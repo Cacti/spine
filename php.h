@@ -23,8 +23,7 @@
  +-------------------------------------------------------------------------+
 */
 
-int php_init();
-int php_close();
-char *php_readpipe();
 char *php_cmd(char *php_command);
-
+char *php_readpipe();
+int php_init();
+void php_close();

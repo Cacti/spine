@@ -55,7 +55,7 @@ char *php_cmd(char *php_command) {
 
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
- 	write(php_pipes.php_write_fd, command, strlen(command));
+	write(php_pipes.php_write_fd, command, strlen(command));
 
 	/* read the result from the php_command */
 	result_string = php_readpipe();
@@ -78,7 +78,6 @@ char *php_cmd(char *php_command) {
 /******************************************************************************/
 char *php_readpipe() {
 	char *result_string = (char *) malloc(BUFSIZE);
-	char result[BUFSIZE] = "";
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
@@ -104,8 +103,8 @@ char *php_readpipe() {
 	/* Should only be the READ Pipe */
 	if (FD_ISSET(php_pipes.php_read_fd, &fds)) {
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
-  		if (rescode > 0)
-	    	snprintf(result_string, rescode, "%s", result_string);
+		if (rescode > 0)
+			snprintf(result_string, rescode, "%s", result_string);
 		else
 			snprintf(result_string, 2, "%s", "U");
 	} else {
@@ -122,12 +121,9 @@ char *php_readpipe() {
 int php_init() {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
-	char logmessage[255];
-	int  i = 0;
-    int  pid;
+	int  pid;
 	char *argv[4];
-	int  check;
-    int  cancel_state;
+	int  cancel_state;
 	char *result_string;
 
 	if (set.verbose >= DEBUG) {
@@ -135,19 +131,19 @@ int php_init() {
 	}
 
 	/* create the output pipes from cactid to php*/
-    if (pipe(cacti2php_pdes) < 0) {
+	if (pipe(cacti2php_pdes) < 0) {
 		cacti_log("ERROR: Could not allocate php server pipes\n");
 		return -1;
 	}
 
 	/* create the input pipes from php to cactid */
-    if (pipe(php2cacti_pdes) < 0) {
+	if (pipe(php2cacti_pdes) < 0) {
 		cacti_log("ERROR: Could not allocate php server pipes\n");
 		return -1;
 	}
 
-    /* Disable thread cancellation from this point forward. */
-    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
+	/* Disable thread cancellation from this point forward. */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 	/* establish arguments for script server execution */
 	argv[0] = set.phppath;
@@ -155,7 +151,7 @@ int php_init() {
 	argv[2] = "cactid";
 	argv[3] = NULL;
 
-    /* fork a child process */
+	/* fork a child process */
 	if (set.verbose >= DEBUG) {
 		cacti_log("CACTID: PHP Script Server About to FORK Child Process.\n");
 	}
@@ -163,8 +159,8 @@ int php_init() {
 	pid = fork();
 
 	/* check the pid status and process as required */
-    switch (pid) {
-	    case -1: /* ERROR: Could not fork() */
+	switch (pid) {
+		case -1: /* ERROR: Could not fork() */
 			if (set.verbose >= DEBUG) {
 				cacti_log("CACTID: PHP Script Server Child FORK Failed.\n");
 			}
@@ -178,7 +174,7 @@ int php_init() {
 
 			return -1;
 			/* NOTREACHED */
-	    case 0:	/* SUCCESS: I am now the child */
+		case 0:	/* SUCCESS: I am now the child */
 			/* Set the standard input/output channels of the new process.  */
 			dup2(cacti2php_pdes[0], STDIN_FILENO);
 			dup2(php2cacti_pdes[1], STDOUT_FILENO);
@@ -199,7 +195,7 @@ int php_init() {
 			}
 	}
 
-    /* Parent */
+	/* Parent */
 	/* Close Unneeded Pipes */
 	close(cacti2php_pdes[0]);
 	close(php2cacti_pdes[1]);
@@ -207,7 +203,7 @@ int php_init() {
 	php_pipes.php_write_fd = cacti2php_pdes[1];
 	php_pipes.php_read_fd = php2cacti_pdes[0];
 
-    /* Restore caller's cancellation state. */
+	/* Restore caller's cancellation state. */
 	pthread_setcancelstate(cancel_state, NULL);
 
 	/* Check pipe to insure startup took place */
@@ -217,19 +213,13 @@ int php_init() {
 	if ((set.verbose == DEBUG) && (strstr(result_string, "Started")))
 		cacti_log("CACTID: Confirmed PHP Script Server Running\n");
 
-    return 1;
+	return 1;
 }
 
 /******************************************************************************/
 /*  php_close - Close the pipes and wait for the status of the child.         */
 /******************************************************************************/
-int php_close() {
-	int i;
-	char command[255];
-	char logmessage[255];
-	fd_set fds;
-	int numfds;
-
+void php_close() {
 	if (set.verbose >= DEBUG) {
 		cacti_log("CACTID: PHP Script Server Shutdown Started.\n");
 	}
@@ -238,6 +228,6 @@ int php_close() {
 	write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
 
 	/* close file descriptors */
-    close(php_pipes.php_write_fd);
-    close(php_pipes.php_read_fd);
+	close(php_pipes.php_write_fd);
+	close(php_pipes.php_read_fd);
 }

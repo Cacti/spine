@@ -83,7 +83,7 @@ void init_mutexes() {
 }
 
 pthread_mutex_t* get_lock(int lock) {
-	pthread_mutex_t *ret_val;
+	pthread_mutex_t *ret_val = NULL;
 
 	switch (lock) {
 	case LOCK_SNMP:
@@ -113,7 +113,7 @@ pthread_mutex_t* get_lock(int lock) {
 }
 
 pthread_once_t* get_attr(int locko) {
-	pthread_once_t *ret_val;
+	pthread_once_t *ret_val = NULL;
 
 	switch (locko) {
 	case LOCK_SNMP_O:

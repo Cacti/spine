@@ -26,6 +26,7 @@
 #include "common.h"
 #include "cactid.h"
 #include "locks.h"
+#include "util.h"
 #include "snmp.h"
 
 #ifdef USE_NET_SNMP
@@ -111,7 +112,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	int status;
 
-	char query[BUFSIZE];
 	char storedoid[BUFSIZE];
 
 	char *result_string = (char *) malloc(BUFSIZE);

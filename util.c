@@ -25,6 +25,7 @@
 
 #include <sys/stat.h>
 #include <syslog.h>
+#include <ctype.h>
 #include "common.h"
 #include "cactid.h"
 #include "util.h"
@@ -43,7 +44,7 @@ int read_cactid_config(char *file, config_t * set) {
 		if (set->verbose >= HIGH) {
 			printf("UTIL: Using cactid config file [%s].\n", file);
 		}
-		
+
 		while(!feof(fp)) {
 			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
@@ -52,6 +53,7 @@ int read_cactid_config(char *file, config_t * set) {
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
 				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
 				else if (!strcasecmp(p1, "LogFile")) strncpy(set->logfile, p2, sizeof(set->logfile));
+				else if (!strcasecmp(p1, "PHP_Server")) strncpy(set->path_php_server, p2, sizeof(set->path_php_server));
 				else if (!strcasecmp(p1, "Verbose")) set->verbose = atoi(p2);
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
 				else if (!strcasecmp(p1, "PHP_Server")) strncpy(set->path_php_server, p2, sizeof(set->path_php_server));
@@ -60,7 +62,7 @@ int read_cactid_config(char *file, config_t * set) {
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
 				else {
-					printf("UTIL: ERROR - Unrecongized directive: %s=%s in %s\n", 
+					printf("UTIL: ERROR - Unrecongized directive: %s=%s in %s\n",
 					p1, p2, file);
 					exit(-1);
 				}
@@ -73,7 +75,7 @@ int read_cactid_config(char *file, config_t * set) {
 		}
 
 		if (set->threads < 1 || set->threads > MAX_THREADS) {
-			printf("UTIL: Invalid Number of Threads: %d (max=%d).\n", 
+			printf("UTIL: Invalid Number of Threads: %d (max=%d).\n",
 			set->threads, MAX_THREADS);
 			exit(-1);
 		}
@@ -104,52 +106,49 @@ void config_defaults(config_t * set) {
 }
 
 /* cacti log file handler */
-int cacti_log(char *logmessage) {
-    FILE *log_file;
+void cacti_log(char *logmessage) {
+	FILE *log_file = NULL;
 
-    /* Variables for Time Display */
-    time_t nowbin;
-    const struct tm *nowstruct;
+	/* Variables for Time Display */
+	time_t nowbin;
+	const struct tm *nowstruct;
 
-    char flogmessage[256];	/* Formatted Log Message */
-    char syslog_cmd[256];	/* Syslog Command */
-    extern config_t set;
-    int attempts = 0;
-    int fileopen = 0;
-    int severity = 0;
+	char flogmessage[256];	/* Formatted Log Message */
+	extern config_t set;
+	int fileopen = 0;
 
-    if ((set.log_destination == 1) || (set.log_destination == 2)) {
- 		while (!fileopen) {
+	if ((set.log_destination == 1) || (set.log_destination == 2)) {
+		while (!fileopen) {
 			if (!file_exists(set.logfile)) {
 				log_file = fopen(set.logfile, "w");
 			}else {
-           		log_file = fopen(set.logfile, "a");
+				log_file = fopen(set.logfile, "a");
 			}
 
-           	if (log_file != NULL) {
-           		fileopen = 1;
-        	}else {
-           		printf("ERROR: Could not open Logfile will not be logging.\n");
+			if (log_file != NULL) {
+				fileopen = 1;
+			}else {
+				printf("ERROR: Could not open Logfile will not be logging.\n");
 				break;
-     		}
-      	}
-  	}
+			}
+		}
+	}
 
 	/* get time for logfile */
-    if (time(&nowbin) == (time_t) - 1)
-       	printf("ERROR: Could not get time of day from time()\n");
+	if (time(&nowbin) == (time_t) - 1)
+		printf("ERROR: Could not get time of day from time()\n");
 
-    nowstruct = localtime(&nowbin);
+	nowstruct = localtime(&nowbin);
 
-    if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M %p - ", nowstruct) == (size_t) 0)
-    	printf("ERROR: Could not get string from strftime()\n");
+	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M %p - ", nowstruct) == (size_t) 0)
+		printf("ERROR: Could not get string from strftime()\n");
 
 	/* concatenate time to log message */
 	strcat(flogmessage, logmessage);
 
-    if ( fileopen != 0 ) {
+	if ( fileopen != 0 ) {
 		fputs(flogmessage, log_file);
-        fclose(log_file);
+		fclose(log_file);
 	}
 
 	/* output to syslog/eventlog */
@@ -159,7 +158,7 @@ int cacti_log(char *logmessage) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
 		}
 		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
-	            syslog(LOG_NOTICE,"%s\n", flogmessage);
+				syslog(LOG_NOTICE,"%s\n", flogmessage);
 		}
 		closelog();
 	}
@@ -220,15 +219,15 @@ char **string_to_argv(char *argstring, int *argc){
 
 /* change backslashes to forward slashes for system calls */
 char *clean_string( char *string_to_clean ) {
-    char *posptr;
+	char *posptr;
 
-    posptr = strchr(string_to_clean,'\\');
+	posptr = strchr(string_to_clean,'\\');
 
 	while(posptr != NULL)
 	{
 		*posptr = '/';
-    	posptr = strchr(string_to_clean,'\\');
-    }
+		posptr = strchr(string_to_clean,'\\');
+	}
 
 	return(string_to_clean);
 }

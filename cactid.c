@@ -31,6 +31,8 @@
 #include <unistd.h>
 #include "poller.h"
 #include "locks.h"
+#include "snmp.h"
+#include "php.h"
 #include "sql.h"
 #include "util.h"
 #include "nft_popen.h"
@@ -91,7 +93,7 @@ int main(int argc, char *argv[]) {
 
 	/* read configuration file to establish local environment */
 	if (conf_file) {
-		if ((read_config(conf_file, &set)) < 0) {
+		if ((read_cactid_config(conf_file, &set)) < 0) {
 			printf("ERROR: Could not read config file: %s\n", conf_file);
 			exit(-1);
 		}
@@ -213,7 +215,7 @@ int main(int argc, char *argv[]) {
 	ids = (int *)malloc(num_rows * sizeof(int));
 
 	pthread_attr_init(&attr);
-	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_DEFAULT);
+	//pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_DEFAULT);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	init_mutexes();

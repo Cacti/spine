@@ -27,6 +27,9 @@
 #include "cactid.h"
 #include "sql.h"
 #include "snmp.h"
+#include "util.h"
+#include "php.h"
+#include "locks.h"
 #include "poller.h"
 #include "nft_popen.h"
 
@@ -64,9 +67,7 @@ void poll_host(int host_id) {
 	char query2[256];
 	char *query3;
 	char query4[256];
-	int target_id = 0;
 	int num_rows;
-	int failcount = 0;
 	char *poll_result;
 	char logmessage[255];
 
@@ -132,7 +133,7 @@ void poll_host(int host_id) {
 			printf("CACTID: Processing %i items in the auto reindex cache for '%s'.\n", num_rows, host->hostname);
 		}
 
-		while (row = mysql_fetch_row(result)) {
+		while ((row = mysql_fetch_row(result))) {
 			reindex->data_query_id = atoi(row[0]);
 			reindex->action = atoi(row[1]);
 			if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
@@ -230,7 +231,7 @@ void poll_host(int host_id) {
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-    			poll_result = php_cmd(entry->arg1);
+				poll_result = php_cmd(entry->arg1);
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 

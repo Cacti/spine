@@ -28,8 +28,6 @@
 
 #define _THREAD_SAFE
 #define _PTHREADS
-#define _POSIX_THREADS
-#define _POSIX_THREAD_SAFE_FUNCTIONS
 #define _P __P
 #define _REENTRANT
 #define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
