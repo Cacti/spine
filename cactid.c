@@ -33,16 +33,11 @@
 #include "util.h"
 #include "nft_popen.h"
 
-/* globals */
-char rrdtool_path[128];
-
 int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
 
 int main(int argc, char *argv[]) {
-	extern char rrdtool_path[128];
-
 	struct timeval now;
 	double begin_time, end_time;
 	char *conf_file = NULL;
@@ -173,15 +168,9 @@ int main(int argc, char *argv[]) {
 		strcpy(set.phppath,mysql_row[0]);
 	}
 
-	/* get the rrdtool path from the cacti settings table */
-	snprintf(rrdtool_path, sizeof(rrdtool_path), "%s", get_rrdtool_path(&mysql));
-
 	if (set.verbose >= HIGH) {
 		printf("CACTID: Ready.\n");
 	}
-
-	/* initilize the rrdtool pipe */
-	rrd_open();
 
 	/* Initialize SNMP */
 	snmp_init();
@@ -329,8 +318,6 @@ int main(int argc, char *argv[]) {
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
 	pthread_mutexattr_destroy(&mutexattr);
-
-	rrd_close();
 
 	snmp_free();
 

@@ -60,6 +60,7 @@ void *child(void * arg) {
 void poll_host(int host_id) {
 	char query1[256];
 	char query2[256];
+	char *query3;
 	int target_id = 0;
 	int num_rows;
 	int failcount = 0;
@@ -70,11 +71,8 @@ void poll_host(int host_id) {
 	char *snmp_result;
 	char logmessage[255];
 
-	int rrd_ds_counter = 0;
-
 	target_t *entry;
 	host_t *host;
-	multi_rrd_t *rrd_multids;
 
 	MYSQL mysql;
 	MYSQL_RES *result;
@@ -117,9 +115,9 @@ void poll_host(int host_id) {
 	snmp_host_init(host);
 
 	/* retreive each hosts polling items from poller cache */
-	entry    = (target_t *) malloc(sizeof(target_t));
+	entry = (target_t *) malloc(sizeof(target_t));
 
-	result   = db_query(&mysql, query1);
+	result = db_query(&mysql, query1);
 	num_rows = (int)mysql_num_rows(result);
 
 	while ((row = mysql_fetch_row(result)) && (!host->ignore_host)) {
@@ -141,11 +139,6 @@ void poll_host(int host_id) {
 		entry->snmp_port = atoi(row[13]);
 		entry->snmp_timeout = atoi(row[14]);
 		snprintf(entry->result, sizeof(entry->result), "%s", "U");
-
-		/* check for the RRD file. if it doesn't exist, create it */
-		if (!file_exists(entry->rrd_path)) {
-			rrd_cmd(create_rrd(entry->local_data_id, entry->rrd_path, &mysql));
-		}
 
 		/* perform a check to see if the host is alive by polling it's SysName
 		 * if the host down from an snmp perspective, don't poll it.
@@ -273,39 +266,11 @@ void poll_host(int host_id) {
 			}
 		}
 
-		/* update RRD files with polling results or ignore if the host was down */
-		if (!host->ignore_host) {
-			if (entry->rrd_num == 1) {
-				if (entry->action == 2) {
-					if (strcmp(entry->result, "U")) {
-						rrd_cmd(rrdcmd_string(entry->rrd_path, entry->result, entry->local_data_id, &mysql));
-					}
-				}else {
-				    if (strcmp(entry->result, "U")) {
-			    		rrd_cmd(rrdcmd_lli(entry->rrd_name, entry->rrd_path, entry->result));
-		    		}
-				}
-			} else if (entry->rrd_num > 1) {
-				if (set.verbose >= HIGH) {
-					printf("MULTIID: A Multi ID Event Has Been Detected for Host [%i]\n", host_id);
-				}
-
-				if (rrd_ds_counter == 0) {
-					rrd_multids = (multi_rrd_t *)malloc(entry->rrd_num * sizeof(multi_rrd_t));
-				}
-
-				snprintf(rrd_multids[rrd_ds_counter].rrd_name, sizeof(rrd_multids[rrd_ds_counter].rrd_name), "%s", entry->rrd_name);
-				snprintf(rrd_multids[rrd_ds_counter].rrd_path, sizeof(rrd_multids[rrd_ds_counter].rrd_path), "%s", entry->rrd_path);
-				snprintf(rrd_multids[rrd_ds_counter].result, sizeof(rrd_multids[rrd_ds_counter].result), "%s", entry->result);
-
-				rrd_ds_counter++;
-
-    			if (rrd_ds_counter == entry->rrd_num) {
-					rrd_cmd(rrdcmd_multids(rrd_multids, (rrd_ds_counter-1)));
-					rrd_ds_counter = 0;
-					free(rrd_multids);
-				}
-			}
+		if (entry->result != NULL) {
+			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
+			sprintf(query3, "insert into poller_output (local_data_id,time,output) values (%i,NOW(),'%s')", entry->local_data_id, entry->result);
+			db_insert(&mysql, query3);
+			free(query3);
 		}
 	}
 

@@ -79,8 +79,4 @@
 
 #include <signal.h>
 
-#if HAVE_RRDTOOL
-# include <rrd.h>
-#endif
-
 #endif /* RTG_COMMON_H */

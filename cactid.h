@@ -26,7 +26,7 @@
 #ifndef _CACTID_H_
 #define _CACTID_H_ 1
 
-/* Defines */ 
+/* Defines */
 #ifndef FALSE
 # define FALSE 0
 #endif
@@ -128,16 +128,6 @@ typedef struct host_struct {
 	int ignore_host;
  	void *snmp_session;
 } host_t;
-
-typedef struct rrd_struct{
-	char rrdcmd[512];
-} rrd_t;
-
-typedef struct multi_rrd_struct{
-	char rrd_name[19];
-	char rrd_path[255];
-	char result[255];
-} multi_rrd_t;
 
 /* Globals */
 config_t set;
