@@ -122,8 +122,8 @@ DIST_SOURCES = $(cactid_SOURCES)
 HEADERS = $(include_HEADERS)
 
 DIST_COMMON = README $(include_HEADERS) ./config/config.h.in AUTHORS \
-	COPYING ChangeLog INSTALL Makefile.am Makefile.in NEWS \
-	aclocal.m4 config/config.guess config/config.sub config/depcomp \
+	COPYING INSTALL Makefile.am Makefile.in NEWS aclocal.m4 \
+	config/config.guess config/config.sub config/depcomp \
 	config/install-sh config/missing config/mkinstalldirs configure \
 	configure.ac
 SOURCES = $(cactid_SOURCES)
