@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	if (set.verbose >= DEBUG) {
-  		sprintf(logmessage,"DEBUG: Initial Value of Active Threads is ->%i\n",set.poller_id,active_threads);
+		sprintf(logmessage, "DEBUG: Initial Value of Active Threads is ->%i\n", active_threads);
 		cacti_log(logmessage);
 	}
 
