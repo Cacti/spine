@@ -90,7 +90,7 @@ void snmp_host_init(host_t *current_host) {
 
 	if (!sessp) {
 		sprintf(logmessage,"ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 		current_host->snmp_session = NULL;
 	}else{
 		current_host->snmp_session = sessp;
@@ -119,7 +119,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	/* only SNMP v1 and v2c are supported right now */
 	if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
 		sprintf(logmessage,"ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->hostname);
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE, "%s", "U");
 
 		return result_string;
@@ -142,13 +142,13 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	/* either no or bad SNMP response */
 	if (status == STAT_DESCRIP_ERROR) {
 		sprintf(logmessage,"ERROR: No SNMP Response: [%s@%s].\n", current_host->hostname, storedoid);
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 	}else if (status != STAT_SUCCESS) {
 		sprintf(logmessage,"ERROR: SNMP Unsuccessful: [%s@%s] [%d].\n", current_host->hostname, storedoid, status);
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 	}else if (status == STAT_SUCCESS && response->errstat != SNMP_ERR_NOERROR) {
 		sprintf(logmessage,"ERROR: SNMP Problem: [%s@%s] %s\n", current_host->hostname, storedoid, snmp_errstring(response->errstat));
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 	}
 
 	/* liftoff, successful poll, process it!! */

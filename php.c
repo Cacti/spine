@@ -94,7 +94,7 @@ char *php_readpipe() {
 		numfds = php_pipes.php_write_fd + 1;
 
 	/* Establish Timeout of 1 Second to Have PHP Script Server Respond */
-	timeout.tv_sec = 3;
+	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
 
 	/* Wait for A Response on The Pipes */
@@ -109,7 +109,7 @@ char *php_readpipe() {
 		else
 			snprintf(result_string, 2, "%s", "U");
 	} else {
-		cacti_log("ERROR: The PHP Script Server Did not Respond in Time\n","e");
+		cacti_log("ERROR: The PHP Script Server Did not Respond in Time\n");
 		snprintf(result_string, 2, "%s", "U");
 	}
 
@@ -131,18 +131,18 @@ int php_init() {
 	char *result_string;
 
 	if (set.verbose >= DEBUG) {
-		printf("CACTID: PHP Script Server Routine Started.\n");
+		cacti_log("CACTID: PHP Script Server Routine Started.\n");
 	}
 
 	/* create the output pipes from cactid to php*/
     if (pipe(cacti2php_pdes) < 0) {
-		cacti_log("ERROR: Could not allocate php server pipes\n", "e");
+		cacti_log("ERROR: Could not allocate php server pipes\n");
 		return -1;
 	}
 
 	/* create the input pipes from php to cactid */
     if (pipe(php2cacti_pdes) < 0) {
-		cacti_log("ERROR: Could not allocate php server pipes\n", "e");
+		cacti_log("ERROR: Could not allocate php server pipes\n");
 		return -1;
 	}
 
@@ -157,7 +157,7 @@ int php_init() {
 
     /* fork a child process */
 	if (set.verbose >= DEBUG) {
-		printf("CACTID: PHP Script Server About to FORK Child Process.\n");
+		cacti_log("CACTID: PHP Script Server About to FORK Child Process.\n");
 	}
 
 	pid = fork();
@@ -166,14 +166,14 @@ int php_init() {
     switch (pid) {
 	    case -1: /* ERROR: Could not fork() */
 			if (set.verbose >= DEBUG) {
-				printf("CACTID: PHP Script Server Child FORK Failed.\n");
+				cacti_log("CACTID: PHP Script Server Child FORK Failed.\n");
 			}
 			close(php2cacti_pdes[0]);
 			close(php2cacti_pdes[1]);
 			close(cacti2php_pdes[0]);
 			close(cacti2php_pdes[1]);
 
-			cacti_log("ERROR: Could not fork php script server\n","e");
+			cacti_log("ERROR: Could not fork php script server\n");
 			pthread_setcancelstate(cancel_state, NULL);
 
 			return -1;
@@ -195,7 +195,7 @@ int php_init() {
 			/* NOTREACHED */
 		default: /* I am the parent process */
 			if (set.verbose >= DEBUG) {
-				printf("CACTID: PHP Script Server Child FORK Success.\n");
+				cacti_log("CACTID: PHP Script Server Child FORK Success.\n");
 			}
 	}
 
@@ -215,7 +215,7 @@ int php_init() {
 	free(result_string);
 
 	if ((set.verbose == DEBUG) && (strstr(result_string, "Started")))
-		cacti_log("CACTID: Confirmed PHP Script Server Running\n","e");
+		cacti_log("CACTID: Confirmed PHP Script Server Running\n");
 
     return 1;
 }
@@ -231,7 +231,7 @@ int php_close() {
 	int numfds;
 
 	if (set.verbose >= DEBUG) {
-		cacti_log("CACTID: PHP Script Server Shutdown Started.\n","e");
+		cacti_log("CACTID: PHP Script Server Shutdown Started.\n");
 	}
 
 	/* tell the script server to close */

@@ -27,6 +27,6 @@ int read_cactid_config(char *file, config_t * set);
 void config_defaults(config_t *);
 void timestamp(char *);
 int file_exists(char *filename);
-int cacti_log(char *logmessage, char *logtype);
+int cacti_log(char *logmessage);
 int is_number(char *string);
 char *clean_string(char *string_to_clean);

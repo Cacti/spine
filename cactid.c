@@ -153,6 +153,18 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	/* get logging level from database - overrides cactid.conf */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_verbosity'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		if (atoi(mysql_row[0])) {
+			set.verbose = atoi(mysql_row[0]);
+		}
+	}
+
 	/* get Cacti defined max threads override cactid.conf */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_threads'");
 	num_rows = (int)mysql_num_rows(result);
@@ -172,7 +184,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (set.verbose >= HIGH) {
-		printf("CACTID: Ready.\n");
+		cacti_log("CACTID: Ready.\n");
 	}
 
 	/* Initialize SNMP */
@@ -210,7 +222,8 @@ int main(int argc, char *argv[]) {
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	if (set.verbose >= DEBUG) {
-		printf("DEBUG: Initial Value of Active Threads is ->%i\n",active_threads);
+  		sprintf(logmessage,"DEBUG: Initial Value of Active Threads is ->%i\n",active_threads);
+		cacti_log(logmessage);
 	}
 
 	while (device_counter < num_rows) {
@@ -218,7 +231,7 @@ int main(int argc, char *argv[]) {
 		switch (mutex_status) {
 		case 0:
 			if (set.verbose >= DEBUG) {
-				printf("DEBUG: Valid Thread to be Created.\n");
+				cacti_log("DEBUG: Valid Thread to be Created.\n");
 			}
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
@@ -235,28 +248,29 @@ int main(int argc, char *argv[]) {
 				switch (thread_status) {
 					case 0:
 						if (set.verbose >= DEBUG) {
-							printf("DEBUG: Valid Thread to be Created.\n");
+							cacti_log("DEBUG: Valid Thread to be Created.\n");
 						}
 
 						device_counter++;
 						active_threads++;
 
 						if (set.verbose >= DEBUG) {
-							printf("DEBUG: The Value of Active Threads is ->%i\n",active_threads);
+							sprintf(logmessage,"DEBUG: The Value of Active Threads is ->%i\n",active_threads);
+							cacti_log(logmessage);
 						}
 
 						break;
 					case EAGAIN:
-						cacti_log("ERROR: The System Lacked the Resources to Create a Thread.\n","e");
+						cacti_log("ERROR: The System Lacked the Resources to Create a Thread.\n");
 						break;
 					case EFAULT:
-						cacti_log("ERROR: The Thread or Attribute Was Invalid.\n","e");
+						cacti_log("ERROR: The Thread or Attribute Was Invalid.\n");
 						break;
 					case EINVAL:
-						cacti_log("ERROR: The Thread Attribute is Not Initialized.\n","e");
+						cacti_log("ERROR: The Thread Attribute is Not Initialized.\n");
 						break;
 					default:
-						cacti_log("ERROR: Unknown Thread Creation Error.\n","e");
+						cacti_log("ERROR: Unknown Thread Creation Error.\n");
 						break;
 				}
 				usleep(500);
@@ -266,16 +280,16 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EBUSY:
-			cacti_log("ERROR: Deadlock Occured.\n","e");
+			cacti_log("ERROR: Deadlock Occured.\n");
 			break;
 		case EINVAL:
-			cacti_log("ERROR: Attempt to Unlock an Uninitialized Mutex.\n","e");
+			cacti_log("ERROR: Attempt to Unlock an Uninitialized Mutex.\n");
 			break;
 		case EFAULT:
-			cacti_log("ERROR: Attempt to Unlock an Invalid Mutex.\n","e");
+			cacti_log("ERROR: Attempt to Unlock an Invalid Mutex.\n");
 			break;
 		default:
-			cacti_log("ERROR: Unknown Mutex Lock Error Code Returned.\n","e");
+			cacti_log("ERROR: Unknown Mutex Lock Error Code Returned.\n");
 			break;
 		}
 
@@ -326,7 +340,7 @@ int main(int argc, char *argv[]) {
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	if (argc == 1) {
 		sprintf(logmessage, "STATS: Execution Time: %.4f s, Method: cactid, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n", (end_time - begin_time), set.threads, num_rows, num_rows);
-		cacti_log(logmessage, "s");
+		cacti_log(logmessage);
 	}
 
 	exit(0);

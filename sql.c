@@ -31,12 +31,13 @@
 int db_insert(MYSQL *mysql, char *query) {
 	char logmessage[255];
 	if (set.verbose >= HIGH) {
-		printf("SQLCMD: %s\n", query);
+		sprintf(logmessage, "SQLCMD: %s\n", query);
+		cacti_log(logmessage);
 	}
 
 	if (mysql_query(mysql, query)) {
 		sprintf(logmessage, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 		return (FALSE);
 	}else{
 		return (TRUE);
@@ -58,7 +59,8 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 int db_connect(char *database, MYSQL *mysql) {
 	char logmessage[255];
 	if (set.verbose >= HIGH) {
-		printf("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+		sprintf(logmessage, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+		cacti_log(logmessage);
 	}
 
 /*	thread_mutex_lock(LOCK_MYSQL);*/
@@ -67,7 +69,7 @@ int db_connect(char *database, MYSQL *mysql) {
 
 	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
 		sprintf(logmessage, "ERROR: MySQL Connection Failed: %s\n", mysql_error(mysql));
-		cacti_log(logmessage,"e");
+		cacti_log(logmessage);
 		thread_mutex_unlock(LOCK_MYSQL);
 		exit(0);
 	}else{

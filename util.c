@@ -95,13 +95,16 @@ void config_defaults(config_t * set) {
 	strncpy(set->logfile, DEFAULT_Log_File, sizeof(set->logfile));
 
 	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0]));
-	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1]));
+	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[2]));
+	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[3]));
+	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[4]));
+	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[5]));
 
 	return;
 }
 
 /* cacti log file handler */
-int cacti_log(char *logmessage, char *logtype) {
+int cacti_log(char *logmessage) {
     FILE *log_file;
 
     /* Variables for Time Display */
@@ -115,56 +118,56 @@ int cacti_log(char *logmessage, char *logtype) {
     int fileopen = 0;
     int severity = 0;
 
-    if (((set.log_pstats == 1) && !(strcmp(logtype,"s"))) || ((set.log_perror) && !(strcmp(logtype,"e")))) {
-        if ((set.log_destination == 1) || (set.log_destination == 2)) {
-            while (!fileopen) {
-				if (!file_exists(set.logfile)) {
-					log_file = fopen(set.logfile, "w");
-				}else {
-            		log_file = fopen(set.logfile, "a");
-				}
+    if ((set.log_destination == 1) || (set.log_destination == 2)) {
+ 		while (!fileopen) {
+			if (!file_exists(set.logfile)) {
+				log_file = fopen(set.logfile, "w");
+			}else {
+           		log_file = fopen(set.logfile, "a");
+			}
 
-            	if (log_file != NULL) {
-            		fileopen = 1;
-           		}else {
-           			printf("ERROR: Could not open Logfile will not be logging.\n");
-					break;
-     			}
-      		}
-  		}
+           	if (log_file != NULL) {
+           		fileopen = 1;
+        	}else {
+           		printf("ERROR: Could not open Logfile will not be logging.\n");
+				break;
+     		}
+      	}
+  	}
 
-		/* get time for logfile */
-        if (time(&nowbin) == (time_t) - 1)
-        	printf("ERROR: Could not get time of day from time()\n");
+	/* get time for logfile */
+    if (time(&nowbin) == (time_t) - 1)
+       	printf("ERROR: Could not get time of day from time()\n");
 
-        nowstruct = localtime(&nowbin);
+    nowstruct = localtime(&nowbin);
 
-        if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M %p - ", nowstruct) == (size_t) 0)
-        	printf("ERROR: Could not get string from strftime()\n");
+    if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M %p - ", nowstruct) == (size_t) 0)
+    	printf("ERROR: Could not get string from strftime()\n");
 
-		/* concatenate time to log message */
-        strcat(flogmessage, logmessage);
+	/* concatenate time to log message */
+	strcat(flogmessage, logmessage);
 
-        if ( fileopen != 0 ) {
-            fputs(flogmessage, log_file);
-            fclose(log_file);
-        }
+    if ( fileopen != 0 ) {
+		fputs(flogmessage, log_file);
+        fclose(log_file);
+	}
 
-		/* output to syslog/eventlog */
-        if ((set.log_destination == 2) || (set.log_destination == 3)) {
-        	openlog("Cacti Logging", LOG_PERROR | LOG_NDELAY | LOG_PID, LOG_SYSLOG);
-            if (!strcmp(logtype,"s")) {
-            	syslog(LOG_INFO,"%s\n", flogmessage);
-            }else {
-            	syslog(LOG_PERROR,"%s\n", flogmessage);
-           	}
-        	closelog();
-        }
-    }
+	/* output to syslog/eventlog */
+	if ((set.log_destination == 2) || (set.log_destination == 3)) {
+		openlog("Cacti Logging", LOG_PERROR | LOG_NDELAY | LOG_PID, LOG_SYSLOG);
+		if (!strstr(flogmessage,"ERROR")) {
+			syslog(LOG_INFO,"%s\n", flogmessage);
+		}else {
+			if (strstr(flogmessage,"STATS")) {
+	            syslog(LOG_PERROR,"%s\n", flogmessage);
+			}
+		}
+		closelog();
+	}
 
 	if (set.verbose >= HIGH) {
-	    printf(logmessage);
- 	}
+		printf(logmessage);
+	}
 }
 
 /* check for a file name */
