@@ -93,7 +93,7 @@ char *create_rrd(int local_data_id, char *data_source_path, MYSQL *mysql) {
 		row = mysql_fetch_row(result);
 		
 		data_source_type_id = (atoi(row[4]) - 1);
-		sprintf(temp,"DS:%s:%s:%s:%s:%s ", row[0], ds[data_source_type_id], row[1], row[2], row[3]);
+		sprintf(temp,"DS:%s:%s:%s:%s:%s ", row[0], ds[data_source_type_id], row[1], row[2], ((atoi(row[3]) == 0) ? "U" : row[3]));
 		
 		strcat(ds_string,temp);
 	}
