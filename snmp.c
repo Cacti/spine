@@ -139,18 +139,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		status = STAT_DESCRIP_ERROR;
 	}
 
-	/* either no or bad SNMP response */
-	if (status == STAT_DESCRIP_ERROR) {
-		sprintf(logmessage,"Host[%i] ERROR: No SNMP Response: [%s@%s].\n",current_host->id,current_host->hostname,storedoid);
-		cacti_log(logmessage);
-	}else if (status != STAT_SUCCESS) {
-		sprintf(logmessage,"Host[%i] ERROR: SNMP Unsuccessful: [%s@%s] [%d].\n",current_host->id,current_host->hostname,storedoid,status);
-		cacti_log(logmessage);
-	}else if (status == STAT_SUCCESS && response->errstat != SNMP_ERR_NOERROR) {
-		sprintf(logmessage,"Host[%i] ERROR: SNMP Problem: [%s@%s] %s\n",current_host->id,current_host->hostname,storedoid,snmp_errstring(response->errstat));
-		cacti_log(logmessage);
-	}
-
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
 		vars = response->variables;
@@ -164,6 +152,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
+  		strcpy(result_string,"SNMP ERROR");
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		snprintf(result_string, BUFSIZE, "%s", "U");
 	}

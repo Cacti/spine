@@ -29,9 +29,158 @@
 #include "common.h"
 #include "cactid.h"
 #include "util.h"
+#include "sql.h"
+
+int read_config_options(config_t *set) {
+	MYSQL mysql;
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int num_rows;
+
+	db_connect(set->dbdb, &mysql);
+
+	/* determine log file, syslog or both, default is 1 or log file only */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_destination'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->log_destination = atoi(mysql_row[0]);
+	}else{
+		set->log_destination = 1;
+	}
+
+	/* determine script server path operation */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_webroot'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+  		strcpy(set->path_php_server,mysql_row[0]);
+  		strcat(set->path_php_server,"/script_server.php");
+	}
+
+	/* set availability_method */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='availability_method'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		set->availability_method = atoi(mysql_row[0]);
+	}
+
+	/* set ping_recovery_count */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_recovery_count'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		set->ping_recovery_count = atoi(mysql_row[0]);
+	}
+
+	/* set ping_failure_count */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_failure_count'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		set->ping_failure_count = atoi(mysql_row[0]);
+	}
+
+	/* set ping_method */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_method'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		set->ping_method = atoi(mysql_row[0]);
+	}
+
+	/* set ping_retries */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_retries'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		set->ping_retries = atoi(mysql_row[0]);
+	}
+
+	/* set ping_timeout */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_timeout'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		set->ping_timeout = atoi(mysql_row[0]);
+	}
+
+	/* set logging option for errors */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_perror'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		if (!strcmp(mysql_row[0],"on")) {
+			set->log_perror = 1;
+		}
+	}
+
+	/* set logging option for statistics */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pstats'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		if (!strcmp(mysql_row[0],"on")) {
+			set->log_pstats = 1;
+		}
+	}
+
+	/* get logging level from database - overrides cactid.conf */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_verbosity'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		if (atoi(mysql_row[0])) {
+			set->verbose = atoi(mysql_row[0]);
+		}
+	}
+
+	/* get Cacti defined max threads override cactid.conf */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_threads'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->threads = atoi(mysql_row[0]);
+	}
+
+	/* get PHP Path Information for Scripting */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_binary'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		strcpy(set->path_php,mysql_row[0]);
+	}
+
+	mysql_free_result(result);
+	mysql_close(&mysql);
+}
 
 /* read configuration file to establish local environment */
-int read_cactid_config(char *file, config_t * set) {
+int read_cactid_config(char *file, config_t *set) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
@@ -117,7 +266,7 @@ void cacti_log(char *logmessage) {
 	/* log message prefix */
  	sprintf(logprefix, "CACTID: Poller[%i] ",set.poller_id);
 
-	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != NONE)) {
+	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != POLLER_VERBOSITY_NONE)) {
 		while (!fileopen) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
@@ -165,6 +314,250 @@ void cacti_log(char *logmessage) {
 
 	if (set.verbose >= MEDIUM) {
 		printf(flogmessage);
+	}
+}
+
+/* ping host */
+int ping_host(host_t *host, ping_t *ping) {
+	struct timeval now;
+	double begin_time, end_time;
+	char *poll_result;
+	int start_time;
+
+	/* initialize variables */
+	strcpy(ping->ping_status, "down");
+	strcpy(ping->ping_response, "Ping not performed due to setting.");
+	strcpy(ping->snmp_status, "down");
+	strcpy(ping->snmp_response, "SNMP not performed due to setting or ping result");
+
+	/* record start time */
+	gettimeofday(&now, NULL);
+	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+	poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
+
+	/* record end time */
+	gettimeofday(&now, NULL);
+	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+	/* temporary fix until ping available */
+	set.availability_method = 2;
+
+	if ((strlen(poll_result) == 0) || (strstr(poll_result,"ERROR"))) {
+		strcpy(ping->snmp_response, "Host did not respond to SNMP");
+		update_host_status(HOST_DOWN, host, ping, set.availability_method);
+		return HOST_DOWN;
+	} else {
+		strcpy(ping->snmp_response, "Host responded to SNMP");
+		sprintf(ping->snmp_status,"%.4f",((end_time-begin_time)*1000));
+		update_host_status(HOST_UP, host, ping, set.availability_method);
+		return HOST_UP;
+	}
+
+	free(poll_result);
+}
+
+int update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
+	int issue_log_message = FALSE;
+	char logmessage[256];
+	double ping_time;
+ 	char current_date[40];
+	time_t nowbin;
+	const struct tm *nowstruct;
+	extern config_t set;
+
+	/* get date and format for mysql */
+	if (time(&nowbin) == (time_t) - 1)
+		printf("ERROR: Could not get time of day from time()\n");
+
+	nowstruct = localtime(&nowbin);
+	strftime(current_date, sizeof(current_date), "%Y-%m-%d %I:%M", nowstruct);
+
+	/* host is down */
+	if (status == HOST_DOWN) {
+		/* update total polls, failed polls and availability */
+		host->failed_polls = host->failed_polls + 1;
+		host->total_polls = host->total_polls + 1;
+		host->availability = 100 * (host->total_polls - host->failed_polls) / host->total_polls;
+
+		/*determine the error message to display */
+  		switch (availability_method) {
+		case AVAIL_SNMP_AND_PING:
+			if (strlen(host->snmp_community) == 0) {
+				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
+			}else {
+				snprintf(host->status_last_error, sizeof(host->status_last_error),"%s, %s",ping->snmp_response,ping->ping_response);
+			}
+			break;
+		case AVAIL_SNMP:
+			if (strlen(host->snmp_community) == 0) {
+				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", "Device does not require SNMP");
+			}else {
+				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->snmp_response);
+			}
+   			break;
+		default:
+			printf("should not be here\n");
+			snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
+		}
+
+		/* determine if to send an alert and update remainder of statistics */
+		if (host->status == HOST_UP) {
+			/* increment the event failure count */
+			host->status_event_count = host->status_event_count + 1;
+
+			/* if it's time to issue an error message, indicate so */
+			if (host->status_event_count >= set.ping_failure_count) {
+				/* host is now down, flag it that way */
+				host->status = HOST_DOWN;
+
+				issue_log_message = TRUE;
+
+				/* update the failure date only if the failure count is 1 */
+				if (set.ping_failure_count == 1) {
+					snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", current_date);
+				}
+			/* host is down, but not ready to issue log message */
+			} else {
+				/* host down for the first time, set event date */
+				if (host->status_event_count == 1) {
+					snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", current_date);
+				}
+			}
+		/* host is recovering, put back in failed state */
+		} else if (host->status == HOST_RECOVERING) {
+			host->status_event_count = 1;
+			host->status = HOST_DOWN;
+
+		/* host was unknown and now is down */
+		} else if (host->status == HOST_UNKNOWN) {
+			host->status = HOST_DOWN;
+			host->status_event_count = 0;
+		} else {
+			host->status_event_count = host->status_event_count + 1;
+		}
+	/* host is up!! */
+	} else {
+		/* update total polls and availability */
+		host->total_polls = host->total_polls + 1;
+		host->availability = 100 * ((host->total_polls - host->failed_polls) / host->total_polls);
+
+		/* determine the ping statistic to set and do so */
+		if (availability_method == AVAIL_SNMP_AND_PING) {
+			if (strlen(host->snmp_community) == 0) {
+				ping_time = atof(ping->ping_status);
+			}else {
+				/* calculate the average of the two times */
+				ping_time = (atof(ping->snmp_status) + atof(ping->ping_status)) / 2;
+			}
+		}else if (availability_method == AVAIL_SNMP) {
+			if (strlen(host->snmp_community) == 0) {
+				ping_time = 0.000;
+			}else {
+				ping_time = atof(ping->snmp_status);
+			}
+		}else {
+			ping_time = atof(ping->ping_status);
+		}
+
+		/* update times as required */
+		host->cur_time = ping_time;
+
+		/* maximum time */
+		if (ping_time > host->max_time)
+			host->max_time = ping_time;
+
+		/* minimum time */
+		if (ping_time < host->min_time)
+			host->min_time = ping_time;
+
+		/* average time */
+  		host->avg_time = (((host->total_polls-1-host->failed_polls)
+			* host->avg_time) + ping_time) / (host->total_polls-host->failed_polls);
+
+		/* the host was down, now it's recovering */
+		if ((host->status == HOST_DOWN) || (host->status == HOST_RECOVERING )) {
+			/* just up, change to recovering */
+			if (host->status == HOST_DOWN) {
+				host->status = HOST_RECOVERING;
+				host->status_event_count = 1;
+			} else {
+				host->status_event_count = host->status_event_count + 1;
+			}
+
+			/* if it's time to issue a recovery message, indicate so */
+			if (host->status_event_count >= set.ping_recovery_count) {
+				/* host is up, flag it that way */
+				host->status = HOST_UP;
+
+				issue_log_message = TRUE;
+
+				/* update the recovery date only if the recovery count is 1 */
+				if (set.ping_recovery_count == 1) {
+					snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", current_date);
+				}
+
+				/* reset the event counter */
+				host->status_event_count = 0;
+			/* host is recovering, but not ready to issue log message */
+			} else {
+				/* host recovering for the first time, set event date */
+				if (host->status_event_count == 1) {
+					snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", current_date);
+				}
+			}
+		} else {
+		/* host was unknown and now is up */
+			host->status = HOST_UP;
+			host->status_event_count = 0;
+		}
+	}
+	/* if the user wants a flood of information then flood them */
+	if (set.verbose >= POLLER_VERBOSITY_HIGH) {
+		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
+			/* log ping result if we are to use a ping for reachability testing */
+			if (availability_method == AVAIL_SNMP_AND_PING) {
+				sprintf(logmessage,"Host[%i] PING: %s\n", host->id, ping->ping_response);
+				cacti_log(logmessage);
+				sprintf(logmessage,"Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
+				cacti_log(logmessage);
+			} else if (availability_method == AVAIL_SNMP) {
+				if (host->snmp_community == "") {
+					sprintf(logmessage,"Host[%i] SNMP: Device does not require SNMP\n", host->id);
+					cacti_log(logmessage);
+				}else{
+					sprintf(logmessage,"Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
+					cacti_log(logmessage);
+				}
+			} else {
+				sprintf(logmessage,"Host[%i] PING: %s\n", host->id, ping->ping_response);
+				cacti_log(logmessage);
+			}
+		} else {
+			if (availability_method == AVAIL_SNMP_AND_PING) {
+				sprintf(logmessage,"Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
+				cacti_log(logmessage);
+				sprintf(logmessage,"Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
+				cacti_log(logmessage);
+			} else if (availability_method == AVAIL_SNMP) {
+				sprintf(logmessage,"Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
+				cacti_log(logmessage);
+			} else {
+				sprintf(logmessage,"Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
+				cacti_log(logmessage);
+			}
+		}
+	}
+
+	/* if there is supposed to be an event generated, do it */
+	if (issue_log_message) {
+		if (host->status == HOST_DOWN) {
+			sprintf(logmessage,"Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
+			cacti_log(logmessage);
+		} else {
+			sprintf(logmessage,"Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
+			cacti_log(logmessage);
+		}
 	}
 }
 

@@ -68,12 +68,17 @@ int main(int argc, char *argv[]) {
 	char result_string[256] = "";
 	char logmessage[256];
 
+	/* set start time for cacti */
+	gettimeofday(&now, NULL);
+	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
 	set.verbose = HIGH;
 
 	if (set.verbose >= HIGH) {
 		printf("CACTID: Version %s starting.\n", VERSION);
 	}
 
+	/* get static defaults for system */
 	config_defaults(&set);
 
 	/* Initial Argument Error Checking */
@@ -118,92 +123,19 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	db_connect(set.dbdb, &mysql);
-
-	/* determine log file, syslog or both, default is 1 or log file only */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_destination'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set.log_destination = atoi(mysql_row[0]);
-	}else{
-		set.log_destination = 1;
-	}
-
-	/* determine script server path operation */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_webroot'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-  		strcpy(set.path_php_server,mysql_row[0]);
-  		strcat(set.path_php_server,"/script_server.php");
-		printf("The location of the script server is->%s\n",set.path_php_server);
-	}
-
-	/* set logging option for errors */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_perror'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (!strcmp(mysql_row[0],"on")) {
-			set.log_perror = 1;
-		}
-	}
-
-	/* set logging option for statistics */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pstats'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (!strcmp(mysql_row[0],"on")) {
-			set.log_pstats = 1;
-		}
-	}
-
-	/* get logging level from database - overrides cactid.conf */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_verbosity'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (atoi(mysql_row[0])) {
-			set.verbose = atoi(mysql_row[0]);
-		}
-	}
-
-	/* get Cacti defined max threads override cactid.conf */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_threads'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set.threads = atoi(mysql_row[0]);
-	}
-
-	/* get PHP Path Information for Scripting */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_binary'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		strcpy(set.path_php,mysql_row[0]);
-	}
+	/* read configuration parameters from the database */
+	read_config_options(&set);
 
 	/* Set the Poller ID */
 	set.poller_id = 0;
 
 	if (set.verbose >= HIGH) {
-		sprintf(logmessage,"Ready.\n");
+		sprintf(logmessage,"CACTID: Version %s starting.\n", VERSION);
 		cacti_log(logmessage);
 	}
+
+	/* connect to database */
+	db_connect(set.dbdb, &mysql);
 
 	/* Initialize SNMP */
 	snmp_init();
@@ -230,19 +162,17 @@ int main(int argc, char *argv[]) {
 	threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t));
 	ids = (int *)malloc(num_rows * sizeof(int));
 
+	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
 	init_mutexes();
-
-	gettimeofday(&now, NULL);
-	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	if (set.verbose >= DEBUG) {
 		sprintf(logmessage, "DEBUG: Initial Value of Active Threads is ->%i\n", active_threads);
 		cacti_log(logmessage);
 	}
 
+	/* loop through devices until done */
 	while (device_counter < num_rows) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
 		switch (mutex_status) {
@@ -323,6 +253,7 @@ int main(int argc, char *argv[]) {
 		usleep(THREAD_SLEEP);
 	}
 
+	/* wait for all threads to complete */
 	while (canexit == 0) {
 		if (thread_mutex_trylock(LOCK_THREAD) != EBUSY) {
 			if (last_active_threads != active_threads) {
@@ -339,7 +270,7 @@ int main(int argc, char *argv[]) {
 		usleep(THREAD_SLEEP);
 	}
 
-	/* print out stats and sleep */
+	/* print out stats */
 	gettimeofday(&now, NULL);
 
 	/* update the db for |data_time| on graphs */
@@ -365,7 +296,7 @@ int main(int argc, char *argv[]) {
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-	if (set.verbose == MEDIUM) {
+	if ((set.verbose == MEDIUM) || (argc == 1)) {
 		sprintf(logmessage, "CACTID: Execution Time: %.4f s, Max Threads/Process: %i, Polled Hosts: %i\n",(end_time - begin_time),set.threads,num_rows);
 		cacti_log(logmessage);
 	}

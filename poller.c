@@ -69,12 +69,15 @@ void poll_host(int host_id) {
 	char *query3;
 	char query4[256];
 	int num_rows;
+	int host_status;
 	char *poll_result;
 	char logmessage[255];
+	char update_sql[512];
 
 	reindex_t *reindex;
 	target_t *entry;
 	host_t *host;
+	ping_t *ping;
 
 	MYSQL mysql;
 	MYSQL_RES *result;
@@ -85,7 +88,7 @@ void poll_host(int host_id) {
 	#endif
 
 	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
-	snprintf(query2, sizeof(query2), "select id,hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
+	snprintf(query2, sizeof(query2), "select id, hostname,snmp_community,snmp_version,snmp_port,snmp_timeout,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
 	snprintf(query4, sizeof(query4), "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
 
 	db_connect(set.dbdb, &mysql);
@@ -102,25 +105,57 @@ void poll_host(int host_id) {
 
 	row = mysql_fetch_row(result);
 
-	/* preload host structure with appropriate values */
+	/* allocate host and ping structures with appropriate values */
 	host = (host_t *) malloc(sizeof(host_t));
+	ping = (ping_t *) malloc(sizeof(ping_t));
 
- 	host->id = atoi(row[0]);
+	/* populate host structure */
+	host->id = atoi(row[0]);
 	if (row[1] != NULL) snprintf(host->hostname, sizeof(host->hostname), "%s", row[1]);
 	if (row[2] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", row[2]);
 	host->snmp_version = atoi(row[3]);
 	host->snmp_port = atoi(row[4]);
 	host->snmp_timeout = atoi(row[5]);
+ 	if (row[6] != NULL) host->status = atoi(row[6]);
+	host->status_event_count = atoi(row[7]);
+ 	snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", row[8]);
+	snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", row[9]);
+	snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", row[10]);
+	host->min_time = atof(row[11]);
+	host->max_time = atof(row[12]);
+	host->cur_time = atof(row[13]);
+	host->avg_time = atof(row[14]);
+	host->total_polls = atoi(row[15]);
+	host->failed_polls = atoi(row[16]);
+	host->availability = atof(row[17]);
+
 	host->ignore_host = 0;
 
 	/* initialize SNMP */
 	snmp_host_init(host);
 
-	/* perform a check to see if the host is alive by polling it's SysName
+	/* perform a check to see if the host is alive by polling it's SysDesc
 	 * if the host down from an snmp perspective, don't poll it.
 	 * function sets the ignore_host bit */
-	poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
-	free(poll_result);
+	host_status = ping_host(host, ping);
+
+	/* update host table */
+	sprintf(update_sql, "update host set status='%i',status_event_count='%i', status_fail_date='%s',status_rec_date='%s',status_last_error='%s',min_time='%f',max_time='%f',cur_time='%f',avg_time='%f',total_polls='%i',failed_polls='%i',availability='%.4f%' where id='%i'\n",
+		host->status,
+		host->status_event_count,
+		host->status_fail_date,
+		host->status_rec_date,
+		host->status_last_error,
+		host->min_time,
+		host->max_time,
+		host->cur_time,
+		host->avg_time,
+		host->total_polls,
+		host->failed_polls,
+		host->availability,
+		host->id);
+
+	db_insert(&mysql, update_sql);
 
 	/* do the reindex check for this host */
 	if (!host->ignore_host) {
@@ -265,6 +300,7 @@ void poll_host(int host_id) {
 
 	free(entry);
 	free(host);
+	free(ping);
 
 	mysql_free_result(result);
 

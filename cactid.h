@@ -90,6 +90,24 @@
 
 #define POLLER_COMMAND_REINDEX 1
 
+#define POLLER_VERBOSITY_NONE 1
+#define POLLER_VERBOSITY_LOW 2
+#define POLLER_VERBOSITY_MEDIUM 3
+#define POLLER_VERBOSITY_HIGH 4
+#define POLLER_VERBOSITY_DEBUG 5
+
+#define AVAIL_SNMP_AND_PING 1
+#define AVAIL_SNMP 2
+#define AVAIL_PING 3
+
+#define PING_ICMP 1
+#define PING_UDP 2
+
+#define HOST_UNKNOWN 0
+#define HOST_DOWN 1
+#define HOST_RECOVERING 2
+#define HOST_UP 3
+
 #define STAT_DESCRIP_ERROR 99
 
 /* Typedefs */
@@ -107,6 +125,12 @@ typedef struct config_struct {
 	int log_destination;
 	int log_perror;
 	int log_pstats;
+	int availability_method;
+	int ping_method;
+	int ping_retries;
+	int ping_timeout;
+	int ping_failure_count;
+	int ping_recovery_count;
 	int verbose;
 	int dboff;
 	int snmp_ver;
@@ -146,6 +170,18 @@ typedef struct host_struct {
 	int snmp_version;
 	int snmp_port;
 	int snmp_timeout;
+ 	int status;
+	int status_event_count;
+ 	char status_fail_date[40];
+	char status_rec_date[40];
+	char status_last_error[50];
+ 	double min_time;
+	double max_time;
+	double cur_time;
+	double avg_time;
+	int total_polls;
+	int failed_polls;
+ 	double availability;
 	int ignore_host;
  	void *snmp_session;
 } host_t;
@@ -157,6 +193,14 @@ typedef struct host_reindex_struct {
 	int data_query_id;
 	int action;
 } reindex_t;
+
+typedef struct ping_results {
+	char hostname[255];
+	char ping_status[50];
+	char ping_response[50];
+	char snmp_status[50];
+	char snmp_response[50];
+} ping_t;
 
 /* Globals */
 config_t set;

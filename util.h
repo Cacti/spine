@@ -30,3 +30,4 @@ int file_exists(char *filename);
 void cacti_log(char *logmessage);
 int is_number(char *string);
 char *clean_string(char *string_to_clean);
+int update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
