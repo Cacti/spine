@@ -872,6 +872,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	int issue_log_message = FALSE;
 	char logmessage[LOGSIZE];
 	double ping_time;
+ 	double hundred_percent = 100.00;
 	char current_date[40];
 	time_t nowbin;
 	const struct tm *nowstruct;
@@ -891,7 +892,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 		/* update total polls, failed polls and availability */
 		host->failed_polls = host->failed_polls + 1;
 		host->total_polls = host->total_polls + 1;
-		host->availability = 100 * (host->total_polls - host->failed_polls) / host->total_polls;
+		host->availability = hundred_percent * (host->total_polls - host->failed_polls) / host->total_polls;
 
 		/*determine the error message to display */
 		switch (availability_method) {
@@ -952,7 +953,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	} else {
 		/* update total polls and availability */
 		host->total_polls = host->total_polls + 1;
-		host->availability = 100 * (host->total_polls - host->failed_polls) / host->total_polls;
+		host->availability = hundred_percent * (host->total_polls - host->failed_polls) / host->total_polls;
 
 		/* determine the ping statistic to set and do so */
 		if (availability_method == AVAIL_SNMP_AND_PING) {
