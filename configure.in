@@ -1,8 +1,3 @@
-# 
-# RTG 0.7.3 configure.in
-# Author: Rob Beverly <rbeverly@users.sourceforge.net>
-#
-
 AC_INIT(cactid.h)
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -118,7 +113,7 @@ done
 if test -d "$MYSQL_LIB_DIR"; then
   AC_DEFINE(HAVE_MYSQL, 1, [Whether you have MySQL])
 else
-  AC_MSG_ERROR(Cannot find thread-safe MySQL library (libmysqlclient))
+  AC_MSG_ERROR(Cannot find MySQL library (libmysqlclient))
 fi
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
@@ -129,7 +124,7 @@ AC_MSG_CHECKING([if MySQL requires libz])
 LIBZ=no
 OLDLIBS="$LIBS"
 LIBS="-lmysqlclient $LIBS"
-AC_TRY_LINK([#include <mysql.h>], [my_thread_init();], AC_MSG_RESULT(no), 
+AC_TRY_LINK([#include <mysql.h>], [mysql_init();], AC_MSG_RESULT(no), 
 	    [ AC_MSG_RESULT(yes)
               LIBZ=yes ])
 
@@ -200,17 +195,17 @@ if test "$SNMP_SSL" = "yes"; then
   AC_CHECK_LIB(crypto, CRYPTO_free,[],[AC_MSG_ERROR(libcrypto not found!)])
 fi
 
-AC_CHECK_LIB(snmp, snmp_timeout,
-       [ LIBS="-lsnmp $LIBS"
-         AC_DEFINE(OLD_UCD_SNMP, 1, Old UCD SNMP Version) 
-	 OLD_UCD_SNMP=yes ],
-       [ AC_MSG_RESULT(Cannot find UCD-SNMP libraries(snmp)... checking NetSNMP)
-         OLD_UCD_SNMP=no ])
+AC_CHECK_LIB(netsnmp, snmp_timeout,
+       [ LIBS="-lnetsnmp $LIBS"
+         AC_DEFINE(USE_NET_SNMP, 1, New Net SNMP Version) 
+	 USE_NET_SNMP=yes ],
+       [ AC_MSG_RESULT(Cannot find NET-SNMP libraries(snmp)... checking UCD-SNMP)
+         USE_NET_SNMP=no ])
 
-if test "$OLD_UCD_SNMP" = "no"; then
- AC_CHECK_LIB(netsnmp, snmp_timeout,
-       LIBS="-lnetsnmp $LIBS",
-       AC_MSG_ERROR(Cannot find Net-SNMP libraries(snmp)))
+if test "$USE_NET_SNMP" = "no"; then
+ AC_CHECK_LIB(snmp, snmp_timeout,
+       LIBS="-lsnmp $LIBS",
+       AC_MSG_ERROR(Cannot find UCD-SNMP libraries(snmp)))
 fi
 
 etcdir="etc"

@@ -75,9 +75,6 @@
 /* UCD SNMP Path Explicitly Defined */
 #undef IN_UCD_SNMP_SOURCE
 
-/* Old UCD SNMP Version */
-#undef OLD_UCD_SNMP
-
 /* Name of package */
 #undef PACKAGE
 
@@ -107,6 +104,9 @@
 
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
+
+/* New Net SNMP Version */
+#undef USE_NET_SNMP
 
 /* Version number of package */
 #undef VERSION
