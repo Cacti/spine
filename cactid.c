@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
 		for(i=0;i<CONFIG_PATHS;i++) {
 			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE); 
 			
-			if (read_config(conf_file, &set) >= 0) {
+			if (read_cactid_config(conf_file, &set) >= 0) {
 				break;
 			} 
 			

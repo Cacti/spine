@@ -29,7 +29,7 @@
 #include "util.h"
 
 /* read configuration file to establish local environment */
-int read_config(char *file, config_t * set) {
+int read_cactid_config(char *file, config_t * set) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
