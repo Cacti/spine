@@ -118,7 +118,7 @@ done
 if test -d "$MYSQL_LIB_DIR"; then
   AC_DEFINE(HAVE_MYSQL, 1, [Whether you have MySQL])
 else
-  AC_MSG_ERROR(Cannot find thread-safe MySQL library (libmysqlclient_r))
+  AC_MSG_ERROR(Cannot find thread-safe MySQL library (libmysqlclient))
 fi
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
@@ -128,7 +128,7 @@ dnl Some builds of MySQL require libz - try to detect
 AC_MSG_CHECKING([if MySQL requires libz])
 LIBZ=no
 OLDLIBS="$LIBS"
-LIBS="-lmysqlclient_r $LIBS"
+LIBS="-lmysqlclient $LIBS"
 AC_TRY_LINK([#include <mysql.h>], [my_thread_init();], AC_MSG_RESULT(no), 
 	    [ AC_MSG_RESULT(yes)
               LIBZ=yes ])
@@ -138,9 +138,9 @@ if test "$LIBZ" = "yes"; then
   LIBS="-lz $OLDLIBS"
 fi
 
-AC_CHECK_LIB(mysqlclient_r, my_thread_init,
-       LIBS="-lmysqlclient_r $LIBS",
-       AC_MSG_ERROR(Cannot link with thread-safe MySQL lib (libmysqlclient_r)))
+AC_CHECK_LIB(mysqlclient, mysql_init,
+       LIBS="-lmysqlclient $LIBS",
+       AC_MSG_ERROR(Cannot link with MySQL lib (libmysqlclient)))
 
 dnl Determine UCD or Net-SNMP installation paths
 if test "x$with_snmp" != "x"; then
