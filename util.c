@@ -1084,45 +1084,49 @@ int file_exists(char *filename) {
 }
 
 /******************************************************************************/
-/*  is_number() - verify is a number for error processing                     */
+/*  is_numeric - check to see if a string is long or double.                  */
 /******************************************************************************/
-int is_number(char *string) {
-	int i;
+is_numeric(char *string)
+{
+	extern int errno;
+	long local_lval;
+	double local_dval;
+	char *end_ptr_long, *end_ptr_double;
+	int conv_base=10;
+	int length;
 
-	for(i=0; i<strlen(string); i++) {
-		if(!isdigit(string[i]) && !(i==strlen(string)-1 && isspace(string[i]))) return(0);
+	length = strlen(string);
+
+	if (!length) {
+		return 0;
 	}
 
-	return(1);
-}
-
-/******************************************************************************/
-/*  is_float() - verify is a number is float, raw                             */
-/******************************************************************************/
-int is_float(char *string) {
-	int i;
-	int sign_count = 0;
- 	int exp_count = 0;
-
-	for(i=0; i<strlen(string); i++) {
-		if ((string[i] == '+') || (string[i] == '-')) {
-   			sign_count = sign_count + 1;
-		} else if (toupper(string[i]) == 'E') {
-			exp_count = exp_count + 1;
-		} else if(!isdigit(string[i]) && !(i==strlen(string)-1 && isspace(string[i]))) {
-			return(0);
+ 	/* check for an integer */
+	errno = 0;
+	local_lval = strtol(string, &end_ptr_long, conv_base);
+	if (errno!=ERANGE) {
+		if (end_ptr_long == string + length) { /* integer string */
+			return 1;
+		} else if (end_ptr_long == string &&
+				*end_ptr_long != '\0') { /* ignore partial string matches */
+			return 0;
 		}
-	}
-
-	if (sign_count > 2) {
-		return(0);
-	} else if (exp_count > 1) {
-		return(0);
 	} else {
-		return(1);
+		end_ptr_long=NULL;
 	}
-}
 
+	errno=0;
+	local_dval = strtod(string, &end_ptr_double);
+	if (errno != ERANGE) {
+		if (end_ptr_double == string + length) { /* floating point string */
+			return 1;
+		}
+	} else {
+		end_ptr_double=NULL;
+	}
+
+	return 0;
+}
 
 /******************************************************************************/
 /*  string_to_argv() - convert a string to an argc/argv combination           */
@@ -1144,43 +1148,88 @@ char **string_to_argv(char *argstring, int *argc){
 /******************************************************************************/
 /*  clean_string() - change backslashes to forward slashes for system calls   */
 /******************************************************************************/
-char *clean_string(char *string_to_clean) {
+char *clean_string(char *string) {
 	char *posptr;
 
-	posptr = strchr(string_to_clean,'\\');
+	posptr = strchr(string,'\\');
 
 	while(posptr != NULL)
 	{
 		*posptr = '/';
-		posptr = strchr(string_to_clean,'\\');
+		posptr = strchr(string,'\\');
 	}
 
-	return(string_to_clean);
+	return(string);
+}
+
+/******************************************************************************/
+/*  strip_quotes() - remove beginning and ending quotes from a string         */
+/******************************************************************************/
+char *strip_quotes(char *string) {
+	int length;
+	char *posptr, *startptr;
+	char type;
+
+	length = strlen(string);
+
+	/* simply return on blank string */
+	if (!length) {
+		return string;
+	}
+
+	/* set starting postion of string */
+	startptr = string;
+
+	/* find first quote in the string, determine type */
+	if ((posptr = strchr(string, '"')) != NULL) {
+		type = '"';
+	} else if ((posptr = strchr(string, '\'')) != NULL) {
+		type = '\'';
+	} else {
+		return string;
+	}
+
+	posptr = strchr(string,type);
+
+	/* if the first character is a string, then we are ok */
+	if (startptr == posptr) {
+		/* remove leading quote */
+		memmove(startptr, posptr+1, strlen(string) - 1);
+		string[length] = '\0';
+
+		/* remove trailing quote */
+		posptr = strchr(string,type);
+		if (posptr != NULL) {
+			*posptr = '\0';
+		}
+ 	}
+
+	return string;
 }
 
 /******************************************************************************/
 /*  strip_string_crlf() - remove control conditions from a string             */
 /******************************************************************************/
-char *strip_string_crlf(char *string_to_clean) {
+char *strip_string_crlf(char *string) {
 	char *posptr;
 
-	posptr = strchr(string_to_clean,'\n');
+	posptr = strchr(string,'\n');
 
 	while(posptr != NULL)
 	{
 		*posptr = '\0';
-		posptr = strchr(string_to_clean,'\n');
+		posptr = strchr(string,'\n');
 	}
 
-	posptr = strchr(string_to_clean,'\r');
+	posptr = strchr(string,'\r');
 
 	while(posptr != NULL)
 	{
 		*posptr = '\0';
-		posptr = strchr(string_to_clean,'\r');
+		posptr = strchr(string,'\r');
 	}
 
-	return(string_to_clean);
+	return(string);
 }
 
 /******************************************************************************/

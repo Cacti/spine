@@ -294,8 +294,11 @@ void poll_host(int host_id) {
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				} else {
-					/* erroneous non-numeric result */
-					if ((!is_number(entry->result)) && (!is_float(entry->result))) {
+					/* remove double or single quotes from string */
+					strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
+
+					/* detect erroneous non-numeric result */
+					if (!is_numeric(entry->result)) {
 						strncpy(errstr, entry->result,sizeof(errstr));
 						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not valid. Partial Result: %s...\n", host_id, errstr);
 						cacti_log(logmessage);
@@ -314,16 +317,19 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				/* erroneous non-numeric result */
+				/* remove double or single quotes from string */
+				strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
+
+				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, (char *) strip_string_crlf(entry->result),sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not valid. Partial Result: %s...\n", host_id, errstr);
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SCRIPT not valid. Partial Result: %s...\n", host_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE, "Host[%i] CMD: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					snprintf(logmessage, LOGSIZE, "Host[%i] SCRIPT: %s, output: %s\n", host_id, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
 
@@ -333,7 +339,10 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				/* erroneous non-numeric result */
+				/* remove double or single quotes from string */
+				strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
+
+				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, entry->result,sizeof(errstr));
 					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not valid.  Partial Result: %s...\n", host_id, errstr);
@@ -396,9 +405,7 @@ int validate_result(char * result) {
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
 	if ((strstr(result, ":") == 0) && (strstr(result, "!") == 0) && (strstr(result, " ") == 0)) {
-		if (is_number(result)) {
-			return(1);
-		} else if (is_float(result)) {
+		if (is_numeric(result)) {
 			return(1);
   		} else {
 			return(0);
@@ -429,9 +436,7 @@ int validate_result(char * result) {
 	}
 
 	/* default handling */
-	if (is_number(result)) {
-		return(1);
-	} else if (is_float(result)) {
+	if (is_numeric(result)) {
 		return(1);
 	} else {
 		return(0);

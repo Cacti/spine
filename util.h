@@ -32,12 +32,13 @@ void config_defaults(config_t *);
 void cacti_log(char *logmessage);
 
 /* Number validation tools */
-int is_number(char *string);
-int is_float(char *string);
+int is_numeric(char *string);
 
 /* String and file utilities */
-char *clean_string(char *string_to_clean);
+char *clean_string(char *string);
 int file_exists(char *filename);
+char *strip_string_crlf(char *string);
+char *strip_quotes(char *string);
 
 /* Host availability functions */
 int ping_host(host_t *host, ping_t *ping);
