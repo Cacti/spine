@@ -277,20 +277,40 @@ int main(int argc, char *argv[]) {
 	pthread_attr_destroy(&attr);
 	pthread_mutexattr_destroy(&mutexattr);
 
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: Thread Cleanup Complete\n");
+	}
+
 	/* cleanup the snmp process*/
 	snmp_free();
 
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: SNMP Cleanup Complete\n");
+	}
+
 	/* close the php script server */
 	php_close();
+
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: PHP Script Server Pipes Closed\n");
+	}
 
 	/* free malloc'd variables */
 	free(threads);
 	free(ids);
 	free(conf_file);
 
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: Allocated Variable Memory Freed\n");
+	}
+
 	/* close mysql */
 	mysql_free_result(result);
 	mysql_close(&mysql);
+
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: MYSQL Free & Close Completed\n");
+	}
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;

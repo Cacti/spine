@@ -249,7 +249,6 @@ void php_close() {
 
 	/* tell the script server to close */
 	write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
-	sleep(1);
 
 	/* close file descriptors */
 	close(php_pipes.php_write_fd);

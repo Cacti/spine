@@ -34,19 +34,10 @@
 #include "snmp.h"
 #include "sql.h"
 
-//#include <netinet/in.h>
-//#include <netinet/ip.h>
-//#include <ctype.h>
-//#include <arpa/inet.h>
-//#include <stdlib.h>
-//#include <stdio.h>
-//#include <unistd.h>
-//#include <sys/types.h>
-//#include <netinet/udp.h>
-//#include <netinet/tcp.h>
-//#include <sys/time.h>
-//#include <string.h>
-
+/******************************************************************************/
+/*  read_config_options() - load default values from the database for poller  */
+/*                          processing.                                       */
+/******************************************************************************/
 int read_config_options(config_t *set) {
 	MYSQL mysql;
 	MYSQL_RES *result;
@@ -223,7 +214,10 @@ int read_config_options(config_t *set) {
 	mysql_close(&mysql);
 }
 
-/* read configuration file to establish local environment */
+/******************************************************************************/
+/*  read_cactid_config() - read the CACTID configuration files to obtain      */
+/*                         environment settings.                              */
+/******************************************************************************/
 int read_cactid_config(char *file, config_t *set) {
 	FILE *fp;
 	char buff[BUFSIZE];
@@ -273,7 +267,9 @@ int read_cactid_config(char *file, config_t *set) {
 	}
 }
 
-/* populate master configuration defaults */
+/******************************************************************************/
+/*  config_defaults() - populate system variables with default values.        */
+/******************************************************************************/
 void config_defaults(config_t * set) {
 	set->interval = DEFAULT_INTERVAL;
 	set->snmp_ver = DEFAULT_SNMP_VER;
@@ -294,7 +290,10 @@ void config_defaults(config_t * set) {
 	return;
 }
 
-/* cacti log file handler */
+/******************************************************************************/
+/*  cacti_log() - output user messages to the Cacti logfile facility.         */
+/*                Can also output to the syslog facility if desired.          */
+/******************************************************************************/
 void cacti_log(char *logmessage) {
 	FILE *log_file = NULL;
 
@@ -363,7 +362,9 @@ void cacti_log(char *logmessage) {
 	}
 }
 
-/* ping host */
+/******************************************************************************/
+/*  ping_host() - check for availability using the desired user method.       */
+/******************************************************************************/
 int ping_host(host_t *host, ping_t *ping) {
 	int ping_result;
 	int snmp_result;
@@ -425,7 +426,9 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 }
 
-/* perform an SNMP based ping */
+/******************************************************************************/
+/*  ping_snmp() - perform an SNMP based ping of host.                         */
+/******************************************************************************/
 int ping_snmp(host_t *host, ping_t *ping) {
 	struct timeval now;
 	char *poll_result;
@@ -462,7 +465,9 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 }
 
-/* allocate the ICMP socket and release su */
+/******************************************************************************/
+/*  init_socket() - allocate the ICMP socket.                                 */
+/******************************************************************************/
 int init_socket()
 {
 	int icmp_socket;
@@ -477,7 +482,9 @@ int init_socket()
 	return(icmp_socket);
 }
 
-/* perform an ICMP/ECHO based ping */
+/******************************************************************************/
+/*  ping_icmp() - perform an ICMP ping of a host.                             */
+/******************************************************************************/
 int ping_icmp(host_t *host, ping_t *ping) {
 	extern int errno;
 	int icmp_socket;
@@ -489,7 +496,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in servername;
 	char socket_reply[BUFSIZE];
 	int retry_count;
-	char request[256];
+	char request[BUFSIZE];
 	char *cacti_msg = "cacti-monitoring-system";
 	int request_len;
 	int return_code;
@@ -527,8 +534,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	/* hostname must be nonblank */
 	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
-		strcpy(ping->ping_status,"down");
-		strcpy(ping->ping_response,"default");
+		strncpy(ping->ping_status,"down", sizeof(ping->ping_status));
+		strncpy(ping->ping_response,"default", sizeof(ping->ping_response));
 
 		/* set the socket timeout */
 		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -544,8 +551,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strcpy(ping->ping_response,"ICMP: Ping timed out");
-				strcpy(ping->ping_status,"down");
+				strncpy(ping->ping_response,"ICMP: Ping timed out", sizeof(ping->ping_response));
+				strncpy(ping->ping_status,"down",sizeof(ping->ping_status));
 				free(packet);
 				close(icmp_socket);
 				return HOST_DOWN;
@@ -579,7 +586,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if (total_time < set.ping_timeout) {
-					strcpy(ping->ping_response,"ICMP: Host is Alive");
+					strncpy(ping->ping_response,"ICMP: Host is Alive",sizeof(ping->ping_response));
 					sprintf(ping->ping_status,"%.5f",total_time);
 					free(packet);
 					close(icmp_socket);
@@ -591,15 +598,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			usleep(50);
 		}
 	} else {
-		strcpy(ping->ping_response,"ICMP: Destination address not specified");
-		strcpy(ping->ping_status,"down");
+		strncpy(ping->ping_response,"ICMP: Destination address not specified",sizeof(ping->ping_response));
+		strncpy(ping->ping_status,"down",sizeof(ping->ping_status));
 		free(packet);
   		close(icmp_socket);
 		return HOST_DOWN;
 	}
 }
 
-/* calculate a checksum for the IP packet */
+/******************************************************************************/
+/*  checksum() - calculate 16bit checksum of a packet buffer.                 */
+/******************************************************************************/
 unsigned short checksum(void* buf, int len)
 {
 	int nleft = len;
@@ -619,7 +628,9 @@ unsigned short checksum(void* buf, int len)
 	return answer;
 }
 
-/* perform a udp based ping */
+/******************************************************************************/
+/*  ping_udp() - perform a UDP ping.  Function may vary from OS to OS.        */
+/******************************************************************************/
 int ping_udp(host_t *host, ping_t *ping) {
 	extern int errno;
 	double begin_time, end_time, total_time;
@@ -627,9 +638,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 	struct timeval timeout;
 	int udp_socket;
 	struct sockaddr_in servername;
-	char socket_reply[256];
+	char socket_reply[BUFSIZE];
+	char logmessage[LOGSIZE];
 	int retry_count;
-	char request[256];
+	char request[BUFSIZE];
 	int request_len;
 	int return_code;
 	fd_set socket_fds;
@@ -642,8 +654,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* hostname must be nonblank */
 	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
-		strcpy(ping->ping_status,"down");
-		strcpy(ping->ping_response,"default");
+		strncpy(ping->ping_status,"down",sizeof(ping->ping_status));
+		strncpy(ping->ping_response,"default",sizeof(ping->ping_response));
 
 		/* initilize the socket */
 		udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -676,8 +688,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strcpy(ping->ping_response,"UDP: Ping timed out");
-				strcpy(ping->ping_status,"down");
+				strncpy(ping->ping_response,"UDP: Ping timed out",sizeof(ping->ping_response));
+				strncpy(ping->ping_status,"down",sizeof(ping->ping_status));
 				close(udp_socket);
 				return HOST_DOWN;
 			}
@@ -707,14 +719,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 			total_time = end_time - begin_time;
 
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				printf("The UDP Ping return_code was %i\n",return_code);
-				printf("The UDP Ping errno was %i\n",errno);
-				printf("The UDP Ping total_time was %.4f milliseconds\n",(total_time*1000));
+				snprintf(logmessage, LOGSIZE, "DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000));
+				cacti_log(logmessage);
 			}
 
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if ((total_time * 1000) <= set.ping_timeout) {
-					strcpy(ping->ping_response,"UDP: Host is Alive");
+					strncpy(ping->ping_response,"UDP: Host is Alive",sizeof(ping->ping_response));
 					sprintf(ping->ping_status,"%.5f",(total_time*1000));
 					close(udp_socket);
 					return HOST_UP;
@@ -724,15 +735,19 @@ int ping_udp(host_t *host, ping_t *ping) {
 			retry_count++;
 		}
 	} else {
-		strcpy(ping->ping_response,"UDP: Destination address not specified");
-		strcpy(ping->ping_status,"down");
+		strncpy(ping->ping_response,"UDP: Destination address not specified",sizeof(ping->ping_response));
+		strncpy(ping->ping_status,"down",sizeof(ping->ping_status));
 		return HOST_DOWN;
 	}
 }
 
+/******************************************************************************/
+/*  update_host_status - calculate the status of a host and update the host   */
+/*                       table.                                               */
+/******************************************************************************/
 int update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
 	int issue_log_message = FALSE;
-	char logmessage[256];
+	char logmessage[LOGSIZE];
 	double ping_time;
 	char current_date[40];
 	time_t nowbin;
@@ -935,7 +950,9 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	}
 }
 
-/* check for a file name */
+/******************************************************************************/
+/*  file_exists - check for the existance of a file.                          */
+/******************************************************************************/
 int file_exists(char *filename) {
 	struct stat file_stat;
 
@@ -946,7 +963,9 @@ int file_exists(char *filename) {
 	}
 }
 
-/* retreive timestamp for logging */
+/******************************************************************************/
+/*  timestamp - get formatted timestamp used for logging                      */
+/******************************************************************************/
 void timestamp(char *str) {
 	struct timeval now;
 	struct tm *t;
@@ -958,7 +977,9 @@ void timestamp(char *str) {
 	return;
 }
 
-/* verify is a number for error processing */
+/******************************************************************************/
+/*  is_number() - verify is a number for error processing                     */
+/******************************************************************************/
 int is_number(char *string) {
 	int i;
 
@@ -969,7 +990,9 @@ int is_number(char *string) {
 	return(1);
 }
 
-/* convert a string to an argc/argv combination */
+/******************************************************************************/
+/*  string_to_argv() - convert a string to an argc/argv combination           */
+/******************************************************************************/
 char **string_to_argv(char *argstring, int *argc){
 	char *p, **argv;
 	char *last;
@@ -984,7 +1007,9 @@ char **string_to_argv(char *argstring, int *argc){
 	return argv;
 }
 
-/* change backslashes to forward slashes for system calls */
+/******************************************************************************/
+/*  clean_string() - change backslashes to forward slashes for system calls   */
+/******************************************************************************/
 char *clean_string( char *string_to_clean ) {
 	char *posptr;
 
@@ -999,6 +1024,9 @@ char *clean_string( char *string_to_clean ) {
 	return(string_to_clean);
 }
 
+/******************************************************************************/
+/*  init_sockaddr - convert host name to internet address                     */
+/******************************************************************************/
 void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
 	char logmessage[255];
@@ -1007,7 +1035,7 @@ void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned sho
 	name->sin_port = htons (port);
 	hostinfo = gethostbyname (hostname);
 	if (hostinfo == NULL) {
-		sprintf(logmessage, "WARNING: Unknown host %s.\n", hostname);
+		snprintf(logmessage, LOGSIZE, "WARNING: Unknown host %s.\n", hostname);
 		cacti_log(logmessage);
 	}
 	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
