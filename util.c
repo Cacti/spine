@@ -35,8 +35,9 @@ int read_cactid_config(char *file, config_t * set) {
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
-	
+
 	if ((fp = fopen(file, "rb")) == NULL) {
+		printf("ERROR: Could not open config file.\n");
 		return (-1);
 	}else{
 		if (set->verbose >= HIGH) {
@@ -47,16 +48,16 @@ int read_cactid_config(char *file, config_t * set) {
 			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%20s %255s", p1, p2);
-				
+
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
 				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
+				else if (!strcasecmp(p1, "LogFile")) strncpy(set->logfile, p2, sizeof(set->logfile));
+				else if (!strcasecmp(p1, "Verbose")) set->verbose = atoi(p2);
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
 				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
-				else if (!strcasecmp(p1, "LogFile")) strncpy(set->logfile, p2, sizeof(set->logfile));
-				else if (!strcasecmp(p1, "Verbose")) strncpy(set->verbose, p2, sizeof(set->logfile));
 				else {
 					printf("UTIL: ERROR - Unrecongized directive: %s=%s in %s\n", 
 					p1, p2, file);
@@ -116,11 +117,17 @@ int cacti_log(char *logmessage, char *logtype) {
     if (((set.log_pstats == 1) && !(strcmp(logtype,"s"))) || ((set.log_perror) && !(strcmp(logtype,"e")))) {
         if ((set.log_destination == 1) || (set.log_destination == 2)) {
             while (!fileopen) {
-            	log_file = fopen( set.logfile, "a" );
+				if (!file_exists(set.logfile)) {
+					log_file = fopen(set.logfile, "w");
+				}else {
+            		log_file = fopen(set.logfile, "a");
+				}
+
             	if (log_file != NULL) {
             		fileopen = 1;
            		}else {
-           			printf("ERROR: Could not open Logfile\n");
+           			printf("ERROR: Could not open Logfile will not be logging.\n");
+					break;
      			}
       		}
   		}
