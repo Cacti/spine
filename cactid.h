@@ -207,7 +207,7 @@ typedef struct cacti_icmp {
 	char icmp_type;
 	char icmp_code;
 	short icmp_chksm;
-	short icmp_id;
+	short icmp_uid;
 	short icmp_sqn;
 	char data[23];
 } icmp_t;
