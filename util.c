@@ -1084,7 +1084,7 @@ int file_exists(char *filename) {
 }
 
 /******************************************************************************/
-/*  is_numeric - check to see if a string is long or double.                  */
+/*  is_numeric() - check to see if a string is long or double.                */
 /******************************************************************************/
 is_numeric(char *string)
 {
@@ -1125,7 +1125,11 @@ is_numeric(char *string)
 		end_ptr_double=NULL;
 	}
 
-	return 0;
+	if (!errno) {
+		return 1;
+	} else {
+		return 0;
+ 	}
 }
 
 /******************************************************************************/

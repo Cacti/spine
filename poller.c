@@ -33,6 +33,9 @@
 #include "poller.h"
 #include "nft_popen.h"
 
+/******************************************************************************/
+/*  child() - called for every host.  Is a forked process to initiate poll.   */
+/******************************************************************************/
 void *child(void * arg) {
 	extern int active_threads;
 	int host_id = *(int *) arg;
@@ -63,6 +66,9 @@ void *child(void * arg) {
 	pthread_exit(0);
 }
 
+/******************************************************************************/
+/*  poll_host() - Poll a host.                                                */
+/******************************************************************************/
 void poll_host(int host_id) {
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
@@ -182,7 +188,7 @@ void poll_host(int host_id) {
 
 		if (num_rows > 0) {
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id,num_rows, host->hostname);
+				snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname);
 				cacti_log(logmessage);
 			}
 
@@ -394,13 +400,17 @@ void poll_host(int host_id) {
 	}
 }
 
+/******************************************************************************/
+/*  validate_result() - Make sure that Cacti results are accurate before      */
+/*                      placing in mysql database and/or logfile.             */
+/******************************************************************************/
 int validate_result(char * result) {
 	int space_cnt = 0;
 	int delim_cnt = 0;
 	int i;
 
-//	/* remove control characters from string */
-//	result = (char *) strip_string_crlf(result);
+	/* remove control characters from string */
+	strncpy(result, strip_string_crlf(result), sizeof(result));
 
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
@@ -444,6 +454,10 @@ int validate_result(char * result) {
 }
 
 
+/******************************************************************************/
+/*  exec_poll() - Poll a host by running an external program utilizing the    */
+/*                popen command.                                              */
+/******************************************************************************/
 char *exec_poll(host_t *current_host, char *command) {
 	FILE *cmd_stdout;
 	int cmd_fd;
@@ -457,7 +471,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	struct timeval timeout;
 
 	/* establish timeout of 5 seconds for pipe response */
-	timeout.tv_sec = 6;
+	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
 
 	char *result_string = (char *) malloc(BUFSIZE);
@@ -494,7 +508,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			snprintf(cmd_result, bytes_read, "%s", cmd_result);
 		}
 
-		/* cleanup file and pipe */
+		/* close pipe */
 		nft_pclose(cmd_fd);
 
 		if (strlen(cmd_result) == 0) {
