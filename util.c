@@ -27,7 +27,7 @@
 #include <sys/stat.h>
 
 /* read configuration file to establish local environment */
-int read_rtg_config(char *file, config_t * set) {
+int init_config(char *file, config_t * set) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
@@ -98,45 +98,6 @@ void config_defaults(config_t * set) {
 	return;
 }
 
-/* Print RTG stats */
-void print_stats(stats_t stats) {
-	printf("\n[Polls = %lld] [DBInserts = %lld] [Wraps = %d] [OutOfRange = %d]\n",
-		stats.polls, stats.db_inserts, stats.wraps, stats.out_of_range);
-	printf("[No Resp = %d] [SNMP Errs = %d] [Slow = %d] [PollTime = %2.3f%c]\n",
-		stats.no_resp, stats.errors, stats.slow, stats.poll_time, 's');
-	
-	return;
-}
-
-
-/* A fancy sleep routine */
-void sleepy(float sleep_time) {
-	int chunks = 10;
-	int i;
-	
-	if (sleep_time > chunks) {
-		if (set.verbose >= LOW) {
-			printf("Next Poll: ");
-		}
-		
-		for (i = chunks; i > 0; i--) {
-			if (set.verbose >= LOW) {
-				printf("%d...", i);
-				fflush(NULL);
-			}
-			
-			usleep(sleep_time*1000000 / chunks);
-		}
-		
-		if (set.verbose >= LOW) printf("\n");
-	}else{
-		sleep_time*=1000000;
-		usleep(sleep_time);
-	}
-	
-	return;
-}
-
 int file_exists(char *filename) {
 	struct stat file_stat;
 	
@@ -160,7 +121,7 @@ void timestamp(char *str) {
 	return;
 }
 
-int is_number (char *string) {
+int is_number(char *string) {
 	int i;
 	
 	for(i=0; i<strlen(string); i++) {
