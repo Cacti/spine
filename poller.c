@@ -316,7 +316,7 @@ void poll_host(int host_id) {
 
 				/* erroneous non-numeric result */
 				if (!validate_result(entry->result)) {
-					strncpy(errstr, entry->result,sizeof(errstr));
+					strncpy(errstr, (char *) strip_string_crlf(entry->result),sizeof(errstr));
 					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not valid. Partial Result: %s...\n", host_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
