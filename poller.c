@@ -56,7 +56,7 @@ void *child(void * arg) {
 	thread_mutex_unlock(LOCK_THREAD);
 
 	if (set.verbose >= DEBUG) {
-		sprintf(logmessage,"DEBUG: The Value of Active Threads is ->%i\n",set.poller_id,active_threads);
+		sprintf(logmessage, "DEBUG: The Value of Active Threads is ->%i\n" ,active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -80,11 +80,9 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	if (MYSQL_VERSION_ID > 40000) {
-		mysql_thread_init();
-	}else{
-		my_thread_init();
-	}
+	#ifndef OLD_MYSQL
+	mysql_thread_init();
+	#endif
 
 	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
 	snprintf(query2, sizeof(query2), "select id,hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
@@ -270,11 +268,9 @@ void poll_host(int host_id) {
 
 	mysql_free_result(result);
 
-	if (MYSQL_VERSION_ID > 40000) {
-		mysql_thread_end();
-	}else{
-		my_thread_end();
-	}
+	#ifndef OLD_MYSQL
+	mysql_thread_end();
+	#endif
 
 	mysql_close(&mysql);
 
