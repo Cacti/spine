@@ -92,6 +92,10 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
+	/* allocate host and ping structures with appropriate values */
+	host = (host_t *) malloc(sizeof(host_t));
+	ping = (ping_t *) malloc(sizeof(ping_t));
+
 	#ifndef OLD_MYSQL
 	mysql_thread_init();
 	#endif
@@ -113,10 +117,6 @@ void poll_host(int host_id) {
 	}
 
 	row = mysql_fetch_row(result);
-
-	/* allocate host and ping structures with appropriate values */
-	host = (host_t *) malloc(sizeof(host_t));
-	ping = (ping_t *) malloc(sizeof(ping_t));
 
 	/* populate host structure */
 	host->id = atoi(row[0]);
@@ -224,7 +224,7 @@ void poll_host(int host_id) {
 					free(query3);
 
 					assert_fail = 1;
-				}else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) <= atoll(poll_result))) {
+				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) <= strtoll(poll_result, (char **)NULL, 10))) {
 					snprintf(logmessage, LOGSIZE, "ASSERT: '%s>%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 					cacti_log(logmessage);
 
@@ -234,7 +234,7 @@ void poll_host(int host_id) {
 					free(query3);
 
 					assert_fail = 1;
-				}else if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) >= atoll(poll_result))) {
+				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) >= strtoll(poll_result, (char **)NULL, 10))) {
 					snprintf(logmessage, LOGSIZE, "ASSERT: '%s<%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 					cacti_log(logmessage);
 
@@ -475,11 +475,11 @@ char *exec_poll(host_t *current_host, char *command) {
 	int rescode, numfds;
 	struct timeval timeout;
 
+	char *result_string = (char *) malloc(BUFSIZE);
+
 	/* establish timeout of 5 seconds for pipe response */
 	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
-
-	char *result_string = (char *) malloc(BUFSIZE);
 
 	cmd_fd = nft_popen((char *)clean_string(command), "r");
 
