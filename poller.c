@@ -98,8 +98,8 @@ void poll_host(int host_id) {
 
 	mysql_thread_init();
 
-	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmpv3_auth_username,snmpv3_auth_password,snmpv3_auth_protocol,snmpv3_priv_passphrase,snmpv3_priv_protocol,snmp_port,snmp_timeout,availability_method,ping_method,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
-	snprintf(query2, sizeof(query2), "select id,hostname,snmp_community,snmp_version,snmpv3_auth_username,snmpv3_auth_password,snmpv3_auth_protocol,snmpv3_priv_passphrase,snmpv3_priv_protocol,snmp_port,snmp_timeout,availability_method,ping_method,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
+	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
+	snprintf(query2, sizeof(query2), "select id, hostname,snmp_community,snmp_version,snmp_port,snmp_timeout,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
 	snprintf(query4, sizeof(query4), "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
 
 	db_connect(set.dbdb, &mysql);
@@ -119,33 +119,22 @@ void poll_host(int host_id) {
 	/* populate host structure */
 	host->id = atoi(row[0]);
 	if (row[1] != NULL) snprintf(host->hostname, sizeof(host->hostname), "%s", row[1]);
-	if (row[2] != NULL) {
-        snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", row[2]);
-    } else {
-        snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", "");
-    }
+	if (row[2] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", row[2]);
 	host->snmp_version = atoi(row[3]);
-	if (row[4] != NULL) snprintf(host->snmpv3_auth_username, sizeof(host->snmpv3_auth_username), "%s", row[4]);
-	if (row[5] != NULL) snprintf(host->snmpv3_auth_password, sizeof(host->snmpv3_auth_password), "%s", row[5]);
-	if (row[6] != NULL) snprintf(host->snmpv3_auth_protocol, sizeof(host->snmpv3_auth_protocol), "%s", row[6]);
-	if (row[7] != NULL) snprintf(host->snmpv3_priv_passphrase, sizeof(host->snmpv3_priv_passphrase), "%s", row[7]);
-	if (row[8] != NULL) snprintf(host->snmpv3_priv_protocol, sizeof(host->snmpv3_priv_protocol), "%s", row[8]);
-	host->snmp_port = atoi(row[9]);
-	host->snmp_timeout = atoi(row[10]);
-    host->availability_method = atoi(row[11]);
-    host->ping_method = atoi(row[12]);
-	if (row[13] != NULL) host->status = atoi(row[13]);
-	host->status_event_count = atoi(row[14]);
-	snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", row[15]);
-	snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", row[16]);
-	snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", row[17]);
-	host->min_time = atof(row[18]);
-	host->max_time = atof(row[19]);
-	host->cur_time = atof(row[20]);
-	host->avg_time = atof(row[21]);
-	host->total_polls = atoi(row[22]);
-	host->failed_polls = atoi(row[23]);
-	host->availability = atof(row[24]);
+	host->snmp_port = atoi(row[4]);
+	host->snmp_timeout = atoi(row[5]);
+	if (row[6] != NULL) host->status = atoi(row[6]);
+	host->status_event_count = atoi(row[7]);
+	snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", row[8]);
+	snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", row[9]);
+	snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", row[10]);
+	host->min_time = atof(row[11]);
+	host->max_time = atof(row[12]);
+	host->cur_time = atof(row[13]);
+	host->avg_time = atof(row[14]);
+	host->total_polls = atoi(row[15]);
+	host->failed_polls = atoi(row[16]);
+	host->availability = atof(row[17]);
 
 	host->ignore_host = 0;
 
@@ -288,22 +277,17 @@ void poll_host(int host_id) {
 			snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", "");
 		}
 		entry->snmp_version = atoi(row[3]);
-   		if (row[4] != NULL) snprintf(entry->snmpv3_auth_username, sizeof(entry->snmpv3_auth_username), "%s", row[4]);
-		if (row[5] != NULL) snprintf(entry->snmpv3_auth_password, sizeof(entry->snmpv3_auth_password), "%s", row[5]);
-        if (row[6] != NULL) snprintf(entry->snmpv3_auth_protocol, sizeof(entry->snmpv3_auth_protocol), "%s", row[6]);
-        if (row[7] != NULL) snprintf(entry->snmpv3_priv_passphrase, sizeof(entry->snmpv3_priv_passphrase), "%s", row[7]);
-        if (row[8] != NULL) snprintf(entry->snmpv3_priv_protocol, sizeof(entry->snmpv3_priv_protocol), "%s", row[8]);
-		entry->snmp_port = atoi(row[9]);
-		entry->snmp_timeout = atoi(row[10]);
-        entry->availability_method = atoi(row[11]);
-        entry->ping_method = atoi(row[12]);
-		if (row[13] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[13]);
-		if (row[14] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[14]);
-		if (row[15] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[15]);
-		if (row[16] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[16]);
-		if (row[17] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[17]);
-		entry->local_data_id = atoi(row[18]);
-		entry->rrd_num = atoi(row[19]);
+		if (row[4] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[4]);
+		if (row[5] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[5]);
+		if (row[6] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[6]);
+		if (row[7] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[7]);
+		if (row[8] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[8]);
+		if (row[9] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[9]);
+		if (row[10] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[10]);
+		entry->local_data_id = atoi(row[11]);
+		entry->rrd_num = atoi(row[12]);
+		entry->snmp_port = atoi(row[13]);
+		entry->snmp_timeout = atoi(row[14]);
 		snprintf(entry->result, sizeof(entry->result), "%s", "U");
 
 		if (!host->ignore_host) {
