@@ -66,6 +66,7 @@
 #define LOCK_THREAD 1
 #define LOCK_MYSQL 2
 #define LOCK_RRDTOOL 3
+#define LOCK_PIPE 4
 
 #define STAT_DESCRIP_ERROR 99
 

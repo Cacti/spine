@@ -127,9 +127,15 @@ void poll_host(int host_id) {
 			
 			break;
 		case 1:
+			mutex_lock(LOCK_PIPE);
 			cmd_stdout=popen(entry->command, "r");
+			mutex_unlock(LOCK_PIPE);
+			
 			fgets(cmd_result, 255, cmd_stdout);
+			
+			mutex_lock(LOCK_PIPE);
 			return_value = pclose(cmd_stdout);
+			mutex_unlock(LOCK_PIPE);
 			
 			if (return_value != 0) {
 				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
@@ -147,9 +153,15 @@ void poll_host(int host_id) {
 			
 			break;
 		case 2:
+			mutex_lock(LOCK_PIPE);
 			cmd_stdout=popen(entry->command, "r");
+			mutex_unlock(LOCK_PIPE);
+			
 			fgets(cmd_result, 255, cmd_stdout);
+			
+			mutex_lock(LOCK_PIPE);
 			return_value = pclose(cmd_stdout);
+			mutex_unlock(LOCK_PIPE);
 			
 			if (return_value != 0) {
 				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);

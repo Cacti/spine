@@ -32,6 +32,7 @@ static pthread_mutex_t snmp_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t threads_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mysql_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t rrdtool_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t pipe_lock = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t* get_lock(int lock) {
 	pthread_mutex_t *ret_val;
@@ -48,6 +49,9 @@ pthread_mutex_t* get_lock(int lock) {
                 break;
 	case LOCK_RRDTOOL:
                 ret_val = &rrdtool_lock;
+                break;
+	case LOCK_PIPE:
+                ret_val = &pipe_lock;
                 break;
 	}
 	
