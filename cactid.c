@@ -23,10 +23,10 @@
  +-------------------------------------------------------------------------+
 */
 
-#include <pthread.h>
-#include <errno.h>
 #include "common.h"
 #include "cactid.h"
+#include <pthread.h>
+#include <errno.h>
 #include "poller.h"
 #include "locks.h"
 #include "sql.h"
@@ -40,8 +40,7 @@ int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
 
-int main(int argc, char *argv[]) 
-{
+int main(int argc, char *argv[]) {
 	extern char rrdtool_path[128];
 
 	struct timeval now;
@@ -52,10 +51,11 @@ int main(int argc, char *argv[])
 	int device_counter = 0;
 	int last_active_threads = 0;
 	long int THREAD_SLEEP = 100000;
+
 	pthread_t* threads = NULL;
-	pthread_attr_t attr = NULL;
-	pthread_mutexattr_t mutexattr = NULL;
-	
+	pthread_attr_t attr;
+	pthread_mutexattr_t mutexattr;
+
 	int* ids = NULL;
 	MYSQL mysql;
 	MYSQL_RES *result;
@@ -68,36 +68,36 @@ int main(int argc, char *argv[])
 	char result_string[256] = "";
 	char logmessage[256];
 
-	set.verbose = LOW;
+	set.verbose = HIGH;
 
 	if (set.verbose >= HIGH) {
 		printf("CACTID: Version %s starting.\n", VERSION);
 	}
 
 	config_defaults(&set);
-	
+
 	/* Initial Argument Error Checking */
-    if ((argc != 1) && (argc != 3)) {
+	if ((argc != 1) && (argc != 3)) {
 		printf("ERROR: Cactid requires either 0 or 2 input parameters.\n");
 		printf("USAGE: <cactidpath>/cactid [start_id end_id]\n");
-        exit(1);
+		exit(1);
 	}
 
-    /* Return error if the first arg is greater than the second */
+	/* Return error if the first arg is greater than the second */
 	if (argc == 3) {
-        if (atol(argv[1]) > atol(argv[2])) {
-                printf("ERROR: Invalid row specifications.  First row must be less than the second row.\n");
-                exit(2);
-        }
-    }
+		if (atol(argv[1]) > atol(argv[2])) {
+			printf("ERROR: Invalid row specifications.  First row must be less than the second row.\n");
+			exit(2);
+		}
+	}
 
 	/* read configuration file to establish local environment */
 	if (conf_file) {
 		if ((read_config(conf_file, &set)) < 0) {
-		        printf("ERROR: Could not read config file: %s\n", conf_file);
-		        exit(-1);
+			printf("ERROR: Could not read config file: %s\n", conf_file);
+			exit(-1);
 		}
-	}else {
+	}else{
 		conf_file = malloc(BUFSIZE);
 
 		if (!conf_file) {
@@ -106,14 +106,14 @@ int main(int argc, char *argv[])
 		}
 
 		for(i=0;i<CONFIG_PATHS;i++) {
-			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE); 
-			
+			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
+
 			if (read_cactid_config(conf_file, &set) >= 0) {
 				break;
-			} 
-			
+			}
+
 			if (i == CONFIG_PATHS-1) {
-				snprintf(conf_file, BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE); 
+				snprintf(conf_file, BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
 			}
 		}
 	}
@@ -125,11 +125,11 @@ int main(int argc, char *argv[])
 	num_rows = (int)mysql_num_rows(result);
 
 	if (num_rows > 0) {
-	    mysql_row = mysql_fetch_row(result);
-	    set.log_destination = atoi(mysql_row[0]);
- 	} else {
- 	    set.log_destination = 1;
-    }
+		mysql_row = mysql_fetch_row(result);
+		set.log_destination = atoi(mysql_row[0]);
+	}else{
+		set.log_destination = 1;
+	}
 
 	/* set logging option for errors */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_perror'");
@@ -137,21 +137,23 @@ int main(int argc, char *argv[])
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-		if (!strcmp(mysql_row[0],"on")) {
-		    set.log_perror = 1;
-        }
- 	}
 
-	/* set logging option for statistics */ 	
+		if (!strcmp(mysql_row[0],"on")) {
+			set.log_perror = 1;
+		}
+	}
+
+	/* set logging option for statistics */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pstats'");
 	num_rows = (int)mysql_num_rows(result);
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
+
 		if (!strcmp(mysql_row[0],"on")) {
-		    set.log_pstats = 1;
-        }
- 	}
+			set.log_pstats = 1;
+		}
+	}
 
 	/* get Cacti defined max threads override cactid.conf */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_threads'");
@@ -159,8 +161,8 @@ int main(int argc, char *argv[])
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-	    set.threads = atoi(mysql_row[0]);
- 	}
+		set.threads = atoi(mysql_row[0]);
+	}
 
 	/* get PHP Path Information for Scripting */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_binary'");
@@ -168,8 +170,8 @@ int main(int argc, char *argv[])
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-	    strcpy(set.phppath,mysql_row[0]);
- 	}
+		strcpy(set.phppath,mysql_row[0]);
+	}
 
 	/* get the rrdtool path from the cacti settings table */
 	snprintf(rrdtool_path, sizeof(rrdtool_path), "%s", get_rrdtool_path(&mysql));
@@ -178,7 +180,7 @@ int main(int argc, char *argv[])
 		printf("CACTID: Ready.\n");
 	}
 
-   	/* initilize the rrdtool pipe */
+	/* initilize the rrdtool pipe */
 	rrd_open();
 
 	/* Initialize SNMP */
@@ -188,31 +190,31 @@ int main(int argc, char *argv[])
 	php_init();
 
 	/* get the id's to poll */
-	switch ( argc ) {
-	    case 1:
-           	result = db_query(&mysql, "SELECT id FROM host WHERE disabled='' ORDER BY id");
+	switch (argc) {
+		case 1:
+			result = db_query(&mysql, "SELECT id FROM host WHERE disabled='' ORDER BY id");
 
-           	break;
-	    case 3:
-           	sprintf(result_string, "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id\0", argv[1], argv[2]);
-           	result = db_query(&mysql, result_string);
+			break;
+		case 3:
+			sprintf(result_string, "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id\0", argv[1], argv[2]);
+			result = db_query(&mysql, result_string);
 
-           	break;
-    	default:
-    	    break;
-    }
+			break;
+		default:
+			break;
+	}
 
-	num_rows   = mysql_num_rows(result);
-	threads    = (pthread_t *)malloc(num_rows * sizeof(pthread_t));
-	ids        = (int *)malloc(num_rows * sizeof(int));
+	num_rows = mysql_num_rows(result);
+	threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t));
+	ids = (int *)malloc(num_rows * sizeof(int));
 
-    pthread_attr_init(&attr);
-	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_attr_init(&attr);
+	pthread_mutexattr_settype(&mutexattr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    init_mutexes();
+	init_mutexes();
 
-	int pret = 0;
+	//int pret = 0;
 
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
@@ -223,6 +225,7 @@ int main(int argc, char *argv[])
 
 	while (device_counter < num_rows) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
+
 		switch (mutex_status) {
 		case 0:
 			if (set.verbose >= HIGH) {
@@ -315,9 +318,9 @@ int main(int argc, char *argv[])
 
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	if ( argc == 1 ) {
-   		sprintf(logmessage, "STATS: Execution Time: %.4f s, Method: cactid, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n", (end_time - begin_time), set.threads, num_rows, num_rows);
-   		cacti_log(logmessage, "s");
+	if (argc == 1) {
+		sprintf(logmessage, "STATS: Execution Time: %.4f s, Method: cactid, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n", (end_time - begin_time), set.threads, num_rows, num_rows);
+		cacti_log(logmessage, "s");
 	}
 
 	/* update the db for |data_time| on graphs */

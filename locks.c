@@ -23,9 +23,9 @@
  +-------------------------------------------------------------------------+
 */
 
-#include <pthread.h>
 #include "common.h"
 #include "cactid.h"
+#include <pthread.h>
 #include "locks.h"
 
 pthread_mutex_t snmp_lock;
@@ -43,36 +43,36 @@ pthread_once_t pipe_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t syslog_lock_o = PTHREAD_ONCE_INIT;
 
 static void init_snmp_lock(void) {
-    pthread_mutex_init(&snmp_lock, PTHREAD_MUTEXATTR_DEFAULT);
+	pthread_mutex_init(&snmp_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 static void init_thread_lock(void) {
-    pthread_mutex_init(&threads_lock, PTHREAD_MUTEXATTR_DEFAULT);
+	pthread_mutex_init(&threads_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 static void init_mysql_lock(void) {
-    pthread_mutex_init(&mysql_lock, PTHREAD_MUTEXATTR_DEFAULT);
+	pthread_mutex_init(&mysql_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 static void init_rrdtool_lock(void) {
-    pthread_mutex_init(&rrdtool_lock, PTHREAD_MUTEXATTR_DEFAULT);
+	pthread_mutex_init(&rrdtool_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 static void init_pipe_lock(void) {
-    pthread_mutex_init(&pipe_lock, PTHREAD_MUTEXATTR_DEFAULT);
+	pthread_mutex_init(&pipe_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 static void init_syslog_lock(void) {
-    pthread_mutex_init(&syslog_lock, PTHREAD_MUTEXATTR_DEFAULT);
+	pthread_mutex_init(&syslog_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 void init_mutexes() {
-    pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O), init_snmp_lock);
-    pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O), init_thread_lock);
-    pthread_once((pthread_once_t*) get_attr(LOCK_MYSQL_O), init_mysql_lock);
-    pthread_once((pthread_once_t*) get_attr(LOCK_RRDTOOL_O), init_rrdtool_lock);
-    pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O), init_pipe_lock);
-    pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O), init_syslog_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O), init_snmp_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O), init_thread_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_MYSQL_O), init_mysql_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_RRDTOOL_O), init_rrdtool_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O), init_pipe_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O), init_syslog_lock);
 }
 
 pthread_mutex_t* get_lock(int lock) {
@@ -83,22 +83,22 @@ pthread_mutex_t* get_lock(int lock) {
 		ret_val = &snmp_lock;
 		break;
 	case LOCK_THREAD:
- 		ret_val = &threads_lock;
-        break;
+		ret_val = &threads_lock;
+		break;
 	case LOCK_MYSQL:
-        ret_val = &mysql_lock;
-        break;
+		ret_val = &mysql_lock;
+		break;
 	case LOCK_RRDTOOL:
-        ret_val = &rrdtool_lock;
-        break;
+		ret_val = &rrdtool_lock;
+		break;
 	case LOCK_PIPE:
-        ret_val = &pipe_lock;
-        break;
+		ret_val = &pipe_lock;
+		break;
 	case LOCK_SYSLOG:
-        ret_val = &syslog_lock;
-        break;
+		ret_val = &syslog_lock;
+		break;
 	}
-	
+
 	return ret_val;
 }
 
@@ -110,20 +110,20 @@ pthread_once_t* get_attr(int locko) {
 		ret_val = &snmp_lock_o;
 		break;
 	case LOCK_THREAD_O:
- 		ret_val = &threads_lock_o;
-        break;
+		ret_val = &threads_lock_o;
+		break;
 	case LOCK_MYSQL_O:
-        ret_val = &mysql_lock_o;
-        break;
+		ret_val = &mysql_lock_o;
+		break;
 	case LOCK_RRDTOOL_O:
-        ret_val = &rrdtool_lock_o;
-        break;
+		ret_val = &rrdtool_lock_o;
+		break;
 	case LOCK_PIPE_O:
-        ret_val = &pipe_lock_o;
-        break;
+		ret_val = &pipe_lock_o;
+		break;
 	case LOCK_SYSLOG_O:
-        ret_val = &syslog_lock_o;
-        break;
+		ret_val = &syslog_lock_o;
+		break;
 	}
 
 	return ret_val;

@@ -81,9 +81,9 @@ am__include = @am__include@
 am__quote = @am__quote@
 install_sh = @install_sh@
 
-cactid_SOURCES = rrd.c sql.c cactid.c util.c snmp.c locks.c poller.c
+cactid_SOURCES = rrd.c sql.c cactid.c util.c snmp.c locks.c poller.c nft_popen.c php.c
 
-include_HEADERS = cactid.h common.h snmp.h rrd.h locks.h sql.h util.h poller.h
+include_HEADERS = cactid.h common.h snmp.h rrd.h locks.h sql.h util.h poller.h nft_popen.h php.h
 
 bin_PROGRAMS = cactid
 subdir = .
@@ -95,7 +95,8 @@ bin_PROGRAMS = cactid$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS)
 
 am_cactid_OBJECTS = rrd.$(OBJEXT) sql.$(OBJEXT) cactid.$(OBJEXT) \
-	util.$(OBJEXT) snmp.$(OBJEXT) locks.$(OBJEXT) poller.$(OBJEXT)
+	util.$(OBJEXT) snmp.$(OBJEXT) locks.$(OBJEXT) poller.$(OBJEXT) \
+	nft_popen.$(OBJEXT) php.$(OBJEXT)
 cactid_OBJECTS = $(am_cactid_OBJECTS)
 cactid_LDADD = $(LDADD)
 cactid_DEPENDENCIES =
@@ -109,6 +110,7 @@ LIBS = @LIBS@
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/cactid.Po ./$(DEPDIR)/locks.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/nft_popen.Po ./$(DEPDIR)/php.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/poller.Po ./$(DEPDIR)/rrd.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/snmp.Po ./$(DEPDIR)/sql.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/util.Po
@@ -200,6 +202,8 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cactid.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/locks.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nft_popen.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/php.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/poller.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rrd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/snmp.Po@am__quote@

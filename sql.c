@@ -45,18 +45,18 @@ int db_insert(MYSQL *mysql, char *query) {
 
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
-	
+
 /*	thread_mutex_lock(LOCK_MYSQL);*/
  	mysql_query(mysql, query);
 	mysql_res = mysql_store_result(mysql);
 /*	thread_mutex_unlock(LOCK_MYSQL);*/
- 	
+
 	return mysql_res;
 }
 
 
 int db_connect(char *database, MYSQL *mysql) {
-	char logmessage[255];    
+	char logmessage[255];
 	if (set.verbose >= HIGH) {
 		printf("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}

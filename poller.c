@@ -34,10 +34,6 @@ void *child(void * arg) {
 	extern int active_threads;
 	int host_id = *(int *) arg;
 
-	#ifndef OLD_MYSQL
-	mysql_thread_init();
-	#endif
-
 	if (set.verbose >= HIGH) {
 		printf("POLLER: In Thread, About to Start Polling of Host.\n");
 	}
@@ -58,10 +54,6 @@ void *child(void * arg) {
 		printf("The Value of Active Threads is ->%i\n",active_threads);
 	}
 
-	#ifndef OLD_MYSQL
-	mysql_thread_end();
-	#endif
-
 	pthread_exit(0);
 }
 
@@ -76,7 +68,7 @@ void poll_host(int host_id) {
 	int return_value;
 	char cmd_result[512];
 	char *snmp_result;
-    char logmessage[255];	
+	char logmessage[255];
 
 	int rrd_ds_counter = 0;
 
@@ -88,7 +80,13 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	snprintf(query1, sizeof(query1), "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	if (MYSQL_VERSION_ID > 40000) {
+		mysql_thread_init();
+	}else{
+		my_thread_init();
+	}
+
+	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
 	snprintf(query2, sizeof(query2), "select hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
 
 	db_connect(set.dbdb, &mysql);
@@ -128,21 +126,20 @@ void poll_host(int host_id) {
 		/* initialize monitored object */
 		entry->target_id = 0;
 		entry->action = atoi(row[0]);
-		if (row[1] != NULL) snprintf(entry->command, sizeof(entry->command), "%s", row[1]);
-		if (row[2] != NULL) snprintf(entry->hostname, sizeof(entry->hostname), "%s", row[2]);
-		if (row[3] != NULL) snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[3]);
-		entry->snmp_version = atoi(row[4]);
-		if (row[5] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[5]);
-		if (row[6] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[6]);
-		if (row[7] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[7]);
-		if (row[8] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[8]);
-		if (row[9] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[9]);
-		if (row[10] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[10]);
-		if (row[11] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[11]);
-		entry->local_data_id = atoi(row[12]);
-		entry->rrd_num = atoi(row[13]);
-		entry->snmp_port = atoi(row[14]);
-		entry->snmp_timeout = atoi(row[15]);
+		if (row[1] != NULL) snprintf(entry->hostname, sizeof(entry->hostname), "%s", row[2]);
+		if (row[2] != NULL) snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[3]);
+		entry->snmp_version = atoi(row[3]);
+		if (row[4] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[5]);
+		if (row[5] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[6]);
+		if (row[6] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[7]);
+		if (row[7] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[8]);
+		if (row[8] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[9]);
+		if (row[9] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[10]);
+		if (row[10] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[11]);
+		entry->local_data_id = atoi(row[11]);
+		entry->rrd_num = atoi(row[12]);
+		entry->snmp_port = atoi(row[13]);
+		entry->snmp_timeout = atoi(row[14]);
 		snprintf(entry->result, sizeof(entry->result), "%s", "U");
 
 		/* check for the RRD file. if it doesn't exist, create it */
@@ -150,10 +147,10 @@ void poll_host(int host_id) {
 			rrd_cmd(create_rrd(entry->local_data_id, entry->rrd_path, &mysql));
 		}
 
-		/* perform a check to see if the host is alive by polling it's SysName */
-		/* if the host down from an snmp perspective, don't poll it.           */
-		/* function sets the ignore_host bit                                   */
-        snmp_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
+		/* perform a check to see if the host is alive by polling it's SysName
+		 * if the host down from an snmp perspective, don't poll it.
+		 * function sets the ignore_host bit */
+		snmp_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
 
 		if (!host->ignore_host) {
 			switch(entry->action) {
@@ -179,55 +176,59 @@ void poll_host(int host_id) {
 
 				break;
 			case 1: /* execute script file */
-			    thread_mutex_lock(LOCK_PIPE);
-   			    cmd_fd = nft_popen((char *)clean_string(entry->command),"r");
+				thread_mutex_lock(LOCK_PIPE);
+				cmd_fd = nft_popen((char *)clean_string(entry->arg1), "r");
+
 				if (cmd_fd >= 0) {
 					cmd_stdout = fdopen(cmd_fd, "r");
-			    	while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
-			    	    usleep(50000);
-			    	}
-			    	if (set.verbose >= HIGH) {
-			    		printf("ACTION1: Command Result->%s\n",cmd_result);
-		    		}
 
-		    		/* Cleanup File and Pipe */
-			    	fflush(cmd_stdout);
-			    	fclose(cmd_stdout);
-   					return_value = nft_pclose(cmd_fd);
+					while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
+						usleep(50000);
+					}
 
-   					thread_mutex_unlock(LOCK_PIPE);
+					if (set.verbose >= HIGH) {
+						printf("ACTION1: Command Result->%s\n",cmd_result);
+					}
 
-		    		if (return_value != 0) {
-		    		    sprintf(logmessage,"ERROR: Problem executing command [%i]: '%s'\n", host_id, entry->command);
-		    		    cacti_log(logmessage,"e");
-		    		    snprintf(entry->result, sizeof(entry->result), "%s", "U");
-		    		}else if (strlen(cmd_result) == 0) {
-		    			sprintf(logmessage,"ERROR: Empty result [%i]: '%s'\n", host_id, entry->command);
-		    			cacti_log(logmessage,"e");
-		    			snprintf(entry->result, sizeof(entry->result), "%s", "U");
-	    			}else {
-	    				snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
-    				}
+					/* Cleanup File and Pipe */
+					fflush(cmd_stdout);
+					fclose(cmd_stdout);
+					return_value = nft_pclose(cmd_fd);
 
-        		}else {
-        			thread_mutex_unlock(LOCK_PIPE);
-        			sprintf(logmessage,"ERROR: Problem executing popen [%i]: '%s'\n", host_id, entry->command);
-        			cacti_log(logmessage,"e");
-        			snprintf(entry->result, sizeof(entry->result), "%s", "U");
-       			}
+					thread_mutex_unlock(LOCK_PIPE);
 
-   				if (set.verbose >= HIGH) {
-   					printf("POLL COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->command, entry->result);
+					if (return_value != 0) {
+						sprintf(logmessage,"ERROR: Problem executing command [%i]: '%s'\n", host_id, entry->arg1);
+						cacti_log(logmessage,"e");
+						snprintf(entry->result, sizeof(entry->result), "%s", "U");
+					}else if (strlen(cmd_result) == 0) {
+						sprintf(logmessage,"ERROR: Empty result [%i]: '%s'\n", host_id, entry->arg1);
+						cacti_log(logmessage,"e");
+						snprintf(entry->result, sizeof(entry->result), "%s", "U");
+					}else {
+						snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
+					}
+				}else{
+					thread_mutex_unlock(LOCK_PIPE);
+					sprintf(logmessage,"ERROR: Problem executing popen [%i]: '%s'\n", host_id, entry->arg1);
+					cacti_log(logmessage,"e");
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				}
 
-       			break;
-   			case 2: /* execute multi script file */
-   				thread_mutex_lock(LOCK_PIPE);
-   			    cmd_fd = nft_popen((char *)clean_string(entry->command),"r");
+				if (set.verbose >= HIGH) {
+					printf("POLL COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+				}
+
+				break;
+			case 2: /* execute multi script file */
+				thread_mutex_lock(LOCK_PIPE);
+				cmd_fd = nft_popen((char *)clean_string(entry->arg1), "r");
+
 				if (cmd_fd > 0) {
 					cmd_stdout = fdopen(cmd_fd, "r");
-			    	while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
-			    	    usleep(50000);
+
+					while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
+						usleep(50000);
 					}
 
 					if (set.verbose >= HIGH) {
@@ -242,37 +243,37 @@ void poll_host(int host_id) {
 					thread_mutex_unlock(LOCK_PIPE);
 
 					if (return_value != 0) {
-						sprintf(logmessage,"ERROR: Problem executing command [%i]: '%s'\n", host_id, entry->command);
+						sprintf(logmessage,"ERROR: Problem executing command [%i]: '%s'\n", host_id, entry->arg1);
 						cacti_log(logmessage,"e");
 						snprintf(entry->result, sizeof(entry->result), "%s", "U");
 					}else if (strlen(cmd_result) == 0) {
-    					sprintf(logmessage,"ERROR: Empty result [%i]: '%s'\n", host_id, entry->command);
-            			cacti_log(logmessage,"e");
-            			snprintf(entry->result, sizeof(entry->result), "%s", "U");
+						sprintf(logmessage,"ERROR: Empty result [%i]: '%s'\n", host_id, entry->arg1);
+						cacti_log(logmessage,"e");
+						snprintf(entry->result, sizeof(entry->result), "%s", "U");
 					}else {
-               			snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
-           			}
-           			
-          		} else {
-        			thread_mutex_unlock(LOCK_PIPE);
-                	sprintf(logmessage,"ERROR: Problem executing popen [%i]: '%s'\n", host_id, entry->command);
-                	cacti_log(logmessage,"e");
-                	snprintf(entry->result, sizeof(entry->result), "%s", "U");
-                }
+						snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
+					}
+				}else{
+					thread_mutex_unlock(LOCK_PIPE);
+					sprintf(logmessage,"ERROR: Problem executing popen [%i]: '%s'\n", host_id, entry->arg1);
+					cacti_log(logmessage,"e");
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
+				}
 
-       			if (set.verbose >= HIGH) {
-               		printf("POLL COMPLETE: MUTLI command [%i]: %s, output: %s\n", host_id, entry->command, entry->result);
-           		}
+				if (set.verbose >= HIGH) {
+					printf("POLL COMPLETE: MUTLI command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+				}
 
-                break;
-           	default: /* unknown action, generate error */
-           		sprintf(logmessage,"ERROR: Unknown Poller Action for Host [%i] Command: %s\n",host_id,entry->command);
-           		cacti_log(logmessage,"e");
-           	    break;
-            }
+				break;
+			default: /* unknown action, generate error */
+				sprintf(logmessage,"ERROR: Unknown Poller Action for Host [%i] Command: %s\n",host_id,entry->arg1);
+				cacti_log(logmessage,"e");
+
+				break;
+			}
 		}
 
-		/* update RRD files with polling results or ignore if the host was down */			
+		/* update RRD files with polling results or ignore if the host was down */
 		if (!host->ignore_host) {
 			if (entry->rrd_num == 1) {
 				if (entry->action == 2) {
@@ -292,7 +293,7 @@ void poll_host(int host_id) {
 				if (rrd_ds_counter == 0) {
 					rrd_multids = (multi_rrd_t *)malloc(entry->rrd_num * sizeof(multi_rrd_t));
 				}
-				
+
 				snprintf(rrd_multids[rrd_ds_counter].rrd_name, sizeof(rrd_multids[rrd_ds_counter].rrd_name), "%s", entry->rrd_name);
 				snprintf(rrd_multids[rrd_ds_counter].rrd_path, sizeof(rrd_multids[rrd_ds_counter].rrd_path), "%s", entry->rrd_path);
 				snprintf(rrd_multids[rrd_ds_counter].result, sizeof(rrd_multids[rrd_ds_counter].result), "%s", entry->result);
@@ -315,6 +316,13 @@ void poll_host(int host_id) {
 	free(host);
 
 	mysql_free_result(result);
+
+	if (MYSQL_VERSION_ID > 40000) {
+		mysql_thread_end();
+	}else{
+		my_thread_end();
+	}
+
 	mysql_close(&mysql);
 
 	if (set.verbose >= HIGH) {

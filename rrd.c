@@ -184,7 +184,7 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id, MYSQL
 			strncat(rrdcmd, ":", BUFSIZE);
 		}
 
-		snprintf(query, BUFSIZE, "select rrd_data_source_name from data_input_data_fcache where \
+		snprintf(query, BUFSIZE, "select rrd_data_source_name from poller_field where \
 			local_data_id=%i and data_input_field_name=\"%s\"", local_data_id, tokens[j]);
 
 		result = db_query(mysql, query);
@@ -198,7 +198,7 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id, MYSQL
 		}else{
 			row = mysql_fetch_row(result);
 			strncat(rrdcmd, row[0], BUFSIZE);
-			
+
 			if (set.verbose >= HIGH) {
 				printf("RRDCMD: MULTI expansion: found fieldname: %s, found rrdname: %s, local_data_id: %i\n", row[0], tokens[j], local_data_id);
 			}

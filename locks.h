@@ -34,3 +34,4 @@ void thread_mutex_lock(int);
 void thread_mutex_unlock(int);
 int thread_mutex_trylock(int mutex);
 pthread_mutex_t* get_lock(int lock);
+pthread_once_t* get_attr(int locko);
