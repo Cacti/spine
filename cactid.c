@@ -310,6 +310,7 @@ int main(int argc, char *argv[]) {
 
 	/* update the db for |data_time| on graphs */
 	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
+	db_insert(&mysql, "insert into poller_time (poller_id, start_time, end_time) values (0, NOW(), NOW())");
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
