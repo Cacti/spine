@@ -54,6 +54,7 @@ int read_cactid_config(char *file, config_t * set) {
 				else if (!strcasecmp(p1, "LogFile")) strncpy(set->logfile, p2, sizeof(set->logfile));
 				else if (!strcasecmp(p1, "Verbose")) set->verbose = atoi(p2);
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
+				else if (!strcasecmp(p1, "PHP_Server")) strncpy(set->path_php_server, p2, sizeof(set->path_php_server));
 				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));

@@ -201,8 +201,8 @@ int main(int argc, char *argv[]) {
 	ids = (int *)malloc(num_rows * sizeof(int));
 
 	pthread_attr_init(&attr);
-	pthread_mutexattr_settype(&mutexattr);
-//	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
+//	pthread_mutexattr_settype(&mutexattr);
+	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	init_mutexes();
