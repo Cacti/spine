@@ -51,8 +51,8 @@ int main(int argc, char *argv[]) {
 	long int THREAD_SLEEP = 100000;
 
 	pthread_t* threads = NULL;
-	pthread_attr_t attr = NULL;
-	pthread_mutexattr_t mutexattr = NULL;
+	pthread_attr_t attr;
+	pthread_mutexattr_t mutexattr;
 
 	int* ids = NULL;
 	MYSQL mysql;
@@ -201,7 +201,8 @@ int main(int argc, char *argv[]) {
 	ids = (int *)malloc(num_rows * sizeof(int));
 
 	pthread_attr_init(&attr);
-	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
+	pthread_mutexattr_settype(&mutexattr);
+//	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	init_mutexes();
