@@ -78,6 +78,16 @@ int read_config_options(config_t *set) {
 		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server));
 	}
 
+	/* determine logfile path */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_cactilog'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
+	}
+
 	/* set availability_method */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='availability_method'");
 	num_rows = (int)mysql_num_rows(result);
@@ -236,8 +246,8 @@ int read_cactid_config(char *file, config_t *set) {
 
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
 				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
-				else if (!strcasecmp(p1, "LogFile")) strncpy(set->path_logfile, p2, sizeof(set->path_logfile));
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
+				else if (!strcasecmp(p1, "LogFile")) strncpy(set->path_logfile, p2, sizeof(set->path_logfile));
 				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
@@ -274,13 +284,13 @@ void config_defaults(config_t * set) {
 	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost));
 	strncpy(set->dbuser, DEFAULT_DB_USER, sizeof(set->dbhost));
 	strncpy(set->dbpass, DEFAULT_DB_PASS, sizeof(set->dbhost));
-	strncpy(set->path_logfile, DEFAULT_Log_File, sizeof(set->path_logfile));
 
 	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0]));
 	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1]));
 	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[2]));
 	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[3]));
 	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[4]));
+	strncpy(config_paths[5], CONFIG_PATH_6, sizeof(config_paths[5]));
 
 	return;
 }
@@ -336,7 +346,7 @@ void cacti_log(char *logmessage) {
 
 	/* output to syslog/eventlog */
 	if ((set.log_destination == 2) || (set.log_destination == 3)) {
-		openlog("Cacti Logging", LOG_PERROR | LOG_NDELAY | LOG_PID, LOG_SYSLOG);
+		openlog("Cacti Logging", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
 		}
@@ -462,10 +472,8 @@ int init_socket()
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 	{
 		cacti_log("ERROR: init_socket: cannot open the ICMP socket\n");
-		return(-1);
+		exit(-1);
 	}
-
-	setuid(getuid());
 
 	return(icmp_socket);
 }

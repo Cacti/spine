@@ -34,22 +34,25 @@
 # define TRUE !FALSE
 #endif
 
-/* Constants */
+/* general constants */
 #define MAX_THREADS 100
 #define BUFSIZE 512
 #define LOGSIZE 255
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
+#define STAT_DESCRIP_ERROR 99
 
-#define CONFIG_PATHS 5
+/* locations to search for the config file */
+#define CONFIG_PATHS 6
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
 #define CONFIG_PATH_3 "/wwwroot/cacti"
 #define CONFIG_PATH_4 "c:/wwwroot/cacti"
-#define CONFIG_PATH_5 "c:/inetpub/wwwroot/cacti"
+#define CONFIG_PATH_5 "c:/webroot/cacti"
+#define CONFIG_PATH_6 "c:/inetpub/wwwroot/cacti"
 
-/* Defaults */
+/* config file defaults */
 #define DEFAULT_CONF_FILE "cactid.conf"
 #define DEFAULT_THREADS 5
 #define DEFAULT_INTERVAL 300
@@ -58,17 +61,10 @@
 #define DEFAULT_DB_DB "cacti"
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
-#define DEFAULT_Log_File "/wwwroot/cacti/log/cacti.log"
-#define DEFAULT_PATH_PHP_SERVER "/wwwroot/cacti/script_server.php"
+#define DEFAULT_LOGFILE "/wwwroot/cacti/log/rrd.log"
 #define DEFAULT_SNMP_VER 1
 
-/* Verbosity levels LOW=info MEDIUM=info+hoststats HIGH=info+SQL DEBUG=info+SQL+junk */
-#define NONE 1
-#define LOW 2
-#define MEDIUM 3
-#define HIGH 4
-#define DEBUG 5
-
+/* threads constants */
 #define LOCK_SNMP 0
 #define LOCK_THREAD 1
 #define LOCK_MYSQL 2
@@ -85,18 +81,28 @@
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
 
+/* poller actions */
 #define POLLER_ACTION_SNMP 0
 #define POLLER_ACTION_SCRIPT 1
 #define POLLER_ACTION_PHP_SCRIPT_SERVER 2
 
+/* reindex constants */
 #define POLLER_COMMAND_REINDEX 1
 
+/* logging levels */
 #define POLLER_VERBOSITY_NONE 1
 #define POLLER_VERBOSITY_LOW 2
 #define POLLER_VERBOSITY_MEDIUM 3
 #define POLLER_VERBOSITY_HIGH 4
 #define POLLER_VERBOSITY_DEBUG 5
 
+#define NONE 1
+#define LOW 2
+#define MEDIUM 3
+#define HIGH 4
+#define DEBUG 5
+
+/* host availability statics */
 #define AVAIL_SNMP_AND_PING 1
 #define AVAIL_SNMP 2
 #define AVAIL_PING 3
@@ -109,11 +115,12 @@
 #define HOST_RECOVERING 2
 #define HOST_UP 3
 
-#define STAT_DESCRIP_ERROR 99
-
 /* required for ICMP and UDP ping */
 #define ICMP_ECHO 8
 #define ICMP_HDR_SIZE 8
+
+/* required for net-snmp */
+#define DEFAULT_MIBDIRS "c:/usr/mibs"
 
 /* Typedefs */
 typedef struct config_struct {

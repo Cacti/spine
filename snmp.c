@@ -117,13 +117,13 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char *result_string = (char *) malloc(BUFSIZE);
 
 	/* only SNMP v1 and v2c are supported right now */
-	if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
-		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
-		cacti_log(logmessage);
-		snprintf(result_string, BUFSIZE, "%s", "U");
+//	if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
+//		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
+//		cacti_log(logmessage);
+//		snprintf(result_string, BUFSIZE, "%s", "U");
 
-		return result_string;
-	}
+//		return result_string;
+//	}
 
 	anOID_len = MAX_OID_LEN;
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
