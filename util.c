@@ -342,20 +342,18 @@ int ping_host(host_t *host, ping_t *ping) {
 	/* icmp/udp ping test */
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
 		if (set.ping_method == PING_ICMP) {
-// UDP is all you get for now...
-//			ping_result = ping_icmp(host, ping);
-			ping_result = ping_udp(host, ping);
+			ping_result = ping_icmp(host, ping);
 		}else if (set.ping_method == PING_UDP) {
 			ping_result = ping_udp(host, ping);
 		}
 	}
 
 	/* snmp test */
-	if ((set.availability_method <= AVAIL_SNMP) || ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result == HOST_UP))) {
+ 	if ((set.availability_method == AVAIL_SNMP) || ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result == HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
 	}else {
 		if ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP)) {
-			snmp_result = 0;
+			snmp_result = HOST_DOWN;
 		}
 	}
 
@@ -409,14 +407,16 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		free(poll_result);
 		return HOST_DOWN;
 	} else {
-		strncpy(ping->snmp_response, "Host responded to SNMP", sizeof(ping->snmp_response));
-		snprintf(ping->snmp_status, sizeof(ping->snmp_status), "%.5f",((end_time-begin_time)*1000));
+    	if (strlen(host->snmp_community) != 0) {
+			strncpy(ping->snmp_response, "Host responded to SNMP", sizeof(ping->snmp_response));
+			snprintf(ping->snmp_status, sizeof(ping->snmp_status), "%.5f",((end_time-begin_time)*1000));
+		}
 		free(poll_result);
 		return HOST_UP;
 	}
 }
 
-/* performa an ICMP based ping */
+/* perform an ICMP/ECHO based ping */
 int ping_icmp(host_t *host, ping_t *ping) {
 	extern int errno;
 	double begin_time, end_time, total_time;
@@ -454,13 +454,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		strcpy(ping->ping_response,"default");
 
 		/* initilize the socket */
-		icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+		icmp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
 
 		/* set the socket timeout */
-		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO,(char*)&timeout,sizeof(timeout));
+		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		init_sockaddr(&servername, host->hostname, 1);
+		init_sockaddr(&servername, host->hostname, 7);
 
 		return_code = connect(icmp_socket, (struct sockaddr *) &servername, sizeof(servername));
 		if (return_code >= 0) {
@@ -479,7 +479,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strcpy(ping->ping_response,"ICMP ping timed out");
+				strcpy(ping->ping_response,"ICMP/ECHO ping timed out");
 				strcpy(ping->ping_status,"down");
 				close(icmp_socket);
 				return HOST_DOWN;
@@ -490,16 +490,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 			/* send packet to destination */
-			return_code = send(icmp_socket, buffer, sizeof(icmp_packet), MSG_DONTROUTE);
-printf("The send return code was ->%\n",return_code);
+			return_code = send(icmp_socket, buffer, sizeof(icmp_packet), 0);
 
 			/* wait for a response on the socket */
 			select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 			/* check to see which socket talked */
 			if (FD_ISSET(icmp_socket, &socket_fds)) {
-			return_code = recv(icmp_socket, socket_reply, 256, 0);
-printf("The reply text was ->%s\n",socket_reply);
+				return_code = recv(icmp_socket, socket_reply, 256, 0);
 			} else {
 				return_code = -10;
 			}
@@ -509,16 +507,15 @@ printf("The reply text was ->%s\n",socket_reply);
 			end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 			/* caculate total time */
-			total_time = end_time - begin_time;
-printf("The total time for host id ->%i was ->%.5f milliseconds\n",host->id,(total_time*1000));
-printf("The return code was ->%i\n",errno);
-printf("The socket reply was ->%s\n",socket_reply);
+			total_time = (end_time - begin_time) * 1000;
 			if ((return_code >= 0) || ((return_code == -1) && (errno == ECONNRESET))) {
-				if ((total_time * 1000) <= set.ping_timeout) {
+				if (total_time < set.ping_timeout) {
 					strcpy(ping->ping_response,"Host is Alive");
-					sprintf(ping->ping_status,"%.5f",(total_time*1000));
+					sprintf(ping->ping_status,"%.5f",total_time);
 					close(icmp_socket);
 					return HOST_UP;
+				} else {
+					printf("host down\n");
 				}
 			}
 
@@ -913,7 +910,6 @@ void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned sho
 	if (hostinfo == NULL) {
 		sprintf(logmessage, "Unknown host %s.\n", hostname);
  		cacti_log(logmessage);
-		exit (EXIT_FAILURE);
 	}
 	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 }
