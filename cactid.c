@@ -133,10 +133,10 @@ int main(int argc, char *argv[]) {
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
-	/* Initialize SNMP */
+	/* initialize SNMP */
 	snmp_init();
 
-	/* Initialize PHP */
+	/* initialize PHP */
 	php_init();
 
 	/* get the id's to poll */

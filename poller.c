@@ -68,6 +68,7 @@ void poll_host(int host_id) {
 	char query2[256];
 	char *query3;
 	char query4[256];
+	char errstr[15];
 	int num_rows;
 	int host_status;
 	char *poll_result = NULL;
@@ -267,6 +268,14 @@ void poll_host(int host_id) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, host->snmp_timeout, host->hostname);
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
+				} else {
+					/* erroneous non-numeric result */
+					if (!is_number(entry->result)) {
+						strncpy(errstr, entry->result,sizeof(errstr));
+						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric.  Result: %s...\n", host_id, errstr);
+						cacti_log(logmessage);
+						strncpy(entry->result, "U", sizeof(entry->result));
+					}
 				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
@@ -280,6 +289,14 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
+				/* erroneous non-numeric result */
+				if (!is_number(entry->result)) {
+					strncpy(errstr, entry->result,sizeof(errstr));
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not numeric.  Result: %s...\n", host_id, errstr);
+					cacti_log(logmessage);
+					strncpy(entry->result, "U", sizeof(entry->result));
+				}
+
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] CMD: %s, output: %s\n", host_id, entry->arg1, entry->result);
 					cacti_log(logmessage);
@@ -290,6 +307,14 @@ void poll_host(int host_id) {
 				poll_result = php_cmd(entry->arg1);
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
+
+				/* erroneous non-numeric result */
+				if (!is_number(entry->result)) {
+					strncpy(errstr, entry->result,sizeof(errstr));
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not numeric.  Result: %s...\n", host_id, errstr);
+					cacti_log(logmessage);
+					strncpy(entry->result, "U", sizeof(entry->result));
+				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] SERVER: %s, output: %s\n", host_id, entry->arg1, entry->result);
@@ -306,10 +331,14 @@ void poll_host(int host_id) {
 		}
 
 		if (entry->result != NULL) {
-			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
-			snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
-			db_insert(&mysql, query3);
-			free(query3);
+			if (is_number(entry->result)) {
+				/* format database insert string */
+				query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
+				snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
+				db_insert(&mysql, query3);
+				free(query3);
+   			} else {
+			}
 		}
 	}
 
@@ -340,29 +369,49 @@ char *exec_poll(host_t *current_host, char *command) {
 	int return_value;
 	char cmd_result[BUFSIZE];
 	char logmessage[LOGSIZE];
+
+	fd_set fds;
+	int rescode, numfds;
+	struct timeval timeout;
+
+	/* establish timeout of 5 seconds for pipe response */
+	timeout.tv_sec = 5;
+	timeout.tv_usec = 0;
+
 	char *result_string = (char *) malloc(BUFSIZE);
 
-	thread_mutex_lock(LOCK_PIPE);
 	cmd_fd = nft_popen((char *)clean_string(command), "r");
 
 	if (cmd_fd >= 0) {
 		cmd_stdout = fdopen(cmd_fd, "r");
 
-		while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
-			usleep(50000);
-		}
+		/* Initialize File Descriptors to Review for Input/Output */
+		FD_ZERO(&fds);
+		FD_SET(cmd_fd,&fds);
 
-		if (set.verbose >= POLLER_VERBOSITY_HIGH) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] CMD RESULT: %s\n", current_host->id, cmd_result);
+		numfds = cmd_fd + 1;
+
+		/* wait 5 seonds for pipe response */
+		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
+		case -1:
+			snprintf(logmessage, LOGSIZE, "ERROR: Fatal Script/Command select() error\n");
 			cacti_log(logmessage);
+			snprintf(result_string, 2, "%s", "U");
+			break;
+		case 0:
+			snprintf(logmessage, LOGSIZE, "ERROR: The Script/Command Server Did not Respond in Time\n");
+			cacti_log(logmessage);
+			snprintf(result_string, 2, "%s", "U");
+			break;
+		default:
+			/* get only one line of output, we will ignore the rest */
+			fgets(cmd_result, 512, cmd_stdout);
 		}
 
-		/* Cleanup File and Pipe */
+		/* cleanup file and pipe */
 		fflush(cmd_stdout);
 		fclose(cmd_stdout);
 		return_value = nft_pclose(cmd_fd);
-
-		thread_mutex_unlock(LOCK_PIPE);
 
 		if (return_value != 0) {
 			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Problem executing command [%s]: '%s'\n", current_host->id, current_host->hostname, command);
@@ -376,7 +425,6 @@ char *exec_poll(host_t *current_host, char *command) {
 			snprintf(result_string, BUFSIZE, "%s", cmd_result);
 		}
 	}else{
-		thread_mutex_unlock(LOCK_PIPE);
 		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Problem executing popen [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE, "%s", "U");

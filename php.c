@@ -42,7 +42,7 @@
 extern char **environ;
 
 /******************************************************************************/
-/*  php_cmd() - Send a command to the Script Server                           */
+/*  php_cmd() - send a command to the script server                           */
 /******************************************************************************/
 char *php_cmd(char *php_command) {
 	char *result_string;
@@ -60,7 +60,7 @@ char *php_cmd(char *php_command) {
 	/* read the result from the php_command */
 	result_string = php_readpipe();
 
-	/* Clean garbage from string.  Don't know why it's there... */
+	/* clean garbage from string.  don't know why it's there... */
 	spaceloc = strchr(result_string, ' ');
 	if (spaceloc != 0) {
 		*spaceloc = '\0';
@@ -74,7 +74,7 @@ char *php_cmd(char *php_command) {
 }
 
 /******************************************************************************/
-/*  php_readpipe - Read a line from the PHP Script Server                     */
+/*  php_readpipe - read a line from the PHP script server                     */
 /******************************************************************************/
 char *php_readpipe() {
 	char *pipe_read = (char *) malloc(BUFSIZE);
@@ -84,7 +84,7 @@ char *php_readpipe() {
 	struct timeval timeout;
 	char logmessage[LOGSIZE];
 
-	/* Initialize File Descriptors to Review for Input/Output */
+	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(php_pipes.php_read_fd,&fds);
 	FD_SET(php_pipes.php_write_fd,&fds);
@@ -94,12 +94,12 @@ char *php_readpipe() {
 	else
 		numfds = php_pipes.php_write_fd + 1;
 
-	/* Establish Timeout of 1 Second to Have PHP Script Server Respond */
+	/* establish timeout of 5 seconds to have PHP script server respond */
 	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
 
-	/* Check to See Which Pipe Talked and Take Action
-	 * Should only be the READ Pipe */
+	/* check to see which pipe talked and take action
+	 * should only be the READ pipe */
 	switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 	case -1:
 		snprintf(logmessage, LOGSIZE, "ERROR: Fatal select() error\n");
@@ -126,7 +126,7 @@ char *php_readpipe() {
 }
 
 /******************************************************************************/
-/*  php_init() - Initialize the PHP Script Server                             */
+/*  php_init() - initialize the PHP script server                             */
 /******************************************************************************/
 int php_init() {
 	int  cacti2php_pdes[2];
@@ -139,13 +139,13 @@ int php_init() {
 	char *result_string;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "PHP Script Server Routine Started.\n");
+		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Routine Started.\n");
 		cacti_log(logmessage);
 	}
 
 	/* create the output pipes from cactid to php*/
 	if (pipe(cacti2php_pdes) < 0) {
-		snprintf(logmessage, LOGSIZE, "Could not allocate php server pipes\n");
+		snprintf(logmessage, LOGSIZE, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
 		return -1;
 	}
@@ -157,7 +157,7 @@ int php_init() {
 		return -1;
 	}
 
-	/* Disable thread cancellation from this point forward. */
+	/* disable thread cancellation from this point forward. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 	/* establish arguments for script server execution */
@@ -170,7 +170,7 @@ int php_init() {
 
 	/* fork a child process */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "PHP Script Server About to FORK Child Process.\n");
+		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server About to FORK Child Process.\n");
 		cacti_log(logmessage);
 	}
 
@@ -191,11 +191,11 @@ int php_init() {
 			return -1;
 			/* NOTREACHED */
 		case 0:	/* SUCCESS: I am now the child */
-			/* Set the standard input/output channels of the new process.  */
+			/* set the standard input/output channels of the new process.  */
 			dup2(cacti2php_pdes[0], STDIN_FILENO);
 			dup2(php2cacti_pdes[1], STDOUT_FILENO);
 
-			/* Close Unneeded Pipes */
+			/* close unneeded Pipes */
 			(void)close(php2cacti_pdes[0]);
 			(void)close(php2cacti_pdes[1]);
 			(void)close(cacti2php_pdes[0]);
@@ -207,27 +207,27 @@ int php_init() {
 			/* NOTREACHED */
 		default: /* I am the parent process */
 			if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "PHP Script Server Child FORK Success.\n");
+				snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Child FORK Success.\n");
 				cacti_log(logmessage);
 			}
 	}
 
 	/* Parent */
-	/* Close Unneeded Pipes */
+	/* close unneeded pipes */
 	close(cacti2php_pdes[0]);
 	close(php2cacti_pdes[1]);
 
 	php_pipes.php_write_fd = cacti2php_pdes[1];
 	php_pipes.php_read_fd = php2cacti_pdes[0];
 
-	/* Restore caller's cancellation state. */
+	/* restore caller's cancellation state. */
 	pthread_setcancelstate(cancel_state, NULL);
 
-	/* Check pipe to insure startup took place */
+	/* check pipe to insure startup took place */
 	result_string = php_readpipe();
 
 	if ((set.verbose >= POLLER_VERBOSITY_DEBUG) && (strstr(result_string, "Started"))) {
-		snprintf(logmessage, LOGSIZE, "Confirmed PHP Script Server Running\n");
+		snprintf(logmessage, LOGSIZE, "DEBUG: Confirmed PHP Script Server Running\n");
 		cacti_log(logmessage);
 	}
 
@@ -237,13 +237,13 @@ int php_init() {
 }
 
 /******************************************************************************/
-/*  php_close - Close the pipes and wait for the status of the child.         */
+/*  php_close - close the pipes and wait for the status of the child.         */
 /******************************************************************************/
 void php_close() {
 	char logmessage[LOGSIZE];
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "PHP Script Server Shutdown Started.\n");
+		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Shutdown Started.\n");
 		cacti_log(logmessage);
 	}
 
