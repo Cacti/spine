@@ -251,6 +251,7 @@ int main(int argc, char *argv[]) {
 	
 	/* free memory from polling list */
 	free(rrd_targets);
+	free(hosts);
 	
 	/* print out stats and sleep */
 	gettimeofday(&now, NULL);
