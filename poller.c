@@ -486,7 +486,7 @@ char *exec_poll(host_t *current_host, char *command) {
     	timeout.tv_sec = 25;
     	timeout.tv_usec = 0;
 
-	cmd_fd = nft_popen((char *)command, "r");
+	cmd_fd = nft_popen((char *)clean_string(command), "r");
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd);

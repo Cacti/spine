@@ -172,6 +172,9 @@ int main(int argc, char *argv[]) {
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
+	#ifndef __linux__
+	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);	
+	#endif
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	init_mutexes();
