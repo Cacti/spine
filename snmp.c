@@ -79,7 +79,7 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int sn
 	
 	snmp_sess_init(&session);
 	
-	if (set.snmp_ver == 2) {
+	if (ver == 2) {
 		session.version = SNMP_VERSION_2c;
 	}else{
 		session.version = SNMP_VERSION_1;
