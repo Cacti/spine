@@ -113,6 +113,15 @@
 #define ICMP_ECHO 8
 #define ICMP_HDR_SIZE 8
 
+/* required for validation of script results */
+#define RESULT_INIT 0
+#define RESULT_ARGX 1
+#define RESULT_VALX 2
+#define RESULT_SEPARATOR 3
+#define RESULT_SPACE 4
+#define RESULT_ALPHA 5
+#define RESULT_DIGIT 6
+
 /* Typedefs */
 typedef struct config_struct {
 	int interval;

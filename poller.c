@@ -180,7 +180,7 @@ void poll_host(int host_id) {
 		num_rows = (int)mysql_num_rows(result);
 
 		if ((num_rows > 0) && (set.verbose >= POLLER_VERBOSITY_HIGH)) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] Processing %i items in the auto reindex cache for '%s'.\n", host->id,num_rows, host->hostname);
+			snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'.\n", host->id,num_rows, host->hostname);
 			cacti_log(logmessage);
 		}
 
@@ -269,16 +269,16 @@ void poll_host(int host_id) {
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				} else {
-//					/* erroneous non-numeric result */
-//					if (!is_number(entry->result)) {
-//						strncpy(errstr, entry->result,sizeof(errstr));
-//						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric.  Result: %s...\n", host_id, errstr);
-//						cacti_log(logmessage);
-//						strncpy(entry->result, "U", sizeof(entry->result));
-//					}
+					/* erroneous non-numeric result */
+					if (!is_number(entry->result)) {
+						strncpy(errstr, entry->result,sizeof(errstr));
+						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric. Partial Result: %s...\n", host_id, errstr);
+						cacti_log(logmessage);
+						strncpy(entry->result, "U", sizeof(entry->result));
+					}
 				}
 
-				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {	
 					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
@@ -289,13 +289,13 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-//				/* erroneous non-numeric result */
-//				if (!is_number(entry->result)) {
-//					strncpy(errstr, entry->result,sizeof(errstr));
-//					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not numeric.  Result: %s...\n", host_id, errstr);
-//					cacti_log(logmessage);
-//					strncpy(entry->result, "U", sizeof(entry->result));
-//				}
+				/* erroneous non-numeric result */
+				if (!validate_result(entry->result)) {
+					strncpy(errstr, entry->result,sizeof(errstr));
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not numeric. Partial Result: %s...\n", host_id, errstr);
+					cacti_log(logmessage);
+					strncpy(entry->result, "U", sizeof(entry->result));
+				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] CMD: %s, output: %s\n", host_id, entry->arg1, entry->result);
@@ -308,13 +308,13 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-//				/* erroneous non-numeric result */
-//				if (!is_number(entry->result)) {
-//					strncpy(errstr, entry->result,sizeof(errstr));
-//					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not numeric.  Result: %s...\n", host_id, errstr);
-//					cacti_log(logmessage);
-//					strncpy(entry->result, "U", sizeof(entry->result));
-//				}
+				/* erroneous non-numeric result */
+				if (!validate_result(entry->result)) {
+					strncpy(errstr, entry->result,sizeof(errstr));
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not numeric.  Result: %s...\n", host_id, errstr);
+					cacti_log(logmessage);
+					strncpy(entry->result, "U", sizeof(entry->result));
+				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] SERVER: %s, output: %s\n", host_id, entry->arg1, entry->result);
@@ -360,6 +360,107 @@ void poll_host(int host_id) {
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function.\n", host_id);
 		cacti_log(logmessage);
+	}
+}
+
+int validate_result(char * result) {
+	int i;
+	int prev_type = RESULT_INIT;
+	int now_type = RESULT_INIT;
+	int next_type = RESULT_ARGX;
+	int args = 0;
+
+	/* check the easy cases first */
+	/* it has not delimiters, and no space, therefore, must be numeric */
+	if ((!strstr(result, ":")) || (!strstr(result, " "))) {
+		if (is_number(result)) {
+			return(1);
+		} else {
+			return(0);
+		}
+	}
+
+	/* it has no delimiters and has space */
+	if ((!strstr(result, ":")) &&
+		(strstr(result, " "))) {
+		return(0);
+	}
+
+	/* it has delimiters but no space */
+	if ((strstr(result, ":")) && (!strstr(result, " "))) {
+		return(0);
+	}
+
+	/* now for serious error checking */
+	for (i=0;i< strlen(result);i++) {
+		/* check for the character type */
+		if (isalpha(result[i])) {
+			now_type = RESULT_ALPHA;
+		} else if (isdigit(result[i])) {
+			now_type = RESULT_DIGIT;
+		} else if (isspace(result[i])) {
+   			now_type = RESULT_SPACE;
+		} else if (result[i] == ':') {
+			now_type = RESULT_SEPARATOR;
+		} else if (iscntrl(result[i])) {
+			return(0);
+		} else if (isxdigit(result[i])) {
+			return(0);
+		}
+
+		/* check for accuracy */
+		switch (next_type) {
+		case RESULT_ARGX:
+			if ((now_type == RESULT_DIGIT) ||
+				(now_type == RESULT_ALPHA)) {
+				/* do nothing, is acceptable */
+			} else if (((now_type == RESULT_SPACE) && (prev_type == RESULT_INIT)) ||
+					(now_type == RESULT_SPACE) && (prev_type == RESULT_VALX)) {
+				/* do nothing, still searching the front of the string */
+			} else if (now_type == RESULT_SPACE) {
+				next_type = RESULT_SEPARATOR;
+				prev_type = RESULT_ARGX;
+			} else if (now_type == RESULT_SEPARATOR) {
+				next_type = RESULT_VALX;
+				prev_type = RESULT_SEPARATOR;
+			}
+
+			break;
+		case RESULT_VALX:
+			if (now_type == RESULT_DIGIT) {
+				/* do nothing, is acceptable */
+			} else if (now_type == RESULT_SPACE) {
+				next_type = RESULT_ARGX;
+				prev_type = RESULT_VALX;
+			} else if (now_type == RESULT_ALPHA) {
+				return(0);
+			} else if (now_type == RESULT_SEPARATOR) {
+    			return(0);
+			}
+
+			break;
+		case RESULT_SEPARATOR:
+			if (now_type == RESULT_DIGIT){
+				return(0);
+			} else if (now_type == RESULT_SEPARATOR) {
+				next_type = RESULT_VALX;
+    			prev_type = RESULT_SEPARATOR;
+			} else if (now_type == RESULT_SPACE) {
+				/* do nothing, is acceptable */
+			} else if (now_type == RESULT_ALPHA) {
+				return(0);
+			}
+
+			args = args + 1;
+
+			break;
+		}
+	}
+
+	if (args = 0) {
+		return(0);
+ 	} else {
+		return(1);
 	}
 }
 
