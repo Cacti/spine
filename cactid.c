@@ -36,7 +36,6 @@ target_t *current = NULL;
 MYSQL mysql;
 int entries = 0;
 
-
 /* Main rtgpoll */
 int main(int argc, char *argv[]) {
 	crew_t crew;
@@ -84,6 +83,9 @@ int main(int argc, char *argv[]) {
 	sigaddset(&signal_set, SIGHUP);
 	sigaddset(&signal_set, SIGUSR1);
 	sigaddset(&signal_set, SIGUSR2);
+	sigaddset(&signal_set, SIGTERM);
+	sigaddset(&signal_set, SIGINT);
+	sigaddset(&signal_set, SIGQUIT);
 	
 	if (pthread_sigmask(SIG_BLOCK, &signal_set, NULL) != 0) {
 		printf("pthread_sigmask error\n");
@@ -99,14 +101,6 @@ int main(int argc, char *argv[]) {
 	
 	if ((read_rtg_config(conf_file, &set)) < 0) {
 		fprintf(stderr, "Couldn't write config file.\n");
-		exit(-1);
-	}
-	
-	/* Read list of targets to be polled into linked list of target_structs */
-	entries = get_targets();
-	
-	if (entries <= 0) {
-		fprintf(stderr, "Error updating target list.");
 		exit(-1);
 	}
 	
@@ -126,20 +120,26 @@ int main(int argc, char *argv[]) {
 	init_snmp("Cactid");
 	
 	/* Attempt to connect to the MySQL Database */
-	if (!(set.dboff)) {
-		if (rtg_dbconnect(set.dbdb, &mysql) < 0) {
-			fprintf(stderr, "** Database error - check configuration.\n");
-			exit(-1);
+	if (rtg_dbconnect(set.dbdb, &mysql) < 0) {
+		fprintf(stderr, "** Database error - check configuration.\n");
+		exit(-1);
+	}
+	
+	if (!mysql_ping(&mysql)) {
+		if (set.verbose >= LOW) {
+			printf("connected.\n");
 		}
-		
-		if (!mysql_ping(&mysql)) {
-			if (set.verbose >= LOW) {
-				printf("connected.\n");
-			}
-		}else{
-			printf("server not responding.\n");
-			exit(-1);
-		}
+	}else{
+		printf("server not responding.\n");
+		exit(-1);
+	}
+	
+	/* Read list of targets to be polled into linked list of target_structs */
+	entries = get_targets();
+	
+	if (entries <= 0) {
+		fprintf(stderr, "Error updating target list.");
+		exit(-1);
 	}
 	
 	if (set.verbose >= HIGH) {
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		
-		mutex_unlock(LOCK_CREW);
+		//mutex_unlock(LOCK_CREW);
 		
 		/* put all of the gathered data into RRD's */
 		process_data();
@@ -253,19 +253,32 @@ void *sig_handler(void *arg) {
 	
 	while (1) {
 		sigwait(signal_set, &sig_number);
-		if (sig_number == SIGHUP) {
+		switch (sig_number) {
+		case SIGHUP:
 			if (lock) {
 				waiting = TRUE;
 			}else{
-				printf("caught HUP. reloading config.\n");
 				entries = get_targets();
 				waiting = FALSE;
 			}
-			
-		}else if (sig_number == SIGUSR1) {
+			break;
+		case SIGUSR1:
 			set.verbose++;
-		}else if (sig_number == SIGUSR2) {
+			break;
+		case SIGUSR2:
 			set.verbose--;
+			break;
+		case SIGTERM:
+		case SIGINT:
+		case SIGQUIT:
+			if (set.verbose >= LOW) {
+				printf("Quiting: received signal %d.\n", sig_number);
+			}
+			
+			rtg_dbdisconnect(&mysql);
+			//unlink(pidfile);
+			exit(1);
+			break;
 		}
 	}
 }
@@ -275,10 +288,12 @@ void process_data() {
 	int rrd_target_counter=0;
 	int current_local_data_id=0;
 	int rrd_multids_counter=0;
+	int rrd_create_pipe_open=0;
 	
 	rrd_t *rrd_targets = (rrd_t *)malloc(entries * sizeof(rrd_t));
 	multi_rrd_t *rrd_multids;
 	target_t *entry = NULL;
+	FILE *rrdtool_stdin;
 	
 	current = targets;
 	
@@ -291,7 +306,7 @@ void process_data() {
 			current = current->head;
 			current_head=1;
 		}
-	
+		
 		if(entry->local_data_id == current->local_data_id) {
 			//printf("Multi DS RRA\n");
 			
@@ -332,10 +347,22 @@ void process_data() {
 		
 		/* do RRD file path check */
 		if (!file_exists(entry->rrd_path)) {
-			create_rrd(entry->local_data_id, entry->rrd_path);
+			/* open RRD create pipe if not already open */
+			if (rrd_create_pipe_open == 0) {
+				rrdtool_stdin=popen("rrdtool -", "w");
+				rrd_create_pipe_open = 1;
+			}
+			
+			/* put RRD create command on the pipe */
+			fprintf(rrdtool_stdin, "%s\n", create_rrd(entry->local_data_id, entry->rrd_path));
 		}
 	}
-		
+	
+	/* close the RRD create pipe if it is open */
+	if (rrd_create_pipe_open == 1) {
+		pclose(rrdtool_stdin);
+	}
+	
 	update_rrd(rrd_targets, rrd_target_counter);
 	free(rrd_targets);
 }
@@ -363,16 +390,8 @@ int get_targets(){
 	target_t *temp2;
 	target_t *head;
 	
-	MYSQL mysql;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
-	
-	mysql_init(&mysql);
-	
-	if (!mysql_real_connect(&mysql, set.dbhost, set.dbuser, set.dbpass, set.dbdb, 0, NULL, 0)) {
-		fprintf(stderr, "%s\n", mysql_error(&mysql));
-		exit(1);
-	}
 	
 	sprintf(query, "select action,command,management_ip,snmp_community, \
 		snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, \
@@ -387,8 +406,6 @@ int get_targets(){
 		fprintf(stderr, "Error retrieving data\n");
 		exit(1);
 	}
-	
-	mysql_close(&mysql);
 	
 	free(targets);
 	targets=NULL;
