@@ -33,3 +33,4 @@ int is_number(char *string);
 char *clean_string(char *string_to_clean);
 int ping_host(host_t *host, ping_t *ping);
 void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
+void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port);

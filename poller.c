@@ -137,7 +137,21 @@ void poll_host(int host_id) {
 	/* perform a check to see if the host is alive by polling it's SysDesc
 	 * if the host down from an snmp perspective, don't poll it.
 	 * function sets the ignore_host bit */
-	host_status = ping_host(host, ping);
+	if ((set.availability_method == AVAIL_SNMP) && (host->snmp_community == "")) {
+		update_host_status(HOST_UP, host, ping, set.availability_method);
+
+		if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+			sprintf(logmessage, "Host[%s] No host availability check possible for '%s'\n",host->id,host->hostname);
+			cacti_log(logmessage);
+		}
+	}else{
+		if (ping_host(host, ping) == HOST_UP) {
+			update_host_status(HOST_UP, host, ping, set.availability_method);
+		}else{
+			host->ignore_host = 1;
+			update_host_status(HOST_DOWN, host, ping, set.availability_method);
+		}
+	}
 
 	/* update host table */
 	snprintf(update_sql, sizeof(update_sql), "update host set status='%i',status_event_count='%i', status_fail_date='%s',status_rec_date='%s',status_last_error='%s',min_time='%f',max_time='%f',cur_time='%f',avg_time='%f',total_polls='%i',failed_polls='%i',availability='%.4f' where id='%i'\n",
