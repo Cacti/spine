@@ -180,70 +180,75 @@ void poll_host(int host_id) {
 		result = db_query(&mysql, query4);
 		num_rows = (int)mysql_num_rows(result);
 
-		if ((num_rows > 0) && (set.verbose >= POLLER_VERBOSITY_HIGH)) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id,num_rows, host->hostname);
-			cacti_log(logmessage);
-		}
-
-		while ((row = mysql_fetch_row(result))) {
-			assert_fail = 0;
-
-			reindex->data_query_id = atoi(row[0]);
-			reindex->action = atoi(row[1]);
-			if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
-			if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
-			if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
-
-			switch(reindex->action) {
-			case POLLER_ACTION_SNMP: /* snmp */
-				poll_result = snmp_get(host, reindex->arg1);
-				break;
-			case POLLER_ACTION_SCRIPT: /* script (popen) */
-				poll_result = exec_poll(host, reindex->arg1);
-				break;
+		if (num_rows > 0) {
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id,num_rows, host->hostname);
+				cacti_log(logmessage);
 			}
 
-			if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
-				printf("Assert '%s=%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+    		while ((row = mysql_fetch_row(result))) {
+    			assert_fail = 0;
 
-				query3 = (char *)malloc(128);
-				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
-				db_insert(&mysql, query3);
-				free(query3);
+    			reindex->data_query_id = atoi(row[0]);
+    			reindex->action = atoi(row[1]);
+    			if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
+    			if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
+    			if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 
-				assert_fail = 1;
-			}else if ((!strcmp(reindex->op, ">")) && (atoi(reindex->assert_value) <= atoi(poll_result))) {
-				printf("Assert '%s>%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+    			switch(reindex->action) {
+    			case POLLER_ACTION_SNMP: /* snmp */
+    				poll_result = snmp_get(host, reindex->arg1);
+    				break;
+    			case POLLER_ACTION_SCRIPT: /* script (popen) */
+    				poll_result = exec_poll(host, reindex->arg1);
+    				break;
+    			}
 
-				query3 = (char *)malloc(128);
-				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
-				db_insert(&mysql, query3);
-				free(query3);
+    			if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
+    				snprintf(logmessage, LOGSIZE, "ASSERT: '%s=%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+     				cacti_log(logmessage);
 
-				assert_fail = 1;
-			}else if ((!strcmp(reindex->op, "<")) && (atoi(reindex->assert_value) >= atoi(poll_result))) {
-				printf("Assert '%s<%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+					query3 = (char *)malloc(128);
+    				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+    				db_insert(&mysql, query3);
+    				free(query3);
 
-				query3 = (char *)malloc(128);
-				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
-				db_insert(&mysql, query3);
-				free(query3);
+    				assert_fail = 1;
+    			}else if ((!strcmp(reindex->op, ">")) && (atoi(reindex->assert_value) <= atoi(poll_result))) {
+    				snprintf(logmessage, LOGSIZE, "ASSERT: '%s>%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+					cacti_log(logmessage);
 
-				assert_fail = 1;
-			}
+    				query3 = (char *)malloc(128);
+    				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+    				db_insert(&mysql, query3);
+    				free(query3);
 
-			/* update 'poller_reindex' with the correct information if:
-			 * 1) the assert fails
-			 * 2) the OP code is > or < meaning the current value could have changed without causing
-			 *     the assert to fail */
-			if ((assert_fail == 1) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, ">"))) {
-				query3 = (char *)malloc(255);
-				snprintf(query3, 255, "update poller_reindex set assert_value='%s' where host_id='%i' and data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
-				db_insert(&mysql, query3);
-				free(query3);
-			}
+    				assert_fail = 1;
+    			}else if ((!strcmp(reindex->op, "<")) && (atoi(reindex->assert_value) >= atoi(poll_result))) {
+    				snprintf(logmessage, LOGSIZE, "ASSERT: '%s<%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+            		cacti_log(logmessage);
 
-			free(poll_result);
+    				query3 = (char *)malloc(128);
+    				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+    				db_insert(&mysql, query3);
+    				free(query3);
+
+    				assert_fail = 1;
+    			}
+
+    			/* update 'poller_reindex' with the correct information if:
+    			 * 1) the assert fails
+    			 * 2) the OP code is > or < meaning the current value could have changed without causing
+    			 *     the assert to fail */
+    			if ((assert_fail == 1) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, ">"))) {
+    				query3 = (char *)malloc(255);
+    				snprintf(query3, 255, "update poller_reindex set assert_value='%s' where host_id='%i' and data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
+    				db_insert(&mysql, query3);
+    				free(query3);
+    			}
+
+    			free(poll_result);
+    		}
 		}
 	}
 
