@@ -213,7 +213,7 @@ void poll_host(int host_id) {
 				}
 
 				if (set.verbose >= HIGH) {
-					printf("SNMPGET COMPLETE: Host [%i]: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
+					printf("SNMPGET: Host [%i]: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
 				}
 
 				break;
@@ -223,18 +223,17 @@ void poll_host(int host_id) {
 				free(poll_result);
 
 				if (set.verbose >= HIGH) {
-					printf("POLL COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					printf("SCRIPT: CMD [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
 				}
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-//    			poll_result = php_cmd(entry->arg1);
-//printf("The Poll Result was ->%s\n", poll_result);
-//				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
-//				free(poll_result);
+    			poll_result = php_cmd(entry->arg1);
+				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
+				free(poll_result);
 
 				if (set.verbose >= HIGH) {
-					printf("PHP SERVER COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					printf("PHPSERVER: CMD [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
 				}
 
 				break;

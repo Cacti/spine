@@ -46,17 +46,29 @@ extern char **environ;
 /******************************************************************************/
 char *php_cmd(char *php_command) {
 	char *result_string;
+	char *spaceloc;
 	char command[BUFSIZE+5];
 
 	/* pad command with CR-LF */
 	sprintf(command,php_command,strlen(php_command));
 	strcat(command,"\r\n");
 
+	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
  	write(php_pipes.php_write_fd, command, strlen(command));
 
 	/* read the result from the php_command */
 	result_string = php_readpipe();
+
+	/* Clean garbage from string.  Don't know why it's there... */
+	spaceloc = strchr(result_string, ' ');
+	if (spaceloc != 0) {
+		*spaceloc = '\0';
+		spaceloc = strchr(result_string, ' ');
+		if (spaceloc != 0)
+			*spaceloc = '\0';
+	}
+	thread_mutex_unlock(LOCK_PHP);
 
 	return result_string;
 }
@@ -65,8 +77,8 @@ char *php_cmd(char *php_command) {
 /*  php_readpipe - Read a line from the PHP Script Server                     */
 /******************************************************************************/
 char *php_readpipe() {
-	char result[BUFSIZE];
 	char *result_string = (char *) malloc(BUFSIZE);
+	char result[BUFSIZE] = "";
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
@@ -82,7 +94,7 @@ char *php_readpipe() {
 		numfds = php_pipes.php_write_fd + 1;
 
 	/* Establish Timeout of 1 Second to Have PHP Script Server Respond */
-	timeout.tv_sec = 1;
+	timeout.tv_sec = 3;
 	timeout.tv_usec = 0;
 
 	/* Wait for A Response on The Pipes */
@@ -92,9 +104,13 @@ char *php_readpipe() {
 	/* Should only be the READ Pipe */
 	if (FD_ISSET(php_pipes.php_read_fd, &fds)) {
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
+  		if (rescode > 0)
+	    	snprintf(result_string, rescode, "%s", result_string);
+		else
+			snprintf(result_string, 2, "%s", "U");
 	} else {
 		cacti_log("ERROR: The PHP Script Server Did not Respond in Time\n","e");
-		snprintf(result_string, BUFSIZE, "%s", "U");
+		snprintf(result_string, 2, "%s", "U");
 	}
 
 	return result_string;
@@ -109,7 +125,7 @@ int php_init() {
 	char logmessage[255];
 	int  i = 0;
     int  pid;
-	char *argv[3];
+	char *argv[4];
 	int  check;
     int  cancel_state;
 	char *result_string;
@@ -136,7 +152,8 @@ int php_init() {
 	/* establish arguments for script server execution */
 	argv[0] = set.phppath;
 	argv[1] = set.path_php_server;
-	argv[2] = NULL;
+	argv[2] = "cactid";
+	argv[3] = NULL;
 
     /* fork a child process */
 	if (set.verbose >= DEBUG) {
@@ -197,14 +214,8 @@ int php_init() {
 	result_string = php_readpipe();
 	free(result_string);
 
-		if ((set.verbose == DEBUG) && (strstr(result_string, "Started")))
+	if ((set.verbose == DEBUG) && (strstr(result_string, "Started")))
 		cacti_log("CACTID: Confirmed PHP Script Server Running\n","e");
-
-	/* Make a sample call to the pipe to see if everything is running */
-	result_string = php_cmd("C:/wwwroot/cacti/scripts/ss_query_host_cpu.php ss_query_host_cpu 192.168.0.2 public 1 get usage 0");
-// 	printf("The result was ->%s\n",result_string);
-
-//	free(result_string);
 
     return 1;
 }

@@ -34,6 +34,7 @@ pthread_mutex_t mysql_lock;
 pthread_mutex_t rrdtool_lock;
 pthread_mutex_t pipe_lock;
 pthread_mutex_t syslog_lock;
+pthread_mutex_t php_lock;
 
 pthread_once_t snmp_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t threads_lock_o = PTHREAD_ONCE_INIT;
@@ -41,6 +42,7 @@ pthread_once_t mysql_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t rrdtool_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t pipe_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t syslog_lock_o = PTHREAD_ONCE_INIT;
+pthread_once_t php_lock_o = PTHREAD_ONCE_INIT;
 
 static void init_snmp_lock(void) {
 	pthread_mutex_init(&snmp_lock, PTHREAD_MUTEXATTR_DEFAULT);
@@ -66,6 +68,10 @@ static void init_syslog_lock(void) {
 	pthread_mutex_init(&syslog_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
+static void init_php_lock(void) {
+	pthread_mutex_init(&php_lock, PTHREAD_MUTEXATTR_DEFAULT);
+}
+
 void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O), init_snmp_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O), init_thread_lock);
@@ -73,6 +79,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_RRDTOOL_O), init_rrdtool_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O), init_pipe_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O), init_syslog_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O), init_php_lock);
 }
 
 pthread_mutex_t* get_lock(int lock) {
@@ -96,6 +103,9 @@ pthread_mutex_t* get_lock(int lock) {
 		break;
 	case LOCK_SYSLOG:
 		ret_val = &syslog_lock;
+		break;
+	case LOCK_PHP:
+		ret_val = &php_lock;
 		break;
 	}
 
@@ -123,6 +133,9 @@ pthread_once_t* get_attr(int locko) {
 		break;
 	case LOCK_SYSLOG_O:
 		ret_val = &syslog_lock_o;
+		break;
+	case LOCK_PHP_O:
+		ret_val = &php_lock_o;
 		break;
 	}
 
