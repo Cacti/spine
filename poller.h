@@ -23,7 +23,5 @@
  +-------------------------------------------------------------------------+
 */
 
-extern int active_threads;
-
 void *child(void * arg);
 void poll_host(int host_id);

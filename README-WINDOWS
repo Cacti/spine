@@ -5,15 +5,17 @@ Prerequisites
 A working cygwin enviroment available @ www.cygwin.com
 You will need at least GCC from the cygwin distrubution in order to compile cactid
 
-At the time of this writing the cygwin1.dll included with the distrubution was problematic, if you encounter problems with cactid you will want to replace it with the latest snapshot available @ http://cygwin.com/snapshots/
+At the time of this revised writing, CACTID is not stable in Windows when calling PHP scripts.  If you only
+use native SNMP, you should be able to run error free.  It has also been reported that PERL runs as well.  
+This stability issue continues to be researched.
+
+At the time of this writing the cygwin1.dll included with the distrubution was problematic, if you encounter 
+problems with cactid you will want to replace it with the latest snapshot available @ http://cygwin.com/snapshots/
 
 The UNIX sources of NetSNMP and the MySQL
 
 MySQL source files available @ www.mysql.com/downloads
 Net-SNMP source files available @ www.netsnmp.org/download
-
-At the time of this writing netsnmp 5.1 would not compile with cygwin, 5.09 was used
-
 
 Build instructions
 
@@ -26,7 +28,6 @@ Only the client libraries are needed for cactid so MySQL can be configured with 
 make
 make install
 
-
 NetSNMP
 
 nothing special required
@@ -36,11 +37,9 @@ nothing special required
 make
 make install
 
-
 Cactid
 
 nothing special required
-
 
 ./configure
 

@@ -23,6 +23,13 @@
  +-------------------------------------------------------------------------+
 */
 
+static void init_snmp_lock(void);
+static void init_thread_lock(void);
+static void init_mysql_lock(void);
+static void init_rrdtool_lock(void);
+static void init_pipe_lock(void);
+static void init_syslog_lock(void);
+void init_mutexes(void);
 void thread_mutex_lock(int);
 void thread_mutex_unlock(int);
 int thread_mutex_trylock(int mutex);

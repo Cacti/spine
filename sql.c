@@ -29,15 +29,14 @@
 #include "sql.h"
 
 int db_insert(MYSQL *mysql, char *query) {
+	char logmessage[255];
 	if (set.verbose >= HIGH) {
-		printf("SQL: %s\n", query);
+		printf("SQLCMD: %s\n", query);
 	}
-	
+
 	if (mysql_query(mysql, query)) {
-		if (set.verbose >= LOW) {
-			fprintf(stderr, "** MySQL Error: %s\n", mysql_error(mysql));
-		}
-		
+		sprintf(logmessage, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
+		cacti_log(logmessage,"e");
 		return (FALSE);
 	}else{
 		return (TRUE);
@@ -47,31 +46,39 @@ int db_insert(MYSQL *mysql, char *query) {
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
 	
-	mysql_query(mysql, query);
+/*	thread_mutex_lock(LOCK_MYSQL);*/
+ 	mysql_query(mysql, query);
 	mysql_res = mysql_store_result(mysql);
-	
+/*	thread_mutex_unlock(LOCK_MYSQL);*/
+ 	
 	return mysql_res;
 }
 
 
 int db_connect(char *database, MYSQL *mysql) {
-	if (set.verbose >= LOW) {
-		printf("Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+	char logmessage[255];    
+	if (set.verbose >= HIGH) {
+		printf("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
-	
-	thread_mutex_lock(LOCK_MYSQL);
+
+/*	thread_mutex_lock(LOCK_MYSQL);*/
+
 	mysql_init(mysql);
-	thread_mutex_unlock(LOCK_MYSQL);
-    	
+
 	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
-		fprintf(stderr, "** Failed: %s\n", mysql_error(mysql));
+		sprintf(logmessage, "ERROR: MySQL Connection Failed: %s\n", mysql_error(mysql));
+		cacti_log(logmessage,"e");
+		thread_mutex_unlock(LOCK_MYSQL);
 		exit(0);
 	}else{
+	    thread_mutex_unlock(LOCK_MYSQL);
 		return (0);
 	}
+/*	thread_mutex_unlock(LOCK_MYSQL);*/
 }
 
-
 void db_disconnect(MYSQL *mysql) {
+/*    thread_mutex_lock(LOCK_MYSQL);*/
 	mysql_close(mysql);
+/*	thread_mutex_unlock(LOCK_MYSQL);*/
 }

@@ -54,6 +54,7 @@
 #define DEFAULT_DB_DB "cacti"
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
+#define DEFAULT_Log_File "/wwwroot/cacti/log/rrd.log"
 #define DEFAULT_SNMP_VER 1
 
 /* Verbosity levels LOW=info HIGH=info+SQL DEBUG=info+SQL+junk */
@@ -67,17 +68,30 @@
 #define LOCK_MYSQL 2
 #define LOCK_RRDTOOL 3
 #define LOCK_PIPE 4
+#define LOCK_SYSLOG 5
+
+#define LOCK_SNMP_O 0
+#define LOCK_THREAD_O 1
+#define LOCK_MYSQL_O 2
+#define LOCK_RRDTOOL_O 3
+#define LOCK_PIPE_O 4
+#define LOCK_SYSLOG_O 5
 
 #define STAT_DESCRIP_ERROR 99
 
 /* Typedefs */
 typedef struct config_struct {
 	int interval;
-	long long out_of_range;
+	long out_of_range;
 	char dbhost[80];
 	char dbdb[80];
 	char dbuser[80];
 	char dbpass[80];
+	char logfile[250];
+	char phppath[250];
+	int log_destination;
+	int log_perror;
+	int log_pstats;
 	int verbose;
 	int dboff;
 	int snmp_ver;
@@ -86,7 +100,7 @@ typedef struct config_struct {
 
 typedef struct target_struct {
 	int target_id;
-	char result[255];
+	char result[512];
 	int local_data_id;
 	int rrd_num;
 	int action;
@@ -112,8 +126,7 @@ typedef struct host_struct {
 	int snmp_port;
 	int snmp_timeout;
 	int ignore_host;
-	
-	void *snmp_session;
+ 	void *snmp_session;
 } host_t;
 
 typedef struct rrd_struct{

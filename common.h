@@ -32,6 +32,7 @@
 #define _POSIX_THREAD_SAFE_FUNCTIONS
 #define _P __P
 #define _REENTRANT
+#define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
 
 #if HAVE_CONFIG_H
 #  include "config.h"
