@@ -1,5 +1,5 @@
 # +-------------------------------------------------------------------------+
-# | Copyright (C) 2003 Ian Berry                                            |
+# | Copyright (C) 2004 Ian Berry                                            |
 # |                                                                         |
 # | This program is free software; you can redistribute it and/or           |
 # | modify it under the terms of the GNU General Public License             |
@@ -11,33 +11,23 @@
 # | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
 # | GNU General Public License for more details.                            |
 # +-------------------------------------------------------------------------+
-# | cactid: a backend data gatherer for cacti                               |
+# | cactid: a backend data gatherer for Cacti                               |
 # +-------------------------------------------------------------------------+
 # | This poller would not have been possible without:                       |
 # |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
 # |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
 # |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
 # +-------------------------------------------------------------------------+
-# | - raXnet - http://www.raxnet.net/                                       |
-# |                                                                         |
 # | Settings                                                                |
-# | _______________________________________________________________________ |
-# |                                                                         |
-# | Interval	Not currently implemented.  Planned demon mode operation    |
-# | P_Server	Not currently implemented.  Planned polling server name     |
-# | SNMP_Ver	Stub Functionality.  Currently only valid option is 1       |
-# | DB_Host	localhost for unix, IP Address for Windows                  |
-# | DB_Database	database name, typically "cacti"                            |
-# | DB_User	the user to use to access the database, typically cactiuser |
-# | DB_Pass	the password for the cacti user                             |
-# | Threads	integer between 1 and 20				    |
-# | LogFile	UNC path name to the cacti logfile			    |  
 # +-------------------------------------------------------------------------+
-Interval        300 # not currently used
-SNMP_Ver        1
-DB_Host         192.168.0.2
+# | DB_Host      'localhost' for unix, IP Address for Windows               |
+# | DB_Database  Database name, typically 'cacti'                           |
+# | DB_User      The user to access the database, typically 'cactiuser'     |
+# | DB_Pass      The password for the Cacti user                            |
+# | LogFile      UNC path name to the Cacti logfile                         |
+# +-------------------------------------------------------------------------+
+DB_Host         localhost
 DB_Database     cacti
 DB_User         cactiuser
-DB_Pass         cacti
-Threads         10
-LogFile	        c:/wwwroot/cacti/log/cacti.log
+DB_Pass         cactiuser
+LogFile         /var/log/cactid.log
