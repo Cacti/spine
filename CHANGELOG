@@ -1,6 +1,7 @@
 raXnet – cactid
 
 0.8.6c
+-bug: fixed integer/float conversion problem.
 -bug: increased the default script timeout from 5 to 10 seconds
 -bug: changed stdout format to reduce clutter on screen
 -bug: removed cygwin workaround that was causing SNMP instability
