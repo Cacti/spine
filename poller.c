@@ -210,7 +210,10 @@ void poll_host(int host_id) {
     				break;
     			}
 
-    			if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
+				/* assume ok if host is up and result wasn't obtained */
+				if (strcmp(poll_result,"U")) {
+					assert_fail = 0;
+				}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
     				snprintf(logmessage, LOGSIZE, "ASSERT: '%s=%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
      				cacti_log(logmessage);
 
