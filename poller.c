@@ -224,7 +224,7 @@ void poll_host(int host_id) {
 					free(query3);
 
 					assert_fail = 1;
-				}else if ((!strcmp(reindex->op, ">")) && (atoi(reindex->assert_value) <= atoi(poll_result))) {
+				}else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) <= atoll(poll_result))) {
 					snprintf(logmessage, LOGSIZE, "ASSERT: '%s>%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 					cacti_log(logmessage);
 
@@ -234,7 +234,7 @@ void poll_host(int host_id) {
 					free(query3);
 
 					assert_fail = 1;
-				}else if ((!strcmp(reindex->op, "<")) && (atoi(reindex->assert_value) >= atoi(poll_result))) {
+				}else if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) >= atoll(poll_result))) {
 					snprintf(logmessage, LOGSIZE, "ASSERT: '%s<%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 					cacti_log(logmessage);
 
