@@ -148,7 +148,7 @@ void poll_host(int host_id) {
 		update_host_status(HOST_UP, host, ping, set.availability_method);
 
 		if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-			snprintf(logmessage, LOGSIZE, "Host[%s] No host availability check possible for '%s'\n", host->id, host->hostname);
+			snprintf(logmessage, LOGSIZE, "Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname);
 			cacti_log(logmessage);
 		}
 	}else{
