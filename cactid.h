@@ -113,9 +113,6 @@
 #define ICMP_ECHO 8
 #define ICMP_HDR_SIZE 8
 
-/* required for net-snmp */
-#define DEFAULT_MIBDIRS "c:/usr/mibs"
-
 /* Typedefs */
 typedef struct config_struct {
 	int interval;

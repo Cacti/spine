@@ -269,13 +269,13 @@ void poll_host(int host_id) {
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				} else {
-					/* erroneous non-numeric result */
-					if (!is_number(entry->result)) {
-						strncpy(errstr, entry->result,sizeof(errstr));
-						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric.  Result: %s...\n", host_id, errstr);
-						cacti_log(logmessage);
-						strncpy(entry->result, "U", sizeof(entry->result));
-					}
+//					/* erroneous non-numeric result */
+//					if (!is_number(entry->result)) {
+//						strncpy(errstr, entry->result,sizeof(errstr));
+//						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric.  Result: %s...\n", host_id, errstr);
+//						cacti_log(logmessage);
+//						strncpy(entry->result, "U", sizeof(entry->result));
+//					}
 				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
@@ -289,13 +289,13 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				/* erroneous non-numeric result */
-				if (!is_number(entry->result)) {
-					strncpy(errstr, entry->result,sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not numeric.  Result: %s...\n", host_id, errstr);
-					cacti_log(logmessage);
-					strncpy(entry->result, "U", sizeof(entry->result));
-				}
+//				/* erroneous non-numeric result */
+//				if (!is_number(entry->result)) {
+//					strncpy(errstr, entry->result,sizeof(errstr));
+//					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not numeric.  Result: %s...\n", host_id, errstr);
+//					cacti_log(logmessage);
+//					strncpy(entry->result, "U", sizeof(entry->result));
+//				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] CMD: %s, output: %s\n", host_id, entry->arg1, entry->result);
@@ -308,13 +308,13 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				/* erroneous non-numeric result */
-				if (!is_number(entry->result)) {
-					strncpy(errstr, entry->result,sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not numeric.  Result: %s...\n", host_id, errstr);
-					cacti_log(logmessage);
-					strncpy(entry->result, "U", sizeof(entry->result));
-				}
+//				/* erroneous non-numeric result */
+//				if (!is_number(entry->result)) {
+//					strncpy(errstr, entry->result,sizeof(errstr));
+//					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not numeric.  Result: %s...\n", host_id, errstr);
+//					cacti_log(logmessage);
+//					strncpy(entry->result, "U", sizeof(entry->result));
+//				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] SERVER: %s, output: %s\n", host_id, entry->arg1, entry->result);
