@@ -75,7 +75,9 @@ void snmp_host_init(host_t *current_host) {
 	/* initialize SNMP */
 	snmp_init(current_host->id);
 
+ 	thread_mutex_lock(LOCK_SNMP);
   	snmp_sess_init(&session);
+	thread_mutex_unlock(LOCK_SNMP);
 
 	if (current_host->snmp_version == 2) {
 		session.version = SNMP_VERSION_2c;
@@ -92,7 +94,9 @@ void snmp_host_init(host_t *current_host) {
 	session.community = current_host->snmp_community;
 	session.community_len = strlen(current_host->snmp_community);
 
+ 	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
+	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		snprintf(logmessage, LOGSIZE, "ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);

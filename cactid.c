@@ -126,6 +126,7 @@ int main(int argc, char *argv[]) {
 	set.poller_id = 0;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting\n", VERSION);
 		cacti_log(logmessage);
 	} else {
 		printf("CACTID: Version %s starting\n", VERSION);
@@ -308,7 +309,7 @@ int main(int argc, char *argv[]) {
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) || (argc == 1)) {
+	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) && (argc != 1)) {
 		snprintf(logmessage, LOGSIZE, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
 	} else {
