@@ -213,13 +213,13 @@ void poll_host(int host_id) {
 				free(poll_result);
 
 				if (host->ignore_host) {
-					sprintf(logmessage,"Host[%i] SNMP timeout detected [%i milliseconds], ignoring host '%s'\n",host_id,host->snmp_timeout, host->hostname);
+					sprintf(logmessage,"Host[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n",host_id,host->snmp_timeout, host->hostname);
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				}
 
-				if (set.verbose >= HIGH) {
-					sprintf(logmessage,"Host[%i] SNMPGET: v%i: %s, dsname: %s, oid: %s, value: %s\n",host_id,host->snmp_version, host->hostname, entry->rrd_name,entry->arg1,entry->result);
+				if (set.verbose >= MEDIUM) {
+					sprintf(logmessage,"Host[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n",host_id,host->snmp_version, host->hostname, entry->rrd_name,entry->arg1,entry->result);
 					cacti_log(logmessage);
 				}
 
@@ -229,8 +229,8 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				if (set.verbose >= HIGH) {
-					sprintf(logmessage,"Host[%i] SCRIPT: %s, output: %s\n",host_id,entry->arg1,entry->result);
+				if (set.verbose >= MEDIUM) {
+					sprintf(logmessage,"Host[%i] CMD: %s, output: %s\n",host_id,entry->arg1,entry->result);
 					cacti_log(logmessage);
 				}
 
@@ -240,8 +240,8 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				if (set.verbose >= HIGH) {
-					sprintf(logmessage,"Host[%i] SCRIPTSVR: %s, output: %s\n",host_id,entry->arg1,entry->result);
+				if (set.verbose >= MEDIUM) {
+					sprintf(logmessage,"Host[%i] SERVER: %s, output: %s\n",host_id,entry->arg1,entry->result);
 					cacti_log(logmessage);
 				}
 
@@ -303,7 +303,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 
 		if (set.verbose >= HIGH) {
-			sprintf(logmessage,"Host[%i] ACTION1 RESULT: %s\n",current_host->id,cmd_result);
+			sprintf(logmessage,"Host[%i] CMD RESULT: %s\n",current_host->id,cmd_result);
 			cacti_log(logmessage);
 		}
 

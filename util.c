@@ -163,7 +163,7 @@ void cacti_log(char *logmessage) {
 		closelog();
 	}
 
-	if (set.verbose >= HIGH) {
+	if (set.verbose >= MEDIUM) {
 		printf(flogmessage);
 	}
 }
