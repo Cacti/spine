@@ -134,9 +134,6 @@ int main(int argc, char *argv[]) {
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
-	/* initialize SNMP */
-//	snmp_init();
-
 	/* initialize PHP */
 	php_init();
 
@@ -282,13 +279,6 @@ int main(int argc, char *argv[]) {
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
-	}
-
-//	/* cleanup the snmp process*/
-//	snmp_free();
-
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: SNMP Cleanup Complete\n");
 	}
 
 	/* close the php script server */

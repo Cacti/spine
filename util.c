@@ -44,6 +44,7 @@ int read_config_options(config_t *set) {
 	MYSQL_ROW mysql_row;
 	int num_rows;
 	char logmessage[LOGSIZE];
+	uid_t ruid;
 
 	db_connect(set->dbdb, &mysql);
 
@@ -180,6 +181,31 @@ int read_config_options(config_t *set) {
 		mysql_row = mysql_fetch_row(result);
 
 		set->ping_method = atoi(mysql_row[0]);
+	}
+
+#if defined(__CYGWIN__)
+	/* root check not required for windows */
+	ruid = 0;
+	printf("CACTID: Windows Environment, root permissions not required for ICMP Ping\n");
+#else
+	/* check for root status (ruid=0) */
+	ruid = getuid();
+	printf("The current user is %i\n", ruid);
+#endif
+
+	/* fall back to UDP ping if ICMP is not available */
+	if (ruid != 0) {
+		if ((set->availability_method == AVAIL_SNMP_AND_PING) || (set->availability_method == AVAIL_PING)) {
+			if (set->ping_method == PING_ICMP) {
+    			set->ping_method = PING_UDP;
+				printf("CACTID: WARNING: Falling back to UDP Ping due to User not being ROOT\n");
+				printf("        To setup a process to run as root, see your documentaion\n");
+				if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+					snprintf(logmessage, LOGSIZE, "DEBUG: Falling back to UDP Ping due to the running User not being ROOT");
+					cacti_log(logmessage);
+				}
+			}
+		}
 	}
 
 	/* log the ping_method variable */
@@ -330,7 +356,7 @@ int read_cactid_config(char *file, config_t *set) {
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
 				else {
-					printf("Warning: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
+					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
 			}
 		}
