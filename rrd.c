@@ -61,7 +61,6 @@ int update_rrd(rrd_t *rrd_targets, int rrd_target_count) {
 char *create_rrd(int local_data_id, char *data_source_path) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
-	//FILE *rrdtool_stdin;
 	
 	int i;
 	int consolidation_function_id, data_source_type_id, rrd_step;
@@ -109,14 +108,7 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 	free(result);
 	
 	/* build final rrd create string */
-	sprintf(rrdcmd, "create %s --step %i %s %s", data_source_path, rrd_step, ds_string, rra_string);
-	
-	/* run the rrd create string against rrdtool */
-	//rrdtool_stdin = popen("rrdtool -", "w");
-	//fprintf(rrdtool_stdin, "%s\n",rrdcmd);
-	//pclose(rrdtool_stdin);
-	
-	//printf("rrdcmd: %s\n", rrdcmd);
+	sprintf(rrdcmd, "create '%s' --step %i %s %s", data_source_path, rrd_step, ds_string, rra_string);
 	
 	return rrdcmd;
 }
@@ -139,21 +131,21 @@ char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 		strcat(part2, temp);
 	}
 	
-	sprintf(rrdcmd, "update %s --template %s N%s", multi_targets[0].rrd_path, part1, part2);
+	sprintf(rrdcmd, "update '%s' --template %s N%s", multi_targets[0].rrd_path, part1, part2);
 	
 	return rrdcmd;
 }
 
 char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
 	char rrdcmd[512];
-	sprintf(rrdcmd, "update %s --template %s N:%s", rrd_path, rrd_name, result);
+	sprintf(rrdcmd, "update '%s' --template %s N:%s", rrd_path, rrd_name, result);
 	
 	return rrdcmd;
 }
 
 char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 	char *p, *tokens[64];
-	char rrdcmd[512] ="update ";
+	char rrdcmd[512] ="update '";
 	char *last;
 	char query[256];
 	int i = 0;
@@ -174,7 +166,7 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 	tokens[i] = NULL;
 	
 	strcat(rrdcmd, rrd_path);
-	strcat(rrdcmd, " --template ");
+	strcat(rrdcmd, "' --template ");
 	for (j=0; j<i; j=j+2) {
 		if (j!=0) {
 			strcat(rrdcmd, ":");
