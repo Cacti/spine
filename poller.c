@@ -38,6 +38,7 @@
 extern target_t *current;
 extern host_t *hosts;
 extern MYSQL mysql;
+extern int num_hosts;
 
 void *poller(void *thread_args) {
 	/* for actions 1 and 2 */
@@ -257,7 +258,6 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 }
 
 int get_host_status(int host_id) {
-	int num_hosts = (sizeof(hosts)-1);
 	int i;
 	
 	mutex_lock(LOCK_CREW);
@@ -275,7 +275,6 @@ int get_host_status(int host_id) {
 }
 
 void set_host_status(int host_id, int new_status) {
-	int num_hosts = (sizeof(hosts)-1);
 	int i;
 	
 	for (i=0;i<num_hosts;i++) {
