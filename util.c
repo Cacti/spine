@@ -24,7 +24,7 @@
 
 #include "common.h"
 #include "cactid.h"
-
+#include <sys/stat.h>
 
 /* read configuration file to establish local environment */
 int read_rtg_config(char *file, config_t * set) {
@@ -98,7 +98,6 @@ void config_defaults(config_t * set) {
 	return;
 }
 
-
 /* Print RTG stats */
 void print_stats(stats_t stats) {
 	printf("\n[Polls = %lld] [DBInserts = %lld] [Wraps = %d] [OutOfRange = %d]\n",
@@ -138,6 +137,15 @@ void sleepy(float sleep_time) {
 	return;
 }
 
+int file_exists(char *filename) {
+	struct stat file_stat;
+	
+	if (stat(filename, &file_stat)) {
+		return 0;
+	}else{
+		return 1;
+	}
+}
 
 /* Timestamp */
 void timestamp(char *str) {
