@@ -65,7 +65,7 @@ int db_connect(char *database, MYSQL *mysql) {
     	
 	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
 		fprintf(stderr, "** Failed: %s\n", mysql_error(mysql));
-		return (-1);
+		exit(0);
 	}else{
 		return (0);
 	}
