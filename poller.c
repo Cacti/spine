@@ -64,17 +64,17 @@ void *child(void * arg) {
 }
 
 void poll_host(int host_id) {
-	char query1[256];
-	char query2[256];
+	char query1[BUFSIZE];
+	char query2[BUFSIZE];
 	char *query3;
-	char query4[256];
+	char query4[BUFSIZE];
 	char errstr[15];
 	int num_rows;
 	int host_status;
 	int assert_fail = 0;
 	char *poll_result = NULL;
 	char logmessage[LOGSIZE];
-	char update_sql[512];
+	char update_sql[BUFSIZE];
 
 	reindex_t *reindex;
 	target_t *entry;
@@ -348,7 +348,7 @@ void poll_host(int host_id) {
 
 				break;
 			default: /* unknown action, generate error */
-				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Unknown Poller Action CMD: %s\n", host_id, entry->arg1);
+				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Unknown Poller Action: %s\n", host_id, entry->arg1);
 				cacti_log(logmessage);
 
 				break;
@@ -452,7 +452,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	struct timeval timeout;
 
 	/* establish timeout of 5 seconds for pipe response */
-	timeout.tv_sec = 5;
+	timeout.tv_sec = 6;
 	timeout.tv_usec = 0;
 
 	char *result_string = (char *) malloc(BUFSIZE);
@@ -487,7 +487,6 @@ char *exec_poll(host_t *current_host, char *command) {
 			/* get only one line of output, we will ignore the rest */
 			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
 			snprintf(cmd_result, bytes_read, "%s", cmd_result);
-			strncpy(cmd_result, strip_string_crlf(cmd_result), sizeof(cmd_result));
 		}
 
 		/* cleanup file and pipe */
