@@ -189,21 +189,21 @@ void poll_host(int host_id) {
 				printf("Assert '%s=%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 
 				query3 = (char *)malloc(128);
-				snprintf(query3, sizeof(query3), "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 				db_insert(&mysql, query3);
 				free(query3);
 			}else if ((!strcmp(reindex->op, ">")) && (atoi(reindex->assert_value) <= atoi(poll_result))) {
 				printf("Assert '%s>%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 
 				query3 = (char *)malloc(128);
-				snprintf(query3, sizeof(query3), "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 				db_insert(&mysql, query3);
 				free(query3);
 			}else if ((!strcmp(reindex->op, "<")) && (atoi(reindex->assert_value) >= atoi(poll_result))) {
 				printf("Assert '%s<%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 
 				query3 = (char *)malloc(128);
-				snprintf(query3, sizeof(query3), "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 				db_insert(&mysql, query3);
 				free(query3);
 			}
@@ -293,7 +293,7 @@ void poll_host(int host_id) {
 
 		if (entry->result != NULL) {
 			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
-			snprintf(query3, sizeof(query3), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
+			snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
 			db_insert(&mysql, query3);
 			free(query3);
 		}
