@@ -227,6 +227,8 @@ void poll_host(int host_id) {
 				}
 
 				break;
+			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
+				break;
 			default: /* unknown action, generate error */
 				sprintf(logmessage,"ERROR: Unknown Poller Action for Host [%i] Command: %s\n",host_id,entry->arg1);
 				cacti_log(logmessage,"e");
