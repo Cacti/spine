@@ -124,16 +124,16 @@ void poll_host(int host_id) {
 		/* initialize monitored object */
 		entry->target_id = 0;
 		entry->action = atoi(row[0]);
-		if (row[1] != NULL) snprintf(entry->hostname, sizeof(entry->hostname), "%s", row[2]);
-		if (row[2] != NULL) snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[3]);
+		if (row[1] != NULL) snprintf(entry->hostname, sizeof(entry->hostname), "%s", row[1]);
+		if (row[2] != NULL) snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[2]);
 		entry->snmp_version = atoi(row[3]);
-		if (row[4] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[5]);
-		if (row[5] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[6]);
-		if (row[6] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[7]);
-		if (row[7] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[8]);
-		if (row[8] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[9]);
-		if (row[9] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[10]);
-		if (row[10] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[11]);
+		if (row[4] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[4]);
+		if (row[5] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[5]);
+		if (row[6] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[6]);
+		if (row[7] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[7]);
+		if (row[8] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[8]);
+		if (row[9] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[9]);
+		if (row[10] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[10]);
 		entry->local_data_id = atoi(row[11]);
 		entry->rrd_num = atoi(row[12]);
 		entry->snmp_port = atoi(row[13]);
@@ -210,51 +210,6 @@ void poll_host(int host_id) {
 
 				if (set.verbose >= HIGH) {
 					printf("POLL COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
-				}
-
-				break;
-			case 2: /* execute multi script file */
-				thread_mutex_lock(LOCK_PIPE);
-				cmd_fd = nft_popen((char *)clean_string(entry->arg1), "r");
-
-				if (cmd_fd > 0) {
-					cmd_stdout = fdopen(cmd_fd, "r");
-
-					while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
-						usleep(50000);
-					}
-
-					if (set.verbose >= HIGH) {
-						printf("ACTION2: Command Result->%s\n",cmd_result);
-					}
-
-					/* Cleanup File and Pipe */
-					fflush(cmd_stdout);
-					fclose(cmd_stdout);
-					return_value = nft_pclose(cmd_fd);
-
-					thread_mutex_unlock(LOCK_PIPE);
-
-					if (return_value != 0) {
-						sprintf(logmessage,"ERROR: Problem executing command [%i]: '%s'\n", host_id, entry->arg1);
-						cacti_log(logmessage,"e");
-						snprintf(entry->result, sizeof(entry->result), "%s", "U");
-					}else if (strlen(cmd_result) == 0) {
-						sprintf(logmessage,"ERROR: Empty result [%i]: '%s'\n", host_id, entry->arg1);
-						cacti_log(logmessage,"e");
-						snprintf(entry->result, sizeof(entry->result), "%s", "U");
-					}else {
-						snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
-					}
-				}else{
-					thread_mutex_unlock(LOCK_PIPE);
-					sprintf(logmessage,"ERROR: Problem executing popen [%i]: '%s'\n", host_id, entry->arg1);
-					cacti_log(logmessage,"e");
-					snprintf(entry->result, sizeof(entry->result), "%s", "U");
-				}
-
-				if (set.verbose >= HIGH) {
-					printf("POLL COMPLETE: MUTLI command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
 				}
 
 				break;
