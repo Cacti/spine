@@ -60,7 +60,7 @@ void snmp_free() {
 }
 
 void snmp_host_init(host_t *current_host) {
-	char logmessage[255];
+	char logmessage[LOGSIZE];
 	void *sessp = NULL;
 	struct snmp_session session;
 
@@ -90,7 +90,7 @@ void snmp_host_init(host_t *current_host) {
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		sprintf(logmessage,"ERROR: Problem initializing SNMP session '%s'\n",current_host->hostname);
+		snprintf(logmessage, LOGSIZE, "ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);
 		cacti_log(logmessage);
 		current_host->snmp_session = NULL;
 	}else{
@@ -108,7 +108,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	oid anOID[MAX_OID_LEN];
 	size_t anOID_len = MAX_OID_LEN;
 	struct variable_list *vars = NULL;
-	char logmessage[255];
+	char logmessage[LOGSIZE];
 
 	int status;
 
@@ -118,7 +118,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	/* only SNMP v1 and v2c are supported right now */
 	if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
-		sprintf(logmessage,"Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n",current_host->id,current_host->hostname);
+		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE, "%s", "U");
 
@@ -152,7 +152,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
-  		strcpy(result_string,"SNMP ERROR");
+		strncpy(result_string, "SNMP ERROR", BUFSIZE);
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		snprintf(result_string, BUFSIZE, "%s", "U");
 	}

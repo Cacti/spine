@@ -50,8 +50,8 @@ char *php_cmd(char *php_command) {
 	char command[BUFSIZE+5];
 
 	/* pad command with CR-LF */
-	sprintf(command,php_command,strlen(php_command));
-	strcat(command,"\r\n");
+	snprintf(command, sizeof(command), php_command, strlen(php_command));
+	strncat(command, "\r\n", 5);
 
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
@@ -82,7 +82,7 @@ char *php_readpipe() {
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
-	char logmessage[255];
+	char logmessage[LOGSIZE];
 
 	/* Initialize File Descriptors to Review for Input/Output */
 	FD_ZERO(&fds);
@@ -110,7 +110,7 @@ char *php_readpipe() {
 		else
 			snprintf(result_string, 2, "%s", "U");
 	} else {
-		sprintf(logmessage,"ERROR: The PHP Script Server Did not Respond in Time\n");
+		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server Did not Respond in Time\n");
 		cacti_log(logmessage);
 		snprintf(result_string, 2, "%s", "U");
 	}
@@ -127,27 +127,27 @@ int php_init() {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
 	int  pid;
-	char logmessage[255];
+	char logmessage[LOGSIZE];
 	char poller_id[11];
 	char *argv[5];
 	int  cancel_state;
 	char *result_string;
 
 	if (set.verbose >= DEBUG) {
-		sprintf(logmessage,"PHP Script Server Routine Started.\n");
+		snprintf(logmessage, LOGSIZE, "PHP Script Server Routine Started.\n");
 		cacti_log(logmessage);
 	}
 
 	/* create the output pipes from cactid to php*/
 	if (pipe(cacti2php_pdes) < 0) {
-		sprintf(logmessage,"Could not allocate php server pipes\n");
+		snprintf(logmessage, LOGSIZE, "Could not allocate php server pipes\n");
 		cacti_log(logmessage);
 		return -1;
 	}
 
 	/* create the input pipes from php to cactid */
 	if (pipe(php2cacti_pdes) < 0) {
-		sprintf(logmessage,"ERROR: Could not allocate php server pipes\n");
+		snprintf(logmessage, LOGSIZE, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
 		return -1;
 	}
@@ -159,13 +159,13 @@ int php_init() {
 	argv[0] = set.path_php;
 	argv[1] = set.path_php_server;
 	argv[2] = "cactid";
-	sprintf(poller_id, "%d", set.poller_id);
+	snprintf(poller_id, sizeof(int), "%d", set.poller_id);
 	argv[3] = poller_id;
 	argv[4] = NULL;
 
 	/* fork a child process */
 	if (set.verbose >= DEBUG) {
-		sprintf(logmessage,"PHP Script Server About to FORK Child Process.\n");
+		snprintf(logmessage, LOGSIZE, "PHP Script Server About to FORK Child Process.\n");
 		cacti_log(logmessage);
 	}
 
@@ -179,7 +179,7 @@ int php_init() {
 			close(cacti2php_pdes[0]);
 			close(cacti2php_pdes[1]);
 
-			sprintf(logmessage,"ERROR: Could not fork php script server\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Could not fork php script server\n");
 			cacti_log(logmessage);
 			pthread_setcancelstate(cancel_state, NULL);
 
@@ -202,7 +202,7 @@ int php_init() {
 			/* NOTREACHED */
 		default: /* I am the parent process */
 			if (set.verbose >= DEBUG) {
-				sprintf(logmessage,"PHP Script Server Child FORK Success.\n");
+				snprintf(logmessage, LOGSIZE, "PHP Script Server Child FORK Success.\n");
 				cacti_log(logmessage);
 			}
 	}
@@ -222,7 +222,7 @@ int php_init() {
 	result_string = php_readpipe();
 
 	if ((set.verbose == DEBUG) && (strstr(result_string, "Started"))) {
-		sprintf(logmessage,"Confirmed PHP Script Server Running\n");
+		snprintf(logmessage, LOGSIZE, "Confirmed PHP Script Server Running\n");
 		cacti_log(logmessage);
 	}
 
@@ -235,10 +235,10 @@ int php_init() {
 /*  php_close - Close the pipes and wait for the status of the child.         */
 /******************************************************************************/
 void php_close() {
-	char logmessage[255];
+	char logmessage[LOGSIZE];
 
 	if (set.verbose >= DEBUG) {
-		sprintf(logmessage,"PHP Script Server Shutdown Started.\n");
+		snprintf(logmessage, LOGSIZE, "PHP Script Server Shutdown Started.\n");
 		cacti_log(logmessage);
 	}
 

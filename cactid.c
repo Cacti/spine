@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
 
 	int* ids = NULL;
 	MYSQL mysql;
-	MYSQL_RES *result;
+	MYSQL_RES *result = NULL;
 	MYSQL_ROW mysql_row;
 	int canexit = 0;
 	int host_id;
@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 	int mutex_status = 0;
 	int thread_status = 0;
 	char result_string[256] = "";
-	char logmessage[256];
+	char logmessage[LOGSIZE];
 
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
 	set.poller_id = 0;
 
 	if (set.verbose >= MEDIUM) {
-		sprintf(logmessage,"CACTID: Version %s starting.\n", VERSION);
+		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting.\n", VERSION);
 		cacti_log(logmessage);
 	}
 
@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case 3:
-			sprintf(result_string, "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id\0", argv[1], argv[2]);
+			snprintf(result_string, sizeof(result_string), "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id\0", argv[1], argv[2]);
 			result = db_query(&mysql, result_string);
 
 			break;
@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
 	init_mutexes();
 
 	if (set.verbose >= DEBUG) {
-		sprintf(logmessage, "DEBUG: Initial Value of Active Threads is ->%i\n", active_threads);
+		snprintf(logmessage, LOGSIZE, "DEBUG: Initial Value of Active Threads is ->%i\n", active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
 		switch (mutex_status) {
 		case 0:
 			if (set.verbose >= DEBUG) {
-				sprintf(logmessage,"DEBUG: Valid Thread to be Created.\n");
+				snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created.\n");
 				cacti_log(logmessage);
 			}
 			if (last_active_threads != active_threads) {
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
 				switch (thread_status) {
 					case 0:
 						if (set.verbose >= DEBUG) {
-							sprintf(logmessage,"DEBUG: Valid Thread to be Created.\n");
+							snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created.\n");
 							cacti_log(logmessage);
 						}
 
@@ -200,25 +200,25 @@ int main(int argc, char *argv[]) {
 						active_threads++;
 
 						if (set.verbose >= DEBUG) {
-							sprintf(logmessage,"DEBUG: The Value of Active Threads is ->%i\n",active_threads);
+							snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is ->%i\n", active_threads);
 							cacti_log(logmessage);
 						}
 
 						break;
 					case EAGAIN:
-						sprintf(logmessage,"ERROR: The System Lacked the Resources to Create a Thread.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: The System Lacked the Resources to Create a Thread.\n");
 						cacti_log(logmessage);
 						break;
 					case EFAULT:
-						sprintf(logmessage, "ERROR: The Thread or Attribute Was Invalid.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: The Thread or Attribute Was Invalid.\n");
 						cacti_log(logmessage);
 						break;
 					case EINVAL:
-						sprintf(logmessage, "ERROR: The Thread Attribute is Not Initialized.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: The Thread Attribute is Not Initialized.\n");
 						cacti_log(logmessage);
 						break;
 					default:
-						sprintf(logmessage, "ERROR: Unknown Thread Creation Error.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: Unknown Thread Creation Error.\n");
 						cacti_log(logmessage);
 						break;
 				}
@@ -229,19 +229,19 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EBUSY:
-			sprintf(logmessage,"ERROR: Deadlock Occured.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Deadlock Occured.\n");
 			cacti_log(logmessage);
 			break;
 		case EINVAL:
-			sprintf(logmessage,"ERROR: Attempt to Unlock an Uninitialized Mutex.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Uninitialized Mutex.\n");
 			cacti_log(logmessage);
 			break;
 		case EFAULT:
-			sprintf(logmessage,"ERROR: Attempt to Unlock an Invalid Mutex.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Invalid Mutex.\n");
 			cacti_log(logmessage);
 			break;
 		default:
-			sprintf(logmessage,"ERROR: Unknown Mutex Lock Error Code Returned.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Unknown Mutex Lock Error Code Returned.\n");
 			cacti_log(logmessage);
 			break;
 		}
@@ -295,7 +295,7 @@ int main(int argc, char *argv[]) {
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	if ((set.verbose == MEDIUM) || (argc == 1)) {
-		sprintf(logmessage, "CACTID: Execution Time: %.4f s, Max Threads/Process: %i, Polled Hosts: %i\n",(end_time - begin_time),set.threads,num_rows);
+		snprintf(logmessage, LOGSIZE, "CACTID: Execution Time: %.4f s, Max Threads/Process: %i, Polled Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
 	}
 

@@ -37,6 +37,7 @@
 /* Constants */
 #define MAX_THREADS 100
 #define BUFSIZE 512
+#define LOGSIZE 255
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
@@ -164,26 +165,26 @@ typedef struct php_pipe_struct {
 } php_t;
 
 typedef struct host_struct {
- 	int id;
+	int id;
 	char hostname[250];
 	char snmp_community[100];
 	int snmp_version;
 	int snmp_port;
 	int snmp_timeout;
- 	int status;
+	int status;
 	int status_event_count;
- 	char status_fail_date[40];
+	char status_fail_date[40];
 	char status_rec_date[40];
 	char status_last_error[50];
- 	double min_time;
+	double min_time;
 	double max_time;
 	double cur_time;
 	double avg_time;
 	int total_polls;
 	int failed_polls;
- 	double availability;
+	double availability;
 	int ignore_host;
- 	void *snmp_session;
+	void *snmp_session;
 } host_t;
 
 typedef struct host_reindex_struct {

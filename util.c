@@ -29,9 +29,10 @@
 #include "common.h"
 #include "cactid.h"
 #include "util.h"
+#include "snmp.h"
 #include "sql.h"
 
-int read_config_options(config_t *set) {
+void read_config_options(config_t *set) {
 	MYSQL mysql;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -57,8 +58,8 @@ int read_config_options(config_t *set) {
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 
-  		strcpy(set->path_php_server,mysql_row[0]);
-  		strcat(set->path_php_server,"/script_server.php");
+		strncpy(set->path_php_server, mysql_row[0], sizeof(set->path_php_server));
+		strncat(set->path_php_server, "/script_server.php", sizeof(set->path_php_server));
 	}
 
 	/* set availability_method */
@@ -172,7 +173,7 @@ int read_config_options(config_t *set) {
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-		strcpy(set->path_php,mysql_row[0]);
+		strncpy(set->path_php, mysql_row[0], sizeof(set->path_php));
 	}
 
 	mysql_free_result(result);
@@ -259,12 +260,12 @@ void cacti_log(char *logmessage) {
 	time_t nowbin;
 	const struct tm *nowstruct;
 	char logprefix[40]; /* Formatted Log Prefix */
-	char flogmessage[255];	/* Formatted Log Message */
+	char flogmessage[LOGSIZE];	/* Formatted Log Message */
 	extern config_t set;
 	int fileopen = 0;
 
 	/* log message prefix */
- 	sprintf(logprefix, "CACTID: Poller[%i] ",set.poller_id);
+	snprintf(logprefix, sizeof(logprefix), "CACTID: Poller[%i] ", set.poller_id);
 
 	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != POLLER_VERBOSITY_NONE)) {
 		while (!fileopen) {
@@ -320,15 +321,14 @@ void cacti_log(char *logmessage) {
 /* ping host */
 int ping_host(host_t *host, ping_t *ping) {
 	struct timeval now;
-	double begin_time, end_time;
+	double begin_time = 0, end_time = 0;
 	char *poll_result;
-	int start_time;
 
 	/* initialize variables */
-	strcpy(ping->ping_status, "down");
-	strcpy(ping->ping_response, "Ping not performed due to setting.");
-	strcpy(ping->snmp_status, "down");
-	strcpy(ping->snmp_response, "SNMP not performed due to setting or ping result");
+	strncpy(ping->ping_status, "down", sizeof(ping->ping_status));
+	strncpy(ping->ping_response, "Ping not performed due to setting.", sizeof(ping->ping_response));
+	strncpy(ping->snmp_status, "down", sizeof(ping->ping_status));
+	strncpy(ping->snmp_response, "SNMP not performed due to setting or ping result", sizeof(ping->ping_response));
 
 	if (strlen(host->snmp_community) != 0) {
 		/* record start time */
@@ -340,9 +340,9 @@ int ping_host(host_t *host, ping_t *ping) {
 		/* record end time */
 		gettimeofday(&now, NULL);
 		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
- 	} else {
-		strcpy(ping->snmp_status, "0.00");
-		strcpy(ping->snmp_response, "Host does not require SNMP");
+	} else {
+		strncpy(ping->snmp_status, "0.00", sizeof(ping->snmp_status));
+		strncpy(ping->snmp_response, "Host does not require SNMP", sizeof(ping->snmp_response));
 		poll_result = "0.00";
 	}
 
@@ -350,12 +350,12 @@ int ping_host(host_t *host, ping_t *ping) {
 	set.availability_method = 2;
 
 	if ((strlen(poll_result) == 0) || (strstr(poll_result,"ERROR"))) {
-		strcpy(ping->snmp_response, "Host did not respond to SNMP");
+		strncpy(ping->snmp_response, "Host did not respond to SNMP", sizeof(ping->snmp_response));
 		update_host_status(HOST_DOWN, host, ping, set.availability_method);
 		return HOST_DOWN;
 	} else {
-		strcpy(ping->snmp_response, "Host responded to SNMP");
-		sprintf(ping->snmp_status,"%.5f",((end_time-begin_time)*1000));
+		strncpy(ping->snmp_response, "Host responded to SNMP", sizeof(ping->snmp_response));
+		snprintf(ping->snmp_status, sizeof(ping->snmp_status), "%.5f", ((end_time-begin_time)*1000));
 		update_host_status(HOST_UP, host, ping, set.availability_method);
 		return HOST_UP;
 	}
@@ -363,11 +363,11 @@ int ping_host(host_t *host, ping_t *ping) {
 	free(poll_result);
 }
 
-int update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
+void update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
 	int issue_log_message = FALSE;
 	char logmessage[256];
 	double ping_time;
- 	char current_date[40];
+	char current_date[40];
 	time_t nowbin;
 	const struct tm *nowstruct;
 	extern config_t set;
@@ -387,7 +387,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 		host->availability = 100 * (host->total_polls - host->failed_polls) / host->total_polls;
 
 		/*determine the error message to display */
-  		switch (availability_method) {
+		switch (availability_method) {
 		case AVAIL_SNMP_AND_PING:
 			if (strlen(host->snmp_community) == 0) {
 				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
@@ -401,7 +401,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 			}else {
 				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->snmp_response);
 			}
-   			break;
+			break;
 		default:
 			snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
 		}
@@ -477,7 +477,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 			host->min_time = ping_time;
 
 		/* average time */
-  		host->avg_time = (((host->total_polls-1-host->failed_polls)
+		host->avg_time = (((host->total_polls-1-host->failed_polls)
 			* host->avg_time) + ping_time) / (host->total_polls-host->failed_polls);
 
 		/* the host was down, now it's recovering */
@@ -522,33 +522,33 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				sprintf(logmessage,"Host[%i] PING: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
-				sprintf(logmessage,"Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else if (availability_method == AVAIL_SNMP) {
 				if (host->snmp_community == "") {
-					sprintf(logmessage,"Host[%i] SNMP: Device does not require SNMP\n", host->id);
+					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: Device does not require SNMP\n", host->id);
 					cacti_log(logmessage);
 				}else{
-					sprintf(logmessage,"Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
+					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
 					cacti_log(logmessage);
 				}
 			} else {
-				sprintf(logmessage,"Host[%i] PING: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 			}
 		} else {
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				sprintf(logmessage,"Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
-				sprintf(logmessage,"Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else if (availability_method == AVAIL_SNMP) {
-				sprintf(logmessage,"Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else {
-				sprintf(logmessage,"Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 			}
 		}
@@ -557,10 +557,10 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			sprintf(logmessage,"Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
+			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
 			cacti_log(logmessage);
 		} else {
-			sprintf(logmessage,"Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
+			snprintf(logmessage, LOGSIZE, "Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
 			cacti_log(logmessage);
 		}
 	}
