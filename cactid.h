@@ -62,10 +62,11 @@
 #define DEFAULT_SNMP_VER 1
 
 /* Verbosity levels LOW=info MEDIUM=info+hoststats HIGH=info+SQL DEBUG=info+SQL+junk */
-#define LOW 1
-#define MEDIUM 2
-#define HIGH 3
-#define DEBUG 4
+#define NONE 1
+#define LOW 2
+#define MEDIUM 3
+#define HIGH 4
+#define DEBUG 5
 
 #define LOCK_SNMP 0
 #define LOCK_THREAD 1

@@ -117,7 +117,7 @@ void cacti_log(char *logmessage) {
 	/* log message prefix */
  	sprintf(logprefix, "CACTID: Poller[%i] ",set.poller_id);
 
-	if ((set.log_destination == 1) || (set.log_destination == 2)) {
+	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != NONE)) {
 		while (!fileopen) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
