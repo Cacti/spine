@@ -101,7 +101,7 @@ AC_DEFUN(MYSQL_LIB_CHK,[
 ])
 
 # Determine MySQL installation paths
-for i in $MYSQL_DIR /usr/local /usr/local/mysql; do
+for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
    test -f $i/include/mysql.h                    && MYSQL_INC_DIR=$i/include
    test -f $i/include/mysql/mysql.h              && MYSQL_INC_DIR=$i/include/mysql
    test -f $i/mysql/include/mysql.h              && MYSQL_INC_DIR=$i/mysql/include
@@ -115,7 +115,7 @@ if test -z "$MYSQL_INC_DIR"; then
   fi
 fi
 
-for i in $MYSQL_DIR /usr/local /usr/local/mysql; do
+for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
    MYSQL_LIB_CHK($i/lib)
    MYSQL_LIB_CHK($i/lib/mysql)
 done
