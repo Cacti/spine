@@ -81,6 +81,7 @@ char *php_readpipe() {
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
+	char logmessage[255];
 
 	/* Initialize File Descriptors to Review for Input/Output */
 	FD_ZERO(&fds);
@@ -108,7 +109,8 @@ char *php_readpipe() {
 		else
 			snprintf(result_string, 2, "%s", "U");
 	} else {
-		cacti_log("ERROR: The PHP Script Server Did not Respond in Time\n");
+		sprintf(logmessage,"ERROR: The PHP Script Server Did not Respond in Time\n");
+  		cacti_log(logmessage);
 		snprintf(result_string, 2, "%s", "U");
 	}
 
@@ -122,23 +124,27 @@ int php_init() {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
 	int  pid;
-	char *argv[4];
+	char logmessage[255];
+	char *argv[5];
 	int  cancel_state;
 	char *result_string;
 
 	if (set.verbose >= DEBUG) {
-		cacti_log("CACTID: PHP Script Server Routine Started.\n");
+		sprintf(logmessage,"PHP Script Server Routine Started.\n");
+		cacti_log(logmessage);
 	}
 
 	/* create the output pipes from cactid to php*/
 	if (pipe(cacti2php_pdes) < 0) {
-		cacti_log("ERROR: Could not allocate php server pipes\n");
+		sprintf(logmessage,"Could not allocate php server pipes\n");
+		cacti_log(logmessage);
 		return -1;
 	}
 
 	/* create the input pipes from php to cactid */
 	if (pipe(php2cacti_pdes) < 0) {
-		cacti_log("ERROR: Could not allocate php server pipes\n");
+		sprintf(logmessage,"ERROR: Could not allocate php server pipes\n");
+		cacti_log(logmessage);
 		return -1;
 	}
 
@@ -146,14 +152,16 @@ int php_init() {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 	/* establish arguments for script server execution */
-	argv[0] = set.phppath;
+	argv[0] = set.path_php;
 	argv[1] = set.path_php_server;
 	argv[2] = "cactid";
-	argv[3] = NULL;
+	argv[3] = set.poller_id;
+	argv[4] = NULL;
 
 	/* fork a child process */
 	if (set.verbose >= DEBUG) {
-		cacti_log("CACTID: PHP Script Server About to FORK Child Process.\n");
+		sprintf(logmessage,"PHP Script Server About to FORK Child Process.\n");
+		cacti_log(logmessage);
 	}
 
 	pid = fork();
@@ -161,15 +169,13 @@ int php_init() {
 	/* check the pid status and process as required */
 	switch (pid) {
 		case -1: /* ERROR: Could not fork() */
-			if (set.verbose >= DEBUG) {
-				cacti_log("CACTID: PHP Script Server Child FORK Failed.\n");
-			}
 			close(php2cacti_pdes[0]);
 			close(php2cacti_pdes[1]);
 			close(cacti2php_pdes[0]);
 			close(cacti2php_pdes[1]);
 
-			cacti_log("ERROR: Could not fork php script server\n");
+			sprintf(logmessage,"ERROR: Could not fork php script server\n");
+			cacti_log(logmessage);
 			pthread_setcancelstate(cancel_state, NULL);
 
 			return -1;
@@ -191,7 +197,8 @@ int php_init() {
 			/* NOTREACHED */
 		default: /* I am the parent process */
 			if (set.verbose >= DEBUG) {
-				cacti_log("CACTID: PHP Script Server Child FORK Success.\n");
+				sprintf(logmessage,"PHP Script Server Child FORK Success.\n");
+				cacti_log(logmessage);
 			}
 	}
 
@@ -210,8 +217,10 @@ int php_init() {
 	result_string = php_readpipe();
 	free(result_string);
 
-	if ((set.verbose == DEBUG) && (strstr(result_string, "Started")))
-		cacti_log("CACTID: Confirmed PHP Script Server Running\n");
+	if ((set.verbose == DEBUG) && (strstr(result_string, "Started"))) {
+		sprintf(logmessage,"Confirmed PHP Script Server Running\n");
+		cacti_log(logmessage);
+	}
 
 	return 1;
 }
@@ -220,8 +229,11 @@ int php_init() {
 /*  php_close - Close the pipes and wait for the status of the child.         */
 /******************************************************************************/
 void php_close() {
+	char logmessage[255];
+
 	if (set.verbose >= DEBUG) {
-		cacti_log("CACTID: PHP Script Server Shutdown Started.\n");
+		sprintf(logmessage,"PHP Script Server Shutdown Started.\n");
+		cacti_log(logmessage);
 	}
 
 	/* tell the script server to close */

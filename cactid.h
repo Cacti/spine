@@ -57,7 +57,7 @@
 #define DEFAULT_DB_DB "cacti"
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
-#define DEFAULT_Log_File "/wwwroot/cacti/log/rrd.log"
+#define DEFAULT_Log_File "/wwwroot/cacti/log/cacti.log"
 #define DEFAULT_PATH_PHP_SERVER "/wwwroot/cacti/script_server.php"
 #define DEFAULT_SNMP_VER 1
 
@@ -65,7 +65,6 @@
 #define LOW 1
 #define HIGH 2
 #define DEBUG 3
-#define DEVELOP 4
 
 #define LOCK_SNMP 0
 #define LOCK_THREAD 1
@@ -94,13 +93,14 @@
 /* Typedefs */
 typedef struct config_struct {
 	int interval;
+	int poller_id;
 	long out_of_range;
 	char dbhost[80];
 	char dbdb[80];
 	char dbuser[80];
 	char dbpass[80];
-	char logfile[250];
-	char phppath[250];
+	char path_logfile[250];
+	char path_php[250];
 	char path_php_server[250];
 	int log_destination;
 	int log_perror;
@@ -138,6 +138,7 @@ typedef struct php_pipe_struct {
 } php_t;
 
 typedef struct host_struct {
+ 	int id;
 	char hostname[250];
 	char snmp_community[100];
 	int snmp_version;

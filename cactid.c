@@ -131,6 +131,16 @@ int main(int argc, char *argv[]) {
 		set.log_destination = 1;
 	}
 
+	/* determine web_root for script_server operation */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_server'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+  		strcpy(set.path_php_server,mysql_row[0]);
+	}
+
 	/* set logging option for errors */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_perror'");
 	num_rows = (int)mysql_num_rows(result);
@@ -182,11 +192,15 @@ int main(int argc, char *argv[]) {
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-		strcpy(set.phppath,mysql_row[0]);
+		strcpy(set.path_php,mysql_row[0]);
 	}
 
+	/* Set the Poller ID */
+	set.poller_id = 0;
+
 	if (set.verbose >= HIGH) {
-		cacti_log("CACTID: Ready.\n");
+		sprintf(logmessage,"Ready.\n");
+		cacti_log(logmessage);
 	}
 
 	/* Initialize SNMP */
@@ -224,7 +238,7 @@ int main(int argc, char *argv[]) {
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	if (set.verbose >= DEBUG) {
-  		sprintf(logmessage,"DEBUG: Initial Value of Active Threads is ->%i\n",active_threads);
+  		sprintf(logmessage,"DEBUG: Initial Value of Active Threads is ->%i\n",set.poller_id,active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -233,7 +247,8 @@ int main(int argc, char *argv[]) {
 		switch (mutex_status) {
 		case 0:
 			if (set.verbose >= DEBUG) {
-				cacti_log("DEBUG: Valid Thread to be Created.\n");
+				sprintf(logmessage,"DEBUG: Valid Thread to be Created.\n");
+				cacti_log(logmessage);
 			}
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
@@ -250,7 +265,8 @@ int main(int argc, char *argv[]) {
 				switch (thread_status) {
 					case 0:
 						if (set.verbose >= DEBUG) {
-							cacti_log("DEBUG: Valid Thread to be Created.\n");
+							sprintf(logmessage,"DEBUG: Valid Thread to be Created.\n");
+							cacti_log(logmessage);
 						}
 
 						device_counter++;
@@ -263,16 +279,20 @@ int main(int argc, char *argv[]) {
 
 						break;
 					case EAGAIN:
-						cacti_log("ERROR: The System Lacked the Resources to Create a Thread.\n");
+						sprintf(logmessage,"ERROR: The System Lacked the Resources to Create a Thread.\n");
+						cacti_log(logmessage);
 						break;
 					case EFAULT:
-						cacti_log("ERROR: The Thread or Attribute Was Invalid.\n");
+						sprintf(logmessage, "ERROR: The Thread or Attribute Was Invalid.\n");
+						cacti_log(logmessage);
 						break;
 					case EINVAL:
-						cacti_log("ERROR: The Thread Attribute is Not Initialized.\n");
+						sprintf(logmessage, "ERROR: The Thread Attribute is Not Initialized.\n");
+						cacti_log(logmessage);
 						break;
 					default:
-						cacti_log("ERROR: Unknown Thread Creation Error.\n");
+						sprintf(logmessage, "ERROR: Unknown Thread Creation Error.\n");
+						cacti_log(logmessage);
 						break;
 				}
 				usleep(500);
@@ -282,16 +302,20 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EBUSY:
-			cacti_log("ERROR: Deadlock Occured.\n");
+			sprintf(logmessage,"ERROR: Deadlock Occured.\n");
+			cacti_log(logmessage);
 			break;
 		case EINVAL:
-			cacti_log("ERROR: Attempt to Unlock an Uninitialized Mutex.\n");
+			sprintf(logmessage,"ERROR: Attempt to Unlock an Uninitialized Mutex.\n");
+			cacti_log(logmessage);
 			break;
 		case EFAULT:
-			cacti_log("ERROR: Attempt to Unlock an Invalid Mutex.\n");
+			sprintf(logmessage,"ERROR: Attempt to Unlock an Invalid Mutex.\n");
+			cacti_log(logmessage);
 			break;
 		default:
-			cacti_log("ERROR: Unknown Mutex Lock Error Code Returned.\n");
+			sprintf(logmessage,"ERROR: Unknown Mutex Lock Error Code Returned.\n");
+			cacti_log(logmessage);
 			break;
 		}
 
@@ -340,10 +364,8 @@ int main(int argc, char *argv[]) {
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-	if (argc == 1) {
-		sprintf(logmessage, "STATS: Execution Time: %.4f s, Method: cactid, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n", (end_time - begin_time), set.threads, num_rows, num_rows);
-		cacti_log(logmessage);
-	}
+	sprintf(logmessage, "STATS: Execution Time: %.4f s, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n",(end_time - begin_time),set.threads,num_rows, num_rows);
+	cacti_log(logmessage);
 
 	exit(0);
 }

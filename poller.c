@@ -39,12 +39,13 @@ void *child(void * arg) {
 	char logmessage[255];
 
 	if (set.verbose >= DEBUG) {
-		cacti_log("DEBUG: In Poller, About to Start Polling of Host.\n");
+		sprintf(logmessage,"DEBUG: In Poller, About to Start Polling of Host.\n");
+		cacti_log(logmessage);
 	}
 
 	if (active_threads == 1) {
 		if (set.verbose >= DEBUG) {
-			cacti_log("DEBUG: This is where popen DEADLOCKs errors occur\n");
+			sprintf(logmessage,"DEBUG: This is where popen DEADLOCKs errors occur\n");
 		}
 	}
 
@@ -55,7 +56,7 @@ void *child(void * arg) {
 	thread_mutex_unlock(LOCK_THREAD);
 
 	if (set.verbose >= DEBUG) {
-		sprintf(logmessage,"DEBUG: The Value of Active Threads is ->%i\n",active_threads);
+		sprintf(logmessage,"DEBUG: The Value of Active Threads is ->%i\n",set.poller_id,active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -86,7 +87,7 @@ void poll_host(int host_id) {
 	}
 
 	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
-	snprintf(query2, sizeof(query2), "select hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
+	snprintf(query2, sizeof(query2), "select id,hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
 	snprintf(query4, sizeof(query4), "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
 
 	db_connect(set.dbdb, &mysql);
@@ -96,7 +97,7 @@ void poll_host(int host_id) {
 	num_rows = (int)mysql_num_rows(result);
 
 	if (num_rows != 1) {
-		sprintf(logmessage,"ERROR: Unknown host id, %i!", host_id);
+		sprintf(logmessage,"Host[%i] ERROR: Unknown Host ID",host_id);
 		cacti_log(logmessage);
 		return;
 	}
@@ -106,11 +107,12 @@ void poll_host(int host_id) {
 	/* preload host structure with appropriate values */
 	host = (host_t *) malloc(sizeof(host_t));
 
-	if (row[0] != NULL) snprintf(host->hostname, sizeof(host->hostname), "%s", row[0]);
-	if (row[1] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", row[1]);
-	host->snmp_version = atoi(row[2]);
-	host->snmp_port = atoi(row[3]);
-	host->snmp_timeout = atoi(row[4]);
+ 	host->id = atoi(row[0]);
+	if (row[1] != NULL) snprintf(host->hostname, sizeof(host->hostname), "%s", row[1]);
+	if (row[2] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", row[2]);
+	host->snmp_version = atoi(row[3]);
+	host->snmp_port = atoi(row[4]);
+	host->snmp_timeout = atoi(row[5]);
 	host->ignore_host = 0;
 
 	/* initialize SNMP */
@@ -129,8 +131,9 @@ void poll_host(int host_id) {
 		result = db_query(&mysql, query4);
 		num_rows = (int)mysql_num_rows(result);
 
-		if (num_rows > 0) {
-			printf("CACTID: Processing %i items in the auto reindex cache for '%s'.\n", num_rows, host->hostname);
+		if ((num_rows > 0) && (set.verbose >= HIGH)) {
+			sprintf(logmessage,"Host[%i] Processing %i items in the auto reindex cache for '%s'.\n",host->id,num_rows, host->hostname);
+			cacti_log(logmessage);
 		}
 
 		while ((row = mysql_fetch_row(result))) {
@@ -210,13 +213,14 @@ void poll_host(int host_id) {
 				free(poll_result);
 
 				if (host->ignore_host) {
-					sprintf(logmessage,"ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host->snmp_timeout, host->hostname);
+					sprintf(logmessage,"Host[%i] SNMP timeout detected [%i milliseconds], ignoring host '%s'\n",host_id,host->snmp_timeout, host->hostname);
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				}
 
 				if (set.verbose >= HIGH) {
-					printf("SNMPGET: Host [%i]: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
+					sprintf(logmessage,"Host[%i] SNMPGET: v%i: %s, dsname: %s, oid: %s, value: %s\n",host_id,host->snmp_version, host->hostname, entry->rrd_name,entry->arg1,entry->result);
+					cacti_log(logmessage);
 				}
 
 				break;
@@ -226,7 +230,8 @@ void poll_host(int host_id) {
 				free(poll_result);
 
 				if (set.verbose >= HIGH) {
-					printf("SCRIPT: CMD [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					sprintf(logmessage,"Host[%i] SCRIPT: %s, output: %s\n",host_id,entry->arg1,entry->result);
+					cacti_log(logmessage);
 				}
 
 				break;
@@ -236,12 +241,13 @@ void poll_host(int host_id) {
 				free(poll_result);
 
 				if (set.verbose >= HIGH) {
-					printf("PHPSERVER: CMD [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					sprintf(logmessage,"Host[%i] SCRIPTSVR: %s, output: %s\n",host_id,entry->arg1,entry->result);
+					cacti_log(logmessage);
 				}
 
 				break;
 			default: /* unknown action, generate error */
-				sprintf(logmessage,"ERROR: Unknown Poller Action for Host [%i] Command: %s\n",host_id,entry->arg1);
+				sprintf(logmessage,"Host[%i] ERROR: Unknown Poller Action CMD: %s\n",host_id,entry->arg1);
 				cacti_log(logmessage);
 
 				break;
@@ -273,7 +279,8 @@ void poll_host(int host_id) {
 	mysql_close(&mysql);
 
 	if (set.verbose >= DEBUG) {
-		printf("DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function.\n");
+		sprintf(logmessage,"Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function.\n",host_id);
+		cacti_log(logmessage);
 	}
 }
 
@@ -296,7 +303,8 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 
 		if (set.verbose >= HIGH) {
-			printf("ACTION1: Command Result->%s\n", cmd_result);
+			sprintf(logmessage,"Host[%i] ACTION1 RESULT: %s\n",current_host->id,cmd_result);
+			cacti_log(logmessage);
 		}
 
 		/* Cleanup File and Pipe */
@@ -307,11 +315,11 @@ char *exec_poll(host_t *current_host, char *command) {
 		thread_mutex_unlock(LOCK_PIPE);
 
 		if (return_value != 0) {
-			sprintf(logmessage,"ERROR: Problem executing command [%s]: '%s'\n", current_host->hostname, command);
+			sprintf(logmessage,"Host[%i] ERROR: Problem executing command [%s]: '%s'\n",current_host->id,current_host->hostname,command);
 			cacti_log(logmessage);
 			snprintf(result_string, BUFSIZE, "%s", "U");
 		}else if (strlen(cmd_result) == 0) {
-			sprintf(logmessage,"ERROR: Empty result [%s]: '%s'\n", current_host->hostname, command);
+			sprintf(logmessage,"Host[%i] ERROR: Empty result [%s]: '%s'\n",current_host->id,current_host->hostname,command);
 			cacti_log(logmessage);
 			snprintf(result_string, BUFSIZE, "%s", "U");
 		}else {
@@ -319,7 +327,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 	}else{
 		thread_mutex_unlock(LOCK_PIPE);
-		sprintf(logmessage,"ERROR: Problem executing popen [%s]: '%s'\n", current_host->hostname, command);
+		sprintf(logmessage,"Host[%i] ERROR: Problem executing popen [%s]: '%s'\n",current_host->id,current_host->hostname,command);
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE, "%s", "U");
 	}

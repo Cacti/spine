@@ -42,7 +42,7 @@ int read_cactid_config(char *file, config_t * set) {
 		return (-1);
 	}else{
 		if (set->verbose >= HIGH) {
-			printf("UTIL: Using cactid config file [%s].\n", file);
+			printf("CACTID: Using cactid config file [%s].\n", file);
 		}
 
 		while(!feof(fp)) {
@@ -52,17 +52,14 @@ int read_cactid_config(char *file, config_t * set) {
 
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
 				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
-				else if (!strcasecmp(p1, "LogFile")) strncpy(set->logfile, p2, sizeof(set->logfile));
-				else if (!strcasecmp(p1, "PHP_Server")) strncpy(set->path_php_server, p2, sizeof(set->path_php_server));
-				else if (!strcasecmp(p1, "Verbose")) set->verbose = atoi(p2);
+				else if (!strcasecmp(p1, "LogFile")) strncpy(set->path_logfile, p2, sizeof(set->path_logfile));
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
-				else if (!strcasecmp(p1, "PHP_Server")) strncpy(set->path_php_server, p2, sizeof(set->path_php_server));
 				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
 				else {
-					printf("UTIL: ERROR - Unrecongized directive: %s=%s in %s\n",
+					printf("ERROR: Unrecongized directive: %s=%s in %s\n",
 					p1, p2, file);
 					exit(-1);
 				}
@@ -70,12 +67,12 @@ int read_cactid_config(char *file, config_t * set) {
 		}
 
 		if (set->snmp_ver != 1 && set->snmp_ver != 2) {
-			printf("UTIL: Unsupported SNMP version: %d.\n", set->snmp_ver);
+			printf("ERROR: Unsupported SNMP version: %d.\n", set->snmp_ver);
 			exit(-1);
 		}
 
 		if (set->threads < 1 || set->threads > MAX_THREADS) {
-			printf("UTIL: Invalid Number of Threads: %d (max=%d).\n",
+			printf("ERROR: Invalid Number of Threads: %d (max=%d).\n",
 			set->threads, MAX_THREADS);
 			exit(-1);
 		}
@@ -94,7 +91,7 @@ void config_defaults(config_t * set) {
 	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost));
 	strncpy(set->dbuser, DEFAULT_DB_USER, sizeof(set->dbhost));
 	strncpy(set->dbpass, DEFAULT_DB_PASS, sizeof(set->dbhost));
-	strncpy(set->logfile, DEFAULT_Log_File, sizeof(set->logfile));
+	strncpy(set->path_logfile, DEFAULT_Log_File, sizeof(set->path_logfile));
 
 	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0]));
 	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[2]));
@@ -112,17 +109,20 @@ void cacti_log(char *logmessage) {
 	/* Variables for Time Display */
 	time_t nowbin;
 	const struct tm *nowstruct;
-
-	char flogmessage[256];	/* Formatted Log Message */
+	char logprefix[40]; /* Formatted Log Prefix */
+	char flogmessage[255];	/* Formatted Log Message */
 	extern config_t set;
 	int fileopen = 0;
 
+	/* log message prefix */
+ 	sprintf(logprefix, "CACTID: Poller[%i] ",set.poller_id);
+
 	if ((set.log_destination == 1) || (set.log_destination == 2)) {
 		while (!fileopen) {
-			if (!file_exists(set.logfile)) {
-				log_file = fopen(set.logfile, "w");
+			if (!file_exists(set.path_logfile)) {
+				log_file = fopen(set.path_logfile, "w");
 			}else {
-				log_file = fopen(set.logfile, "a");
+				log_file = fopen(set.path_logfile, "a");
 			}
 
 			if (log_file != NULL) {
@@ -143,7 +143,7 @@ void cacti_log(char *logmessage) {
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M %p - ", nowstruct) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
 
-	/* concatenate time to log message */
+	strcat(flogmessage, logprefix);
 	strcat(flogmessage, logmessage);
 
 	if ( fileopen != 0 ) {
@@ -164,7 +164,7 @@ void cacti_log(char *logmessage) {
 	}
 
 	if (set.verbose >= HIGH) {
-		printf(logmessage);
+		printf(flogmessage);
 	}
 }
 
