@@ -203,8 +203,6 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	//int pret = 0;
-
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -240,11 +238,9 @@ int main(int argc, char *argv[]) {
 					if (set.verbose >= HIGH) {
 						printf("THREAD: Valid Thread to be Created.\n");
 					}
-					device_counter = device_counter + 1;
 
-					thread_mutex_lock(LOCK_THREAD);
-					active_threads = active_threads + 1;
-					thread_mutex_unlock(LOCK_THREAD);
+					device_counter++;
+					active_threads++;
 
 					if (set.verbose >= HIGH) {
 						printf("The Value of Active Threads is ->%i\n",active_threads);
