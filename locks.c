@@ -69,5 +69,3 @@ void thread_mutex_unlock(int mutex) {
 int thread_mutex_trylock(int mutex) {
 	return pthread_mutex_trylock(get_lock(mutex));
 }
-
-
