@@ -77,6 +77,7 @@ char *php_cmd(char *php_command) {
 /*  php_readpipe - Read a line from the PHP Script Server                     */
 /******************************************************************************/
 char *php_readpipe() {
+	char *pipe_read = (char *) malloc(BUFSIZE);
 	char *result_string = (char *) malloc(BUFSIZE);
 	fd_set fds;
 	int rescode, numfds;
@@ -103,16 +104,18 @@ char *php_readpipe() {
 	/* Check to See Which Pipe Talked and Take Action */
 	/* Should only be the READ Pipe */
 	if (FD_ISSET(php_pipes.php_read_fd, &fds)) {
-		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
+		rescode = read(php_pipes.php_read_fd, pipe_read, BUFSIZE);
 		if (rescode > 0)
-			snprintf(result_string, rescode, "%s", result_string);
+			snprintf(result_string, rescode, "%s", pipe_read);
 		else
 			snprintf(result_string, 2, "%s", "U");
 	} else {
 		sprintf(logmessage,"ERROR: The PHP Script Server Did not Respond in Time\n");
-  		cacti_log(logmessage);
+		cacti_log(logmessage);
 		snprintf(result_string, 2, "%s", "U");
 	}
+
+	free(pipe_read);
 
 	return result_string;
 }
@@ -125,6 +128,7 @@ int php_init() {
 	int  php2cacti_pdes[2];
 	int  pid;
 	char logmessage[255];
+	char poller_id[11];
 	char *argv[5];
 	int  cancel_state;
 	char *result_string;
@@ -155,7 +159,8 @@ int php_init() {
 	argv[0] = set.path_php;
 	argv[1] = set.path_php_server;
 	argv[2] = "cactid";
-	argv[3] = set.poller_id;
+	sprintf(poller_id, "%d", set.poller_id);
+	argv[3] = poller_id;
 	argv[4] = NULL;
 
 	/* fork a child process */
@@ -215,12 +220,13 @@ int php_init() {
 
 	/* Check pipe to insure startup took place */
 	result_string = php_readpipe();
-	free(result_string);
 
 	if ((set.verbose == DEBUG) && (strstr(result_string, "Started"))) {
 		sprintf(logmessage,"Confirmed PHP Script Server Running\n");
 		cacti_log(logmessage);
 	}
+
+	free(result_string);
 
 	return 1;
 }
