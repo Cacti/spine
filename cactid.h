@@ -82,20 +82,6 @@ typedef struct config_struct {
     int threads;
 } config_t;
 
-/*typedef struct target_struct {
-    char host[80];
-    char objoid[256];
-    int bits;
-    char community[80];
-    char table[80];
-    int iid;
-    char description[80];
-    int init;
-    unsigned long long last_value;
-    struct target_struct *next;
-    struct target_struct *prev;
-} target_t;*/
-
 typedef struct target_struct{
   int target_id;
   unsigned long long result;
@@ -110,7 +96,6 @@ typedef struct target_struct{
   char snmp_password[50];
   char rrd_name[19];
   char rrd_path[255];
-  int rrd_num;
   char arg1[255];
   char arg2[255];
   char arg3[255];
