@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(cactid.c)
 AC_PREFIX_DEFAULT(/usr/local/cactid)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.4)
+AM_INIT_AUTOMAKE(cactid, 0.8.5)
 AM_CONFIG_HEADER(config/config.h)
 
 # mysql
