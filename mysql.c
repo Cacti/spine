@@ -38,6 +38,15 @@ int db_insert(char *query, MYSQL * mysql)
 	return (TRUE);
 }
 
+MYSQL_RES *db_query(MYSQL * mysql, char *query) {
+	MYSQL_RES *mysql_res;
+
+	mysql_query(mysql, query);
+	mysql_res = mysql_store_result(mysql);
+	
+	return mysql_res;
+}
+
 
 int rtg_dbconnect(char *database, MYSQL * mysql)
 {
