@@ -190,7 +190,9 @@ int main(int argc, char *argv[]) {
 		mutex_lock(LOCK_CREW);
 		
 		while (crew.work_count > 0) {
-			printf("Work_count: %i\n",crew.work_count);
+			if (set.verbose >= LOW) {
+				printf("Work_count: %i\n",crew.work_count);
+			}
 			
 			if (pthread_cond_wait(&(crew.done), get_lock(LOCK_CREW)) != 0) {
 				printf("error waiting for crew to finish\n");
@@ -199,6 +201,10 @@ int main(int argc, char *argv[]) {
 		
 		mutex_unlock(LOCK_CREW);
 		
+		/* put all of the gathered data into RRD's */
+		process_data();
+		
+		/* print out stats and sleep */
 		gettimeofday(&now, NULL);
 		lock = FALSE;
 		
@@ -218,11 +224,7 @@ int main(int argc, char *argv[]) {
 		
 		if (set.verbose >= LOW) {
 			printf("\n----- Poll round %d complete. (Polling Time: %fs) -----\n\n", stats.round, stats.poll_time);
-			//timestamp(errstr);
-			//print_stats(stats);
 		}
-		
-		process_data();
 		
 		if (sleep_time <= 0) {
 			stats.slow++;
