@@ -21,7 +21,6 @@
  * This is a thread-safe variant of popen that does unbuffered IO, to
  * avoid running afoul of Solaris's inability to fdopen when fd > 255.
  *
- * $Id$
  *******************************************************************************
  */
 

@@ -39,7 +39,7 @@ void *child(void * arg) {
 	char logmessage[LOGSIZE];
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: In Poller, About to Start Polling of Host.\n");
+		snprintf(logmessage, LOGSIZE, "DEBUG: In Poller, About to Start Polling of Host\n");
 		cacti_log(logmessage);
 	}
 
@@ -55,7 +55,7 @@ void *child(void * arg) {
 	active_threads = active_threads - 1;
 	thread_mutex_unlock(LOCK_THREAD);
 
-	if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is ->%i\n" ,active_threads);
 		cacti_log(logmessage);
 	}
@@ -181,7 +181,7 @@ void poll_host(int host_id) {
 		num_rows = (int)mysql_num_rows(result);
 
 		if ((num_rows > 0) && (set.verbose >= POLLER_VERBOSITY_HIGH)) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'.\n", host->id,num_rows, host->hostname);
+			snprintf(logmessage, LOGSIZE, "Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id,num_rows, host->hostname);
 			cacti_log(logmessage);
 		}
 
@@ -204,7 +204,7 @@ void poll_host(int host_id) {
 			}
 
 			if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
-				printf("Assert '%s=%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+				printf("Assert '%s=%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 
 				query3 = (char *)malloc(128);
 				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
@@ -213,7 +213,7 @@ void poll_host(int host_id) {
 
 				assert_fail = 1;
 			}else if ((!strcmp(reindex->op, ">")) && (atoi(reindex->assert_value) <= atoi(poll_result))) {
-				printf("Assert '%s>%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+				printf("Assert '%s>%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 
 				query3 = (char *)malloc(128);
 				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
@@ -222,7 +222,7 @@ void poll_host(int host_id) {
 
 				assert_fail = 1;
 			}else if ((!strcmp(reindex->op, "<")) && (atoi(reindex->assert_value) >= atoi(poll_result))) {
-				printf("Assert '%s<%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+				printf("Assert '%s<%s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
 
 				query3 = (char *)malloc(128);
 				snprintf(query3, 128, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
@@ -378,21 +378,19 @@ void poll_host(int host_id) {
 	mysql_close(&mysql);
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function.\n", host_id);
+		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function\n", host_id);
 		cacti_log(logmessage);
 	}
 }
 
 int validate_result(char * result) {
+	int space_cnt = 0;
+	int delim_cnt = 0;
 	int i;
-	int prev_type = RESULT_INIT;
-	int now_type = RESULT_INIT;
-	int next_type = RESULT_ARGX;
-	int args = 0;
 
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
-	if ((!strstr(result, ":")) || (!strstr(result, " "))) {
+	if ((strstr(result, ":") == 0) && (strstr(result, "!") == 0) && (strstr(result, " ") == 0)) {
 		if (is_number(result)) {
 			return(1);
 		} else if (is_float(result)) {
@@ -403,13 +401,34 @@ int validate_result(char * result) {
 	}
 
 	/* it has no delimiters and has space */
-	if ((!strstr(result, ":")) &&
-		(strstr(result, " "))) {
-		return(0);
+	if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
+		if (strstr(result, " ") == 0) {
+			return(1);
+		}
+
+		if (strstr(result, " ") != 0) {
+			for(i=0; i<strlen(result); i++) {
+				if ((result[i] == ':') || (result[i] == '!')) {
+   					delim_cnt = delim_cnt + 1;
+				} else if (result[i] == ' ') {
+					space_cnt = space_cnt + 1;
+				}
+   			}
+
+			if (space_cnt+1 == delim_cnt) {
+				return(1);
+			} else {
+				return(0);
+			}
+		}
 	}
 
-	/* it has delimiters but no space */
-	if ((strstr(result, ":")) && (!strstr(result, " "))) {
+	/* default handling */
+	if (is_number(result)) {
+		return(1);
+	} else if (is_float(result)) {
+		return(1);
+	} else {
 		return(0);
 	}
 }
@@ -434,9 +453,12 @@ char *exec_poll(host_t *current_host, char *command) {
 
 	cmd_fd = nft_popen((char *)clean_string(command), "r");
 
-	if (cmd_fd >= 0) {
-		cmd_stdout = fdopen(cmd_fd, "r");
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd);
+		cacti_log(logmessage);
+	}
 
+	if (cmd_fd >= 0) {
 		/* Initialize File Descriptors to Review for Input/Output */
 		FD_ZERO(&fds);
 		FD_SET(cmd_fd,&fds);
@@ -446,27 +468,21 @@ char *exec_poll(host_t *current_host, char *command) {
 		/* wait 5 seonds for pipe response */
 		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 		case -1:
-			snprintf(logmessage, LOGSIZE, "ERROR: Fatal Script/Command select() error\n");
+			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The script/command select() failed\n", current_host->id);
 			cacti_log(logmessage);
 			snprintf(result_string, 2, "%s", "U");
 			break;
 		case 0:
-			snprintf(logmessage, LOGSIZE, "ERROR: The Script/Command Server Did not Respond in Time\n");
+			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The POPEN timed out\n", current_host->id);
 			cacti_log(logmessage);
 			snprintf(result_string, 2, "%s", "U");
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			if (cmd_stdout > 0) {
-				fgets(cmd_result, 512, cmd_stdout);
-			}
+			read(cmd_fd, cmd_result, sizeof(cmd_result));
 		}
 
 		/* cleanup file and pipe */
-		if (cmd_stdout > 0) {
-			fflush(cmd_stdout);
-			fclose(cmd_stdout);
-		}
 		nft_pclose(cmd_fd);
 
 		if (strlen(cmd_result) == 0) {
@@ -477,7 +493,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			snprintf(result_string, BUFSIZE, "%s", cmd_result);
 		}
 	}else{
-		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Problem executing popen [%s]: '%s'\n", current_host->id, current_host->hostname, command);
+		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE, "%s", "U");
 	}

@@ -43,8 +43,37 @@ int read_config_options(config_t *set) {
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
 	int num_rows;
+	char logmessage[LOGSIZE];
 
 	db_connect(set->dbdb, &mysql);
+
+	/* get logging level from database - overrides cactid.conf */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_verbosity'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		if (atoi(mysql_row[0])) {
+			set->verbose = atoi(mysql_row[0]);
+		}
+	}
+
+	/* determine logfile path */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_cactilog'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
+	}
+
+	/* log the path_cactilog variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The path_cactilog variable is %s\n" ,set->path_logfile);
+		cacti_log(logmessage);
+	}
 
 	/* determine log file, syslog or both, default is 1 or log file only */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_destination'");
@@ -55,6 +84,12 @@ int read_config_options(config_t *set) {
 		set->log_destination = atoi(mysql_row[0]);
 	}else{
 		set->log_destination = 1;
+	}
+
+	/* log the log_destination variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The log_destination variable is %i\n" ,set->log_destination);
+		cacti_log(logmessage);
 	}
 
 	/* determine script server path operation */
@@ -68,14 +103,25 @@ int read_config_options(config_t *set) {
 		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server));
 	}
 
-	/* determine logfile path */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_cactilog'");
+	/* log the path_webroot variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The path_php_server variable is %s\n" ,set->path_php_server);
+		cacti_log(logmessage);
+	}
+
+	/* get PHP Path Information for Scripting */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_binary'");
 	num_rows = (int)mysql_num_rows(result);
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
+		strncpy(set->path_php,mysql_row[0], sizeof(set->path_php));
+	}
 
-		strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
+	/* log the path_php variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The path_php variable is %s\n" ,set->path_php);
+		cacti_log(logmessage);
 	}
 
 	/* set availability_method */
@@ -88,6 +134,12 @@ int read_config_options(config_t *set) {
 		set->availability_method = atoi(mysql_row[0]);
 	}
 
+	/* log the availability_method variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The availability_method variable is %i\n" ,set->availability_method);
+		cacti_log(logmessage);
+	}
+
 	/* set ping_recovery_count */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_recovery_count'");
 	num_rows = (int)mysql_num_rows(result);
@@ -96,6 +148,12 @@ int read_config_options(config_t *set) {
 		mysql_row = mysql_fetch_row(result);
 
 		set->ping_recovery_count = atoi(mysql_row[0]);
+	}
+
+	/* log the ping_recovery_count variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_recovery_count variable is %i\n" ,set->ping_recovery_count);
+		cacti_log(logmessage);
 	}
 
 	/* set ping_failure_count */
@@ -108,6 +166,12 @@ int read_config_options(config_t *set) {
 		set->ping_failure_count = atoi(mysql_row[0]);
 	}
 
+	/* log the ping_failure_count variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_failure_count variable is %i\n" ,set->ping_failure_count);
+		cacti_log(logmessage);
+	}
+
 	/* set ping_method */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_method'");
 	num_rows = (int)mysql_num_rows(result);
@@ -116,6 +180,12 @@ int read_config_options(config_t *set) {
 		mysql_row = mysql_fetch_row(result);
 
 		set->ping_method = atoi(mysql_row[0]);
+	}
+
+	/* log the ping_method variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_method variable is %i\n" ,set->ping_method);
+		cacti_log(logmessage);
 	}
 
 	/* set ping_retries */
@@ -128,6 +198,12 @@ int read_config_options(config_t *set) {
 		set->ping_retries = atoi(mysql_row[0]);
 	}
 
+	/* log the ping_retries variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_retries variable is %i\n" ,set->ping_retries);
+		cacti_log(logmessage);
+	}
+
 	/* set ping_timeout */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_timeout'");
 	num_rows = (int)mysql_num_rows(result);
@@ -136,6 +212,12 @@ int read_config_options(config_t *set) {
 		mysql_row = mysql_fetch_row(result);
 
 		set->ping_timeout = atoi(mysql_row[0]);
+	}
+
+	/* log the ping_timeout variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_timeout variable is %i\n" ,set->ping_timeout);
+		cacti_log(logmessage);
 	}
 
 	/* set logging option for errors */
@@ -152,6 +234,12 @@ int read_config_options(config_t *set) {
 		}
 	}
 
+	/* log the log_perror variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The log_perror variable is %i\n" ,set->log_perror);
+		cacti_log(logmessage);
+	}
+
 	/* set logging option for errors */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pwarn'");
 	num_rows = (int)mysql_num_rows(result);
@@ -164,6 +252,12 @@ int read_config_options(config_t *set) {
 		}else {
 			set->log_pwarn = 0;
 		}
+	}
+
+	/* log the log_pwarn variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The log_pwarn variable is %i\n" ,set->log_pwarn);
+		cacti_log(logmessage);
 	}
 
 	/* set logging option for statistics */
@@ -180,16 +274,10 @@ int read_config_options(config_t *set) {
 		}
 	}
 
-	/* get logging level from database - overrides cactid.conf */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_verbosity'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (atoi(mysql_row[0])) {
-			set->verbose = atoi(mysql_row[0]);
-		}
+	/* log the log_pstats variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The log_pstats variable is %i\n" ,set->log_pstats);
+		cacti_log(logmessage);
 	}
 
 	/* get Cacti defined max threads override cactid.conf */
@@ -201,13 +289,10 @@ int read_config_options(config_t *set) {
 		set->threads = atoi(mysql_row[0]);
 	}
 
-	/* get PHP Path Information for Scripting */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_binary'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		strncpy(set->path_php,mysql_row[0], sizeof(set->path_php));
+	/* log the threads variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The threads variable is %i\n" ,set->threads);
+		cacti_log(logmessage);
 	}
 
 	mysql_free_result(result);
@@ -225,42 +310,40 @@ int read_cactid_config(char *file, config_t *set) {
 	char p2[BUFSIZE];
 
 	if ((fp = fopen(file, "rb")) == NULL) {
-		printf("ERROR: Could not open config file.\n");
+		printf("ERROR: Could not open config file\n");
 		return (-1);
 	}else{
 		if (set->verbose >= POLLER_VERBOSITY_HIGH) {
-			printf("CACTID: Using cactid config file [%s].\n", file);
+			printf("CACTID: Using cactid config file [%s]\n", file);
 		}
 
 		while(!feof(fp)) {
 			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
-				sscanf(buff, "%20s %255s", p1, p2);
+				sscanf(buff, "%12s %255s", p1, p2);
 
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
 				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
-				else if (!strcasecmp(p1, "LogFile")) strncpy(set->path_logfile, p2, sizeof(set->path_logfile));
+//				else if (!strcasecmp(p1, "LogFile")) strncpy(set->path_logfile, p2, sizeof(set->path_logfile));
 				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
 				else {
-					printf("ERROR: Unrecongized directive: %s=%s in %s\n",
-					p1, p2, file);
-					exit(-1);
+					printf("Warning: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
 			}
 		}
 
 		if (set->snmp_ver != 1 && set->snmp_ver != 2) {
-			printf("ERROR: Unsupported SNMP version: %d.\n", set->snmp_ver);
+			printf("ERROR: Unsupported SNMP version: %d\n", set->snmp_ver);
 			exit(-1);
 		}
 
 		if (set->threads < 1 || set->threads > MAX_THREADS) {
-			printf("ERROR: Invalid Number of Threads: %d (max=%d).\n", set->threads, MAX_THREADS);
-			exit(-1);
+			printf("WARNING: Invalid number of threads will default to 10: %d (max=%d).\n", set->threads, MAX_THREADS);
+			set->threads = 10;
 		}
 
 		return (0);
@@ -319,7 +402,7 @@ void cacti_log(char *logmessage) {
 			if (log_file != NULL) {
 				fileopen = 1;
 			}else {
-				printf("ERROR: Could not open Logfile will not be logging.\n");
+				printf("ERROR: Could not open Logfile will not be logging\n");
 				break;
 			}
 		}
@@ -331,7 +414,7 @@ void cacti_log(char *logmessage) {
 
 	nowstruct = localtime(&nowbin);
 
-	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M %p - ", nowstruct) == (size_t) 0)
+	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", nowstruct) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
 
 	strcat(flogmessage, logprefix);
@@ -964,20 +1047,6 @@ int file_exists(char *filename) {
 }
 
 /******************************************************************************/
-/*  timestamp - get formatted timestamp used for logging                      */
-/******************************************************************************/
-void timestamp(char *str) {
-	struct timeval now;
-	struct tm *t;
-
-	gettimeofday(&now, NULL);
-	t = localtime(&now.tv_sec);
-	printf("[%02d/%02d %02d:%02d:%02d %s]\n", t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, str);
-
-	return;
-}
-
-/******************************************************************************/
 /*  is_number() - verify is a number for error processing                     */
 /******************************************************************************/
 int is_number(char *string) {
@@ -1063,7 +1132,7 @@ void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned sho
 	name->sin_port = htons (port);
 	hostinfo = gethostbyname (hostname);
 	if (hostinfo == NULL) {
-		snprintf(logmessage, LOGSIZE, "WARNING: Unknown host %s.\n", hostname);
+		snprintf(logmessage, LOGSIZE, "WARNING: Unknown host %s\n", hostname);
 		cacti_log(logmessage);
 	}
 	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;

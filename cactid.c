@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
 
 	/* scan arguments for errors */
 	if ((argc != 1) && (argc != 3)) {
-		printf("ERROR: Cactid requires either 0 or 2 input parameters.\n");
+		printf("ERROR: Cactid requires either 0 or 2 input parameters\n");
 		printf("USAGE: <cactidpath>/cactid [start_id end_id]\n");
 		exit(1);
 	}
@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
 	/* return error if the first arg is greater than the second */
 	if (argc == 3) {
 		if (atol(argv[1]) > atol(argv[2])) {
-			printf("ERROR: Invalid row specifications.  First row must be less than the second row.\n");
+			printf("ERROR: Invalid row specifications.  First row must be less than the second row\n");
 			exit(2);
 		}
 	}
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
 	set.poller_id = 0;
 
 	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting.\n", VERSION);
+		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting\n", VERSION);
 		cacti_log(logmessage);
 	}
 
@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
 		switch (mutex_status) {
 		case 0:
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created.\n");
+				snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created\n");
 				cacti_log(logmessage);
 			}
 			if (last_active_threads != active_threads) {
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
 				switch (thread_status) {
 					case 0:
 						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-							snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created.\n");
+							snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created\n");
 							cacti_log(logmessage);
 						}
 
@@ -206,19 +206,19 @@ int main(int argc, char *argv[]) {
 
 						break;
 					case EAGAIN:
-						snprintf(logmessage, LOGSIZE, "ERROR: The System Lacked the Resources to Create a Thread.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: The System Lacked the Resources to Create a Thread\n");
 						cacti_log(logmessage);
 						break;
 					case EFAULT:
-						snprintf(logmessage, LOGSIZE, "ERROR: The Thread or Attribute Was Invalid.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: The Thread or Attribute Was Invalid\n");
 						cacti_log(logmessage);
 						break;
 					case EINVAL:
-						snprintf(logmessage, LOGSIZE, "ERROR: The Thread Attribute is Not Initialized.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: The Thread Attribute is Not Initialized\n");
 						cacti_log(logmessage);
 						break;
 					default:
-						snprintf(logmessage, LOGSIZE, "ERROR: Unknown Thread Creation Error.\n");
+						snprintf(logmessage, LOGSIZE, "ERROR: Unknown Thread Creation Error\n");
 						cacti_log(logmessage);
 						break;
 				}
@@ -229,19 +229,19 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EBUSY:
-			snprintf(logmessage, LOGSIZE, "ERROR: Deadlock Occured.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Deadlock Occured\n");
 			cacti_log(logmessage);
 			break;
 		case EINVAL:
-			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Uninitialized Mutex.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Uninitialized Mutex\n");
 			cacti_log(logmessage);
 			break;
 		case EFAULT:
-			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Invalid Mutex.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Invalid Mutex\n");
 			cacti_log(logmessage);
 			break;
 		default:
-			snprintf(logmessage, LOGSIZE, "ERROR: Unknown Mutex Lock Error Code Returned.\n");
+			snprintf(logmessage, LOGSIZE, "ERROR: Unknown Mutex Lock Error Code Returned\n");
 			cacti_log(logmessage);
 			break;
 		}
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) || (argc == 1)) {
-		snprintf(logmessage, LOGSIZE, "CACTID: Execution Time: %.4f s, Max Threads/Process: %i, Polled Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+		snprintf(logmessage, LOGSIZE, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
 	}
 
