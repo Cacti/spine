@@ -509,7 +509,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 			/* caculate total time */
 			total_time = (end_time - begin_time) * 1000;
-			if ((return_code >= 0) || ((return_code == -1) && (errno == ECONNRESET))) {
+			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if (total_time < set.ping_timeout) {
 					strcpy(ping->ping_response,"Host is Alive");
 					sprintf(ping->ping_status,"%.5f",total_time);
@@ -616,7 +616,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 			/* caculate total time */
 			total_time = end_time - begin_time;
 
-			if ((return_code >= 0) || ((return_code == -1) && (errno == ECONNRESET))) {
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				printf("The UDP Ping return_code was %i\n",return_code);
+				printf("The UDP Ping errno was %i\n",errno);
+				printf("The UDP Ping total_time was %.4f milliseconds\n",(total_time*1000));
+			}
+
+			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if ((total_time * 1000) <= set.ping_timeout) {
 					strcpy(ping->ping_response,"Host is Alive");
 					sprintf(ping->ping_status,"%.5f",(total_time*1000));
