@@ -884,7 +884,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	}
 
 	nowstruct = localtime(&nowbin);
-	strftime(current_date, sizeof(current_date), "%Y-%m-%d %I:%M", nowstruct);
+	strftime(current_date, sizeof(current_date), "%Y-%m-%d %H:%M", nowstruct);
 
 	/* host is down */
 	if (status == HOST_DOWN) {
