@@ -28,7 +28,7 @@
 #include "locks.h"
 #include "sql.h"
 
-int db_insert(char *query, MYSQL *mysql) {
+int db_insert(MYSQL *mysql, char *query) {
 	if (set.verbose >= HIGH) {
 		printf("SQL: %s\n", query);
 	}

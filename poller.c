@@ -68,7 +68,7 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	
-	sprintf(query, "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	snprintf(query, sizeof(query), "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
 	
 	db_connect(set.dbdb, &mysql);
 	
@@ -80,20 +80,21 @@ void poll_host(int host_id) {
 	while ((row = mysql_fetch_row(result))) {
 		entry->target_id = 0;
 		entry->action = atoi(row[0]);
-		sprintf(entry->command, "%s", row[1]);
-		sprintf(entry->hostname, "%s", row[2]);
-		sprintf(entry->snmp_community, "%s", row[3]);
+		if (row[1] != NULL) snprintf(entry->command, sizeof(entry->command), "%s", row[1]);
+		if (row[2] != NULL) snprintf(entry->hostname, sizeof(entry->hostname), "%s", row[2]);
+		if (row[3] != NULL) snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[3]);
 		entry->snmp_version = atoi(row[4]);
-		sprintf(entry->snmp_username, "%s", row[5]);
-		sprintf(entry->snmp_password, "%s", row[6]);
-		sprintf(entry->rrd_name, "%s", row[7]);
-		sprintf(entry->rrd_path, "%s", row[8]);
-		sprintf(entry->arg1, "%s", row[9]);
-		//sprintf(entry->arg2, "%s", row[10]);
-		//sprintf(entry->arg3, "%s", row[11]);
+		if (row[5] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[5]);
+		if (row[6] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[6]);
+		if (row[7] != NULL) snprintf(entry->rrd_name, sizeof(entry->rrd_name), "%s", row[7]);
+		if (row[8] != NULL) snprintf(entry->rrd_path, sizeof(entry->rrd_path), "%s", row[8]);
+		if (row[9] != NULL) snprintf(entry->arg1, sizeof(entry->arg1), "%s", row[9]);
+		if (row[10] != NULL) snprintf(entry->arg2, sizeof(entry->arg2), "%s", row[10]);
+		if (row[11] != NULL) snprintf(entry->arg3, sizeof(entry->arg3), "%s", row[11]);
 		entry->local_data_id = atoi(row[12]);
 		entry->rrd_num = atoi(row[13]);
 		entry->snmp_port = atoi(row[14]);
+		entry->snmp_timeout = atoi(row[15]);
 		
 		/* do RRD file path check */
 		if (!file_exists(entry->rrd_path)) {
@@ -103,17 +104,17 @@ void poll_host(int host_id) {
 		switch(entry->action) {
 		case 0:
 			if (ignore_host == 0) {
-				snmp_result = snmp_get(entry->hostname, entry->snmp_community, 1, entry->arg1, entry->snmp_port, host_id);
-				sprintf(entry->result, "%s", snmp_result);
+				snmp_result = snmp_get(entry->hostname, entry->snmp_community, 1, entry->arg1, entry->snmp_port, entry->snmp_timeout, host_id);
+				snprintf(entry->result, sizeof(entry->result), "%s", snmp_result);
 				free(snmp_result);
 			}else{
-				sprintf(entry->result, "%s", "U");
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}
 			
 			if (!strcmp(entry->result, "E")) {
 				ignore_host = 1;
-				printf("SNMP timeout detected, ignoring host '%s'\n", entry->hostname);
-				sprintf(entry->result, "%s", "U");
+				printf("SNMP timeout detected (%i milliseconds), ignoring host '%s'\n", entry->snmp_timeout, entry->hostname);
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}
 			
 			if (set.verbose >= LOW) {
@@ -124,12 +125,16 @@ void poll_host(int host_id) {
 		case 1:
 			cmd_stdout=popen(entry->command, "r");
 			fgets(cmd_result, 255, cmd_stdout);
-			pclose(cmd_stdout);
+			return_value = pclose(cmd_stdout);
 			
-			if (cmd_result == "") {
-				sprintf(entry->result, "%s", "U");
+			if (return_value != 0) {
+				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
+			}else if (cmd_result == "") {
+				printf("[%i] Empty result from command, '%s'\n", host_id, entry->command);
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}else{
-				sprintf(entry->result, "%s", cmd_result);
+				snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
 			}
 			
 			if (set.verbose >= LOW) {
@@ -144,9 +149,12 @@ void poll_host(int host_id) {
 			
 			if (return_value != 0) {
 				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
-				sprintf(entry->result, "%s", "U");
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
+			}else if (cmd_result == "") {
+				printf("[%i] Empty result from command, '%s'\n", host_id, entry->command);
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}else{
-				sprintf(entry->result, "%s", cmd_result);
+				snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
 			}
 			
 			if (set.verbose >= LOW) {
@@ -169,9 +177,9 @@ void poll_host(int host_id) {
 				rrd_multids = (multi_rrd_t *)malloc(entry->rrd_num * sizeof(multi_rrd_t));
 			}
 			
-			sprintf(rrd_multids[rrd_ds_counter].rrd_name, "%s", entry->rrd_name);
-			sprintf(rrd_multids[rrd_ds_counter].rrd_path, "%s", entry->rrd_path);
-			sprintf(rrd_multids[rrd_ds_counter].result, "%s", entry->result);
+			snprintf(rrd_multids[rrd_ds_counter].rrd_name, sizeof(rrd_multids[rrd_ds_counter].rrd_name), "%s", entry->rrd_name);
+			snprintf(rrd_multids[rrd_ds_counter].rrd_path, sizeof(rrd_multids[rrd_ds_counter].rrd_path), "%s", entry->rrd_path);
+			snprintf(rrd_multids[rrd_ds_counter].result, sizeof(rrd_multids[rrd_ds_counter].result), "%s", entry->result);
 			
 			rrd_ds_counter++;
 			

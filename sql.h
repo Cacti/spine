@@ -27,7 +27,7 @@
 #include "cactid.h"
 #include <mysql.h>
 
-int db_insert(char *query, MYSQL *mysql);
+int db_insert(MYSQL *mysql, char *query);
 MYSQL_RES *db_query(MYSQL *mysql, char *query);
 int db_connect(char *database, MYSQL *mysql);
 void db_disconnect(MYSQL *mysql);

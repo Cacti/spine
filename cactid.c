@@ -44,7 +44,6 @@ int main(int argc, char *argv[]) {
 	struct timeval now;
 	double begin_time, end_time;
 	char *conf_file = NULL;
-	//char filename[BUFSIZE];
 	
 	int num_rows;
 	int device_counter = 0;
@@ -97,7 +96,7 @@ int main(int argc, char *argv[]) {
 	db_connect(set.dbdb, &mysql);
 	
 	/* get the rrdtool path from the cacti settings table */
-	sprintf(rrdtool_path, "%s", get_rrdtool_path(&mysql));
+	snprintf(rrdtool_path, sizeof(rrdtool_path), "%s", get_rrdtool_path(&mysql));
 	
 	/* initilize the rrdtool pipe */
 	rrd_open();
@@ -163,6 +162,9 @@ int main(int argc, char *argv[]) {
 	if (set.verbose >= LOW) {
 		printf("\n----- Poll complete. (Polling Time: %fs) -----\n\n", (end_time - begin_time));
 	}
+	
+	/* update the db for |data_time| on graphs */
+	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
 	
 	rrd_close();
 	snmp_free();

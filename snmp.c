@@ -35,7 +35,7 @@ void snmp_free() {
 	SOCK_CLEANUP;
 }
 
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int snmp_port, int host_id) {
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int snmp_port, int snmp_timeout, int host_id) {
 	void *sessp = NULL;
 	struct snmp_session session;
 	struct snmp_pdu *pdu = NULL;
@@ -61,6 +61,7 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int sn
 	
 	session.peername = snmp_host;
 	session.remote_port = snmp_port;
+	session.timeout = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 	session.community = snmp_comm;
 	session.community_len = strlen(snmp_comm);
 	
@@ -103,9 +104,9 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int sn
 	}
 	
 	if (status == STAT_TIMEOUT) {
-		sprintf(result_string, "%s", "E");
+		snprintf(result_string, BUFSIZE, "%s", "E");
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
-		sprintf(result_string, "%s", "U");
+		snprintf(result_string, BUFSIZE, "%s", "U");
 	}
 	
 	if (sessp != NULL) {
