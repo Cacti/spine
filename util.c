@@ -45,6 +45,7 @@ int read_config_options(config_t *set) {
 	int num_rows;
 	char logmessage[LOGSIZE];
 	uid_t ruid;
+	char web_root[BUFSIZE];
 
 	db_connect(set->dbdb, &mysql);
 
@@ -60,6 +61,18 @@ int read_config_options(config_t *set) {
 		}
 	}
 
+	/* determine script server path operation and default log file processing */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_webroot'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server));
+		strncpy(web_root, mysql_row[0], sizeof(web_root));
+		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server));
+	}
+
 	/* determine logfile path */
 	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_cactilog'");
 	num_rows = (int)mysql_num_rows(result);
@@ -67,7 +80,19 @@ int read_config_options(config_t *set) {
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 
-		strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
+		if (strlen(mysql_row[0]) != 0) {
+			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
+		} else {
+			strncpy(set->path_logfile, strcat(web_root, "/log/rrd.log"), sizeof(set->path_logfile));
+		}
+	} else {
+		strncpy(set->path_logfile, strcat(web_root, "/log/rrd.log"), sizeof(set->path_logfile));
+ 	}
+
+	/* log the path_webroot variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "DEBUG: The path_php_server variable is %s\n" ,set->path_php_server);
+		cacti_log(logmessage);
 	}
 
 	/* log the path_cactilog variable */
@@ -90,23 +115,6 @@ int read_config_options(config_t *set) {
 	/* log the log_destination variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "DEBUG: The log_destination variable is %i\n" ,set->log_destination);
-		cacti_log(logmessage);
-	}
-
-	/* determine script server path operation */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_webroot'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server));
-		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server));
-	}
-
-	/* log the path_webroot variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The path_php_server variable is %s\n" ,set->path_php_server);
 		cacti_log(logmessage);
 	}
 
