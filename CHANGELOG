@@ -1,12 +1,16 @@
-05/28/03
-- fixed segfaults when action == 2
-- unified pthread mutex locking code
+raXnet – cactid
 
-05/26/03
-- addition of create_rrd()
+0.8.6c
+-bug: increased the default script timeout from 5 to 10 seconds
+-bug: changed stdout format to reduce clutter on screen
+-bug: removed cygwin workaround that was causing SNMP instability
+-bug: increased both BUFSIZE and LOGSIZE to allow for larger output corner cases
+-bug: added mutex locking around MySQL calls and eliminated one unlock without a lock
+-feature: added connection timeout and retry logic
+-feature: added database port option in cactid.conf file.  New parameter is DB_Port
+-feature: added some compiler directives for better compatibility with cygwin
 
-05/25/03
-- major code cleanup and autoconf fixes
-
-05/24/03
-- merged code from RTG and the previous poller
+0.8.6b
+-bug: fixed issue that prevented multi ds item RRD’s from updating
+-bug: fixed invalid string length calculation that was truncating output over 4 characters
+-bug: small log file reformatting

@@ -60,6 +60,7 @@
 #define DEFAULT_DB_DB "cacti"
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
+#define DEFAULT_DB_PORT 3306
 #define DEFAULT_LOGFILE "/wwwroot/cacti/log/rrd.log"
 #define DEFAULT_SNMP_VER 1
 
@@ -121,6 +122,12 @@
 #define RESULT_ALPHA 5
 #define RESULT_DIGIT 6
 
+/* snmp session status */
+#define SNMP_1 0
+#define SNMP_2c 1
+#define SNMP_3 3
+#define SNMP_NONE 4
+
 /* Typedefs */
 typedef struct config_struct {
 	int interval;
@@ -130,6 +137,7 @@ typedef struct config_struct {
 	char dbdb[80];
 	char dbuser[80];
 	char dbpass[80];
+    unsigned int dbport;
 	char path_logfile[250];
 	char path_php[250];
 	char path_php_server[250];
@@ -155,14 +163,19 @@ typedef struct target_struct {
 	int local_data_id;
 	int rrd_num;
 	int action;
-	char command[256];
+	char command[BUFSIZE];
 	char hostname[250];
 	char snmp_community[100];
 	int snmp_version;
-	char snmp_username[50];
-	char snmp_password[50];
+	char snmpv3_auth_username[50];
+	char snmpv3_auth_password[50];
+    char snmpv3_auth_protocol[5];
+    char snmpv3_priv_passphrase[200];
+    char snmpv3_priv_protocol[5];
 	int snmp_port;
 	int snmp_timeout;
+    int availability_method;
+    int ping_method;
 	char rrd_name[30];
 	char rrd_path[255];
 	char arg1[255];
@@ -180,8 +193,15 @@ typedef struct host_struct {
 	char hostname[250];
 	char snmp_community[100];
 	int snmp_version;
+    char snmpv3_auth_username[50];
+    char snmpv3_auth_password[50];
+    char snmpv3_auth_protocol[5];
+    char snmpv3_priv_passphrase[200];
+    char snmpv3_priv_protocol[5];
 	int snmp_port;
 	int snmp_timeout;
+    int availability_method;
+    int ping_method;
 	int status;
 	int status_event_count;
 	char status_fail_date[40];

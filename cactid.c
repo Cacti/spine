@@ -145,10 +145,8 @@ int main(int argc, char *argv[]) {
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
-	/* initialize SNMP, Unix only */
-	#if !defined(__CYGWIN__)
+	/* initialize SNMP */
 	init_snmp("cactid");
-	#endif
 
 	/* initialize PHP */
 	php_init();
@@ -174,8 +172,8 @@ int main(int argc, char *argv[]) {
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
-
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
 	init_mutexes();
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
@@ -189,10 +187,6 @@ int main(int argc, char *argv[]) {
 
 		switch (mutex_status) {
 		case 0:
-			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created\n");
-				cacti_log(logmessage);
-			}
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
 			}
@@ -238,7 +232,7 @@ int main(int argc, char *argv[]) {
 						cacti_log(logmessage);
 						break;
 				}
-				usleep(500);
+				usleep(THREAD_SLEEP);
 			}
 
 			thread_mutex_unlock(LOCK_THREAD);
@@ -296,15 +290,6 @@ int main(int argc, char *argv[]) {
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
 	}
-
-	/* cleanup the snmp process*/
-    #if !defined(__CYGWIN__)
-	snmp_free();
-
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: SNMP Cleanup Complete\n");
-	}
-	#endif
 
 	/* close the php script server */
 	php_close();

@@ -26,10 +26,22 @@
 #ifndef CACTID_COMMON_H
 #define CACTID_COMMON_H 1
 
+#ifdef __CYGWIN__
+/* We use a Unix API, so pretend it's not Windows */
+#undef WIN
+#undef WIN32
+#undef _WIN
+#undef _WIN32
+#undef _WIN64
+#undef __WIN__
+#undef __WIN32__
+#define HAVE_ERRNO_AS_DEFINE
+#endif /* __CYGWIN__ */
+
 #define _THREAD_SAFE
 #define _PTHREADS
 #define _P __P
-#define _REENTRANT
+#define _REENTRANT 1
 #define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
 
 #if HAVE_CONFIG_H

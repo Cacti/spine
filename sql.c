@@ -37,11 +37,14 @@ int db_insert(MYSQL *mysql, char *query) {
 		cacti_log(logmessage);
 	}
 
+	thread_mutex_lock(LOCK_MYSQL);
 	if (mysql_query(mysql, query)) {
 		snprintf(logmessage, LOGSIZE, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
+  		thread_mutex_unlock(LOCK_MYSQL);
 		return (FALSE);
 	}else{
+		thread_mutex_unlock(LOCK_MYSQL);
 		return (TRUE);
 	}
 }
@@ -49,33 +52,49 @@ int db_insert(MYSQL *mysql, char *query) {
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
 
+	thread_mutex_lock(LOCK_MYSQL);
  	mysql_query(mysql, query);
 	mysql_res = mysql_store_result(mysql);
+	thread_mutex_unlock(LOCK_MYSQL);
 
 	return mysql_res;
 }
 
 int db_connect(char *database, MYSQL *mysql) {
 	char logmessage[LOGSIZE];
+	int retries;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 		cacti_log(logmessage);
 	}
 
+	retries = 1;
 	mysql_init(mysql);
+	mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, "5");
+		
+	while (1) {
+		thread_mutex_lock(LOCK_MYSQL);
 
-	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
-		snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
-		cacti_log(logmessage);
-		thread_mutex_unlock(LOCK_MYSQL);
-		exit(0);
-	}else{
-		thread_mutex_unlock(LOCK_MYSQL);
-		return (0);
+		if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, set.dbport, NULL, 0)) {
+			if (retries > 10) {
+				snprintf(logmessage, LOGSIZE, "MYSQL: Connection failed after 10 attempts : %s\n", mysql_error(mysql));
+				cacti_log(logmessage);
+				thread_mutex_unlock(LOCK_MYSQL);
+				exit(-1);
+			} else {
+				retries++;
+				usleep(100000);
+			}
+		}else {
+			thread_mutex_unlock(LOCK_MYSQL);
+			return (0);
+		}
 	}
 }
 
 void db_disconnect(MYSQL *mysql) {
 	mysql_close(mysql);
 }
+
+

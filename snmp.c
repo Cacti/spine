@@ -44,15 +44,6 @@ extern char **environ;
 void snmp_init(int host_id) {
 	char cactid_session[10];
 
-	/* BEGIN: WORKAROUND - Workaround to make cactid stable in windows */
-	#if defined(__CYGWIN__)
-	snprintf(cactid_session, sizeof(cactid_session),"cactid%i",host_id);
-	init_snmp(cactid_session);
-	#endif
- 	/* END: WORKAROUND */
-
-	SOCK_STARTUP;
-
 	#ifdef USE_NET_SNMP
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
@@ -64,10 +55,6 @@ void snmp_init(int host_id) {
 	#endif
 }
 
-void snmp_free() {
-	SOCK_CLEANUP;
-}
-
 void snmp_host_init(host_t *current_host) {
 	char logmessage[LOGSIZE];
 	void *sessp = NULL;
@@ -77,7 +64,6 @@ void snmp_host_init(host_t *current_host) {
 
 	/* initialize SNMP */
 	snmp_init(current_host->id);
-
  	thread_mutex_lock(LOCK_SNMP);
   	snmp_sess_init(&session);
 	thread_mutex_unlock(LOCK_SNMP);
@@ -98,7 +84,13 @@ void snmp_host_init(host_t *current_host) {
 	session.community_len = strlen(current_host->snmp_community);
 
  	thread_mutex_lock(LOCK_SNMP);
+
+	/* windows socket call */
+	SOCK_STARTUP;
+
+	/* open SNMP Session */
 	sessp = snmp_sess_open(&session);
+
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
@@ -112,12 +104,7 @@ void snmp_host_init(host_t *current_host) {
 
 void snmp_host_cleanup(host_t *current_host) {
 	snmp_sess_close(current_host->snmp_session);
-
-	/* BEGIN: WORKAROUND - Workaround to make cactid stable in windows */
-	#if defined(__CYGWIN__)
-	snmp_free();
-	#endif
- 	/* END: WORKAROUND */
+	SOCK_CLEANUP;
 }
 
 char *snmp_get(host_t *current_host, char *snmp_oid) {

@@ -368,6 +368,7 @@ int read_cactid_config(char *file, config_t *set) {
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
+                else if (!strcasecmp(p1, "DB_Port")) set->dbport = atoi(p2);
 				else {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
@@ -395,6 +396,7 @@ void config_defaults(config_t * set) {
 	set->interval = DEFAULT_INTERVAL;
 	set->snmp_ver = DEFAULT_SNMP_VER;
 	set->threads = DEFAULT_THREADS;
+    set->dbport = DEFAULT_DB_PORT;
 
 	strncpy(set->dbhost, DEFAULT_DB_HOST, sizeof(set->dbhost));
 	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost));
@@ -478,6 +480,7 @@ void cacti_log(char *logmessage) {
 	}
 
 	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+	    snprintf(flogmessage, LOGSIZE, "CACTID: %s", logmessage);
 		printf(flogmessage);
 	}
 }
