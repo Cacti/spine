@@ -359,7 +359,7 @@ char *exec_poll(host_t *current_host, char *command) {
 
 		/* Cleanup File and Pipe */
 		fflush(cmd_stdout);
-		fclose(cmd_stdout);
+//		fclose(cmd_stdout);
 		return_value = nft_pclose(cmd_fd);
 
 		thread_mutex_unlock(LOCK_PIPE);
