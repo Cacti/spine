@@ -35,7 +35,7 @@ int read_config(char *file, config_t * set) {
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
 	
-	if ((fp = fopen(file, "r")) == NULL) {
+	if ((fp = fopen(file, "rb")) == NULL) {
 		return (-1);
 	}else{
 		if (set->verbose >= LOW) {
