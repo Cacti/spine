@@ -131,14 +131,16 @@ int main(int argc, char *argv[]) {
 		set.log_destination = 1;
 	}
 
-	/* determine web_root for script_server operation */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_server'");
+	/* determine script server path operation */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_webroot'");
 	num_rows = (int)mysql_num_rows(result);
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 
   		strcpy(set.path_php_server,mysql_row[0]);
+  		strcat(set.path_php_server,"/script_server.php");
+		printf("The location of the script server is->%s\n",set.path_php_server);
 	}
 
 	/* set logging option for errors */
