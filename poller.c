@@ -529,7 +529,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
-				strncpy(result_string, strip_string_crlf(result_string), sizeof(result_string));
+				strip_string_crlf(result_string);
 			} else {
 				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 				cacti_log(logmessage);
