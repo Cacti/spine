@@ -1,0 +1,11 @@
+#
+# RTG Master Config
+#
+Interval	300
+OutOfRange	93750000000
+SNMP_Ver	1
+DB_Host	localhost
+DB_Database	dev_cacti_3
+DB_User	cactiuser
+DB_Pass	cactiuser
+Threads 5
