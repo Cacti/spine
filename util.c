@@ -330,15 +330,21 @@ int ping_host(host_t *host, ping_t *ping) {
 	strcpy(ping->snmp_status, "down");
 	strcpy(ping->snmp_response, "SNMP not performed due to setting or ping result");
 
-	/* record start time */
-	gettimeofday(&now, NULL);
-	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+	if (strlen(host->snmp_community) != 0) {
+		/* record start time */
+		gettimeofday(&now, NULL);
+		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
 
-	/* record end time */
-	gettimeofday(&now, NULL);
-	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+		/* record end time */
+		gettimeofday(&now, NULL);
+		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+ 	} else {
+		strcpy(ping->snmp_status, "0.00");
+		strcpy(ping->snmp_response, "Host does not require SNMP");
+		poll_result = "0.00";
+	}
 
 	/* temporary fix until ping available */
 	set.availability_method = 2;
@@ -349,7 +355,7 @@ int ping_host(host_t *host, ping_t *ping) {
 		return HOST_DOWN;
 	} else {
 		strcpy(ping->snmp_response, "Host responded to SNMP");
-		sprintf(ping->snmp_status,"%.4f",((end_time-begin_time)*1000));
+		sprintf(ping->snmp_status,"%.5f",((end_time-begin_time)*1000));
 		update_host_status(HOST_UP, host, ping, set.availability_method);
 		return HOST_UP;
 	}
@@ -397,7 +403,6 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 			}
    			break;
 		default:
-			printf("should not be here\n");
 			snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
 		}
 
@@ -440,7 +445,7 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	} else {
 		/* update total polls and availability */
 		host->total_polls = host->total_polls + 1;
-		host->availability = 100 * ((host->total_polls - host->failed_polls) / host->total_polls);
+		host->availability = 100 * (host->total_polls - host->failed_polls) / host->total_polls;
 
 		/* determine the ping statistic to set and do so */
 		if (availability_method == AVAIL_SNMP_AND_PING) {

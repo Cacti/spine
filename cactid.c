@@ -74,21 +74,17 @@ int main(int argc, char *argv[]) {
 
 	set.verbose = HIGH;
 
-	if (set.verbose >= HIGH) {
-		printf("CACTID: Version %s starting.\n", VERSION);
-	}
-
 	/* get static defaults for system */
 	config_defaults(&set);
 
-	/* Initial Argument Error Checking */
+	/* scan arguments for errors */
 	if ((argc != 1) && (argc != 3)) {
 		printf("ERROR: Cactid requires either 0 or 2 input parameters.\n");
 		printf("USAGE: <cactidpath>/cactid [start_id end_id]\n");
 		exit(1);
 	}
 
-	/* Return error if the first arg is greater than the second */
+	/* return error if the first arg is greater than the second */
 	if (argc == 3) {
 		if (atol(argv[1]) > atol(argv[2])) {
 			printf("ERROR: Invalid row specifications.  First row must be less than the second row.\n");
@@ -123,13 +119,13 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* read configuration parameters from the database */
+	/* read settings table from the database to further establish environment */
 	read_config_options(&set);
 
-	/* Set the Poller ID */
+	/* set the poller ID, stub for next version */
 	set.poller_id = 0;
 
-	if (set.verbose >= HIGH) {
+	if (set.verbose >= MEDIUM) {
 		sprintf(logmessage,"CACTID: Version %s starting.\n", VERSION);
 		cacti_log(logmessage);
 	}
@@ -190,7 +186,7 @@ int main(int argc, char *argv[]) {
 				host_id = atoi(mysql_row[0]);
 				ids[device_counter] = host_id;
 
-				/* create chile process */
+				/* create child process */
 				thread_status = pthread_create(&threads[device_counter], &attr, child, &ids[device_counter]);
 
 				switch (thread_status) {
@@ -287,10 +283,12 @@ int main(int argc, char *argv[]) {
 	/* close the php script server */
 	php_close();
 
+	/* free malloc'd variables */
 	free(threads);
 	free(ids);
 	free(conf_file);
 
+	/* close mysql */
 	mysql_free_result(result);
 	mysql_close(&mysql);
 
