@@ -223,7 +223,11 @@ void poll_host(int host_id) {
 		entry->target_id = 0;
 		entry->action = atoi(row[0]);
 		if (row[1] != NULL) snprintf(entry->hostname, sizeof(entry->hostname), "%s", row[1]);
-		if (row[2] != NULL) snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[2]);
+		if (row[2] != NULL) {
+			snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", row[2]);
+		} else {
+			snprintf(entry->snmp_community, sizeof(entry->snmp_community), "%s", "");
+		}
 		entry->snmp_version = atoi(row[3]);
 		if (row[4] != NULL) snprintf(entry->snmp_username, sizeof(entry->snmp_username), "%s", row[4]);
 		if (row[5] != NULL) snprintf(entry->snmp_password, sizeof(entry->snmp_password), "%s", row[5]);
