@@ -61,10 +61,11 @@
 #define DEFAULT_PATH_PHP_SERVER "/wwwroot/cacti/script_server.php"
 #define DEFAULT_SNMP_VER 1
 
-/* Verbosity levels LOW=info HIGH=info+SQL DEBUG=info+SQL+junk */
+/* Verbosity levels LOW=info MEDIUM=info+hoststats HIGH=info+SQL DEBUG=info+SQL+junk */
 #define LOW 1
-#define HIGH 2
-#define DEBUG 3
+#define MEDIUM 2
+#define HIGH 3
+#define DEBUG 4
 
 #define LOCK_SNMP 0
 #define LOCK_THREAD 1
