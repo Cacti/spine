@@ -88,8 +88,8 @@ void poll_host(int host_id) {
 		sprintf(entry->rrd_name, "%s", row[7]);
 		sprintf(entry->rrd_path, "%s", row[8]);
 		sprintf(entry->arg1, "%s", row[9]);
-		sprintf(entry->arg2, "%s", row[10]);
-		sprintf(entry->arg3, "%s", row[11]);
+		//sprintf(entry->arg2, "%s", row[10]);
+		//sprintf(entry->arg3, "%s", row[11]);
 		entry->local_data_id = atoi(row[12]);
 		entry->rrd_num = atoi(row[13]);
 		
