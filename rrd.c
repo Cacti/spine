@@ -26,6 +26,7 @@
 #include "cactid.h"
 
 extern MYSQL mysql;
+extern char rrdtool_path[128];
 
 int update_rrd(rrd_t *rrd_targets, int rrd_target_count) {
 	int i;
@@ -35,7 +36,7 @@ int update_rrd(rrd_t *rrd_targets, int rrd_target_count) {
 	int rrdargc;
 	
 	#ifndef RRD
-	rrdtool_stdin=popen("rrdtool -", "w");
+	rrdtool_stdin=popen(rrdtool_path, "w");
 	#endif
 	
 	for(i=0; i<rrd_target_count; i++) {
@@ -143,7 +144,7 @@ char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
 	return rrdcmd;
 }
 
-char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
+char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id) {
 	char *p, *tokens[64];
 	static char rrdcmd[512] = "update '";
 	char *last;
@@ -196,4 +197,28 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 	}
 	
 	return rrdcmd;
+}
+
+char *get_rrdtool_path() {
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	
+	static char rrdtool_path[128];
+	char query[256];
+	
+	sprintf(query, "select value from settings where name='path_rrdtool'");
+	
+	result = db_query(&mysql, query);
+	
+	if (mysql_num_rows(result) == 0) {
+		sprintf(rrdtool_path, "%s", "rrdtool -");
+	}else{
+		row = mysql_fetch_row(result);
+		sprintf(rrdtool_path, "%s -", row[0]);
+	}
+	
+	/* free memory */
+	mysql_free_result(result);
+	
+	return rrdtool_path;
 }

@@ -28,7 +28,7 @@
 #include "locks.c"
 
 /* Yes.  Globals. */
-char *target_file = NULL;
+char rrdtool_path[128];
 target_t *targets = NULL;
 target_t *current = NULL;
 host_t *hosts = NULL;
@@ -38,6 +38,8 @@ int num_hosts = 0;
 
 /* Main rtgpoll */
 int main(int argc, char *argv[]) {
+	extern char rrdtool_path[128];
+	
 	crew_t crew;
 	struct timeval now;
 	double begin_time, end_time;
@@ -107,7 +109,12 @@ int main(int argc, char *argv[]) {
 	
 	/* Read list of targets to be polled into linked list of target_structs */
 	entries = get_targets();
+	
+	/* get a list of hosts for status information */
 	num_hosts = get_host_list();
+	
+	/* get the rrdtool path from the cacti settings table */
+	sprintf(rrdtool_path, "%s", get_rrdtool_path());
 	
 	if (entries <= 0) {
 		fprintf(stderr, "Error updating target list.");
@@ -225,7 +232,7 @@ int main(int argc, char *argv[]) {
 		if (!file_exists(entry->rrd_path)) {
 			/* open RRD create pipe if not already open */
 			if (rrd_create_pipe_open == 0) {
-				rrdtool_stdin=popen("rrdtool -", "w");
+				rrdtool_stdin=popen(rrdtool_path, "w");
 				rrd_create_pipe_open = 1;
 			}
 			
