@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	set.verbose = HIGH;
+	set.verbose = POLLER_VERBOSITY_HIGH;
 
 	/* get static defaults for system */
 	config_defaults(&set);
@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
 	/* set the poller ID, stub for next version */
 	set.poller_id = 0;
 
-	if (set.verbose >= MEDIUM) {
+	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting.\n", VERSION);
 		cacti_log(logmessage);
 	}
@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	init_mutexes();
 
-	if (set.verbose >= DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "DEBUG: Initial Value of Active Threads is ->%i\n", active_threads);
 		cacti_log(logmessage);
 	}
@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
 		switch (mutex_status) {
 		case 0:
-			if (set.verbose >= DEBUG) {
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 				snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created.\n");
 				cacti_log(logmessage);
 			}
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
 
 				switch (thread_status) {
 					case 0:
-						if (set.verbose >= DEBUG) {
+						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 							snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created.\n");
 							cacti_log(logmessage);
 						}
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
 						device_counter++;
 						active_threads++;
 
-						if (set.verbose >= DEBUG) {
+						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 							snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is ->%i\n", active_threads);
 							cacti_log(logmessage);
 						}
@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-	if ((set.verbose == MEDIUM) || (argc == 1)) {
+	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) || (argc == 1)) {
 		snprintf(logmessage, LOGSIZE, "CACTID: Execution Time: %.4f s, Max Threads/Process: %i, Polled Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
 	}

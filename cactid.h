@@ -96,12 +96,6 @@
 #define POLLER_VERBOSITY_HIGH 4
 #define POLLER_VERBOSITY_DEBUG 5
 
-#define NONE 1
-#define LOW 2
-#define MEDIUM 3
-#define HIGH 4
-#define DEBUG 5
-
 /* host availability statics */
 #define AVAIL_SNMP_AND_PING 1
 #define AVAIL_SNMP 2

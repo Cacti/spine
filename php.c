@@ -138,7 +138,7 @@ int php_init() {
 	int  cancel_state;
 	char *result_string;
 
-	if (set.verbose >= DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "PHP Script Server Routine Started.\n");
 		cacti_log(logmessage);
 	}
@@ -169,7 +169,7 @@ int php_init() {
 	argv[4] = NULL;
 
 	/* fork a child process */
-	if (set.verbose >= DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "PHP Script Server About to FORK Child Process.\n");
 		cacti_log(logmessage);
 	}
@@ -206,7 +206,7 @@ int php_init() {
 			_exit(127);
 			/* NOTREACHED */
 		default: /* I am the parent process */
-			if (set.verbose >= DEBUG) {
+			if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
 				snprintf(logmessage, LOGSIZE, "PHP Script Server Child FORK Success.\n");
 				cacti_log(logmessage);
 			}
@@ -226,7 +226,7 @@ int php_init() {
 	/* Check pipe to insure startup took place */
 	result_string = php_readpipe();
 
-	if ((set.verbose == DEBUG) && (strstr(result_string, "Started"))) {
+	if ((set.verbose >= POLLER_VERBOSITY_DEBUG) && (strstr(result_string, "Started"))) {
 		snprintf(logmessage, LOGSIZE, "Confirmed PHP Script Server Running\n");
 		cacti_log(logmessage);
 	}
@@ -242,7 +242,7 @@ int php_init() {
 void php_close() {
 	char logmessage[LOGSIZE];
 
-	if (set.verbose >= DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "PHP Script Server Shutdown Started.\n");
 		cacti_log(logmessage);
 	}

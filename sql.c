@@ -32,7 +32,7 @@
 int db_insert(MYSQL *mysql, char *query) {
 	char logmessage[LOGSIZE];
 
-	if (set.verbose == DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "DEBUG: SQLCMD: %s\n", query);
 		cacti_log(logmessage);
 	}
@@ -58,7 +58,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 int db_connect(char *database, MYSQL *mysql) {
 	char logmessage[LOGSIZE];
 
-	if (set.verbose >= HIGH) {
+	if (set.verbose >= POLLER_VERBOSITY_HIGH) {
 		snprintf(logmessage, LOGSIZE, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 		cacti_log(logmessage);
 	}

@@ -234,7 +234,7 @@ int read_cactid_config(char *file, config_t *set) {
 		printf("ERROR: Could not open config file.\n");
 		return (-1);
 	}else{
-		if (set->verbose >= HIGH) {
+		if (set->verbose >= POLLER_VERBOSITY_HIGH) {
 			printf("CACTID: Using cactid config file [%s].\n", file);
 		}
 
@@ -358,7 +358,7 @@ void cacti_log(char *logmessage) {
 		closelog();
 	}
 
-	if (set.verbose >= MEDIUM) {
+	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 		printf(flogmessage);
 	}
 }

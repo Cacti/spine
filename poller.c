@@ -38,13 +38,13 @@ void *child(void * arg) {
 	int host_id = *(int *) arg;
 	char logmessage[LOGSIZE];
 
-	if (set.verbose >= DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "DEBUG: In Poller, About to Start Polling of Host.\n");
 		cacti_log(logmessage);
 	}
 
 	if (active_threads == 1) {
-		if (set.verbose >= DEBUG) {
+		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 			snprintf(logmessage, LOGSIZE, "DEBUG: This is where popen DEADLOCKs errors occur\n");
 		}
 	}
@@ -55,7 +55,7 @@ void *child(void * arg) {
 	active_threads = active_threads - 1;
 	thread_mutex_unlock(LOCK_THREAD);
 
-	if (set.verbose >= DEBUG) {
+	if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is ->%i\n" ,active_threads);
 		cacti_log(logmessage);
 	}
@@ -178,7 +178,7 @@ void poll_host(int host_id) {
 		result = db_query(&mysql, query4);
 		num_rows = (int)mysql_num_rows(result);
 
-		if ((num_rows > 0) && (set.verbose >= HIGH)) {
+		if ((num_rows > 0) && (set.verbose >= POLLER_VERBOSITY_HIGH)) {
 			snprintf(logmessage, LOGSIZE, "Host[%i] Processing %i items in the auto reindex cache for '%s'.\n", host->id,num_rows, host->hostname);
 			cacti_log(logmessage);
 		}
@@ -269,7 +269,7 @@ void poll_host(int host_id) {
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				}
 
-				if (set.verbose >= MEDIUM) {
+				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
@@ -280,7 +280,7 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				if (set.verbose >= MEDIUM) {
+				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] CMD: %s, output: %s\n", host_id, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
@@ -291,7 +291,7 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
-				if (set.verbose >= MEDIUM) {
+				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] SERVER: %s, output: %s\n", host_id, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
@@ -328,7 +328,7 @@ void poll_host(int host_id) {
 
 	mysql_close(&mysql);
 
-	if (set.verbose >= DEBUG) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function.\n", host_id);
 		cacti_log(logmessage);
 	}
@@ -352,7 +352,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			usleep(50000);
 		}
 
-		if (set.verbose >= HIGH) {
+		if (set.verbose >= POLLER_VERBOSITY_HIGH) {
 			snprintf(logmessage, LOGSIZE, "Host[%i] CMD RESULT: %s\n", current_host->id, cmd_result);
 			cacti_log(logmessage);
 		}
