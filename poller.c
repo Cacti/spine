@@ -75,7 +75,7 @@ void poll_host(int host_id) {
 	char query2[BUFSIZE];
 	char *query3;
 	char query4[BUFSIZE];
-	char errstr[15];
+	char errstr[512];
 	int num_rows;
 	int host_status;
 	int assert_fail = 0;
@@ -310,7 +310,7 @@ void poll_host(int host_id) {
 					/* detect erroneous non-numeric result */
 					if (!is_numeric(entry->result)) {
 						strncpy(errstr, entry->result,sizeof(errstr));
-						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not valid. Partial Result: %s...\n", host_id, errstr);
+						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, errstr);
 						cacti_log(logmessage);
 						strncpy(entry->result, "U", sizeof(entry->result));
 					}
@@ -333,7 +333,7 @@ void poll_host(int host_id) {
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, (char *) strip_string_crlf(entry->result),sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SCRIPT not valid. Partial Result: %s...\n", host_id, errstr);
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
@@ -354,8 +354,8 @@ void poll_host(int host_id) {
 
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
-					strncpy(errstr, entry->result,sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not valid.  Partial Result: %s...\n", host_id, errstr);
+					strncpy(errstr, entry->result, sizeof(errstr));
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
@@ -426,7 +426,7 @@ int validate_result(char * result) {
 		}
 	}
 
-	/* it has delimiters and has no space */
+	/* it has delimiters */
 	if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
 		if (strstr(result, " ") == 0) {
 			return(1);
