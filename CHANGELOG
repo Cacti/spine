@@ -1,7 +1,9 @@
 raXnet – cactid
 
 0.8.6e
--bug: removed code that was converting back slashes to forward slashes
+-bug: re-implemented thread safe operations for non-linux systems
+-bug: reduced timeout for popen and script server back to 10 seconds
+-bug: optimized some string handling routines
 -feature: added polling for non host specific data sources
 
 0.8.6d

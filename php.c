@@ -93,8 +93,8 @@ char *php_readpipe() {
 	else
 		numfds = php_pipes.php_write_fd + 1;
 
-	/* establish timeout of 25 seconds to have PHP script server respond */
-	timeout.tv_sec = 25;
+	/* establish timeout of 10 seconds to have PHP script server respond */
+	timeout.tv_sec = 10;
 	timeout.tv_usec = 0;
 
 	/* check to see which pipe talked and take action
@@ -103,19 +103,24 @@ char *php_readpipe() {
 	case -1:
 		snprintf(logmessage, LOGSIZE, "ERROR: Fatal select() error\n");
 		cacti_log(logmessage);
-		snprintf(result_string, 2, "%s", "U");
+		snprintf(result_string, BUFSIZE, "%s", "U");
 		break;
 	case 0:
 		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server Did not Respond in Time\n");
 		cacti_log(logmessage);
-		snprintf(result_string, 2, "%s", "U");
+		snprintf(result_string, BUFSIZE, "%s", "U");
+
+		/* restart the script server because of error */
+		php_close();
+		php_init();
+
 		break;
 	default:
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE-1);
 		if (rescode > 0)
-			result_string[rescode] = '\0';
+			snprintf(result_string, BUFSIZE, "%s\0", strip_string_crlf(result_string));
 		else
-			snprintf(result_string, 2, "%s", "U");
+			snprintf(result_string, BUFSIZE, "%s", "U");
 		break;
 	}
 

@@ -63,6 +63,7 @@
 #define DEFAULT_DB_PORT 3306
 #define DEFAULT_LOGFILE "/wwwroot/cacti/log/rrd.log"
 #define DEFAULT_SNMP_VER 1
+#define DEFAULT_TIMEOUT 294000000
 
 /* threads constants */
 #define LOCK_SNMP 0

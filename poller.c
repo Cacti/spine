@@ -475,6 +475,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	int return_value;
 	int bytes_read;
 	char logmessage[LOGSIZE];
+	char cmd_result[BUFSIZE];
 
 	fd_set fds;
 	int rescode, numfds;
@@ -482,9 +483,9 @@ char *exec_poll(host_t *current_host, char *command) {
 
 	char *result_string = (char *) malloc(BUFSIZE);
 
-    	/* establish timeout of 25 seconds for pipe response */
-    	timeout.tv_sec = 25;
-    	timeout.tv_usec = 0;
+	/* establish timeout of 25 seconds for pipe response */
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
 
 	cmd_fd = nft_popen((char *)clean_string(command), "r");
 
@@ -500,7 +501,7 @@ char *exec_poll(host_t *current_host, char *command) {
 
 		numfds = cmd_fd + 1;
 
-		/* wait 5 seonds for pipe response */
+		/* wait 10 seonds for pipe response */
 		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {
@@ -532,10 +533,9 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
-			if (bytes_read > 0) {
-				result_string[bytes_read] = '\0';
-				strip_string_crlf(result_string);
+			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
+			if (bytes_read) {
+				snprintf(result_string, BUFSIZE, "%s\0", strip_string_crlf(result_string));				
 			} else {
 				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 				cacti_log(logmessage);
