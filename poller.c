@@ -297,7 +297,7 @@ void poll_host(int host_id) {
 					/* erroneous non-numeric result */
 					if ((!is_number(entry->result)) && (!is_float(entry->result))) {
 						strncpy(errstr, entry->result,sizeof(errstr));
-						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric. Partial Result: %s...\n", host_id, errstr);
+						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not valid. Partial Result: %s...\n", host_id, errstr);
 						cacti_log(logmessage);
 						strncpy(entry->result, "U", sizeof(entry->result));
 					}
@@ -317,7 +317,7 @@ void poll_host(int host_id) {
 				/* erroneous non-numeric result */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, entry->result,sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not numeric. Partial Result: %s...\n", host_id, errstr);
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from CMD not valid. Partial Result: %s...\n", host_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
@@ -336,7 +336,7 @@ void poll_host(int host_id) {
 				/* erroneous non-numeric result */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, entry->result,sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not numeric.  Result: %s...\n", host_id, errstr);
+					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not valid.  Partial Result: %s...\n", host_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
