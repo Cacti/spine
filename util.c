@@ -192,14 +192,15 @@ int read_config_options(config_t *set) {
 	}
 
 	ruid = 999;
-#if defined(__CYGWIN__)
+
+	#if defined(__CYGWIN__)
 	/* root check not required for windows */
 	ruid = 0;
 	printf("CACTID: Windows Environment, root permissions not required for ICMP Ping\n");
-#else
+
+	#else
 	/* check for root status (ruid=0) */
 	ruid = getuid();
-#endif
 
 	/* fall back to UDP ping if ICMP is not available */
 	if (ruid != 0) {
@@ -217,6 +218,8 @@ int read_config_options(config_t *set) {
 	} else {
 		printf("CACTID: Non Window envrionment, running as root, ICMP Ping available\n");
 	}
+
+	#endif
 
 	/* log the ping_method variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {

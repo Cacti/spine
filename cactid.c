@@ -135,6 +135,11 @@ int main(int argc, char *argv[]) {
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
+	/* initialize SNMP, Unix only */
+	#if !defined(__CYGWIN__)
+	init_snmp("cactid");
+	#endif
+
 	/* initialize PHP */
 	php_init();
 
@@ -281,6 +286,15 @@ int main(int argc, char *argv[]) {
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
 	}
+
+	/* cleanup the snmp process*/
+    #if !defined(__CYGWIN__)
+	snmp_free();
+
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: SNMP Cleanup Complete\n");
+	}
+	#endif
 
 	/* close the php script server */
 	php_close();

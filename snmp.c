@@ -44,9 +44,12 @@ extern char **environ;
 void snmp_init(int host_id) {
 	char cactid_session[10];
 
+	/* BEGIN: WORKAROUND - Workaround to make cactid stable in windows */
+	#if defined(__CYGWIN__)
 	snprintf(cactid_session, sizeof(cactid_session),"cactid%i",host_id);
-
 	init_snmp(cactid_session);
+	#endif
+ 	/* END: WORKAROUND */
 
 	SOCK_STARTUP;
 
@@ -110,9 +113,11 @@ void snmp_host_init(host_t *current_host) {
 void snmp_host_cleanup(host_t *current_host) {
 	snmp_sess_close(current_host->snmp_session);
 
-	/* cleanup the snmp process*/
+	/* BEGIN: WORKAROUND - Workaround to make cactid stable in windows */
+	#if defined(__CYGWIN__)
 	snmp_free();
-
+	#endif
+ 	/* END: WORKAROUND */
 }
 
 char *snmp_get(host_t *current_host, char *snmp_oid) {
