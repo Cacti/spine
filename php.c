@@ -98,21 +98,26 @@ char *php_readpipe() {
 	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
 
-	/* Wait for A Response on The Pipes */
-	select(numfds, &fds, NULL, NULL, &timeout);
-
-	/* Check to See Which Pipe Talked and Take Action */
-	/* Should only be the READ Pipe */
-	if (FD_ISSET(php_pipes.php_read_fd, &fds)) {
+	/* Check to See Which Pipe Talked and Take Action
+	 * Should only be the READ Pipe */
+	switch (select(numfds, &fds, NULL, NULL, &timeout)) {
+	case -1:
+		snprintf(logmessage, LOGSIZE, "ERROR: Fatal select() error\n");
+		cacti_log(logmessage);
+		snprintf(result_string, 2, "%s", "U");
+		break;
+	case 0:
+		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server Did not Respond in Time\n");
+		cacti_log(logmessage);
+		snprintf(result_string, 2, "%s", "U");
+		break;
+	default:
 		rescode = read(php_pipes.php_read_fd, pipe_read, BUFSIZE);
 		if (rescode > 0)
 			snprintf(result_string, rescode, "%s", pipe_read);
 		else
 			snprintf(result_string, 2, "%s", "U");
-	} else {
-		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server Did not Respond in Time\n");
-		cacti_log(logmessage);
-		snprintf(result_string, 2, "%s", "U");
+		break;
 	}
 
 	free(pipe_read);
