@@ -127,11 +127,14 @@ AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
 # Determine UCD or Net-SNMP installation paths
 if test "x$SNMP_DIR" != "x"; then
     for i in / /ucd-snmp /include/ucd-snmp; do
-       test -f $SNMP_DIR/$i/snmp.h           && SNMP_INCDIR=$SNMP_DIR/$i
+       test -f $SNMP_DIR/$i/snmp.h             && SNMP_INCDIR=$SNMP_DIR$i
     done
     for i in / /net-snmp /include/net-snmp; do
-       test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR/$i
+       test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i
     done
+    
+    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
+    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
 else
     for i in /usr/include /usr/local/include; do
       test -f $i/snmp.h                       && SNMP_INCDIR=$i
