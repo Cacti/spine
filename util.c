@@ -562,7 +562,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		gettimeofday(&now, NULL);
 		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 
 		/* record end time */
 		gettimeofday(&now, NULL);

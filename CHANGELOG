@@ -8,6 +8,7 @@ raXnet – cactid
 -bug: allow cactid to poll from non-standard snmp port
 -bug: optimized some string handling routines
 -bug: removed thread locks around MySQL to optimize performance
+-bug: changed snmp availability polling to sysUptime from sysDesc
 -feature: added polling for non host specific data sources
 
 0.8.6d
