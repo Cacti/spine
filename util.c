@@ -401,7 +401,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
  	} else {
 		strncpy(ping->snmp_status, "0.00", sizeof(ping->snmp_status));
 		strncpy(ping->snmp_response, "Host does not require SNMP", sizeof(ping->snmp_response));
-		strncpy(poll_result,"0.00", sizeof(poll_result));
+		poll_result = "0.00";
 	}
 
 	if ((strlen(poll_result) == 0) || (strstr(poll_result,"ERROR"))) {
