@@ -37,7 +37,10 @@ int update_rrd(rrd_t *rrd_targets, int rrd_target_count) {
 	#endif
 	
 	for(i=0; i<rrd_target_count; i++) {
-		printf("rrdcmd: %s\n", rrd_targets[i].rrdcmd);
+		if (set.verbose >= LOW) {
+			printf("rrdcmd: %s\n", rrd_targets[i].rrdcmd);
+		}
+		
 		#ifdef RRD
 		sprintf(rrdcmd,"%s", rrd_targets[i].rrdcmd);
 		rrdargv = string_to_argv(rrdcmd, &rrdargc);
@@ -195,7 +198,9 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 			row = mysql_fetch_row(result);
 			strcat(rrdcmd, row[0]);
 			
-			printf("MULTI expansion: found fieldname: %s, found rrdname: %s, local_data_id: %i\n", row[0], tokens[j], local_data_id);
+			if (set.verbose >= LOW) {
+				printf("MULTI expansion: found fieldname: %s, found rrdname: %s, local_data_id: %i\n", row[0], tokens[j], local_data_id);
+			}
 		}
 	}
 	

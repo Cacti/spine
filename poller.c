@@ -81,7 +81,10 @@ void *poller(void *thread_args) {
 			switch(entry->action) {
 			case 0:
 				sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, worker->index));
-				printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", worker->index, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
+				
+				if (set.verbose >= LOW) {
+					printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", worker->index, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
+				}
 				
 				break;
 			case 1:
@@ -97,7 +100,9 @@ void *poller(void *thread_args) {
 					sprintf(entry->result, "%s", cmd_result);
 				}
 				
-				printf("[%i] command: %s, output: %s\n", worker->index, entry->command, entry->result);
+				if (set.verbose >= LOW) {
+					printf("[%i] command: %s, output: %s\n", worker->index, entry->command, entry->result);
+				}
 				
 				pclose(cmd_stdout);
 				break;
@@ -109,7 +114,10 @@ void *poller(void *thread_args) {
 				if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
 				
 				sprintf(entry->result, "%s", cmd_result);
-				printf("[%i] MUTLI command: %s, output: %s\n", worker->index, entry->command, entry->result);
+				
+				if (set.verbose >= LOW) {
+					printf("[%i] MUTLI command: %s, output: %s\n", worker->index, entry->command, entry->result);
+				}
 				
 				pclose(cmd_stdout);
 				break;
