@@ -1122,6 +1122,32 @@ char *clean_string( char *string_to_clean ) {
 }
 
 /******************************************************************************/
+/*  strip_string_crlf() - remove control conditions from a string             */
+/******************************************************************************/
+char *strip_string_crlf( char *string_to_clean ) {
+	char *posptr;
+
+	posptr = strchr(string_to_clean,'\n');
+
+	while(posptr != NULL)
+	{
+		*posptr = '\0';
+		posptr = strchr(string_to_clean,'\n');
+	}
+
+	posptr = strchr(string_to_clean,'\r');
+
+	while(posptr != NULL)
+	{
+		*posptr = '\0';
+		posptr = strchr(string_to_clean,'\r');
+	}
+
+	return(string_to_clean);
+}
+
+
+/******************************************************************************/
 /*  init_sockaddr - convert host name to internet address                     */
 /******************************************************************************/
 void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port) {

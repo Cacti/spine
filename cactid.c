@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
 	init_mutexes();
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: Initial Value of Active Threads is ->%i\n", active_threads);
+		snprintf(logmessage, LOGSIZE, "DEBUG: Initial Value of Active Threads is %i\n", active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -200,7 +200,7 @@ int main(int argc, char *argv[]) {
 						active_threads++;
 
 						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-							snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is ->%i\n", active_threads);
+							snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is %i\n", active_threads);
 							cacti_log(logmessage);
 						}
 
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) || (argc == 1)) {
-		snprintf(logmessage, LOGSIZE, "Time: %.4f s, Method: cactid, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+		snprintf(logmessage, LOGSIZE, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
 	}
 

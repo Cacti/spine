@@ -56,7 +56,7 @@ void *child(void * arg) {
 	thread_mutex_unlock(LOCK_THREAD);
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is ->%i\n" ,active_threads);
+		snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is %i\n" ,active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -388,6 +388,9 @@ int validate_result(char * result) {
 	int delim_cnt = 0;
 	int i;
 
+	/* remove control characters from string */
+	result = (char *) strip_string_crlf(result);
+
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
 	if ((strstr(result, ":") == 0) && (strstr(result, "!") == 0) && (strstr(result, " ") == 0)) {
@@ -481,7 +484,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		default:
 			/* get only one line of output, we will ignore the rest */
 			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
-			snprintf(cmd_result, bytes_read, "%s", cmd_result);
+			snprintf(cmd_result, bytes_read+1, "%s", cmd_result);
 		}
 
 		/* cleanup file and pipe */
