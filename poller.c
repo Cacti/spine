@@ -60,17 +60,15 @@ void *poller(void *thread_args) {
 	//	my_thread_init();
 	//}
 	
-	while (crew->work_count >= 0) {
+	while (1) {
 		if (set.verbose >= DEVELOP){
 			printf("Thread [%d] locking (wait on work)\n", worker->index);
 		}
 		
-		if (pthread_mutex_lock(&crew->mutex) != 0){
-			printf("pthread_lock error\n");
-		}
+		mutex_lock(LOCK_CREW);
 		
 		while (current == NULL) {
-			if (pthread_cond_wait(&crew->go, &crew->mutex) != 0) {
+			if (pthread_cond_wait(&crew->go, get_lock(LOCK_CREW)) != 0) {
 				printf("pthread_wait error\n");
 			}
 		}
@@ -80,10 +78,6 @@ void *poller(void *thread_args) {
 		}
 		
 		if (current != NULL) {
-			if (pthread_mutex_unlock(&crew->mutex) != 0) {
-				printf("pthread_unlock error\n");
-			}
-			
 			entry = current;
 			
 			if (current->next != NULL) {
@@ -97,6 +91,8 @@ void *poller(void *thread_args) {
 				entry->result = snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, worker->index);
 				break;
 			case 1:
+				mutex_unlock(LOCK_CREW);
+				
 				cmd_stdout=popen(entry->command, "r");
 				
 				if(cmd_stdout != NULL) fgets(cmd_result, 64, cmd_stdout);
@@ -107,7 +103,7 @@ void *poller(void *thread_args) {
 				pclose(cmd_stdout);
 				break;
 			case 2:
-				pthread_mutex_lock(&crew->mutex);
+				mutex_unlock(LOCK_CREW);
 				
 				cmd_stdout=popen(entry->command, "r");
 				
@@ -119,7 +115,6 @@ void *poller(void *thread_args) {
 				printf("MULTI CMD: %s result: %lli\n", entry->command, entry->result);
 				
 				pclose(cmd_stdout);
-				pthread_mutex_unlock(&crew->mutex);
 				
 				break;
 			}
@@ -128,9 +123,7 @@ void *poller(void *thread_args) {
 				printf("Thread [%d] locking (update work_count)\n", worker->index);
 			}
 			
-			if (pthread_mutex_lock(&crew->mutex) != 0){
-				printf("pthread_lock error\n");
-			}
+			mutex_lock(LOCK_CREW);
 			
 			crew->work_count--;
 			
@@ -148,9 +141,7 @@ void *poller(void *thread_args) {
 				printf("Thread [%d] unlocking (update work_count)\n", worker->index);
 			}
 			
-			if (pthread_mutex_unlock(&crew->mutex) != 0) {
-				printf("pthread_unlock error\n");
-			}
+			mutex_unlock(LOCK_CREW);
 		}
 	}
 }
@@ -201,6 +192,8 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 		printf("Thread [%d] unlocking (done grabbing current)\n", current_thread);
 	}
 	
+	mutex_unlock(LOCK_CREW);
+	
 	snmp_add_null_var(pdu, anOID, anOID_len);
 	
 	if (sessp != NULL) {
@@ -237,7 +230,6 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 				printf("64-bit result: (%s@%s) %s\n", session.peername, storedoid, result_string);
 			}
 			
-			result = vars->val.counter64->high;
 			result = result << 32;
 			result = result + vars->val.counter64->low;
 		}else if (vars->type == ASN_COUNTER) {

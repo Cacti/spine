@@ -25,6 +25,7 @@
 #define _REENTRANT
 #include "common.h"
 #include "cactid.h"
+#include "locks.c"
 
 /* Yes.  Globals. */
 stats_t stats =
@@ -113,7 +114,6 @@ int main(int argc, char *argv[]) {
 		printf("Initializing threads (%d).\n", set.threads);
 	}
 	
-	pthread_mutex_init(&(crew.mutex), NULL);
 	pthread_cond_init(&(crew.done), NULL);
 	pthread_cond_init(&(crew.go), NULL);
 	crew.work_count = 0;
@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	/* give threads time to start up */
-	sleep(1);
+	sleep(2);
 	
 	if (set.verbose >= LOW) {
 		printf("Cactid Ready.\n");
@@ -172,16 +172,12 @@ int main(int argc, char *argv[]) {
 		gettimeofday(&now, NULL);
 		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 		
-		if (pthread_mutex_lock(&(crew.mutex)) != 0) {
-			printf("pthread_lock error\n");
-		}
+		mutex_lock(LOCK_CREW);
 		
 		current = targets;
 		crew.work_count = entries;
 		
-		if (pthread_mutex_unlock(&(crew.mutex)) != 0) {
-			printf("pthread_unlock error\n");
-		}
+		mutex_unlock(LOCK_CREW);
 		
 		if (set.verbose >= LOW) {
 			timestamp("Queue ready, broadcasting thread go condition.");
@@ -191,27 +187,19 @@ int main(int argc, char *argv[]) {
 			printf("pthread_cond error\n");
 		}
 		
-		if (pthread_mutex_lock(&(crew.mutex)) != 0) {
-			printf("pthread_lock error\n");
-		}
+		mutex_lock(LOCK_CREW);
 		
 		while (crew.work_count > 0) {
 			printf("Work_count: %i\n",crew.work_count);
 			
-			if (pthread_cond_wait(&(crew.done), &(crew.mutex)) != 0) {
+			if (pthread_cond_wait(&(crew.done), get_lock(LOCK_CREW)) != 0) {
 				printf("error waiting for crew to finish\n");
 			}
 		}
 		
-		//for (i = 0; i < set.threads; i++) {
-		//	pthread_kill(&(crew.member[i].thread), NULL);
-		//}
-		
 		printf("Work_count: %i\n",crew.work_count);
 		
-		if (pthread_mutex_unlock(&(crew.mutex)) != 0) {
-			printf("pthread_unlock error\n");
-		}
+		mutex_unlock(LOCK_CREW);
 		
 		gettimeofday(&now, NULL);
 		lock = FALSE;
@@ -249,7 +237,6 @@ int main(int argc, char *argv[]) {
 		rtg_dbdisconnect(&mysql);
 	}
 	
-  	pthread_mutex_destroy(&(crew.mutex));
   	pthread_cond_destroy(&(crew.done));
 	pthread_cond_destroy(&(crew.go));
  	pthread_exit(NULL);
