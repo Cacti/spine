@@ -94,10 +94,10 @@ void config_defaults(config_t * set) {
 	strncpy(set->path_logfile, DEFAULT_Log_File, sizeof(set->path_logfile));
 
 	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0]));
-	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[2]));
-	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[3]));
-	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[4]));
-	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[5]));
+	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1]));
+	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[2]));
+	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[3]));
+	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[4]));
 
 	return;
 }

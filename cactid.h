@@ -45,8 +45,8 @@
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
 #define CONFIG_PATH_3 "/wwwroot/cacti"
-#define CONFIG_PATH_4 "c:\\wwwroot\\cacti"
-#define CONFIG_PATH_5 "c:\\inetpub\\wwwroot\\cacti"
+#define CONFIG_PATH_4 "c:/wwwroot/cacti"
+#define CONFIG_PATH_5 "c:/inetpub/wwwroot/cacti"
 
 /* Defaults */
 #define DEFAULT_CONF_FILE "cactid.conf"
