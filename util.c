@@ -39,7 +39,7 @@ int init_config(char *file, config_t * set) {
 		return (-1);
 	}else{
 		if (set->verbose >= LOW) {
-			printf("\nReading RTG config [%s].\n", file);
+			printf("\nReading cactid config [%s].\n", file);
 		}
 		
 		while(!feof(fp)) {
