@@ -285,7 +285,6 @@ int main(int argc, char *argv[]) {
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
-	pthread_mutexattr_destroy(&mutexattr);
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
