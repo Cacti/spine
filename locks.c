@@ -1,4 +1,3 @@
-#include "locks.h"
 #include <pthread.h>
 
 static pthread_mutex_t crew_lock = PTHREAD_MUTEX_INITIALIZER;
