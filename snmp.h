@@ -23,47 +23,6 @@
  +-------------------------------------------------------------------------+
 */
 
-#include <pthread.h>
-#include "common.h"
-#include "cactid.h"
-#include "locks.h"
-
-static pthread_mutex_t snmp_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t threads_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t mysql_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t rrdtool_lock = PTHREAD_MUTEX_INITIALIZER;
-
-pthread_mutex_t* get_lock(int lock) {
-	pthread_mutex_t *ret_val;
-
-	switch (lock) {
-	case LOCK_SNMP:
-		ret_val = &snmp_lock;
-		break;
-	case LOCK_THREAD:
-                ret_val = &threads_lock;
-                break;
-	case LOCK_MYSQL:
-                ret_val = &mysql_lock;
-                break;
-	case LOCK_RRDTOOL:
-                ret_val = &rrdtool_lock;
-                break;
-	}
-	
-	return ret_val;
-}
-
-void mutex_lock(int mutex) {
-	pthread_mutex_lock(get_lock(mutex));
-}
-
-void mutex_unlock(int mutex) {
-	pthread_mutex_unlock(get_lock(mutex));
-}
-
-int mutex_trylock(int mutex) {
-	return pthread_mutex_trylock(get_lock(mutex));
-}
-
-
+void snmp_init();
+void snmp_free();
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id);

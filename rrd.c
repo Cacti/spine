@@ -25,6 +25,9 @@
 
 #include "common.h"
 #include "cactid.h"
+#include "locks.h"
+#include "sql.h"
+#include "rrd.h"
 
 extern MYSQL mysql;
 extern char rrdtool_path[128];

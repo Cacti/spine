@@ -26,6 +26,13 @@
 #ifndef RTG_COMMON_H
 #define RTG_COMMON_H 1
 
+#define _THREAD_SAFE
+#define _PTHREADS
+#define _POSIX_THREADS
+#define _POSIX_THREAD_SAFE_FUNCTIONS
+#define _P __P
+#define _REENTRANT
+
 #if HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -70,10 +77,6 @@
 #endif
 
 #include <signal.h>
-
-#if HAVE_MYSQL
-# include <mysql.h>
-#endif
 
 #if HAVE_RRDTOOL
 # include <rrd.h>

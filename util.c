@@ -23,9 +23,10 @@
  +-------------------------------------------------------------------------+
 */
 
+#include <sys/stat.h>
 #include "common.h"
 #include "cactid.h"
-#include <sys/stat.h>
+#include "util.h"
 
 /* read configuration file to establish local environment */
 int init_config(char *file, config_t * set) {

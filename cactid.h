@@ -58,7 +58,7 @@
 #define DEBUG 3
 #define DEVELOP 4
 
-#define LOCK_CREW 0
+#define LOCK_SNMP 0
 #define LOCK_THREAD 1
 #define LOCK_MYSQL 2
 #define LOCK_RRDTOOL 3
@@ -130,38 +130,7 @@ typedef struct multi_rrd_struct{
   char result[255];
 }multi_rrd_t;
 
-/* Precasts: cactid.c */
-int get_host_list();
-int get_targets();
-
-/* Precasts: poller.c */
-void *poller(void *);
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id);
-int get_host_status(int host_id);
-void set_host_status(int host_id, int new_status);
-
-/* Precasts: mysql.c */
-int db_insert(char *query, MYSQL *mysql);
-MYSQL_RES *db_query(MYSQL *mysql, char *query);
-int db_connect(char *database, MYSQL *mysql);
-void db_disconnect(MYSQL *mysql);
-
-/* Precasts: util.c */
-int init_config(char *, config_t *);
-void config_defaults(config_t *);
-void timestamp(char *);
-int file_exists(char *filename);
-int is_number(char *string);
-
-/* Precasts: locks.c */
-void mutex_lock(int);
-void mutex_unlock(int);
-int mutex_trylock(int mutex);
-pthread_mutex_t* get_lock(int lock);
-
 /* Globals */
 config_t set;
-int lock;
-int waiting;
 
 #endif /* not _CACTID_H_ */
