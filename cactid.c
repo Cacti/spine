@@ -203,6 +203,10 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		
+		//for (i = 0; i < set.threads; i++) {
+		//	pthread_kill(&(crew.member[i].thread), NULL);
+		//}
+		
 		printf("Work_count: %i\n",crew.work_count);
 		
 		if (pthread_mutex_unlock(&(crew.mutex)) != 0) {
@@ -245,6 +249,10 @@ int main(int argc, char *argv[]) {
 		rtg_dbdisconnect(&mysql);
 	}
 	
+  	pthread_mutex_destroy(&(crew.mutex));
+  	pthread_cond_destroy(&(crew.done));
+	pthread_cond_destroy(&(crew.go));
+ 	pthread_exit(NULL);
 	exit(0);
 }
 
@@ -379,7 +387,7 @@ int get_targets(){
 	
 	sprintf(query, "select action,command,management_ip,snmp_community, \
 		snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, \
-		arg1, arg2, arg3, local_data_id, rrd_num from data_input_data_cache order \
+		arg1, arg2, arg3, local_data_id from data_input_data_cache order \
 		by local_data_id");
 	
 	if (mysql_query(&mysql, query)) {
@@ -413,7 +421,6 @@ int get_targets(){
 		sprintf(temp->arg2, "%s", row[10]);
 		sprintf(temp->arg3, "%s", row[11]);
 		temp->local_data_id = atoi(row[12]);
-		temp->rrd_num = atoi(row[13]);
 		
 		temp->prev=NULL;
 		temp->next=NULL;
