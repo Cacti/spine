@@ -101,7 +101,7 @@ void poll_host(int host_id) {
 		case 1:
 			cmd_stdout=popen(entry->command, "r");
 			
-			if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
+			fgets(cmd_result, 255, cmd_stdout);
 			
 			if (cmd_result == "") {
 				sprintf(entry->result, "%s", "U");
@@ -118,7 +118,7 @@ void poll_host(int host_id) {
 		case 2:
 			cmd_stdout=popen(entry->command, "r");
 			
-			if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
+			fgets(cmd_result, 255, cmd_stdout);
 			
 			sprintf(entry->result, "%s", cmd_result);
 			

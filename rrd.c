@@ -45,6 +45,8 @@ void rrd_cmd(char *rrdcmd) {
 	mutex_lock(LOCK_RRDTOOL);
 	fprintf(rrdtool_stdin, "%s\n", rrdcmd);
 	mutex_unlock(LOCK_RRDTOOL);
+	
+	free(rrdcmd);
 }
 
 char *create_rrd(int local_data_id, char *data_source_path, MYSQL *mysql) {
@@ -56,7 +58,7 @@ char *create_rrd(int local_data_id, char *data_source_path, MYSQL *mysql) {
 	char query[512];
 	char rra_string[512] = "";
 	char ds_string[512] = "";
-	static char rrdcmd[2048];
+	char *rrdcmd = (char *) malloc(2048);
 	char temp[64];
 	char *cf[4] = {"AVERAGE", "MIN", "MAX", "LAST"};
 	char *ds[4] = {"GAUGE", "COUNTER", "DERIVE", "ABSOLUTE"};
@@ -105,7 +107,7 @@ char *create_rrd(int local_data_id, char *data_source_path, MYSQL *mysql) {
 char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 	int i;
 	char part1[256]="", part2[256]="";
-	static char rrdcmd[512];
+	char *rrdcmd = (char *) malloc(512);
 	char temp[256];
 	
 	if (multi_target_count > 15) {
@@ -126,7 +128,7 @@ char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 }
 
 char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
-	static char rrdcmd[512];
+	char *rrdcmd = (char *) malloc(512);
 	sprintf(rrdcmd, "update '%s' --template %s N:%s", rrd_path, rrd_name, result);
 	
 	return rrdcmd;
@@ -134,7 +136,7 @@ char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
 
 char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id, MYSQL *mysql) {
 	char *p, *tokens[64];
-	static char rrdcmd[512] = "update '";
+	char *rrdcmd = (char *) malloc(512);
 	char *last;
 	char query[256];
 	int i = 0;
@@ -142,6 +144,8 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id, MYSQL
 	
 	MYSQL_RES *result;
 	MYSQL_ROW row;
+	
+	sprintf(rrdcmd, "%s", "update '");
 	
 	for((p = strtok_r(stringresult, " :", &last)); p; (p = strtok_r(NULL, " :", &last)), i++) tokens[i] = p;
 	tokens[i] = NULL;
