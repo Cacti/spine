@@ -203,6 +203,15 @@ typedef struct ping_results {
 	char snmp_response[50];
 } ping_t;
 
+typedef struct cacti_icmp {
+	char icmp_type;
+	char icmp_code;
+	short icmp_chksm;
+	short icmp_id;
+	short icmp_sqn;
+	char data[23];
+} icmp_t;
+
 /* Globals */
 config_t set;
 php_t php_pipes;
