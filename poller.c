@@ -223,7 +223,7 @@ void poll_host(int host_id) {
 
 		if (entry->result != NULL) {
 			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
-			sprintf(query3, "insert into poller_output (local_data_id,time,output) values (%i,NOW(),'%s')", entry->local_data_id, entry->result);
+			sprintf(query3, "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
 			db_insert(&mysql, query3);
 			free(query3);
 		}
