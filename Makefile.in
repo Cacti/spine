@@ -64,15 +64,14 @@ CC = @CC@
 CPP = @CPP@
 LN_S = @LN_S@
 MAKEINFO = @MAKEINFO@
-MYSQL_DIR = @MYSQL_DIR@
 PACKAGE = @PACKAGE@
 RANLIB = @RANLIB@
 VERSION = @VERSION@
 ac_aux_dir = @ac_aux_dir@
 
-cactid_SOURCES = poller.c rrd.c mysql.c cactid.c util.c
+cactid_SOURCES = rrd.c sql.c cactid.c util.c snmp.c locks.c poller.c
 
-include_HEADERS = cactid.h common.h
+include_HEADERS = cactid.h common.h snmp.h rrd.h locks.h sql.h util.h poller.h
 
 bin_PROGRAMS = cactid
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -86,7 +85,7 @@ DEFS = @DEFS@ -I. -I$(srcdir) -I./config
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-cactid_OBJECTS =  poller.o rrd.o mysql.o cactid.o util.o
+cactid_OBJECTS =  rrd.o sql.o cactid.o util.o snmp.o locks.o poller.o
 cactid_LDADD = $(LDADD)
 cactid_DEPENDENCIES = 
 cactid_LDFLAGS = 
@@ -98,34 +97,34 @@ HEADERS =  $(include_HEADERS)
 
 DIST_COMMON =  README AUTHORS COPYING ChangeLog INSTALL Makefile.am \
 Makefile.in NEWS aclocal.m4 config/config.h.in config/stamp-h.in \
-configure configure.in
+configure configure.ac
 
 
 DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
 
 TAR = gtar
 GZIP_ENV = --best
-DEP_FILES =  .deps/cactid.P .deps/mysql.P .deps/poller.P .deps/rrd.P \
-.deps/util.P
+DEP_FILES =  .deps/cactid.P .deps/locks.P .deps/poller.P .deps/rrd.P \
+.deps/snmp.P .deps/sql.P .deps/util.P
 SOURCES = $(cactid_SOURCES)
 OBJECTS = $(cactid_OBJECTS)
 
 all: all-redirect
 .SUFFIXES:
 .SUFFIXES: .S .c .o .s
-$(srcdir)/Makefile.in: Makefile.am $(top_srcdir)/configure.in $(ACLOCAL_M4) 
+$(srcdir)/Makefile.in: Makefile.am $(top_srcdir)/configure.ac $(ACLOCAL_M4) 
 	cd $(top_srcdir) && $(AUTOMAKE) --gnu Makefile
 
 Makefile: $(srcdir)/Makefile.in  $(top_builddir)/config.status $(BUILT_SOURCES)
 	cd $(top_builddir) \
 	  && CONFIG_FILES=$@ CONFIG_HEADERS= $(SHELL) ./config.status
 
-$(ACLOCAL_M4):  configure.in 
+$(ACLOCAL_M4):  configure.ac 
 	cd $(srcdir) && $(ACLOCAL)
 
 config.status: $(srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	$(SHELL) ./config.status --recheck
-$(srcdir)/configure: $(srcdir)/configure.in $(ACLOCAL_M4) $(CONFIGURE_DEPENDENCIES)
+$(srcdir)/configure: $(srcdir)/configure.ac $(ACLOCAL_M4) $(CONFIGURE_DEPENDENCIES)
 	cd $(srcdir) && $(AUTOCONF)
 
 config/config.h: config/stamp-h
@@ -143,7 +142,7 @@ $(srcdir)/config/config.h.in: $(srcdir)/config/stamp-h.in
 		rm -f $(srcdir)/config/stamp-h.in; \
 		$(MAKE) $(srcdir)/config/stamp-h.in; \
 	else :; fi
-$(srcdir)/config/stamp-h.in: $(top_srcdir)/configure.in $(ACLOCAL_M4) 
+$(srcdir)/config/stamp-h.in: $(top_srcdir)/configure.ac $(ACLOCAL_M4) 
 	cd $(top_srcdir) && $(AUTOHEADER)
 	@echo timestamp > $(srcdir)/config/stamp-h.in 2> /dev/null
 
