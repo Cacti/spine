@@ -1107,7 +1107,7 @@ char **string_to_argv(char *argstring, int *argc){
 /******************************************************************************/
 /*  clean_string() - change backslashes to forward slashes for system calls   */
 /******************************************************************************/
-char *clean_string( char *string_to_clean ) {
+char *clean_string(char *string_to_clean) {
 	char *posptr;
 
 	posptr = strchr(string_to_clean,'\\');
@@ -1124,7 +1124,7 @@ char *clean_string( char *string_to_clean ) {
 /******************************************************************************/
 /*  strip_string_crlf() - remove control conditions from a string             */
 /******************************************************************************/
-char *strip_string_crlf( char *string_to_clean ) {
+char *strip_string_crlf(char *string_to_clean) {
 	char *posptr;
 
 	posptr = strchr(string_to_clean,'\n');
@@ -1145,7 +1145,6 @@ char *strip_string_crlf( char *string_to_clean ) {
 
 	return(string_to_clean);
 }
-
 
 /******************************************************************************/
 /*  init_sockaddr - convert host name to internet address                     */

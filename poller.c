@@ -295,7 +295,7 @@ void poll_host(int host_id) {
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				} else {
 					/* erroneous non-numeric result */
-					if (!is_number(entry->result)) {
+					if ((!is_number(entry->result)) && (!is_float(entry->result))) {
 						strncpy(errstr, entry->result,sizeof(errstr));
 						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not numeric. Partial Result: %s...\n", host_id, errstr);
 						cacti_log(logmessage);
@@ -356,14 +356,11 @@ void poll_host(int host_id) {
 		}
 
 		if (entry->result != NULL) {
-			if (is_number(entry->result)) {
-				/* format database insert string */
-				query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
-				snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
-				db_insert(&mysql, query3);
-				free(query3);
-   			} else {
-			}
+			/* format database insert string */
+			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
+			snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s',NOW(),'%s')", entry->local_data_id, entry->rrd_name, entry->result);
+			db_insert(&mysql, query3);
+			free(query3);
 		}
 	}
 
@@ -489,7 +486,8 @@ char *exec_poll(host_t *current_host, char *command) {
 		default:
 			/* get only one line of output, we will ignore the rest */
 			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
-			snprintf(cmd_result, bytes_read+1, "%s", cmd_result);
+			snprintf(cmd_result, bytes_read, "%s", cmd_result);
+			strncpy(cmd_result, strip_string_crlf(cmd_result), sizeof(cmd_result));
 		}
 
 		/* cleanup file and pipe */
