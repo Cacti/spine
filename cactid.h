@@ -102,6 +102,7 @@ typedef struct target_struct{
   char snmp_username[50];
   char snmp_password[50];
   int snmp_port;
+  int snmp_timeout;
   char rrd_name[30];
   char rrd_path[255];
   char arg1[255];
