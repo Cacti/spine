@@ -39,8 +39,12 @@
  #include <mib.h>
 #endif
 
-void snmp_init() {
-	init_snmp("cactid");
+void snmp_init(int host_id) {
+	char cactid_session[10];
+
+	snprintf(cactid_session, sizeof(cactid_session),"cactid%i",host_id);
+
+	init_snmp(cactid_session);
 
 	SOCK_STARTUP;
 
@@ -66,9 +70,12 @@ void snmp_host_init(host_t *current_host) {
 
 	char hostname[BUFSIZE];
 
-	thread_mutex_lock(LOCK_SNMP);
+	/* initialize SNMP */
+	snmp_init(current_host->id);
+
+//	thread_mutex_lock(LOCK_SNMP);
   	snmp_sess_init(&session);
-	thread_mutex_unlock(LOCK_SNMP);
+//	thread_mutex_unlock(LOCK_SNMP);
 
 	if (current_host->snmp_version == 2) {
 		session.version = SNMP_VERSION_2c;
@@ -85,9 +92,9 @@ void snmp_host_init(host_t *current_host) {
 	session.community = current_host->snmp_community;
 	session.community_len = strlen(current_host->snmp_community);
 
-	thread_mutex_lock(LOCK_SNMP);
+//	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_SNMP);
+//	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		snprintf(logmessage, LOGSIZE, "ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);
@@ -100,6 +107,10 @@ void snmp_host_init(host_t *current_host) {
 
 void snmp_host_cleanup(host_t *current_host) {
 	snmp_sess_close(current_host->snmp_session);
+
+	/* cleanup the snmp process*/
+	snmp_free();
+
 }
 
 char *snmp_get(host_t *current_host, char *snmp_oid) {

@@ -37,20 +37,19 @@
 /* general constants */
 #define MAX_THREADS 100
 #define BUFSIZE 512
-#define LOGSIZE 1024
+#define LOGSIZE 512
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
 #define STAT_DESCRIP_ERROR 99
 
 /* locations to search for the config file */
-#define CONFIG_PATHS 6
+#define CONFIG_PATHS 5
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
-#define CONFIG_PATH_3 "/wwwroot/cacti"
-#define CONFIG_PATH_4 "c:/wwwroot/cacti"
-#define CONFIG_PATH_5 "c:/webroot/cacti"
-#define CONFIG_PATH_6 "c:/inetpub/wwwroot/cacti"
+#define CONFIG_PATH_3 "/cygdrive/c/wwwroot/cacti"
+#define CONFIG_PATH_4 "/cygdrive/c/webroot/cacti"
+#define CONFIG_PATH_5 "/cygdrive/c/inetpub/wwwroot/cacti"
 
 /* config file defaults */
 #define DEFAULT_CONF_FILE "cactid.conf"

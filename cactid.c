@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 	int i;
 	int mutex_status = 0;
 	int thread_status = 0;
-	char result_string[256] = "";
+	char result_string[BUFSIZE] = "";
 	char logmessage[LOGSIZE];
 
 	/* set start time for cacti */
@@ -81,14 +81,14 @@ int main(int argc, char *argv[]) {
 	if ((argc != 1) && (argc != 3)) {
 		printf("ERROR: Cactid requires either 0 or 2 input parameters\n");
 		printf("USAGE: <cactidpath>/cactid [start_id end_id]\n");
-		exit(1);
+		exit(-1);
 	}
 
 	/* return error if the first arg is greater than the second */
 	if (argc == 3) {
 		if (atol(argv[1]) > atol(argv[2])) {
 			printf("ERROR: Invalid row specifications.  First row must be less than the second row\n");
-			exit(2);
+			exit(-2);
 		}
 	}
 
@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
 	if (conf_file) {
 		if ((read_cactid_config(conf_file, &set)) < 0) {
 			printf("ERROR: Could not read config file: %s\n", conf_file);
-			exit(-1);
+			exit(-3);
 		}
 	}else{
 		conf_file = malloc(BUFSIZE);
@@ -125,16 +125,17 @@ int main(int argc, char *argv[]) {
 	/* set the poller ID, stub for next version */
 	set.poller_id = 0;
 
-	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting\n", VERSION);
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log(logmessage);
+	} else {
+		printf("CACTID: Version %s starting\n", VERSION);
 	}
 
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
 	/* initialize SNMP */
-	snmp_init();
+//	snmp_init();
 
 	/* initialize PHP */
 	php_init();
@@ -160,6 +161,7 @@ int main(int argc, char *argv[]) {
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
+
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	init_mutexes();
 
@@ -171,6 +173,7 @@ int main(int argc, char *argv[]) {
 	/* loop through devices until done */
 	while (device_counter < num_rows) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
+
 		switch (mutex_status) {
 		case 0:
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
@@ -281,8 +284,8 @@ int main(int argc, char *argv[]) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
 	}
 
-	/* cleanup the snmp process*/
-	snmp_free();
+//	/* cleanup the snmp process*/
+//	snmp_free();
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: SNMP Cleanup Complete\n");
@@ -314,9 +317,12 @@ int main(int argc, char *argv[]) {
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
 	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) || (argc == 1)) {
 		snprintf(logmessage, LOGSIZE, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
+	} else {
+		printf("CACTID: Execution Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 	}
 
 	exit(0);

@@ -58,7 +58,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 int db_connect(char *database, MYSQL *mysql) {
 	char logmessage[LOGSIZE];
 
-	if (set.verbose >= POLLER_VERBOSITY_HIGH) {
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 		cacti_log(logmessage);
 	}

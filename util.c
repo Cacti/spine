@@ -367,7 +367,6 @@ void config_defaults(config_t * set) {
 	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[2]));
 	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[3]));
 	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[4]));
-	strncpy(config_paths[5], CONFIG_PATH_6, sizeof(config_paths[5]));
 
 	return;
 }
