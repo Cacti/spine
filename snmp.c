@@ -35,7 +35,7 @@ void snmp_free() {
 	SOCK_CLEANUP;
 }
 
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id) {
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int snmp_port, int host_id) {
 	void *sessp = NULL;
 	struct snmp_session session;
 	struct snmp_pdu *pdu = NULL;
@@ -60,6 +60,7 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 	}
 	
 	session.peername = snmp_host;
+	session.remote_port = snmp_port;
 	session.community = snmp_comm;
 	session.community_len = strlen(snmp_comm);
 	
@@ -71,7 +72,7 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	read_objid(snmp_oid, anOID, &anOID_len);
 	
-	strcpy(storedoid, snmp_oid);
+	strncpy(storedoid, snmp_oid, sizeof(storedoid));
 	
 	snmp_add_null_var(pdu, anOID, anOID_len);
 	

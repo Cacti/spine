@@ -25,4 +25,4 @@
 
 void snmp_init();
 void snmp_free();
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id);
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int snmp_port, int host_id);

@@ -40,9 +40,13 @@
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
-#define CONFIG1 "cactid.conf"
+
+#define CONFIG_PATHS 2
+#define CONFIG_PATH_1 ""
+#define CONFIG_PATH_2 "/etc/"
 
 /* Defaults */
+#define DEFAULT_CONF_FILE "cactid.conf"
 #define DEFAULT_THREADS 5
 #define DEFAULT_INTERVAL 300
 #define DEFAULT_OUT_OF_RANGE 93750000000
@@ -97,6 +101,7 @@ typedef struct target_struct{
   int snmp_version;
   char snmp_username[50];
   char snmp_password[50];
+  int snmp_port;
   char rrd_name[30];
   char rrd_path[255];
   char arg1[255];
@@ -132,5 +137,6 @@ typedef struct multi_rrd_struct{
 
 /* Globals */
 config_t set;
+char config_paths[CONFIG_PATHS][BUFSIZE];
 
 #endif /* not _CACTID_H_ */

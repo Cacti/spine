@@ -68,7 +68,7 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	
-	sprintf(query, "select action,command,management_ip,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	sprintf(query, "select action,command,management_ip,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
 	
 	db_connect(set.dbdb, &mysql);
 	
@@ -93,6 +93,7 @@ void poll_host(int host_id) {
 		//sprintf(entry->arg3, "%s", row[11]);
 		entry->local_data_id = atoi(row[12]);
 		entry->rrd_num = atoi(row[13]);
+		entry->snmp_port = atoi(row[14]);
 		
 		/* do RRD file path check */
 		if (!file_exists(entry->rrd_path)) {
@@ -102,7 +103,7 @@ void poll_host(int host_id) {
 		switch(entry->action) {
 		case 0:
 			if (ignore_host == 0) {
-				snmp_result = snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, host_id);
+				snmp_result = snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, entry->snmp_port, host_id);
 				sprintf(entry->result, "%s", snmp_result);
 				free(snmp_result);
 			}else{
