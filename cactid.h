@@ -96,7 +96,7 @@ typedef struct target_struct{
   int rrd_num;
   int action;
   char command[256];
-  char management_ip[16];
+  char hostname[250];
   char snmp_community[100];
   int snmp_version;
   char snmp_username[50];

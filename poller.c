@@ -68,7 +68,7 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	
-	sprintf(query, "select action,command,management_ip,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	sprintf(query, "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
 	
 	db_connect(set.dbdb, &mysql);
 	
@@ -81,7 +81,7 @@ void poll_host(int host_id) {
 		entry->target_id = 0;
 		entry->action = atoi(row[0]);
 		sprintf(entry->command, "%s", row[1]);
-		sprintf(entry->management_ip, "%s", row[2]);
+		sprintf(entry->hostname, "%s", row[2]);
 		sprintf(entry->snmp_community, "%s", row[3]);
 		entry->snmp_version = atoi(row[4]);
 		sprintf(entry->snmp_username, "%s", row[5]);
@@ -103,7 +103,7 @@ void poll_host(int host_id) {
 		switch(entry->action) {
 		case 0:
 			if (ignore_host == 0) {
-				snmp_result = snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, entry->snmp_port, host_id);
+				snmp_result = snmp_get(entry->hostname, entry->snmp_community, 1, entry->arg1, entry->snmp_port, host_id);
 				sprintf(entry->result, "%s", snmp_result);
 				free(snmp_result);
 			}else{
@@ -112,12 +112,12 @@ void poll_host(int host_id) {
 			
 			if (!strcmp(entry->result, "E")) {
 				ignore_host = 1;
-				printf("SNMP timeout detected, ignoring host '%s'\n", entry->management_ip);
+				printf("SNMP timeout detected, ignoring host '%s'\n", entry->hostname);
 				sprintf(entry->result, "%s", "U");
 			}
 			
 			if (set.verbose >= LOW) {
-				printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
+				printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->hostname, entry->rrd_name, entry->arg1, entry->result);
 			}
 			
 			break;
