@@ -155,12 +155,11 @@ int cacti_log(char *logmessage) {
 	/* output to syslog/eventlog */
 	if ((set.log_destination == 2) || (set.log_destination == 3)) {
 		openlog("Cacti Logging", LOG_PERROR | LOG_NDELAY | LOG_PID, LOG_SYSLOG);
-		if ((!strstr(flogmessage,"ERROR")) && (set.log_perror)) {
-			syslog(LOG_INFO,"%s\n", flogmessage);
-		}else {
-			if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
-	            syslog(LOG_PERROR,"%s\n", flogmessage);
-			}
+		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
+			syslog(LOG_CRIT,"%s\n", flogmessage);
+		}
+		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
+	            syslog(LOG_NOTICE,"%s\n", flogmessage);
 		}
 		closelog();
 	}
