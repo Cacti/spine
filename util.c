@@ -191,6 +191,7 @@ int read_config_options(config_t *set) {
 		set->ping_method = atoi(mysql_row[0]);
 	}
 
+	ruid = 999;
 #if defined(__CYGWIN__)
 	/* root check not required for windows */
 	ruid = 0;
@@ -198,7 +199,6 @@ int read_config_options(config_t *set) {
 #else
 	/* check for root status (ruid=0) */
 	ruid = getuid();
-	printf("The current user is %i\n", ruid);
 #endif
 
 	/* fall back to UDP ping if ICMP is not available */
@@ -209,11 +209,13 @@ int read_config_options(config_t *set) {
 				printf("CACTID: WARNING: Falling back to UDP Ping due to User not being ROOT\n");
 				printf("        To setup a process to run as root, see your documentaion\n");
 				if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-					snprintf(logmessage, LOGSIZE, "DEBUG: Falling back to UDP Ping due to the running User not being ROOT");
+					snprintf(logmessage, LOGSIZE, "DEBUG: Falling back to UDP Ping due to the running User not being ROOTBEER\n");
 					cacti_log(logmessage);
 				}
 			}
 		}
+	} else {
+		printf("CACTID: Non Window envrionment, running as root, ICMP Ping available\n");
 	}
 
 	/* log the ping_method variable */
