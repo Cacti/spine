@@ -25,28 +25,27 @@
 
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/ip_icmp.h>
-#include <netinet/ip.h>
 #include <netdb.h>
 #include <syslog.h>
-#include <ctype.h>
 #include <errno.h>
-#include <arpa/inet.h>
 #include "common.h"
 #include "cactid.h"
 #include "util.h"
 #include "snmp.h"
 #include "sql.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
-#include <sys/time.h>
-#include <string.h>
+//#include <netinet/in.h>
+//#include <netinet/ip.h>
+//#include <ctype.h>
+//#include <arpa/inet.h>
+//#include <stdlib.h>
+//#include <stdio.h>
+//#include <unistd.h>
+//#include <sys/types.h>
+//#include <netinet/udp.h>
+//#include <netinet/tcp.h>
+//#include <sys/time.h>
+//#include <string.h>
 
 int read_config_options(config_t *set) {
 	MYSQL mysql;
