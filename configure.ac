@@ -36,24 +36,11 @@ fi
 # Platform-specific tweaks
 case $host_alias in
 *solaris*)
-    AC_DEFINE(HAVE_LONG_LONG_SCANF, 1, scanf supports long long)
     CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
-*linux*)
-    AC_DEFINE(HAVE_LONG_LONG_SCANF, 1, scanf supports long long);;
 *freebsd*)
     LIBS="$LIBS -pthread"
     AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 esac
-
-AC_DEFUN(MYSQL_LIB_CHK,[
-  str="$1/libmysqlclient.*"
-  for j in `echo $str`; do
-    if test -r $j; then
-      MYSQL_LIB_DIR=$1
-      break 2
-    fi
-  done
-])
 
 # Checks for programs.
 AC_PROG_AWK
@@ -68,7 +55,7 @@ AC_ARG_ENABLE(warnings,
   [  --enable-warnings       Enable -Wall if using gcc.],
   [ if test -n "$GCC"; then
     AC_MSG_RESULT(adding -Wall to CFLAGS.)
-        CFLAGS="$CFLAGS -Wall"
+        CFLAGS="$CFLAGS -Wall"	
    fi],AC_MSG_RESULT(no))
 
 # Checks for libraries.
@@ -77,10 +64,12 @@ AC_CHECK_LIB(nsl, gethostbyname)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
 AC_CHECK_LIB(pthread, pthread_exit)
+# Some builds of MySQL require libz - try to detect
+AC_CHECK_LIB(z, deflate)
 
 # Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS(malloc.h strings.h sys/time.h unistd.h stdint.h netinet/in.h)
+AC_CHECK_HEADERS(malloc.h ctype.h sys/time.h netinet/in.h)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_TYPES([unsigned long long, long long])
@@ -91,7 +80,19 @@ AC_STRUCT_TM
 
 # Checks for library functions.
 AC_TYPE_SIGNAL
-AC_CHECK_FUNCS(gettimeofday strerror)
+AC_CHECK_FUNCS(gettimeofday strerror strtoll)
+
+# ****************** MySQL Checks ***********************
+
+AC_DEFUN(MYSQL_LIB_CHK,[
+	str="$1/libmysqlclient.*"
+	for j in `echo $str`; do
+		if test -r $j; then
+		MYSQL_LIB_DIR=$1
+		break 2
+	fi
+	done
+])
 
 # Determine MySQL installation paths
 for i in $MYSQL_DIR /usr/local /usr/local/mysql; do
@@ -116,22 +117,13 @@ done
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_MSG_CHECKING([if MySQL requires libz])
-LIBZ=no
-AC_TRY_LINK([#include <mysql.h>], [mysql_init();], AC_MSG_RESULT(no), 
-	    [ AC_MSG_RESULT(yes)
-              LIBZ=yes ])
-
-# We need libz to link with mysql libs on this machine
-if test "$LIBZ" = "yes"; then
-  LIBS="-lz $LIBS"
-fi
-
 AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="-lmysqlclient $LIBS",
 	AC_MSG_ERROR([MySQL libraries not found.]))
 AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
 	AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version]))
 
+# ****************** Net-SNMP/UCD-SNMP Checks ***********************
+	
 # Determine UCD or Net-SNMP installation paths
 if test "x$SNMP_DIR" != "x"; then
     for i in / /ucd-snmp /include/ucd-snmp; do
@@ -181,7 +173,6 @@ AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
 
 if test "$SNMP_SSL" = "yes"; then
   LDFLAGS="-L/usr/local/ssl/lib $LDFLAGS"
-  LIBS="$LIBS -lcrypto"
   AC_CHECK_LIB(crypto, CRYPTO_free,[],[AC_MSG_ERROR(libcrypto not found!)])
 fi
 
