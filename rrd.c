@@ -35,11 +35,18 @@ extern char rrdtool_path[128];
 FILE *rrdtool_stdin;
 
 void rrd_open() {
-	rrdtool_stdin = popen(rrdtool_path, "w");
+	if ((rrdtool_stdin = popen(rrdtool_path, "w")) == NULL) {
+		printf("Failed to open the RRDTool pipe at: %s\n", rrdtool_path);
+		exit(1);
+	}
 }
 
 void rrd_close() {
-	pclose(rrdtool_stdin);
+	if (rrdtool_stdin) {
+		pclose(rrdtool_stdin);
+	}else{
+		printf("RRDTool pipe closed prematurely\n");
+	}
 }
 
 void rrd_cmd(char *rrdcmd) {
