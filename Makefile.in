@@ -301,6 +301,8 @@ distdir: $(DISTFILES)
 
 DEPS_MAGIC := $(shell mkdir .deps > /dev/null 2>&1 || :)
 
+-include $(DEP_FILES)
+
 mostlyclean-depend:
 
 clean-depend:
