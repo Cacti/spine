@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-	sprintf(logmessage, "STATS: Execution Time: %.4f s, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n",(end_time - begin_time),set.threads,num_rows, num_rows);
+	sprintf(logmessage, "STATS: Execution Time: %.4f s, Max Threads/Process: %i, Polled Hosts: %i\n",(end_time - begin_time),set.threads,num_rows);
 	cacti_log(logmessage);
 
 	exit(0);
