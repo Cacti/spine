@@ -25,6 +25,8 @@
 
 #include "common.h"
 #include "cactid.h"
+#include "locks.h"
+#include "sql.h"
 
 int db_insert(char *query, MYSQL *mysql) {
 	if (set.verbose >= HIGH) {
