@@ -67,7 +67,7 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 	char query[512];
 	char rra_string[512] = "";
 	char ds_string[512] = "";
-	char rrdcmd[2048];
+	static char rrdcmd[2048];
 	char temp[64];
 	char *cf[4] = {"AVERAGE", "MIN", "MAX", "LAST"};
 	char *ds[4] = {"GAUGE", "COUNTER", "DERIVE", "ABSOLUTE"};
@@ -105,7 +105,7 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 	}
 	
 	/* free memory */
-	free(result);
+	mysql_free_result(result);
 	
 	/* build final rrd create string */
 	sprintf(rrdcmd, "create '%s' --step %i %s %s", data_source_path, rrd_step, ds_string, rra_string);
@@ -116,7 +116,7 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 	int i;
 	char part1[256]="", part2[256]="";
-	char rrdcmd[512];
+	static char rrdcmd[512];
 	char temp[256];
 	
 	if (multi_target_count > 15) {
@@ -137,7 +137,7 @@ char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 }
 
 char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
-	char rrdcmd[512];
+	static char rrdcmd[512];
 	sprintf(rrdcmd, "update '%s' --template %s N:%s", rrd_path, rrd_name, result);
 	
 	return rrdcmd;
@@ -145,28 +145,21 @@ char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
 
 char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 	char *p, *tokens[64];
-	char rrdcmd[512] ="update '";
+	static char rrdcmd[512] = "update '";
 	char *last;
 	char query[256];
 	int i = 0;
 	int j = 0;
 	
-	MYSQL mysql;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
-	
-	mysql_init(&mysql);
-	
-	if (!mysql_real_connect(&mysql, set.dbhost, set.dbuser, set.dbpass, set.dbdb, 0, NULL, 0)) {
-		fprintf(stderr, "%s\n", mysql_error(&mysql));
-		exit(1);
-	}
 	
 	for((p = strtok_r(stringresult, " :", &last)); p; (p = strtok_r(NULL, " :", &last)), i++) tokens[i] = p;
 	tokens[i] = NULL;
 	
 	strcat(rrdcmd, rrd_path);
 	strcat(rrdcmd, "' --template ");
+	
 	for (j=0; j<i; j=j+2) {
 		if (j!=0) {
 			strcat(rrdcmd, ":");
@@ -175,14 +168,7 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 		sprintf(query, "select rrd_data_source_name from data_input_data_fcache where \
 			local_data_id=%i and data_input_field_name=\"%s\"", local_data_id, tokens[j]);
 		
-		if (mysql_query(&mysql, query)) {
-			fprintf(stderr, "Error in query\n");
-		}
-		
-		if ((result = mysql_store_result(&mysql)) == NULL) {
-			fprintf(stderr, "Error retrieving data\n");
-			exit(1);
-		}
+		result = db_query(&mysql, query);
 		
 		/* make sure to check if the entry actual exists in the 'data_input_data_fcache' table, or cactid
 		will segfault */
@@ -199,7 +185,9 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 		}
 	}
 	
-	mysql_close(&mysql);
+	/* free memory */
+	mysql_free_result(result);
+	
 	strcat(rrdcmd, " N");
 	
 	for(j=1; j<i; j=j+2) {
