@@ -32,6 +32,7 @@
 #include "locks.h"
 #include "poller.h"
 #include "nft_popen.h"
+#include <errno.h>
 
 /******************************************************************************/
 /*  child() - called for every host.  Is a forked process to initiate poll.   */
@@ -462,11 +463,12 @@ int validate_result(char * result) {
 /*                popen command.                                              */
 /******************************************************************************/
 char *exec_poll(host_t *current_host, char *command) {
+	extern int errno;
 	FILE *cmd_stdout;
 	int cmd_fd;
 	int return_value;
 	int bytes_read;
-	char cmd_result[BUFSIZE];
+	char cmd_result[BUFSIZE] = "";
 	char logmessage[LOGSIZE];
 
 	fd_set fds;
@@ -496,10 +498,28 @@ char *exec_poll(host_t *current_host, char *command) {
 		/* wait 5 seonds for pipe response */
 		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 		case -1:
-			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The script/command select() failed\n", current_host->id);
-			cacti_log(logmessage);
-			snprintf(result_string, 2, "%s", "U");
-			break;
+			switch (errno) {
+				case EBADF:
+					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id);
+					cacti_log(logmessage);
+					snprintf(result_string, 2, "%s", "U");
+					break;
+				case EINTR:
+					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The function was interrupted before any of the selected events occurred and before the timeout interval expired.\n", current_host->id);
+					cacti_log(logmessage);
+					snprintf(result_string, 2, "%s", "U");
+					break;
+				case EINVAL:
+					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id);
+					cacti_log(logmessage);
+					snprintf(result_string, 2, "%s", "U");
+					break;
+				default:
+					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The script/command select() failed\n", current_host->id);
+					cacti_log(logmessage);
+					snprintf(result_string, 2, "%s", "U");
+					break;
+			}
 		case 0:
 			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The POPEN timed out\n", current_host->id);
 			cacti_log(logmessage);
@@ -508,19 +528,18 @@ char *exec_poll(host_t *current_host, char *command) {
 		default:
 			/* get only one line of output, we will ignore the rest */
 			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
-			snprintf(cmd_result, bytes_read, "%s", cmd_result);
+			if (bytes_read) {
+				snprintf(result_string, bytes_read+1, "%s", cmd_result);
+				strncpy(result_string, strip_string_crlf(result_string), sizeof(result_string));
+			} else {
+				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
+				cacti_log(logmessage);
+				snprintf(result_string, BUFSIZE, "%s", "U");
+			}
 		}
 
 		/* close pipe */
 		nft_pclose(cmd_fd);
-
-		if (strlen(cmd_result) == 0) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
-			cacti_log(logmessage);
-			snprintf(result_string, BUFSIZE, "%s", "U");
-		}else {
-			snprintf(result_string, BUFSIZE, "%s", cmd_result);
-		}
 	}else{
 		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 		cacti_log(logmessage);
