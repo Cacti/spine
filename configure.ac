@@ -163,8 +163,8 @@ if test -z "$SNMP_INCDIR"; then
   fi
 fi
 
-LDFLAGS="$LDFLAGS -L$SNMP_LIBDIR"
-CPPFLAGS="$CPPFLAGS -I$SNMP_INCDIR"
+LDFLAGS="-L$SNMP_LIBDIR $LDFLAGS"
+CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR/.. $CFLAGS"
 
 # Net/UCD-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if UCD-SNMP needs crypto support])
