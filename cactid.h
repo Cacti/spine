@@ -71,71 +71,60 @@
 #define STAT_DESCRIP_ERROR 99
 
 /* Typedefs */
-typedef struct worker_struct {
-    int index;
-    pthread_t thread;
-    struct crew_struct *crew;
-} worker_t;
-
 typedef struct config_struct {
-    int interval;
-    long long out_of_range;
-    char dbhost[80];
-    char dbdb[80];
-    char dbuser[80];
-    char dbpass[80];
-    int verbose;
-    int dboff;
-    int snmp_ver;
-    int threads;
+	int interval;
+	long long out_of_range;
+	char dbhost[80];
+	char dbdb[80];
+	char dbuser[80];
+	char dbpass[80];
+	int verbose;
+	int dboff;
+	int snmp_ver;
+	int threads;
 } config_t;
 
-typedef struct target_struct{
-  int target_id;
-  char result[255];
-  int local_data_id;
-  int rrd_num;
-  int action;
-  char command[256];
-  char hostname[250];
-  char snmp_community[100];
-  int snmp_version;
-  char snmp_username[50];
-  char snmp_password[50];
-  int snmp_port;
-  int snmp_timeout;
-  char rrd_name[30];
-  char rrd_path[255];
-  char arg1[255];
-  char arg2[255];
-  char arg3[255];
-  struct target_struct *next;
-  struct target_struct *prev;
-  struct target_struct *head;
-}target_t;
-
-typedef struct crew_struct {
-    int work_count;
-    worker_t member[MAX_THREADS];
-    pthread_mutex_t mutex;
-    pthread_cond_t done;
-    pthread_cond_t go;
-} crew_t;
-
-typedef struct rrd_struct{
-  char rrdcmd[512];
-}rrd_t;
+typedef struct target_struct {
+	int target_id;
+	char result[255];
+	int local_data_id;
+	int rrd_num;
+	int action;
+	char command[256];
+	char hostname[250];
+	char snmp_community[100];
+	int snmp_version;
+	char snmp_username[50];
+	char snmp_password[50];
+	int snmp_port;
+	int snmp_timeout;
+	char rrd_name[30];
+	char rrd_path[255];
+	char arg1[255];
+	char arg2[255];
+	char arg3[255];
+} target_t;
 
 typedef struct host_struct {
-  int host_id;
-  int status;
-}host_t;
+	char hostname[250];
+	char snmp_community[100];
+	int snmp_version;
+	int snmp_port;
+	int snmp_timeout;
+	int ignore_host;
+	
+	void *snmp_session;
+} host_t;
+
+typedef struct rrd_struct{
+	char rrdcmd[512];
+} rrd_t;
 
 typedef struct multi_rrd_struct{
-  char rrd_name[19];
-  char rrd_path[255];
-  char result[255];
-}multi_rrd_t;
+	char rrd_name[19];
+	char rrd_path[255];
+	char result[255];
+} multi_rrd_t;
 
 /* Globals */
 config_t set;

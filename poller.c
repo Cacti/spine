@@ -59,17 +59,15 @@ void poll_host(int host_id) {
 	char cmd_result[255];
 	char *snmp_result;
 	
-	int ignore_host = 0;
 	int rrd_ds_counter = 0;
 	
 	target_t *entry;
+	host_t *host;
 	multi_rrd_t *rrd_multids;
 	
 	MYSQL mysql;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
-	
-	void *snmp_session_ptr = NULL;
 	
 	snprintf(query1, sizeof(query1), "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
 	snprintf(query2, sizeof(query2), "select hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
@@ -87,9 +85,19 @@ void poll_host(int host_id) {
 	
 	row = mysql_fetch_row(result);
 	
-	/* initialize the snmp session */ 
-	snmp_session_ptr = snmp_host_init(row[0], row[1], atoi(row[2]), atoi(row[3]), atoi(row[4]));
+	/* load up database values into the host struct */
+	host = (host_t *) malloc(sizeof(host_t));
 	
+	if (row[0] != NULL) snprintf(host->hostname, sizeof(host->hostname), "%s", row[0]);
+	if (row[1] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community), "%s", row[1]);
+	host->snmp_version = atoi(row[2]);
+	host->snmp_port = atoi(row[3]);
+	host->snmp_timeout = atoi(row[4]);
+	host->ignore_host = 0;
+	
+	snmp_host_init(host);
+	
+	/* fetch a list of each poller cache item that belongs to this host */
 	entry = (target_t *) malloc(sizeof(target_t));
 	
 	result = db_query(&mysql, query1);
@@ -121,27 +129,26 @@ void poll_host(int host_id) {
 		
 		switch(entry->action) {
 		case 0:
-			if (ignore_host == 0) {
+			if (!host->ignore_host) {
 				if ((entry->snmp_version == 1) || (entry->snmp_version == 2)) {
-					snmp_result = snmp_get(snmp_session_ptr, entry->arg1, entry->hostname);
+					snmp_result = snmp_get(host, entry->arg1);
 					
 					snprintf(entry->result, sizeof(entry->result), "%s", snmp_result);
 					free(snmp_result);
 				}else{
-					printf("SNMP v3 is not yet supported in cactid (host: %s)\n", entry->hostname);
+					printf("SNMP v3 is not yet supported in cactid (host: %s)\n", host->hostname);
+				}
+				
+				if (host->ignore_host) {
+					printf("SNMP timeout detected (%i milliseconds), ignoring host '%s'\n", host->snmp_timeout, host->hostname);
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				}
 			}else{
 				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}
 			
-			if (!strcmp(entry->result, "E")) {
-				ignore_host = 1;
-				printf("SNMP timeout detected (%i milliseconds), ignoring host '%s'\n", entry->snmp_timeout, entry->hostname);
-				snprintf(entry->result, sizeof(entry->result), "%s", "U");
-			}
-			
 			if (set.verbose >= LOW) {
-				printf("[%i] SNMP v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->snmp_version, entry->hostname, entry->rrd_name, entry->arg1, entry->result);
+				printf("[%i] SNMP v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
 			}
 			
 			break;
@@ -227,9 +234,10 @@ void poll_host(int host_id) {
 		}
 	}
 	
-	snmp_host_cleanup(snmp_session_ptr);
+	snmp_host_cleanup(host);
 	
 	free(entry);
+	free(host);
 	
 	mysql_free_result(result);
 	mysql_close(&mysql);
