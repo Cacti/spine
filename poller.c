@@ -54,6 +54,7 @@ void poll_host(int host_id) {
 	int target_id = 0;
 	int num_rows;
 	FILE *cmd_stdout;
+	int return_value;
 	char cmd_result[255];
 	char *snmp_result;
 	
@@ -121,8 +122,8 @@ void poll_host(int host_id) {
 			break;
 		case 1:
 			cmd_stdout=popen(entry->command, "r");
-			
 			fgets(cmd_result, 255, cmd_stdout);
+			pclose(cmd_stdout);
 			
 			if (cmd_result == "") {
 				sprintf(entry->result, "%s", "U");
@@ -134,26 +135,31 @@ void poll_host(int host_id) {
 				printf("[%i] command: %s, output: %s\n", host_id, entry->command, entry->result);
 			}
 			
-			pclose(cmd_stdout);
 			break;
 		case 2:
 			cmd_stdout=popen(entry->command, "r");
-			
 			fgets(cmd_result, 255, cmd_stdout);
+			return_value = pclose(cmd_stdout);
 			
-			sprintf(entry->result, "%s", cmd_result);
+			if (return_value != 0) {
+				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
+				sprintf(entry->result, "%s", "U");
+			}else{
+				sprintf(entry->result, "%s", cmd_result);
+			}
 			
 			if (set.verbose >= LOW) {
 				printf("[%i] MUTLI command: %s, output: %s\n", host_id, entry->command, entry->result);
 			}
 			
-			pclose(cmd_stdout);
 			break;
 		}
 		
 		if (entry->rrd_num == 1) {
 			if (entry->action == 2) {
-				rrd_cmd(rrdcmd_string(entry->rrd_path, entry->result, entry->local_data_id, &mysql));
+				if (strcmp(entry->result, "U")) {
+					rrd_cmd(rrdcmd_string(entry->rrd_path, entry->result, entry->local_data_id, &mysql));
+				}
 			}else{
 				rrd_cmd(rrdcmd_lli(entry->rrd_name, entry->rrd_path, entry->result));
 			}
