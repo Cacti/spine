@@ -24,7 +24,7 @@
 Interval	300 # not currently used
 SNMP_Ver	1
 DB_Host		localhost
-DB_Database	cacti_mod_sittech
+DB_Database	cacti
 DB_User		cactiuser
 DB_Pass		cactiuser
 Threads		10
