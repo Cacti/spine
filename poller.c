@@ -540,7 +540,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, result_string, BUFSIZE);
+			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
 			if (bytes_read) {
 				result_string[bytes_read] = '\0';
 				strip_string_crlf(result_string); 
