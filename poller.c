@@ -60,7 +60,7 @@ void *poller(void *thread_args) {
 	//	my_thread_init();
 	//}
 	
-	while (1) {
+	while (crew->work_count >= 0) {
 		if (set.verbose >= DEVELOP){
 			printf("Thread [%d] locking (wait on work)\n", worker->index);
 		}
