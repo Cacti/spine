@@ -15,8 +15,9 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
- |    - Rivo Nurges (rrd support, mysql poller cache, misc functions)      |
- |    - RTG (core poller code, pthreads, snmp, autoconf examples)          |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
  | - raXnet - http://www.raxnet.net/                                       |
  +-------------------------------------------------------------------------+
@@ -25,7 +26,9 @@
 #include <pthread.h>
 
 static pthread_mutex_t crew_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t stats_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t threads_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mysql_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t rrdtool_lock = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t* get_lock(int lock) {
 	pthread_mutex_t *ret_val;
@@ -34,8 +37,14 @@ pthread_mutex_t* get_lock(int lock) {
 	case LOCK_CREW:
 		ret_val = &crew_lock;
 		break;
-	case LOCK_STATS:
-                ret_val = &stats_lock;
+	case LOCK_THREAD:
+                ret_val = &threads_lock;
+                break;
+	case LOCK_MYSQL:
+                ret_val = &mysql_lock;
+                break;
+	case LOCK_RRDTOOL:
+                ret_val = &rrdtool_lock;
                 break;
 	}
 	
@@ -49,3 +58,9 @@ void mutex_lock(int mutex) {
 void mutex_unlock(int mutex) {
 	pthread_mutex_unlock(get_lock(mutex));
 }
+
+int mutex_trylock(int mutex) {
+	return pthread_mutex_trylock(get_lock(mutex));
+}
+
+

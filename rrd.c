@@ -15,8 +15,9 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
- |    - Rivo Nurges (rrd support, mysql poller cache, misc functions)      |
- |    - RTG (core poller code, pthreads, snmp, autoconf examples)          |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
  | - raXnet - http://www.raxnet.net/                                       |
  +-------------------------------------------------------------------------+
@@ -28,38 +29,25 @@
 extern MYSQL mysql;
 extern char rrdtool_path[128];
 
-int update_rrd(rrd_t *rrd_targets, int rrd_target_count) {
-	int i;
-	FILE *rrdtool_stdin;
-	char rrdcmd[512];
-	char **rrdargv;
-	int rrdargc;
-	
-	#ifndef RRD
-	rrdtool_stdin=popen(rrdtool_path, "w");
-	#endif
-	
-	for(i=0; i<rrd_target_count; i++) {
-		if (set.verbose >= LOW) {
-			printf("rrdcmd: %s\n", rrd_targets[i].rrdcmd);
-		}
-		
-		#ifdef RRD
-		sprintf(rrdcmd,"%s", rrd_targets[i].rrdcmd);
-		rrdargv = string_to_argv(rrdcmd, &rrdargc);
-		rrd_update(rrdargc, rrdargv);
-		free(rrdargv);
-		#else
-		fprintf(rrdtool_stdin, "%s\n",rrd_targets[i].rrdcmd);
-		#endif
-	}
-	
-	#ifndef RRD
-	pclose(rrdtool_stdin);
-	#endif
+FILE *rrdtool_stdin;
+
+void rrd_open() {
+	rrdtool_stdin = popen(rrdtool_path, "w");
 }
 
-char *create_rrd(int local_data_id, char *data_source_path) {
+void rrd_close() {
+	pclose(rrdtool_stdin);
+}
+
+void rrd_cmd(char *rrdcmd) {
+	printf("RRDCMD: %s\n", rrdcmd);
+	
+	mutex_lock(LOCK_RRDTOOL);
+	fprintf(rrdtool_stdin, "%s\n", rrdcmd);
+	mutex_unlock(LOCK_RRDTOOL);
+}
+
+char *create_rrd(int local_data_id, char *data_source_path, MYSQL *mysql) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	
@@ -76,7 +64,7 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 	/* get a list of RRAs in this RRD file */
 	sprintf(query, "select data_template_data.rrd_step,rra.x_files_factor,rra.steps,rra.rows,rra_cf.consolidation_function_id,(rra.rows*rra.steps) as rra_order from data_template_data left join data_template_data_rra on data_template_data.id=data_template_data_rra.data_template_data_id left join rra on data_template_data_rra.rra_id=rra.id left join rra_cf on rra.id=rra_cf.rra_id where data_template_data.local_data_id=%i and (rra.steps is not null or rra.rows is not null) order by rra_cf.consolidation_function_id,rra_order", local_data_id);
 	
-	result = db_query(&mysql, query);
+	result = db_query(mysql, query);
 	
 	/* loop through each RRA */
 	for (i=0; i<mysql_num_rows(result); i++) {
@@ -93,7 +81,7 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 	/* get a list of DSs in this RRD file */
 	sprintf(query, "select data_source_name,rrd_heartbeat,rrd_minimum,rrd_maximum,data_source_type_id from data_template_rrd where local_data_id=%i", local_data_id);
 	
-	result = db_query(&mysql, query);
+	result = db_query(mysql, query);
 	
 	/* loop through each DS */
 	for (i=0; i<mysql_num_rows(result); i++) {
@@ -144,7 +132,7 @@ char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
 	return rrdcmd;
 }
 
-char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id) {
+char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id, MYSQL *mysql) {
 	char *p, *tokens[64];
 	static char rrdcmd[512] = "update '";
 	char *last;
@@ -169,7 +157,7 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id) {
 		sprintf(query, "select rrd_data_source_name from data_input_data_fcache where \
 			local_data_id=%i and data_input_field_name=\"%s\"", local_data_id, tokens[j]);
 		
-		result = db_query(&mysql, query);
+		result = db_query(mysql, query);
 		
 		/* make sure to check if the entry actual exists in the 'data_input_data_fcache' table, or cactid
 		will segfault */
@@ -199,7 +187,7 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id) {
 	return rrdcmd;
 }
 
-char *get_rrdtool_path() {
+char *get_rrdtool_path(MYSQL *mysql) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	
@@ -208,7 +196,7 @@ char *get_rrdtool_path() {
 	
 	sprintf(query, "select value from settings where name='path_rrdtool'");
 	
-	result = db_query(&mysql, query);
+	result = db_query(mysql, query);
 	
 	if (mysql_num_rows(result) == 0) {
 		sprintf(rrdtool_path, "%s", "rrdtool -");

@@ -15,8 +15,9 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
- |    - Rivo Nurges (rrd support, mysql poller cache, misc functions)      |
- |    - RTG (core poller code, pthreads, snmp, autoconf examples)          |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
  | - raXnet - http://www.raxnet.net/                                       |
  +-------------------------------------------------------------------------+

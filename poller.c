@@ -15,8 +15,9 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
- |    - Rivo Nurges (rrd support, mysql poller cache, misc functions)      |
- |    - RTG (core poller code, pthreads, snmp, autoconf examples)          |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
  | - raXnet - http://www.raxnet.net/                                       |
  +-------------------------------------------------------------------------+
@@ -35,130 +36,138 @@
  #include "mib.h"
 #endif
 
-extern target_t *current;
-extern host_t *hosts;
-extern MYSQL mysql;
-extern int num_hosts;
-
-void *poller(void *thread_args) {
-	/* for actions 1 and 2 */
+void poll_host(int host_id) {
+	char query[256];
+	int target_id = 0;
+	int num_rows;
 	FILE *cmd_stdout;
 	char cmd_result[255];
 	
-	worker_t *worker = (worker_t *) thread_args;
-	crew_t *crew = worker->crew;
-	target_t *entry = NULL;
+	int ignore_host = 0;
+	int rrd_ds_counter = 0;
 	
-	if (set.verbose >= HIGH){
-		printf("Thread [%d] starting.\n", worker->index);
-	}
+	target_t *entry;
+	multi_rrd_t *rrd_multids;
 	
-	while (1) {
-		if (set.verbose >= DEVELOP){
-			printf("Thread [%d] locking (wait on work)\n", worker->index);
-		}
+	MYSQL mysql;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	
+	sprintf(query, "select action,command,management_ip,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	
+	db_connect(set.dbdb, &mysql);
+	
+	result = db_query(&mysql, query);
+	num_rows = (int)mysql_num_rows(result);
+	
+	entry = (target_t *) malloc(sizeof(target_t));
+	
+	while ((row = mysql_fetch_row(result))) {
+		entry->target_id = 0;
+		entry->action = atoi(row[0]);
+		sprintf(entry->command, "%s", row[1]);
+		sprintf(entry->management_ip, "%s", row[2]);
+		sprintf(entry->snmp_community, "%s", row[3]);
+		entry->snmp_version = atoi(row[4]);
+		sprintf(entry->snmp_username, "%s", row[5]);
+		sprintf(entry->snmp_password, "%s", row[6]);
+		sprintf(entry->rrd_name, "%s", row[7]);
+		sprintf(entry->rrd_path, "%s", row[8]);
+		sprintf(entry->arg1, "%s", row[9]);
+		sprintf(entry->arg2, "%s", row[10]);
+		sprintf(entry->arg3, "%s", row[11]);
+		entry->local_data_id = atoi(row[12]);
+		entry->rrd_num = atoi(row[13]);
 		
-		mutex_lock(LOCK_CREW);
-		
-		while (current == NULL) {
-			if (pthread_cond_wait(&(crew->go), get_lock(LOCK_CREW)) != 0) {
-				printf("pthread_wait error\n");
-			}
-		}
-		
-		if (set.verbose >= DEVELOP) {
-			printf("Thread [%d] done waiting, received go (work cnt: %d)\n", worker->index, crew->work_count);
-		}
-		
-		if (current != NULL) {
-			entry = current;
-			
-			if (current->next != NULL) {
-				current = current->next;
+		switch(entry->action) {
+		case 0:
+			if (ignore_host == 0) {
+				sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, host_id));
 			}else{
-				current = NULL;
+				sprintf(entry->result, "%s", "U");
 			}
 			
-			switch(entry->action) {
-			case 0:
-				mutex_unlock(LOCK_CREW);
-				
-				if (get_host_status(entry->host_id) == 0) {
-					sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, entry->host_id, worker->index));
-				}else{
-					printf("[%i] downed host (%s) detected. ignoring.\n", worker->index, entry->management_ip);
-					sprintf(entry->result, "%s", "U");
-				}
-				
-				if (set.verbose >= LOW) {
-					printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", worker->index, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
-				}
-				
-				break;
-			case 1:
-				mutex_unlock(LOCK_CREW);
-				
-				cmd_stdout=popen(entry->command, "r");
-				
-				if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
-				
-				if (cmd_result == "") {
-					sprintf(entry->result, "%s", "U");
-				}else{
-					sprintf(entry->result, "%s", cmd_result);
-				}
-				
-				if (set.verbose >= LOW) {
-					printf("[%i] command: %s, output: %s\n", worker->index, entry->command, entry->result);
-				}
-				
-				pclose(cmd_stdout);
-				break;
-			case 2:
-				mutex_unlock(LOCK_CREW);
-				
-				cmd_stdout=popen(entry->command, "r");
-				
-				if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
-				
+			if (!strcmp(entry->result, "E")) {
+				ignore_host = 1;
+				printf("SNMP timeout detected, ignoring host '%s'\n", entry->management_ip);
+				sprintf(entry->result, "%s", "U");
+			}
+			
+			if (set.verbose >= LOW) {
+				printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
+			}
+			
+			break;
+		case 1:
+			cmd_stdout=popen(entry->command, "r");
+			
+			if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
+			
+			if (cmd_result == "") {
+				sprintf(entry->result, "%s", "U");
+			}else{
 				sprintf(entry->result, "%s", cmd_result);
+			}
+			
+			if (set.verbose >= LOW) {
+				printf("[%i] command: %s, output: %s\n", host_id, entry->command, entry->result);
+			}
+			
+			pclose(cmd_stdout);
+			break;
+		case 2:
+			cmd_stdout=popen(entry->command, "r");
+			
+			if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
+			
+			sprintf(entry->result, "%s", cmd_result);
+			
+			if (set.verbose >= LOW) {
+				printf("[%i] MUTLI command: %s, output: %s\n", host_id, entry->command, entry->result);
+			}
+			
+			pclose(cmd_stdout);
+			break;
+		}
+		
+		if (entry->rrd_num == 1) {
+			if (entry->action == 2) {
+				rrd_cmd(rrdcmd_string(entry->rrd_path, entry->result, entry->local_data_id, &mysql));
+			}else{
+				rrd_cmd(rrdcmd_lli(entry->rrd_name, entry->rrd_path, entry->result));
+			}
+		}else if (entry->rrd_num > 1) {
+			if (rrd_ds_counter == 0) {
+				rrd_multids = (multi_rrd_t *)malloc(entry->rrd_num * sizeof(multi_rrd_t));
+			}
+			
+			sprintf(rrd_multids[rrd_ds_counter].rrd_name, "%s", entry->rrd_name);
+			sprintf(rrd_multids[rrd_ds_counter].rrd_path, "%s", entry->rrd_path);
+			sprintf(rrd_multids[rrd_ds_counter].result, "%s", entry->result);
+			
+			rrd_ds_counter++;
+			
+			if (rrd_ds_counter == entry->rrd_num) {
+				rrd_cmd(rrdcmd_multids(rrd_multids, (rrd_ds_counter-1)));
 				
-				if (set.verbose >= LOW) {
-					printf("[%i] MUTLI command: %s, output: %s\n", worker->index, entry->command, entry->result);
-				}
-				
-				pclose(cmd_stdout);
-				break;
+				rrd_ds_counter = 0;
+				free(rrd_multids);
 			}
-			
-			if (set.verbose >= DEVELOP){
-				printf("Thread [%d] locking (update work_count)\n", worker->index);
-			}
-			
-			mutex_lock(LOCK_CREW);
-			
-			crew->work_count--;
-			
-			if (crew->work_count <= 0) {
-				if (set.verbose >= HIGH) {
-				    printf("Queue processed. Broadcasting thread done condition.\n");
-				}
-				
-				if (pthread_cond_broadcast(&crew->done) != 0) {
-					printf("pthread_cond error\n");
-				}
-			}
-			
-			if (set.verbose >= DEVELOP) {
-				printf("Thread [%d] unlocking (update work_count)\n", worker->index);
-			}
-			
-			mutex_unlock(LOCK_CREW);
+		}
+		
+		/* do RRD file path check */
+		if (!file_exists(entry->rrd_path)) {
+			rrd_cmd(create_rrd(entry->local_data_id, entry->rrd_path, &mysql));
 		}
 	}
+	
+	free(entry);
+	
+	mysql_free_result(result);
+	mysql_close(&mysql);
 }
 
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id, int current_thread) {
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id) {
 	void *sessp = NULL;
 	struct snmp_session session;
 	struct snmp_pdu *pdu = NULL;
@@ -173,7 +182,7 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 	char storedoid[BUFSIZE];
 	static char result_string[BUFSIZE];
 	
-	mutex_lock(LOCK_CREW);
+	mutex_lock(LOCK_THREAD);
 	
 	snmp_sess_init(&session);
 	
@@ -185,7 +194,7 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
 	#endif
 	
-	mutex_unlock(LOCK_CREW);
+	mutex_unlock(LOCK_THREAD);
 	
 	if (set.snmp_ver == 2) {
 		session.version = SNMP_VERSION_2c;
@@ -204,10 +213,6 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 	
 	strcpy(storedoid, snmp_oid);
 	
-	if (set.verbose >= DEVELOP) {
-		printf("Thread [%d] unlocking (done grabbing current)\n", current_thread);
-	}
-	
 	snmp_add_null_var(pdu, anOID, anOID_len);
 	
 	if (sessp != NULL) {
@@ -221,10 +226,6 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 		printf("*** SNMP Error: (%s) Bad descriptor.\n", session.peername);
 	}else if (status == STAT_TIMEOUT) {
 		printf("*** SNMP No response: (%s@%s).\n", session.peername, storedoid);
-		
-		mutex_lock(LOCK_CREW);
-		set_host_status(host_id, 2);
-		mutex_unlock(LOCK_CREW);
 	}else if (status != STAT_SUCCESS) {
 		printf("*** SNMP Error: (%s@%s) Unsuccessuful (%d).\n", session.peername, storedoid, status);
 	}else if (status == STAT_SUCCESS && response->errstat != SNMP_ERR_NOERROR) {
@@ -242,7 +243,9 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 		#endif
 	}
 	
-	if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
+	if (status == STAT_TIMEOUT) {
+		sprintf(result_string, "%s", "E");
+	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		sprintf(result_string, "%s", "U");
 	}
 	
@@ -255,32 +258,4 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int ho
 	}
 	
 	return result_string;
-}
-
-int get_host_status(int host_id) {
-	int i;
-	
-	mutex_lock(LOCK_CREW);
-	
-	for (i=0;i<num_hosts;i++) {
-		if (hosts[i].host_id == host_id) {
-			mutex_unlock(LOCK_CREW);
-			return hosts[i].status;
-		}
-	}
-	
-	mutex_unlock(LOCK_CREW);
-	
-	return 0;
-}
-
-void set_host_status(int host_id, int new_status) {
-	int i;
-	
-	for (i=0;i<num_hosts;i++) {
-		if (hosts[i].host_id == host_id) {
-			hosts[i].status = new_status;
-			return;
-		}
-	}
 }

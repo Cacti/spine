@@ -15,8 +15,9 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
- |    - Rivo Nurges (rrd support, mysql poller cache, misc functions)      |
- |    - RTG (core poller code, pthreads, snmp, autoconf examples)          |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
  | - raXnet - http://www.raxnet.net/                                       |
  +-------------------------------------------------------------------------+
@@ -58,7 +59,9 @@
 #define DEVELOP 4
 
 #define LOCK_CREW 0
-#define LOCK_STATS 1
+#define LOCK_THREAD 1
+#define LOCK_MYSQL 2
+#define LOCK_RRDTOOL 3
 
 #define STAT_DESCRIP_ERROR 99
 
@@ -86,7 +89,7 @@ typedef struct target_struct{
   int target_id;
   char result[255];
   int local_data_id;
-  int host_id;
+  int rrd_num;
   int action;
   char command[256];
   char management_ip[16];
@@ -133,7 +136,7 @@ int get_targets();
 
 /* Precasts: poller.c */
 void *poller(void *);
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id, int current_thread);
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id);
 int get_host_status(int host_id);
 void set_host_status(int host_id, int new_status);
 
@@ -153,6 +156,7 @@ int is_number(char *string);
 /* Precasts: locks.c */
 void mutex_lock(int);
 void mutex_unlock(int);
+int mutex_trylock(int mutex);
 pthread_mutex_t* get_lock(int lock);
 
 /* Globals */

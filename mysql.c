@@ -15,8 +15,9 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
- |    - Rivo Nurges (rrd support, mysql poller cache, misc functions)      |
- |    - RTG (core poller code, pthreads, snmp, autoconf examples)          |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
  | - raXnet - http://www.raxnet.net/                                       |
  +-------------------------------------------------------------------------+
@@ -43,7 +44,7 @@ int db_insert(char *query, MYSQL *mysql) {
 
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
-
+	
 	mysql_query(mysql, query);
 	mysql_res = mysql_store_result(mysql);
 	
@@ -53,10 +54,12 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 
 int db_connect(char *database, MYSQL *mysql) {
 	if (set.verbose >= LOW) {
-		printf("Connecting to MySQL database '%s' on '%s'...", database, set.dbhost);
+		printf("Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
 	
+	mutex_lock(LOCK_MYSQL);
 	mysql_init(mysql);
+	mutex_unlock(LOCK_MYSQL);
     	
 	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
 		fprintf(stderr, "** Failed: %s\n", mysql_error(mysql));
