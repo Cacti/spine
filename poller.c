@@ -411,13 +411,9 @@ char *exec_poll(host_t *current_host, char *command) {
 		/* cleanup file and pipe */
 		fflush(cmd_stdout);
 		fclose(cmd_stdout);
-		return_value = nft_pclose(cmd_fd);
+		nft_pclose(cmd_fd);
 
-		if (return_value != 0) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Problem executing command [%s]: '%s'\n", current_host->id, current_host->hostname, command);
-			cacti_log(logmessage);
-			snprintf(result_string, BUFSIZE, "%s", "U");
-		}else if (strlen(cmd_result) == 0) {
+		if (strlen(cmd_result) == 0) {
 			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 			cacti_log(logmessage);
 			snprintf(result_string, BUFSIZE, "%s", "U");
