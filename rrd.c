@@ -123,9 +123,14 @@ char *create_rrd(int local_data_id, char *data_source_path) {
 
 char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 	int i;
-	char part1[64]="", part2[64]="";
+	char part1[256]="", part2[256]="";
 	char rrdcmd[512];
-	char temp[64];
+	char temp[256];
+	
+	if (multi_target_count > 15) {
+		printf("too many data sources in this RRD! (%i), trimming to 15\n", multi_target_count);
+		multi_target_count = 15;
+	}
 	
 	for(i=0; i<=multi_target_count; i++) {
 		if(i!=0) strcat(part1, ":");
