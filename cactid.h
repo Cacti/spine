@@ -128,8 +128,6 @@ typedef struct target_struct {
 } target_t;
 
 typedef struct php_pipe_struct {
-	int php_output_pdes[2];
-	int php_input_pdes[2];
 	int php_write_fd;
 	int php_read_fd;
 } php_t;

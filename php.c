@@ -88,6 +88,8 @@ char *php_readpipe() {
 /*  php_init() - Initialize the PHP Script Server                             */
 /******************************************************************************/
 int php_init() {
+	int cacti2php_pdes[2];
+	int php2cacti_pdes[2];
 	char logmessage[255];
 	int i = 0;
     int  pid;
@@ -101,13 +103,13 @@ int php_init() {
 	}
 
 	/* create the input pipes */
-    if (pipe(php_pipes.php_input_pdes) < 0) {
+    if (pipe(php2cacti_pdes) < 0) {
 		cacti_log("ERROR: Could not allocate php server pipes\n", "e");
 		return -1;
 	}
 
 	/* create the output pipes */
-    if (pipe(php_pipes.php_output_pdes) < 0) {
+    if (pipe(cacti2php_pdes) < 0) {
 		cacti_log("ERROR: Could not allocate php server pipes\n", "e");
 		return -1;
 	}
@@ -130,10 +132,10 @@ int php_init() {
 			if (set.verbose >= DEBUG) {
 				printf("CACTID: PHP Script Server Child FORK Failed.\n");
 			}
-			close(php_pipes.php_input_pdes[0]);
-			close(php_pipes.php_input_pdes[1]);
-			close(php_pipes.php_output_pdes[0]);
-			close(php_pipes.php_output_pdes[1]);
+			close(php2cacti_pdes[0]);
+			close(php2cacti_pdes[1]);
+			close(cacti2php_pdes[0]);
+			close(cacti2php_pdes[1]);
 
 			cacti_log("ERROR: Could not fork php script server\n","e");
 			pthread_setcancelstate(cancel_state, NULL);
@@ -142,14 +144,14 @@ int php_init() {
 			/* NOTREACHED */
 	    case 0:	/* SUCCESS: I am now the child */
 			/* Set the standard input/output channels of the new process.  */
-			dup2(php_pipes.php_output_pdes[0], STDIN_FILENO);
-			dup2(php_pipes.php_input_pdes[1], STDOUT_FILENO);
+			dup2(cacti2php_pdes[0], STDIN_FILENO);
+			dup2(php2cacti_pdes[1], STDOUT_FILENO);
 
 			/* Close Unneeded Pipes */
-//			(void)close(php_pipes.php_input_pdes[0]);
-//			(void)close(php_pipes.php_input_pdes[1]);
-//			(void)close(php_pipes.php_output_pdes[0]);
-//			(void)close(php_pipes.php_output_pdes[1]);
+			(void)close(php2cacti_pdes[0]);
+			(void)close(php2cacti_pdes[1]);
+			(void)close(cacti2php_pdes[0]);
+			(void)close(cacti2php_pdes[1]);
 
 			/* start the php script server process */
 			execve(argv[0], argv, environ);
@@ -163,11 +165,11 @@ int php_init() {
 
     /* Parent */
 	/* Close Unneeded Pipes */
-	close(php_pipes.php_output_pdes[0]);
-	close(php_pipes.php_input_pdes[1]);
+	close(cacti2php_pdes[0]);
+	close(php2cacti_pdes[1]);
 
-	php_pipes.php_write_fd = php_pipes.php_output_pdes[1];
-	php_pipes.php_read_fd = php_pipes.php_input_pdes[0];
+	php_pipes.php_write_fd = cacti2php_pdes[1];
+	php_pipes.php_read_fd = php2cacti_pdes[0];
 
     /* Restore caller's cancellation state. */
     pthread_setcancelstate(cancel_state, NULL);
