@@ -323,8 +323,7 @@ void process_data() {
 			free(rrd_multids);
 			current_local_data_id=0;
 		} else if(entry->action==2){
-			printf("String result\n");
-			printf("ldid: %i\n", entry->local_data_id);
+			printf("String result: %s\n", entry->stringresult);
 			sprintf(rrd_targets[rrd_target_counter].rrdcmd, "%s", rrdcmd_string(entry->rrd_path, entry->stringresult, entry->local_data_id));
 			rrd_target_counter++;
 		} else {
