@@ -186,8 +186,15 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 			exit(1);
 		}
 		
-		row = mysql_fetch_row(result);
-		strcat(rrdcmd, row[0]);
+		/* make sure to check if the entry actual exists in the 'data_input_data_fcache' table, or cactid
+		will segfault */
+		if (mysql_num_rows(result) == 0) {
+			printf("ERROR: Field name '%s' not in field cache!\n", tokens[j]);
+			strcat(rrdcmd, tokens[j]);
+		}else{
+			row = mysql_fetch_row(result);
+			strcat(rrdcmd, row[0]);
+		}
 	}
 	
 	mysql_close(&mysql);
