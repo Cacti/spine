@@ -475,7 +475,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	int return_value;
 	int bytes_read;
 	char logmessage[LOGSIZE];
-	char cmd_result[BUFSIZE];
+	char *win32_command;
 
 	fd_set fds;
 	int rescode, numfds;
@@ -487,7 +487,14 @@ char *exec_poll(host_t *current_host, char *command) {
 	timeout.tv_sec = 10;
 	timeout.tv_usec = 0;
 
-	cmd_fd = nft_popen((char *)clean_string(command), "r");
+	/* nasty workaround to compensate for vbs WMI calling parameters not wanting backslashes bothered with */
+	#ifdef __CYGWIN__
+	win32_command = add_win32_slashes(command, 2);
+	cmd_fd = nft_popen((char *)win32_command, "r");
+	free(win32_command);
+	#else
+	cmd_fd = nft_popen((char *)command, "r");
+	#endif
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd);
@@ -533,7 +540,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
+			bytes_read = read(cmd_fd, result_string, BUFSIZE);
 			if (bytes_read) {
 				result_string[bytes_read] = '\0';
 				strip_string_crlf(result_string); 

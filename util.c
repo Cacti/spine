@@ -1171,6 +1171,52 @@ char *clean_string(char *string) {
 }
 
 /******************************************************************************/
+/*  add_win32_slashes() - add slashes to Window'z arguments for scripts.      */
+/******************************************************************************/
+char *add_win32_slashes(char *string, int arguments_2_strip) {
+	int length;
+	int space_count;
+	int position;
+	int new_position;
+	
+	char *return_str = (char *) malloc(BUFSIZE);
+
+	length = strlen(string);
+	space_count = 0;
+	position = 0;
+	new_position = position;
+	
+	/* simply return on blank string */
+	if (!length) {
+		return string;
+	}
+
+	while (position < length) {
+		/* backslash detected, change to forward slash */
+		if (string[position] == '\\') {	
+			/* only add slashes for first x arguments */
+			if (space_count < arguments_2_strip) {
+				return_str[new_position] = '/';
+			} else {
+				return_str[new_position] = string[position];
+			}
+		/* end of argument detected */
+		} else if (string[position] == ' ') {
+			return_str[new_position] = ' ';
+			space_count++;
+		/* normal character detected */
+		} else {
+			return_str[new_position] = string[position];
+		}
+		new_position++;
+		position++;
+	}
+	return_str[new_position] = '\0';
+
+	return(return_str);
+}
+
+/******************************************************************************/
 /*  strip_quotes() - remove beginning and ending quotes from a string         */
 /******************************************************************************/
 char *strip_quotes(char *string) {
