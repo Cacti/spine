@@ -400,7 +400,7 @@ int validate_result(char * result) {
 		}
 	}
 
-	/* it has no delimiters and has space */
+	/* it has delimiters and has no space */
 	if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
 		if (strstr(result, " ") == 0) {
 			return(1);
@@ -438,6 +438,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	FILE *cmd_stdout;
 	int cmd_fd;
 	int return_value;
+	int bytes_read;
 	char cmd_result[BUFSIZE];
 	char logmessage[LOGSIZE];
 
@@ -479,7 +480,8 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			read(cmd_fd, cmd_result, sizeof(cmd_result));
+			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
+			snprintf(cmd_result, bytes_read, "%s", cmd_result);
 		}
 
 		/* cleanup file and pipe */
