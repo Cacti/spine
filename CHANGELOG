@@ -1,9 +1,12 @@
 raXnet – cactid
 
 0.8.6e
+-bug: removed code that was converting back slashes to forward slashes
 -bug: re-implemented thread safe operations for non-linux systems
 -bug: reduced timeout for popen and script server back to 10 seconds
+-bug: allow cactid to poll from non-standard snmp port
 -bug: optimized some string handling routines
+-bug: removed thread locks around MySQL to optimize performance
 -feature: added polling for non host specific data sources
 
 0.8.6d
