@@ -45,9 +45,9 @@ void rrd_close() {
 void rrd_cmd(char *rrdcmd) {
 	printf("RRDCMD: %s\n", rrdcmd);
 	
-	mutex_lock(LOCK_RRDTOOL);
+	thread_mutex_lock(LOCK_RRDTOOL);
 	fprintf(rrdtool_stdin, "%s\n", rrdcmd);
-	mutex_unlock(LOCK_RRDTOOL);
+	thread_mutex_unlock(LOCK_RRDTOOL);
 	
 	free(rrdcmd);
 }

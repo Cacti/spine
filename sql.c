@@ -59,9 +59,9 @@ int db_connect(char *database, MYSQL *mysql) {
 		printf("Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
 	
-	mutex_lock(LOCK_MYSQL);
+	thread_mutex_lock(LOCK_MYSQL);
 	mysql_init(mysql);
-	mutex_unlock(LOCK_MYSQL);
+	thread_mutex_unlock(LOCK_MYSQL);
     	
 	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
 		fprintf(stderr, "** Failed: %s\n", mysql_error(mysql));

@@ -23,7 +23,7 @@
  +-------------------------------------------------------------------------+
 */
 
-void mutex_lock(int);
-void mutex_unlock(int);
-int mutex_trylock(int mutex);
+void thread_mutex_lock(int);
+void thread_mutex_unlock(int);
+int thread_mutex_trylock(int mutex);
 pthread_mutex_t* get_lock(int lock);

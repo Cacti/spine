@@ -58,15 +58,15 @@ pthread_mutex_t* get_lock(int lock) {
 	return ret_val;
 }
 
-void mutex_lock(int mutex) {
+void thread_mutex_lock(int mutex) {
 	pthread_mutex_lock(get_lock(mutex));
 }
 
-void mutex_unlock(int mutex) {
+void thread_mutex_unlock(int mutex) {
 	pthread_mutex_unlock(get_lock(mutex));
 }
 
-int mutex_trylock(int mutex) {
+int thread_mutex_trylock(int mutex) {
 	return pthread_mutex_trylock(get_lock(mutex));
 }
 

@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	
 	while (device_counter < num_rows) {
-		if (mutex_trylock(LOCK_THREAD) != EBUSY) {
+		if (thread_mutex_trylock(LOCK_THREAD) != EBUSY) {
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
 			}
@@ -132,14 +132,14 @@ int main(int argc, char *argv[]) {
 				active_threads++;
 			}
 			
-			mutex_unlock(LOCK_THREAD);
+			thread_mutex_unlock(LOCK_THREAD);
 		}
 		
 		usleep(THREAD_SLEEP);
 	}
 
 	while (canexit == 0) {
-		if (mutex_trylock(LOCK_THREAD) != EBUSY) {
+		if (thread_mutex_trylock(LOCK_THREAD) != EBUSY) {
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
 			}
@@ -148,7 +148,7 @@ int main(int argc, char *argv[]) {
 				canexit = 1;
 			}
 			
-			mutex_unlock(LOCK_THREAD);
+			thread_mutex_unlock(LOCK_THREAD);
 		}
 		
 		usleep(THREAD_SLEEP);

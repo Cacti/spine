@@ -38,9 +38,9 @@ void *child(void * arg) {
 	
 	poll_host(host_id);
 
-	mutex_lock(LOCK_THREAD);
+	thread_mutex_lock(LOCK_THREAD);
 	active_threads--;
-	mutex_unlock(LOCK_THREAD);
+	thread_mutex_unlock(LOCK_THREAD);
 	
 	#ifndef OLD_MYSQL
 	mysql_thread_end();
@@ -50,7 +50,8 @@ void *child(void * arg) {
 }
 
 void poll_host(int host_id) {
-	char query[256];
+	char query1[256];
+	char query2[256];
 	int target_id = 0;
 	int num_rows;
 	FILE *cmd_stdout;
@@ -68,14 +69,31 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	
-	snprintf(query, sizeof(query), "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	void *snmp_session_ptr = NULL;
+	
+	snprintf(query1, sizeof(query1), "select action,command,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from data_input_data_cache where host_id=%i order by rrd_path,rrd_name", host_id);
+	snprintf(query2, sizeof(query2), "select hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
 	
 	db_connect(set.dbdb, &mysql);
 	
-	result = db_query(&mysql, query);
+	/* get data about this host */
+	result = db_query(&mysql, query2);
 	num_rows = (int)mysql_num_rows(result);
 	
+	if (num_rows != 1) {
+		printf("Unknown host id, %i!", host_id);
+		return;
+	}
+	
+	row = mysql_fetch_row(result);
+	
+	/* initialize the snmp session */ 
+	snmp_session_ptr = snmp_host_init(row[0], row[1], atoi(row[2]), atoi(row[3]), atoi(row[4]));
+	
 	entry = (target_t *) malloc(sizeof(target_t));
+	
+	result = db_query(&mysql, query1);
+	num_rows = (int)mysql_num_rows(result);
 	
 	while ((row = mysql_fetch_row(result))) {
 		entry->target_id = 0;
@@ -105,7 +123,8 @@ void poll_host(int host_id) {
 		case 0:
 			if (ignore_host == 0) {
 				if ((entry->snmp_version == 1) || (entry->snmp_version == 2)) {
-					snmp_result = snmp_get(entry->hostname, entry->snmp_community, entry->snmp_version, entry->arg1, entry->snmp_port, entry->snmp_timeout, host_id);
+					snmp_result = snmp_get(snmp_session_ptr, entry->arg1, entry->hostname);
+					
 					snprintf(entry->result, sizeof(entry->result), "%s", snmp_result);
 					free(snmp_result);
 				}else{
@@ -127,15 +146,15 @@ void poll_host(int host_id) {
 			
 			break;
 		case 1:
-			mutex_lock(LOCK_PIPE);
+			thread_mutex_lock(LOCK_PIPE);
 			cmd_stdout=popen(entry->command, "r");
-			mutex_unlock(LOCK_PIPE);
+			thread_mutex_unlock(LOCK_PIPE);
 			
 			fgets(cmd_result, 255, cmd_stdout);
 			
-			mutex_lock(LOCK_PIPE);
+			thread_mutex_lock(LOCK_PIPE);
 			return_value = pclose(cmd_stdout);
-			mutex_unlock(LOCK_PIPE);
+			thread_mutex_unlock(LOCK_PIPE);
 			
 			if (return_value != 0) {
 				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
@@ -153,15 +172,15 @@ void poll_host(int host_id) {
 			
 			break;
 		case 2:
-			mutex_lock(LOCK_PIPE);
+			thread_mutex_lock(LOCK_PIPE);
 			cmd_stdout=popen(entry->command, "r");
-			mutex_unlock(LOCK_PIPE);
+			thread_mutex_unlock(LOCK_PIPE);
 			
 			fgets(cmd_result, 255, cmd_stdout);
 			
-			mutex_lock(LOCK_PIPE);
+			thread_mutex_lock(LOCK_PIPE);
 			return_value = pclose(cmd_stdout);
-			mutex_unlock(LOCK_PIPE);
+			thread_mutex_unlock(LOCK_PIPE);
 			
 			if (return_value != 0) {
 				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
@@ -207,6 +226,8 @@ void poll_host(int host_id) {
 			}
 		}
 	}
+	
+	snmp_host_cleanup(snmp_session_ptr);
 	
 	free(entry);
 	
