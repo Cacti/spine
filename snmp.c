@@ -39,13 +39,9 @@
 #endif
 
 void snmp_init() {
-	struct snmp_session session;
-	
 	init_snmp("cactid");
 	
 	SOCK_STARTUP;
-	
-	snmp_sess_init(&session);
 	
 	#ifdef USE_NET_SNMP
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
@@ -62,22 +58,11 @@ void snmp_free() {
 	SOCK_CLEANUP;
 }
 
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int snmp_port, int snmp_timeout, int host_id) {
-	void *sessp = NULL;
+void *snmp_host_init(char *snmp_host, char *snmp_comm, int ver, int snmp_port, int snmp_timeout) {
+	static void *sessp = NULL;
 	struct snmp_session session;
-	struct snmp_pdu *pdu = NULL;
-	struct snmp_pdu *response = NULL;
-	oid anOID[MAX_OID_LEN];
-	size_t anOID_len = MAX_OID_LEN;
-	struct variable_list *vars = NULL;
 	
-	int status;
-	
-	char query[BUFSIZE];
-	char storedoid[BUFSIZE];
 	char hostname[BUFSIZE];
-	
-	char *result_string = (char *) malloc(BUFSIZE);
 	
 	snmp_sess_init(&session);
 	
@@ -96,9 +81,30 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int sn
 	session.community = snmp_comm;
 	session.community_len = strlen(snmp_comm);
 	
-	mutex_lock(LOCK_SNMP);
+	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	mutex_unlock(LOCK_SNMP);
+	thread_mutex_unlock(LOCK_SNMP);
+	
+	return sessp;
+}
+
+void snmp_host_cleanup(void *sessp) {
+	snmp_sess_close(sessp);
+}
+
+char *snmp_get(void *sessp, char *snmp_oid, char *hostname) {
+	struct snmp_pdu *pdu = NULL;
+	struct snmp_pdu *response = NULL;
+	oid anOID[MAX_OID_LEN];
+	size_t anOID_len = MAX_OID_LEN;
+	struct variable_list *vars = NULL;
+	
+	int status;
+	
+	char query[BUFSIZE];
+	char storedoid[BUFSIZE];
+	
+	char *result_string = (char *) malloc(BUFSIZE);
 	
 	anOID_len = MAX_OID_LEN;
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
@@ -116,11 +122,11 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int sn
 	
 	/* No or Bad SNMP Response */
 	if (status == STAT_DESCRIP_ERROR) {
-		printf("*** SNMP No response: (%s@%s).\n", session.peername, storedoid);
+		printf("*** SNMP No response: (%s@%s).\n", hostname, storedoid);
 	}else if (status != STAT_SUCCESS) {
-		printf("*** SNMP Error: (%s@%s) Unsuccessuful (%d).\n", session.peername, storedoid, status);
+		printf("*** SNMP Error: (%s@%s) Unsuccessuful (%d).\n", hostname, storedoid, status);
 	}else if (status == STAT_SUCCESS && response->errstat != SNMP_ERR_NOERROR) {
-		printf("*** SNMP Error: (%s@%s) %s\n", session.peername, storedoid, snmp_errstring(response->errstat));
+		printf("*** SNMP Error: (%s@%s) %s\n", hostname, storedoid, snmp_errstring(response->errstat));
 	}
 	
 	/* Liftoff, successful poll, process it */
@@ -141,8 +147,6 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int sn
 	}
 	
 	if (sessp != NULL) {
-		snmp_sess_close(sessp);
-		
 		if (response != NULL) {
 			snmp_free_pdu(response);
 		}
