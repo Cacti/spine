@@ -236,6 +236,9 @@ struct icmphdr {
 config_t set;
 php_t php_pipes;
 
+/* Variables for Time Display */
+char start_datetime[20];
+
 char config_paths[CONFIG_PATHS][BUFSIZE];
 
 #endif /* not _CACTID_H_ */

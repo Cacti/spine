@@ -44,13 +44,14 @@ int active_threads = 0;
 
 int main(int argc, char *argv[]) {
 	struct timeval now;
-	double begin_time, end_time;
 	char *conf_file = NULL;
-
+	double begin_time, end_time;
 	int num_rows;
 	int device_counter = 0;
 	int last_active_threads = 0;
 	long int THREAD_SLEEP = 100000;
+	time_t nowbin;
+	const struct tm *nowstruct;
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
@@ -71,6 +72,15 @@ int main(int argc, char *argv[]) {
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+	/* get time for poller_output table */
+	if (time(&nowbin) == (time_t) - 1)
+		printf("ERROR: Could not get time of day from time()\n");
+
+	nowstruct = localtime(&nowbin);
+
+	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", nowstruct) == (size_t) 0)
+		printf("ERROR: Could not get string from strftime()\n");
 
 	set.verbose = POLLER_VERBOSITY_HIGH;
 

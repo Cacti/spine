@@ -1086,7 +1086,7 @@ int file_exists(char *filename) {
 /******************************************************************************/
 /*  is_numeric() - check to see if a string is long or double.                */
 /******************************************************************************/
-is_numeric(char *string)
+int is_numeric(char *string)
 {
 	extern int errno;
 	long local_lval;
