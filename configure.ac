@@ -12,6 +12,13 @@ AC_LANG(C)
 AM_INIT_AUTOMAKE(cactid, 0.8.5)
 AM_CONFIG_HEADER(config/config.h)
 
+# static libraries
+AC_ARG_WITH(static,
+	AC_HELP_STRING(
+		[--with-static],
+		[Build using static libraries]),
+	[CFLAGS="-static $CFLAGS"])
+
 # mysql
 AC_ARG_WITH(mysql,
 	AC_HELP_STRING(
@@ -26,7 +33,6 @@ AC_ARG_WITH(snmp,
 		[--with-snmp],
 		[SNMP include base directory [[/usr/(local/)include]]]),
 	[SNMP_DIR=$withval])
-
 
 # if host_alias is empty, ac_cv_host_alias may still have the info
 if test -z "$host_alias"; then
