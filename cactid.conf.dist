@@ -32,9 +32,7 @@
 # | DB_Pass	the password for the cacti user                             |
 # | Threads	integer between 1 and 20				    |
 # | LogFile	UNC path name to the cacti logfile			    |  
-# | Verbose	STDOUT Reporting Levels			                    |
 # +-------------------------------------------------------------------------+
-Verbose         2
 Interval        300 # not currently used
 SNMP_Ver        1
 DB_Host         192.168.0.2
@@ -42,5 +40,4 @@ DB_Database     cacti
 DB_User         cactiuser
 DB_Pass         cacti
 Threads         10
-PHP_Server      c:/wwwroot/cacti/script_server.php
 LogFile	        c:/wwwroot/cacti/log/cacti.log
