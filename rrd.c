@@ -129,7 +129,7 @@ char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 	for(i=0; i<=multi_target_count; i++) {
 		if(i!=0) strcat(part1, ":");
 		strcat(part1, multi_targets[i].rrd_name);
-		sprintf(temp, ":%lli", multi_targets[i].result);
+		sprintf(temp, ":%s", multi_targets[i].result);
 		strcat(part2, temp);
 	}
 	
@@ -138,9 +138,9 @@ char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 	return rrdcmd;
 }
 
-char *rrdcmd_lli(char *rrd_name, char *rrd_path, unsigned long long int result) {
+char *rrdcmd_lli(char *rrd_name, char *rrd_path, char *result) {
 	char rrdcmd[512];
-	sprintf(rrdcmd, "update %s --template %s N:%lli", rrd_path, rrd_name, result);
+	sprintf(rrdcmd, "update %s --template %s N:%s", rrd_path, rrd_name, result);
 	
 	return rrdcmd;
 }
@@ -194,6 +194,8 @@ char *rrdcmd_string(char *rrd_path, char *stringresult, int local_data_id){
 		}else{
 			row = mysql_fetch_row(result);
 			strcat(rrdcmd, row[0]);
+			
+			printf("MULTI expansion: found fieldname: %s, found rrdname: %s, local_data_id: %i\n", row[0], tokens[j], local_data_id);
 		}
 	}
 	

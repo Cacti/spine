@@ -73,10 +73,10 @@ int main(int argc, char *argv[]) {
 		break;
 	}
 	*/
-	set.verbose = DEVELOP;
+	set.verbose = LOW;
 	
 	if (set.verbose >= LOW) {
-		printf("RTG version %s starting.", VERSION);
+		printf("cactid version %s starting.", VERSION);
 	}
 	
 	/* Initialize signal handler */
@@ -197,12 +197,11 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		
-		printf("Work_count: %i\n",crew.work_count);
-		
 		mutex_unlock(LOCK_CREW);
 		
 		gettimeofday(&now, NULL);
 		lock = FALSE;
+		
 		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 		stats.poll_time = end_time - begin_time;
 		stats.round++;
@@ -218,9 +217,9 @@ int main(int argc, char *argv[]) {
 		}
 		
 		if (set.verbose >= LOW) {
-			sprintf(errstr, "Poll round %d complete.", stats.round);
-			timestamp(errstr);
-			print_stats(stats);
+			printf("\n----- Poll round %d complete. (Polling Time: %fs) -----\n\n", stats.round, stats.poll_time);
+			//timestamp(errstr);
+			//print_stats(stats);
 		}
 		
 		process_data();
@@ -291,8 +290,6 @@ void process_data() {
 			current_head=1;
 		}
 	
-		//printf("management_ip: %s oid: %s result: %lli\n",entry->management_ip, entry->arg1, entry->result);
-		
 		if(entry->local_data_id == current->local_data_id) {
 			//printf("Multi DS RRA\n");
 			
@@ -302,29 +299,28 @@ void process_data() {
 				rrd_multids_counter=0;
 				sprintf(rrd_multids[rrd_multids_counter].rrd_name, "%s", entry->rrd_name);
 				sprintf(rrd_multids[rrd_multids_counter].rrd_path, "%s", entry->rrd_path);
-				rrd_multids[rrd_multids_counter].result = entry->result;
+				sprintf(rrd_multids[rrd_multids_counter].result, "%s", entry->result);
 				rrd_multids_counter++;
 				current_local_data_id = entry->local_data_id;
 			} else if(entry->local_data_id == current_local_data_id){
 				//printf("Old MultiDS: %i\n", entry->local_data_id);
 				sprintf(rrd_multids[rrd_multids_counter].rrd_name, "%s", entry->rrd_name);
 				sprintf(rrd_multids[rrd_multids_counter].rrd_path, "%s", entry->rrd_path);
-				rrd_multids[rrd_multids_counter].result = entry->result;
+				sprintf(rrd_multids[rrd_multids_counter].result, "%s", entry->result);
 				rrd_multids_counter++;
 			}
 		} else if(entry->local_data_id == current_local_data_id && current->local_data_id != current_local_data_id){
 			//printf("Last MultiDS: %i\n", entry->local_data_id);
 			sprintf(rrd_multids[rrd_multids_counter].rrd_name, "%s", entry->rrd_name);
 			sprintf(rrd_multids[rrd_multids_counter].rrd_path, "%s", entry->rrd_path);
-			rrd_multids[rrd_multids_counter].result = entry->result;
-		
+			sprintf(rrd_multids[rrd_multids_counter].result, "%s", entry->result);
+			
 			sprintf(rrd_targets[rrd_target_counter].rrdcmd, "%s", rrdcmd_multids(rrd_multids,rrd_multids_counter));
 			rrd_target_counter++;
 			free(rrd_multids);
 			current_local_data_id=0;
 		} else if(entry->action==2){
-			printf("String result: %s\n", entry->stringresult);
-			sprintf(rrd_targets[rrd_target_counter].rrdcmd, "%s", rrdcmd_string(entry->rrd_path, entry->stringresult, entry->local_data_id));
+			sprintf(rrd_targets[rrd_target_counter].rrdcmd, "%s", rrdcmd_string(entry->rrd_path, entry->result, entry->local_data_id));
 			rrd_target_counter++;
 		} else {
 			//printf("Single DS RRA\n");
@@ -378,7 +374,7 @@ int get_targets(){
 	
 	sprintf(query, "select action,command,management_ip,snmp_community, \
 		snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, \
-		arg1, arg2, arg3, local_data_id from data_input_data_cache order \
+		arg1, arg2, arg3,local_data_id from data_input_data_cache order \
 		by local_data_id");
 	
 	if (mysql_query(&mysql, query)) {

@@ -26,12 +26,10 @@
 #include "cactid.h"
 
 #ifdef OLD_UCD_SNMP
- #include "asn1.h"
- #include "snmp_api.h"
- #include "snmp_impl.h"
- #include "snmp_client.h"
+ #include <ucd-snmp/ucd-snmp-config.h>
+ #include <ucd-snmp/ucd-snmp-includes.h>
+ #include <ucd-snmp/system.h>
  #include "mib.h"
- #include "snmp.h"
 #else
  #include "net-snmp-config.h"
  #include "net-snmp-includes.h"
@@ -44,7 +42,7 @@ extern MYSQL mysql;
 void *poller(void *thread_args) {
 	/* for actions 1 and 2 */
 	FILE *cmd_stdout;
-	char cmd_result[64];
+	char cmd_result[255];
 	
 	worker_t *worker = (worker_t *) thread_args;
 	crew_t *crew = worker->crew;
@@ -53,12 +51,6 @@ void *poller(void *thread_args) {
 	if (set.verbose >= HIGH){
 		printf("Thread [%d] starting.\n", worker->index);
 	}
-	
-	//if (MYSQL_VERSION_ID > 40000){
-	//	mysql_thread_init();
-	//}else{
-	//	my_thread_init();
-	//}
 	
 	while (1) {
 		if (set.verbose >= DEVELOP){
@@ -88,17 +80,24 @@ void *poller(void *thread_args) {
 			
 			switch(entry->action) {
 			case 0:
-				entry->result = snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, worker->index);
+				sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, worker->index));
+				printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", worker->index, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
+				
 				break;
 			case 1:
 				mutex_unlock(LOCK_CREW);
 				
 				cmd_stdout=popen(entry->command, "r");
 				
-				if(cmd_stdout != NULL) fgets(cmd_result, 64, cmd_stdout);
-				if(is_number(cmd_result)) entry->result = atoi(cmd_result);
+				if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
 				
-				printf("CMD: [%d] %s result: %lli\n", worker->index, entry->command, entry->result);
+				if (cmd_result == "") {
+					sprintf(entry->result, "%s", "U");
+				}else{
+					sprintf(entry->result, "%s", cmd_result);
+				}
+				
+				printf("[%i] command: %s, output: %s\n", worker->index, entry->command, entry->result);
 				
 				pclose(cmd_stdout);
 				break;
@@ -107,15 +106,12 @@ void *poller(void *thread_args) {
 				
 				cmd_stdout=popen(entry->command, "r");
 				
-				if(cmd_stdout != NULL) fgets(cmd_result, 64, cmd_stdout);
-				printf("cmd_result: %s\n", cmd_result);
-				sprintf(entry->stringresult, "%s", cmd_result);
-				entry->result=0;
+				if(cmd_stdout != NULL) fgets(cmd_result, 255, cmd_stdout);
 				
-				printf("MULTI CMD: %s result: %lli\n", entry->command, entry->result);
+				sprintf(entry->result, "%s", cmd_result);
+				printf("[%i] MUTLI command: %s, output: %s\n", worker->index, entry->command, entry->result);
 				
 				pclose(cmd_stdout);
-				
 				break;
 			}
 			
@@ -147,7 +143,7 @@ void *poller(void *thread_args) {
 }
 
 
-unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread) {
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread) {
 	void *sessp = NULL;
 	struct snmp_session session;
 	struct snmp_pdu *pdu = NULL;
@@ -156,16 +152,21 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 	size_t anOID_len = MAX_OID_LEN;
 	struct variable_list *vars = NULL;
 	
-	unsigned long long result = 0;
-	unsigned long long last_value = 0;
-	unsigned long long insert_val = 0;
+	int status;
 	
-	int status, bits, init = 0;
 	char query[BUFSIZE];
 	char storedoid[BUFSIZE];
 	char result_string[BUFSIZE];
 	
 	snmp_sess_init(&session);
+	
+	#ifdef OLD_UCD_SNMP
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
+	#else
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	#endif
 	
 	if (set.snmp_ver == 2) {
 		session.version = SNMP_VERSION_2c;
@@ -182,10 +183,6 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	read_objid(snmp_oid, anOID, &anOID_len);
 	
-	last_value = 0; /*OOOOO*/
-	init = 1; /*OOOOO*/
-	insert_val = 0;
-	bits = 32; /*OOOOO*/
 	strcpy(storedoid, snmp_oid);
 	
 	if (set.verbose >= DEVELOP) {
@@ -215,8 +212,6 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 	
 	/* Liftoff, successful poll, process it */
 	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
-		stats.polls++;
-		
 		vars = response->variables;
 		
 		#ifdef OLD_UCD_SNMP
@@ -224,90 +219,6 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 		#else
 		snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
 		#endif
-		
-		if (vars->type == ASN_COUNTER64) {
-			if (set.verbose >= DEBUG) {
-				printf("64-bit result: (%s@%s) %s\n", session.peername, storedoid, result_string);
-			}
-			
-			result = result << 32;
-			result = result + vars->val.counter64->low;
-		}else if (vars->type == ASN_COUNTER) {
-			if (set.verbose >= DEBUG) {
-				printf("32-bit result: (%s@%s) %s\n", session.peername, storedoid, result_string);
-			}
-			
-			result = (unsigned long) *(vars->val.integer);
-		}else if (vars->type == ASN_GAUGE) {
-			if (set.verbose >= DEBUG) {
-				printf("32-bit gauge: (%s@%s) %s\n", session.peername, storedoid, result_string);
-			}
-			
-			result = (unsigned long) *(vars->val.integer);
-		}else if (vars->type == ASN_INTEGER) {
-			if (set.verbose >= DEBUG) {
-				printf("32-bit result: (%s@%s) %s\n", session.peername, storedoid, result_string);
-			}
-			
-			result = (unsigned long) *(vars->val.integer);
-		}else{
-			if (set.verbose >= DEBUG) {
-				printf("Unknown result type: (%s@%s) %s\n", session.peername, storedoid, result_string);
-			}
-		}
-		
-		/* Counter Wrap Condition */
-		if (bits == 0) {
-			if (result != last_value) {
-				insert_val = result;
-				
-				if (set.verbose >= HIGH) {
-					printf("Thread [%d]: Gauge change from %lld to %lld\n", current_thread, last_value, insert_val);
-				}
-			} else insert_val = 0;
-		} else if (result < last_value) {
-			if (bits == 32) {
-				insert_val = (THIRTYTWO - last_value) + result;
-			}else if (bits == 64) {
-				insert_val = (SIXTYFOUR - last_value) + result;
-			}
-			
-			if (set.verbose >= LOW) {
-				printf("*** Counter Wrap (%s@%s) [poll: %lli][last: %llu][insert: %llu]\n",
-					session.peername, storedoid, result, last_value, insert_val);
-			}
-		/* Not a counter wrap and this is not the first poll */
-		} else if ((last_value >= 0) && (init >= 0)) {
-			insert_val = result - last_value;
-			
-			/* Print out SNMP result if verbose */
-			if (set.verbose == DEBUG) {
-				printf("Thread [%d]: (%lld-%lld) = %lli\n", current_thread, result, last_value, insert_val);
-			}
-			
-			if (set.verbose == HIGH) {
-				printf("Thread [%d]: %lli\n", current_thread, insert_val);
-			}
-		/* last_value < 0, so this must be the first poll */
-		} else {
-			if (set.verbose >= HIGH) {
-				printf("Thread [%d]: First Poll, Normalizing\n", current_thread);
-			}
-			
-			insert_val = 0;
-		}
-		
-		/* Check for bogus data, either negative or unrealistic */
-		if (insert_val > set.out_of_range || result < 0) {
-			if (set.verbose >= LOW) {
-				printf("*** Out of Range (%s@%s) [insert_val: %lli] [oor: %lld]\n",
-					session.peername, storedoid, insert_val, set.out_of_range);
-			}
-			
-			insert_val = 0;
-		}
-	}else{
-		result = 0;	
 	}
 	
 	if (sessp != NULL) {
@@ -318,5 +229,9 @@ unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char 
 		}
 	}
 	
-	return result;
+	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
+		return result_string;
+	}else{
+		return "U";
+	}
 }

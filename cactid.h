@@ -84,8 +84,7 @@ typedef struct config_struct {
 
 typedef struct target_struct{
   int target_id;
-  unsigned long long result;
-  char stringresult[255];
+  char result[255];
   int local_data_id;
   int action;
   char command[256];
@@ -94,7 +93,7 @@ typedef struct target_struct{
   int snmp_version;
   char snmp_username[50];
   char snmp_password[50];
-  char rrd_name[19];
+  char rrd_name[30];
   char rrd_path[255];
   char arg1[255];
   char arg2[255];
@@ -132,7 +131,7 @@ typedef struct rrd_struct{
 typedef struct multi_rrd_struct{
   char rrd_name[19];
   char rrd_path[255];
-  long long int result;
+  char result[255];
 }multi_rrd_t;
 
 /* Precasts: rtgpoll.c */
@@ -142,7 +141,7 @@ int get_targets();
 
 /* Precasts: rtgpoll.c */
 void *poller(void *);
-unsigned long long int snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread);
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread);
 
 /* Precasts: mysql.c */
 int db_insert(char *, MYSQL *);
