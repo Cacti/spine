@@ -83,10 +83,10 @@ int read_config_options(config_t *set) {
 		if (strlen(mysql_row[0]) != 0) {
 			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
 		} else {
-			strncpy(set->path_logfile, strcat(web_root, "/log/rrd.log"), sizeof(set->path_logfile));
+			strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
 		}
 	} else {
-		strncpy(set->path_logfile, strcat(web_root, "/log/rrd.log"), sizeof(set->path_logfile));
+		strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
  	}
 
 	/* log the path_webroot variable */
