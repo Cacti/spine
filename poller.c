@@ -34,13 +34,13 @@ void *child(void * arg) {
 	extern int active_threads;
 	int host_id = *(int *) arg;
 
-	if (set.verbose >= HIGH) {
-		printf("POLLER: In Thread, About to Start Polling of Host.\n");
+	if (set.verbose >= DEBUG) {
+		printf("DEBUG: In Poller, About to Start Polling of Host.\n");
 	}
 
 	if (active_threads == 1) {
-		if (set.verbose >= HIGH) {
-			printf("--------->>>>This is where errors occur<<<<-----------\n");
+		if (set.verbose >= DEBUG) {
+			printf("DEBUG: This is where popen DEADLOCKs errors occur\n");
 		}
 	}
 
@@ -50,8 +50,8 @@ void *child(void * arg) {
 	active_threads = active_threads - 1;
 	thread_mutex_unlock(LOCK_THREAD);
 
-	if (set.verbose >= HIGH) {
-		printf("The Value of Active Threads is ->%i\n",active_threads);
+	if (set.verbose >= DEBUG) {
+		printf("DEBUG: The Value of Active Threads is ->%i\n",active_threads);
 	}
 
 	pthread_exit(0);
@@ -228,6 +228,15 @@ void poll_host(int host_id) {
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
+//    			poll_result = php_cmd(entry->arg1);
+//printf("The Poll Result was ->%s\n", poll_result);
+//				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
+//				free(poll_result);
+
+				if (set.verbose >= HIGH) {
+					printf("PHP SERVER COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
+				}
+
 				break;
 			default: /* unknown action, generate error */
 				sprintf(logmessage,"ERROR: Unknown Poller Action for Host [%i] Command: %s\n",host_id,entry->arg1);
@@ -261,8 +270,8 @@ void poll_host(int host_id) {
 
 	mysql_close(&mysql);
 
-	if (set.verbose >= HIGH) {
-		printf("HOST COMPLETE: About to Exit Host Polling Thread Function\n");
+	if (set.verbose >= DEBUG) {
+		printf("DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function.\n");
 	}
 }
 

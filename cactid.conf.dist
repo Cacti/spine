@@ -19,12 +19,28 @@
 # |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
 # +-------------------------------------------------------------------------+
 # | - raXnet - http://www.raxnet.net/                                       |
+# |                                                                         |
+# | Settings                                                                |
+# | _______________________________________________________________________ |
+# |                                                                         |
+# | Interval	Not currently implemented.  Planned demon mode operation    |
+# | P_Server	Not currently implemented.  Planned polling server name     |
+# | SNMP_Ver	Stub Functionality.  Currently only valid option is 1       |
+# | DB_Host	localhost for unix, IP Address for Windows                  |
+# | DB_Database	database name, typically "cacti"                            |
+# | DB_User	the user to use to access the database, typically cactiuser |
+# | DB_Pass	the password for the cacti user                             |
+# | Threads	integer between 1 and 20				    |
+# | LogFile	UNC path name to the cacti logfile			    |  
+# | Verbose	STDOUT Reporting Levels			                    |
 # +-------------------------------------------------------------------------+
-
-Interval	300 # not currently used
-SNMP_Ver	1
-DB_Host		localhost
-DB_Database	dev_cacti_3
-DB_User		cactiuser
-DB_Pass		cactiuser
-Threads		10
+Verbose         2
+Interval        300 # not currently used
+SNMP_Ver        1
+DB_Host         192.168.0.2
+DB_Database     cacti
+DB_User         cactiuser
+DB_Pass         cacti
+Threads         10
+PHP_Server      c:/wwwroot/cacti/script_server.php
+LogFile	        c:/wwwroot/cacti/log/cacti.log

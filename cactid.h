@@ -55,6 +55,7 @@
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
 #define DEFAULT_Log_File "/wwwroot/cacti/log/rrd.log"
+#define DEFAULT_PATH_PHP_SERVER "/wwwroot/cacti/script_server.php"
 #define DEFAULT_SNMP_VER 1
 
 /* Verbosity levels LOW=info HIGH=info+SQL DEBUG=info+SQL+junk */
@@ -95,6 +96,7 @@ typedef struct config_struct {
 	char dbpass[80];
 	char logfile[250];
 	char phppath[250];
+	char path_php_server[250];
 	int log_destination;
 	int log_perror;
 	int log_pstats;
@@ -125,6 +127,13 @@ typedef struct target_struct {
 	char arg3[255];
 } target_t;
 
+typedef struct php_pipe_struct {
+	int php_output_pdes[2];
+	int php_input_pdes[2];
+	int php_write_fd;
+	int php_read_fd;
+} php_t;
+
 typedef struct host_struct {
 	char hostname[250];
 	char snmp_community[100];
@@ -145,6 +154,8 @@ typedef struct host_reindex_struct {
 
 /* Globals */
 config_t set;
+php_t php_pipes;
+
 char config_paths[CONFIG_PATHS][BUFSIZE];
 
 #endif /* not _CACTID_H_ */

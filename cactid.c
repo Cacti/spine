@@ -27,12 +27,15 @@
 #include "cactid.h"
 #include <pthread.h>
 #include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
 #include "poller.h"
 #include "locks.h"
 #include "sql.h"
 #include "util.h"
 #include "nft_popen.h"
 
+/* Global Variables */
 int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
@@ -206,17 +209,16 @@ int main(int argc, char *argv[]) {
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	if (set.verbose >= HIGH) {
-		printf("Initial Value of Active Threads is ->%i\n",active_threads);
+	if (set.verbose >= DEBUG) {
+		printf("DEBUG: Initial Value of Active Threads is ->%i\n",active_threads);
 	}
 
 	while (device_counter < num_rows) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
-
 		switch (mutex_status) {
 		case 0:
-			if (set.verbose >= HIGH) {
-				printf("THREAD: Valid Thread to be Created.\n");
+			if (set.verbose >= DEBUG) {
+				printf("DEBUG: Valid Thread to be Created.\n");
 			}
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
@@ -230,36 +232,34 @@ int main(int argc, char *argv[]) {
 				/* create chile process */
 				thread_status = pthread_create(&threads[device_counter], &attr, child, &ids[device_counter]);
 
-				/* throttle down the parent to give the thread a change to start */
-				/* if not, deadlocks have been known to occur */
-				/*usleep(200000);*/
 				switch (thread_status) {
-				case 0:
-					if (set.verbose >= HIGH) {
-						printf("THREAD: Valid Thread to be Created.\n");
-					}
+					case 0:
+						if (set.verbose >= DEBUG) {
+							printf("DEBUG: Valid Thread to be Created.\n");
+						}
 
-					device_counter++;
-					active_threads++;
+						device_counter++;
+						active_threads++;
 
-					if (set.verbose >= HIGH) {
-						printf("The Value of Active Threads is ->%i\n",active_threads);
-					}
+						if (set.verbose >= DEBUG) {
+							printf("DEBUG: The Value of Active Threads is ->%i\n",active_threads);
+						}
 
-					break;
-				case EAGAIN:
-					cacti_log("ERROR: The System Lacked the Resources to Create a Thread.\n","e");
-					break;
-				case EFAULT:
-					cacti_log("ERROR: The Thread or Attribute Was Invalid.\n","e");
-					break;
-				case EINVAL:
-					cacti_log("ERROR: The Thread Attribute is Not Initialized.\n","e");
-					break;
-				default:
-					cacti_log("ERROR: Unknown Thread Creation Error.\n","e");
-					break;
+						break;
+					case EAGAIN:
+						cacti_log("ERROR: The System Lacked the Resources to Create a Thread.\n","e");
+						break;
+					case EFAULT:
+						cacti_log("ERROR: The Thread or Attribute Was Invalid.\n","e");
+						break;
+					case EINVAL:
+						cacti_log("ERROR: The Thread Attribute is Not Initialized.\n","e");
+						break;
+					default:
+						cacti_log("ERROR: Unknown Thread Creation Error.\n","e");
+						break;
 				}
+				usleep(500);
 			}
 
 			thread_mutex_unlock(LOCK_THREAD);
@@ -301,13 +301,6 @@ int main(int argc, char *argv[]) {
 	/* print out stats and sleep */
 	gettimeofday(&now, NULL);
 
-	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
-	if (argc == 1) {
-		sprintf(logmessage, "STATS: Execution Time: %.4f s, Method: cactid, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n", (end_time - begin_time), set.threads, num_rows, num_rows);
-		cacti_log(logmessage, "s");
-	}
-
 	/* update the db for |data_time| on graphs */
 	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
 	db_insert(&mysql, "insert into poller_time (poller_id, start_time, end_time) values (0, NOW(), NOW())");
@@ -316,8 +309,10 @@ int main(int argc, char *argv[]) {
 	pthread_attr_destroy(&attr);
 	pthread_mutexattr_destroy(&mutexattr);
 
+	/* cleanup the snmp process*/
 	snmp_free();
 
+	/* close the php script server */
 	php_close();
 
 	free(threads);
@@ -326,6 +321,13 @@ int main(int argc, char *argv[]) {
 
 	mysql_free_result(result);
 	mysql_close(&mysql);
+
+	/* finally add some statistics to the log and exit */
+	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+	if (argc == 1) {
+		sprintf(logmessage, "STATS: Execution Time: %.4f s, Method: cactid, Max Processes: 1, Max Threads/Process: %i, Polled Hosts: %i, Hosts/Process: %i\n", (end_time - begin_time), set.threads, num_rows, num_rows);
+		cacti_log(logmessage, "s");
+	}
 
 	exit(0);
 }

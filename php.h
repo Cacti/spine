@@ -25,5 +25,6 @@
 
 int php_init();
 int php_close();
-int php_cmd( char * php_command );
+char *php_readpipe();
+char *php_cmd(char *php_command);
 
