@@ -154,55 +154,63 @@ void poll_host(int host_id) {
 			break;
 		case 1:
 			thread_mutex_lock(LOCK_PIPE);
-			cmd_stdout=popen(entry->command, "r");
-			thread_mutex_unlock(LOCK_PIPE);
 			
-			fgets(cmd_result, 255, cmd_stdout);
-			
-			thread_mutex_lock(LOCK_PIPE);
-			return_value = pclose(cmd_stdout);
-			thread_mutex_unlock(LOCK_PIPE);
-			
-			if (return_value != 0) {
-				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
-				snprintf(entry->result, sizeof(entry->result), "%s", "U");
-			}else if (cmd_result == "") {
-				printf("[%i] Empty result from command, '%s'\n", host_id, entry->command);
-				snprintf(entry->result, sizeof(entry->result), "%s", "U");
+			if ((cmd_stdout=popen(entry->command, "r")) != NULL) {
+				while (fgets(cmd_result, 255, cmd_stdout) != NULL);
+				
+				return_value = pclose(cmd_stdout);
+				
+				thread_mutex_unlock(LOCK_PIPE);
+				
+				if (return_value != 0) {
+					printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
+				}else if (cmd_result == "") {
+					printf("[%i] Empty result from command, '%s'\n", host_id, entry->command);
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
+				}else{
+					snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
+				}
+				
+				if (set.verbose >= LOW) {
+					printf("[%i] command: %s, output: %s\n", host_id, entry->command, entry->result);
+				}
 			}else{
-				snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
+				thread_mutex_unlock(LOCK_PIPE);
+				printf("[%i] Error executing popen for command, '%s'\n", host_id, entry->command);
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}
-			
-			if (set.verbose >= LOW) {
-				printf("[%i] command: %s, output: %s\n", host_id, entry->command, entry->result);
-			}
-			
+				
 			break;
 		case 2:
 			thread_mutex_lock(LOCK_PIPE);
-			cmd_stdout=popen(entry->command, "r");
-			thread_mutex_unlock(LOCK_PIPE);
 			
-			fgets(cmd_result, 255, cmd_stdout);
-			
-			thread_mutex_lock(LOCK_PIPE);
-			return_value = pclose(cmd_stdout);
-			thread_mutex_unlock(LOCK_PIPE);
-			
-			if (return_value != 0) {
-				printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
-				snprintf(entry->result, sizeof(entry->result), "%s", "U");
-			}else if (cmd_result == "") {
-				printf("[%i] Empty result from command, '%s'\n", host_id, entry->command);
-				snprintf(entry->result, sizeof(entry->result), "%s", "U");
+			if ((cmd_stdout=popen(entry->command, "r")) != NULL) {
+				while (fgets(cmd_result, 255, cmd_stdout) != NULL);
+				
+				return_value = pclose(cmd_stdout);
+				
+				thread_mutex_unlock(LOCK_PIPE);
+				
+				if (return_value != 0) {
+					printf("[%i] Error executing command, '%s'\n", host_id, entry->command);
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
+				}else if (cmd_result == "") {
+					printf("[%i] Empty result from command, '%s'\n", host_id, entry->command);
+					snprintf(entry->result, sizeof(entry->result), "%s", "U");
+				}else{
+					snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
+				}
+				
+				if (set.verbose >= LOW) {
+					printf("[%i] MUTLI command: %s, output: %s\n", host_id, entry->command, entry->result);
+				}
 			}else{
-				snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
+				thread_mutex_unlock(LOCK_PIPE);
+				printf("[%i] Error executing popen for command, '%s'\n", host_id, entry->command);
+				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}
-			
-			if (set.verbose >= LOW) {
-				printf("[%i] MUTLI command: %s, output: %s\n", host_id, entry->command, entry->result);
-			}
-			
+				
 			break;
 		}
 		
