@@ -23,12 +23,13 @@
  +-------------------------------------------------------------------------+
 */
 
-#define _REENTRANT
-
 #include <errno.h>
 #include "common.h"
 #include "cactid.h"
-#include "locks.c"
+#include "poller.h"
+#include "locks.h"
+#include "sql.h"
+#include "util.h"
 
 /* Yes.  Globals. */
 char rrdtool_path[128];
@@ -37,24 +38,6 @@ int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
 
-void *child(void * arg) {
-	int host_id = *(int *) arg;
-
-	//mysql_thread_init();
-	
-	poll_host(host_id);
-
-	mutex_lock(LOCK_THREAD);
-	active_threads--;
-	mutex_unlock(LOCK_THREAD);
-	
-	
-	//mysql_thread_end();
-	
-	pthread_exit(0);
-}
-
-/* Main rtgpoll */
 int main(int argc, char *argv[]) {
 	extern char rrdtool_path[128];
 	
@@ -94,33 +77,15 @@ int main(int argc, char *argv[]) {
 		exit(-1);
 	}
 	
-	/* Initialize the SNMP session */
-	if (set.verbose >= LOW) {
-		printf("Initializing SNMP (v%d).\n", set.snmp_ver);
-	}
-	
-	init_snmp("Cactid");
-	
-	/* Attempt to connect to the MySQL Database */
-	if (db_connect(set.dbdb, &mysql) < 0) {
-		fprintf(stderr, "** Database error - check configuration.\n");
-		exit(-1);
-	}
-	
-	if (!mysql_ping(&mysql)) {
-		if (set.verbose >= LOW) {
-			printf("connected.\n");
-		}
-	}else{
-		printf("server not responding.\n");
-		exit(-1);
-	}
+	db_connect(set.dbdb, &mysql);
 	
 	/* get the rrdtool path from the cacti settings table */
 	sprintf(rrdtool_path, "%s", get_rrdtool_path(&mysql));
 	
 	/* initilize the rrdtool pipe */
 	rrd_open();
+	
+	snmp_init();
 	
 	if (set.verbose >= LOW) {
 		printf("Cactid Ready.\n");
@@ -183,9 +148,11 @@ int main(int argc, char *argv[]) {
 	}
 	
 	rrd_close();
+	snmp_free();
 	
 	free(threads);
 	free(ids);
+	free(conf_file);
 	
 	mysql_free_result(result);
 	mysql_close(&mysql);

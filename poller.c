@@ -25,16 +25,29 @@
 
 #include "common.h"
 #include "cactid.h"
+#include "sql.h"
+#include "snmp.h"
+#include "poller.h"
 
-#ifdef USE_NET_SNMP
- #include "net-snmp-config.h"
- #include "net-snmp-includes.h"
-#else
- #include <ucd-snmp/ucd-snmp-config.h>
- #include <ucd-snmp/ucd-snmp-includes.h>
- #include <ucd-snmp/system.h>
- #include "mib.h"
-#endif
+void *child(void * arg) {
+	int host_id = *(int *) arg;
+
+	#ifndef OLD_MYSQL
+	mysql_thread_init();
+	#endif
+	
+	poll_host(host_id);
+
+	mutex_lock(LOCK_THREAD);
+	active_threads--;
+	mutex_unlock(LOCK_THREAD);
+	
+	#ifndef OLD_MYSQL
+	mysql_thread_end();
+	#endif
+	
+	pthread_exit(0);
+}
 
 void poll_host(int host_id) {
 	char query[256];
@@ -42,6 +55,7 @@ void poll_host(int host_id) {
 	int num_rows;
 	FILE *cmd_stdout;
 	char cmd_result[255];
+	char *snmp_result;
 	
 	int ignore_host = 0;
 	int rrd_ds_counter = 0;
@@ -79,10 +93,17 @@ void poll_host(int host_id) {
 		entry->local_data_id = atoi(row[12]);
 		entry->rrd_num = atoi(row[13]);
 		
+		/* do RRD file path check */
+		if (!file_exists(entry->rrd_path)) {
+			rrd_cmd(create_rrd(entry->local_data_id, entry->rrd_path, &mysql));
+		}
+		
 		switch(entry->action) {
 		case 0:
 			if (ignore_host == 0) {
-				sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, host_id));
+				snmp_result = snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, host_id);
+				sprintf(entry->result, "%s", snmp_result);
+				free(snmp_result);
 			}else{
 				sprintf(entry->result, "%s", "U");
 			}
@@ -154,108 +175,10 @@ void poll_host(int host_id) {
 				free(rrd_multids);
 			}
 		}
-		
-		/* do RRD file path check */
-		if (!file_exists(entry->rrd_path)) {
-			rrd_cmd(create_rrd(entry->local_data_id, entry->rrd_path, &mysql));
-		}
 	}
 	
 	free(entry);
 	
 	mysql_free_result(result);
 	mysql_close(&mysql);
-}
-
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id) {
-	void *sessp = NULL;
-	struct snmp_session session;
-	struct snmp_pdu *pdu = NULL;
-	struct snmp_pdu *response = NULL;
-	oid anOID[MAX_OID_LEN];
-	size_t anOID_len = MAX_OID_LEN;
-	struct variable_list *vars = NULL;
-	
-	int status;
-	
-	char query[BUFSIZE];
-	char storedoid[BUFSIZE];
-	static char result_string[BUFSIZE];
-	
-	mutex_lock(LOCK_THREAD);
-	
-	snmp_sess_init(&session);
-	
-	#ifdef USE_NET_SNMP
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
-	#else
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
-	#endif
-	
-	mutex_unlock(LOCK_THREAD);
-	
-	if (set.snmp_ver == 2) {
-		session.version = SNMP_VERSION_2c;
-	}else{
-		session.version = SNMP_VERSION_1;
-	}
-	
-	session.peername = snmp_host;
-	session.community = snmp_comm;
-	session.community_len = strlen(snmp_comm);
-	
-	sessp = snmp_sess_open(&session);
-	anOID_len = MAX_OID_LEN;
-	pdu = snmp_pdu_create(SNMP_MSG_GET);
-	read_objid(snmp_oid, anOID, &anOID_len);
-	
-	strcpy(storedoid, snmp_oid);
-	
-	snmp_add_null_var(pdu, anOID, anOID_len);
-	
-	if (sessp != NULL) {
-		status = snmp_sess_synch_response(sessp, pdu, &response);
-	}else{
-		status = STAT_DESCRIP_ERROR;
-	}
-	
-	/* No or Bad SNMP Response */
-	if (status == STAT_DESCRIP_ERROR) {
-		printf("*** SNMP Error: (%s) Bad descriptor.\n", session.peername);
-	}else if (status == STAT_TIMEOUT) {
-		printf("*** SNMP No response: (%s@%s).\n", session.peername, storedoid);
-	}else if (status != STAT_SUCCESS) {
-		printf("*** SNMP Error: (%s@%s) Unsuccessuful (%d).\n", session.peername, storedoid, status);
-	}else if (status == STAT_SUCCESS && response->errstat != SNMP_ERR_NOERROR) {
-		printf("*** SNMP Error: (%s@%s) %s\n", session.peername, storedoid, snmp_errstring(response->errstat));
-	}
-	
-	/* Liftoff, successful poll, process it */
-	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
-		vars = response->variables;
-		
-		#ifdef USE_NET_SNMP
-		snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
-		#else
-		sprint_value(result_string, anOID, anOID_len, vars);
-		#endif
-	}
-	
-	if (status == STAT_TIMEOUT) {
-		sprintf(result_string, "%s", "E");
-	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
-		sprintf(result_string, "%s", "U");
-	}
-	
-	if (sessp != NULL) {
-		snmp_sess_close(sessp);
-		
-		if (response != NULL) {
-			snmp_free_pdu(response);
-		}
-	}
-	
-	return result_string;
 }
