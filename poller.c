@@ -80,6 +80,8 @@ void *poller(void *thread_args) {
 			
 			switch(entry->action) {
 			case 0:
+				mutex_unlock(LOCK_CREW);
+				
 				sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, worker->index));
 				
 				if (set.verbose >= LOW) {
@@ -150,7 +152,6 @@ void *poller(void *thread_args) {
 	}
 }
 
-
 char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread) {
 	void *sessp = NULL;
 	struct snmp_session session;
@@ -166,6 +167,8 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 	char storedoid[BUFSIZE];
 	char result_string[BUFSIZE];
 	
+	mutex_lock(LOCK_CREW);
+	
 	snmp_sess_init(&session);
 	
 	#ifdef OLD_UCD_SNMP
@@ -175,6 +178,8 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
 	#endif
+	
+	mutex_unlock(LOCK_CREW);
 	
 	if (set.snmp_ver == 2) {
 		session.version = SNMP_VERSION_2c;
@@ -196,8 +201,6 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 	if (set.verbose >= DEVELOP) {
 		printf("Thread [%d] unlocking (done grabbing current)\n", current_thread);
 	}
-	
-	mutex_unlock(LOCK_CREW);
 	
 	snmp_add_null_var(pdu, anOID, anOID_len);
 	
@@ -229,6 +232,10 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 		#endif
 	}
 	
+	if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
+		sprintf(result_string, "%s", "U");
+	}
+	
 	if (sessp != NULL) {
 		snmp_sess_close(sessp);
 		
@@ -237,9 +244,5 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 		}
 	}
 	
-	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
-		return result_string;
-	}else{
-		return "U";
-	}
+	return result_string;
 }
