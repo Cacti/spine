@@ -86,6 +86,7 @@ typedef struct target_struct{
   int target_id;
   char result[255];
   int local_data_id;
+  int host_id;
   int action;
   char command[256];
   char management_ip[16];
@@ -111,22 +112,14 @@ typedef struct crew_struct {
     pthread_cond_t go;
 } crew_t;
 
-typedef struct poll_stats {
-    pthread_mutex_t mutex;
-    long long polls;
-    long long db_inserts;
-    int round;
-    int wraps;
-    int no_resp;
-    int out_of_range;
-    int errors;
-    int slow;
-    double poll_time; 
-} stats_t;
-
 typedef struct rrd_struct{
   char rrdcmd[512];
 }rrd_t;
+
+typedef struct host_struct {
+  int host_id;
+  int status;
+}host_t;
 
 typedef struct multi_rrd_struct{
   char rrd_name[19];
@@ -134,31 +127,25 @@ typedef struct multi_rrd_struct{
   char result[255];
 }multi_rrd_t;
 
-/* Precasts: rtgpoll.c */
-void *sig_handler(void *);
-void usage(char *);
-int get_targets();
-
-/* Precasts: rtgpoll.c */
+/* Precasts: poller.c */
 void *poller(void *);
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread);
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id, int current_thread);
 
 /* Precasts: mysql.c */
 int db_insert(char *, MYSQL *);
-int rtg_dbconnect(char *, MYSQL *);
-void rtg_dbdisconnect(MYSQL *);
+int db_connect(char *, MYSQL *);
+void db_disconnect(MYSQL *);
 
 /* Precasts: util.c */
-int read_rtg_config(char *, config_t *);
-int write_rtg_config(char *, config_t *);
+int init_config(char *, config_t *);
 void config_defaults(config_t *);
-void print_stats (stats_t);
-void sleepy(float);
 void timestamp(char *);
+int file_exists(char *filename);
+int is_number(char *string);
 
 /* Precasts: locks.c */
-void	mutex_lock(int);
-void	mutex_unlock(int);
+void mutex_lock(int);
+void mutex_unlock(int);
 
 /* Globals */
 config_t set;

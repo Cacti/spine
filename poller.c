@@ -25,18 +25,18 @@
 #include "common.h"
 #include "cactid.h"
 
-#ifdef OLD_UCD_SNMP
+#ifdef USE_NET_SNMP
+ #include "net-snmp-config.h"
+ #include "net-snmp-includes.h"
+#else
  #include <ucd-snmp/ucd-snmp-config.h>
  #include <ucd-snmp/ucd-snmp-includes.h>
  #include <ucd-snmp/system.h>
  #include "mib.h"
-#else
- #include "net-snmp-config.h"
- #include "net-snmp-includes.h"
 #endif
 
 extern target_t *current;
-extern stats_t stats;
+extern host_t *hosts;
 extern MYSQL mysql;
 
 void *poller(void *thread_args) {
@@ -60,7 +60,7 @@ void *poller(void *thread_args) {
 		mutex_lock(LOCK_CREW);
 		
 		while (current == NULL) {
-			if (pthread_cond_wait(&crew->go, get_lock(LOCK_CREW)) != 0) {
+			if (pthread_cond_wait(&(crew->go), get_lock(LOCK_CREW)) != 0) {
 				printf("pthread_wait error\n");
 			}
 		}
@@ -82,7 +82,12 @@ void *poller(void *thread_args) {
 			case 0:
 				mutex_unlock(LOCK_CREW);
 				
-				sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, worker->index));
+				if (get_host_status(entry->host_id) == 0) {
+					sprintf(entry->result, "%s", snmp_get(entry->management_ip, entry->snmp_community, 1, entry->arg1, entry->host_id, worker->index));
+				}else{
+					printf("[%i] downed host (%s) detected. ignoring.\n", worker->index, entry->management_ip);
+					sprintf(entry->result, "%s", "U");
+				}
 				
 				if (set.verbose >= LOW) {
 					printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", worker->index, entry->management_ip, entry->rrd_name, entry->arg1, entry->result);
@@ -152,7 +157,7 @@ void *poller(void *thread_args) {
 	}
 }
 
-char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int current_thread) {
+char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int host_id, int current_thread) {
 	void *sessp = NULL;
 	struct snmp_session session;
 	struct snmp_pdu *pdu = NULL;
@@ -165,18 +170,18 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 	
 	char query[BUFSIZE];
 	char storedoid[BUFSIZE];
-	char result_string[BUFSIZE];
+	static char result_string[BUFSIZE];
 	
 	mutex_lock(LOCK_CREW);
 	
 	snmp_sess_init(&session);
 	
-	#ifdef OLD_UCD_SNMP
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
-	#else
+	#ifdef USE_NET_SNMP
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	#else
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
 	#endif
 	
 	mutex_unlock(LOCK_CREW);
@@ -215,6 +220,10 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 		printf("*** SNMP Error: (%s) Bad descriptor.\n", session.peername);
 	}else if (status == STAT_TIMEOUT) {
 		printf("*** SNMP No response: (%s@%s).\n", session.peername, storedoid);
+		
+		mutex_lock(LOCK_CREW);
+		set_host_status(host_id, 2);
+		mutex_unlock(LOCK_CREW);
 	}else if (status != STAT_SUCCESS) {
 		printf("*** SNMP Error: (%s@%s) Unsuccessuful (%d).\n", session.peername, storedoid, status);
 	}else if (status == STAT_SUCCESS && response->errstat != SNMP_ERR_NOERROR) {
@@ -225,10 +234,10 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
 		vars = response->variables;
 		
-		#ifdef OLD_UCD_SNMP
-		sprint_value(result_string, anOID, anOID_len, vars);
-		#else
+		#ifdef USE_NET_SNMP
 		snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+		#else
+		sprint_value(result_string, anOID, anOID_len, vars);
 		#endif
 	}
 	
@@ -245,4 +254,34 @@ char *snmp_get(char *snmp_host, char *snmp_comm, int ver, char *snmp_oid, int cu
 	}
 	
 	return result_string;
+}
+
+int get_host_status(int host_id) {
+	int num_hosts = (sizeof(hosts)-1);
+	int i;
+	
+	mutex_lock(LOCK_CREW);
+	
+	for (i=0;i<num_hosts;i++) {
+		if (hosts[i].host_id == host_id) {
+			mutex_unlock(LOCK_CREW);
+			return hosts[i].status;
+		}
+	}
+	
+	mutex_unlock(LOCK_CREW);
+	
+	return 0;
+}
+
+void set_host_status(int host_id, int new_status) {
+	int num_hosts = (sizeof(hosts)-1);
+	int i;
+	
+	for (i=0;i<num_hosts;i++) {
+		if (hosts[i].host_id == host_id) {
+			hosts[i].status = new_status;
+			return;
+		}
+	}
 }

@@ -28,67 +28,38 @@
 #include "locks.c"
 
 /* Yes.  Globals. */
-stats_t stats =
-{PTHREAD_MUTEX_INITIALIZER, 0, 0, 0, 0, 0, 0, 0, 0, 0.0};
 char *target_file = NULL;
 target_t *targets = NULL;
 target_t *current = NULL;
+host_t *hosts = NULL;
 MYSQL mysql;
 int entries = 0;
+int num_hosts = 0;
 
 /* Main rtgpoll */
 int main(int argc, char *argv[]) {
 	crew_t crew;
-	pthread_t sig_thread;
-	sigset_t signal_set;
 	struct timeval now;
-	double begin_time, end_time, sleep_time;
+	double begin_time, end_time;
 	char *conf_file = NULL;
 	char filename[BUFSIZE];
-	char errstr[BUFSIZE];
-	int ch, i;
+	int i;
 	
-	/* Check argument count */
-	// if (argc < 3)
-	//	usage(argv[0]);
+	int current_head = 0;
+	int rrd_target_counter=0;
+	int current_local_data_id=0;
+	int rrd_multids_counter=0;
+	int rrd_create_pipe_open=0;
 	
-	/* Parse the command-line. */
-	/* while ((ch = getopt(argc, argv, "c:dht:v")) != EOF)
-	switch ((char) ch) {
-	case 'c':
-		conf_file = optarg;
-		break;
-	case 'd':
-		set.dboff = TRUE;
-		break;
-	case 'h':
-		usage(argv[0]);
-		break;
-	case 't':
-		target_file = optarg;
-		break;
-	case 'v':
-		set.verbose++;
-		break;
-	}
-	*/
+	multi_rrd_t *rrd_multids;
+	rrd_t *rrd_targets;
+	target_t *entry = NULL;
+	FILE *rrdtool_stdin;
+	
 	set.verbose = LOW;
 	
 	if (set.verbose >= LOW) {
 		printf("cactid version %s starting.", VERSION);
-	}
-	
-	/* Initialize signal handler */
-	sigemptyset(&signal_set);
-	sigaddset(&signal_set, SIGHUP);
-	sigaddset(&signal_set, SIGUSR1);
-	sigaddset(&signal_set, SIGUSR2);
-	sigaddset(&signal_set, SIGTERM);
-	sigaddset(&signal_set, SIGINT);
-	sigaddset(&signal_set, SIGQUIT);
-	
-	if (pthread_sigmask(SIG_BLOCK, &signal_set, NULL) != 0) {
-		printf("pthread_sigmask error\n");
 	}
 	
 	/* Read configuration file to establish local environment */
@@ -99,7 +70,7 @@ int main(int argc, char *argv[]) {
 		strcpy(conf_file, CONFIG1);
 	}
 	
-	if ((read_rtg_config(conf_file, &set)) < 0) {
+	if ((init_config(conf_file, &set)) < 0) {
 		fprintf(stderr, "Couldn't write config file.\n");
 		exit(-1);
 	}
@@ -120,7 +91,7 @@ int main(int argc, char *argv[]) {
 	init_snmp("Cactid");
 	
 	/* Attempt to connect to the MySQL Database */
-	if (rtg_dbconnect(set.dbdb, &mysql) < 0) {
+	if (db_connect(set.dbdb, &mysql) < 0) {
 		fprintf(stderr, "** Database error - check configuration.\n");
 		exit(-1);
 	}
@@ -136,6 +107,7 @@ int main(int argc, char *argv[]) {
 	
 	/* Read list of targets to be polled into linked list of target_structs */
 	entries = get_targets();
+	num_hosts = get_host_list();
 	
 	if (entries <= 0) {
 		fprintf(stderr, "Error updating target list.");
@@ -155,10 +127,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	
-	if (pthread_create(&sig_thread, NULL, sig_handler, (void *) &(signal_set)) != 0) {
-		printf("pthread_create error\n");
-	}
-	
 	/* give threads time to start up */
 	sleep(2);
 	
@@ -166,137 +134,43 @@ int main(int argc, char *argv[]) {
 		printf("Cactid Ready.\n");
 	}
 	
-	/* Loop Forever Polling Target List */
-	while (1) {
-		lock = TRUE;
-		gettimeofday(&now, NULL);
-		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-		
-		mutex_lock(LOCK_CREW);
-		
-		current = targets;
-		crew.work_count = entries;
-		
-		mutex_unlock(LOCK_CREW);
-		
-		if (set.verbose >= LOW) {
-			timestamp("Queue ready, broadcasting thread go condition.");
-		}
-		
-		if (pthread_cond_broadcast(&(crew.go)) != 0) {
-			printf("pthread_cond error\n");
-		}
-		
-		mutex_lock(LOCK_CREW);
-		
-		while (crew.work_count > 0) {
-			if (set.verbose >= LOW) {
-				printf("Work_count: %i\n",crew.work_count);
-			}
-			
-			if (pthread_cond_wait(&(crew.done), get_lock(LOCK_CREW)) != 0) {
-				printf("error waiting for crew to finish\n");
-			}
-		}
-		
-		//mutex_unlock(LOCK_CREW);
-		
-		/* put all of the gathered data into RRD's */
-		process_data();
-		
-		/* print out stats and sleep */
-		gettimeofday(&now, NULL);
-		lock = FALSE;
-		
-		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-		stats.poll_time = end_time - begin_time;
-		stats.round++;
-		sleep_time = set.interval - stats.poll_time;
-		
-		if (waiting) {
-			if (set.verbose >= HIGH) {
-				printf("Processing pending SIGHUP.\n");
-			}
-			
-			entries = get_targets();
-			waiting = FALSE;
-		}
-		
-		if (set.verbose >= LOW) {
-			printf("\n----- Poll round %d complete. (Polling Time: %fs) -----\n\n", stats.round, stats.poll_time);
-		}
-		
-		if (sleep_time <= 0) {
-			stats.slow++;
-		}else{
-			sleepy(sleep_time);
-		}
-
-		mutex_unlock(LOCK_CREW);
-	} /* while */
+	lock = TRUE;
+	gettimeofday(&now, NULL);
+	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	
-	/* Disconnect from the MySQL Database, exit. */
-	if (!(set.dboff)) {
-		rtg_dbdisconnect(&mysql);
+	mutex_lock(LOCK_CREW);
+	
+	current = targets;
+	crew.work_count = entries;
+	
+	mutex_unlock(LOCK_CREW);
+	
+	if (set.verbose >= LOW) {
+		timestamp("Queue ready, broadcasting thread go condition.");
 	}
 	
-  	pthread_cond_destroy(&(crew.done));
-	pthread_cond_destroy(&(crew.go));
- 	pthread_exit(NULL);
-	exit(0);
-}
-
-
-/* Signal Handler.  USR1 increases verbosity, USR2 decreases verbosity. 
-   HUP re-reads target list */
-void *sig_handler(void *arg) {
-	sigset_t *signal_set = (sigset_t *) arg;
-	int sig_number;
+	if (pthread_cond_broadcast(&(crew.go)) != 0) {
+		printf("pthread_cond error\n");
+	}
 	
-	while (1) {
-		sigwait(signal_set, &sig_number);
-		switch (sig_number) {
-		case SIGHUP:
-			if (lock) {
-				waiting = TRUE;
-			}else{
-				entries = get_targets();
-				waiting = FALSE;
-			}
-			break;
-		case SIGUSR1:
-			set.verbose++;
-			break;
-		case SIGUSR2:
-			set.verbose--;
-			break;
-		case SIGTERM:
-		case SIGINT:
-		case SIGQUIT:
-			if (set.verbose >= LOW) {
-				printf("Quiting: received signal %d.\n", sig_number);
-			}
-			
-			rtg_dbdisconnect(&mysql);
-			//unlink(pidfile);
-			exit(1);
-			break;
+	mutex_lock(LOCK_CREW);
+	
+	while (crew.work_count > 0) {
+		if (set.verbose >= LOW) {
+			printf("Work_count: %i\n",crew.work_count);
+		}
+		
+		if (pthread_cond_wait(&(crew.done), get_lock(LOCK_CREW)) != 0) {
+			printf("error waiting for crew to finish\n");
 		}
 	}
-}
-
-void process_data() {
-	int current_head = 0;
-	int rrd_target_counter=0;
-	int current_local_data_id=0;
-	int rrd_multids_counter=0;
-	int rrd_create_pipe_open=0;
 	
-	rrd_t *rrd_targets = (rrd_t *)malloc(entries * sizeof(rrd_t));
-	multi_rrd_t *rrd_multids;
-	target_t *entry = NULL;
-	FILE *rrdtool_stdin;
+	mutex_unlock(LOCK_CREW);
 	
+	/* reserve memory for the polling list */
+	rrd_targets = (rrd_t *)malloc(entries * sizeof(rrd_t));
+	
+	/* put all of the gathered data into RRD's */
 	current = targets;
 	
 	while (current != NULL && current_head==0) {
@@ -314,7 +188,7 @@ void process_data() {
 			
 			if(entry->local_data_id != current_local_data_id) {
 				//printf("New MultiDS: %i\n", entry->local_data_id);
-				rrd_multids = (rrd_t *)malloc(entries * sizeof(rrd_t));
+				rrd_multids = (multi_rrd_t *)malloc(entries * sizeof(multi_rrd_t));
 				rrd_multids_counter=0;
 				sprintf(rrd_multids[rrd_multids_counter].rrd_name, "%s", entry->rrd_name);
 				sprintf(rrd_multids[rrd_multids_counter].rrd_path, "%s", entry->rrd_path);
@@ -365,28 +239,69 @@ void process_data() {
 		pclose(rrdtool_stdin);
 	}
 	
+	/* commit change to the rrd files */
 	update_rrd(rrd_targets, rrd_target_counter);
+	
+	/* free memory from polling list */
 	free(rrd_targets);
+	
+	/* print out stats and sleep */
+	gettimeofday(&now, NULL);
+	lock = FALSE;
+	
+	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+	
+	if (set.verbose >= LOW) {
+		printf("\n----- Poll complete. (Polling Time: %fs) -----\n\n", (end_time - begin_time));
+	}
+	
+	/* Disconnect from the MySQL Database, exit. */
+	db_disconnect(&mysql);
+  	pthread_cond_destroy(&(crew.done));
+	pthread_cond_destroy(&(crew.go));
+	
+	exit(1);
 }
 
-void usage(char *prog)
-{
-    printf("rtgpoll - RTG v%s\n", VERSION);
-    printf("Usage: %s [-d] [-vvv] [-c <file>] -t <file>\n", prog);
-    printf("\nOptions:\n");
-    printf("  -c <file>   Specify configuration file\n");
-    printf("  -d          Disable database inserts\n");
-    printf("  -t <file>   Specify target file\n");
-    printf("  -v          Increase verbosity\n");
-    printf("  -h          Help\n");
-    exit(-1);
+int get_host_list() {
+	extern host_t *hosts;
+	
+	char query[256];
+	int i = 0, num_hosts;
+	
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	
+	sprintf(query, "select host_id,count(host_id) as count from data_input_data_cache group by host_id");
+	
+	if (mysql_query(&mysql, query)) {
+		fprintf(stderr, "Error in query\n");
+	}
+	
+	if ((result = mysql_store_result(&mysql)) == NULL) {
+		fprintf(stderr, "Error retrieving data\n");
+		exit(1);
+	}
+	
+	num_hosts = (int)mysql_num_rows(result);
+	
+	hosts = (host_t *)malloc(num_hosts * sizeof(host_t));
+	
+	while ((row = mysql_fetch_row(result))) {
+		hosts[i].host_id = atoi(row[0]);
+		hosts[i].status = 0;
+		i++;
+	}
+	
+	return num_hosts;
 }
 
-int get_targets(){
+int get_targets() {
 	extern target_t *targets;
 	
 	char query[256];
 	int target_id = 0;
+	int num_rows;
 	
 	target_t *temp;
 	target_t *temp2;
@@ -397,7 +312,7 @@ int get_targets(){
 	
 	sprintf(query, "select action,command,management_ip,snmp_community, \
 		snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, \
-		arg1, arg2, arg3,local_data_id from data_input_data_cache order \
+		arg1, arg2, arg3,local_data_id,host_id from data_input_data_cache order \
 		by local_data_id");
 	
 	if (mysql_query(&mysql, query)) {
@@ -429,6 +344,7 @@ int get_targets(){
 		sprintf(temp->arg2, "%s", row[10]);
 		sprintf(temp->arg3, "%s", row[11]);
 		temp->local_data_id = atoi(row[12]);
+		temp->host_id = atoi(row[13]);
 		
 		temp->prev=NULL;
 		temp->next=NULL;
@@ -452,5 +368,9 @@ int get_targets(){
 	temp2=NULL;
 	free(temp2);
 	
-	return (int)mysql_num_rows(result);
+	num_rows = (int)mysql_num_rows(result);
+	
+	mysql_free_result(result);
+	
+	return num_rows;
 }
