@@ -104,9 +104,13 @@ void poll_host(int host_id) {
 		switch(entry->action) {
 		case 0:
 			if (ignore_host == 0) {
-				snmp_result = snmp_get(entry->hostname, entry->snmp_community, 1, entry->arg1, entry->snmp_port, entry->snmp_timeout, host_id);
-				snprintf(entry->result, sizeof(entry->result), "%s", snmp_result);
-				free(snmp_result);
+				if ((entry->snmp_version == 1) || (entry->snmp_version == 2)) {
+					snmp_result = snmp_get(entry->hostname, entry->snmp_community, entry->snmp_version, entry->arg1, entry->snmp_port, entry->snmp_timeout, host_id);
+					snprintf(entry->result, sizeof(entry->result), "%s", snmp_result);
+					free(snmp_result);
+				}else{
+					printf("SNMP v3 is not yet supported in cactid (host: %s)\n", entry->hostname);
+				}
 			}else{
 				snprintf(entry->result, sizeof(entry->result), "%s", "U");
 			}
@@ -118,7 +122,7 @@ void poll_host(int host_id) {
 			}
 			
 			if (set.verbose >= LOW) {
-				printf("[%i] snmp: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->hostname, entry->rrd_name, entry->arg1, entry->result);
+				printf("[%i] SNMP v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->snmp_version, entry->hostname, entry->rrd_name, entry->arg1, entry->result);
 			}
 			
 			break;
