@@ -119,7 +119,7 @@ void poll_host(int host_id) {
 	/* perform a check to see if the host is alive by polling it's SysName
 	 * if the host down from an snmp perspective, don't poll it.
 	 * function sets the ignore_host bit */
-	poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
+	poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
 	free(poll_result);
 
 	/* do the reindex check for this host */
