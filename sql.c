@@ -26,6 +26,7 @@
 #include "common.h"
 #include "cactid.h"
 #include "locks.h"
+#include "util.h"
 #include "sql.h"
 
 int db_insert(MYSQL *mysql, char *query) {

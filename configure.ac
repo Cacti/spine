@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(cactid.c)
 AC_PREFIX_DEFAULT(/usr/local/cactid)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.5a)
+AM_INIT_AUTOMAKE(cactid, 0.8.6)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
@@ -61,7 +61,7 @@ AC_ARG_ENABLE(warnings,
   [  --enable-warnings       Enable -Wall if using gcc.],
   [ if test -n "$GCC"; then
     AC_MSG_RESULT(adding -Wall to CFLAGS.)
-        CFLAGS="$CFLAGS -Wall"	
+        CFLAGS="$CFLAGS -Wall"
    fi],AC_MSG_RESULT(no))
 
 # Checks for libraries.
@@ -129,7 +129,7 @@ AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
 	AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version]))
 
 # ****************** Net-SNMP/UCD-SNMP Checks ***********************
-	
+
 # Determine UCD or Net-SNMP installation paths
 if test "x$SNMP_DIR" != "x"; then
     for i in / /ucd-snmp /include/ucd-snmp; do
@@ -138,7 +138,7 @@ if test "x$SNMP_DIR" != "x"; then
     for i in / /net-snmp /include/net-snmp; do
        test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i
     done
-    
+
     test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
     test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
 else
@@ -187,7 +187,7 @@ fi
 
 AC_CHECK_LIB(netsnmp, snmp_timeout,
        [ LIBS="-lnetsnmp $LIBS"
-         AC_DEFINE(USE_NET_SNMP, 1, New Net SNMP Version) 
+         AC_DEFINE(USE_NET_SNMP, 1, New Net SNMP Version)
 	 USE_NET_SNMP=yes ],
        [ AC_MSG_RESULT(Cannot find NET-SNMP libraries(snmp)... checking UCD-SNMP)
          USE_NET_SNMP=no ])
