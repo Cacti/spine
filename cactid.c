@@ -166,7 +166,7 @@ int main(int argc, char *argv[]) {
 			break;
 	}
 
-	num_rows = mysql_num_rows(result);
+	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
 	threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t));
 	ids = (int *)malloc(num_rows * sizeof(int));
 
@@ -192,9 +192,13 @@ int main(int argc, char *argv[]) {
 			}
 
 			while ((active_threads < set.threads) && (device_counter < num_rows)) {
-				mysql_row = mysql_fetch_row(result);
-				host_id = atoi(mysql_row[0]);
-				ids[device_counter] = host_id;
+				if (device_counter > 0) {
+					mysql_row = mysql_fetch_row(result);
+					host_id = atoi(mysql_row[0]);
+					ids[device_counter] = host_id;
+				} else {
+					ids[device_counter] = 0;
+				}
 
 				/* create child process */
 				thread_status = pthread_create(&threads[device_counter], &attr, child, &ids[device_counter]);
