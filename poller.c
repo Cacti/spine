@@ -390,8 +390,8 @@ int validate_result(char * result) {
 	int delim_cnt = 0;
 	int i;
 
-	/* remove control characters from string */
-	result = (char *) strip_string_crlf(result);
+//	/* remove control characters from string */
+//	result = (char *) strip_string_crlf(result);
 
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
