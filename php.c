@@ -118,7 +118,7 @@ char *php_readpipe() {
 	default:
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE-1);
 		if (rescode > 0)
-			snprintf(result_string, BUFSIZE, "%s\0", strip_string_crlf(result_string));
+			result_string[rescode] = '\0';
 		else
 			snprintf(result_string, BUFSIZE, "%s", "U");
 		break;

@@ -508,34 +508,35 @@ char *exec_poll(host_t *current_host, char *command) {
 				case EBADF:
 					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id);
 					cacti_log(logmessage);
-					snprintf(result_string, 2, "%s", "U");
+					snprintf(result_string, BUFSIZE, "%s", "U");
 					break;
 				case EINTR:
 					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The function was interrupted before any of the selected events occurred and before the timeout interval expired.\n", current_host->id);
 					cacti_log(logmessage);
-					snprintf(result_string, 2, "%s", "U");
+					snprintf(result_string, BUFSIZE, "%s", "U");
 					break;
 				case EINVAL:
 					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id);
 					cacti_log(logmessage);
-					snprintf(result_string, 2, "%s", "U");
+					snprintf(result_string, BUFSIZE, "%s", "U");
 					break;
 				default:
 					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The script/command select() failed\n", current_host->id);
 					cacti_log(logmessage);
-					snprintf(result_string, 2, "%s", "U");
+					snprintf(result_string, BUFSIZE, "%s", "U");
 					break;
 			}
 		case 0:
 			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: The POPEN timed out\n", current_host->id);
 			cacti_log(logmessage);
-			snprintf(result_string, 2, "%s", "U");
+			snprintf(result_string, BUFSIZE, "%s", "U");
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
 			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
 			if (bytes_read) {
-				snprintf(result_string, BUFSIZE, "%s\0", strip_string_crlf(result_string));				
+				result_string[bytes_read] = '\0';
+				strip_string_crlf(result_string); 
 			} else {
 				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 				cacti_log(logmessage);
