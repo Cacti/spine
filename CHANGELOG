@@ -1,0 +1,12 @@
+05/28/03
+- fixed segfaults when action == 2
+- unified pthread mutex locking code
+
+05/26/03
+- addition of create_rrd()
+
+05/25/03
+- major code cleanup and autoconf fixes
+
+05/24/03
+- merged code from RTG and the previous poller
