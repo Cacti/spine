@@ -231,6 +231,8 @@ int main(int argc, char *argv[]) {
 		}else{
 			sleepy(sleep_time);
 		}
+
+		mutex_unlock(LOCK_CREW);
 	} /* while */
 	
 	/* Disconnect from the MySQL Database, exit. */
