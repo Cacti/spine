@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2003 Ian Berry                                            |
+ | Copyright (C) 2004 Ian Berry                                            |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU General Public License             |
@@ -23,8 +23,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#ifndef RTG_COMMON_H
-#define RTG_COMMON_H 1
+#ifndef CACTID_COMMON_H
+#define CACTID_COMMON_H 1
 
 #define _THREAD_SAFE
 #define _PTHREADS
@@ -77,4 +77,4 @@
 
 #include <signal.h>
 
-#endif /* RTG_COMMON_H */
+#endif /* CACTID_COMMON_H */
