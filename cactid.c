@@ -345,8 +345,13 @@ void process_data() {
 			sprintf(rrd_targets[rrd_target_counter].rrdcmd, "%s", rrdcmd_lli(entry->rrd_name, entry->rrd_path, entry->result));
 			rrd_target_counter++;
 		}
+		
+		/* do RRD file path check */
+		if (!file_exists(entry->rrd_path)) {
+			create_rrd(entry->local_data_id, entry->rrd_path);
+		}
 	}
-	
+		
 	update_rrd(rrd_targets, rrd_target_counter);
 	free(rrd_targets);
 }

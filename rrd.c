@@ -53,6 +53,73 @@ int update_rrd(rrd_t *rrd_targets, int rrd_target_count) {
 	#endif
 }
 
+void create_rrd(int local_data_id, char *data_source_path) {
+	MYSQL mysql;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	FILE *rrdtool_stdin;
+	
+	int i;
+	int consolidation_function_id, data_source_type_id, rrd_step;
+	char query[512];
+	char rra_string[512] = "";
+	char ds_string[512] = "";
+	char rrdcmd[512];
+	char temp[64];
+	char *cf[4] = {"AVERAGE", "MIN", "MAX", "LAST"};
+	char *ds[4] = {"GAUGE", "COUNTER", "DERIVE", "ABSOLUTE"};
+	
+	/* get a list of RRAs in this RRD file */
+	sprintf(query, "select data_template_data.rrd_step,rra.x_files_factor,rra.steps,rra.rows,rra_cf.consolidation_function_id,(rra.rows*rra.steps) as rra_order from data_template_data left join data_template_data_rra on data_template_data.id=data_template_data_rra.data_template_data_id left join rra on data_template_data_rra.rra_id=rra.id left join rra_cf on rra.id=rra_cf.rra_id where data_template_data.local_data_id=%i and (rra.steps is not null or rra.rows is not null) order by rra_cf.consolidation_function_id,rra_order", local_data_id);
+	
+	rtg_dbconnect(set.dbdb, &mysql);
+	result = db_query(&mysql, query);
+	
+	/* loop through each RRA */
+	for (i=0; i<mysql_num_rows(result); i++) {
+		row = mysql_fetch_row(result);
+		
+		consolidation_function_id = (atoi(row[4]) - 1);
+		sprintf(temp,"RRA:%s:%s:%s:%s ", cf[consolidation_function_id], row[1], row[2], row[3]);
+		
+		strcat(rra_string,temp);
+		
+		rrd_step = atoi(row[0]);
+	}
+	
+	/* free memory */
+	free(result);
+	
+	/* get a list of DSs in this RRD file */
+	sprintf(query, "select data_source_name,rrd_heartbeat,rrd_minimum,rrd_maximum,data_source_type_id from data_template_rrd where local_data_id=%i", local_data_id);
+	
+	result = db_query(&mysql, query);
+	
+	/* loop through each DS */
+	for (i=0; i<mysql_num_rows(result); i++) {
+		row = mysql_fetch_row(result);
+		
+		data_source_type_id = (atoi(row[4]) - 1);
+		sprintf(temp,"DS:%s:%s:%s:%s:%s ", row[0], ds[data_source_type_id], row[1], row[2], row[3]);
+		
+		strcat(ds_string,temp);
+	}
+	
+	/* free memory */
+	free(result);
+	mysql_close(&mysql);
+	
+	/* build final rrd create string */
+	sprintf(rrdcmd, "create %s --step %i %s %s", data_source_path, rrd_step, ds_string, rra_string);
+	
+	/* run the rrd create string against rrdtool */
+	rrdtool_stdin = popen("rrdtool -", "w");
+	fprintf(rrdtool_stdin, "%s\n",rrdcmd);
+	pclose(rrdtool_stdin);
+	
+	printf("rrdcmd: %s\n", rrdcmd);
+}
+
 char *rrdcmd_multids(multi_rrd_t *multi_targets, int multi_target_count) {
 	int i;
 	char part1[64]="", part2[64]="";
