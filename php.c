@@ -77,7 +77,6 @@ char *php_cmd(char *php_command) {
 /*  php_readpipe - read a line from the PHP script server                     */
 /******************************************************************************/
 char *php_readpipe() {
-	char *pipe_read = (char *) malloc(BUFSIZE);
 	char *result_string = (char *) malloc(BUFSIZE);
 	fd_set fds;
 	int rescode, numfds;
@@ -112,15 +111,13 @@ char *php_readpipe() {
 		snprintf(result_string, 2, "%s", "U");
 		break;
 	default:
-		rescode = read(php_pipes.php_read_fd, pipe_read, BUFSIZE);
+		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE-1);
 		if (rescode > 0)
-			snprintf(result_string, rescode, "%s", pipe_read);
+			result_string[rescode] = '\0';
 		else
 			snprintf(result_string, 2, "%s", "U");
 		break;
 	}
-
-	free(pipe_read);
 
 	return result_string;
 }
@@ -164,7 +161,7 @@ int php_init() {
 	argv[0] = set.path_php;
 	argv[1] = set.path_php_server;
 	argv[2] = "cactid";
-	snprintf(poller_id, sizeof(int), "%d", set.poller_id);
+	snprintf(poller_id, sizeof(poller_id), "%d", set.poller_id);
 	argv[3] = poller_id;
 	argv[4] = NULL;
 

@@ -468,7 +468,6 @@ char *exec_poll(host_t *current_host, char *command) {
 	int cmd_fd;
 	int return_value;
 	int bytes_read;
-	char cmd_result[BUFSIZE] = "";
 	char logmessage[LOGSIZE];
 
 	fd_set fds;
@@ -527,9 +526,9 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, cmd_result, sizeof(cmd_result));
-			if (bytes_read) {
-				snprintf(result_string, bytes_read+1, "%s", cmd_result);
+			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
+			if (bytes_read > 0) {
+				result_string[bytes_read] = '\0';
 				strncpy(result_string, strip_string_crlf(result_string), sizeof(result_string));
 			} else {
 				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);

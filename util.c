@@ -567,7 +567,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	} else {
 		strncpy(ping->snmp_status, "0.00", sizeof(ping->snmp_status));
 		strncpy(ping->snmp_response, "Host does not require SNMP", sizeof(ping->snmp_response));
-		poll_result = "0.00";
+		poll_result = strdup("0.00");
 	}
 
 	if ((strlen(poll_result) == 0) || (strstr(poll_result,"ERROR"))) {
@@ -826,7 +826,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			/* check to see which socket talked */
 			if (FD_ISSET(udp_socket, &socket_fds)) {
-				return_code = read(udp_socket, socket_reply, 256);
+				return_code = read(udp_socket, socket_reply, BUFSIZE-1);
 			} else {
 				return_code = -10;
 			}

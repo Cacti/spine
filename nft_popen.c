@@ -119,7 +119,7 @@ int nft_popen(const char * command, const char * type) {
 	 */
 	if (strchr(type, '+')) {
 		twoway = 1;
-		type = "r+";
+		type = strdup("r+");
 	}else {
 		twoway = 0;
 		if ((*type != 'r' && *type != 'w') || type[1]) {
@@ -141,8 +141,8 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
-	argv[0] = "sh";
-	argv[1] = "-c";
+	argv[0] = strdup("sh");
+	argv[1] = strdup("-c");
 	argv[2] = (char *)command;
 	argv[3] = NULL;
 
