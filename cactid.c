@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
 	struct timeval now;
 	double begin_time, end_time;
 	char *conf_file = NULL;
-	char filename[BUFSIZE];
+	//char filename[BUFSIZE];
 	
 	int num_rows;
 	int device_counter = 0;
@@ -57,24 +57,41 @@ int main(int argc, char *argv[]) {
 	MYSQL_ROW mysql_row;
 	int canexit = 0;
 	int host_id;
+	int i;
 	
 	set.verbose = LOW;
 	
 	if (set.verbose >= LOW) {
-		printf("cactid version %s starting.", VERSION);
+		printf("cactid version %s starting.\n", VERSION);
 	}
 	
-	/* Read configuration file to establish local environment */
 	config_defaults(&set);
 	
-	if (conf_file == NULL) {
-		conf_file = malloc(sizeof(filename));
-		strcpy(conf_file, CONFIG1);
-	}
-	
-	if ((init_config(conf_file, &set)) < 0) {
-		fprintf(stderr, "Couldn't write config file.\n");
+	/* Read configuration file to establish local environment */
+	if (conf_file) {
+		if ((read_config(conf_file, &set)) < 0) {
+		printf("Could not read config file: %s\n", conf_file);
 		exit(-1);
+		}
+	}else{
+		conf_file = malloc(BUFSIZE);
+		
+		if (!conf_file) {
+			printf("Fatal malloc error!\n");
+			exit(-1);
+		}
+		
+		for(i=0;i<CONFIG_PATHS;i++) {
+			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE); 
+			
+			if (read_config(conf_file, &set) >= 0) {
+				break;
+			} 
+			
+			if (i == CONFIG_PATHS-1) {
+				snprintf(conf_file, BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE); 
+			}
+		}
 	}
 	
 	db_connect(set.dbdb, &mysql);

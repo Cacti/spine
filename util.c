@@ -29,7 +29,7 @@
 #include "util.h"
 
 /* read configuration file to establish local environment */
-int init_config(char *file, config_t * set) {
+int read_config(char *file, config_t * set) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
@@ -39,29 +39,21 @@ int init_config(char *file, config_t * set) {
 		return (-1);
 	}else{
 		if (set->verbose >= LOW) {
-			printf("\nReading cactid config [%s].\n", file);
+			printf("Using cactid config file [%s].", file);
 		}
 		
 		while(!feof(fp)) {
 			fgets(buff, BUFSIZE, fp);
-			
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
-				sscanf(buff, "%s %s", p1, p2);
+				sscanf(buff, "%20s %20s", p1, p2);
+				
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
 				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
 				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
-				else if (!strcasecmp(p1, "DB_Host")) strcpy(set->dbhost, p2);
-				else if (!strcasecmp(p1, "DB_Database")) strcpy(set->dbdb, p2);
-				else if (!strcasecmp(p1, "DB_User")) strcpy(set->dbuser, p2);
-				else if (!strcasecmp(p1, "DB_Pass")) strcpy(set->dbpass, p2);
-				
-				/* Long longs not ANSI C.  If OS doesn't support atoll() use default. */
-				else if (!strcasecmp(p1, "OutOfRange")) 
-					#ifdef HAVE_LONG_LONG_SCANF
-					set->out_of_range = atoll(p2);
-					#else
-					set->out_of_range = DEFAULT_OUT_OF_RANGE;
-					#endif
+				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
+				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
+				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
+				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
 				else { 
 					printf("*** Unrecongized directive: %s=%s in %s\n", 
 					p1, p2, file);
@@ -80,22 +72,24 @@ int init_config(char *file, config_t * set) {
 			set->threads, MAX_THREADS);
 			exit(-1);
 		}
+		
 		return (0);
 	}
 }
 
-
-
 /* Populate Master Configuration Defaults */
 void config_defaults(config_t * set) {
 	set->interval = DEFAULT_INTERVAL;
-	set->out_of_range = DEFAULT_OUT_OF_RANGE;
 	set->snmp_ver = DEFAULT_SNMP_VER;
 	set->threads = DEFAULT_THREADS;
-	strcpy(set->dbhost, DEFAULT_DB_HOST);
-	strcpy(set->dbdb, DEFAULT_DB_DB);
-	strcpy(set->dbuser, DEFAULT_DB_USER);
-	strcpy(set->dbpass, DEFAULT_DB_PASS);
+	
+	strncpy(set->dbhost, DEFAULT_DB_HOST, sizeof(set->dbhost));
+	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost));
+	strncpy(set->dbuser, DEFAULT_DB_USER, sizeof(set->dbhost));
+	strncpy(set->dbpass, DEFAULT_DB_PASS, sizeof(set->dbhost));
+	
+	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0]));
+	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1]));
 	
 	return;
 }
@@ -117,8 +111,7 @@ void timestamp(char *str) {
 	
 	gettimeofday(&now, NULL);
 	t = localtime(&now.tv_sec);
-	printf("[%02d/%02d %02d:%02d:%02d %s]\n", t->tm_mon + 1, 
-	t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, str);
+	printf("[%02d/%02d %02d:%02d:%02d %s]\n", t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, str);
 	
 	return;
 }

@@ -23,7 +23,7 @@
  +-------------------------------------------------------------------------+
 */
 
-int init_config(char *, config_t *);
+int read_config(char *file, config_t * set);
 void config_defaults(config_t *);
 void timestamp(char *);
 int file_exists(char *filename);
