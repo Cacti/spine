@@ -25,3 +25,4 @@
 
 void *child(void * arg);
 void poll_host(int host_id);
+char *exec_poll(host_t *current_host, char *command);

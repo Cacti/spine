@@ -40,9 +40,9 @@
 
 void snmp_init() {
 	init_snmp("cactid");
-	
+
 	SOCK_STARTUP;
-	
+
 	#ifdef USE_NET_SNMP
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
@@ -115,6 +115,15 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char storedoid[BUFSIZE];
 
 	char *result_string = (char *) malloc(BUFSIZE);
+
+	/* only SNMP v1 and v2c are supported right now */
+	if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
+		sprintf(logmessage,"ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->hostname);
+		cacti_log(logmessage,"e");
+		snprintf(result_string, BUFSIZE, "%s", "U");
+
+		return result_string;
+	}
 
 	anOID_len = MAX_OID_LEN;
 	pdu = snmp_pdu_create(SNMP_MSG_GET);

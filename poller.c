@@ -61,16 +61,14 @@ void poll_host(int host_id) {
 	char query1[256];
 	char query2[256];
 	char *query3;
+	char query4[256];
 	int target_id = 0;
 	int num_rows;
 	int failcount = 0;
-	FILE *cmd_stdout;
-	int cmd_fd;
-	int return_value;
-	char cmd_result[512];
-	char *snmp_result;
+	char *poll_result;
 	char logmessage[255];
 
+	reindex_t *reindex;
 	target_t *entry;
 	host_t *host;
 
@@ -86,6 +84,7 @@ void poll_host(int host_id) {
 
 	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
 	snprintf(query2, sizeof(query2), "select hostname,snmp_community,snmp_version,snmp_port,snmp_timeout from host where id=%i", host_id);
+	snprintf(query4, sizeof(query4), "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
 
 	db_connect(set.dbdb, &mysql);
 
@@ -114,6 +113,66 @@ void poll_host(int host_id) {
 	/* initialize SNMP */
 	snmp_host_init(host);
 
+	/* perform a check to see if the host is alive by polling it's SysName
+	 * if the host down from an snmp perspective, don't poll it.
+	 * function sets the ignore_host bit */
+	poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
+	free(poll_result);
+
+	/* do the reindex check for this host */
+	if (!host->ignore_host) {
+		reindex = (reindex_t *) malloc(sizeof(reindex_t));
+
+		result = db_query(&mysql, query4);
+		num_rows = (int)mysql_num_rows(result);
+
+		if (num_rows > 0) {
+			printf("Processing %i items in the auto reindex cache for '%s'.\n", num_rows, host->hostname);
+		}
+
+		while (row = mysql_fetch_row(result)) {
+			reindex->data_query_id = atoi(row[0]);
+			reindex->action = atoi(row[1]);
+			if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
+			if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
+			if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
+
+			switch(reindex->action) {
+			case POLLER_ACTION_SNMP: /* snmp */
+				poll_result = snmp_get(host, reindex->arg1);
+				break;
+			case POLLER_ACTION_SCRIPT: /* script (popen) */
+				poll_result = exec_poll(host, reindex->arg1);
+				break;
+			}
+
+			if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
+				printf("Assert '%s=%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+
+				query3 = (char *)malloc(128);
+				sprintf(query3, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+				db_insert(&mysql, query3);
+				free(query3);
+			}else if ((!strcmp(reindex->op, ">")) && (atoi(reindex->assert_value) <= atoi(poll_result))) {
+				printf("Assert '%s>%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+
+				query3 = (char *)malloc(128);
+				sprintf(query3, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+				db_insert(&mysql, query3);
+				free(query3);
+			}else if ((!strcmp(reindex->op, "<")) && (atoi(reindex->assert_value) >= atoi(poll_result))) {
+				printf("Assert '%s<%s' failed. Recaching host '%s', data query #%i.\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+
+				query3 = (char *)malloc(128);
+				sprintf(query3, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+				db_insert(&mysql, query3);
+				free(query3);
+			}
+
+			free(poll_result);
+		}
+	}
+
 	/* retreive each hosts polling items from poller cache */
 	entry = (target_t *) malloc(sizeof(target_t));
 
@@ -140,22 +199,12 @@ void poll_host(int host_id) {
 		entry->snmp_timeout = atoi(row[14]);
 		snprintf(entry->result, sizeof(entry->result), "%s", "U");
 
-		/* perform a check to see if the host is alive by polling it's SysName
-		 * if the host down from an snmp perspective, don't poll it.
-		 * function sets the ignore_host bit */
-		snmp_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
-
 		if (!host->ignore_host) {
 			switch(entry->action) {
-			case 0: /* raw SNMP poll */
-				if ((entry->snmp_version == 1) || (entry->snmp_version == 2)) {
-					snmp_result = snmp_get(host, entry->arg1);
-					snprintf(entry->result, sizeof(entry->result), "%s", snmp_result);
-					free(snmp_result);
-				}else {
-					sprintf(logmessage,"ERROR: SNMP v3 is not yet supported in cactid [host: %s]\n", host->hostname);
-					cacti_log(logmessage,"e");
-				}
+			case POLLER_ACTION_SNMP: /* raw SNMP poll */
+				poll_result = snmp_get(host, entry->arg1);
+				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
+				free(poll_result);
 
 				if (host->ignore_host) {
 					sprintf(logmessage,"ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host->snmp_timeout, host->hostname);
@@ -168,45 +217,10 @@ void poll_host(int host_id) {
 				}
 
 				break;
-			case 1: /* execute script file */
-				thread_mutex_lock(LOCK_PIPE);
-				cmd_fd = nft_popen((char *)clean_string(entry->arg1), "r");
-
-				if (cmd_fd >= 0) {
-					cmd_stdout = fdopen(cmd_fd, "r");
-
-					while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
-						usleep(50000);
-					}
-
-					if (set.verbose >= HIGH) {
-						printf("ACTION1: Command Result->%s\n",cmd_result);
-					}
-
-					/* Cleanup File and Pipe */
-					fflush(cmd_stdout);
-					fclose(cmd_stdout);
-					return_value = nft_pclose(cmd_fd);
-
-					thread_mutex_unlock(LOCK_PIPE);
-
-					if (return_value != 0) {
-						sprintf(logmessage,"ERROR: Problem executing command [%i]: '%s'\n", host_id, entry->arg1);
-						cacti_log(logmessage,"e");
-						snprintf(entry->result, sizeof(entry->result), "%s", "U");
-					}else if (strlen(cmd_result) == 0) {
-						sprintf(logmessage,"ERROR: Empty result [%i]: '%s'\n", host_id, entry->arg1);
-						cacti_log(logmessage,"e");
-						snprintf(entry->result, sizeof(entry->result), "%s", "U");
-					}else {
-						snprintf(entry->result, sizeof(entry->result), "%s", cmd_result);
-					}
-				}else{
-					thread_mutex_unlock(LOCK_PIPE);
-					sprintf(logmessage,"ERROR: Problem executing popen [%i]: '%s'\n", host_id, entry->arg1);
-					cacti_log(logmessage,"e");
-					snprintf(entry->result, sizeof(entry->result), "%s", "U");
-				}
+			case POLLER_ACTION_SCRIPT: /* execute script file */
+				poll_result = exec_poll(host, entry->arg1);
+				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
+				free(poll_result);
 
 				if (set.verbose >= HIGH) {
 					printf("POLL COMPLETE: Command [%i]: %s, output: %s\n", host_id, entry->arg1, entry->result);
@@ -248,4 +262,54 @@ void poll_host(int host_id) {
 	if (set.verbose >= HIGH) {
 		printf("HOST COMPLETE: About to Exit Host Polling Thread Function\n");
 	}
+}
+
+char *exec_poll(host_t *current_host, char *command) {
+	FILE *cmd_stdout;
+	int cmd_fd;
+	int return_value;
+	char cmd_result[BUFSIZE];
+	char logmessage[255];
+	char *result_string = (char *) malloc(BUFSIZE);
+
+	thread_mutex_lock(LOCK_PIPE);
+	cmd_fd = nft_popen((char *)clean_string(command), "r");
+
+	if (cmd_fd >= 0) {
+		cmd_stdout = fdopen(cmd_fd, "r");
+
+		while ((fgets(cmd_result, 512, cmd_stdout) != NULL)) {
+			usleep(50000);
+		}
+
+		if (set.verbose >= HIGH) {
+			printf("ACTION1: Command Result->%s\n", cmd_result);
+		}
+
+		/* Cleanup File and Pipe */
+		fflush(cmd_stdout);
+		fclose(cmd_stdout);
+		return_value = nft_pclose(cmd_fd);
+
+		thread_mutex_unlock(LOCK_PIPE);
+
+		if (return_value != 0) {
+			sprintf(logmessage,"ERROR: Problem executing command [%s]: '%s'\n", current_host->hostname, command);
+			cacti_log(logmessage,"e");
+			snprintf(result_string, BUFSIZE, "%s", "U");
+		}else if (strlen(cmd_result) == 0) {
+			sprintf(logmessage,"ERROR: Empty result [%s]: '%s'\n", current_host->hostname, command);
+			cacti_log(logmessage,"e");
+			snprintf(result_string, BUFSIZE, "%s", "U");
+		}else {
+			snprintf(result_string, BUFSIZE, "%s", cmd_result);
+		}
+	}else{
+		thread_mutex_unlock(LOCK_PIPE);
+		sprintf(logmessage,"ERROR: Problem executing popen [%s]: '%s'\n", current_host->hostname, command);
+		cacti_log(logmessage,"e");
+		snprintf(result_string, BUFSIZE, "%s", "U");
+	}
+
+	return result_string;
 }

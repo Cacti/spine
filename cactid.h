@@ -77,6 +77,12 @@
 #define LOCK_PIPE_O 4
 #define LOCK_SYSLOG_O 5
 
+#define POLLER_ACTION_SNMP 0
+#define POLLER_ACTION_SCRIPT 1
+#define POLLER_ACTION_SCRIPT_PHP 2
+
+#define POLLER_COMMAND_REINDEX 1
+
 #define STAT_DESCRIP_ERROR 99
 
 /* Typedefs */
@@ -128,6 +134,14 @@ typedef struct host_struct {
 	int ignore_host;
  	void *snmp_session;
 } host_t;
+
+typedef struct host_reindex_struct {
+	char op[2];
+	char assert_value[100];
+	char arg1[100];
+	int data_query_id;
+	int action;
+} reindex_t;
 
 /* Globals */
 config_t set;
