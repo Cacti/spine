@@ -391,11 +391,13 @@ int validate_result(char * result) {
 	int args = 0;
 
 	/* check the easy cases first */
-	/* it has not delimiters, and no space, therefore, must be numeric */
+	/* it has no delimiters, and no space, therefore, must be numeric */
 	if ((!strstr(result, ":")) || (!strstr(result, " "))) {
 		if (is_number(result)) {
 			return(1);
-		} else {
+		} else if (is_float(result)) {
+			return(1);
+  		} else {
 			return(0);
 		}
 	}
@@ -410,79 +412,8 @@ int validate_result(char * result) {
 	if ((strstr(result, ":")) && (!strstr(result, " "))) {
 		return(0);
 	}
-
-	/* now for serious error checking */
-	for (i=0;i< strlen(result);i++) {
-		/* check for the character type */
-		if (isalpha(result[i])) {
-			now_type = RESULT_ALPHA;
-		} else if (isdigit(result[i])) {
-			now_type = RESULT_DIGIT;
-		} else if (isspace(result[i])) {
-   			now_type = RESULT_SPACE;
-		} else if (result[i] == ':') {
-			now_type = RESULT_SEPARATOR;
-		} else if (iscntrl(result[i])) {
-			return(0);
-		} else if (isxdigit(result[i])) {
-			return(0);
-		}
-
-		/* check for accuracy */
-		switch (next_type) {
-		case RESULT_ARGX:
-			if ((now_type == RESULT_DIGIT) ||
-				(now_type == RESULT_ALPHA)) {
-				/* do nothing, is acceptable */
-			} else if (((now_type == RESULT_SPACE) && (prev_type == RESULT_INIT)) ||
-					(now_type == RESULT_SPACE) && (prev_type == RESULT_VALX)) {
-				/* do nothing, still searching the front of the string */
-			} else if (now_type == RESULT_SPACE) {
-				next_type = RESULT_SEPARATOR;
-				prev_type = RESULT_ARGX;
-			} else if (now_type == RESULT_SEPARATOR) {
-				next_type = RESULT_VALX;
-				prev_type = RESULT_SEPARATOR;
-			}
-
-			break;
-		case RESULT_VALX:
-			if (now_type == RESULT_DIGIT) {
-				/* do nothing, is acceptable */
-			} else if (now_type == RESULT_SPACE) {
-				next_type = RESULT_ARGX;
-				prev_type = RESULT_VALX;
-			} else if (now_type == RESULT_ALPHA) {
-				return(0);
-			} else if (now_type == RESULT_SEPARATOR) {
-    			return(0);
-			}
-
-			break;
-		case RESULT_SEPARATOR:
-			if (now_type == RESULT_DIGIT){
-				return(0);
-			} else if (now_type == RESULT_SEPARATOR) {
-				next_type = RESULT_VALX;
-    			prev_type = RESULT_SEPARATOR;
-			} else if (now_type == RESULT_SPACE) {
-				/* do nothing, is acceptable */
-			} else if (now_type == RESULT_ALPHA) {
-				return(0);
-			}
-
-			args = args + 1;
-
-			break;
-		}
-	}
-
-	if (args = 0) {
-		return(0);
- 	} else {
-		return(1);
-	}
 }
+
 
 char *exec_poll(host_t *current_host, char *command) {
 	FILE *cmd_stdout;
@@ -526,12 +457,16 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			fgets(cmd_result, 512, cmd_stdout);
+			if (cmd_stdout > 0) {
+				fgets(cmd_result, 512, cmd_stdout);
+			}
 		}
 
 		/* cleanup file and pipe */
-		fflush(cmd_stdout);
-		fclose(cmd_stdout);
+		if (cmd_stdout > 0) {
+			fflush(cmd_stdout);
+			fclose(cmd_stdout);
+		}
 		nft_pclose(cmd_fd);
 
 		if (strlen(cmd_result) == 0) {

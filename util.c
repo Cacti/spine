@@ -991,6 +991,34 @@ int is_number(char *string) {
 }
 
 /******************************************************************************/
+/*  is_float() - verify is a number is float, raw                             */
+/******************************************************************************/
+int is_float(char *string) {
+	int i;
+	int sign_count = 0;
+ 	int exp_count = 0;
+
+	for(i=0; i<strlen(string); i++) {
+		if ((string[i] == '+') || (string[i] == '-')) {
+   			sign_count = sign_count + 1;
+		} else if (toupper(string[i]) == 'E') {
+			exp_count = exp_count + 1;
+		} else if(!isdigit(string[i]) && !(i==strlen(string)-1 && isspace(string[i]))) {
+			return(0);
+		}
+	}
+
+	if (sign_count > 2) {
+		return(0);
+	} else if (exp_count > 1) {
+		return(0);
+	} else {
+		return(1);
+	}
+}
+
+
+/******************************************************************************/
 /*  string_to_argv() - convert a string to an argc/argv combination           */
 /******************************************************************************/
 char **string_to_argv(char *argstring, int *argc){
