@@ -1,0 +1,11 @@
+------------------------------------------
+cactid: a backend data gatherer for cacti
+------------------------------------------
+
+This code represents the future replacement for cmd.php. As you can see
+from the short changelog, development on this code has only just begun. It
+has been included in the main release for *testing* purposes only! Please
+stick to cmd.php for now.
+
+-Ian
+
