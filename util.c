@@ -39,6 +39,15 @@
 #include "snmp.h"
 #include "sql.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <netinet/udp.h>
+#include <netinet/tcp.h>
+#include <sys/time.h>
+#include <string.h>
+
 int read_config_options(config_t *set) {
 	MYSQL mysql;
 	MYSQL_RES *result;
@@ -138,6 +147,22 @@ int read_config_options(config_t *set) {
 
 		if (!strcmp(mysql_row[0],"on")) {
 			set->log_perror = 1;
+		}else {
+			set->log_perror = 0;
+		}
+	}
+
+	/* set logging option for errors */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pwarn'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+
+		if (!strcmp(mysql_row[0],"on")) {
+			set->log_pwarn = 1;
+		}else {
+			set->log_pwarn = 0;
 		}
 	}
 
@@ -150,6 +175,8 @@ int read_config_options(config_t *set) {
 
 		if (!strcmp(mysql_row[0],"on")) {
 			set->log_pstats = 1;
+		}else {
+			set->log_pstats = 0;
 		}
 	}
 
@@ -313,6 +340,9 @@ void cacti_log(char *logmessage) {
 		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
 		}
+		if ((strstr(flogmessage,"WARNING")) && (set.log_pwarn)){
+			syslog(LOG_WARNING,"%s\n", flogmessage);
+		}
 		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
 				syslog(LOG_NOTICE,"%s\n", flogmessage);
 		}
@@ -341,10 +371,16 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	/* icmp/udp ping test */
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
-		if (set.ping_method == PING_ICMP) {
-			ping_result = ping_icmp(host, ping);
-		}else if (set.ping_method == PING_UDP) {
-			ping_result = ping_udp(host, ping);
+		if (!strstr(host->hostname, "localhost")) {
+			if (set.ping_method == PING_ICMP) {
+				ping_result = ping_icmp(host, ping);
+			}else if (set.ping_method == PING_UDP) {
+				ping_result = ping_udp(host, ping);
+			}
+		} else {
+			strncpy(ping->ping_status, "0.000", sizeof(ping->ping_status));
+			strncpy(ping->ping_response, "PING: Host does not require ping", sizeof(ping->ping_response));
+			ping_result = HOST_UP;
 		}
 	}
 
@@ -417,36 +453,69 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 }
 
+/* allocate the ICMP socket and release su */
+int init_socket()
+{
+	int icmp_socket;
+
+	/* error getting socket */
+	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+	{
+		cacti_log("ERROR: init_socket: cannot open the ICMP socket\n");
+		return(-1);
+	}
+
+	setuid(getuid());
+
+	return(icmp_socket);
+}
+
 /* perform an ICMP/ECHO based ping */
 int ping_icmp(host_t *host, ping_t *ping) {
 	extern int errno;
+	int icmp_socket;
+
 	double begin_time, end_time, total_time;
 	struct timeval now;
 	struct timeval timeout;
-	int icmp_socket;
+
 	struct sockaddr_in servername;
-	char socket_reply[256];
+	char socket_reply[BUFSIZE];
 	int retry_count;
 	char request[256];
+	char *cacti_msg = "cacti-monitoring-system";
 	int request_len;
 	int return_code;
+	int packet_len;
+	int fromlen;
 	fd_set socket_fds;
 	int numfds;
-	icmp_t icmp_packet;
-	char *buffer;
+
+	static unsigned int seq = 0;
+	struct icmphdr* icmp;
+	size_t packet_size;
+	unsigned char* packet;
+
+	/* get ICMP socket and release setuid */
+ 	icmp_socket = init_socket();
 
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
 	timeout.tv_usec = set.ping_timeout * 1000;
 
-	icmp_packet.icmp_type = 0x08; // 0x08 echo message; 0x00 echo reply message
-	icmp_packet.icmp_code = 0x00; // always 0x00
-	icmp_packet.icmp_chksm = 0x96a6; // generate checksum for icmp request
-	icmp_packet.icmp_uid = 0x0000; // we will have to work with this later
-	icmp_packet.icmp_sqn = 0x0028; // we will have to work with this later
-	strncpy(icmp_packet.data, "cacti-monitoring-system", sizeof(icmp_packet.data));
+	/* allocate the packet in memory */
+	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
+	packet = malloc(packet_len);
 
-	buffer = &icmp_packet;
+	icmp = (struct icmphdr*)packet;
+	icmp->type = ICMP_ECHO;
+	icmp->code = 0;
+	icmp->un.echo.id = getpid();
+	icmp->un.echo.sequence = seq++;
+	gettimeofday((struct timeval*)(icmp+1), NULL);
+	icmp->checksum = 0;
+	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
+	icmp->checksum = checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
 	if (strlen(host->hostname) != 0) {
@@ -454,23 +523,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		strcpy(ping->ping_status,"down");
 		strcpy(ping->ping_response,"default");
 
-		/* initilize the socket */
-		icmp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-
 		/* set the socket timeout */
 		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
 		init_sockaddr(&servername, host->hostname, 7);
-
-		return_code = connect(icmp_socket, (struct sockaddr *) &servername, sizeof(servername));
-		if (return_code >= 0) {
-				// do nothing
-		} else {
-			strcpy(ping->ping_status, "down");
-			strcpy(ping->ping_response, "Cannot connect to host");
-			return HOST_DOWN;
-		}
 
 		retry_count = 0;
 
@@ -480,8 +537,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strcpy(ping->ping_response,"ICMP/ECHO ping timed out");
+				strcpy(ping->ping_response,"ICMP: Ping timed out");
 				strcpy(ping->ping_status,"down");
+				free(packet);
 				close(icmp_socket);
 				return HOST_DOWN;
 			}
@@ -491,14 +549,16 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 			/* send packet to destination */
-			return_code = send(icmp_socket, buffer, sizeof(icmp_packet), 0);
+			return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
 
 			/* wait for a response on the socket */
 			select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
+   			fromlen = sizeof(servername);
+
 			/* check to see which socket talked */
 			if (FD_ISSET(icmp_socket, &socket_fds)) {
-				return_code = recv(icmp_socket, socket_reply, 256, 0);
+				return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &servername, &fromlen);
 			} else {
 				return_code = -10;
 			}
@@ -509,24 +569,47 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 			/* caculate total time */
 			total_time = (end_time - begin_time) * 1000;
+
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if (total_time < set.ping_timeout) {
-					strcpy(ping->ping_response,"Host is Alive");
+					strcpy(ping->ping_response,"ICMP: Host is Alive");
 					sprintf(ping->ping_status,"%.5f",total_time);
+					free(packet);
 					close(icmp_socket);
 					return HOST_UP;
-				} else {
-					printf("host down\n");
 				}
 			}
 
 			retry_count++;
+			usleep(50);
 		}
 	} else {
-		strcpy(ping->ping_response,"Destination address not specified");
+		strcpy(ping->ping_response,"ICMP: Destination address not specified");
 		strcpy(ping->ping_status,"down");
+		free(packet);
+  		close(icmp_socket);
 		return HOST_DOWN;
 	}
+}
+
+/* calculate a checksum for the IP packet */
+unsigned short checksum(void* buf, int len)
+{
+	int nleft = len;
+	int sum = 0;
+	unsigned short answer;
+	unsigned short* w = (unsigned short*)buf;
+
+	while (nleft > 1) {
+		sum += *w++;
+		nleft -= 2;
+	}
+	if (nleft == 1)
+		sum += *(unsigned char*)w;
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	answer = ~sum;				/* truncate to 16 bits */
+	return answer;
 }
 
 /* perform a udp based ping */
@@ -568,7 +651,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				// do nothing
 		} else {
 			strcpy(ping->ping_status, "down");
-			strcpy(ping->ping_response, "Cannot connect to host");
+			strcpy(ping->ping_response, "UDP: Cannot connect to host");
 			return HOST_DOWN;
 		}
 
@@ -586,7 +669,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strcpy(ping->ping_response,"UDP ping timed out");
+				strcpy(ping->ping_response,"UDP: Ping timed out");
 				strcpy(ping->ping_status,"down");
 				close(udp_socket);
 				return HOST_DOWN;
@@ -624,7 +707,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if ((total_time * 1000) <= set.ping_timeout) {
-					strcpy(ping->ping_response,"Host is Alive");
+					strcpy(ping->ping_response,"UDP: Host is Alive");
 					sprintf(ping->ping_status,"%.5f",(total_time*1000));
 					close(udp_socket);
 					return HOST_UP;
@@ -634,7 +717,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			retry_count++;
 		}
 	} else {
-		strcpy(ping->ping_response,"Destination address not specified");
+		strcpy(ping->ping_response,"UDP: Destination address not specified");
 		strcpy(ping->ping_status,"down");
 		return HOST_DOWN;
 	}
@@ -650,8 +733,10 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 	extern config_t set;
 
 	/* get date and format for mysql */
-	if (time(&nowbin) == (time_t) - 1)
+	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
+		exit(-1);
+	}
 
 	nowstruct = localtime(&nowbin);
 	strftime(current_date, sizeof(current_date), "%Y-%m-%d %I:%M", nowstruct);
@@ -799,33 +884,33 @@ int update_host_status(int status, host_t *host, ping_t *ping, int availability_
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				snprintf(logmessage, LOGSIZE, "Host[%i] PING: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
-				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else if (availability_method == AVAIL_SNMP) {
 				if (host->snmp_community == "") {
-					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: Device does not require SNMP\n", host->id);
+					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP Result: Device does not require SNMP\n", host->id);
 					cacti_log(logmessage);
 				}else{
-					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: %s\n", host->id, ping->snmp_response);
+					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 					cacti_log(logmessage);
 				}
 			} else {
-				snprintf(logmessage, LOGSIZE, "Host[%i] PING: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING: Result %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 			}
 		} else {
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				snprintf(logmessage, LOGSIZE, "Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
-				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else if (availability_method == AVAIL_SNMP) {
-				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP ERROR: %s\n", host->id, ping->snmp_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else {
-				snprintf(logmessage, LOGSIZE, "Host[%i] PING ERROR: %s\n", host->id, ping->ping_response);
+				snprintf(logmessage, LOGSIZE, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 			}
 		}
@@ -915,7 +1000,7 @@ void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned sho
 	name->sin_port = htons (port);
 	hostinfo = gethostbyname (hostname);
 	if (hostinfo == NULL) {
-		sprintf(logmessage, "Unknown host %s.\n", hostname);
+		sprintf(logmessage, "WARNING: Unknown host %s.\n", hostname);
 		cacti_log(logmessage);
 	}
 	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;

@@ -111,6 +111,10 @@
 
 #define STAT_DESCRIP_ERROR 99
 
+/* required for ICMP and UDP ping */
+#define ICMP_ECHO 8
+#define ICMP_HDR_SIZE 8
+
 /* Typedefs */
 typedef struct config_struct {
 	int interval;
@@ -125,6 +129,7 @@ typedef struct config_struct {
 	char path_php_server[250];
 	int log_destination;
 	int log_perror;
+	int log_pwarn;
 	int log_pstats;
 	int availability_method;
 	int ping_method;
@@ -203,14 +208,23 @@ typedef struct ping_results {
 	char snmp_response[50];
 } ping_t;
 
-typedef struct cacti_icmp {
-	char icmp_type;
-	char icmp_code;
-	short icmp_chksm;
-	short icmp_uid;
-	short icmp_sqn;
-	char data[23];
-} icmp_t;
+struct icmphdr {
+    char type;
+	char code;
+	unsigned short checksum;
+	union {
+		struct {
+			unsigned short id;
+			unsigned short sequence;
+		} echo;
+		unsigned int gateway;
+		struct {
+			unsigned short unused;
+    		unsigned short mtu;
+		} frag;
+	} un;
+};
+
 
 /* Globals */
 config_t set;
