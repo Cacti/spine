@@ -93,8 +93,8 @@ char *php_readpipe() {
 	else
 		numfds = php_pipes.php_write_fd + 1;
 
-	/* establish timeout of 10 seconds to have PHP script server respond */
-	timeout.tv_sec = 10;
+	/* establish timeout of 25 seconds to have PHP script server respond */
+	timeout.tv_sec = 25;
 	timeout.tv_usec = 0;
 
 	/* check to see which pipe talked and take action

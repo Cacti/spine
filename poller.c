@@ -476,8 +476,8 @@ char *exec_poll(host_t *current_host, char *command) {
 
 	char *result_string = (char *) malloc(BUFSIZE);
 
-    	/* establish timeout of 5 seconds for pipe response */
-    	timeout.tv_sec = 10;
+    	/* establish timeout of 25 seconds for pipe response */
+    	timeout.tv_sec = 25;
     	timeout.tv_usec = 0;
 
 	cmd_fd = nft_popen((char *)clean_string(command), "r");
