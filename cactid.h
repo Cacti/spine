@@ -34,7 +34,7 @@
 #endif
 
 /* Constants */
-#define MAX_THREADS 10
+#define MAX_THREADS 100
 #define BUFSIZE 512
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
@@ -156,6 +156,10 @@ void config_defaults(config_t *);
 void print_stats (stats_t);
 void sleepy(float);
 void timestamp(char *);
+
+/* Precasts: locks.c */
+void	mutex_lock(int);
+void	mutex_unlock(int);
 
 /* Globals */
 config_t set;
