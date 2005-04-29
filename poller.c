@@ -498,7 +498,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	char *result_string = (char *) malloc(BUFSIZE);
 
 	/* establish timeout of 25 seconds for pipe response */
-	timeout.tv_sec = 10;
+	timeout.tv_sec = 25;
 	timeout.tv_usec = 0;
 
 	/* nasty workaround to compensate for vbs WMI calling parameters not wanting backslashes bothered with */
