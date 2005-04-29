@@ -79,6 +79,7 @@ void poll_host(int host_id) {
 	int num_rows;
 	int host_status;
 	int assert_fail = 0;
+	int spike_kill = 0;
 	char *poll_result = NULL;
 	char logmessage[LOGSIZE];
 	char update_sql[BUFSIZE];
@@ -259,6 +260,14 @@ void poll_host(int host_id) {
 					snprintf(query3, 255, "update poller_reindex set assert_value='%s' where host_id='%i' and data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
 					db_insert(&mysql, query3);
 					free(query3);
+
+					if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
+						spike_kill = 1;
+						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+							snprintf(logmessage, LOGSIZE, "Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname);
+							cacti_log(logmessage);
+						}
+					}
 				}
 
 				free(poll_result);
@@ -379,6 +388,11 @@ void poll_host(int host_id) {
 		}
 
 		if (entry->result != NULL) {
+			/* insert a NaN in place of the actual value if the snmp agent restarts */
+			if ((spike_kill) && (!strstr(entry->result,":"))) {
+				strncpy(entry->result, "U", sizeof(entry->result));				
+			}
+
 			/* format database insert string */
 			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
 			snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s','%s','%s')", entry->local_data_id, entry->rrd_name, start_datetime, entry->result);
