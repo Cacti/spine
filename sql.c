@@ -57,21 +57,44 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 
 int db_connect(char *database, MYSQL *mysql) {
 	char logmessage[LOGSIZE];
-	int retries;
+	int tries;
+	int result;
+
+	/* initialalize my variables */
+	tries = 10;
+	result = 0;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 		cacti_log(logmessage);
 	}
 
-	retries = 1;
 	mysql_init(mysql);
-		
-	if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, set.dbport, NULL, 0)) {
-		snprintf(logmessage, LOGSIZE, "ERROR: MySQL Connection failed after 10 attempts: %s\n", mysql_error(mysql));
+	
+	while (tries > 0){
+		tries--;
+		if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
+				cacti_log(logmessage);
+			}
+			result = 1;
+		}else{
+			tries = 0;
+			result = 0;
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				snprintf(logmessage, LOGSIZE, "MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+				cacti_log(logmessage);
+			}
+		}
+	}
+	if (result == 1){
+		snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
-		exit(-1);
-	}else {
+		thread_mutex_unlock(LOCK_MYSQL);
+		exit(0);
+	}else{
+		thread_mutex_unlock(LOCK_MYSQL);
 		return (0);
 	}
 }
