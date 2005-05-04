@@ -62,17 +62,25 @@ void snmp_host_init(host_t *current_host) {
 
 	char hostname[BUFSIZE];
 
+	/* assume snmp session is invalid */
+	current_host->snmp_session = NULL;
+
 	/* initialize SNMP */
 	snmp_init(current_host->id);
  	thread_mutex_lock(LOCK_SNMP);
   	snmp_sess_init(&session);
 	thread_mutex_unlock(LOCK_SNMP);
 
+	/* verify snmp version is accurate */
 	if (current_host->snmp_version == 2) {
 		session.version = SNMP_VERSION_2c;
-	}else{
+	}else if (current_host->snmp_version == 1) {
 		session.version = SNMP_VERSION_1;
-	}
+	}else {
+		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", current_host->id, current_host->hostname);
+		cacti_log(logmessage);
+		return;
+	}		
 
 	/* net-snmp likes the hostname in 'host:port' format */
 	snprintf(hostname, BUFSIZE, "%s:%i", current_host->hostname, current_host->snmp_port);
@@ -122,38 +130,43 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	char *result_string = (char *) malloc(BUFSIZE);
 
-	/* only SNMP v1 and v2c are supported right now */
-	if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
-		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
-		cacti_log(logmessage);
-		snprintf(result_string, BUFSIZE, "%s", "U");
-
-		return result_string;
-	}
-
-	anOID_len = MAX_OID_LEN;
-	pdu = snmp_pdu_create(SNMP_MSG_GET);
-	read_objid(snmp_oid, anOID, &anOID_len);
-
-	strncpy(storedoid, snmp_oid, sizeof(storedoid));
-
-	snmp_add_null_var(pdu, anOID, anOID_len);
 
 	if (current_host->snmp_session != NULL) {
-		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+		/* only SNMP v1 and v2c are supported right now */
+		if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
+			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
+			cacti_log(logmessage);
+			snprintf(result_string, BUFSIZE, "%s", "U");
+
+			return result_string;
+		}
+
+		anOID_len = MAX_OID_LEN;
+		pdu = snmp_pdu_create(SNMP_MSG_GET);
+		read_objid(snmp_oid, anOID, &anOID_len);
+
+		strncpy(storedoid, snmp_oid, sizeof(storedoid));
+
+		snmp_add_null_var(pdu, anOID, anOID_len);
+
+		if (current_host->snmp_session != NULL) {
+			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+		}else {
+			status = STAT_DESCRIP_ERROR;
+		}
+
+		/* liftoff, successful poll, process it!! */
+		if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
+			vars = response->variables;
+
+			#ifdef USE_NET_SNMP
+			snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+			#else
+			sprint_value(result_string, anOID, anOID_len, vars);
+			#endif
+		}
 	}else {
 		status = STAT_DESCRIP_ERROR;
-	}
-
-	/* liftoff, successful poll, process it!! */
-	if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
-		vars = response->variables;
-
-		#ifdef USE_NET_SNMP
-		snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
-		#else
-		sprint_value(result_string, anOID, anOID_len, vars);
-		#endif
 	}
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
