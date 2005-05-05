@@ -41,7 +41,11 @@
 #define _THREAD_SAFE
 #define _PTHREADS
 #define _P __P
-#define _REENTRANT 1
+
+#ifndef _REENTRANT 
+#define _REENTRANT 
+#endif 
+
 #define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
 
 #if HAVE_CONFIG_H

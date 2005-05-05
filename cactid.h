@@ -24,7 +24,7 @@
 */
 
 #ifndef _CACTID_H_
-#define _CACTID_H_ 1
+#define _CACTID_H_
 
 /* Defines */
 #ifndef FALSE

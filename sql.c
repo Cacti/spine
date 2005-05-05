@@ -48,9 +48,15 @@ int db_insert(MYSQL *mysql, char *query) {
 
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
-
- 	mysql_query(mysql, query);
-	mysql_res = mysql_store_result(mysql);
+	int return_code;
+	
+ 	return_code = mysql_query(mysql, query);
+	if (return_code) {
+		cacti_log("MYSQL: ERROR encountered while attempting to retrieve records from query\n");
+		exit -1;
+	}else{
+		mysql_res = mysql_store_result(mysql);
+	}
 
 	return mysql_res;
 }

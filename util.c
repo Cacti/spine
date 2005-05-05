@@ -326,6 +326,9 @@ int read_config_options(config_t *set) {
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 		set->threads = atoi(mysql_row[0]);
+		if (set->threads > 30) {
+			set->threads = 30;
+		}
 	}
 
 	/* log the threads variable */
@@ -362,8 +365,6 @@ int read_cactid_config(char *file, config_t *set) {
 				sscanf(buff, "%15s %255s", p1, p2);
 
 				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
-				else if (!strcasecmp(p1, "SNMP_Ver")) set->snmp_ver = atoi(p2);
-				else if (!strcasecmp(p1, "Threads")) set->threads = atoi(p2);
 				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
@@ -373,16 +374,6 @@ int read_cactid_config(char *file, config_t *set) {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
 			}
-		}
-
-		if (set->snmp_ver != 1 && set->snmp_ver != 2) {
-			printf("ERROR: Unsupported SNMP version: %d\n", set->snmp_ver);
-			exit(-1);
-		}
-
-		if (set->threads < 1 || set->threads > MAX_THREADS) {
-			printf("WARNING: Invalid number of threads will default to 10: %d (max=%d).\n", set->threads, MAX_THREADS);
-			set->threads = 10;
 		}
 
 		return (0);

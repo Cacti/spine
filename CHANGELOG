@@ -1,4 +1,4 @@
-raXnet – cactid
+The Cacti Group – cactid
 
 0.8.6e
 -bug: removed code that was converting back slashes to forward slashes
@@ -9,6 +9,9 @@ raXnet – cactid
 -bug: optimized some string handling routines
 -bug: removed thread locks around MySQL to optimize performance
 -bug: changed snmp availability polling to sysUptime from sysDesc
+-bug: limit the number of concurrent threads to 30
+-bug: remove legacy code from system for old cactid.conf file parameters
+-bug: add fault detection logic to mysql query calls to prevent segfaults
 -feature: added polling for non host specific data sources
 -feature: spike suppression feature
 
