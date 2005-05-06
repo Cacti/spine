@@ -79,7 +79,7 @@ int db_connect(char *database, MYSQL *mysql) {
 	
 	while (tries > 0){
 		tries--;
-		if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, 0, NULL, 0)) {
+		if (!mysql_real_connect(mysql, set.dbhost, set.dbuser, set.dbpass, database, set.dbport, NULL, 0)) {
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 				snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 				cacti_log(logmessage);
