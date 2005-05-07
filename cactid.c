@@ -178,9 +178,6 @@ int main(int argc, char *argv[]) {
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
-	#ifdef PTHREAD_MUTEX_ERRORCHECK
-	pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);	
-	#endif
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	init_mutexes();
@@ -318,9 +315,6 @@ int main(int argc, char *argv[]) {
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
-	#ifdef PTHREAD_MUTEX_ERRORCHECK
-	pthread_mutexattr_destroy(&mutexattr);
-	#endif
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
