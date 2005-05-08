@@ -92,6 +92,7 @@ int db_connect(char *database, MYSQL *mysql) {
 				snprintf(logmessage, LOGSIZE, "MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 				cacti_log(logmessage);
 			}
+			break;
 		}
 	}
 	if (result == 1){
