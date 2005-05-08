@@ -152,9 +152,17 @@ int main(int argc, char *argv[]) {
 	db_connect(set.dbdb, &mysql);
 
 	/* initialize SNMP */
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "CACTID: Initializing Net-SNMP API\n", VERSION);
+		cacti_log(logmessage);
+	}
 	init_snmp("cactid");
 
 	/* initialize PHP */
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE, "CACTID: Initializing PHP Script Server\n", VERSION);
+		cacti_log(logmessage);
+	}
 	php_init();
 
 	/* get the id's to poll */

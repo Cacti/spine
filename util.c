@@ -338,7 +338,7 @@ int read_config_options(config_t *set) {
 	}
 
 	mysql_free_result(result);
-	mysql_close(&mysql);
+	db_disconnect(&mysql);
 }
 
 /******************************************************************************/
