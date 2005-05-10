@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case 3:
-			snprintf(result_string, sizeof(result_string), "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id\0", argv[1], argv[2]);
+			snprintf(result_string, sizeof(result_string), "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id", argv[1], argv[2]);
 			result = db_query(&mysql, result_string);
 
 			break;
