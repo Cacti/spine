@@ -55,7 +55,6 @@ int main(int argc, char *argv[]) {
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
-	pthread_mutexattr_t mutexattr;
 
 	int* ids = NULL;
 	MYSQL mysql;
