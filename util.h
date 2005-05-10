@@ -43,7 +43,10 @@ char *strip_quotes(char *string);
 
 /* Host availability functions */
 int ping_host(host_t *host, ping_t *ping);
-int update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
+int ping_snmp(host_t *host, ping_t *ping);
+int ping_icmp(host_t *host, ping_t *ping);
+int ping_udp(host_t *host, ping_t *ping);
+void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
 void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port);
 int init_socket();
 unsigned short checksum(void* buf, int len);

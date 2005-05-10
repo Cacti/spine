@@ -546,7 +546,8 @@ int ping_host(host_t *host, ping_t *ping) {
 int ping_snmp(host_t *host, ping_t *ping) {
 	struct timeval now;
 	char *poll_result;
-	double begin_time, end_time;
+	double begin_time = 0;
+	double end_time = 0;
 
 	if (strlen(host->snmp_community) != 0) {
 		/* record start time */
@@ -612,16 +613,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int retry_count;
 	char request[BUFSIZE];
 	char *cacti_msg = "cacti-monitoring-system";
-	int request_len;
-	int return_code;
 	int packet_len;
 	int fromlen;
+	int return_code;
 	fd_set socket_fds;
-	int numfds;
 
 	static unsigned int seq = 0;
 	struct icmphdr* icmp;
-	size_t packet_size;
 	unsigned char* packet;
 
 	/* get ICMP socket and release setuid */
@@ -859,7 +857,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 /*  update_host_status - calculate the status of a host and update the host   */
 /*                       table.                                               */
 /******************************************************************************/
-int update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
+void update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
 	int issue_log_message = FALSE;
 	char logmessage[LOGSIZE];
 	double ping_time;

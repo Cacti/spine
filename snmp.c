@@ -42,8 +42,6 @@ extern char **environ;
 #endif
 
 void snmp_init(int host_id) {
-	char cactid_session[10];
-
 	#ifdef USE_NET_SNMP
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);

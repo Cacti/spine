@@ -12,6 +12,7 @@ The Cacti Group – cactid
 -bug: limit the number of concurrent threads to 30
 -bug: remove legacy code from system for old cactid.conf file parameters
 -bug: add fault detection logic to mysql query calls to prevent segfaults
+-bug: some unused variable cleanup work
 -feature: added polling for non host specific data sources
 -feature: spike suppression feature
 

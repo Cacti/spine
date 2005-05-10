@@ -77,7 +77,6 @@ void poll_host(int host_id) {
 	char query4[BUFSIZE];
 	char errstr[512];
 	int num_rows;
-	int host_status;
 	int assert_fail = 0;
 	int spike_kill = 0;
 	char *poll_result = NULL;
@@ -484,15 +483,14 @@ int validate_result(char * result) {
 /******************************************************************************/
 char *exec_poll(host_t *current_host, char *command) {
 	extern int errno;
-	FILE *cmd_stdout;
 	int cmd_fd;
-	int return_value;
 	int bytes_read;
 	char logmessage[LOGSIZE];
+	#ifdef __CYGWIN__
 	char *win32_command;
-
+	#endif
 	fd_set fds;
-	int rescode, numfds;
+	int numfds;
 	struct timeval timeout;
 
 	char *result_string = (char *) malloc(BUFSIZE);
