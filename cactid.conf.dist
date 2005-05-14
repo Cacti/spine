@@ -1,5 +1,5 @@
 # +-------------------------------------------------------------------------+
-# | Copyright (C) 2004 Ian Berry                                            |
+# | Copyright (C) 2005 The Cacti Group                                      |
 # |                                                                         |
 # | This program is free software; you can redistribute it and/or           |
 # | modify it under the terms of the GNU General Public License             |
@@ -17,11 +17,13 @@
 # |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
 # |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
 # |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+# |   - Larry Adams (current development)									|
 # +-------------------------------------------------------------------------+
 # | Settings                                                                |
 # +-------------------------------------------------------------------------+
 # | DB_Host      'localhost' for unix, IP Address for Windows               |
 # | DB_Database  Database name, typically 'cacti'                           |
+# | DB_Port		 The database port to use									|
 # | DB_User      The user to access the database, typically 'cactiuser'     |
 # | DB_Pass      The password for the Cacti user                            |
 # | LogFile      UNC path name to the Cacti logfile                         |
@@ -30,4 +32,3 @@ DB_Host         localhost
 DB_Database     cacti
 DB_User         cactiuser
 DB_Pass         cactiuser
-LogFile         /var/log/cactid.log
