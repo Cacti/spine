@@ -13,6 +13,7 @@ The Cacti Group – cactid
 -bug: remove legacy code from system for old cactid.conf file parameters
 -bug: add fault detection logic to mysql query calls to prevent segfaults
 -bug: some unused variable cleanup work
+-bug: add ability to better detect errors and shut down php script_server better
 -feature: added polling for non host specific data sources
 -feature: spike suppression feature
 
