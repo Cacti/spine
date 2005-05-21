@@ -28,6 +28,9 @@ int read_config_options(config_t *set);
 int read_cactid_config(char *file, config_t * set);
 void config_defaults(config_t *);
 
+/* Cacti premature shutdown utility */
+void exit_cactid();
+
 /* Cacti logging utilities */
 void cacti_log(char *logmessage);
 

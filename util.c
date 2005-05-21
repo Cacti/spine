@@ -404,6 +404,23 @@ void config_defaults(config_t * set) {
 }
 
 /******************************************************************************/
+/*  exit_cactid() - if there is a serious error and cactid can't continue     */
+/*                  make sure that the php script server is shut down first.  */
+/******************************************************************************/
+void exit_cactid() {
+	if (set.php_running == 1) {
+		if (set.parent_fork == CACTID_PARENT) {
+			php_close();
+			cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
+		} else {
+			cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
+		}
+	}
+
+	exit(-1);
+}
+
+/******************************************************************************/
 /*  cacti_log() - output user messages to the Cacti logfile facility.         */
 /*                Can also output to the syslog facility if desired.          */
 /******************************************************************************/
@@ -591,7 +608,7 @@ int init_socket()
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 	{
 		cacti_log("ERROR: init_socket: cannot open the ICMP socket\n");
-		exit(-1);
+		exit_cactid();
 	}
 
 	return(icmp_socket);
@@ -870,7 +887,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* get date and format for mysql */
 	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
-		exit(-1);
+		exit_cactid();
 	}
 
 	nowstruct = localtime(&nowbin);

@@ -41,7 +41,7 @@ extern char **environ;
  #include <mib.h>
 #endif
 
-void snmp_init(int host_id) {
+void snmp_init() {
 	#ifdef USE_NET_SNMP
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
@@ -64,8 +64,8 @@ void snmp_host_init(host_t *current_host) {
 	current_host->snmp_session = NULL;
 
 	/* initialize SNMP */
-	snmp_init(current_host->id);
  	thread_mutex_lock(LOCK_SNMP);
+	snmp_init();
   	snmp_sess_init(&session);
 	thread_mutex_unlock(LOCK_SNMP);
 
@@ -117,17 +117,13 @@ void snmp_host_cleanup(host_t *current_host) {
 char *snmp_get(host_t *current_host, char *snmp_oid) {
 	struct snmp_pdu *pdu = NULL;
 	struct snmp_pdu *response = NULL;
-	oid anOID[MAX_OID_LEN];
-	size_t anOID_len = MAX_OID_LEN;
 	struct variable_list *vars = NULL;
 	char logmessage[LOGSIZE];
-
-	int status;
-
 	char storedoid[BUFSIZE];
-
+	oid anOID[MAX_OID_LEN];
+	size_t anOID_len = MAX_OID_LEN;
+	int status;
 	char *result_string = (char *) malloc(BUFSIZE);
-
 
 	if (current_host->snmp_session != NULL) {
 		/* only SNMP v1 and v2c are supported right now */
@@ -142,9 +138,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		anOID_len = MAX_OID_LEN;
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 		read_objid(snmp_oid, anOID, &anOID_len);
-
 		strncpy(storedoid, snmp_oid, sizeof(storedoid));
-
 		snmp_add_null_var(pdu, anOID, anOID_len);
 
 		if (current_host->snmp_session != NULL) {

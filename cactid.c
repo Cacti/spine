@@ -70,6 +70,12 @@ int main(int argc, char *argv[]) {
 	char result_string[BUFSIZE] = "";
 	char logmessage[LOGSIZE];
 
+	/* make sure we note that php script server is not running */
+	set.php_running = 0;
+
+	/* tell cactid that it is parent */
+	set.parent_fork = CACTID_PARENT;
+
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
@@ -93,14 +99,14 @@ int main(int argc, char *argv[]) {
 	if ((argc != 1) && (argc != 3)) {
 		printf("ERROR: Cactid requires either 0 or 2 input parameters\n");
 		printf("USAGE: <cactidpath>/cactid [start_id end_id]\n");
-		exit(-1);
+		exit_cactid();
 	}
 
 	/* return error if the first arg is greater than the second */
 	if (argc == 3) {
 		if (atol(argv[1]) > atol(argv[2])) {
 			printf("ERROR: Invalid row specifications.  First row must be less than the second row\n");
-			exit(-2);
+			exit_cactid();
 		}
 	}
 
@@ -108,14 +114,14 @@ int main(int argc, char *argv[]) {
 	if (conf_file) {
 		if ((read_cactid_config(conf_file, &set)) < 0) {
 			printf("ERROR: Could not read config file: %s\n", conf_file);
-			exit(-3);
+			exit_cactid();
 		}
 	}else{
 		conf_file = malloc(BUFSIZE);
 
 		if (!conf_file) {
 			printf("ERROR: Fatal malloc error!\n");
-			exit(-1);
+			exit_cactid();
 		}
 
 		for(i=0;i<CONFIG_PATHS;i++) {
@@ -162,7 +168,12 @@ int main(int argc, char *argv[]) {
 		snprintf(logmessage, LOGSIZE, "CACTID: Initializing PHP Script Server\n", VERSION);
 		cacti_log(logmessage);
 	}
-	php_init();
+
+	if (!php_init()) {
+		exit_cactid();
+	} else {
+		set.php_running = 1;
+	}
 
 	/* get the id's to poll */
 	switch (argc) {
@@ -194,6 +205,9 @@ int main(int argc, char *argv[]) {
 		cacti_log(logmessage);
 	}
 
+	/* tell fork processes that they are now active */
+	set.parent_fork = CACTID_FORK;
+	
 	/* loop through devices until done */
 	while ((device_counter < num_rows) && (canexit == 0)) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
@@ -313,6 +327,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	/* tell cactid that it is now parent */
+	set.parent_fork = CACTID_PARENT;
+	
 	/* print out stats */
 	gettimeofday(&now, NULL);
 

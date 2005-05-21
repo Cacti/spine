@@ -23,7 +23,7 @@
  +-------------------------------------------------------------------------+
 */
 
-void snmp_init(int host_id);
+void snmp_init();
 void snmp_host_init(host_t *current_host);
 void snmp_host_cleanup(host_t *current_host);
 char *snmp_get(host_t *current_host, char *snmp_oid);

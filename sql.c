@@ -53,7 +53,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
  	return_code = mysql_query(mysql, query);
 	if (return_code) {
 		cacti_log("MYSQL: ERROR encountered while attempting to retrieve records from query\n");
-		exit -1;
+		exit_cactid();
 	}else{
 		mysql_res = mysql_store_result(mysql);
 	}
@@ -99,7 +99,7 @@ int db_connect(char *database, MYSQL *mysql) {
 		snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
 		thread_mutex_unlock(LOCK_MYSQL);
-		exit(0);
+		exit_cactid();
 	}else{
 		thread_mutex_unlock(LOCK_MYSQL);
 		return (0);

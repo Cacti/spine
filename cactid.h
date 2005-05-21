@@ -28,10 +28,10 @@
 
 /* Defines */
 #ifndef FALSE
-# define FALSE 0
+#define FALSE 0
 #endif
 #ifndef TRUE
-# define TRUE !FALSE
+#define TRUE !FALSE
 #endif
 
 /* general constants */
@@ -42,6 +42,8 @@
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
 #define STAT_DESCRIP_ERROR 99
+#define CACTID_PARENT 1
+#define CACTID_FORK 0
 
 /* locations to search for the config file */
 #define CONFIG_PATHS 5
@@ -153,6 +155,8 @@ typedef struct config_struct {
 	int ping_failure_count;
 	int ping_recovery_count;
 	int verbose;
+	int php_running;
+	int parent_fork;
 	int dboff;
 	int snmp_ver;
 	int threads;
