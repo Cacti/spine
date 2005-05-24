@@ -435,6 +435,9 @@ int validate_result(char * result) {
 	/* remove control characters from string */
 	strncpy(result, strip_string_crlf(result), sizeof(result));
 
+	/* remove trailing white space from string */
+	strncpy(result, rtrim(result), sizeof(result));
+
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
 	if ((strstr(result, ":") == 0) && (strstr(result, "!") == 0) && (strstr(result, " ") == 0)) {

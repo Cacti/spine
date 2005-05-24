@@ -1177,6 +1177,26 @@ char *clean_string(char *string) {
 }
 
 /******************************************************************************/
+/*  rtrim() - remove trailing white space from a string.                      */
+/******************************************************************************/
+char *rtrim(char *string)
+{
+	int i;
+
+	if (0 != (i = strlen(string))) {
+		while (--i >= 0) {
+			if (!isspace(string[i])) {
+				break;
+			}
+		}
+
+		string[++i] = '\0';
+	}
+
+	return string;
+}
+
+/******************************************************************************/
 /*  add_win32_slashes() - add slashes to Window'z arguments for scripts.      */
 /******************************************************************************/
 char *add_win32_slashes(char *string, int arguments_2_strip) {

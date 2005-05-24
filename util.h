@@ -43,6 +43,7 @@ char *add_win32_slashes(char *string, int arguments_2_strip);
 int file_exists(char *filename);
 char *strip_string_crlf(char *string);
 char *strip_quotes(char *string);
+char *rtrim(char *string);
 
 /* Host availability functions */
 int ping_host(host_t *host, ping_t *ping);

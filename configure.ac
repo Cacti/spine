@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(cactid.c)
 AC_PREFIX_DEFAULT(/usr/local/cactid)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.6e)
+AM_INIT_AUTOMAKE(cactid, 0.8.6e-rc7)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
@@ -118,8 +118,6 @@ fi
 for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
    MYSQL_LIB_CHK($i/lib)
    MYSQL_LIB_CHK($i/lib/mysql)
-   MYSQL_LIB_CHK($i/lib64)
-   MYSQL_LIB_CHK($i/lib64/mysql)
 done
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
