@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004 Ian Berry                                            |
+ | Copyright (C) 2002-2005 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU General Public License             |
@@ -15,11 +15,12 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
+ |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
  |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
- | - raXnet - http://www.raxnet.net/                                       |
+ | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
 */
 
@@ -489,9 +490,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	int cmd_fd;
 	int bytes_read;
 	char logmessage[LOGSIZE];
-	#ifdef __CYGWIN__
-	char *win32_command;
-	#endif
+	char *command;
 	fd_set fds;
 	int numfds;
 	struct timeval timeout;
@@ -502,14 +501,10 @@ char *exec_poll(host_t *current_host, char *command) {
 	timeout.tv_sec = 25;
 	timeout.tv_usec = 0;
 
-	/* nasty workaround to compensate for vbs WMI calling parameters not wanting backslashes bothered with */
-	#ifdef __CYGWIN__
-	win32_command = add_win32_slashes(command, 2);
-	cmd_fd = nft_popen((char *)win32_command, "r");
-	free(win32_command);
-	#else
+	/* compensate for back slashes in arguments */
+	command = add_slashes(command, 2);
 	cmd_fd = nft_popen((char *)command, "r");
-	#endif
+	free(command);
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd);

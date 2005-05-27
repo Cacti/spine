@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004 Ian Berry                                            |
+ | Copyright (C) 2002-2005 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU General Public License             |
@@ -15,11 +15,12 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
+ |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
  |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
- | - raXnet - http://www.raxnet.net/                                       |
+ | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
 */
 
@@ -81,13 +82,17 @@ int main(int argc, char *argv[]) {
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	/* get time for poller_output table */
-	if (time(&nowbin) == (time_t) - 1)
+	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
+		exit_cactid();
+	}
 
 	nowstruct = localtime(&nowbin);
 
-	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", nowstruct) == (size_t) 0)
+	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", nowstruct) == (size_t) 0) {
 		printf("ERROR: Could not get string from strftime()\n");
+		exit_cactid();
+	}
 
 	/* set default verbosity */
 	set.verbose = POLLER_VERBOSITY_HIGH;
@@ -97,8 +102,24 @@ int main(int argc, char *argv[]) {
 
 	/* scan arguments for errors */
 	if ((argc != 1) && (argc != 3)) {
+		if (argc == 2) { 
+			/* return version */ 
+			if ((strcmp(argv[1], "--version") == 0) || (strcmp(argv[1], "--help") == 0)){ 
+				printf("CACTID %s  Copyright 2002-2005 by The Cacti Group\n\n", VERSION); 
+				printf("Usage: cactid [start_host_id end_host_id]\n\n");
+				printf("If you do not specify [start_host_id end_host_id], Cactid will poll all hosts.\n\n");
+				printf("Cactid relies on the cactid.conf file that can exist in multiple locations.\n");
+				printf("The first location checked is the current directory.  Optionally, it can be\n");
+				printf("placed in the '/etc' directory.\n\n");
+				printf("Cactid is distributed under the Terms of the GNU General\n");
+				printf("Public License Version 2. (www.gnu.org/copyleft/gpl.html)\n\n");
+				printf("For more information, see http://www.cacti.net\n");
+				exit_cactid(); 
+			} 
+		} 
+
 		printf("ERROR: Cactid requires either 0 or 2 input parameters\n");
-		printf("USAGE: <cactidpath>/cactid [start_id end_id]\n");
+		printf("USAGE: <cactidpath>/cactid [start_host_id end_host_id]\n");
 		exit_cactid();
 	}
 

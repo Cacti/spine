@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004 Ian Berry                                            |
+ | Copyright (C) 2002-2005 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU General Public License             |
@@ -15,11 +15,12 @@
  | cactid: a backend data gatherer for cacti                               |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
+ |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
  |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
  +-------------------------------------------------------------------------+
- | - raXnet - http://www.raxnet.net/                                       |
+ | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
 */
 
@@ -39,19 +40,8 @@ int is_numeric(char *string);
 
 /* String and file utilities */
 char *clean_string(char *string);
-char *add_win32_slashes(char *string, int arguments_2_strip);
+char *add_slashes(char *string, int arguments_2_strip);
 int file_exists(char *filename);
 char *strip_string_crlf(char *string);
 char *strip_quotes(char *string);
 char *rtrim(char *string);
-
-/* Host availability functions */
-int ping_host(host_t *host, ping_t *ping);
-int ping_snmp(host_t *host, ping_t *ping);
-int ping_icmp(host_t *host, ping_t *ping);
-int ping_udp(host_t *host, ping_t *ping);
-void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
-void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port);
-int init_socket();
-unsigned short checksum(void* buf, int len);
-

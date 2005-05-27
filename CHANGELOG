@@ -1,9 +1,11 @@
 The Cacti Group – cactid
 
 0.8.6e
+-bug:#0000470: added --version and --help to command line options to make more GNU friendly
+-bug:#0000425: added ability to specify a socket file in *nix environments
 -bug: removed code that was converting back slashes to forward slashes
--bug: attempt to correct issues with WMI counters and calling using VBS in Windows
--bug: stop Cactid from segfaulting when the database contains orphaned data source records.
+-bug: attempt to correct issues converting back slashes to forward slashes in arguments
+-bug: stop Cactid from segfaulting when the database contains orphaned data source records
 -bug: re-implemented thread safe operations for non-linux systems
 -bug: allow cactid to poll from non-standard snmp port
 -bug: optimized some string handling routines

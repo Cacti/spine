@@ -24,11 +24,13 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "cactid.h"
-#include <mysql.h>
+/* Host availability functions */
+int ping_host(host_t *host, ping_t *ping);
+int ping_snmp(host_t *host, ping_t *ping);
+int ping_icmp(host_t *host, ping_t *ping);
+int ping_udp(host_t *host, ping_t *ping);
+void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
+void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port);
+int init_socket();
+unsigned short checksum(void* buf, int len);
 
-int db_insert(MYSQL *mysql, char *query);
-MYSQL_RES *db_query(MYSQL *mysql, char *query);
-int db_connect(char *database, MYSQL *mysql);
-void db_disconnect(MYSQL *mysql);

@@ -14,19 +14,19 @@
 # | cactid: a backend data gatherer for Cacti                               |
 # +-------------------------------------------------------------------------+
 # | This poller would not have been possible without:                       |
+# |   - Larry Adams (current development and enhancements)                  |
 # |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
 # |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
 # |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
-# |   - Larry Adams (current development)									|
 # +-------------------------------------------------------------------------+
 # | Settings                                                                |
 # +-------------------------------------------------------------------------+
-# | DB_Host      'localhost' for unix, IP Address for Windows               |
+# | DB_Host      'localhost' or socket file for unix                        |
+# |              IP Address for Windows                                     |
 # | DB_Database  Database name, typically 'cacti'                           |
 # | DB_Port		 The database port to use									|
 # | DB_User      The user to access the database, typically 'cactiuser'     |
 # | DB_Pass      The password for the Cacti user                            |
-# | LogFile      UNC path name to the Cacti logfile                         |
 # +-------------------------------------------------------------------------+
 DB_Host         localhost
 DB_Database     cacti
