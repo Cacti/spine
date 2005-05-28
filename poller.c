@@ -490,21 +490,21 @@ char *exec_poll(host_t *current_host, char *command) {
 	int cmd_fd;
 	int bytes_read;
 	char logmessage[LOGSIZE];
-	char *command;
 	fd_set fds;
 	int numfds;
 	struct timeval timeout;
 
 	char *result_string = (char *) malloc(BUFSIZE);
+	char *proc_command = (char *) malloc(BUFSIZE);
 
 	/* establish timeout of 25 seconds for pipe response */
 	timeout.tv_sec = 25;
 	timeout.tv_usec = 0;
 
 	/* compensate for back slashes in arguments */
-	command = add_slashes(command, 2);
-	cmd_fd = nft_popen((char *)command, "r");
-	free(command);
+	proc_command = add_slashes(command, 2);
+	cmd_fd = nft_popen((char *)proc_command, "r");
+	free(proc_command);
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE, "Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd);
