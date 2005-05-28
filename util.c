@@ -338,6 +338,27 @@ int read_config_options(config_t *set) {
 		cacti_log(logmessage);
 	}
 
+	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='poller_interval'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->poller_interval = atoi(mysql_row[0]);
+	}else{
+		set->poller_interval = 0;
+	}
+
+	/* log the threads variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		if (set->poller_interval == 0) {
+			snprintf(logmessage, LOGSIZE, "DEBUG: The polling interval is the system default\n" ,set->poller_interval);
+		}else{
+			snprintf(logmessage, LOGSIZE, "DEBUG: The polling interval is %i seconds\n" ,set->poller_interval);
+		}
+		cacti_log(logmessage);
+	}
+
 	mysql_free_result(result);
 	db_disconnect(&mysql);
 }

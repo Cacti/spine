@@ -155,6 +155,7 @@ typedef struct config_struct {
 	int ping_timeout;
 	int ping_failure_count;
 	int ping_recovery_count;
+	int poller_interval;
 	int verbose;
 	int php_running;
 	int parent_fork;

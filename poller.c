@@ -76,6 +76,9 @@ void poll_host(int host_id) {
 	char query2[BUFSIZE];
 	char *query3;
 	char query4[BUFSIZE];
+	char query5[BUFSIZE];
+	char query6[BUFSIZE];
+	char query7[BUFSIZE];
 	char errstr[512];
 	int num_rows;
 	int assert_fail = 0;
@@ -104,6 +107,9 @@ void poll_host(int host_id) {
 	snprintf(query1, sizeof(query1), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
 	snprintf(query2, sizeof(query2), "select id, hostname,snmp_community,snmp_version,snmp_port,snmp_timeout,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
 	snprintf(query4, sizeof(query4), "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
+	snprintf(query5, sizeof(query6), "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where (host_id=%i and rrd_next_step <=0) order by rrd_path,rrd_name", host_id);
+	snprintf(query6, sizeof(query6), "update poller_item SET rrd_next_step=rrd_next_step-%i where host_id=%i", set.poller_interval, host_id);
+	snprintf(query7, sizeof(query7), "update poller_item SET rrd_next_step=rrd_step-%i where (rrd_next_step < 0 and host_id=%i)", set.poller_interval, host_id);
 
 	db_connect(set.dbdb, &mysql);
 	
@@ -278,8 +284,17 @@ void poll_host(int host_id) {
 	/* retreive each hosts polling items from poller cache */
 	entry = (target_t *) malloc(sizeof(target_t));
 
-	result = db_query(&mysql, query1);
-	num_rows = (int)mysql_num_rows(result);
+	if (set.poller_interval == 0) {
+		result = db_query(&mysql, query1);
+		num_rows = (int)mysql_num_rows(result);
+	}else{
+		result = db_query(&mysql, query5);
+		num_rows = (int)mysql_num_rows(result);
+		
+		/* update poller_items table for next polling interval */
+		db_query(&mysql, query6);
+		db_query(&mysql, query7);
+	}
 
 	while ((row = mysql_fetch_row(result)) && (!host->ignore_host)) {
 		/* initialize monitored object */
