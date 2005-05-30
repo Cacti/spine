@@ -328,7 +328,7 @@ void poll_host(int host_id) {
 				free(poll_result);
 
 				if (host->ignore_host) {
-					snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, host->snmp_timeout, host->hostname);
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, entry->local_data_id, host->snmp_timeout, host->hostname);
 					cacti_log(logmessage);
 					snprintf(entry->result, sizeof(entry->result), "%s", "U");
 				} else {
@@ -338,14 +338,14 @@ void poll_host(int host_id) {
 					/* detect erroneous non-numeric result */
 					if (!is_numeric(entry->result)) {
 						strncpy(errstr, entry->result,sizeof(errstr));
-						snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, errstr);
+						snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
 						cacti_log(logmessage);
 						strncpy(entry->result, "U", sizeof(entry->result));
 					}
 				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE, "Host[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, entry->local_data_id, host->snmp_version, host->hostname, entry->rrd_name, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
 
@@ -361,13 +361,13 @@ void poll_host(int host_id) {
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, (char *) strip_string_crlf(entry->result),sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, errstr);
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE, "Host[%i] SCRIPT: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, entry->local_data_id, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
 
@@ -383,19 +383,19 @@ void poll_host(int host_id) {
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
 					strncpy(errstr, entry->result, sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, errstr);
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
 
 				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE, "Host[%i] SERVER: %s, output: %s\n", host_id, entry->arg1, entry->result);
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, entry->local_data_id, entry->arg1, entry->result);
 					cacti_log(logmessage);
 				}
 
 				break;
 			default: /* unknown action, generate error */
-				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Unknown Poller Action: %s\n", host_id, entry->arg1);
+				snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, entry->local_data_id, entry->arg1);
 				cacti_log(logmessage);
 
 				break;
