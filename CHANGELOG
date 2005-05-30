@@ -3,8 +3,7 @@ The Cacti Group – cactid
 0.8.6e
 -bug:#0000470: added --version and --help to command line options to make more GNU friendly
 -bug:#0000425: added ability to specify a socket file in *nix environments
--bug: removed code that was converting back slashes to forward slashes
--bug: attempt to correct issues converting back slashes to forward slashes in arguments
+-bug: correct issues converting back slashes to forward slashes in arguments
 -bug: stop Cactid from segfaulting when the database contains orphaned data source records
 -bug: re-implemented thread safe operations for non-linux systems
 -bug: allow cactid to poll from non-standard snmp port
@@ -15,10 +14,12 @@ The Cacti Group – cactid
 -bug: remove legacy code from system for old cactid.conf file parameters
 -bug: add fault detection logic to mysql query calls to prevent segfaults
 -bug: some unused variable cleanup work
--bug: add ability to better detect errors and shut down php script_server better
+-bug: add ability to detect errors and shut down php script_server when those errors occur
 -bug: remove trailing blanks from script results
 -feature: added polling for non host specific data sources
+-feature: added data source logging to provide easier problem resolution
 -feature: spike suppression feature
+-feature: added support for poller interval setting
 
 0.8.6d
 -bug: increased timers for popen and script server to 20 seconds
