@@ -612,15 +612,15 @@ char *clean_string(char *string) {
 }
 
 /******************************************************************************/
-/*  rtrim() - remove trailing white space from a string.                      */
+/*  strip_alpha() - remove trailing alpha characters from a string.           */
 /******************************************************************************/
-char *rtrim(char *string)
+char *strip_alpha(char *string)
 {
 	int i;
 
 	if (0 != (i = strlen(string))) {
 		while (--i >= 0) {
-			if (!isspace(string[i])) {
+			if ((string[i] > 47) && (string[i] < 58)) {
 				break;
 			}
 		}

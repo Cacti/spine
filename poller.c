@@ -452,7 +452,7 @@ int validate_result(char * result) {
 	strncpy(result, strip_string_crlf(result), sizeof(result));
 
 	/* remove trailing white space from string */
-	strncpy(result, rtrim(result), sizeof(result));
+	strncpy(result, strip_alpha(result), sizeof(result));
 
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */

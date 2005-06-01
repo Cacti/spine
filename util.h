@@ -44,4 +44,4 @@ char *add_slashes(char *string, int arguments_2_strip);
 int file_exists(char *filename);
 char *strip_string_crlf(char *string);
 char *strip_quotes(char *string);
-char *rtrim(char *string);
+char *strip_alpha(char *string);
