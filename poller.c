@@ -327,6 +327,9 @@ void poll_host(int host_id) {
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
 
+				/* remove double or single quotes from string */
+				strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
+
 				if (host->ignore_host) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, entry->local_data_id, host->snmp_timeout, host->hostname);
 					cacti_log(logmessage);
@@ -336,7 +339,7 @@ void poll_host(int host_id) {
 					strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
 
 					/* detect erroneous non-numeric result */
-					if (!is_numeric(entry->result)) {
+					if (!validate_result(entry->result)) {
 						strncpy(errstr, entry->result,sizeof(errstr));
 						snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
 						cacti_log(logmessage);
