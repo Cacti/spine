@@ -617,15 +617,16 @@ char *clean_string(char *string) {
 char *strip_alpha(char *string)
 {
 	int i;
+	
+	i = strlen(string);
 
-	if (0 != (i = strlen(string))) {
-		while (--i >= 0) {
-			if ((string[i] > 47) && (string[i] < 58)) {
-				break;
-			}
+	while (i >= 0) {
+		if ((string[i] > 47) && (string[i] < 58)) {
+			break;
+		}else{
+			string[i] = '\0';
 		}
-
-		string[++i] = '\0';
+		i--;
 	}
 
 	return string;
