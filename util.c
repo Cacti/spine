@@ -386,8 +386,7 @@ int read_cactid_config(char *file, config_t *set) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (!strcasecmp(p1, "Interval")) set->interval = atoi(p2);
-				else if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
+				if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
 				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
 				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
 				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
@@ -406,7 +405,6 @@ int read_cactid_config(char *file, config_t *set) {
 /*  config_defaults() - populate system variables with default values.        */
 /******************************************************************************/
 void config_defaults(config_t * set) {
-	set->interval = DEFAULT_INTERVAL;
 	set->snmp_ver = DEFAULT_SNMP_VER;
 	set->threads = DEFAULT_THREADS;
     set->dbport = DEFAULT_DB_PORT;

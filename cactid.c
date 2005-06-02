@@ -104,7 +104,10 @@ int main(int argc, char *argv[]) {
 	if ((argc != 1) && (argc != 3)) {
 		if (argc == 2) { 
 			/* return version */ 
-			if ((strcmp(argv[1], "--version") == 0) || (strcmp(argv[1], "--help") == 0)){ 
+			if ((strcmp(argv[1], "--version") == 0) || 
+				(strcmp(argv[1], "--help") == 0) ||
+				(strcmp(argv[1], "-v") == 0) ||
+				(strcmp(argv[1], "-h") == 0)) {
 				printf("CACTID %s  Copyright 2002-2005 by The Cacti Group\n\n", VERSION); 
 				printf("Usage: cactid [start_host_id end_host_id]\n\n");
 				printf("If you do not specify [start_host_id end_host_id], Cactid will poll all hosts.\n\n");

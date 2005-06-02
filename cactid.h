@@ -57,7 +57,6 @@
 /* config file defaults */
 #define DEFAULT_CONF_FILE "cactid.conf"
 #define DEFAULT_THREADS 5
-#define DEFAULT_INTERVAL 300
 #define DEFAULT_OUT_OF_RANGE 93750000000
 #define DEFAULT_DB_HOST "localhost"
 #define DEFAULT_DB_DB "cacti"
@@ -134,7 +133,6 @@
 
 /* Typedefs */
 typedef struct config_struct {
-	int interval;
 	int poller_id;
 	long out_of_range;
 	char dbhost[80];
