@@ -200,7 +200,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	gettimeofday((struct timeval*)(icmp+1), NULL);
 	icmp->checksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
-	icmp->checksum = checksum(packet, packet_len);
+	icmp->checksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
 	if (strlen(host->hostname) != 0) {
@@ -278,9 +278,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 }
 
 /******************************************************************************/
-/*  checksum() - calculate 16bit checksum of a packet buffer.                 */
+/*  get_checksum() - calculate 16bit checksum of a packet buffer.             */
 /******************************************************************************/
-unsigned short checksum(void* buf, int len)
+unsigned short get_checksum(void* buf, int len)
 {
 	int nleft = len;
 	int sum = 0;

@@ -47,7 +47,6 @@ extern char **environ;
 /******************************************************************************/
 char *php_cmd(char *php_command) {
 	char *result_string;
-	char *spaceloc;
 	char command[BUFSIZE+5];
 
 	/* pad command with CR-LF */
@@ -60,15 +59,7 @@ char *php_cmd(char *php_command) {
 
 	/* read the result from the php_command */
 	result_string = php_readpipe();
-
-	/* clean garbage from string.  don't know why it's there... */
-	spaceloc = strchr(result_string, ' ');
-	if (spaceloc != 0) {
-		*spaceloc = '\0';
-		spaceloc = strchr(result_string, ' ');
-		if (spaceloc != 0)
-			*spaceloc = '\0';
-	}
+	
 	thread_mutex_unlock(LOCK_PHP);
 
 	return result_string;
@@ -78,12 +69,12 @@ char *php_cmd(char *php_command) {
 /*  php_readpipe - read a line from the PHP script server                     */
 /******************************************************************************/
 char *php_readpipe() {
-	char *result_string = (char *) malloc(BUFSIZE);
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
 	char logmessage[LOGSIZE];
-
+	char *result_string = (char *) malloc(BUFSIZE);
+	
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(php_pipes.php_read_fd,&fds);
@@ -117,12 +108,10 @@ char *php_readpipe() {
 
 		break;
 	default:
-		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE-1);
-		if (rescode > 0)
-			result_string[rescode] = '\0';
-		else
+		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
+		if (rescode == 0) {
 			snprintf(result_string, BUFSIZE, "%s", "U");
-		break;
+		}
 	}
 
 	return result_string;
