@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(cactid.c)
 AC_PREFIX_DEFAULT(/usr/local/cactid)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.6e-rc16)
+AM_INIT_AUTOMAKE(cactid, 0.8.6e-rc17)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries

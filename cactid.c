@@ -330,7 +330,7 @@ int main(int argc, char *argv[]) {
 
 	/* wait for all threads to complete */
 	while (canexit == 0) {
-		if (thread_mutex_trylock(LOCK_THREAD) != EBUSY) {
+		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
 			if (last_active_threads != active_threads) {
 				last_active_threads = active_threads;
 			}
