@@ -34,6 +34,7 @@
 #include "util.h"
 #include "snmp.h"
 #include "sql.h"
+#include "ping.h"
 
 /******************************************************************************/
 /*  ping_host() - check for availability using the desired user method.       */
