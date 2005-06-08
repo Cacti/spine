@@ -1,7 +1,7 @@
 The Cacti Group – cactid
 
 0.8.6e
--bug:#0000470: added --version and --help to command line options to make more GNU friendly
+-bug:#0000470: added -v, --version, -h, --help to command line options to make more GNU friendly
 -bug:#0000425: added ability to specify a socket file in *nix environments
 -bug: correct issues converting back slashes to forward slashes in arguments
 -bug: stop cactid from segfaulting when the database contains orphaned data source records
@@ -13,11 +13,12 @@ The Cacti Group – cactid
 -bug: limit the number of concurrent threads to 30
 -bug: remove legacy cactid.conf file processing code
 -bug: add fault detection logic to mysql query calls to prevent segfaults
--bug: some unused variable cleanup work
+-bug: cleaned up some unused variables
 -bug: add ability to detect errors and gracefully shut down php script_server
 -bug: remove trailing blanks and alpha characters from results
 -bug: clean up some string handling on script server results
--feature: added polling for non host specific data sources
+-bug: stop DEADLOCKS by not prematurely releasing mutex locks
+-feature: added polling for non-host specific data sources
 -feature: added data source logging to provide easier problem resolution
 -feature: spike suppression feature
 -feature: added support for poller interval setting
