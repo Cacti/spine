@@ -454,45 +454,35 @@ int validate_result(char * result) {
 	int delim_cnt = 0;
 	int i;
 
-	/* check the easy cases first */
-	/* it has no delimiters, and no space, therefore, must be numeric */
-	if ((strstr(result, ":") == 0) && (strstr(result, "!") == 0) && (strstr(result, " ") == 0)) {
-		if (is_numeric(result)) {
-			return(1);
-		} else {
-			return(0);
-		}
-	}
-
-	/* it has delimiters */
-	if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
-		if (strstr(result, " ") == 0) {
-			return(1);
-		}
-
-		if (strstr(result, " ") != 0) {
-			for(i=0; i<strlen(result); i++) {
-				if ((result[i] == ':') || (result[i] == '!')) {
-					delim_cnt = delim_cnt + 1;
-				} else if (result[i] == ' ') {
-					space_cnt = space_cnt + 1;
-				}
-			}
-
-			if (space_cnt+1 == delim_cnt) {
-				return(1);
-			} else {
-				return(0);
-			}
-		}
-	}
-
-	/* default handling */
+	/* check the easy case first */
 	if (is_numeric(result)) {
 		return(1);
 	} else {
-		return(0);
+		/* it must have delimiters */
+		if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
+			if (strstr(result, " ") == 0) {
+				return(1);
+			}
+
+			if (strstr(result, " ") != 0) {
+				for(i=0; i<strlen(result); i++) {
+					if ((result[i] == ':') || (result[i] == '!')) {
+						delim_cnt = delim_cnt + 1;
+					} else if (result[i] == ' ') {
+						space_cnt = space_cnt + 1;
+					}
+				}
+
+				if (space_cnt+1 == delim_cnt) {
+					return(1);
+				} else {
+					return(0);
+				}
+			}
+		}
 	}
+	
+	return(0);
 }
 
 
