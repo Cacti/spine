@@ -158,6 +158,23 @@ int init_socket()
 }
 
 /******************************************************************************/
+/*  init_sockaddr - convert host name to internet address                     */
+/******************************************************************************/
+void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port) {
+	struct hostent *hostinfo;
+	char logmessage[255];
+
+	name->sin_family = AF_INET;
+	name->sin_port = htons (port);
+	hostinfo = gethostbyname (hostname);
+	if (hostinfo == NULL) {
+		snprintf(logmessage, LOGSIZE, "WARNING: Unknown host %s\n", hostname);
+		cacti_log(logmessage);
+	}
+	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+}
+
+/******************************************************************************/
 /*  ping_icmp() - perform an ICMP ping of a host.                             */
 /******************************************************************************/
 int ping_icmp(host_t *host, ping_t *ping) {

@@ -71,9 +71,6 @@ int main(int argc, char *argv[]) {
 	char result_string[BUFSIZE] = "";
 	char logmessage[LOGSIZE];
 
-	/* make sure we note that php script server is not running */
-	set.php_running = 0;
-
 	/* tell cactid that it is parent */
 	set.parent_fork = CACTID_PARENT;
 
@@ -105,9 +102,9 @@ int main(int argc, char *argv[]) {
 		if (argc == 2) { 
 			/* return version */ 
 			if ((strcmp(argv[1], "--version") == 0) || 
-				(strcmp(argv[1], "--help") == 0) ||
-				(strcmp(argv[1], "-v") == 0) ||
-				(strcmp(argv[1], "-h") == 0)) {
+               (strcmp(argv[1], "--help") == 0) ||
+               (strcmp(argv[1], "-h") == 0) ||
+               (strcmp(argv[1], "-v") == 0)){ 
 				printf("CACTID %s  Copyright 2002-2005 by The Cacti Group\n\n", VERSION); 
 				printf("Usage: cactid [start_host_id end_host_id]\n\n");
 				printf("If you do not specify [start_host_id end_host_id], Cactid will poll all hosts.\n\n");
@@ -193,11 +190,8 @@ int main(int argc, char *argv[]) {
 		cacti_log(logmessage);
 	}
 
-	if (!php_init()) {
-		exit_cactid();
-	} else {
-		set.php_running = 1;
-	}
+	/* initialize the script server */
+	php_init();
 
 	/* get the id's to poll */
 	switch (argc) {

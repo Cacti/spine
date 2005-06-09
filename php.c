@@ -98,7 +98,7 @@ char *php_readpipe() {
 		snprintf(result_string, BUFSIZE, "%s", "U");
 		break;
 	case 0:
-		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server Did not Respond in Time\n");
+		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server did not respond in time and will therefore be restarted\n");
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE, "%s", "U");
 
@@ -111,6 +111,9 @@ char *php_readpipe() {
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
 		if (rescode == 0) {
 			snprintf(result_string, BUFSIZE, "%s", "U");
+		} else {
+			result_string[rescode] = '\0';
+			result_string = strip_alpha(result_string);
 		}
 	}
 
@@ -123,15 +126,18 @@ char *php_readpipe() {
 int php_init() {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
-	int  pid;
+	pid_t  pid;
 	char logmessage[LOGSIZE];
 	char poller_id[11];
 	char *argv[5];
 	int  cancel_state;
 	char *result_string;
 
+	/* initialize the php process id */
+	set.php_sspid = 0;
+	
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Routine Started\n");
+		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Routine Starting\n");
 		cacti_log(logmessage);
 	}
 
@@ -202,6 +208,7 @@ int php_init() {
 				snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Child FORK Success\n");
 				cacti_log(logmessage);
 			}
+			set.php_sspid = pid;
 	}
 
 	/* Parent */
@@ -239,10 +246,15 @@ void php_close() {
 		cacti_log(logmessage);
 	}
 
-	/* tell the script server to close */
-	write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
+	if (set.php_sspid) {
+		/* tell the script server to close */
+		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
 
-	/* close file descriptors */
-	close(php_pipes.php_write_fd);
-	close(php_pipes.php_read_fd);
+		/* end the php script server process */
+		kill(set.php_sspid, SIGINT);
+
+		/* close file descriptors */
+		close(php_pipes.php_write_fd);
+		close(php_pipes.php_read_fd);
+	}
 }

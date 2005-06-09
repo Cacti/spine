@@ -84,7 +84,11 @@ int read_config_options(config_t *set) {
 		if (strlen(mysql_row[0]) != 0) {
 			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
 		} else {
-			strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
+			if (strlen(web_root) != 0) {
+				strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
+			} else {
+				strncpy(set->path_logfile, "", sizeof(set->path_logfile));
+			}
 		}
 	} else {
 		strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
@@ -374,13 +378,12 @@ int read_cactid_config(char *file, config_t *set) {
 	char p2[BUFSIZE];
 
 	if ((fp = fopen(file, "rb")) == NULL) {
-		printf("ERROR: Could not open config file\n");
+		if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+			printf("ERROR: Could not open config file [%s]\n", file);
+		}
 		return (-1);
 	}else{
-		if (set->verbose >= POLLER_VERBOSITY_HIGH) {
-			printf("CACTID: Using cactid config file [%s]\n", file);
-		}
-
+		printf("CACTID: Using cactid config file [%s]\n", file);
 		while(!feof(fp)) {
 			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
@@ -428,13 +431,11 @@ void config_defaults(config_t * set) {
 /*                  make sure that the php script server is shut down first.  */
 /******************************************************************************/
 void exit_cactid() {
-	if (set.php_running == 1) {
-		if (set.parent_fork == CACTID_PARENT) {
-			php_close();
-			cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
-		} else {
+	if (set.parent_fork == CACTID_PARENT) {
+		php_close();
+		cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
+	} else {
 			cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
-		}
 	}
 
 	exit(-1);
@@ -458,7 +459,7 @@ void cacti_log(char *logmessage) {
 	/* log message prefix */
 	snprintf(logprefix, sizeof(logprefix), "CACTID: Poller[%i] ", set.poller_id);
 
-	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != POLLER_VERBOSITY_NONE)) {
+	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
 		while (!fileopen) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
@@ -469,7 +470,9 @@ void cacti_log(char *logmessage) {
 			if (log_file != NULL) {
 				fileopen = 1;
 			}else {
-				printf("ERROR: Could not open Logfile will not be logging\n");
+				if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+					printf("ERROR: Could not open Logfile will not be logging\n");
+				}
 				break;
 			}
 		}
@@ -487,7 +490,7 @@ void cacti_log(char *logmessage) {
 	strcat(flogmessage, logprefix);
 	strcat(flogmessage, logmessage);
 
-	if ( fileopen != 0 ) {
+	if (fileopen != 0) {
 		fputs(flogmessage, log_file);
 		fclose(log_file);
 	}
@@ -590,23 +593,6 @@ char **string_to_argv(char *argstring, int *argc){
 	argv[i] = NULL;
 
 	return argv;
-}
-
-/******************************************************************************/
-/*  clean_string() - change backslashes to forward slashes for system calls   */
-/******************************************************************************/
-char *clean_string(char *string) {
-	char *posptr;
-
-	posptr = strchr(string,'\\');
-
-	while(posptr != NULL)
-	{
-		*posptr = '/';
-		posptr = strchr(string,'\\');
-	}
-
-	return(string);
 }
 
 /******************************************************************************/
@@ -720,46 +706,3 @@ char *strip_quotes(char *string) {
 
 	return string;
 }
-
-/******************************************************************************/
-/*  strip_string_crlf() - remove control conditions from a string             */
-/******************************************************************************/
-char *strip_string_crlf(char *string) {
-	char *posptr;
-
-	posptr = strchr(string,'\n');
-
-	while(posptr != NULL)
-	{
-		*posptr = '\0';
-		posptr = strchr(string,'\n');
-	}
-
-	posptr = strchr(string,'\r');
-
-	while(posptr != NULL)
-	{
-		*posptr = '\0';
-		posptr = strchr(string,'\r');
-	}
-
-	return(string);
-}
-
-/******************************************************************************/
-/*  init_sockaddr - convert host name to internet address                     */
-/******************************************************************************/
-void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port) {
-	struct hostent *hostinfo;
-	char logmessage[255];
-
-	name->sin_family = AF_INET;
-	name->sin_port = htons (port);
-	hostinfo = gethostbyname (hostname);
-	if (hostinfo == NULL) {
-		snprintf(logmessage, LOGSIZE, "WARNING: Unknown host %s\n", hostname);
-		cacti_log(logmessage);
-	}
-	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-}
-

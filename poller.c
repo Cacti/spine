@@ -323,12 +323,9 @@ void poll_host(int host_id) {
 		if (!host->ignore_host) {
 			switch(entry->action) {
 			case POLLER_ACTION_SNMP: /* raw SNMP poll */
-				poll_result = snmp_get(host, entry->arg1);
+				poll_result = strip_alpha(snmp_get(host, entry->arg1));
 				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
 				free(poll_result);
-
-				/* remove double or single quotes from string */
-				strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
 
 				if (host->ignore_host) {
 					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, entry->local_data_id, host->snmp_timeout, host->hostname);
@@ -363,7 +360,7 @@ void poll_host(int host_id) {
 
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(entry->result)) {
-					strncpy(errstr, (char *) strip_string_crlf(entry->result),sizeof(errstr));
+					strncpy(errstr, entry->result,sizeof(errstr));
 					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
@@ -376,26 +373,32 @@ void poll_host(int host_id) {
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-				poll_result = php_cmd(entry->arg1);
-				snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
-				free(poll_result);
+				if (set.php_sspid) {
+					poll_result = php_cmd(entry->arg1);
+					snprintf(entry->result, sizeof(entry->result), "%s", poll_result);
+					free(poll_result);
 
-				/* remove double or single quotes from string */
-				strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
+					/* remove double or single quotes from string */
+					strncpy(entry->result, strip_quotes(entry->result), sizeof(entry->result));
 
-				/* detect erroneous result. can be non-numeric */
-				if (!validate_result(entry->result)) {
-					strncpy(errstr, entry->result, sizeof(errstr));
-					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
+					/* detect erroneous result. can be non-numeric */
+					if (!validate_result(entry->result)) {
+						strncpy(errstr, entry->result, sizeof(errstr));
+						snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, entry->local_data_id, errstr);
+						cacti_log(logmessage);
+						strncpy(entry->result, "U", sizeof(entry->result));
+					}
+
+					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+						snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, entry->local_data_id, entry->arg1, entry->result);
+						cacti_log(logmessage);
+					}
+				} else {
+					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] WARNING: Could not call script server\n", host_id, entry->local_data_id);
 					cacti_log(logmessage);
 					strncpy(entry->result, "U", sizeof(entry->result));
 				}
-
-				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, entry->local_data_id, entry->arg1, entry->result);
-					cacti_log(logmessage);
-				}
-
+					
 				break;
 			default: /* unknown action, generate error */
 				snprintf(logmessage, LOGSIZE, "Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, entry->local_data_id, entry->arg1);
@@ -450,12 +453,6 @@ int validate_result(char * result) {
 	int space_cnt = 0;
 	int delim_cnt = 0;
 	int i;
-
-	/* remove control characters from string */
-	strncpy(result, strip_string_crlf(result), sizeof(result));
-
-	/* remove trailing white space from string */
-	strncpy(result, strip_alpha(result), sizeof(result));
 
 	/* check the easy cases first */
 	/* it has no delimiters, and no space, therefore, must be numeric */
@@ -571,7 +568,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
 			if (bytes_read) {
 				result_string[bytes_read] = '\0';
-				strip_string_crlf(result_string); 
+				result_string = strip_alpha(result_string);
 			} else {
 				snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 				cacti_log(logmessage);
