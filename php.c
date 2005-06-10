@@ -64,7 +64,6 @@ char *php_cmd(char *php_command) {
 	char *result_string;
 	char command[BUFSIZE+5];
 	int write_status;
-	int php_status;
 
 	/* pad command with CR-LF */
 	snprintf(command, sizeof(command), php_command, strlen(php_command));
@@ -277,7 +276,7 @@ void php_close() {
 		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
 
 		/* end the php script server process */
-		kill(set.php_sspid, SIGINT);
+		kill(set.php_sspid, SIGKILL);
 
 		/* close file descriptors */
 		close(php_pipes.php_write_fd);
