@@ -71,8 +71,11 @@ int main(int argc, char *argv[]) {
 	char result_string[BUFSIZE] = "";
 	char logmessage[LOGSIZE];
 
-	/* tell cactid that it is parent */
+	/* tell cactid that it is parent, initialize php script server status and set poller id */
 	set.parent_fork = CACTID_PARENT;
+	set.php_sspid = 0;
+	set.poller_id = 0;
+
 
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
@@ -160,9 +163,6 @@ int main(int argc, char *argv[]) {
 
 	/* read settings table from the database to further establish environment */
 	read_config_options(&set);
-
-	/* set the poller ID, stub for next version */
-	set.poller_id = 0;
 
 	/* find out how many loops we can perform before terminating */
 	max_loops = DEFAULT_TIMEOUT / THREAD_SLEEP;

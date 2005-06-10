@@ -431,11 +431,13 @@ void config_defaults(config_t * set) {
 /*                  make sure that the php script server is shut down first.  */
 /******************************************************************************/
 void exit_cactid() {
-	if (set.parent_fork == CACTID_PARENT) {
-		php_close();
-		cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
-	} else {
+	if (set.php_sspid) {
+		if (set.parent_fork == CACTID_PARENT) {
+			php_close();
+			cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
+		} else {
 			cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
+		}
 	}
 
 	exit(-1);
