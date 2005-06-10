@@ -294,9 +294,11 @@ int main(int argc, char *argv[]) {
 			thread_mutex_unlock(LOCK_THREAD);
 
 			break;
-		case EBUSY:
+		case EDEADLK:
 			snprintf(logmessage, LOGSIZE, "ERROR: Deadlock Occured\n");
 			cacti_log(logmessage);
+			break;
+		case EBUSY:
 			break;
 		case EINVAL:
 			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Uninitialized Mutex\n");

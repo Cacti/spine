@@ -48,6 +48,8 @@ extern char **environ;
 char *php_cmd(char *php_command) {
 	char *result_string;
 	char command[BUFSIZE+5];
+	int write_status;
+	int php_status;
 
 	/* pad command with CR-LF */
 	snprintf(command, sizeof(command), php_command, strlen(php_command));
@@ -55,7 +57,16 @@ char *php_cmd(char *php_command) {
 
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
-	write(php_pipes.php_write_fd, command, strlen(command));
+	write_status = write(php_pipes.php_write_fd, command, strlen(command));
+
+	/* if write status is <= 0 then the script server may be hung */
+	if (write_status <= 0) {
+		cacti_log("ERROR: PHP Script Server communications lost, attempting to close and restart\n");
+		php_close();
+		if (!php_init()) {
+			cacti_log("ERROR: The PHP Script Server could not be restarted, Script Server command to be ingnored for remainder of polling cycle\n");
+		}
+	}
 
 	/* read the result from the php_command */
 	result_string = php_readpipe();
