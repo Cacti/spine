@@ -60,7 +60,6 @@ int read_config_options(config_t *set) {
 	MYSQL_ROW mysql_row;
 	int num_rows;
 	char logmessage[LOGSIZE];
-	uid_t ruid;
 	char web_root[BUFSIZE];
 
 	db_connect(set->dbdb, &mysql);
@@ -210,36 +209,6 @@ int read_config_options(config_t *set) {
 
 		set->ping_method = atoi(mysql_row[0]);
 	}
-
-	ruid = 999;
-
-	#if defined(__CYGWIN__)
-	/* root check not required for windows */
-	ruid = 0;
-	printf("CACTID: Windows Environment, root permissions not required for ICMP Ping\n");
-
-	#else
-	/* check for root status (ruid=0) */
-	ruid = getuid();
-
-	/* fall back to UDP ping if ICMP is not available */
-	if (ruid != 0) {
-		if ((set->availability_method == AVAIL_SNMP_AND_PING) || (set->availability_method == AVAIL_PING)) {
-			if (set->ping_method == PING_ICMP) {
-    			set->ping_method = PING_UDP;
-				printf("CACTID: WARNING: Falling back to UDP Ping due to User not being ROOT\n");
-				printf("        To setup a process to run as root, see your documentaion\n");
-				if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-					snprintf(logmessage, LOGSIZE, "DEBUG: Falling back to UDP Ping due to the running User not being ROOTBEER\n");
-					cacti_log(logmessage);
-				}
-			}
-		}
-	} else {
-		printf("CACTID: Non Window envrionment, running as root, ICMP Ping available\n");
-	}
-
-	#endif
 
 	/* log the ping_method variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {

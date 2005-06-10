@@ -68,11 +68,24 @@ int ping_host(host_t *host, ping_t *ping) {
 	ping_result = 0;
 	snmp_result = 0;
 
+	/* test for asroot */
+	#if defined (__CYGWIN__)
+	#else
+	if (geteuid() != 0) {
+		set.ping_method = PING_UDP;
+		printf("CACTID: WARNING: Falling back to UDP Ping due to inability to set asroot permissions\n");
+		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+			cacti_log("DEBUG: Falling back to UDP Ping due to inability to set asroot permissions\n");
+		}
+	}
+	#endif
+	
 	/* icmp/udp ping test */
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
 		if (!strstr(host->hostname, "localhost")) {
 			if (set.ping_method == PING_ICMP) {
 				ping_result = ping_icmp(host, ping);
+				setuid(getuid());
 			}else if (set.ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);
 			}

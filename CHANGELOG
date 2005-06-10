@@ -18,6 +18,7 @@ The Cacti Group – cactid
 -bug: remove trailing blanks and alpha characters from results
 -bug: clean up some string handling on script server results
 -bug: stop DEADLOCKS by not prematurely releasing mutex locks
+-feature: added seteuid functionality for unix and ICMP ping
 -feature: added polling for non-host specific data sources
 -feature: added data source logging to provide easier problem resolution
 -feature: spike suppression feature
