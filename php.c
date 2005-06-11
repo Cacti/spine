@@ -66,7 +66,7 @@ char *php_cmd(char *php_command) {
 	int write_status;
 
 	/* pad command with CR-LF */
-	snprintf(command, sizeof(command), php_command, strlen(php_command));
+	snprintf(command, sizeof(command)-1, php_command, strlen(php_command));
 	strncat(command, "\r\n", 5);
 
 	thread_mutex_lock(LOCK_PHP);
@@ -118,14 +118,14 @@ char *php_readpipe() {
 	 * should only be the READ pipe */
 	switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 	case -1:
-		snprintf(logmessage, LOGSIZE, "ERROR: Fatal select() error\n");
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Fatal select() error\n");
 		cacti_log(logmessage);
-		snprintf(result_string, BUFSIZE, "%s", "U");
+		snprintf(result_string, BUFSIZE-1, "%s", "U");
 		break;
 	case 0:
-		snprintf(logmessage, LOGSIZE, "ERROR: The PHP Script Server did not respond in time and will therefore be restarted\n");
+		snprintf(logmessage, LOGSIZE-1, "ERROR: The PHP Script Server did not respond in time and will therefore be restarted\n");
 		cacti_log(logmessage);
-		snprintf(result_string, BUFSIZE, "%s", "U");
+		snprintf(result_string, BUFSIZE-1, "%s", "U");
 
 		/* restart the script server because of error */
 		php_close();
@@ -135,7 +135,7 @@ char *php_readpipe() {
 	default:
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
 		if (rescode == 0) {
-			snprintf(result_string, BUFSIZE, "%s", "U");
+			snprintf(result_string, BUFSIZE-1, "%s", "U");
 		} else {
 			result_string[rescode] = '\0';
 			result_string = strip_alpha(result_string);
@@ -162,20 +162,20 @@ int php_init() {
 	set.php_sspid = 0;
 	
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Routine Starting\n");
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: PHP Script Server Routine Starting\n");
 		cacti_log(logmessage);
 	}
 
 	/* create the output pipes from cactid to php*/
 	if (pipe(cacti2php_pdes) < 0) {
-		snprintf(logmessage, LOGSIZE, "ERROR: Could not allocate php server pipes\n");
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
 		return FALSE;
 	}
 
 	/* create the input pipes from php to cactid */
 	if (pipe(php2cacti_pdes) < 0) {
-		snprintf(logmessage, LOGSIZE, "ERROR: Could not allocate php server pipes\n");
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
 		return FALSE;
 	}
@@ -187,13 +187,13 @@ int php_init() {
 	argv[0] = set.path_php;
 	argv[1] = set.path_php_server;
 	argv[2] = "cactid";
-	snprintf(poller_id, sizeof(poller_id), "%d", set.poller_id);
+	snprintf(poller_id, sizeof(poller_id)-1, "%d", set.poller_id);
 	argv[3] = poller_id;
 	argv[4] = NULL;
 
 	/* fork a child process */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server About to FORK Child Process\n");
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: PHP Script Server About to FORK Child Process\n");
 		cacti_log(logmessage);
 	}
 
@@ -207,7 +207,7 @@ int php_init() {
 			close(cacti2php_pdes[0]);
 			close(cacti2php_pdes[1]);
 
-			snprintf(logmessage, LOGSIZE, "ERROR: Could not fork php script server\n");
+			snprintf(logmessage, LOGSIZE-1, "ERROR: Could not fork php script server\n");
 			cacti_log(logmessage);
 			pthread_setcancelstate(cancel_state, NULL);
 
@@ -230,7 +230,7 @@ int php_init() {
 			/* NOTREACHED */
 		default: /* I am the parent process */
 			if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Child FORK Success\n");
+				snprintf(logmessage, LOGSIZE-1, "DEBUG: PHP Script Server Child FORK Success\n");
 				cacti_log(logmessage);
 			}
 			set.php_sspid = pid;
@@ -251,7 +251,7 @@ int php_init() {
 	result_string = php_readpipe();
 
 	if ((set.verbose >= POLLER_VERBOSITY_DEBUG) && (strstr(result_string, "Started"))) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: Confirmed PHP Script Server Running\n");
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: Confirmed PHP Script Server Running\n");
 		cacti_log(logmessage);
 	}
 
@@ -267,7 +267,7 @@ void php_close() {
 	char logmessage[LOGSIZE];
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: PHP Script Server Shutdown Started\n");
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: PHP Script Server Shutdown Started\n");
 		cacti_log(logmessage);
 	}
 

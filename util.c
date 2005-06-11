@@ -110,13 +110,13 @@ int read_config_options(config_t *set) {
 
 	/* log the path_webroot variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The path_php_server variable is %s\n" ,set->path_php_server);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The path_php_server variable is %s\n" ,set->path_php_server);
 		cacti_log(logmessage);
 	}
 
 	/* log the path_cactilog variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The path_cactilog variable is %s\n" ,set->path_logfile);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The path_cactilog variable is %s\n" ,set->path_logfile);
 		cacti_log(logmessage);
 	}
 
@@ -133,7 +133,7 @@ int read_config_options(config_t *set) {
 
 	/* log the log_destination variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The log_destination variable is %i\n" ,set->log_destination);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_destination variable is %i\n" ,set->log_destination);
 		cacti_log(logmessage);
 	}
 
@@ -148,7 +148,7 @@ int read_config_options(config_t *set) {
 
 	/* log the path_php variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The path_php variable is %s\n" ,set->path_php);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The path_php variable is %s\n" ,set->path_php);
 		cacti_log(logmessage);
 	}
 
@@ -164,7 +164,7 @@ int read_config_options(config_t *set) {
 
 	/* log the availability_method variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The availability_method variable is %i\n" ,set->availability_method);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The availability_method variable is %i\n" ,set->availability_method);
 		cacti_log(logmessage);
 	}
 
@@ -180,7 +180,7 @@ int read_config_options(config_t *set) {
 
 	/* log the ping_recovery_count variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_recovery_count variable is %i\n" ,set->ping_recovery_count);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_recovery_count variable is %i\n" ,set->ping_recovery_count);
 		cacti_log(logmessage);
 	}
 
@@ -196,7 +196,7 @@ int read_config_options(config_t *set) {
 
 	/* log the ping_failure_count variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_failure_count variable is %i\n" ,set->ping_failure_count);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_failure_count variable is %i\n" ,set->ping_failure_count);
 		cacti_log(logmessage);
 	}
 
@@ -212,7 +212,7 @@ int read_config_options(config_t *set) {
 
 	/* log the ping_method variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_method variable is %i\n" ,set->ping_method);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_method variable is %i\n" ,set->ping_method);
 		cacti_log(logmessage);
 	}
 
@@ -228,7 +228,7 @@ int read_config_options(config_t *set) {
 
 	/* log the ping_retries variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_retries variable is %i\n" ,set->ping_retries);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_retries variable is %i\n" ,set->ping_retries);
 		cacti_log(logmessage);
 	}
 
@@ -244,7 +244,7 @@ int read_config_options(config_t *set) {
 
 	/* log the ping_timeout variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The ping_timeout variable is %i\n" ,set->ping_timeout);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_timeout variable is %i\n" ,set->ping_timeout);
 		cacti_log(logmessage);
 	}
 
@@ -264,7 +264,7 @@ int read_config_options(config_t *set) {
 
 	/* log the log_perror variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The log_perror variable is %i\n" ,set->log_perror);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_perror variable is %i\n" ,set->log_perror);
 		cacti_log(logmessage);
 	}
 
@@ -284,7 +284,7 @@ int read_config_options(config_t *set) {
 
 	/* log the log_pwarn variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The log_pwarn variable is %i\n" ,set->log_pwarn);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_pwarn variable is %i\n" ,set->log_pwarn);
 		cacti_log(logmessage);
 	}
 
@@ -304,7 +304,7 @@ int read_config_options(config_t *set) {
 
 	/* log the log_pstats variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The log_pstats variable is %i\n" ,set->log_pstats);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_pstats variable is %i\n" ,set->log_pstats);
 		cacti_log(logmessage);
 	}
 
@@ -322,7 +322,7 @@ int read_config_options(config_t *set) {
 
 	/* log the threads variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: The threads variable is %i\n" ,set->threads);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The threads variable is %i\n" ,set->threads);
 		cacti_log(logmessage);
 	}
 
@@ -340,9 +340,9 @@ int read_config_options(config_t *set) {
 	/* log the threads variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
 		if (set->poller_interval == 0) {
-			snprintf(logmessage, LOGSIZE, "DEBUG: The polling interval is the system default\n" ,set->poller_interval);
+			snprintf(logmessage, LOGSIZE-1, "DEBUG: The polling interval is the system default\n" ,set->poller_interval);
 		}else{
-			snprintf(logmessage, LOGSIZE, "DEBUG: The polling interval is %i seconds\n" ,set->poller_interval);
+			snprintf(logmessage, LOGSIZE-1, "DEBUG: The polling interval is %i seconds\n" ,set->poller_interval);
 		}
 		cacti_log(logmessage);
 	}
@@ -443,7 +443,7 @@ void cacti_log(char *logmessage) {
 	int fileopen = 0;
 
 	/* log message prefix */
-	snprintf(logprefix, sizeof(logprefix), "CACTID: Poller[%i] ", set.poller_id);
+	snprintf(logprefix, sizeof(logprefix)-1, "CACTID: Poller[%i] ", set.poller_id);
 
 	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
 		while (!fileopen) {
@@ -497,7 +497,7 @@ void cacti_log(char *logmessage) {
 	}
 
 	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-	    snprintf(flogmessage, LOGSIZE, "CACTID: %s", logmessage);
+	    snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", logmessage);
 		printf(flogmessage);
 	}
 }

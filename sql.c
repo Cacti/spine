@@ -49,12 +49,12 @@ int db_insert(MYSQL *mysql, char *query) {
 	char logmessage[LOGSIZE];
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: SQLCMD: %s\n", query);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: SQLCMD: %s\n", query);
 		cacti_log(logmessage);
 	}
 
 	if (mysql_query(mysql, query)) {
-		snprintf(logmessage, LOGSIZE, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
 		return (FALSE);
 	}else{
@@ -85,7 +85,7 @@ int db_connect(char *database, MYSQL *mysql) {
 	char *socket;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
-		snprintf(logmessage, LOGSIZE, "ERROR: malloc(): strdup() failed\n");
+		snprintf(logmessage, LOGSIZE-1, "ERROR: malloc(): strdup() failed\n");
 		cacti_log(logmessage);
 		return (FALSE);
 	}
@@ -96,7 +96,7 @@ int db_connect(char *database, MYSQL *mysql) {
 	result = 0;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 		cacti_log(logmessage);
 	}
 
@@ -107,7 +107,7 @@ int db_connect(char *database, MYSQL *mysql) {
 		tries--;
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
+				snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 				cacti_log(logmessage);
 			}
 			result = 1;
@@ -115,7 +115,7 @@ int db_connect(char *database, MYSQL *mysql) {
 			tries = 0;
 			result = 0;
 			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE, "MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+				snprintf(logmessage, LOGSIZE-1, "MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 				cacti_log(logmessage);
 			}
 		}
@@ -124,7 +124,7 @@ int db_connect(char *database, MYSQL *mysql) {
 	free(hostname);
 
 	if (result == 1){
-		snprintf(logmessage, LOGSIZE, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
+		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
 		thread_mutex_unlock(LOCK_MYSQL);
 		exit_cactid();

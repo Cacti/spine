@@ -91,13 +91,13 @@ void snmp_host_init(host_t *current_host) {
 	}else if (current_host->snmp_version == 1) {
 		session.version = SNMP_VERSION_1;
 	}else {
-		snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", current_host->id, current_host->hostname);
+		snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", current_host->id, current_host->hostname);
 		cacti_log(logmessage);
 		return;
 	}		
 
 	/* net-snmp likes the hostname in 'host:port' format */
-	snprintf(hostname, BUFSIZE, "%s:%i", current_host->hostname, current_host->snmp_port);
+	snprintf(hostname, BUFSIZE-1, "%s:%i", current_host->hostname, current_host->snmp_port);
 
 	session.peername = hostname;
 	session.retries = 3;
@@ -117,7 +117,7 @@ void snmp_host_init(host_t *current_host) {
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		snprintf(logmessage, LOGSIZE, "ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);
 		cacti_log(logmessage);
 		current_host->snmp_session = NULL;
 	}else{
@@ -144,9 +144,9 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	if (current_host->snmp_session != NULL) {
 		/* only SNMP v1 and v2c are supported right now */
 		if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
-			snprintf(logmessage, LOGSIZE, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
+			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
 			cacti_log(logmessage);
-			snprintf(result_string, BUFSIZE, "%s", "U");
+			snprintf(result_string, BUFSIZE-1, "%s", "U");
 
 			return result_string;
 		}
@@ -181,7 +181,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		current_host->ignore_host = 1;
 		strncpy(result_string, "SNMP ERROR", BUFSIZE);
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
-		snprintf(result_string, BUFSIZE, "%s", "U");
+		snprintf(result_string, BUFSIZE-1, "%s", "U");
 	}
 
 	if (current_host->snmp_session != NULL) {

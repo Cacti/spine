@@ -164,14 +164,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		for(i=0;i<CONFIG_PATHS;i++) {
-			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
+			snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_cactid_config(conf_file, &set) >= 0) {
 				break;
 			}
 
 			if (i == CONFIG_PATHS-1) {
-				snprintf(conf_file, BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
+				snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
 			}
 		}
 	}
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
 	max_loops = DEFAULT_TIMEOUT / THREAD_SLEEP;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "CACTID: Version %s starting\n", VERSION);
+		snprintf(logmessage, LOGSIZE-1, "CACTID: Version %s starting\n", VERSION);
 		cacti_log(logmessage);
 	} else {
 		printf("CACTID: Version %s starting\n", VERSION);
@@ -194,14 +194,14 @@ int main(int argc, char *argv[]) {
 
 	/* initialize SNMP */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "CACTID: Initializing Net-SNMP API\n", VERSION);
+		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing Net-SNMP API\n", VERSION);
 		cacti_log(logmessage);
 	}
 	init_snmp("cactid");
 
 	/* initialize PHP */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "CACTID: Initializing PHP Script Server\n", VERSION);
+		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing PHP Script Server\n", VERSION);
 		cacti_log(logmessage);
 	}
 
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case 3:
-			snprintf(result_string, sizeof(result_string), "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id", argv[1], argv[2]);
+			snprintf(result_string, sizeof(result_string)-1, "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id", argv[1], argv[2]);
 			result = db_query(&mysql, result_string);
 
 			break;
@@ -234,7 +234,7 @@ int main(int argc, char *argv[]) {
 	init_mutexes();
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE, "DEBUG: Initial Value of Active Threads is %i\n", active_threads);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: Initial Value of Active Threads is %i\n", active_threads);
 		cacti_log(logmessage);
 	}
 
@@ -266,7 +266,7 @@ int main(int argc, char *argv[]) {
 				switch (thread_status) {
 					case 0:
 						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-							snprintf(logmessage, LOGSIZE, "DEBUG: Valid Thread to be Created\n");
+							snprintf(logmessage, LOGSIZE-1, "DEBUG: Valid Thread to be Created\n");
 							cacti_log(logmessage);
 						}
 
@@ -274,25 +274,25 @@ int main(int argc, char *argv[]) {
 						active_threads++;
 
 						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-							snprintf(logmessage, LOGSIZE, "DEBUG: The Value of Active Threads is %i\n", active_threads);
+							snprintf(logmessage, LOGSIZE-1, "DEBUG: The Value of Active Threads is %i\n", active_threads);
 							cacti_log(logmessage);
 						}
 
 						break;
 					case EAGAIN:
-						snprintf(logmessage, LOGSIZE, "ERROR: The System Lacked the Resources to Create a Thread\n");
+						snprintf(logmessage, LOGSIZE-1, "ERROR: The System Lacked the Resources to Create a Thread\n");
 						cacti_log(logmessage);
 						break;
 					case EFAULT:
-						snprintf(logmessage, LOGSIZE, "ERROR: The Thread or Attribute Was Invalid\n");
+						snprintf(logmessage, LOGSIZE-1, "ERROR: The Thread or Attribute Was Invalid\n");
 						cacti_log(logmessage);
 						break;
 					case EINVAL:
-						snprintf(logmessage, LOGSIZE, "ERROR: The Thread Attribute is Not Initialized\n");
+						snprintf(logmessage, LOGSIZE-1, "ERROR: The Thread Attribute is Not Initialized\n");
 						cacti_log(logmessage);
 						break;
 					default:
-						snprintf(logmessage, LOGSIZE, "ERROR: Unknown Thread Creation Error\n");
+						snprintf(logmessage, LOGSIZE-1, "ERROR: Unknown Thread Creation Error\n");
 						cacti_log(logmessage);
 						break;
 				}
@@ -310,21 +310,21 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EDEADLK:
-			snprintf(logmessage, LOGSIZE, "ERROR: Deadlock Occured\n");
+			snprintf(logmessage, LOGSIZE-1, "ERROR: Deadlock Occured\n");
 			cacti_log(logmessage);
 			break;
 		case EBUSY:
 			break;
 		case EINVAL:
-			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Uninitialized Mutex\n");
+			snprintf(logmessage, LOGSIZE-1, "ERROR: Attempt to Unlock an Uninitialized Mutex\n");
 			cacti_log(logmessage);
 			break;
 		case EFAULT:
-			snprintf(logmessage, LOGSIZE, "ERROR: Attempt to Unlock an Invalid Mutex\n");
+			snprintf(logmessage, LOGSIZE-1, "ERROR: Attempt to Unlock an Invalid Mutex\n");
 			cacti_log(logmessage);
 			break;
 		default:
-			snprintf(logmessage, LOGSIZE, "ERROR: Unknown Mutex Lock Error Code Returned\n");
+			snprintf(logmessage, LOGSIZE-1, "ERROR: Unknown Mutex Lock Error Code Returned\n");
 			cacti_log(logmessage);
 			break;
 		}
@@ -407,7 +407,7 @@ int main(int argc, char *argv[]) {
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) && (argc != 1)) {
-		snprintf(logmessage, LOGSIZE, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+		snprintf(logmessage, LOGSIZE-1, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
 	} else {
 		printf("CACTID: Execution Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
