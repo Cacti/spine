@@ -145,7 +145,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		anOID_len = MAX_OID_LEN;
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 		read_objid(snmp_oid, anOID, &anOID_len);
-		strncpy(storedoid, snmp_oid, sizeof(storedoid));
+		strncpy(storedoid, snmp_oid, sizeof(storedoid)-1);
 		snmp_add_null_var(pdu, anOID, anOID_len);
 
 		if (current_host->snmp_session != NULL) {
@@ -170,7 +170,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
-		strncpy(result_string, "SNMP ERROR", BUFSIZE);
+		strncpy(result_string, "SNMP ERROR", BUFSIZE-1);
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		snprintf(result_string, BUFSIZE-1, "%s", "U");
 	}

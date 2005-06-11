@@ -74,8 +74,8 @@ int read_config_options(config_t *set) {
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 
-		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server));
-		strncpy(web_root, mysql_row[0], sizeof(web_root));
+		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server)-1);
+		strncpy(web_root, mysql_row[0], sizeof(web_root)-1);
 		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server));
 	}
 
@@ -87,16 +87,16 @@ int read_config_options(config_t *set) {
 		mysql_row = mysql_fetch_row(result);
 
 		if (strlen(mysql_row[0]) != 0) {
-			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile));
+			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile)-1);
 		} else {
 			if (strlen(web_root) != 0) {
-				strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
+				strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile)-1);
 			} else {
-				strncpy(set->path_logfile, "", sizeof(set->path_logfile));
+				strncpy(set->path_logfile, "", sizeof(set->path_logfile)-1);
 			}
 		}
 	} else {
-		strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile));
+		strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile)-1);
  	}
 
 	/* log the path_webroot variable */
@@ -134,7 +134,7 @@ int read_config_options(config_t *set) {
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-		strncpy(set->path_php,mysql_row[0], sizeof(set->path_php));
+		strncpy(set->path_php,mysql_row[0], sizeof(set->path_php)-1);
 	}
 
 	/* log the path_php variable */
@@ -364,10 +364,10 @@ int read_cactid_config(char *file, config_t *set) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost));
-				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb));
-				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser));
-				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass));
+				if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost)-1);
+				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb)-1);
+				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser)-1);
+				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass)-1);
                 else if (!strcasecmp(p1, "DB_Port")) set->dbport = atoi(p2);
 				else {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
@@ -387,16 +387,16 @@ void config_defaults(config_t * set) {
 	set->threads = DEFAULT_THREADS;
     set->dbport = DEFAULT_DB_PORT;
 
-	strncpy(set->dbhost, DEFAULT_DB_HOST, sizeof(set->dbhost));
-	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost));
-	strncpy(set->dbuser, DEFAULT_DB_USER, sizeof(set->dbhost));
-	strncpy(set->dbpass, DEFAULT_DB_PASS, sizeof(set->dbhost));
+	strncpy(set->dbhost, DEFAULT_DB_HOST, sizeof(set->dbhost)-1);
+	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost)-1);
+	strncpy(set->dbuser, DEFAULT_DB_USER, sizeof(set->dbhost)-1);
+	strncpy(set->dbpass, DEFAULT_DB_PASS, sizeof(set->dbhost)-1);
 
-	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0]));
-	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1]));
-	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[2]));
-	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[3]));
-	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[4]));
+	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0])-1);
+	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1])-1);
+	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[2])-1);
+	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[3])-1);
+	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[4])-1);
 
 	return;
 }
@@ -638,6 +638,29 @@ char *add_slashes(char *string, int arguments_2_strip) {
 
 	return(return_str);
 }
+
+/******************************************************************************/
+/*  strip_string_crlf() - remove control conditions from a string             */
+/******************************************************************************/
+char *strip_string_crlf(char *string) {
+	char *posptr;
+
+	posptr = strchr(string,'\n');
+
+	while(posptr != NULL) {
+		*posptr = '\0';
+		posptr = strchr(string,'\n');
+	}
+
+	posptr = strchr(string,'\r');
+
+	while(posptr != NULL) {
+		*posptr = '\0';
+		posptr = strchr(string,'\r');
+	}
+
+	return(string);
+} 
 
 /******************************************************************************/
 /*  strip_quotes() - remove beginning and ending quotes from a string         */

@@ -91,6 +91,9 @@ char *php_readpipe() {
 	char logmessage[LOGSIZE];
 	char *result_string = (char *) malloc(BUFSIZE);
 	
+	/* set the result_string to all zeros */
+	memset(result_string, 0, BUFSIZE);
+
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(php_pipes.php_read_fd,&fds);
@@ -129,7 +132,6 @@ char *php_readpipe() {
 			snprintf(result_string, BUFSIZE-1, "%s", "U");
 		} else {
 			result_string[rescode] = '\0';
-			result_string = strip_alpha(result_string);
 		}
 	}
 
