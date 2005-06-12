@@ -116,7 +116,7 @@ char *php_readpipe() {
 		snprintf(result_string, BUFSIZE-1, "%s", "U");
 		break;
 	case 0:
-		snprintf(logmessage, LOGSIZE-1, "ERROR: The PHP Script Server did not respond in time and will therefore be restarted\n");
+		snprintf(logmessage, LOGSIZE-1, "WARNING: The PHP Script Server did not respond in time and will therefore be restarted\n");
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE-1, "%s", "U");
 
