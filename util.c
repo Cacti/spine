@@ -90,13 +90,13 @@ int read_config_options(config_t *set) {
 			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile)-1);
 		} else {
 			if (strlen(web_root) != 0) {
-				strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile)-1);
+				strncpy(set->path_logfile, strncat(web_root, "/log/cacti.log", sizeof(web_root)-1), sizeof(set->path_logfile)-1);
 			} else {
 				strncpy(set->path_logfile, "", sizeof(set->path_logfile)-1);
 			}
 		}
 	} else {
-		strncpy(set->path_logfile, strcat(web_root, "/log/cacti.log"), sizeof(set->path_logfile)-1);
+		strncpy(set->path_logfile, strncat(web_root, "/log/cacti.log", sizeof(web_root)-1), sizeof(set->path_logfile)-1);
  	}
 
 	/* log the path_webroot variable */
@@ -464,8 +464,8 @@ void cacti_log(char *logmessage) {
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", nowstruct) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
 
-	strcat(flogmessage, logprefix);
-	strcat(flogmessage, logmessage);
+	strncat(flogmessage, logprefix, sizeof(flogmessage)-1);
+	strncat(flogmessage, logmessage, sizeof(flogmessage)-1);
 
 	if (fileopen != 0) {
 		fputs(flogmessage, log_file);
@@ -474,6 +474,7 @@ void cacti_log(char *logmessage) {
 
 	/* output to syslog/eventlog */
 	if ((set.log_destination == 2) || (set.log_destination == 3)) {
+		thread_mutex_lock(LOCK_SYSLOG);
 		openlog("Cacti Logging", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
@@ -485,6 +486,7 @@ void cacti_log(char *logmessage) {
 				syslog(LOG_NOTICE,"%s\n", flogmessage);
 		}
 		closelog();
+		thread_mutex_unlock(LOCK_SYSLOG);
 	}
 
 	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
