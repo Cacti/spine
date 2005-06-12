@@ -76,7 +76,7 @@ int read_config_options(config_t *set) {
 
 		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server)-1);
 		strncpy(web_root, mysql_row[0], sizeof(web_root)-1);
-		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server));
+		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server)-1);
 	}
 
 	/* determine logfile path */

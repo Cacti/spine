@@ -424,8 +424,8 @@ void poll_host(int host_id) {
 			}
 
 			/* format database insert string */
-			query3 = (char *)malloc(sizeof(entry->result) + sizeof(entry->local_data_id) + 128);
-			snprintf(query3, (sizeof(entry->result) + sizeof(entry->local_data_id) + 128 - 1), "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s','%s','%s')", entry->local_data_id, entry->rrd_name, start_datetime, entry->result);
+			query3 = (char *)malloc(BUFSIZE);
+			snprintf(query3, BUFSIZE-1, "insert into poller_output (local_data_id,rrd_name,time,output) values (%i,'%s','%s','%s')", entry->local_data_id, entry->rrd_name, start_datetime, entry->result);
 			db_insert(&mysql, query3);
 			free(query3);
 		}

@@ -53,12 +53,11 @@ extern char **environ;
 /******************************************************************************/
 char *php_cmd(char *php_command) {
 	char *result_string;
-	char command[BUFSIZE+5];
+	char command[BUFSIZE];
 	int write_status;
 
 	/* pad command with CR-LF */
-	snprintf(command, sizeof(command)-1, php_command, strlen(php_command));
-	strncat(command, "\r\n", 5);
+	snprintf(command, sizeof(command)-1, "%s\r\n", php_command);
 
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */

@@ -295,7 +295,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if (total_time < set.ping_timeout) {
 					strncpy(ping->ping_response,"ICMP: Host is Alive",sizeof(ping->ping_response)-1);
-					sprintf(ping->ping_status,"%.5f",total_time);
+					snprintf(ping->ping_status,sizeof(ping->ping_status)-1,"%.5f",total_time);
 					free(packet);
 					close(icmp_socket);
 					return HOST_UP;
@@ -383,7 +383,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 		}
 
 		/* format packet */
-		sprintf(request, "cacti-monitoring-system"); // the actual test data
+		snprintf(request, sizeof(request)-1, "cacti-monitoring-system"); // the actual test data
 		request_len = strlen(request);
 
 		retry_count = 0;
@@ -434,7 +434,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
 				if ((total_time * 1000) <= set.ping_timeout) {
 					strncpy(ping->ping_response,"UDP: Host is Alive",sizeof(ping->ping_response)-1);
-					sprintf(ping->ping_status,"%.5f",(total_time*1000));
+					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f",(total_time*1000));
 					close(udp_socket);
 					return HOST_UP;
 				}

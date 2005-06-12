@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 	int num_rows;
 	int device_counter = 0;
 	int last_active_threads = 0;
-	long int THREAD_SLEEP = 100000;
+	long int THREAD_SLEEP = 50000;
 	time_t nowbin;
 	const struct tm *nowstruct;
 
