@@ -46,6 +46,8 @@ extern char **environ;
  #undef PACKAGE_TARNAME
  #include <net-snmp-config.h>
  #include <net-snmp-includes.h>
+ #include <config_api.h>
+ #include <mib_api.h>
 #else
  #include <ucd-snmp/ucd-snmp-config.h>
  #include <ucd-snmp/ucd-snmp-includes.h>
