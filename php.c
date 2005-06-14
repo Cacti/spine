@@ -61,7 +61,7 @@ char *php_cmd(char *php_command) {
 
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
-	write_status = write(php_pipes.php_write_fd, command, strlen(command)+1);
+	write_status = write(php_pipes.php_write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
