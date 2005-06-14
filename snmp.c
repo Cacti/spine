@@ -39,6 +39,11 @@
 extern char **environ;
 
 #ifdef USE_NET_SNMP
+ #undef PACKAGE_NAME
+ #undef PACKAGE_VERSION
+ #undef PACKAGE_BUGREPORT
+ #undef PACKAGE_STRING
+ #undef PACKAGE_TARNAME
  #include <net-snmp-config.h>
  #include <net-snmp-includes.h>
 #else
@@ -51,10 +56,14 @@ extern char **environ;
 void snmp_cactid_init() {
 	SOCK_STARTUP;
 	init_snmp("cactid");
+	#ifdef USE_NET_SNMP
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+	#endif
 }
 
 void snmp_cactid_close() {
 	SOCK_CLEANUP;
+	snmp_shutdown("cactid");
 }
 
 void snmp_host_init(host_t *current_host) {

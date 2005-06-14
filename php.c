@@ -61,7 +61,7 @@ char *php_cmd(char *php_command) {
 
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
-	write_status = write(php_pipes.php_write_fd, command, strlen(command));
+	write_status = write(php_pipes.php_write_fd, command, strlen(command)+1);
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
@@ -129,8 +129,6 @@ char *php_readpipe() {
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
 		if (rescode == 0) {
 			snprintf(result_string, BUFSIZE-1, "%s", "U");
-		} else {
-			result_string[rescode] = '\0';
 		}
 	}
 
