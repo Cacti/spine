@@ -82,7 +82,6 @@ int main(int argc, char *argv[]) {
 	set.php_sspid = 0;
 	set.poller_id = 0;
 
-
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
@@ -188,7 +187,7 @@ int main(int argc, char *argv[]) {
 		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing Net-SNMP API\n", VERSION);
 		cacti_log(logmessage);
 	}
-	init_snmp("cactid");
+	snmp_cactid_init();
 
 	/* initialize PHP */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
@@ -385,6 +384,13 @@ int main(int argc, char *argv[]) {
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Allocated Variable Memory Freed\n");
 	}
+
+	/* shutdown SNMP */
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "CACTID: Shutting down Net-SNMP API\n", VERSION);
+		cacti_log(logmessage);
+	}
+	snmp_cactid_close();
 
 	/* close mysql */
 	mysql_free_result(result);

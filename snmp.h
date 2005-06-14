@@ -30,7 +30,8 @@
  +-------------------------------------------------------------------------+
 */
 
-void snmp_init();
+void snmp_cactid_init();
+void snmp_cactid_close();
 void snmp_host_init(host_t *current_host);
 void snmp_host_cleanup(host_t *current_host);
 char *snmp_get(host_t *current_host, char *snmp_oid);

@@ -48,16 +48,13 @@ extern char **environ;
  #include <mib.h>
 #endif
 
-void snmp_init() {
-	#ifdef USE_NET_SNMP
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
-	#else
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
-	#endif
+void snmp_cactid_init() {
+	SOCK_STARTUP;
+	init_snmp("cactid");
+}
+
+void snmp_cactid_close() {
+	SOCK_CLEANUP;
 }
 
 void snmp_host_init(host_t *current_host) {
@@ -72,7 +69,15 @@ void snmp_host_init(host_t *current_host) {
 
 	/* initialize SNMP */
  	thread_mutex_lock(LOCK_SNMP);
-	snmp_init();
+	#ifdef USE_NET_SNMP
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
+	#else
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
+	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
+	#endif
   	snmp_sess_init(&session);
 	thread_mutex_unlock(LOCK_SNMP);
 
@@ -97,14 +102,9 @@ void snmp_host_init(host_t *current_host) {
 	session.community = current_host->snmp_community;
 	session.community_len = strlen(current_host->snmp_community);
 
- 	thread_mutex_lock(LOCK_SNMP);
-
-	/* windows socket call */
-	SOCK_STARTUP;
-
 	/* open SNMP Session */
+ 	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
@@ -118,7 +118,6 @@ void snmp_host_init(host_t *current_host) {
 
 void snmp_host_cleanup(host_t *current_host) {
 	snmp_sess_close(current_host->snmp_session);
-	SOCK_CLEANUP;
 }
 
 char *snmp_get(host_t *current_host, char *snmp_oid) {
