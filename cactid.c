@@ -52,11 +52,13 @@ int active_threads = 0;
 int main(int argc, char *argv[]) {
 	struct timeval now;
 	char *conf_file = NULL;
-	double begin_time, end_time;
+	double begin_time, end_time, current_time;
+	int poller_interval;
 	int num_rows;
 	int device_counter = 0;
 	int last_active_threads = 0;
-	long int THREAD_SLEEP = 50000;
+	long int EXTERNAL_THREAD_SLEEP = 100000;
+	long int internal_thread_sleep;
 	time_t nowbin;
 	const struct tm *nowstruct;
 
@@ -70,15 +72,15 @@ int main(int argc, char *argv[]) {
 	int canexit = 0;
 	int host_id;
 	int i;
-	int loop_count = 0;
-	int max_loops;
 	int mutex_status = 0;
 	int thread_status = 0;
-	char result_string[BUFSIZE] = "";
+	pid_t ppid;
+	char result_string[BUFSIZE];
 	char logmessage[LOGSIZE];
 
-	/* tell cactid that it is parent, initialize php script server status and set poller id */
+	/* tell cactid that it is parent, set/initialize the process ids, initialize php script server status and set poller id */
 	set.parent_fork = CACTID_PARENT;
+	set.cactid_pid = getpid();
 	set.php_sspid = 0;
 	set.poller_id = 0;
 
@@ -166,11 +168,32 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	/* get the host_id bounds for polling */
+	switch (argc) {
+		case 3:
+			set.start_host_id = atoi(argv[1]);
+			set.end_host_id = atoi(argv[2]);
+
+			break;
+		default:
+			set.start_host_id = 0;
+			set.end_host_id = 0;
+
+			break;
+	}
+
 	/* read settings table from the database to further establish environment */
 	read_config_options(&set);
 
 	/* find out how many loops we can perform before terminating */
-	max_loops = DEFAULT_TIMEOUT / THREAD_SLEEP;
+	if (set.poller_interval == 0) {
+		poller_interval = 300;
+	}else {
+		poller_interval = set.poller_interval;
+	}
+
+	/* calculate the external_tread_sleep value */
+	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 2;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE-1, "CACTID: Version %s starting\n", VERSION);
@@ -189,14 +212,22 @@ int main(int argc, char *argv[]) {
 	}
 	snmp_cactid_init();
 
-	/* initialize PHP */
+	/* initialize PHP if required */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing PHP Script Server\n", VERSION);
 		cacti_log(logmessage);
 	}
 
 	/* initialize the script server */
-	php_init();
+	if (set.php_required) {
+		php_init();
+	}
+
+	/* log the parent and php script server process id's */
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: Parent pid=%i, Script Server pid=%i\n", set.cactid_pid, set.php_sspid);
+		cacti_log(logmessage);
+	}
 
 	/* get the id's to poll */
 	switch (argc) {
@@ -286,10 +317,13 @@ int main(int argc, char *argv[]) {
 						cacti_log(logmessage);
 						break;
 				}
-				usleep(THREAD_SLEEP);
+				usleep(internal_thread_sleep);
 
-				loop_count++;
-				if (loop_count > max_loops) {
+				/* get current time and exit program if time limit exceeded */
+				gettimeofday(&now, NULL);
+				current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+				if ((current_time - begin_time) > poller_interval) {
 					cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
 					canexit = 1;
 					break;
@@ -319,10 +353,13 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		usleep(THREAD_SLEEP);
+		usleep(internal_thread_sleep);
 
-		loop_count++;
-		if (loop_count > max_loops) {
+		/* get current time and exit program if time limit exceeded */
+		gettimeofday(&now, NULL);
+		current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+		if ((current_time - begin_time) > poller_interval) {
 			cacti_log("ERROR: Cactid Timed Out While Processing Hosts External\n");
 			canexit = 1;
 			break;
@@ -343,11 +380,15 @@ int main(int argc, char *argv[]) {
 			thread_mutex_unlock(LOCK_THREAD);
 		}
 
-		usleep(THREAD_SLEEP);
+		usleep(EXTERNAL_THREAD_SLEEP);
 
-		loop_count++;
-		if (loop_count > max_loops) {
-			cacti_log("ERROR: Cactid Timed Out While Processing Hosts\n");
+		/* get current time and exit program if time limit exceeded */
+		gettimeofday(&now, NULL);
+		current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+		if ((current_time - begin_time) > poller_interval) {
+			cacti_log("ERROR: Cactid Timed Out While Processing Host Shutdown\n");
+			canexit = 1;
 			break;
 		}
 	}
@@ -370,7 +411,9 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* close the php script server */
-	php_close();
+	if (set.php_required) {
+		php_close();
+	}
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: PHP Script Server Pipes Closed\n");

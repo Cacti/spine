@@ -232,31 +232,37 @@ void poll_host(int host_id) {
 				if (!strcmp(poll_result,"U")) {
 					assert_fail = 0;
 				}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
-					snprintf(logmessage, LOGSIZE-1, "ASSERT: '%s .eq. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
-					cacti_log(logmessage);
+					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+						snprintf(logmessage, LOGSIZE-1, "ASSERT: '%s .eq. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+						cacti_log(logmessage);
+					}
 
-					query3 = (char *)malloc(128);
-					snprintf(query3, 128-1, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+					query3 = (char *)malloc(255);
+					snprintf(query3, 255-1, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					free(query3);
 
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) <= strtoll(poll_result, (char **)NULL, 10))) {
-					snprintf(logmessage, LOGSIZE-1, "ASSERT: '%s .gt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
-					cacti_log(logmessage);
+					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+						snprintf(logmessage, LOGSIZE-1, "ASSERT: '%s .gt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+						cacti_log(logmessage);
+					}
 
-					query3 = (char *)malloc(128);
-					snprintf(query3, 128-1, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+					query3 = (char *)malloc(255);
+					snprintf(query3, 255-1, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					free(query3);
 
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) >= strtoll(poll_result, (char **)NULL, 10))) {
-					snprintf(logmessage, LOGSIZE-1, "ASSERT: '%s .lt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
-					cacti_log(logmessage);
+					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+						snprintf(logmessage, LOGSIZE-1, "ASSERT: '%s .lt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id);
+						cacti_log(logmessage);
+					}
 
-					query3 = (char *)malloc(128);
-					snprintf(query3, 128-1, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+					query3 = (char *)malloc(255);
+					snprintf(query3, 255-1, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					free(query3);
 
@@ -275,7 +281,7 @@ void poll_host(int host_id) {
 
 					if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
 						spike_kill = 1;
-						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 							snprintf(logmessage, LOGSIZE-1, "Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname);
 							cacti_log(logmessage);
 						}

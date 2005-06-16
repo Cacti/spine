@@ -36,8 +36,6 @@
 #include "util.h"
 #include "snmp.h"
 
-extern char **environ;
-
 #ifdef USE_NET_SNMP
  #undef PACKAGE_NAME
  #undef PACKAGE_VERSION
@@ -55,16 +53,14 @@ extern char **environ;
  #include <mib.h>
 #endif
 
+/* do not load mibs, Cactid does not use them */
+#define DISABLE_MIB_LOADING
+
 void snmp_cactid_init() {
-	SOCK_STARTUP;
 	init_snmp("cactid");
-	#ifdef USE_NET_SNMP
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
-	#endif
 }
 
 void snmp_cactid_close() {
-	SOCK_CLEANUP;
 	snmp_shutdown("cactid");
 }
 
@@ -81,6 +77,8 @@ void snmp_host_init(host_t *current_host) {
 	/* initialize SNMP */
  	thread_mutex_lock(LOCK_SNMP);
 	#ifdef USE_NET_SNMP
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+	netsnmp_ds_set_int(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_OID_OUTPUT_FORMAT, NETSNMP_OID_OUTPUT_NUMERIC);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);

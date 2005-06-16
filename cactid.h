@@ -63,14 +63,12 @@
 /* config file defaults */
 #define DEFAULT_CONF_FILE "cactid.conf"
 #define DEFAULT_THREADS 5
-#define DEFAULT_OUT_OF_RANGE 93750000000
 #define DEFAULT_DB_HOST "localhost"
 #define DEFAULT_DB_DB "cacti"
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
 #define DEFAULT_DB_PORT 3306
 #define DEFAULT_LOGFILE "/wwwroot/cacti/log/rrd.log"
-#define DEFAULT_SNMP_VER 1
 #define DEFAULT_TIMEOUT 294000000
 
 /* threads constants */
@@ -140,11 +138,12 @@
 /* Typedefs */
 typedef struct config_struct {
 	int poller_id;
-	long out_of_range;
+	int poller_interval;
 	char dbhost[80];
 	char dbdb[80];
 	char dbuser[80];
 	char dbpass[80];
+	int dboff;
     unsigned int dbport;
 	char path_logfile[250];
 	char path_php[250];
@@ -159,13 +158,15 @@ typedef struct config_struct {
 	int ping_timeout;
 	int ping_failure_count;
 	int ping_recovery_count;
-	int poller_interval;
 	int verbose;
 	pid_t php_sspid;
+	pid_t cactid_pid;
+	int php_required;
 	int parent_fork;
-	int dboff;
-	int snmp_ver;
+	int num_parent_processes;
 	int threads;
+	int start_host_id;
+	int end_host_id;
 } config_t;
 
 typedef struct target_struct {

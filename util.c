@@ -52,6 +52,7 @@ int read_config_options(config_t *set) {
 	int num_rows;
 	char logmessage[LOGSIZE];
 	char web_root[BUFSIZE];
+	char result_string[BUFSIZE];
 
 	db_connect(set->dbdb, &mysql);
 
@@ -328,12 +329,58 @@ int read_config_options(config_t *set) {
 		set->poller_interval = 0;
 	}
 
-	/* log the threads variable */
+	/* log the poller_interval variable */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
 		if (set->poller_interval == 0) {
 			snprintf(logmessage, LOGSIZE-1, "DEBUG: The polling interval is the system default\n" ,set->poller_interval);
 		}else{
 			snprintf(logmessage, LOGSIZE-1, "DEBUG: The polling interval is %i seconds\n" ,set->poller_interval);
+		}
+		cacti_log(logmessage);
+	}
+
+	/* get the concurrent_processes variable to determine thread sleep values */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='concurrent_processes'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->num_parent_processes = atoi(mysql_row[0]);
+	}else{
+		set->num_parent_processes = 1;
+	}
+
+	/* log the concurrent processes variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The number of concurrent processes is %i\n" ,set->num_parent_processes);
+		cacti_log(logmessage);
+	}
+
+	/* determine if the php script server is required */
+	if (set->end_host_id == 0) {
+		strncpy(result_string, "SELECT action FROM poller_item WHERE action=2", sizeof(result_string)-1);
+	}else{
+		snprintf(result_string, sizeof(result_string)-1, "SELECT action FROM poller_item WHERE ((host_id >= %i) AND (host_id <= %i) AND (action=2))", set->start_host_id, set->end_host_id);
+	}
+
+	result = db_query(&mysql, result_string);
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		set->php_required = 1;
+	}else{
+		set->php_required = 0;
+	}
+
+	/* log the requirement for the script server */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'\n" ,set->start_host_id,set->end_host_id,num_rows);
+		cacti_log(logmessage);
+
+		if (set->php_required == 0) {
+			snprintf(logmessage, LOGSIZE-1, "DEBUG: The PHP Script Server is Not Required\n" ,set->poller_interval);
+		}else{
+			snprintf(logmessage, LOGSIZE-1, "DEBUG: The PHP Script Server is Required\n" ,set->poller_interval);
 		}
 		cacti_log(logmessage);
 	}
@@ -383,7 +430,6 @@ int read_cactid_config(char *file, config_t *set) {
 /*  config_defaults() - populate system variables with default values.        */
 /******************************************************************************/
 void config_defaults(config_t * set) {
-	set->snmp_ver = DEFAULT_SNMP_VER;
 	set->threads = DEFAULT_THREADS;
     set->dbport = DEFAULT_DB_PORT;
 

@@ -2,10 +2,11 @@
 cactid: a backend data gatherer for cacti
 ------------------------------------------
 
-This code represents the future replacement for cmd.php. As you can see
-from the short changelog, development on this code has only just begun. It
-has been included in the main release for *testing* purposes only! Please
-stick to cmd.php for now.
+This code represents the future replacement for cmd.php.  It has come quite a 
+ways from it's initial development.  It is almost 100% compatible with the 
+legacy cmd.php processor.  The major drawback of the current implementation
+is that it will only support the default snmp port of the host.  If you are
+polling a device that has multiple agents on multiple ports, Cactid will
+not work for you yet.
 
--Ian
-
+-Larry (aka TheWitness)
