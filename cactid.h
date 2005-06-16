@@ -164,6 +164,7 @@ typedef struct config_struct {
 	int php_required;
 	int parent_fork;
 	int num_parent_processes;
+	int script_timeout;
 	int threads;
 	int start_host_id;
 	int end_host_id;

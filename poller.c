@@ -521,7 +521,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	memset(result_string, 0, BUFSIZE);
 
 	/* establish timeout of 25 seconds for pipe response */
-	timeout.tv_sec = 25;
+	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
 
 	/* compensate for back slashes in arguments */

@@ -356,6 +356,26 @@ int read_config_options(config_t *set) {
 		cacti_log(logmessage);
 	}
 
+	/* get the script timeout to establish timeouts */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='script_timeout'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->script_timeout = atoi(mysql_row[0]);
+		if (set->script_timeout < 5) {
+			set->script_timeout = 5;
+		}
+	}else{
+		set->script_timeout = 25;
+	}
+
+	/* log the concurrent processes variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The script timeout is %i\n" ,set->script_timeout);
+		cacti_log(logmessage);
+	}
+
 	/* determine if the php script server is required */
 	if (set->end_host_id == 0) {
 		strncpy(result_string, "SELECT action FROM poller_item WHERE action=2", sizeof(result_string)-1);
