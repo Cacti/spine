@@ -44,11 +44,14 @@ int db_insert(MYSQL *mysql, char *query) {
 		cacti_log(logmessage);
 	}
 
+	thread_mutex_lock(LOCK_MYSQL);
 	if (mysql_query(mysql, query)) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
+		thread_mutex_unlock(LOCK_MYSQL);
 		return (FALSE);
 	}else{
+		thread_mutex_unlock(LOCK_MYSQL);
 		return (TRUE);
 	}
 }
@@ -57,12 +60,15 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
 	int return_code;
 	
+	thread_mutex_lock(LOCK_MYSQL);
  	return_code = mysql_query(mysql, query);
 	if (return_code) {
 		cacti_log("MYSQL: ERROR encountered while attempting to retrieve records from query\n");
+		thread_mutex_unlock(LOCK_MYSQL);
 		exit_cactid();
 	}else{
 		mysql_res = mysql_store_result(mysql);
+		thread_mutex_unlock(LOCK_MYSQL);
 	}
 
 	return mysql_res;

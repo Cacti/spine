@@ -53,6 +53,11 @@
  #include <mib.h>
 #endif
 
+/* resolve problems in debian */
+#ifndef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+ #define NETSNMP_DS_LIB_DONT_PERSIST_STATE 32
+#endif
+
 /* do not load mibs, Cactid does not use them */
 #define DISABLE_MIB_LOADING
 
