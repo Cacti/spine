@@ -8,7 +8,6 @@ The Cacti Group – cactid
 -bug: re-implemented thread safe operations for non-linux systems
 -bug: allow cactid to poll from non-standard snmp port
 -bug: optimized some string handling routines
--bug: removed thread locks around MySQL to optimize performance
 -bug: changed snmp availability check to sysUptime from sysDesc
 -bug: limit the number of concurrent threads to 30
 -bug: remove legacy cactid.conf file processing code
@@ -20,11 +19,17 @@ The Cacti Group – cactid
 -bug: stop DEADLOCKS by not prematurely releasing mutex locks
 -bug: changed licensing to LGPL to accomodate linked libraries such as OpenSSL
 -bug: corrected issues where snprintf was taking 1 too many characters
+-bug: remove unneccessary Windows MACRO's from net-snmp initialization
 -feature: added seteuid functionality for unix and ICMP ping
+-feature: restart the script server after a timeout to prevent unexpected results
+-feature: only run the php script server if you have script server elements to process
+-feature: disable MIB loading to speed the launch of the net-snmp api
+-feature: change TREAD_SLEEP duration depending on number of processes to reduce CPU load
+-feature: allow the user to specify a script and script server timeout value from the user interface
 -feature: added polling for non-host specific data sources
 -feature: added data source logging to provide easier problem resolution
--feature: spike suppression feature
--feature: added support for poller interval setting
+-feature: added cmd.php like spike suppression
+-feature: added support for experimental multiple poller interval handling
 
 0.8.6d
 -bug: increased timers for popen and script server to 20 seconds
