@@ -81,9 +81,9 @@ am__include = @am__include@
 am__quote = @am__quote@
 install_sh = @install_sh@
 
-cactid_SOURCES = sql.c cactid.c util.c snmp.c locks.c poller.c nft_popen.c php.c
+cactid_SOURCES = sql.c cactid.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c
 
-include_HEADERS = cactid.h common.h snmp.h locks.h sql.h util.h poller.h nft_popen.h php.h
+include_HEADERS = cactid.h common.h snmp.h locks.h sql.h util.h poller.h nft_popen.h php.h ping.h
 
 bin_PROGRAMS = cactid
 subdir = .
@@ -96,7 +96,7 @@ PROGRAMS = $(bin_PROGRAMS)
 
 am_cactid_OBJECTS = sql.$(OBJEXT) cactid.$(OBJEXT) util.$(OBJEXT) \
 	snmp.$(OBJEXT) locks.$(OBJEXT) poller.$(OBJEXT) \
-	nft_popen.$(OBJEXT) php.$(OBJEXT)
+	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT)
 cactid_OBJECTS = $(am_cactid_OBJECTS)
 cactid_LDADD = $(LDADD)
 cactid_DEPENDENCIES =
@@ -111,8 +111,9 @@ depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/cactid.Po ./$(DEPDIR)/locks.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/nft_popen.Po ./$(DEPDIR)/php.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/poller.Po ./$(DEPDIR)/snmp.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/sql.Po ./$(DEPDIR)/util.Po
+@AMDEP_TRUE@	./$(DEPDIR)/ping.Po ./$(DEPDIR)/poller.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/snmp.Po ./$(DEPDIR)/sql.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/util.Po
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
@@ -203,6 +204,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/locks.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nft_popen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/php.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ping.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/poller.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/snmp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql.Po@am__quote@
