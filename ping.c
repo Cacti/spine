@@ -377,7 +377,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 		if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) >= 0) {
 				// do nothing
 		} else {
-			strncpy(ping->ping_status, "down", sizeof(ping->ping_response)-1);
+			strncpy(ping->ping_status, "down", sizeof(ping->ping_status)-1);
 			strncpy(ping->ping_response, "UDP: Cannot connect to host", sizeof(ping->ping_response)-1);
 			return HOST_DOWN;
 		}
