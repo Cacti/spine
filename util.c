@@ -541,7 +541,7 @@ void cacti_log(char *logmessage) {
 	/* output to syslog/eventlog */
 	if ((set.log_destination == 2) || (set.log_destination == 3)) {
 		thread_mutex_lock(LOCK_SYSLOG);
-		openlog("Cacti Logging", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
+		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
 		}
