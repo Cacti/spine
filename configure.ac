@@ -117,6 +117,7 @@ fi
 
 for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
    MYSQL_LIB_CHK($i/lib)
+   MYSQL_LIB_CHK($i/lib64)
    MYSQL_LIB_CHK($i/lib/mysql)
 done
 

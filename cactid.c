@@ -56,6 +56,7 @@ int main(int argc, char *argv[]) {
 	int poller_interval;
 	int num_rows;
 	int device_counter = 0;
+	int poller_counter = 0;
 	int last_active_threads = 0;
 	long int EXTERNAL_THREAD_SLEEP = 100000;
 	long int internal_thread_sleep;
@@ -102,7 +103,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* set default verbosity */
-	set.verbose = POLLER_VERBOSITY_HIGH;
+	set.verbose = POLLER_VERBOSITY_LOW;
 
 	/* get static defaults for system */
 	config_defaults(&set);
@@ -320,13 +321,19 @@ int main(int argc, char *argv[]) {
 				usleep(internal_thread_sleep);
 
 				/* get current time and exit program if time limit exceeded */
-				gettimeofday(&now, NULL);
-				current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+				if (poller_counter >= 50) {
+					gettimeofday(&now, NULL);
+					current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-				if ((current_time - begin_time) > poller_interval) {
-					cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
-					canexit = 1;
-					break;
+					if ((current_time - begin_time) > poller_interval) {
+						cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
+						canexit = 1;
+						break;
+					}
+
+					poller_counter = 0;
+				}else{
+					poller_counter++;
 				}
 			}
 
@@ -356,13 +363,19 @@ int main(int argc, char *argv[]) {
 		usleep(internal_thread_sleep);
 
 		/* get current time and exit program if time limit exceeded */
-		gettimeofday(&now, NULL);
-		current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+		if (poller_counter >= 50) {
+			gettimeofday(&now, NULL);
+			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-		if ((current_time - begin_time) > poller_interval) {
-			cacti_log("ERROR: Cactid Timed Out While Processing Hosts External\n");
-			canexit = 1;
-			break;
+			if ((current_time - begin_time) > poller_interval) {
+				cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
+				canexit = 1;
+				break;
+			}
+
+			poller_counter = 0;
+		}else{
+			poller_counter++;
 		}
 	}
 
@@ -383,13 +396,19 @@ int main(int argc, char *argv[]) {
 		usleep(EXTERNAL_THREAD_SLEEP);
 
 		/* get current time and exit program if time limit exceeded */
-		gettimeofday(&now, NULL);
-		current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+		if (poller_counter >= 50) {
+			gettimeofday(&now, NULL);
+			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-		if ((current_time - begin_time) > poller_interval) {
-			cacti_log("ERROR: Cactid Timed Out While Processing Host Shutdown\n");
-			canexit = 1;
-			break;
+			if ((current_time - begin_time) > poller_interval) {
+				cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
+				canexit = 1;
+				break;
+			}
+
+			poller_counter = 0;
+		}else{
+			poller_counter++;
 		}
 	}
 

@@ -230,9 +230,9 @@ typedef struct host_reindex_struct {
 typedef struct ping_results {
 	char hostname[255];
 	char ping_status[50];
-	char ping_response[50];
+	char ping_response[100];
 	char snmp_status[50];
-	char snmp_response[50];
+	char snmp_response[100];
 } ping_t;
 
 struct icmphdr {

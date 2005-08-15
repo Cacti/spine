@@ -60,13 +60,12 @@ int ping_host(host_t *host, ping_t *ping) {
 	snmp_result = 0;
 
 	/* test for asroot */
-	#if defined (__CYGWIN__)
-	#else
+	#ifndef __CYGWIN__
 	if (geteuid() != 0) {
 		set.ping_method = PING_UDP;
-		printf("CACTID: WARNING: Falling back to UDP Ping due to inability to set asroot permissions\n");
+		printf("CACTID: WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
 		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("DEBUG: Falling back to UDP Ping due to inability to set asroot permissions\n");
+			cacti_log("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
 		}
 	}
 	#endif
@@ -292,7 +291,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			/* caculate total time */
 			total_time = (end_time - begin_time) * 1000;
 
-			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
+			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 				if (total_time < set.ping_timeout) {
 					strncpy(ping->ping_response,"ICMP: Host is Alive",sizeof(ping->ping_response)-1);
 					snprintf(ping->ping_status,sizeof(ping->ping_status)-1,"%.5f",total_time);
@@ -431,7 +430,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				cacti_log(logmessage);
 			}
 
-			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno = ECONNREFUSED)))) {
+			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 				if ((total_time * 1000) <= set.ping_timeout) {
 					strncpy(ping->ping_response,"UDP: Host is Alive",sizeof(ping->ping_response)-1);
 					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f",(total_time*1000));
