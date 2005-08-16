@@ -513,9 +513,9 @@ char *exec_poll(host_t *current_host, char *command) {
 	fd_set fds;
 	int numfds;
 	struct timeval timeout;
+	char *proc_command;
 
 	char *result_string = (char *) malloc(BUFSIZE);
-	char *proc_command = (char *) malloc(BUFSIZE);
 
 	/* initialize the result_string to all zeros */
 	memset(result_string, 0, BUFSIZE);

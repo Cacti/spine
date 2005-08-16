@@ -53,6 +53,10 @@
 #define _REENTRANT 
 #endif 
 
+#ifndef _LIBC_REENTRANT
+#define _LIBC_REENTRANT
+#endif
+
 #define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
 
 #if HAVE_CONFIG_H

@@ -69,7 +69,7 @@ int ping_host(host_t *host, ping_t *ping) {
 		}
 	}
 	#endif
-	
+
 	/* icmp/udp ping test */
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
 		if (!strstr(host->hostname, "localhost")) {

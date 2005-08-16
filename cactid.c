@@ -321,7 +321,7 @@ int main(int argc, char *argv[]) {
 				usleep(internal_thread_sleep);
 
 				/* get current time and exit program if time limit exceeded */
-				if (poller_counter >= 50) {
+				if (poller_counter >= 20) {
 					gettimeofday(&now, NULL);
 					current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
 		usleep(internal_thread_sleep);
 
 		/* get current time and exit program if time limit exceeded */
-		if (poller_counter >= 50) {
+		if (poller_counter >= 20) {
 			gettimeofday(&now, NULL);
 			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -396,7 +396,7 @@ int main(int argc, char *argv[]) {
 		usleep(EXTERNAL_THREAD_SLEEP);
 
 		/* get current time and exit program if time limit exceeded */
-		if (poller_counter >= 50) {
+		if (poller_counter >= 20) {
 			gettimeofday(&now, NULL);
 			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 

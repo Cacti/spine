@@ -423,7 +423,7 @@ int read_cactid_config(char *file, config_t *set) {
 		if (set->verbose == POLLER_VERBOSITY_DEBUG) {
 			printf("ERROR: Could not open config file [%s]\n", file);
 		}
-		return (-1);
+		return -1;
 	}else{
 		printf("CACTID: Using cactid config file [%s]\n", file);
 		while(!feof(fp)) {
@@ -442,7 +442,7 @@ int read_cactid_config(char *file, config_t *set) {
 			}
 		}
 
-		return (0);
+		return 0;
 	}
 }
 
@@ -676,10 +676,13 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	space_count = 0;
 	position = 0;
 	new_position = position;
+
+	/* initialize return_str */
+	memset(return_str, 0, BUFSIZE);
 	
 	/* simply return on blank string */
 	if (!length) {
-		return string;
+		return return_str;
 	}
 
 	while (position < length) {

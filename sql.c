@@ -49,10 +49,10 @@ int db_insert(MYSQL *mysql, char *query) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
 		thread_mutex_unlock(LOCK_MYSQL);
-		return (FALSE);
+		return FALSE;
 	}else{
 		thread_mutex_unlock(LOCK_MYSQL);
-		return (TRUE);
+		return TRUE;
 	}
 }
 
@@ -84,7 +84,7 @@ int db_connect(char *database, MYSQL *mysql) {
 	if ((hostname = strdup(set.dbhost)) == NULL) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: malloc(): strdup() failed\n");
 		cacti_log(logmessage);
-		return (FALSE);
+		return FALSE;
 	}
 	if ((socket = strstr(hostname,":"))) *socket++ = 0x0;
 
@@ -127,7 +127,7 @@ int db_connect(char *database, MYSQL *mysql) {
 		exit_cactid();
 	}else{
 		thread_mutex_unlock(LOCK_MYSQL);
-		return (0);
+		return 0;
 	}
 }
 
