@@ -111,7 +111,7 @@ void poll_host(int host_id) {
 	#endif 
 
 	snprintf(query1, sizeof(query1)-1, "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by rrd_path,rrd_name", host_id);
-	snprintf(query2, sizeof(query2)-1, "select id, hostname,snmp_community,snmp_version,snmp_port,snmp_timeout,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
+	snprintf(query2, sizeof(query2)-1, "select id, hostname,snmp_community,snmp_username,snmp_password,snmp_version,snmp_port,snmp_timeout,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
 	snprintf(query4, sizeof(query4)-1, "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
 	snprintf(query5, sizeof(query6)-1, "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where (host_id=%i and rrd_next_step <=0) order by rrd_path,rrd_name", host_id);
 	snprintf(query6, sizeof(query6)-1, "update poller_item SET rrd_next_step=rrd_next_step-%i where host_id=%i", set.poller_interval, host_id);
@@ -137,21 +137,23 @@ void poll_host(int host_id) {
 		host->id = atoi(row[0]);
 		if (row[1] != NULL) snprintf(host->hostname, sizeof(host->hostname)-1, "%s", row[1]);
 		if (row[2] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community)-1, "%s", row[2]);
-		host->snmp_version = atoi(row[3]);
-		host->snmp_port = atoi(row[4]);
-		host->snmp_timeout = atoi(row[5]);
-		if (row[6] != NULL) host->status = atoi(row[6]);
-		host->status_event_count = atoi(row[7]);
-		snprintf(host->status_fail_date, sizeof(host->status_fail_date)-1, "%s", row[8]);
-		snprintf(host->status_rec_date, sizeof(host->status_rec_date)-1, "%s", row[9]);
-		snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "%s", row[10]);
-		host->min_time = atof(row[11]);
-		host->max_time = atof(row[12]);
-		host->cur_time = atof(row[13]);
-		host->avg_time = atof(row[14]);
-		host->total_polls = atoi(row[15]);
-		host->failed_polls = atoi(row[16]);
-		host->availability = atof(row[17]);
+		snprintf(host->snmp_username, sizeof(host->snmp_username)-1, "%s", row[3]);
+		snprintf(host->snmp_password, sizeof(host->snmp_password)-1, "%s", row[4]);
+		host->snmp_version = atoi(row[5]);
+		host->snmp_port = atoi(row[6]);
+		host->snmp_timeout = atoi(row[7]);
+		if (row[6] != NULL) host->status = atoi(row[8]);
+		host->status_event_count = atoi(row[9]);
+		snprintf(host->status_fail_date, sizeof(host->status_fail_date)-1, "%s", row[10]);
+		snprintf(host->status_rec_date, sizeof(host->status_rec_date)-1, "%s", row[11]);
+		snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "%s", row[12]);
+		host->min_time = atof(row[13]);
+		host->max_time = atof(row[14]);
+		host->cur_time = atof(row[15]);
+		host->avg_time = atof(row[16]);
+		host->total_polls = atoi(row[17]);
+		host->failed_polls = atoi(row[18]);
+		host->availability = atof(row[19]);
 
 		/* initialize SNMP */
 		snmp_host_init(host);

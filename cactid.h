@@ -53,12 +53,9 @@
 #define CACTID_FORK 0
 
 /* locations to search for the config file */
-#define CONFIG_PATHS 5
+#define CONFIG_PATHS 2
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
-#define CONFIG_PATH_3 "/cygdrive/c/wwwroot/cacti"
-#define CONFIG_PATH_4 "/cygdrive/c/webroot/cacti"
-#define CONFIG_PATH_5 "/cygdrive/c/inetpub/wwwroot/cacti"
 
 /* config file defaults */
 #define DEFAULT_CONF_FILE "cactid.conf"
@@ -200,6 +197,8 @@ typedef struct host_struct {
 	int id;
 	char hostname[250];
 	char snmp_community[100];
+	char snmp_username[50];
+	char snmp_password[50];
 	int snmp_version;
 	int snmp_port;
 	int snmp_timeout;

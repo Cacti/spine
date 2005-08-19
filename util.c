@@ -307,8 +307,8 @@ int read_config_options(config_t *set) {
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 		set->threads = atoi(mysql_row[0]);
-		if (set->threads > 30) {
-			set->threads = 30;
+		if (set->threads > MAX_THREADS) {
+			set->threads = MAX_THREADS;
 		}
 	}
 
@@ -460,9 +460,6 @@ void config_defaults(config_t * set) {
 
 	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0])-1);
 	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1])-1);
-	strncpy(config_paths[2], CONFIG_PATH_3, sizeof(config_paths[2])-1);
-	strncpy(config_paths[3], CONFIG_PATH_4, sizeof(config_paths[3])-1);
-	strncpy(config_paths[4], CONFIG_PATH_5, sizeof(config_paths[4])-1);
 
 	return;
 }

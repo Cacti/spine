@@ -58,8 +58,10 @@
  #define NETSNMP_DS_LIB_DONT_PERSIST_STATE 32
 #endif
 
+#define OIDSIZE(p) (sizeof(p)/sizeof(oid))
+
 /* do not load mibs, Cactid does not use them */
-#define DISABLE_MIB_LOADING
+#define DISABLE_MIB_LOADING 1
 
 void snmp_cactid_init() {
 	init_snmp("cactid");
@@ -100,6 +102,8 @@ void snmp_host_init(host_t *current_host) {
 		session.version = SNMP_VERSION_2c;
 	}else if (current_host->snmp_version == 1) {
 		session.version = SNMP_VERSION_1;
+	}else if (current_host->snmp_version == 3) {
+		session.version = SNMP_VERSION_3;
 	}else {
 		snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", current_host->id, current_host->hostname);
 		cacti_log(logmessage);
@@ -113,8 +117,39 @@ void snmp_host_init(host_t *current_host) {
 	session.retries = 3;
 	session.remote_port = current_host->snmp_port;
 	session.timeout = (current_host->snmp_timeout * 1000); /* net-snmp likes microseconds */
-	session.community = current_host->snmp_community;
-	session.community_len = strlen(current_host->snmp_community);
+
+	if ((current_host->snmp_version == 2) || (current_host->snmp_version == 1)) {
+		session.community = current_host->snmp_community;
+		session.community_len = strlen(current_host->snmp_community);
+	}else {
+	    /* set the SNMPv3 user name */
+	    session.securityName = strdup(current_host->snmp_username);
+	    session.securityNameLen = strlen(session.securityName);
+
+		session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+
+	    /* set the authentication method to MD5 */
+	    session.securityAuthProto = snmp_duplicate_objid(usmHMACMD5AuthProtocol, OIDSIZE(usmHMACMD5AuthProtocol));
+	    session.securityAuthProtoLen = OIDSIZE(usmHMACMD5AuthProtocol);
+
+		/* set the privacy protocol to none */
+		session.securityPrivProto = usmNoPrivProtocol;
+		session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
+		session.securityPrivKeyLen = USM_PRIV_KU_LEN;
+
+	    /* set the security level to authenticate, but not encrypted */
+		session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
+
+	    /* set the authentication key to the hashed version. The password must me at least 8 char */
+	    if (generate_Ku(session.securityAuthProto, 
+						session.securityAuthProtoLen,
+						(u_char *) current_host->snmp_password,
+						strlen(current_host->snmp_password),
+	                    session.securityAuthKey,
+	                    &(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
+	        cacti_log("SNMP: Error generating SNMPv3 Ku from authentication pass phrase.");
+		}
+	}
 
 	/* open SNMP Session */
  	thread_mutex_lock(LOCK_SNMP);
@@ -146,15 +181,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char *result_string = (char *) malloc(BUFSIZE);
 
 	if (current_host->snmp_session != NULL) {
-		/* only SNMP v1 and v2c are supported right now */
-		if ((current_host->snmp_version != 1) && (current_host->snmp_version != 2)) {
-			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Only SNMP v1 and v2c are supported in Cactid [host: %s]\n", current_host->id, current_host->hostname);
-			cacti_log(logmessage);
-			snprintf(result_string, BUFSIZE-1, "%s", "U");
-
-			return result_string;
-		}
-
 		anOID_len = MAX_OID_LEN;
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 		read_objid(snmp_oid, anOID, &anOID_len);
