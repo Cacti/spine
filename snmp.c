@@ -243,9 +243,7 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
     }
 
 	if (current_host->snmp_session != NULL) {
-		pdu = snmp_pdu_create(SNMP_MSG_GETBULK);
-		pdu->non_repeaters = non_repeaters;
-		pdu->max_repetitions = max_repetitions;     /* fill the packet */
+		pdu = snmp_pdu_create(SNMP_MSG_GET);
 	    for (i = 0; i < num_oids; i++) {
 			snmp_add_null_var(pdu, name[i].name, name[i].name_len);
 		}

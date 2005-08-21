@@ -405,6 +405,26 @@ int read_config_options(config_t *set) {
 		cacti_log(logmessage);
 	}
 
+	/* determine log file, syslog or both, default is 1 or log file only */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_get_size'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->max_get_size = atoi(mysql_row[0]);
+		if (set->max_get_size > 128) {
+			set->max_get_size = 128;
+		}
+	}else{
+		set->max_get_size = 25;
+	}
+
+	/* log the max_get_size variable */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG:  The Maximum SNMP OID Get Size is %i\n" ,set->max_get_size);
+		cacti_log(logmessage);
+	}
+
 	mysql_free_result(result);
 	db_disconnect(&mysql);
 }

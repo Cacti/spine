@@ -91,6 +91,7 @@ void poll_host(int host_id) {
 	int spike_kill = 0;
 	int rows_processed = 0;
 	int i;
+	int num_oids = 0;
 
 	char *poll_result = NULL;
 	char logmessage[LOGSIZE];
@@ -100,7 +101,6 @@ void poll_host(int host_id) {
 	int last_snmp_port = 0;
 	char last_snmp_username[50];
 	char last_snmp_password[50];
-	int last_local_data_id = -1;
 
 	reindex_t *reindex;
 	target_t *entry;
@@ -356,6 +356,8 @@ void poll_host(int host_id) {
 		i++;
 	}
 
+	snmp_oids = (snmp_oids_t *) calloc(snmp_items, sizeof(snmp_oids_t));
+
 	i = 0;
 	while ((i < num_rows) && (!host->ignore_host)) {
 		if (!host->ignore_host) {
@@ -379,6 +381,42 @@ void poll_host(int host_id) {
 					(strcmp(last_snmp_username, poller_items[i].snmp_username) != 0) ||
 					(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
 					
+					if (num_oids > 0) {
+						snmp_get_bulk(host, snmp_oids, num_oids);
+
+						int j;
+						for (j = 0; j < num_oids; j++) {
+							/* remove double or single quotes from string */
+							strncpy(snmp_oids[j].result, strip_alpha(strip_quotes(snmp_oids[j].result)), sizeof(snmp_oids[j].result)-1);
+
+							if (host->ignore_host) {
+								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+								cacti_log(logmessage);
+								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", "U");
+							}else {
+								/* remove double or single quotes from string */
+								strncpy(snmp_oids[j].result, strip_quotes(snmp_oids[j].result), sizeof(snmp_oids[j].result)-1);
+
+								/* detect erroneous non-numeric result */
+								if (!validate_result(snmp_oids[j].result)) {
+									strncpy(errstr, snmp_oids[j].result,sizeof(errstr)-1);
+									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+									cacti_log(logmessage);
+									strncpy(snmp_oids[j].result, "U", sizeof(snmp_oids[j].result)-1);
+								}
+							}
+
+							strncpy(poller_items[snmp_oids[j].array_position].result, snmp_oids[j].result, 255-1);
+							
+							if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
+								cacti_log(logmessage);
+							}
+						}
+
+						num_oids = 0;
+					}
+					
 					snmp_host_cleanup(host);
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
 											poller_items[i].snmp_community,poller_items[i].snmp_username,
@@ -390,33 +428,48 @@ void poll_host(int host_id) {
 					strncpy(last_snmp_password, poller_items[i].snmp_password, sizeof(last_snmp_password)-1);
 				}
 
-				poll_result = snmp_get(host, poller_items[i].arg1);
-				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", poll_result);
-				free(poll_result);
+				if (num_oids > set.max_get_size) {
+					snmp_get_bulk(host, snmp_oids, num_oids);
 
-				/* remove double or single quotes from string */
-				strncpy(poller_items[i].result, strip_alpha(strip_quotes(poller_items[i].result)), sizeof(poller_items[i].result)-1);
+					int j;
+					for (j = 0; j < num_oids; j++) {
+						/* remove double or single quotes from string */
+						strncpy(snmp_oids[j].result, strip_alpha(strip_quotes(snmp_oids[j].result)), sizeof(snmp_oids[j].result)-1);
 
-				if (host->ignore_host) {
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[i].local_data_id, host->snmp_timeout, host->hostname);
-					cacti_log(logmessage);
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", "U");
-				} else {
-					/* remove double or single quotes from string */
-					strncpy(poller_items[i].result, strip_quotes(poller_items[i].result), sizeof(poller_items[i].result)-1);
+						if (host->ignore_host) {
+							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+							cacti_log(logmessage);
+							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", "U");
+						}else {
+							/* remove double or single quotes from string */
+							strncpy(snmp_oids[j].result, strip_quotes(snmp_oids[j].result), sizeof(snmp_oids[j].result)-1);
 
-					/* detect erroneous non-numeric result */
-					if (!validate_result(poller_items[i].result)) {
-						strncpy(errstr, poller_items[i].result,sizeof(errstr)-1);
-						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
-						cacti_log(logmessage);
-						strncpy(poller_items[i].result, "U", sizeof(poller_items[i].result)-1);
+							/* detect erroneous non-numeric result */
+							if (!validate_result(snmp_oids[j].result)) {
+								strncpy(errstr, snmp_oids[j].result,sizeof(errstr)-1);
+								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+								cacti_log(logmessage);
+								strncpy(snmp_oids[j].result, "U", sizeof(snmp_oids[j].result)-1);
+							}
+						}
+
+						strncpy(poller_items[snmp_oids[j].array_position].result, snmp_oids[j].result, 255-1);
+							
+						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
+							cacti_log(logmessage);
+						}
 					}
-				}
 
-				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[i].local_data_id, host->snmp_version, host->hostname, poller_items[i].rrd_name, poller_items[i].arg1, poller_items[i].result);
-					cacti_log(logmessage);
+					num_oids = 0;
+						
+					strncpy(snmp_oids[num_oids].oid, poller_items[i].arg1, sizeof(snmp_oids[num_oids].oid)-1);
+					snmp_oids[num_oids].array_position = i;
+					num_oids++;
+				}else {
+					strncpy(snmp_oids[num_oids].oid, poller_items[i].arg1, sizeof(snmp_oids[num_oids].oid)-1);
+					snmp_oids[num_oids].array_position = i;
+					num_oids++;
 				}
 				
 				break;
@@ -489,6 +542,41 @@ void poll_host(int host_id) {
 		rows_processed++;
 	}
 
+	/* process last bulk request if applicable */
+	if (num_oids > 0) {
+		snmp_get_bulk(host, snmp_oids, num_oids);
+
+		int j;
+		for (j = 0; j < num_oids; j++) {
+			/* remove double or single quotes from string */
+			strncpy(snmp_oids[j].result, strip_alpha(strip_quotes(snmp_oids[j].result)), sizeof(snmp_oids[j].result)-1);
+
+			if (host->ignore_host) {
+				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+				cacti_log(logmessage);
+				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", "U");
+			}else {
+				/* remove double or single quotes from string */
+				strncpy(snmp_oids[j].result, strip_quotes(snmp_oids[j].result), sizeof(snmp_oids[j].result)-1);
+
+				/* detect erroneous non-numeric result */
+				if (!validate_result(snmp_oids[j].result)) {
+					strncpy(errstr, snmp_oids[j].result,sizeof(errstr)-1);
+					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+					cacti_log(logmessage);
+					strncpy(snmp_oids[j].result, "U", sizeof(snmp_oids[j].result)-1);
+				}
+			}
+
+			strncpy(poller_items[snmp_oids[j].array_position].result, snmp_oids[j].result, 255-1);
+					
+			if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
+				cacti_log(logmessage);
+			}
+		}
+	}
+	
 	/* format database insert */
 	int buffer;
 	buffer = 600*rows_processed+100;

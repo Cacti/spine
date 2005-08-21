@@ -156,6 +156,7 @@ typedef struct config_struct {
 	int ping_failure_count;
 	int ping_recovery_count;
 	int verbose;
+	int max_get_size;
 	pid_t php_sspid;
 	pid_t cactid_pid;
 	int php_required;
@@ -192,6 +193,12 @@ typedef struct php_pipe_struct {
 	int php_write_fd;
 	int php_read_fd;
 } php_t;
+
+typedef struct snmp_oids {
+	int array_position;
+	char oid[255];
+	char result[255];
+} snmp_oids_t;
 
 typedef struct host_struct {
 	int id;
