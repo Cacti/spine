@@ -71,15 +71,13 @@ void snmp_cactid_close() {
 	snmp_shutdown("cactid");
 }
 
-void snmp_host_init(host_t *current_host) {
+void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community, 
+					char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout) {
 	char logmessage[LOGSIZE];
 	void *sessp = NULL;
 	struct snmp_session session;
 
-	char hostname[BUFSIZE];
-
-	/* assume snmp session is invalid */
-	current_host->snmp_session = NULL;
+	char hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
  	thread_mutex_lock(LOCK_SNMP);
@@ -98,32 +96,32 @@ void snmp_host_init(host_t *current_host) {
 	thread_mutex_unlock(LOCK_SNMP);
 
 	/* verify snmp version is accurate */
-	if (current_host->snmp_version == 2) {
+	if (snmp_version == 2) {
 		session.version = SNMP_VERSION_2c;
-	}else if (current_host->snmp_version == 1) {
+	}else if (snmp_version == 1) {
 		session.version = SNMP_VERSION_1;
-	}else if (current_host->snmp_version == 3) {
+	}else if (snmp_version == 3) {
 		session.version = SNMP_VERSION_3;
 	}else {
-		snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", current_host->id, current_host->hostname);
+		snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname);
 		cacti_log(logmessage);
 		return;
 	}		
 
 	/* net-snmp likes the hostname in 'host:port' format */
-	snprintf(hostname, BUFSIZE-1, "%s:%i", current_host->hostname, current_host->snmp_port);
+	snprintf(hostnameport, BUFSIZE-1, "%s:%i", hostname, snmp_port);
 
-	session.peername = hostname;
+	session.peername = hostnameport;
 	session.retries = 3;
-	session.remote_port = current_host->snmp_port;
-	session.timeout = (current_host->snmp_timeout * 1000); /* net-snmp likes microseconds */
+	session.remote_port = snmp_port;
+	session.timeout = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
-	if ((current_host->snmp_version == 2) || (current_host->snmp_version == 1)) {
-		session.community = current_host->snmp_community;
-		session.community_len = strlen(current_host->snmp_community);
+	if ((snmp_version == 2) || (snmp_version == 1)) {
+		session.community = snmp_community;
+		session.community_len = strlen(snmp_community);
 	}else {
 	    /* set the SNMPv3 user name */
-	    session.securityName = strdup(current_host->snmp_username);
+	    session.securityName = strdup(snmp_username);
 	    session.securityNameLen = strlen(session.securityName);
 
 		session.securityAuthKeyLen = USM_AUTH_KU_LEN;
@@ -143,8 +141,8 @@ void snmp_host_init(host_t *current_host) {
 	    /* set the authentication key to the hashed version. The password must me at least 8 char */
 	    if (generate_Ku(session.securityAuthProto, 
 						session.securityAuthProtoLen,
-						(u_char *) current_host->snmp_password,
-						strlen(current_host->snmp_password),
+						(u_char *) snmp_password,
+						strlen(snmp_password),
 	                    session.securityAuthKey,
 	                    &(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
 	        cacti_log("SNMP: Error generating SNMPv3 Ku from authentication pass phrase.");
@@ -157,12 +155,11 @@ void snmp_host_init(host_t *current_host) {
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem initializing SNMP session '%s'\n", current_host->hostname);
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem initializing SNMP session '%s'\n", hostname);
 		cacti_log(logmessage);
-		current_host->snmp_session = NULL;
-	}else{
-		current_host->snmp_session = sessp;
 	}
+	
+	return sessp;
 }
 
 void snmp_host_cleanup(host_t *current_host) {
@@ -174,7 +171,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	struct snmp_pdu *response = NULL;
 	struct variable_list *vars = NULL;
 	char logmessage[LOGSIZE];
-	char storedoid[BUFSIZE];
 	oid anOID[MAX_OID_LEN];
 	size_t anOID_len = MAX_OID_LEN;
 	int status;
@@ -184,7 +180,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		anOID_len = MAX_OID_LEN;
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 		read_objid(snmp_oid, anOID, &anOID_len);
-		strncpy(storedoid, snmp_oid, sizeof(storedoid)-1);
 		snmp_add_null_var(pdu, anOID, anOID_len);
 
 		if (current_host->snmp_session != NULL) {
@@ -221,4 +216,79 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	}
 
 	return result_string;
+}
+
+void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
+	struct snmp_pdu *pdu = NULL;
+	struct snmp_pdu *response = NULL;
+	struct variable_list *vars = NULL;
+	char logmessage[LOGSIZE];
+	int status;
+	int i;
+	int max_repetitions = 1;
+	int non_repeaters = 0;
+	int names;
+
+	struct nameStruct {
+	    oid             name[MAX_OID_LEN];
+	    size_t          name_len;
+	} *name, *namep;
+
+	/* load up oids */
+    namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
+    for (i = 0; i < num_oids; i++) {
+        namep->name_len = MAX_OID_LEN;
+		snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len);
+        namep++;
+    }
+
+	if (current_host->snmp_session != NULL) {
+		pdu = snmp_pdu_create(SNMP_MSG_GETBULK);
+		pdu->non_repeaters = non_repeaters;
+		pdu->max_repetitions = max_repetitions;     /* fill the packet */
+	    for (i = 0; i < num_oids; i++) {
+			snmp_add_null_var(pdu, name[i].name, name[i].name_len);
+		}
+
+		/* execute the bulk get request */
+		if (current_host->snmp_session != NULL) {
+			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+		}else {
+			status = STAT_DESCRIP_ERROR;
+		}
+
+		/* liftoff, successful poll, process it!! */
+		if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
+			i = 0;
+            for (vars = response->variables; vars; vars = vars->next_variable) {
+				#ifdef USE_NET_SNMP
+				snprint_value(snmp_oids[i].result, 255-1, vars->name, vars->name_length, vars);
+				#else
+				sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+				#endif
+				i++;
+			}
+		}else if (response->errindex != 0) {
+			printf("Errored Index is '%i'\n", response->errindex);
+		}
+	}else {
+		status = STAT_DESCRIP_ERROR;
+	}
+
+	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
+		current_host->ignore_host = 1;
+		for (i = 0; i < num_oids; i++) {
+			strncpy(snmp_oids[i].result, "SNMP ERROR", 255-1);
+		}
+	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
+		for (i = 0; i < num_oids; i++) {
+			strncpy(snmp_oids[i].result, "U", 255-1);
+		}
+	}
+
+	if (current_host->snmp_session != NULL) {
+		if (response != NULL) {
+			snmp_free_pdu(response);
+		}
+	}
 }
