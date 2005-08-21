@@ -260,14 +260,12 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 			i = 0;
             for (vars = response->variables; vars; vars = vars->next_variable) {
 				#ifdef USE_NET_SNMP
-				snprint_value(snmp_oids[i].result, 255-1, vars->name, vars->name_length, vars);
+				snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
 				#else
 				sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 				#endif
 				i++;
 			}
-		}else if (response->errindex != 0) {
-			printf("Errored Index is '%i'\n", response->errindex);
 		}
 	}else {
 		status = STAT_DESCRIP_ERROR;

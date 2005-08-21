@@ -92,6 +92,7 @@ void poll_host(int host_id) {
 	int rows_processed = 0;
 	int i;
 	int num_oids = 0;
+	int snmp_poller_items = 0;
 
 	char *poll_result = NULL;
 	char logmessage[LOGSIZE];
@@ -353,10 +354,15 @@ void poll_host(int host_id) {
 		poller_items[i].snmp_timeout = atoi(row[14]);
 		snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", "U");
 
+		if (poller_items[i].action == POLLER_ACTION_SNMP) {
+			snmp_poller_items++;
+		}
+		
 		i++;
 	}
 
-	snmp_oids = (snmp_oids_t *) calloc(snmp_items, sizeof(snmp_oids_t));
+	/* create an array for snmp oids */
+	snmp_oids = (snmp_oids_t *) calloc(snmp_poller_items, sizeof(snmp_oids_t));
 
 	i = 0;
 	while ((i < num_rows) && (!host->ignore_host)) {
