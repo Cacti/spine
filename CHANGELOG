@@ -6,6 +6,7 @@ The Cacti Group – cactid
 -bug: increased max_threads from 30 to 100
 -feature: implemented snmpv3 AuthNoPriv to align with Cacti 0.8.6 user interface
 -feature: improved performance of poller by the reduction of MySQL insert calls
+-feature: improved poller performance by grouping snmp get requests in a single call
 
 0.8.6e
 -bug:#0000470: added -v, --version, -h, --help to command line options to make more GNU friendly
