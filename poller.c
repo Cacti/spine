@@ -585,6 +585,7 @@ void poll_host(int host_id) {
 	
 	/* format database insert */
 	int buffer;
+	char result_string[BUFSIZE];
 	buffer = 600*rows_processed+100;
 	query3 = (char *)malloc(buffer);
 	strncpy(query3, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES", buffer-1);
@@ -592,11 +593,13 @@ void poll_host(int host_id) {
 	i=0;
 	char delim = ' ';
 	while (i < rows_processed) {
-		snprintf(query3, buffer-1, "%s%c(%i,'%s','%s','%s')", query3, delim, poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
+		snprintf(result_string, sizeof(result_string)-1, "%c(%i,'%s','%s','%s')", delim, poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
+		strncat(query3, result_string, strlen(result_string));
 		delim = ',';
 		i++;
 	}
 
+	/* only perform and insert if there is something to insert */
 	if (rows_processed > 0) {
 		/* insert records into database */
 		db_insert(&mysql, query3);

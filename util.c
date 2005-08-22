@@ -77,7 +77,7 @@ int read_config_options(config_t *set) {
 
 		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server)-1);
 		strncpy(web_root, mysql_row[0], sizeof(web_root)-1);
-		strncat(set->path_php_server,"/script_server.php", sizeof(set->path_php_server)-1);
+		strncat(set->path_php_server,"/script_server.php", 18);
 	}
 
 	/* determine logfile path */
@@ -91,13 +91,15 @@ int read_config_options(config_t *set) {
 			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile)-1);
 		} else {
 			if (strlen(web_root) != 0) {
-				strncpy(set->path_logfile, strncat(web_root, "/log/cacti.log", sizeof(web_root)-1), sizeof(set->path_logfile)-1);
+				strncat(web_root, "/log/cacti.log", 14);
+				strncpy(set->path_logfile, web_root, strlen(web_root));
 			} else {
-				strncpy(set->path_logfile, "", sizeof(set->path_logfile)-1);
+				memset(set->path_logfile, 0, sizeof(set->path_logfile));
 			}
 		}
 	} else {
-		strncpy(set->path_logfile, strncat(web_root, "/log/cacti.log", sizeof(web_root)-1), sizeof(set->path_logfile)-1);
+		strncat(web_root, "/log/cacti.log", 14);
+		strncpy(set->path_logfile, web_root, strlen(web_root));
  	}
 
 	/* log the path_webroot variable */
@@ -547,8 +549,8 @@ void cacti_log(char *logmessage) {
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", nowstruct) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
 
-	strncat(flogmessage, logprefix, sizeof(flogmessage)-1);
-	strncat(flogmessage, logmessage, sizeof(flogmessage)-1);
+	strncat(flogmessage, logprefix, strlen(logprefix));
+	strncat(flogmessage, logmessage, strlen(logmessage));
 
 	if (fileopen != 0) {
 		fputs(flogmessage, log_file);
