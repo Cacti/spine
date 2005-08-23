@@ -50,10 +50,10 @@ int ping_host(host_t *host, ping_t *ping) {
 	int snmp_result;
 
 	/* initialize variables */
-	strncpy(ping->ping_status, "down", sizeof(ping->ping_status)-1);
-	strncpy(ping->ping_response, "Ping not performed due to setting.", sizeof(ping->ping_response)-1);
-	strncpy(ping->snmp_status, "down", sizeof(ping->ping_status)-1);
-	strncpy(ping->snmp_response, "SNMP not performed due to setting or ping result", sizeof(ping->ping_response)-1);
+	snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+	snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "Ping not performed due to setting.");
+	snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "down");
+	snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "SNMP not performed due to setting or ping result");
 
 	/* snmp pinging has been selected at a minimum */
 	ping_result = 0;
@@ -80,8 +80,8 @@ int ping_host(host_t *host, ping_t *ping) {
 				ping_result = ping_udp(host, ping);
 			}
 		} else {
-			strncpy(ping->ping_status, "0.000", sizeof(ping->ping_status)-1);
-			strncpy(ping->ping_response, "PING: Host does not require ping", sizeof(ping->ping_response)-1);
+			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "0.000");
+			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "PING: Host does not require ping");
 			ping_result = HOST_UP;
 		}
 	}
@@ -138,18 +138,18 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		gettimeofday(&now, NULL);
 		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	} else {
-		strncpy(ping->snmp_status, "0.00", sizeof(ping->snmp_status)-1);
-		strncpy(ping->snmp_response, "Host does not require SNMP", sizeof(ping->snmp_response)-1);
+		snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "0.00");
+		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host does not require SNMP");
 		poll_result = strdup("0.00");
 	}
 
 	if ((strlen(poll_result) == 0) || (strstr(poll_result,"ERROR"))) {
-		strncpy(ping->snmp_response, "Host did not respond to SNMP", sizeof(ping->snmp_response)-1);
+		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
 		free(poll_result);
 		return HOST_DOWN;
 	} else {
 		if (strlen(host->snmp_community) != 0) {
-			strncpy(ping->snmp_response, "Host responded to SNMP", sizeof(ping->snmp_response)-1);
+			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host responded to SNMP");
 			snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "%.5f",((end_time-begin_time)*1000));
 		}
 
@@ -241,8 +241,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	/* hostname must be nonblank */
 	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
-		strncpy(ping->ping_status,"down", sizeof(ping->ping_status)-1);
-		strncpy(ping->ping_response,"default", sizeof(ping->ping_response)-1);
+		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "default");
 
 		/* set the socket timeout */
 		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -258,8 +258,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strncpy(ping->ping_response,"ICMP: Ping timed out", sizeof(ping->ping_response)-1);
-				strncpy(ping->ping_status,"down",sizeof(ping->ping_status)-1);
+				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
+				snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 				free(packet);
 				close(icmp_socket);
 				return HOST_DOWN;
@@ -293,8 +293,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 				if (total_time < set.ping_timeout) {
-					strncpy(ping->ping_response,"ICMP: Host is Alive",sizeof(ping->ping_response)-1);
-					snprintf(ping->ping_status,sizeof(ping->ping_status)-1,"%.5f",total_time);
+					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Host is Alive");
+					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", total_time);
 					free(packet);
 					close(icmp_socket);
 					return HOST_UP;
@@ -305,8 +305,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			usleep(50);
 		}
 	} else {
-		strncpy(ping->ping_response,"ICMP: Destination address not specified",sizeof(ping->ping_response)-1);
-		strncpy(ping->ping_status,"down",sizeof(ping->ping_status)-1);
+		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination address not specified");
+		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		free(packet);
   		close(icmp_socket);
 		return HOST_DOWN;
@@ -361,8 +361,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* hostname must be nonblank */
 	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
-		strncpy(ping->ping_status,"down",sizeof(ping->ping_status)-1);
-		strncpy(ping->ping_response,"default",sizeof(ping->ping_response)-1);
+		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "default");
 
 		/* initilize the socket */
 		udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -376,8 +376,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 		if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) >= 0) {
 				// do nothing
 		} else {
-			strncpy(ping->ping_status, "down", sizeof(ping->ping_status)-1);
-			strncpy(ping->ping_response, "UDP: Cannot connect to host", sizeof(ping->ping_response)-1);
+			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Cannot connect to host");
 			return HOST_DOWN;
 		}
 
@@ -395,8 +395,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 		while (1) {
 			if (retry_count >= set.ping_retries) {
-				strncpy(ping->ping_response,"UDP: Ping timed out",sizeof(ping->ping_response)-1);
-				strncpy(ping->ping_status,"down",sizeof(ping->ping_status)-1);
+				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Ping timed out");
+				snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 				close(udp_socket);
 				return HOST_DOWN;
 			}
@@ -432,8 +432,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 				if ((total_time * 1000) <= set.ping_timeout) {
-					strncpy(ping->ping_response,"UDP: Host is Alive",sizeof(ping->ping_response)-1);
-					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f",(total_time*1000));
+					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Host is Alive");
+					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", (total_time*1000));
 					close(udp_socket);
 					return HOST_UP;
 				}
@@ -442,8 +442,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 			retry_count++;
 		}
 	} else {
-		strncpy(ping->ping_response,"UDP: Destination address not specified",sizeof(ping->ping_response)-1);
-		strncpy(ping->ping_status,"down",sizeof(ping->ping_status)-1);
+		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination address not specified");
+		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		return HOST_DOWN;
 	}
 }

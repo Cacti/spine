@@ -113,12 +113,12 @@ char *php_readpipe() {
 	case -1:
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Fatal select() error\n");
 		cacti_log(logmessage);
-		snprintf(result_string, BUFSIZE-1, "%s", "U");
+		snprintf(result_string, BUFSIZE-1, "U");
 		break;
 	case 0:
 		snprintf(logmessage, LOGSIZE-1, "WARNING: The PHP Script Server did not respond in time and will therefore be restarted\n");
 		cacti_log(logmessage);
-		snprintf(result_string, BUFSIZE-1, "%s", "U");
+		snprintf(result_string, BUFSIZE-1, "U");
 
 		/* restart the script server because of error */
 		php_close();
@@ -128,7 +128,7 @@ char *php_readpipe() {
 	default:
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
 		if (rescode == 0) {
-			snprintf(result_string, BUFSIZE-1, "%s", "U");
+			snprintf(result_string, BUFSIZE-1, "U");
 		}
 	}
 

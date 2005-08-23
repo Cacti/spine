@@ -75,9 +75,8 @@ int read_config_options(config_t *set) {
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
 
-		strncpy(set->path_php_server,mysql_row[0], sizeof(set->path_php_server)-1);
-		strncpy(web_root, mysql_row[0], sizeof(web_root)-1);
-		strncat(set->path_php_server,"/script_server.php", 18);
+		snprintf(set->path_php_server, sizeof(set->path_php_server)-1, "%s/script_server.php", mysql_row[0]);
+		snprintf(web_root, sizeof(web_root)-1, "%s", mysql_row[0]);
 	}
 
 	/* determine logfile path */
@@ -88,18 +87,16 @@ int read_config_options(config_t *set) {
 		mysql_row = mysql_fetch_row(result);
 
 		if (strlen(mysql_row[0]) != 0) {
-			strncpy(set->path_logfile,mysql_row[0], sizeof(set->path_logfile)-1);
+			snprintf(set->path_logfile, sizeof(set->path_logfile)-1, mysql_row[0]);
 		} else {
 			if (strlen(web_root) != 0) {
-				strncat(web_root, "/log/cacti.log", 14);
-				strncpy(set->path_logfile, web_root, strlen(web_root));
+				snprintf(set->path_logfile, sizeof(set->path_logfile)-1, "%s/log/cacti.log", web_root);
 			} else {
 				memset(set->path_logfile, 0, sizeof(set->path_logfile));
 			}
 		}
 	} else {
-		strncat(web_root, "/log/cacti.log", 14);
-		strncpy(set->path_logfile, web_root, strlen(web_root));
+		snprintf(set->path_logfile, sizeof(set->path_logfile)-1, "%s/log/cacti.log", web_root);
  	}
 
 	/* log the path_webroot variable */
@@ -137,7 +134,7 @@ int read_config_options(config_t *set) {
 
 	if (num_rows > 0) {
 		mysql_row = mysql_fetch_row(result);
-		strncpy(set->path_php,mysql_row[0], sizeof(set->path_php)-1);
+		snprintf(set->path_php, sizeof(set->path_php)-1, "%s", mysql_row[0]);
 	}
 
 	/* log the path_php variable */
@@ -380,7 +377,7 @@ int read_config_options(config_t *set) {
 
 	/* determine if the php script server is required */
 	if (set->end_host_id == 0) {
-		strncpy(result_string, "SELECT action FROM poller_item WHERE action=2", sizeof(result_string)-1);
+		snprintf(result_string, sizeof(result_string)-1, "SELECT action FROM poller_item WHERE action=2");
 	}else{
 		snprintf(result_string, sizeof(result_string)-1, "SELECT action FROM poller_item WHERE ((host_id >= %i) AND (host_id <= %i) AND (action=2))", set->start_host_id, set->end_host_id);
 	}
@@ -453,10 +450,10 @@ int read_cactid_config(char *file, config_t *set) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (!strcasecmp(p1, "DB_Host")) strncpy(set->dbhost, p2, sizeof(set->dbhost)-1);
-				else if (!strcasecmp(p1, "DB_Database")) strncpy(set->dbdb, p2, sizeof(set->dbdb)-1);
-				else if (!strcasecmp(p1, "DB_User")) strncpy(set->dbuser, p2, sizeof(set->dbuser)-1);
-				else if (!strcasecmp(p1, "DB_Pass")) strncpy(set->dbpass, p2, sizeof(set->dbpass)-1);
+				if (!strcasecmp(p1, "DB_Host")) snprintf(set->dbhost, sizeof(set->dbhost)-1, "%s", p2);
+				else if (!strcasecmp(p1, "DB_Database")) snprintf(set->dbdb, sizeof(set->dbdb)-1, "%s", p2);
+				else if (!strcasecmp(p1, "DB_User")) snprintf(set->dbuser, sizeof(set->dbuser)-1, "%s", p2);
+				else if (!strcasecmp(p1, "DB_Pass")) snprintf(set->dbpass, sizeof(set->dbpass)-1, "%s", p2);
                 else if (!strcasecmp(p1, "DB_Port")) set->dbport = atoi(p2);
 				else {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
@@ -475,13 +472,13 @@ void config_defaults(config_t * set) {
 	set->threads = DEFAULT_THREADS;
     set->dbport = DEFAULT_DB_PORT;
 
-	strncpy(set->dbhost, DEFAULT_DB_HOST, sizeof(set->dbhost)-1);
-	strncpy(set->dbdb, DEFAULT_DB_DB, sizeof(set->dbhost)-1);
-	strncpy(set->dbuser, DEFAULT_DB_USER, sizeof(set->dbhost)-1);
-	strncpy(set->dbpass, DEFAULT_DB_PASS, sizeof(set->dbhost)-1);
+	snprintf(set->dbhost, sizeof(set->dbhost)-1, DEFAULT_DB_HOST);
+	snprintf(set->dbdb, sizeof(set->dbdb)-1, DEFAULT_DB_DB);
+	snprintf(set->dbuser, sizeof(set->dbuser)-1, DEFAULT_DB_USER);
+	snprintf(set->dbpass, sizeof(set->dbpass)-1, DEFAULT_DB_PASS);
 
-	strncpy(config_paths[0], CONFIG_PATH_1, sizeof(config_paths[0])-1);
-	strncpy(config_paths[1], CONFIG_PATH_2, sizeof(config_paths[1])-1);
+	snprintf(config_paths[0], sizeof(config_paths[0])-1, CONFIG_PATH_1);
+	snprintf(config_paths[1], sizeof(config_paths[1])-1, CONFIG_PATH_2);
 
 	return;
 }

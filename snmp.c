@@ -204,9 +204,9 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
-		strncpy(result_string, "SNMP ERROR", BUFSIZE-1);
+		snprintf(result_string, sizeof(result_string)-1, "SNMP ERROR");
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
-		snprintf(result_string, BUFSIZE-1, "%s", "U");
+		snprintf(result_string, BUFSIZE-1, "U");
 	}
 
 	if (current_host->snmp_session != NULL) {
@@ -249,6 +249,7 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		}
 
 		/* execute the bulk get request */
+		retry:
 		if (current_host->snmp_session != NULL) {
 			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 		}else {
@@ -266,6 +267,23 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 				#endif
 				i++;
 			}
+		}else if (response->errindex != 0) {
+			/* removed errored OID and then retry */
+			snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
+			int count;
+			for (count = 1, vars = response->variables;
+                     vars && count != response->errindex;
+                     vars = vars->next_variable, count++) {
+
+                    /*EMPTY*/;
+			}
+
+			pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
+			snmp_free_pdu(response);
+			response = NULL;
+			if (pdu != NULL) {
+				goto retry;
+			}
 		}
 	}else {
 		status = STAT_DESCRIP_ERROR;
@@ -274,11 +292,7 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
-			strncpy(snmp_oids[i].result, "SNMP ERROR", 255-1);
-		}
-	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
-		for (i = 0; i < num_oids; i++) {
-			strncpy(snmp_oids[i].result, "U", 255-1);
+			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "SNMP ERROR");
 		}
 	}
 
