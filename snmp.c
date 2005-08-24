@@ -204,7 +204,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
-		snprintf(result_string, sizeof(result_string)-1, "SNMP ERROR");
+		snprintf(result_string, BUFSIZE-1, "SNMP ERROR");
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		snprintf(result_string, BUFSIZE-1, "U");
 	}
