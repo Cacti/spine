@@ -162,8 +162,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	return sessp;
 }
 
-void snmp_host_cleanup(host_t *current_host) {
-	snmp_sess_close(current_host->snmp_session);
+void snmp_host_cleanup(void *snmp_session) {
+	if (snmp_session != NULL) {	
+		snmp_sess_close(snmp_session);
+	}
 }
 
 char *snmp_get(host_t *current_host, char *snmp_oid) {
@@ -204,7 +206,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
-		snprintf(result_string, BUFSIZE-1, "SNMP ERROR");
+		snprintf(result_string, BUFSIZE-1, "U");
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		snprintf(result_string, BUFSIZE-1, "U");
 	}

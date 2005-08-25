@@ -76,6 +76,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 
 int db_connect(char *database, MYSQL *mysql) {
 	char logmessage[LOGSIZE];
+	MYSQL *db;
 	int tries;
 	int result;
 	char *hostname;
@@ -98,7 +99,11 @@ int db_connect(char *database, MYSQL *mysql) {
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
-	mysql_init(mysql);
+	db = mysql_init(mysql);
+	if (db == NULL) {
+		cacti_log("ERROR: MySQL unable to allocate memory and therefore can not connect\n");
+		exit_cactid();
+	}
 	
 	while (tries > 0){
 		tries--;

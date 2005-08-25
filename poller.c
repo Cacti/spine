@@ -167,10 +167,14 @@ void poll_host(int host_id) {
 		host->failed_polls = atoi(row[18]);
 		host->availability = atof(row[19]);
 
-		host->snmp_session = snmp_host_init(host->id, host->hostname, host->snmp_version, host->snmp_community,
-								host->snmp_username,host->snmp_password, host->snmp_port, host->snmp_timeout);
+		if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) || (host->snmp_version == 3)) {
+			host->snmp_session = snmp_host_init(host->id, host->hostname, host->snmp_version, host->snmp_community,
+									host->snmp_username,host->snmp_password, host->snmp_port, host->snmp_timeout);
+		}else{
+			host->snmp_session = NULL;
+		}
 
-		/* save snmp session data for future use */
+		/* save snmp status data for future use */
 		last_snmp_port = host->snmp_port;
 		last_snmp_version = host->snmp_version;
 		strncpy(last_snmp_username, host->snmp_username, sizeof(last_snmp_username)-1);
@@ -370,7 +374,7 @@ void poll_host(int host_id) {
 			switch(poller_items[i].action) {
 			case POLLER_ACTION_SNMP: /* raw SNMP poll */
 				/* initialize or reinitialize snmp as required */
-				if (!host->snmp_session) {
+				if (host->snmp_session == NULL) {
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
 					strncpy(last_snmp_username, poller_items[i].snmp_username, sizeof(last_snmp_username)-1);
@@ -379,6 +383,12 @@ void poll_host(int host_id) {
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
 											poller_items[i].snmp_community,poller_items[i].snmp_username,
 											poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+				}
+				
+				/* catch snmp initialization issues */
+				if (host->snmp_session == NULL) {
+					host->ignore_host = 1;
+					break;
 				}
 				
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
@@ -401,7 +411,6 @@ void poll_host(int host_id) {
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 							}else {
 								/* remove double or single quotes from string */
-//								strncpy(snmp_oids[j].result, strip_quotes(snmp_oids[j].result), sizeof(snmp_oids[j].result)-1);
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_quotes(snmp_oids[j].result));
 								
 								/* detect erroneous non-numeric result */
@@ -449,7 +458,7 @@ void poll_host(int host_id) {
 							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 						}else {
 							/* remove double or single quotes from string */
-							strncpy(snmp_oids[j].result, strip_quotes(snmp_oids[j].result), sizeof(snmp_oids[j].result)-1);
+							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_quotes(snmp_oids[j].result));
 
 							/* detect erroneous non-numeric result */
 							if (!validate_result(snmp_oids[j].result)) {
@@ -483,10 +492,10 @@ void poll_host(int host_id) {
 			case POLLER_ACTION_SCRIPT: /* execute script file */
 				poll_result = exec_poll(host, poller_items[i].arg1);
 				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", poll_result);
-				free(poll_result);
 
+				free(poll_result);
 				/* remove double or single quotes from string */
-				strncpy(poller_items[i].result, strip_alpha(strip_quotes(poller_items[i].result)), sizeof(poller_items[i].result)-1);
+				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poller_items[i].result)));
 
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(poller_items[i].result)) {
@@ -509,7 +518,7 @@ void poll_host(int host_id) {
 					free(poll_result);
 
 					/* remove double or single quotes from string */
-					strncpy(poller_items[i].result, strip_alpha(strip_quotes(poller_items[i].result)), sizeof(poller_items[i].result)-1);
+					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poller_items[i].result)));
 
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
@@ -564,7 +573,7 @@ void poll_host(int host_id) {
 				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 			}else {
 				/* remove double or single quotes from string */
-				strncpy(snmp_oids[j].result, strip_quotes(snmp_oids[j].result), sizeof(snmp_oids[j].result)-1);
+				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_quotes(snmp_oids[j].result));
 
 				/* detect erroneous non-numeric result */
 				if (!validate_result(snmp_oids[j].result)) {
@@ -604,14 +613,14 @@ void poll_host(int host_id) {
 	if (rows_processed > 0) {
 		/* insert records into database */
 		db_insert(&mysql, query3);
-		free(query3);
 	}
 
 	/* cleanup memory and prepare for function exit */
 	if (host_id) {
-		snmp_host_cleanup(host);
+		snmp_host_cleanup(host->snmp_session);
 	}
 
+	free(query3);
 	free(poller_items);
 	free(host);
 	free(ping);
@@ -696,6 +705,7 @@ char *exec_poll(host_t *current_host, char *command) {
 
 	/* compensate for back slashes in arguments */
 	proc_command = add_slashes(command, 2);
+
 	cmd_fd = nft_popen((char *)proc_command, "r");
 	free(proc_command);
 

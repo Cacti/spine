@@ -33,5 +33,5 @@
 void snmp_cactid_init();
 void snmp_cactid_close();
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community, char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout);
-void snmp_host_cleanup(host_t *current_host);
+void snmp_host_cleanup(void *snmp_session);
 char *snmp_get(host_t *current_host, char *snmp_oid);
