@@ -36,7 +36,7 @@ int ping_snmp(host_t *host, ping_t *ping);
 int ping_icmp(host_t *host, ping_t *ping);
 int ping_udp(host_t *host, ping_t *ping);
 void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
-void init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port);
+int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port);
 int init_socket();
 unsigned short get_checksum(void* buf, int len);
 

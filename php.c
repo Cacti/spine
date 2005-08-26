@@ -88,7 +88,13 @@ char *php_readpipe() {
 	int rescode, numfds;
 	struct timeval timeout;
 	char logmessage[LOGSIZE];
+
 	char *result_string = (char *) malloc(BUFSIZE);
+	
+	if (!result_string) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 	
 	/* set the result_string to all zeros */
 	memset(result_string, 0, BUFSIZE);

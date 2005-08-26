@@ -685,8 +685,12 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	int space_count;
 	int position;
 	int new_position;
+	char *return_str;
 	
-	char *return_str = (char *) malloc(BUFSIZE);
+	if (!(return_str = (char *) malloc(BUFSIZE))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 
 	length = strlen(string);
 	space_count = 0;

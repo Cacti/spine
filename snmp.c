@@ -82,7 +82,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	/* initialize SNMP */
  	thread_mutex_lock(LOCK_SNMP);
 	#ifdef USE_NET_SNMP
+	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+	/* Prevent update of the snmpapp.conf file */
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+	#endif
 	netsnmp_ds_set_int(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_OID_OUTPUT_FORMAT, NETSNMP_OID_OUTPUT_NUMERIC);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
@@ -176,7 +179,12 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	oid anOID[MAX_OID_LEN];
 	size_t anOID_len = MAX_OID_LEN;
 	int status;
-	char *result_string = (char *) malloc(BUFSIZE);
+	char *result_string;
+	
+	if (!(result_string = (char *) malloc(BUFSIZE))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;

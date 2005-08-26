@@ -149,9 +149,7 @@ int main(int argc, char *argv[]) {
 			exit_cactid();
 		}
 	}else{
-		conf_file = malloc(BUFSIZE);
-
-		if (!conf_file) {
+		if (!(conf_file = malloc(BUFSIZE))) {
 			printf("ERROR: Fatal malloc error!\n");
 			exit_cactid();
 		}
@@ -186,7 +184,7 @@ int main(int argc, char *argv[]) {
 	/* read settings table from the database to further establish environment */
 	read_config_options(&set);
 
-	/* find out how many loops we can perform before terminating */
+	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
 		poller_interval = 300;
 	}else {
@@ -246,8 +244,16 @@ int main(int argc, char *argv[]) {
 	}
 
 	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
-	threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t));
-	ids = (int *)malloc(num_rows * sizeof(int));
+
+	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
+
+	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);

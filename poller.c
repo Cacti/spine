@@ -85,7 +85,7 @@ void poll_host(int host_id) {
 	char query5[BUFSIZE];
 	char query6[BUFSIZE];
 	char query7[BUFSIZE];
-	char errstr[512];
+	char errstr[BUFSIZE];
 	int num_rows;
 	int assert_fail = 0;
 	int spike_kill = 0;
@@ -115,8 +115,15 @@ void poll_host(int host_id) {
 	MYSQL_ROW row;
 
 	/* allocate host and ping structures with appropriate values */
-	host = (host_t *) malloc(sizeof(host_t));
-	ping = (ping_t *) malloc(sizeof(ping_t));
+	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
+
+	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 
 	#ifndef OLD_MYSQL   
 	mysql_thread_init();
@@ -177,8 +184,8 @@ void poll_host(int host_id) {
 		/* save snmp status data for future use */
 		last_snmp_port = host->snmp_port;
 		last_snmp_version = host->snmp_version;
-		strncpy(last_snmp_username, host->snmp_username, sizeof(last_snmp_username)-1);
-		strncpy(last_snmp_password, host->snmp_password, sizeof(last_snmp_password)-1);
+		snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", host->snmp_username);
+		snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", host->snmp_password);
 
 		/* perform a check to see if the host is alive by polling it's SysDesc
 		 * if the host down from an snmp perspective, don't poll it.
@@ -223,7 +230,10 @@ void poll_host(int host_id) {
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		reindex = (reindex_t *) malloc(sizeof(reindex_t));
+		if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
+			printf("ERROR: Fatal malloc error!\n");
+			exit_cactid();
+		}
 
 		result = db_query(&mysql, query4);
 		num_rows = (int)mysql_num_rows(result);
@@ -252,6 +262,11 @@ void poll_host(int host_id) {
 					break;
 				}
 
+				if (!(query3 = (char *)malloc(255))) {
+					printf("ERROR: Fatal malloc error!\n");
+					exit_cactid();
+				}
+
 				/* assume ok if host is up and result wasn't obtained */
 				if (!strcmp(poll_result,"U")) {
 					assert_fail = 0;
@@ -261,11 +276,8 @@ void poll_host(int host_id) {
 						cacti_log(logmessage);
 					}
 
-					query3 = (char *)malloc(255);
 					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
-					free(query3);
-
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) <= strtoll(poll_result, (char **)NULL, 10))) {
 					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
@@ -273,11 +285,8 @@ void poll_host(int host_id) {
 						cacti_log(logmessage);
 					}
 
-					query3 = (char *)malloc(255);
 					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
-					free(query3);
-
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) >= strtoll(poll_result, (char **)NULL, 10))) {
 					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
@@ -285,11 +294,8 @@ void poll_host(int host_id) {
 						cacti_log(logmessage);
 					}
 
-					query3 = (char *)malloc(255);
 					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
-					free(query3);
-
 					assert_fail = 1;
 				}
 
@@ -298,10 +304,8 @@ void poll_host(int host_id) {
 				 * 2) the OP code is > or < meaning the current value could have changed without causing
 				 *     the assert to fail */
 				if ((assert_fail == 1) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, ">"))) {
-					query3 = (char *)malloc(255);
 					snprintf(query3, 254, "update poller_reindex set assert_value='%s' where host_id='%i' and data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
 					db_insert(&mysql, query3);
-					free(query3);
 
 					if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
 						spike_kill = 1;
@@ -312,6 +316,7 @@ void poll_host(int host_id) {
 					}
 				}
 
+				free(query3);
 				free(poll_result);
 			}
 		}
@@ -377,8 +382,8 @@ void poll_host(int host_id) {
 				if (host->snmp_session == NULL) {
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
-					strncpy(last_snmp_username, poller_items[i].snmp_username, sizeof(last_snmp_username)-1);
-					strncpy(last_snmp_password, poller_items[i].snmp_password, sizeof(last_snmp_password)-1);
+					snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", poller_items[i].snmp_username);
+					snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", poller_items[i].snmp_password);
 					
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
 											poller_items[i].snmp_community,poller_items[i].snmp_username,
@@ -403,7 +408,7 @@ void poll_host(int host_id) {
 						int j;
 						for (j = 0; j < num_oids; j++) {
 							/* remove double or single quotes from string */
-							strncpy(snmp_oids[j].result, strip_alpha(strip_quotes(snmp_oids[j].result)), sizeof(snmp_oids[j].result)-1);
+							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 							if (host->ignore_host) {
 								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
@@ -415,14 +420,14 @@ void poll_host(int host_id) {
 								
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
-									strncpy(errstr, snmp_oids[j].result,sizeof(errstr)-1);
+									snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
 									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
 									cacti_log(logmessage);
 									snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 								}
 							}
 
-							strncpy(poller_items[snmp_oids[j].array_position].result, snmp_oids[j].result, 255-1);
+							snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
 							
 							if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
@@ -440,8 +445,8 @@ void poll_host(int host_id) {
 
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
-					strncpy(last_snmp_username, poller_items[i].snmp_username, sizeof(last_snmp_username)-1);
-					strncpy(last_snmp_password, poller_items[i].snmp_password, sizeof(last_snmp_password)-1);
+					snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", poller_items[i].snmp_username);
+					snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", poller_items[i].snmp_password);
 				}
 
 				if (num_oids > set.max_get_size) {
@@ -450,7 +455,7 @@ void poll_host(int host_id) {
 					int j;
 					for (j = 0; j < num_oids; j++) {
 						/* remove double or single quotes from string */
-						strncpy(snmp_oids[j].result, strip_alpha(strip_quotes(snmp_oids[j].result)), sizeof(snmp_oids[j].result)-1);
+						snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 						if (host->ignore_host) {
 							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
@@ -462,14 +467,14 @@ void poll_host(int host_id) {
 
 							/* detect erroneous non-numeric result */
 							if (!validate_result(snmp_oids[j].result)) {
-								strncpy(errstr, snmp_oids[j].result,sizeof(errstr)-1);
+								snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
 								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
 								cacti_log(logmessage);
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 							}
 						}
 
-						strncpy(poller_items[snmp_oids[j].array_position].result, snmp_oids[j].result, 255-1);
+						snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
 							
 						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
@@ -479,11 +484,11 @@ void poll_host(int host_id) {
 
 					num_oids = 0;
 						
-					strncpy(snmp_oids[num_oids].oid, poller_items[i].arg1, sizeof(snmp_oids[num_oids].oid)-1);
+					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid)-1, "%s", poller_items[i].arg1);
 					snmp_oids[num_oids].array_position = i;
 					num_oids++;
 				}else {
-					strncpy(snmp_oids[num_oids].oid, poller_items[i].arg1, sizeof(snmp_oids[num_oids].oid)-1);
+					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid)-1, "%s", poller_items[i].arg1);
 					snmp_oids[num_oids].array_position = i;
 					num_oids++;
 				}
@@ -499,7 +504,7 @@ void poll_host(int host_id) {
 
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(poller_items[i].result)) {
-					strncpy(errstr, poller_items[i].result,sizeof(errstr)-1);
+					snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
 					cacti_log(logmessage);
 					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
@@ -522,7 +527,7 @@ void poll_host(int host_id) {
 
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
-						strncpy(errstr, poller_items[i].result, sizeof(errstr)-1);
+						snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
 						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
 						cacti_log(logmessage);
 						snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
@@ -565,7 +570,7 @@ void poll_host(int host_id) {
 		int j;
 		for (j = 0; j < num_oids; j++) {
 			/* remove double or single quotes from string */
-			strncpy(snmp_oids[j].result, strip_alpha(strip_quotes(snmp_oids[j].result)), sizeof(snmp_oids[j].result)-1);
+			snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 			if (host->ignore_host) {
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
@@ -577,14 +582,14 @@ void poll_host(int host_id) {
 
 				/* detect erroneous non-numeric result */
 				if (!validate_result(snmp_oids[j].result)) {
-					strncpy(errstr, snmp_oids[j].result,sizeof(errstr)-1);
+					snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
 					cacti_log(logmessage);
 					snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 				}
 			}
 
-			strncpy(poller_items[snmp_oids[j].array_position].result, snmp_oids[j].result, 255-1);
+			snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
 					
 			if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
@@ -597,7 +602,12 @@ void poll_host(int host_id) {
 	int buffer;
 	char result_string[BUFSIZE];
 	buffer = 600*rows_processed+100;
-	query3 = (char *)malloc(buffer);
+
+	if (!(query3 = (char *)malloc(buffer))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
+
 	snprintf(query3, buffer-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
 
 	i=0;
@@ -693,8 +703,12 @@ char *exec_poll(host_t *current_host, char *command) {
 	int numfds;
 	struct timeval timeout;
 	char *proc_command;
+	char *result_string;
 
-	char *result_string = (char *) malloc(BUFSIZE);
+	if (!(result_string = (char *) malloc(BUFSIZE))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 
 	/* initialize the result_string to all zeros */
 	memset(result_string, 0, BUFSIZE);

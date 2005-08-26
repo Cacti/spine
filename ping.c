@@ -166,10 +166,8 @@ int init_socket()
 	int icmp_socket;
 
 	/* error getting socket */
-	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
-	{
+	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
 		cacti_log("ERROR: init_socket: cannot open the ICMP socket\n");
-		exit_cactid();
 	}
 
 	return(icmp_socket);
@@ -178,18 +176,21 @@ int init_socket()
 /******************************************************************************/
 /*  init_sockaddr - convert host name to internet address                     */
 /******************************************************************************/
-void init_sockaddr (struct sockaddr_in *name, const char *hostname, unsigned short int port) {
+int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
-	char logmessage[255];
+	char logmessage[LOGSIZE];
 
 	name->sin_family = AF_INET;
 	name->sin_port = htons (port);
-	hostinfo = gethostbyname (hostname);
+	hostinfo = gethostbyname(hostname);
 	if (hostinfo == NULL) {
 		snprintf(logmessage, LOGSIZE-1, "WARNING: Unknown host %s\n", hostname);
 		cacti_log(logmessage);
+		return FALSE;
+	}else{
+		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+		return TRUE;
 	}
-	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 }
 
 /******************************************************************************/
@@ -217,7 +218,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct icmphdr* icmp;
 	unsigned char* packet;
 
-	/* get ICMP socket and release setuid */
+	/* get ICMP socket */
  	icmp_socket = init_socket();
 
 	/* establish timeout value */
@@ -226,7 +227,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* allocate the packet in memory */
 	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
-	packet = malloc(packet_len);
+
+	if (!(packet = malloc(packet_len))) {
+		printf("ERROR: Fatal malloc error!\n");
+		exit_cactid();
+	}
 
 	icmp = (struct icmphdr*)packet;
 	icmp->type = ICMP_ECHO;
@@ -239,7 +244,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->checksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
-	if (strlen(host->hostname) != 0) {
+	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "default");
@@ -248,67 +253,73 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		init_sockaddr(&servername, host->hostname, 7);
+		if (init_sockaddr(&servername, host->hostname, 7)) {
+			retry_count = 0;
 
-		retry_count = 0;
+			/* initialize file descriptor to review for input/output */
+			FD_ZERO(&socket_fds);
+			FD_SET(icmp_socket,&socket_fds);
 
-		/* initialize file descriptor to review for input/output */
-		FD_ZERO(&socket_fds);
-		FD_SET(icmp_socket,&socket_fds);
-
-		while (1) {
-			if (retry_count >= set.ping_retries) {
-				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
-				snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-				free(packet);
-				close(icmp_socket);
-				return HOST_DOWN;
-			}
-
-			/* record start time */
-			gettimeofday(&now, NULL);
-			begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
-			/* send packet to destination */
-			return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
-
-			/* wait for a response on the socket */
-			select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
-
-   			fromlen = sizeof(servername);
-
-			/* check to see which socket talked */
-			if (FD_ISSET(icmp_socket, &socket_fds)) {
-				return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &servername, &fromlen);
-			} else {
-				return_code = -10;
-			}
-
-			/* record end time */
-			gettimeofday(&now, NULL);
-			end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
-			/* caculate total time */
-			total_time = (end_time - begin_time) * 1000;
-
-			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-				if (total_time < set.ping_timeout) {
-					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Host is Alive");
-					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", total_time);
+			while (1) {
+				if (retry_count >= set.ping_retries) {
+					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
+					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 					free(packet);
 					close(icmp_socket);
-					return HOST_UP;
+					return HOST_DOWN;
 				}
-			}
 
-			retry_count++;
-			usleep(50);
+				/* record start time */
+				gettimeofday(&now, NULL);
+				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+				/* send packet to destination */
+				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
+
+				/* wait for a response on the socket */
+				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+
+	   			fromlen = sizeof(servername);
+
+				/* check to see which socket talked */
+				if (FD_ISSET(icmp_socket, &socket_fds)) {
+					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &servername, &fromlen);
+				} else {
+					return_code = -10;
+				}
+
+				/* record end time */
+				gettimeofday(&now, NULL);
+				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+				/* caculate total time */
+				total_time = (end_time - begin_time) * 1000;
+
+				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
+					if (total_time < set.ping_timeout) {
+						snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Host is Alive");
+						snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", total_time);
+						free(packet);
+						close(icmp_socket);
+						return HOST_UP;
+					}
+				}
+
+				retry_count++;
+				usleep(50);
+			}
+		}else{
+			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination hostname invalid");
+			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+			free(packet);
+			if (icmp_socket) close(icmp_socket);
+			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		free(packet);
-  		close(icmp_socket);
+  		if (icmp_socket) close(icmp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -358,92 +369,97 @@ int ping_udp(host_t *host, ping_t *ping) {
 	timeout.tv_sec  = 0;
 	timeout.tv_usec = set.ping_timeout * 1000;
 
+	/* initilize the socket */
+	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
 	/* hostname must be nonblank */
-	if (strlen(host->hostname) != 0) {
+	if ((strlen(host->hostname) != 0) && (udp_socket != -1)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "default");
-
-		/* initilize the socket */
-		udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 		/* set the socket timeout */
 		setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		init_sockaddr(&servername, host->hostname, 33439);
-
-		if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) >= 0) {
-				// do nothing
-		} else {
-			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Cannot connect to host");
-			return HOST_DOWN;
-		}
-
-		/* format packet */
-		snprintf(request, sizeof(request)-1, "cacti-monitoring-system"); // the actual test data
-		request_len = strlen(request);
-
-		retry_count = 0;
-
-		/* initialize file descriptor to review for input/output */
-		FD_ZERO(&socket_fds);
-		FD_SET(udp_socket,&socket_fds);
-
-		numfds = udp_socket + 1;
-
-		while (1) {
-			if (retry_count >= set.ping_retries) {
-				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Ping timed out");
+		if (init_sockaddr(&servername, host->hostname, 33439)) {
+			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-				close(udp_socket);
+				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Cannot connect to host");
+				if (udp_socket) close(udp_socket);
 				return HOST_DOWN;
 			}
 
-			/* record start time */
-			gettimeofday(&now, NULL);
-			begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+			/* format packet */
+			snprintf(request, sizeof(request)-1, "cacti-monitoring-system"); // the actual test data
+			request_len = strlen(request);
 
-			/* send packet to destination */
-			send(udp_socket, request, request_len, 0);
+			retry_count = 0;
 
-			/* wait for a response on the socket */
-			select(numfds, &socket_fds, NULL, NULL, &timeout);
+			/* initialize file descriptor to review for input/output */
+			FD_ZERO(&socket_fds);
+			FD_SET(udp_socket,&socket_fds);
 
-			/* check to see which socket talked */
-			if (FD_ISSET(udp_socket, &socket_fds)) {
-				return_code = read(udp_socket, socket_reply, BUFSIZE-1);
-			} else {
-				return_code = -10;
-			}
+			numfds = udp_socket + 1;
 
-			/* record end time */
-			gettimeofday(&now, NULL);
-			end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
-			/* caculate total time */
-			total_time = end_time - begin_time;
-
-			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE-1, "DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000));
-				cacti_log(logmessage);
-			}
-
-			if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-				if ((total_time * 1000) <= set.ping_timeout) {
-					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Host is Alive");
-					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", (total_time*1000));
+			while (1) {
+				if (retry_count >= set.ping_retries) {
+					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Ping timed out");
+					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 					close(udp_socket);
-					return HOST_UP;
+					return HOST_DOWN;
 				}
-			}
 
-			retry_count++;
+				/* record start time */
+				gettimeofday(&now, NULL);
+				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+				/* send packet to destination */
+				send(udp_socket, request, request_len, 0);
+
+				/* wait for a response on the socket */
+				select(numfds, &socket_fds, NULL, NULL, &timeout);
+
+				/* check to see which socket talked */
+				if (FD_ISSET(udp_socket, &socket_fds)) {
+					return_code = read(udp_socket, socket_reply, BUFSIZE-1);
+				} else {
+					return_code = -10;
+				}
+
+				/* record end time */
+				gettimeofday(&now, NULL);
+				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+				/* caculate total time */
+				total_time = end_time - begin_time;
+
+				if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+					snprintf(logmessage, LOGSIZE-1, "DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000));
+					cacti_log(logmessage);
+				}
+
+				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
+					if ((total_time * 1000) <= set.ping_timeout) {
+						snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Host is Alive");
+						snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", (total_time*1000));
+						close(udp_socket);
+						return HOST_UP;
+					}
+				}
+
+				retry_count++;
+			}
+		}else{
+			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination hostname invalid");
+			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+			if (udp_socket) close(udp_socket);
+			return HOST_DOWN;
 		}
 	} else {
-		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination address not specified");
+		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+		if (udp_socket) close(udp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -501,7 +517,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		/* determine if to send an alert and update remainder of statistics */
 		if (host->status == HOST_UP) {
 			/* increment the event failure count */
-			host->status_event_count = host->status_event_count + 1;
+			host->status_event_count++;
 
 			/* if it's time to issue an error message, indicate so */
 			if (host->status_event_count >= set.ping_failure_count) {
@@ -531,7 +547,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			host->status = HOST_DOWN;
 			host->status_event_count = 0;
 		} else {
-			host->status_event_count = host->status_event_count + 1;
+			host->status_event_count++;
 		}
 	/* host is up!! */
 	} else {
@@ -579,7 +595,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				host->status = HOST_RECOVERING;
 				host->status_event_count = 1;
 			} else {
-				host->status_event_count = host->status_event_count + 1;
+				host->status_event_count++;
 			}
 
 			/* if it's time to issue a recovery message, indicate so */
