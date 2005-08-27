@@ -143,7 +143,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		poll_result = strdup("0.00");
 	}
 
-	if ((strlen(poll_result) == 0) || (strstr(poll_result,"ERROR"))) {
+	if ((strlen(poll_result) == 0) || (strcmp(poll_result, "U") == 0)) {
 		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
 		free(poll_result);
 		return HOST_DOWN;
@@ -229,7 +229,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
 
 	if (!(packet = malloc(packet_len))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: ping.c ping_icmp!\n");
 		exit_cactid();
 	}
 
@@ -635,7 +635,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
 			} else if (availability_method == AVAIL_SNMP) {
-				if (host->snmp_community == "") {
+				if (strlen(host->snmp_community) == 0) {
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: Device does not require SNMP\n", host->id);
 					cacti_log(logmessage);
 				}else{

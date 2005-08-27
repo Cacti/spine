@@ -85,9 +85,12 @@ int db_connect(char *database, MYSQL *mysql) {
 	if ((hostname = strdup(set.dbhost)) == NULL) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: malloc(): strdup() failed\n");
 		cacti_log(logmessage);
-		return FALSE;
+		exit_cactid();
 	}
-	if ((socket = strstr(hostname,":"))) *socket++ = 0x0;
+
+	if ((socket = strstr(hostname,":"))) {
+		*socket++ = 0x0;
+	}
 
 	/* initialalize my variables */
 	tries = 10;

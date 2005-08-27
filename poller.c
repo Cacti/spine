@@ -116,12 +116,12 @@ void poll_host(int host_id) {
 
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: poller.c host struct!\n");
 		exit_cactid();
 	}
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: poller.c ping struct!\n");
 		exit_cactid();
 	}
 
@@ -190,7 +190,7 @@ void poll_host(int host_id) {
 		/* perform a check to see if the host is alive by polling it's SysDesc
 		 * if the host down from an snmp perspective, don't poll it.
 		 * function sets the ignore_host bit */
-		if ((set.availability_method == AVAIL_SNMP) && (host->snmp_community == "")) {
+		if ((set.availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
 			update_host_status(HOST_UP, host, ping, set.availability_method);
 
 			if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
@@ -231,7 +231,7 @@ void poll_host(int host_id) {
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
 		if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
-			printf("ERROR: Fatal malloc error!\n");
+			cacti_log("ERROR: Fatal malloc error: poller.c reindex poll!\n");
 			exit_cactid();
 		}
 
@@ -263,7 +263,7 @@ void poll_host(int host_id) {
 				}
 
 				if (!(query3 = (char *)malloc(255))) {
-					printf("ERROR: Fatal malloc error!\n");
+					cacti_log("ERROR: Fatal malloc error: poller.c reindex insert!\n");
 					exit_cactid();
 				}
 
@@ -322,6 +322,7 @@ void poll_host(int host_id) {
 		}
 	}
 
+	/* calculate the number of poller items to poll this cycle */
 	if (set.poller_interval == 0) {
 		result = db_query(&mysql, query1);
 		num_rows = (int)mysql_num_rows(result);
@@ -403,7 +404,7 @@ void poll_host(int host_id) {
 					(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
 					
 					if (num_oids > 0) {
-						snmp_get_bulk(host, snmp_oids, num_oids);
+						snmp_get_multi(host, snmp_oids, num_oids);
 
 						int j;
 						for (j = 0; j < num_oids; j++) {
@@ -450,7 +451,7 @@ void poll_host(int host_id) {
 				}
 
 				if (num_oids > set.max_get_size) {
-					snmp_get_bulk(host, snmp_oids, num_oids);
+					snmp_get_multi(host, snmp_oids, num_oids);
 
 					int j;
 					for (j = 0; j < num_oids; j++) {
@@ -565,7 +566,7 @@ void poll_host(int host_id) {
 
 	/* process last bulk request if applicable */
 	if (num_oids > 0) {
-		snmp_get_bulk(host, snmp_oids, num_oids);
+		snmp_get_multi(host, snmp_oids, num_oids);
 
 		int j;
 		for (j = 0; j < num_oids; j++) {
@@ -604,7 +605,7 @@ void poll_host(int host_id) {
 	buffer = 600*rows_processed+100;
 
 	if (!(query3 = (char *)malloc(buffer))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: poller.c query3 oids!\n");
 		exit_cactid();
 	}
 
@@ -632,6 +633,8 @@ void poll_host(int host_id) {
 
 	free(query3);
 	free(poller_items);
+	free(snmp_oids);
+	free(reindex);
 	free(host);
 	free(ping);
 
@@ -660,12 +663,12 @@ int validate_result(char * result) {
 
 	/* check the easy case first */
 	if (is_numeric(result)) {
-		return(1);
+		return TRUE;
 	} else {
 		/* it must have delimiters */
 		if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
 			if (strstr(result, " ") == 0) {
-				return(1);
+				return TRUE;
 			}
 
 			if (strstr(result, " ") != 0) {
@@ -678,17 +681,16 @@ int validate_result(char * result) {
 				}
 
 				if (space_cnt+1 == delim_cnt) {
-					return(1);
+					return TRUE;
 				} else {
-					return(0);
+					return FALSE;
 				}
 			}
 		}
 	}
 	
-	return(0);
+	return FALSE;
 }
-
 
 /******************************************************************************/
 /*  exec_poll() - Poll a host by running an external program utilizing the    */
@@ -706,7 +708,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	char *result_string;
 
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: poller.c exec_poll!\n");
 		exit_cactid();
 	}
 

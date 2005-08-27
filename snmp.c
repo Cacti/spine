@@ -36,6 +36,9 @@
 #include "util.h"
 #include "snmp.h"
 
+/* do not load mibs, Cactid does not use them */
+#define DISABLE_MIB_LOADING 1
+
 #ifdef USE_NET_SNMP
  #undef PACKAGE_NAME
  #undef PACKAGE_VERSION
@@ -59,9 +62,6 @@
 #endif
 
 #define OIDSIZE(p) (sizeof(p)/sizeof(oid))
-
-/* do not load mibs, Cactid does not use them */
-#define DISABLE_MIB_LOADING 1
 
 void snmp_cactid_init() {
 	init_snmp("cactid");
@@ -182,7 +182,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char *result_string;
 	
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: snmp.c snmp_get!\n");
 		exit_cactid();
 	}
 
@@ -228,7 +228,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	return result_string;
 }
 
-void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
+void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
 	struct snmp_pdu *pdu = NULL;
 	struct snmp_pdu *response = NULL;
 	struct variable_list *vars = NULL;
@@ -293,6 +293,8 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 			response = NULL;
 			if (pdu != NULL) {
 				goto retry;
+			}else{
+				status = STAT_DESCRIP_ERROR;
 			}
 		}
 	}else {
@@ -302,7 +304,7 @@ void *snmp_get_bulk(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
-			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "SNMP ERROR");
+			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
 		}
 	}
 

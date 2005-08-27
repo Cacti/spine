@@ -150,11 +150,11 @@ int main(int argc, char *argv[]) {
 		}
 	}else{
 		if (!(conf_file = malloc(BUFSIZE))) {
-			printf("ERROR: Fatal malloc error!\n");
+			printf("ERROR: Fatal malloc error: cactid.c conf_file!\n");
 			exit_cactid();
 		}
 
-		for(i=0;i<CONFIG_PATHS;i++) {
+		for (i = 0; i < CONFIG_PATHS; i++) {
 			snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_cactid_config(conf_file, &set) >= 0) {
@@ -246,12 +246,12 @@ int main(int argc, char *argv[]) {
 	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: cactid.c threads!\n");
 		exit_cactid();
 	}
 
 	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: cactid.c host id's!\n");
 		exit_cactid();
 	}
 
@@ -294,8 +294,7 @@ int main(int argc, char *argv[]) {
 				switch (thread_status) {
 					case 0:
 						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-							snprintf(logmessage, LOGSIZE-1, "DEBUG: Valid Thread to be Created\n");
-							cacti_log(logmessage);
+							cacti_log("DEBUG: Valid Thread to be Created\n");
 						}
 
 						device_counter++;
@@ -308,20 +307,16 @@ int main(int argc, char *argv[]) {
 
 						break;
 					case EAGAIN:
-						snprintf(logmessage, LOGSIZE-1, "ERROR: The System Lacked the Resources to Create a Thread\n");
-						cacti_log(logmessage);
+						cacti_log("ERROR: The System Lacked the Resources to Create a Thread\n");
 						break;
 					case EFAULT:
-						snprintf(logmessage, LOGSIZE-1, "ERROR: The Thread or Attribute Was Invalid\n");
-						cacti_log(logmessage);
+						cacti_log("ERROR: The Thread or Attribute Was Invalid\n");
 						break;
 					case EINVAL:
-						snprintf(logmessage, LOGSIZE-1, "ERROR: The Thread Attribute is Not Initialized\n");
-						cacti_log(logmessage);
+						cacti_log("ERROR: The Thread Attribute is Not Initialized\n");
 						break;
 					default:
-						snprintf(logmessage, LOGSIZE-1, "ERROR: Unknown Thread Creation Error\n");
-						cacti_log(logmessage);
+						cacti_log("ERROR: Unknown Thread Creation Error\n");
 						break;
 				}
 				usleep(internal_thread_sleep);
@@ -331,7 +326,7 @@ int main(int argc, char *argv[]) {
 					gettimeofday(&now, NULL);
 					current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-					if ((current_time - begin_time) > poller_interval) {
+					if ((current_time - begin_time + 6) > poller_interval) {
 						cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
 						canexit = 1;
 						break;
@@ -347,22 +342,18 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EDEADLK:
-			snprintf(logmessage, LOGSIZE-1, "ERROR: Deadlock Occured\n");
-			cacti_log(logmessage);
+			cacti_log("ERROR: Deadlock Occured\n");
 			break;
 		case EBUSY:
 			break;
 		case EINVAL:
-			snprintf(logmessage, LOGSIZE-1, "ERROR: Attempt to Unlock an Uninitialized Mutex\n");
-			cacti_log(logmessage);
+			cacti_log("ERROR: Attempt to Unlock an Uninitialized Mutex\n");
 			break;
 		case EFAULT:
-			snprintf(logmessage, LOGSIZE-1, "ERROR: Attempt to Unlock an Invalid Mutex\n");
-			cacti_log(logmessage);
+			cacti_log("ERROR: Attempt to Unlock an Invalid Mutex\n");
 			break;
 		default:
-			snprintf(logmessage, LOGSIZE-1, "ERROR: Unknown Mutex Lock Error Code Returned\n");
-			cacti_log(logmessage);
+			cacti_log("ERROR: Unknown Mutex Lock Error Code Returned\n");
 			break;
 		}
 
@@ -373,7 +364,7 @@ int main(int argc, char *argv[]) {
 			gettimeofday(&now, NULL);
 			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-			if ((current_time - begin_time) > poller_interval) {
+			if ((current_time - begin_time + 6) > poller_interval) {
 				cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
 				canexit = 1;
 				break;
@@ -406,7 +397,7 @@ int main(int argc, char *argv[]) {
 			gettimeofday(&now, NULL);
 			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-			if ((current_time - begin_time) > poller_interval) {
+			if ((current_time - begin_time + 6) > poller_interval) {
 				cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
 				canexit = 1;
 				break;

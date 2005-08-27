@@ -479,8 +479,6 @@ void config_defaults(config_t * set) {
 
 	snprintf(config_paths[0], sizeof(config_paths[0])-1, CONFIG_PATH_1);
 	snprintf(config_paths[1], sizeof(config_paths[1])-1, CONFIG_PATH_2);
-
-	return;
 }
 
 /******************************************************************************/
@@ -584,9 +582,9 @@ int file_exists(char *filename) {
 	struct stat file_stat;
 
 	if (stat(filename, &file_stat)) {
-		return 0;
+		return FALSE;
 	}else{
-		return 1;
+		return TRUE;
 	}
 }
 
@@ -605,7 +603,7 @@ int is_numeric(char *string)
 	length = strlen(string);
 
 	if (!length) {
-		return 0;
+		return FALSE;
 	}
 
  	/* check for an integer */
@@ -613,29 +611,29 @@ int is_numeric(char *string)
 	local_lval = strtol(string, &end_ptr_long, conv_base);
 	if (errno!=ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
-			return 1;
+			return TRUE;
 		} else if (end_ptr_long == string &&
 				*end_ptr_long != '\0') { /* ignore partial string matches */
-			return 0;
+			return FALSE;
 		}
 	} else {
 		end_ptr_long=NULL;
 	}
 
-	errno=0;
+	errno = 0;
 	local_dval = strtod(string, &end_ptr_double);
 	if (errno != ERANGE) {
 		if (end_ptr_double == string + length) { /* floating point string */
-			return 1;
+			return TRUE;
 		}
 	} else {
 		end_ptr_double=NULL;
 	}
 
 	if (!errno) {
-		return 1;
+		return TRUE;
 	} else {
-		return 0;
+		return FALSE;
  	}
 }
 
@@ -688,7 +686,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	char *return_str;
 	
 	if (!(return_str = (char *) malloc(BUFSIZE))) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: util.c add_slashes!\n");
 		exit_cactid();
 	}
 

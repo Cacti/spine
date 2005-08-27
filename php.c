@@ -92,7 +92,7 @@ char *php_readpipe() {
 	char *result_string = (char *) malloc(BUFSIZE);
 	
 	if (!result_string) {
-		printf("ERROR: Fatal malloc error!\n");
+		cacti_log("ERROR: Fatal malloc error: php.c php_readpipe!\n");
 		exit_cactid();
 	}
 	
