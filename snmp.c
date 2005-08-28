@@ -186,6 +186,8 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		exit_cactid();
 	}
 
+	status = STAT_DESCRIP_ERROR;
+
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
@@ -252,6 +254,8 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
         namep++;
     }
 
+	status = STAT_DESCRIP_ERROR;
+
 	if (current_host->snmp_session != NULL) {
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 	    for (i = 0; i < num_oids; i++) {
@@ -267,44 +271,47 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 		}
 
 		/* liftoff, successful poll, process it!! */
-		if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
-			i = 0;
-            for (vars = response->variables; vars; vars = vars->next_variable) {
-				#ifdef USE_NET_SNMP
-				snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
-				#else
-				sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-				#endif
-				i++;
-			}
-		}else if (response->errindex != 0) {
-			/* removed errored OID and then retry */
-			snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
-			int count;
-			for (count = 1, vars = response->variables;
-                     vars && count != response->errindex;
-                     vars = vars->next_variable, count++) {
+		if (status == STAT_SUCCESS) {
+			if (response->errstat == SNMP_ERR_NOERROR) {
+				i = 0;
+    	        for (vars = response->variables; vars; vars = vars->next_variable) {
+					#ifdef USE_NET_SNMP
+					snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
+					#else
+					sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+					#endif
+					i++;
+				}
+			}else {
+				if (response->errindex != 0) {
+					/* removed errored OID and then retry */
+					snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
+					int count;
+					for (count = 1, vars = response->variables;
+            	   	     vars && count != response->errindex;
+                    	 vars = vars->next_variable, count++) {
+	                    /*EMPTY*/;
+					}
 
-                    /*EMPTY*/;
-			}
-
-			pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
-			snmp_free_pdu(response);
-			response = NULL;
-			if (pdu != NULL) {
-				goto retry;
-			}else{
-				status = STAT_DESCRIP_ERROR;
+					pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
+					snmp_free_pdu(response);
+					response = NULL;
+					if (pdu != NULL) {
+						goto retry;
+					}else{
+						status = STAT_DESCRIP_ERROR;
+					}
+				}else {
+					status = STAT_DESCRIP_ERROR;
+				}
 			}
 		}
-	}else {
-		status = STAT_DESCRIP_ERROR;
 	}
 
-	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
+	if (status != STAT_SUCCESS) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
-			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
+			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, snmp_errstring(response->errstat));
 		}
 	}
 

@@ -129,12 +129,19 @@ void poll_host(int host_id) {
 	mysql_thread_init();
 	#endif 
 
+	/* initialize query strings */
 	snprintf(query1, sizeof(query1)-1, "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where host_id=%i order by arg1", host_id);
 	snprintf(query2, sizeof(query2)-1, "select id, hostname,snmp_community,snmp_username,snmp_password,snmp_version,snmp_port,snmp_timeout,status,status_event_count,status_fail_date,status_rec_date,status_last_error,min_time,max_time,cur_time,avg_time,total_polls,failed_polls,availability from host where id=%i", host_id);
 	snprintf(query4, sizeof(query4)-1, "select data_query_id,action,op,assert_value,arg1 from poller_reindex where host_id=%i", host_id);
 	snprintf(query5, sizeof(query6)-1, "select action,hostname,snmp_community,snmp_version,snmp_username,snmp_password,rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,rrd_num,snmp_port,snmp_timeout from poller_item where (host_id=%i and rrd_next_step <=0) order by rrd_path,rrd_name", host_id);
 	snprintf(query6, sizeof(query6)-1, "update poller_item SET rrd_next_step=rrd_next_step-%i where host_id=%i", set.poller_interval, host_id);
 	snprintf(query7, sizeof(query7)-1, "update poller_item SET rrd_next_step=rrd_step-%i where (rrd_next_step < 0 and host_id=%i)", set.poller_interval, host_id);
+
+	/* initialize the ping structure variables */
+	snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+	snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "Ping not performed due to setting.");
+	snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "down");
+	snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "SNMP not performed due to setting or ping result");
 
 	db_connect(set.dbdb, &mysql);
 	
@@ -146,6 +153,13 @@ void poll_host(int host_id) {
 		if (num_rows != 1) {
 			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Unknown Host ID", host_id);
 			cacti_log(logmessage);
+
+			mysql_free_result(result);
+			#ifndef OLD_MYSQL   
+			mysql_thread_end();
+			#endif 
+			mysql_close(&mysql);
+
 			return;
 		}
 
@@ -574,7 +588,7 @@ void poll_host(int host_id) {
 			snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 			if (host->ignore_host) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 				cacti_log(logmessage);
 				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 			}else {

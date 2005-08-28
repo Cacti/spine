@@ -49,12 +49,6 @@ int ping_host(host_t *host, ping_t *ping) {
 	int ping_result;
 	int snmp_result;
 
-	/* initialize variables */
-	snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-	snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "Ping not performed due to setting.");
-	snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "down");
-	snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "SNMP not performed due to setting or ping result");
-
 	/* snmp pinging has been selected at a minimum */
 	ping_result = 0;
 	snmp_result = 0;
@@ -129,18 +123,29 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 	if (strlen(host->snmp_community) != 0) {
 		/* record start time */
-		gettimeofday(&now, NULL);
+		if (gettimeofday(&now, NULL) == -1) {
+			cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+			exit_cactid();
+		}
+
 		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 
 		/* record end time */
-		gettimeofday(&now, NULL);
+		if (gettimeofday(&now, NULL) == -1) {
+			cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+			exit_cactid();
+		}
+
 		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 	} else {
 		snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "0.00");
 		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host does not require SNMP");
-		poll_result = strdup("0.00");
+		if (!(poll_result = strdup("0.00"))) {
+			cacti_log("ERROR: Fatal malloc error: ping.c ping_snmp\n");
+			exit_cactid();
+		}
 	}
 
 	if ((strlen(poll_result) == 0) || (strcmp(poll_result, "U") == 0)) {
@@ -238,7 +243,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->code = 0;
 	icmp->un.echo.id = getpid();
 	icmp->un.echo.sequence = seq++;
-	gettimeofday((struct timeval*)(icmp+1), NULL);
+	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
+		cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+		exit_cactid();
+	}
+	
 	icmp->checksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
 	icmp->checksum = get_checksum(packet, packet_len);
@@ -270,7 +279,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				gettimeofday(&now, NULL);
+				if (gettimeofday(&now, NULL) == -1) {
+					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+					exit_cactid();
+				}
 				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 				/* send packet to destination */
@@ -289,7 +301,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				/* record end time */
-				gettimeofday(&now, NULL);
+				if (gettimeofday(&now, NULL) == -1) {
+					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+					exit_cactid();
+				}
 				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 				/* caculate total time */
@@ -312,14 +327,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 			free(packet);
-			if (icmp_socket) close(icmp_socket);
+			if (icmp_socket != -1) close(icmp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		free(packet);
-  		if (icmp_socket) close(icmp_socket);
+  		if (icmp_socket != -1) close(icmp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -411,7 +426,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				gettimeofday(&now, NULL);
+				if (gettimeofday(&now, NULL) == -1) {
+					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+					exit_cactid();
+				}
 				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 				/* send packet to destination */
@@ -428,7 +446,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}
 
 				/* record end time */
-				gettimeofday(&now, NULL);
+				if (gettimeofday(&now, NULL) == -1) {
+					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+					exit_cactid();
+				}
 				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 				/* caculate total time */
@@ -453,13 +474,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-			if (udp_socket) close(udp_socket);
+			if (udp_socket != -1) close(udp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-		if (udp_socket) close(udp_socket);
+		if (udp_socket != -1) close(udp_socket);
 		return HOST_DOWN;
 	}
 }
