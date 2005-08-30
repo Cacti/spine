@@ -201,14 +201,16 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		}
 
 		/* liftoff, successful poll, process it!! */
-		if (status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR) {
-			vars = response->variables;
+		if (status == STAT_SUCCESS) {
+			if (response->errstat == SNMP_ERR_NOERROR) {
+				vars = response->variables;
 
-			#ifdef USE_NET_SNMP
-			snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
-			#else
-			sprint_value(result_string, anOID, anOID_len, vars);
-			#endif
+				#ifdef USE_NET_SNMP
+				snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+				#else
+				sprint_value(result_string, anOID, anOID_len, vars);
+				#endif
+			}
 		}
 	}else {
 		status = STAT_DESCRIP_ERROR;
@@ -311,7 +313,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 	if (status != STAT_SUCCESS) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
-			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, snmp_errstring(response->errstat));
+			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
 		}
 	}
 

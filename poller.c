@@ -426,7 +426,7 @@ void poll_host(int host_id) {
 							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 							if (host->ignore_host) {
-								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 								cacti_log(logmessage);
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 							}else {
@@ -473,7 +473,7 @@ void poll_host(int host_id) {
 						snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 						if (host->ignore_host) {
-							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i milliseconds], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 							cacti_log(logmessage);
 							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 						}else {

@@ -79,15 +79,12 @@ int main(int argc, char *argv[]) {
 	char result_string[BUFSIZE];
 	char logmessage[LOGSIZE];
 
-	/* tell cactid that it is parent, set/initialize the process ids, initialize php script server status and set poller id */
-	set.parent_fork = CACTID_PARENT;
-	set.cactid_pid = getpid();
-	set.php_sspid = 0;
-	set.poller_id = 0;
-
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+	/* make sure exit_cactid() works correctly */
+	set.php_sspid = (pid_t)NULL;
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
@@ -95,7 +92,7 @@ int main(int argc, char *argv[]) {
 		exit_cactid();
 	}
 
-	nowstruct = localtime(&nowbin);
+	nowstruct = localtime_r(&nowbin);
 
 	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", nowstruct) == (size_t) 0) {
 		printf("ERROR: Could not get string from strftime()\n");
@@ -215,6 +212,16 @@ int main(int argc, char *argv[]) {
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing PHP Script Server\n", VERSION);
 		cacti_log(logmessage);
+	}
+
+	/* tell cactid that it is parent, set/initialize the process ids, initialize php script server status and set poller id */
+	set.parent_fork = CACTID_PARENT;
+	if ((ppid = getpid()) > 0) {
+		set.cactid_pid = ppid;
+		set.php_sspid = 0;
+		set.poller_id = 0;
+	}else {
+		cacti_log("ERROR: Problem Getting Parent Process ID\n");
 	}
 
 	/* initialize the script server */

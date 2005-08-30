@@ -539,7 +539,7 @@ void cacti_log(char *logmessage) {
 	if (time(&nowbin) == (time_t) - 1)
 		printf("ERROR: Could not get time of day from time()\n");
 
-	nowstruct = localtime(&nowbin);
+	nowstruct = localtime_r(&nowbin);
 
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", nowstruct) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
@@ -569,8 +569,8 @@ void cacti_log(char *logmessage) {
 		thread_mutex_unlock(LOCK_SYSLOG);
 	}
 
-	if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-	    snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", logmessage);
+	if (set.verbose >= POLLER_VERBOSITY_NONE) {
+		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", logmessage);
 		printf(flogmessage);
 	}
 }

@@ -91,7 +91,7 @@ AC_CHECK_FUNCS(gettimeofday strerror strtoll)
 # ****************** MySQL Checks ***********************
 
 AC_DEFUN([MYSQL_LIB_CHK],[
-	str="$1/libmysqlclient.*"
+	str="$1/libmysqlclient_r.*"
 	for j in `echo $str`; do
 		if test -r $j; then
 		MYSQL_LIB_DIR=$1
@@ -124,9 +124,9 @@ done
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="-lmysqlclient $LIBS",
+AC_CHECK_LIB(mysqlclient_r, mysql_init, LIBS="-lmysqlclient_r $LIBS",
 	AC_MSG_ERROR([MySQL libraries not found.]))
-AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
+AC_CHECK_LIB(mysqlclient_r, mysql_thread_init, [],
 	AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version]))
 
 # ****************** Net-SNMP/UCD-SNMP Checks ***********************
