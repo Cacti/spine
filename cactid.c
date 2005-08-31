@@ -61,7 +61,8 @@ int main(int argc, char *argv[]) {
 	long int EXTERNAL_THREAD_SLEEP = 100000;
 	long int internal_thread_sleep;
 	time_t nowbin;
-	const struct tm *nowstruct;
+	struct tm now_time;
+	struct tm *now_ptr;
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
@@ -87,14 +88,16 @@ int main(int argc, char *argv[]) {
 	set.php_sspid = (pid_t)NULL;
 
 	/* get time for poller_output table */
+	thread_mutex_lock(LOCK_TIME);
 	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
 		exit_cactid();
 	}
+	localtime_r(&nowbin,&now_time);
+	now_ptr = &now_time;
+	thread_mutex_unlock(LOCK_TIME);
 
-	nowstruct = localtime_r(&nowbin);
-
-	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", nowstruct) == (size_t) 0) {
+	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
 		printf("ERROR: Could not get string from strftime()\n");
 		exit_cactid();
 	}

@@ -4,6 +4,8 @@ The Cacti Group – cactid
 -bug: allow a host to have more than 1 SNMP port defined for those odd devices that have them
 -bug: corrected an issue that caused infrequent segfaults when a host refused a ping request
 -bug: increased max_threads from 30 to 100
+-bug: delayed killing php script server process by .5 seconds to allow MySQL connections to close
+-bug: place thread locks around unsafe functions to prevent possible segfaults
 -feature: implemented snmpv3 AuthNoPriv to align with Cacti 0.8.6 user interface
 -feature: improved performance of poller by the reduction of MySQL insert calls
 -feature: improved poller performance by grouping snmp get requests in a single call

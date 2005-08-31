@@ -72,7 +72,7 @@
 #define LOCK_SNMP 0
 #define LOCK_THREAD 1
 #define LOCK_MYSQL 2
-#define LOCK_RRDTOOL 3
+#define LOCK_TIME 3
 #define LOCK_PIPE 4
 #define LOCK_SYSLOG 5
 #define LOCK_PHP 6
@@ -80,7 +80,7 @@
 #define LOCK_SNMP_O 0
 #define LOCK_THREAD_O 1
 #define LOCK_MYSQL_O 2
-#define LOCK_RRDTOOL_O 3
+#define LOCK_TIME_O 3
 #define LOCK_PIPE_O 4
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6

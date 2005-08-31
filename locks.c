@@ -38,7 +38,7 @@
 pthread_mutex_t snmp_lock;
 pthread_mutex_t threads_lock;
 pthread_mutex_t mysql_lock;
-pthread_mutex_t rrdtool_lock;
+pthread_mutex_t time_lock;
 pthread_mutex_t pipe_lock;
 pthread_mutex_t syslog_lock;
 pthread_mutex_t php_lock;
@@ -46,7 +46,7 @@ pthread_mutex_t php_lock;
 pthread_once_t snmp_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t threads_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t mysql_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t rrdtool_lock_o = PTHREAD_ONCE_INIT;
+pthread_once_t time_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t pipe_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t syslog_lock_o = PTHREAD_ONCE_INIT;
 pthread_once_t php_lock_o = PTHREAD_ONCE_INIT;
@@ -63,8 +63,8 @@ static void init_mysql_lock(void) {
 	pthread_mutex_init(&mysql_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
-static void init_rrdtool_lock(void) {
-	pthread_mutex_init(&rrdtool_lock, PTHREAD_MUTEXATTR_DEFAULT);
+static void init_time_lock(void) {
+	pthread_mutex_init(&time_lock, PTHREAD_MUTEXATTR_DEFAULT);
 }
 
 static void init_pipe_lock(void) {
@@ -83,7 +83,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O), init_snmp_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O), init_thread_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_MYSQL_O), init_mysql_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_RRDTOOL_O), init_rrdtool_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_TIME_O), init_time_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O), init_pipe_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O), init_syslog_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O), init_php_lock);
@@ -102,8 +102,8 @@ pthread_mutex_t* get_lock(int lock) {
 	case LOCK_MYSQL:
 		ret_val = &mysql_lock;
 		break;
-	case LOCK_RRDTOOL:
-		ret_val = &rrdtool_lock;
+	case LOCK_TIME:
+		ret_val = &time_lock;
 		break;
 	case LOCK_PIPE:
 		ret_val = &pipe_lock;
@@ -132,8 +132,8 @@ pthread_once_t* get_attr(int locko) {
 	case LOCK_MYSQL_O:
 		ret_val = &mysql_lock_o;
 		break;
-	case LOCK_RRDTOOL_O:
-		ret_val = &rrdtool_lock_o;
+	case LOCK_TIME_O:
+		ret_val = &time_lock_o;
 		break;
 	case LOCK_PIPE_O:
 		ret_val = &pipe_lock_o;

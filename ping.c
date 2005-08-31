@@ -64,7 +64,9 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 	#endif
 
+
 	/* icmp/udp ping test */
+	thread_mutex_lock(LOCK_TIME);
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
 		if (!strstr(host->hostname, "localhost")) {
 			if (set.ping_method == PING_ICMP) {
@@ -90,6 +92,7 @@ int ping_host(host_t *host, ping_t *ping) {
 			snmp_result = HOST_DOWN;
 		}
 	}
+	thread_mutex_unlock(LOCK_TIME);
 
 	switch (set.availability_method) {
 		case AVAIL_SNMP_AND_PING:
@@ -497,18 +500,22 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	double ping_time;
  	double hundred_percent = 100.00;
 	char current_date[40];
+
 	time_t nowbin;
-	const struct tm *nowstruct;
+	struct tm now_time;
+	struct tm *now_ptr;
+
 	extern config_t set;
 
-	/* get date and format for mysql */
+	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
 		exit_cactid();
 	}
+	localtime_r(&nowbin,&now_time);
+	now_ptr = &now_time;
 
-	nowstruct = localtime_r(&nowbin);
-	strftime(current_date, sizeof(current_date), "%Y-%m-%d %H:%M", nowstruct);
+	strftime(current_date, sizeof(current_date), "%Y-%m-%d %H:%M", now_ptr);
 
 	/* host is down */
 	if (status == HOST_DOWN) {

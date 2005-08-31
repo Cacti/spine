@@ -350,7 +350,8 @@ void poll_host(int host_id) {
 	}
 
 	/* retreive each hosts polling items from poller cache and load into array */
-    poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
+	poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
+	memset(poller_items, 0, sizeof(poller_items));
 
 	i = 0;
 	while ((row = mysql_fetch_row(result))) {
@@ -387,6 +388,7 @@ void poll_host(int host_id) {
 
 	/* create an array for snmp oids */
 	snmp_oids = (snmp_oids_t *) calloc(snmp_poller_items, sizeof(snmp_oids_t));
+	memset(snmp_oids, 0, sizeof(snmp_oids));
 
 	i = 0;
 	while ((i < num_rows) && (!host->ignore_host)) {

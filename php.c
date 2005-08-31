@@ -271,6 +271,9 @@ void php_close() {
 		/* tell the script server to close */
 		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
 
+		/* wait before killing php */
+		usleep(500000);
+
 		/* end the php script server process */
 		kill(set.php_sspid, SIGKILL);
 

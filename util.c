@@ -454,7 +454,7 @@ int read_cactid_config(char *file, config_t *set) {
 				else if (!strcasecmp(p1, "DB_Database")) snprintf(set->dbdb, sizeof(set->dbdb)-1, "%s", p2);
 				else if (!strcasecmp(p1, "DB_User")) snprintf(set->dbuser, sizeof(set->dbuser)-1, "%s", p2);
 				else if (!strcasecmp(p1, "DB_Pass")) snprintf(set->dbpass, sizeof(set->dbpass)-1, "%s", p2);
-                else if (!strcasecmp(p1, "DB_Port")) set->dbport = atoi(p2);
+				else if (!strcasecmp(p1, "DB_Port")) set->dbport = atoi(p2);
 				else {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
@@ -470,7 +470,7 @@ int read_cactid_config(char *file, config_t *set) {
 /******************************************************************************/
 void config_defaults(config_t * set) {
 	set->threads = DEFAULT_THREADS;
-    set->dbport = DEFAULT_DB_PORT;
+	set->dbport = DEFAULT_DB_PORT;
 
 	snprintf(set->dbhost, sizeof(set->dbhost)-1, DEFAULT_DB_HOST);
 	snprintf(set->dbdb, sizeof(set->dbdb)-1, DEFAULT_DB_DB);
@@ -507,7 +507,9 @@ void cacti_log(char *logmessage) {
 
 	/* Variables for Time Display */
 	time_t nowbin;
-	const struct tm *nowstruct;
+	struct tm now_time;
+	struct tm *now_ptr;
+
 	char logprefix[40]; /* Formatted Log Prefix */
 	char flogmessage[LOGSIZE];	/* Formatted Log Message */
 	extern config_t set;
@@ -535,13 +537,17 @@ void cacti_log(char *logmessage) {
 		}
 	}
 
-	/* get time for logfile */
-	if (time(&nowbin) == (time_t) - 1)
+	/* get time for poller_output table */
+	thread_mutex_lock(LOCK_TIME);
+	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
+		exit_cactid();
+	}
+	localtime_r(&nowbin,&now_time);
+	now_ptr = &now_time;
+	thread_mutex_unlock(LOCK_TIME);
 
-	nowstruct = localtime_r(&nowbin);
-
-	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", nowstruct) == (size_t) 0)
+	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
 
 	strncat(flogmessage, logprefix, strlen(logprefix));
@@ -609,15 +615,14 @@ int is_numeric(char *string)
  	/* check for an integer */
 	errno = 0;
 	local_lval = strtol(string, &end_ptr_long, conv_base);
-	if (errno!=ERANGE) {
+	if (errno != ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
 			return TRUE;
-		} else if (end_ptr_long == string &&
-				*end_ptr_long != '\0') { /* ignore partial string matches */
+		} else if (end_ptr_long == string && *end_ptr_long != '\0') { /* ignore partial string matches */
 			return FALSE;
 		}
 	} else {
-		end_ptr_long=NULL;
+		end_ptr_long = NULL;
 	}
 
 	errno = 0;
@@ -627,7 +632,7 @@ int is_numeric(char *string)
 			return TRUE;
 		}
 	} else {
-		end_ptr_double=NULL;
+		end_ptr_double = NULL;
 	}
 
 	if (!errno) {
