@@ -62,6 +62,7 @@ char *php_cmd(char *php_command) {
 	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
 	write_status = write(php_pipes.php_write_fd, command, strlen(command));
+	fflush(NULL);
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
@@ -88,16 +89,13 @@ char *php_readpipe() {
 	int rescode, numfds;
 	struct timeval timeout;
 	char logmessage[LOGSIZE];
+	char *result_string;
 
-	char *result_string = (char *) malloc(BUFSIZE);
-	
-	if (!result_string) {
+	if (!(result_string = (char *)malloc(BUFSIZE))) {
 		cacti_log("ERROR: Fatal malloc error: php.c php_readpipe!\n");
 		exit_cactid();
 	}
-	
-	/* set the result_string to all zeros */
-	memset(result_string, 0, BUFSIZE);
+	memset(result_string, 0, BUFSIZE);	
 
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
@@ -269,10 +267,10 @@ void php_close() {
 
 	if (set.php_sspid) {
 		/* tell the script server to close */
-		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
+//		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
 
 		/* wait before killing php */
-		usleep(500000);
+//		usleep(500000);
 
 		/* end the php script server process */
 		kill(set.php_sspid, SIGKILL);

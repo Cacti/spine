@@ -80,7 +80,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
- 	thread_mutex_lock(LOCK_SNMP);
+ 	thread_mutex_lock(LOCK_GHBN);
 	#ifdef USE_NET_SNMP
 	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
 	/* Prevent update of the snmpapp.conf file */
@@ -96,7 +96,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
 	#endif
   	snmp_sess_init(&session);
-	thread_mutex_unlock(LOCK_SNMP);
+	thread_mutex_unlock(LOCK_GHBN);
 
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
@@ -153,9 +153,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	/* open SNMP Session */
- 	thread_mutex_lock(LOCK_SNMP);
+ 	thread_mutex_lock(LOCK_GHBN);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_SNMP);
+	thread_mutex_unlock(LOCK_GHBN);
 
 	if (!sessp) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem initializing SNMP session '%s'\n", hostname);
@@ -185,31 +185,41 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		cacti_log("ERROR: Fatal malloc error: snmp.c snmp_get!\n");
 		exit_cactid();
 	}
+	memset(result_string, 0, BUFSIZE);
 
 	status = STAT_DESCRIP_ERROR;
 
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
-		read_objid(snmp_oid, anOID, &anOID_len);
-		snmp_add_null_var(pdu, anOID, anOID_len);
 
-		if (current_host->snmp_session != NULL) {
-			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-		}else {
-			status = STAT_DESCRIP_ERROR;
+		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
+			cacti_log("ERROR: Problems parsing SNMP OID\n");
+			snprintf(result_string, BUFSIZE-1, "U");
+			return result_string;
+		}else{
+			snmp_add_null_var(pdu, anOID, anOID_len);
 		}
+
+		/* poll host */
+		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
-			if (response->errstat == SNMP_ERR_NOERROR) {
-				vars = response->variables;
+			if (response == NULL) {
+				cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get\n");
+				snprintf(result_string, BUFSIZE-1, "U");
+				return result_string;
+			}else{
+				if (response->errstat == SNMP_ERR_NOERROR) {
+					vars = response->variables;
 
-				#ifdef USE_NET_SNMP
-				snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
-				#else
-				sprint_value(result_string, anOID, anOID_len, vars);
-				#endif
+					#ifdef USE_NET_SNMP
+					snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+					#else
+					sprint_value(result_string, anOID, anOID_len, vars);
+					#endif
+				}
 			}
 		}
 	}else {
@@ -249,62 +259,74 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 	} *name, *namep;
 
 	/* load up oids */
-    namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
-    for (i = 0; i < num_oids; i++) {
-        namep->name_len = MAX_OID_LEN;
-		snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len);
-        namep++;
-    }
+	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
+	for (i = 0; i < num_oids; i++) {
+		namep->name_len = MAX_OID_LEN;
+
+		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
+			cacti_log("ERROR: Problems parsing Multi SNMP OID!\n");
+
+			/* something is wrong with one of the OID's, so return errors for everyone */
+			for (i = 0; i < num_oids; i++) {
+				snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
+			}
+			return;
+		}
+
+		namep++;
+	}
 
 	status = STAT_DESCRIP_ERROR;
 
 	if (current_host->snmp_session != NULL) {
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
-	    for (i = 0; i < num_oids; i++) {
+		for (i = 0; i < num_oids; i++) {
 			snmp_add_null_var(pdu, name[i].name, name[i].name_len);
 		}
 
 		/* execute the bulk get request */
 		retry:
-		if (current_host->snmp_session != NULL) {
-			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-		}else {
-			status = STAT_DESCRIP_ERROR;
-		}
+		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
-			if (response->errstat == SNMP_ERR_NOERROR) {
-				i = 0;
-    	        for (vars = response->variables; vars; vars = vars->next_variable) {
-					#ifdef USE_NET_SNMP
-					snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
-					#else
-					sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-					#endif
-					i++;
-				}
-			}else {
-				if (response->errindex != 0) {
-					/* removed errored OID and then retry */
-					snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
-					int count;
-					for (count = 1, vars = response->variables;
-            	   	     vars && count != response->errindex;
-                    	 vars = vars->next_variable, count++) {
-	                    /*EMPTY*/;
-					}
-
-					pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
-					snmp_free_pdu(response);
-					response = NULL;
-					if (pdu != NULL) {
-						goto retry;
-					}else{
-						status = STAT_DESCRIP_ERROR;
+			if (response == NULL) {
+				status = STAT_DESCRIP_ERROR;
+				cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n");
+			}else{
+				if (response->errstat == SNMP_ERR_NOERROR) {
+					i = 0;
+					for (vars = response->variables; vars; vars = vars->next_variable) {
+						#ifdef USE_NET_SNMP
+						snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
+						#else
+						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+						#endif
+						i++;
 					}
 				}else {
-					status = STAT_DESCRIP_ERROR;
+					if (response->errindex != 0) {
+						/* removed errored OID and then retry */
+						snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
+						int count;
+						for (count = 1, vars = response->variables;
+							vars && count != response->errindex;
+							vars = vars->next_variable, count++) {
+								/*EMPTY*/;
+						}
+
+						pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
+						snmp_free_pdu(response);
+						response = NULL;
+						if (pdu != NULL) {
+							usleep(50000);
+							goto retry;
+						}else{
+							status = STAT_DESCRIP_ERROR;
+						}
+					}else {
+						status = STAT_DESCRIP_ERROR;
+					}
 				}
 			}
 		}

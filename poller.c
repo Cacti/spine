@@ -119,11 +119,13 @@ void poll_host(int host_id) {
 		cacti_log("ERROR: Fatal malloc error: poller.c host struct!\n");
 		exit_cactid();
 	}
+	memset(host, 0, sizeof(host));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
 		cacti_log("ERROR: Fatal malloc error: poller.c ping struct!\n");
 		exit_cactid();
 	}
+	memset(ping, 0, sizeof(ping_t));
 
 	#ifndef OLD_MYSQL   
 	mysql_thread_init();
@@ -168,18 +170,38 @@ void poll_host(int host_id) {
 		/* populate host structure */
 		host->ignore_host = 0;
 		host->id = atoi(row[0]);
-		if (row[1] != NULL) snprintf(host->hostname, sizeof(host->hostname)-1, "%s", row[1]);
-		if (row[2] != NULL) snprintf(host->snmp_community, sizeof(host->snmp_community)-1, "%s", row[2]);
-		snprintf(host->snmp_username, sizeof(host->snmp_username)-1, "%s", row[3]);
-		snprintf(host->snmp_password, sizeof(host->snmp_password)-1, "%s", row[4]);
+		if (row[1] != NULL) {
+			snprintf(host->hostname, sizeof(host->hostname)-1, "%s", row[1]);
+		}else{
+			snprintf(host->hostname, sizeof(host->hostname)-1, "");
+		}
+		if (row[2] != NULL) {
+			snprintf(host->snmp_community, sizeof(host->snmp_community)-1, "%s", row[2]);
+		}else{
+			snprintf(host->snmp_community, sizeof(host->snmp_community)-1, "");
+		}
+		if (row[3] != NULL) {
+			snprintf(host->snmp_username, sizeof(host->snmp_username)-1, "%s", row[3]);
+		}else{
+			snprintf(host->snmp_username, sizeof(host->snmp_username)-1, "");
+		}
+		if (row[4] != NULL) {
+			snprintf(host->snmp_password, sizeof(host->snmp_password)-1, "%s", row[4]);
+		}else{
+			snprintf(host->snmp_password, sizeof(host->snmp_password)-1, "");
+		}
 		host->snmp_version = atoi(row[5]);
 		host->snmp_port = atoi(row[6]);
 		host->snmp_timeout = atoi(row[7]);
-		if (row[6] != NULL) host->status = atoi(row[8]);
+		host->status = atoi(row[8]);
 		host->status_event_count = atoi(row[9]);
 		snprintf(host->status_fail_date, sizeof(host->status_fail_date)-1, "%s", row[10]);
 		snprintf(host->status_rec_date, sizeof(host->status_rec_date)-1, "%s", row[11]);
-		snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "%s", row[12]);
+		if (row[12] != NULL) {
+			snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "%s", row[12]);
+		}else{
+			snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "");
+		}
 		host->min_time = atof(row[13]);
 		host->max_time = atof(row[14]);
 		host->cur_time = atof(row[15]);
@@ -190,7 +212,7 @@ void poll_host(int host_id) {
 
 		if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) || (host->snmp_version == 3)) {
 			host->snmp_session = snmp_host_init(host->id, host->hostname, host->snmp_version, host->snmp_community,
-									host->snmp_username,host->snmp_password, host->snmp_port, host->snmp_timeout);
+									host->snmp_username, host->snmp_password, host->snmp_port, host->snmp_timeout);
 		}else{
 			host->snmp_session = NULL;
 		}
@@ -248,6 +270,7 @@ void poll_host(int host_id) {
 			cacti_log("ERROR: Fatal malloc error: poller.c reindex poll!\n");
 			exit_cactid();
 		}
+		memset(reindex, 0, sizeof(reindex_t));
 
 		result = db_query(&mysql, query4);
 		num_rows = (int)mysql_num_rows(result);
@@ -276,10 +299,11 @@ void poll_host(int host_id) {
 					break;
 				}
 
-				if (!(query3 = (char *)malloc(255))) {
+				if (!(query3 = (char *)malloc(BUFSIZE))) {
 					cacti_log("ERROR: Fatal malloc error: poller.c reindex insert!\n");
 					exit_cactid();
 				}
+				memset(query3, 0, BUFSIZE);
 
 				/* assume ok if host is up and result wasn't obtained */
 				if (!strcmp(poll_result,"U")) {
@@ -351,7 +375,7 @@ void poll_host(int host_id) {
 
 	/* retreive each hosts polling items from poller cache and load into array */
 	poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
-	memset(poller_items, 0, sizeof(poller_items));
+	memset(poller_items, 0, sizeof(target_t)*num_rows);
 
 	i = 0;
 	while ((row = mysql_fetch_row(result))) {
@@ -363,11 +387,19 @@ void poll_host(int host_id) {
 		if (row[2] != NULL) {
 			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "%s", row[2]);
 		} else {
-			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "%s", "");
+			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "");
 		}
 		poller_items[i].snmp_version = atoi(row[3]);
-		if (row[4] != NULL) snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "%s", row[4]);
-		if (row[5] != NULL) snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "%s", row[5]);
+		if (row[4] != NULL) {
+			snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "%s", row[4]);
+		}else{
+			snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "");
+		}
+		if (row[5] != NULL) {
+			snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "%s", row[5]);
+		}else{
+			snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "");
+		}
 		if (row[6] != NULL) snprintf(poller_items[i].rrd_name, sizeof(poller_items[i].rrd_name)-1, "%s", row[6]);
 		if (row[7] != NULL) snprintf(poller_items[i].rrd_path, sizeof(poller_items[i].rrd_path)-1, "%s", row[7]);
 		if (row[8] != NULL) snprintf(poller_items[i].arg1, sizeof(poller_items[i].arg1)-1, "%s", row[8]);
@@ -388,7 +420,7 @@ void poll_host(int host_id) {
 
 	/* create an array for snmp oids */
 	snmp_oids = (snmp_oids_t *) calloc(snmp_poller_items, sizeof(snmp_oids_t));
-	memset(snmp_oids, 0, sizeof(snmp_oids));
+	memset(snmp_oids, 0, sizeof(snmp_oids_t)*snmp_poller_items);
 
 	i = 0;
 	while ((i < num_rows) && (!host->ignore_host)) {
@@ -428,7 +460,7 @@ void poll_host(int host_id) {
 							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 							if (host->ignore_host) {
-								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 								cacti_log(logmessage);
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 							}else {
@@ -438,7 +470,7 @@ void poll_host(int host_id) {
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
 									snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
-									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
 									cacti_log(logmessage);
 									snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 								}
@@ -475,7 +507,7 @@ void poll_host(int host_id) {
 						snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 						if (host->ignore_host) {
-							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 							cacti_log(logmessage);
 							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 						}else {
@@ -513,11 +545,10 @@ void poll_host(int host_id) {
 				break;
 			case POLLER_ACTION_SCRIPT: /* execute script file */
 				poll_result = exec_poll(host, poller_items[i].arg1);
-				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", poll_result);
 
-				free(poll_result);
 				/* remove double or single quotes from string */
-				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poller_items[i].result)));
+				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poll_result)));
+				free(poll_result);
 
 				/* detect erroneous result. can be non-numeric */
 				if (!validate_result(poller_items[i].result)) {
@@ -536,11 +567,10 @@ void poll_host(int host_id) {
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
 				if (set.php_sspid) {
 					poll_result = php_cmd(poller_items[i].arg1);
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", poll_result);
-					free(poll_result);
 
 					/* remove double or single quotes from string */
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poller_items[i].result)));
+					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poll_result)));
+					free(poll_result);
 
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
@@ -590,7 +620,7 @@ void poll_host(int host_id) {
 			snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
 
 			if (host->ignore_host) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 				cacti_log(logmessage);
 				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 			}else {
@@ -624,6 +654,7 @@ void poll_host(int host_id) {
 		cacti_log("ERROR: Fatal malloc error: poller.c query3 oids!\n");
 		exit_cactid();
 	}
+	memset(query3, 0, buffer);
 
 	snprintf(query3, buffer-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
 
@@ -647,14 +678,14 @@ void poll_host(int host_id) {
 		snmp_host_cleanup(host->snmp_session);
 	}
 
-	free(query3);
-	free(poller_items);
-	free(snmp_oids);
-	free(reindex);
-	free(host);
-	free(ping);
+	if (query3) free(query3);
+	if (poller_items) free(poller_items);
+	if (snmp_oids) free(snmp_oids);
+	if (reindex) free(reindex);
+	if (host) free(host);
+	if (ping) free(ping);
 
-	mysql_free_result(result);
+	if (result) mysql_free_result(result);
 
 	#ifndef OLD_MYSQL   
 	mysql_thread_end();
@@ -672,7 +703,7 @@ void poll_host(int host_id) {
 /*  validate_result() - Make sure that Cacti results are accurate before      */
 /*                      placing in mysql database and/or logfile.             */
 /******************************************************************************/
-int validate_result(char * result) {
+int validate_result(char *result) {
 	int space_cnt = 0;
 	int delim_cnt = 0;
 	int i;
@@ -727,8 +758,6 @@ char *exec_poll(host_t *current_host, char *command) {
 		cacti_log("ERROR: Fatal malloc error: poller.c exec_poll!\n");
 		exit_cactid();
 	}
-
-	/* initialize the result_string to all zeros */
 	memset(result_string, 0, BUFSIZE);
 
 	/* establish timeout of 25 seconds for pipe response */
@@ -786,7 +815,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		default:
 			/* get only one line of output, we will ignore the rest */
 			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
-			if (bytes_read) {
+			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
 			} else {
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);

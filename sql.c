@@ -59,16 +59,30 @@ int db_insert(MYSQL *mysql, char *query) {
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
 	int return_code;
+	int retries;
+	int error;
 	
 	thread_mutex_lock(LOCK_MYSQL);
- 	return_code = mysql_query(mysql, query);
-	if (return_code) {
-		cacti_log("MYSQL: ERROR encountered while attempting to retrieve records from query\n");
-		thread_mutex_unlock(LOCK_MYSQL);
+	retries = 0;
+	error = FALSE;
+	while (retries < 3) {
+	 	return_code = mysql_query(mysql, query);
+		if (return_code) {
+			cacti_log("MYSQL: ERROR encountered while attempting to retrieve records from query\n");
+			error = TRUE;
+		}else{
+			mysql_res = mysql_store_result(mysql);
+			error = FALSE;
+			break;
+		}
+		usleep(100000);
+		retries++;
+	}
+	thread_mutex_unlock(LOCK_MYSQL);
+
+	if (error) {
+		cacti_log("MYSQL: ERROR could not obtain results from database, exiting\n");
 		exit_cactid();
-	}else{
-		mysql_res = mysql_store_result(mysql);
-		thread_mutex_unlock(LOCK_MYSQL);
 	}
 
 	return mysql_res;
@@ -102,12 +116,13 @@ int db_connect(char *database, MYSQL *mysql) {
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
+	thread_mutex_lock(LOCK_GHBN);
 	db = mysql_init(mysql);
 	if (db == NULL) {
 		cacti_log("ERROR: MySQL unable to allocate memory and therefore can not connect\n");
 		exit_cactid();
 	}
-	
+
 	while (tries > 0){
 		tries--;
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
@@ -131,9 +146,11 @@ int db_connect(char *database, MYSQL *mysql) {
 	if (result == 1){
 		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
+		thread_mutex_unlock(LOCK_GHBN);
 		thread_mutex_unlock(LOCK_MYSQL);
 		exit_cactid();
 	}else{
+		thread_mutex_unlock(LOCK_GHBN);
 		thread_mutex_unlock(LOCK_MYSQL);
 		return 0;
 	}

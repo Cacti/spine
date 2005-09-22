@@ -53,21 +53,19 @@ int ping_host(host_t *host, ping_t *ping) {
 	ping_result = 0;
 	snmp_result = 0;
 
-	/* test for asroot */
-	#ifndef __CYGWIN__
-	if (geteuid() != 0) {
-		set.ping_method = PING_UDP;
-		printf("CACTID: WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
-		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
-		}
-	}
-	#endif
-
-
 	/* icmp/udp ping test */
-	thread_mutex_lock(LOCK_TIME);
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
+		/* test for asroot */
+		#ifndef __CYGWIN__
+		if (geteuid() != 0) {
+			set.ping_method = PING_UDP;
+			printf("CACTID: WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				cacti_log("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
+			}
+		}
+		#endif
+
 		if (!strstr(host->hostname, "localhost")) {
 			if (set.ping_method == PING_ICMP) {
 				ping_result = ping_icmp(host, ping);
@@ -92,7 +90,6 @@ int ping_host(host_t *host, ping_t *ping) {
 			snmp_result = HOST_DOWN;
 		}
 	}
-	thread_mutex_unlock(LOCK_TIME);
 
 	switch (set.availability_method) {
 		case AVAIL_SNMP_AND_PING:
@@ -123,6 +120,7 @@ int ping_host(host_t *host, ping_t *ping) {
 int ping_snmp(host_t *host, ping_t *ping) {
 	struct timeval now;
 	char *poll_result;
+	char *oid;
 	double begin_time = 0;
 	double end_time = 0;
 
@@ -135,7 +133,14 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+		if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
+			cacti_log("ERROR: malloc(): strdup() oid ping.c failed\n");
+			exit_cactid();
+		}
+
+		poll_result = snmp_get(host, oid);
+
+		free(oid);
 
 		/* record end time */
 		if (gettimeofday(&now, NULL) == -1) {
@@ -171,8 +176,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 /******************************************************************************/
 /*  init_socket() - allocate the ICMP socket.                                 */
 /******************************************************************************/
-int init_socket()
-{
+int init_socket() {
 	int icmp_socket;
 
 	/* error getting socket */
@@ -188,18 +192,31 @@ int init_socket()
 /******************************************************************************/
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
+	int i;
 	char logmessage[LOGSIZE];
 
 	name->sin_family = AF_INET;
 	name->sin_port = htons (port);
-	hostinfo = gethostbyname(hostname);
-	if (hostinfo == NULL) {
-		snprintf(logmessage, LOGSIZE-1, "WARNING: Unknown host %s\n", hostname);
-		cacti_log(logmessage);
-		return FALSE;
-	}else{
-		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-		return TRUE;
+
+	/* retry 3 times to contact host */
+	i = 0;
+	thread_mutex_lock(LOCK_GHBN);
+	while (1) {
+		hostinfo = gethostbyname(hostname);
+		if (hostinfo == NULL) {
+			snprintf(logmessage, LOGSIZE-1, "WARNING: Unknown host %s\n", hostname);
+			cacti_log(logmessage);
+			if (i > 3) {
+				thread_mutex_unlock(LOCK_GHBN);
+				return FALSE;
+			}
+			i++;
+			usleep(1000);
+		}else{
+			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+			thread_mutex_unlock(LOCK_GHBN);
+			return TRUE;
+		}
 	}
 }
 
@@ -242,6 +259,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		cacti_log("ERROR: Fatal malloc error: ping.c ping_icmp!\n");
 		exit_cactid();
 	}
+	memset(packet, 0, ICMP_HDR_SIZE + strlen(cacti_msg));
 
 	icmp = (struct icmphdr*)packet;
 	icmp->type = ICMP_ECHO;
@@ -326,7 +344,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				retry_count++;
-				usleep(50);
+				usleep(1000);
 			}
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination hostname invalid");
@@ -347,8 +365,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 /******************************************************************************/
 /*  get_checksum() - calculate 16bit checksum of a packet buffer.             */
 /******************************************************************************/
-unsigned short get_checksum(void* buf, int len)
-{
+unsigned short get_checksum(void* buf, int len) {
 	int nleft = len;
 	int sum = 0;
 	unsigned short answer;
@@ -475,6 +492,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}
 
 				retry_count++;
+				usleep(1000);
 			}
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination hostname invalid");

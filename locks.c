@@ -83,7 +83,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O), init_snmp_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O), init_thread_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_MYSQL_O), init_mysql_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_TIME_O), init_time_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O), init_time_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O), init_pipe_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O), init_syslog_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O), init_php_lock);
@@ -102,7 +102,7 @@ pthread_mutex_t* get_lock(int lock) {
 	case LOCK_MYSQL:
 		ret_val = &mysql_lock;
 		break;
-	case LOCK_TIME:
+	case LOCK_GHBN:
 		ret_val = &time_lock;
 		break;
 	case LOCK_PIPE:
@@ -132,7 +132,7 @@ pthread_once_t* get_attr(int locko) {
 	case LOCK_MYSQL_O:
 		ret_val = &mysql_lock_o;
 		break;
-	case LOCK_TIME_O:
+	case LOCK_GHBN_O:
 		ret_val = &time_lock_o;
 		break;
 	case LOCK_PIPE_O:

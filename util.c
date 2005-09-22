@@ -538,14 +538,14 @@ void cacti_log(char *logmessage) {
 	}
 
 	/* get time for poller_output table */
-	thread_mutex_lock(LOCK_TIME);
+	thread_mutex_lock(LOCK_GHBN);
 	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
 		exit_cactid();
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
-	thread_mutex_unlock(LOCK_TIME);
+	thread_mutex_unlock(LOCK_GHBN);
 
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
@@ -694,15 +694,13 @@ char *add_slashes(char *string, int arguments_2_strip) {
 		cacti_log("ERROR: Fatal malloc error: util.c add_slashes!\n");
 		exit_cactid();
 	}
+	memset(return_str, 0, BUFSIZE);
 
 	length = strlen(string);
 	space_count = 0;
 	position = 0;
 	new_position = position;
 
-	/* initialize return_str */
-	memset(return_str, 0, BUFSIZE);
-	
 	/* simply return on blank string */
 	if (!length) {
 		return return_str;

@@ -6,6 +6,8 @@ Support will not be provided for this poller at this point!
 
 Below are some random notes about installing:
 
+- to minimize the impact of MIB files for net-snmp, utilize the 
+  --disable-mib-loading configure option in net-snmp (vers 5.1 and above).
 - sometimes ./configure detects ucd-snmp when you really have net-snmp.
   I was able to remedy this by deleting my old ucd-snmp libraries in
   /usr/lib/libsnmp*

@@ -88,14 +88,12 @@ int main(int argc, char *argv[]) {
 	set.php_sspid = (pid_t)NULL;
 
 	/* get time for poller_output table */
-	thread_mutex_lock(LOCK_TIME);
 	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
 		exit_cactid();
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
-	thread_mutex_unlock(LOCK_TIME);
 
 	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
 		printf("ERROR: Could not get string from strftime()\n");
@@ -153,6 +151,7 @@ int main(int argc, char *argv[]) {
 			printf("ERROR: Fatal malloc error: cactid.c conf_file!\n");
 			exit_cactid();
 		}
+		memset(conf_file, 0, BUFSIZE);
 
 		for (i = 0; i < CONFIG_PATHS; i++) {
 			snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[i], DEFAULT_CONF_FILE);

@@ -17,7 +17,7 @@ MySQL
 
 Only the client libraries are needed for cactid so MySQL can be configured with the following option:
 
-./configure --without-server --enable-thread-safe
+./configure --without-server
 
 make
 make install
@@ -26,7 +26,7 @@ NetSNMP
 
 Use the experimental reentrant configure flag
 
-./configure --enable-reentrant
+./configure --enable-reentrant --disable-mib-loading
 
 make
 make install
