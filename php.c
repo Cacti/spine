@@ -70,6 +70,8 @@ char *php_cmd(char *php_command) {
 		php_close();
 		if (!php_init()) {
 			cacti_log("ERROR: The PHP Script Server could not be restarted, Script Server command to be ingnored for remainder of polling cycle\n");
+			result_string = strdup("U");
+			return result_string;
 		}
 	}
 
