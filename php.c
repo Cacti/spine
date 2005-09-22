@@ -164,6 +164,7 @@ int php_init() {
 	if (pipe(cacti2php_pdes) < 0) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
+		set.php_sspid = (pid_t)NULL;
 		return FALSE;
 	}
 
@@ -171,6 +172,7 @@ int php_init() {
 	if (pipe(php2cacti_pdes) < 0) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
+		set.php_sspid = (pid_t)NULL;
 		return FALSE;
 	}
 
@@ -205,6 +207,7 @@ int php_init() {
 			cacti_log(logmessage);
 			pthread_setcancelstate(cancel_state, NULL);
 
+			set.php_sspid = (pid_t)NULL;
 			return FALSE;
 			/* NOTREACHED */
 		case 0:	/* SUCCESS: I am now the child */
