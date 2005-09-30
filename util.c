@@ -88,14 +88,14 @@ int read_config_options(config_t *set) {
 
 		if (strlen(mysql_row[0]) != 0) {
 			snprintf(set->path_logfile, sizeof(set->path_logfile)-1, mysql_row[0]);
-		} else {
+		}else{
 			if (strlen(web_root) != 0) {
 				snprintf(set->path_logfile, sizeof(set->path_logfile)-1, "%s/log/cacti.log", web_root);
-			} else {
+			}else{
 				memset(set->path_logfile, 0, sizeof(set->path_logfile));
 			}
 		}
-	} else {
+	}else{
 		snprintf(set->path_logfile, sizeof(set->path_logfile)-1, "%s/log/cacti.log", web_root);
  	}
 
@@ -490,7 +490,7 @@ void exit_cactid() {
 		if (set.parent_fork == CACTID_PARENT) {
 			php_close();
 			cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
-		} else {
+		}else{
 			cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
 		}
 	}
@@ -538,14 +538,12 @@ void cacti_log(char *logmessage) {
 	}
 
 	/* get time for poller_output table */
-	thread_mutex_lock(LOCK_GHBN);
 	if (time(&nowbin) == (time_t) - 1) {
 		printf("ERROR: Could not get time of day from time()\n");
 		exit_cactid();
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
-	thread_mutex_unlock(LOCK_GHBN);
 
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0)
 		printf("ERROR: Could not get string from strftime()\n");
@@ -618,10 +616,10 @@ int is_numeric(char *string)
 	if (errno != ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
 			return TRUE;
-		} else if (end_ptr_long == string && *end_ptr_long != '\0') { /* ignore partial string matches */
+		}else if (end_ptr_long == string && *end_ptr_long != '\0') { /* ignore partial string matches */
 			return FALSE;
 		}
-	} else {
+	}else{
 		end_ptr_long = NULL;
 	}
 
@@ -631,13 +629,13 @@ int is_numeric(char *string)
 		if (end_ptr_double == string + length) { /* floating point string */
 			return TRUE;
 		}
-	} else {
+	}else{
 		end_ptr_double = NULL;
 	}
 
 	if (!errno) {
 		return TRUE;
-	} else {
+	}else{
 		return FALSE;
  	}
 }
@@ -712,15 +710,15 @@ char *add_slashes(char *string, int arguments_2_strip) {
 			/* only add slashes for first x arguments */
 			if (space_count < arguments_2_strip) {
 				return_str[new_position] = '/';
-			} else {
+			}else{
 				return_str[new_position] = string[position];
 			}
 		/* end of argument detected */
-		} else if (string[position] == ' ') {
+		}else if (string[position] == ' ') {
 			return_str[new_position] = ' ';
 			space_count++;
 		/* normal character detected */
-		} else {
+		}else{
 			return_str[new_position] = string[position];
 		}
 		new_position++;
@@ -775,9 +773,9 @@ char *strip_quotes(char *string) {
 	/* find first quote in the string, determine type */
 	if ((posptr = strchr(string, '"')) != NULL) {
 		type = '"';
-	} else if ((posptr = strchr(string, '\'')) != NULL) {
+	}else if ((posptr = strchr(string, '\'')) != NULL) {
 		type = '\'';
-	} else {
+	}else{
 		return string;
 	}
 

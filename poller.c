@@ -97,6 +97,7 @@ void poll_host(int host_id) {
 	char *poll_result = NULL;
 	char logmessage[LOGSIZE];
 	char update_sql[BUFSIZE];
+	char temp_result[BUFSIZE];
 
 	int last_snmp_version = 0;
 	int last_snmp_port = 0;
@@ -259,7 +260,7 @@ void poll_host(int host_id) {
 			host->id);
 
 		db_insert(&mysql, update_sql);
-	} else {
+	}else{
 		host->id = 0;
 		host->ignore_host = 0;
 	}
@@ -386,7 +387,7 @@ void poll_host(int host_id) {
 		if (row[1] != NULL) snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname)-1, "%s", row[1]);
 		if (row[2] != NULL) {
 			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "%s", row[2]);
-		} else {
+		}else{
 			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "");
 		}
 		poller_items[i].snmp_version = atoi(row[3]);
@@ -456,16 +457,14 @@ void poll_host(int host_id) {
 
 						int j;
 						for (j = 0; j < num_oids; j++) {
-							/* remove double or single quotes from string */
-							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
-
 							if (host->ignore_host) {
 								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 								cacti_log(logmessage);
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 							}else {
 								/* remove double or single quotes from string */
-								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_quotes(snmp_oids[j].result));
+								snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
+								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
 								
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
@@ -503,16 +502,14 @@ void poll_host(int host_id) {
 
 					int j;
 					for (j = 0; j < num_oids; j++) {
-						/* remove double or single quotes from string */
-						snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
-
 						if (host->ignore_host) {
 							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 							cacti_log(logmessage);
 							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 						}else {
 							/* remove double or single quotes from string */
-							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_quotes(snmp_oids[j].result));
+							snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
+							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
 
 							/* detect erroneous non-numeric result */
 							if (!validate_result(snmp_oids[j].result)) {
@@ -547,7 +544,9 @@ void poll_host(int host_id) {
 				poll_result = exec_poll(host, poller_items[i].arg1);
 
 				/* remove double or single quotes from string */
-				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poll_result)));
+				snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
+				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(temp_result));
+
 				free(poll_result);
 
 				/* detect erroneous result. can be non-numeric */
@@ -565,11 +564,14 @@ void poll_host(int host_id) {
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
+				thread_mutex_lock(LOCK_PHP);
 				if (set.php_sspid) {
 					poll_result = php_cmd(poller_items[i].arg1);
 
 					/* remove double or single quotes from string */
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(strip_quotes(poll_result)));
+					snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
+					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(temp_result));
+
 					free(poll_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -584,11 +586,12 @@ void poll_host(int host_id) {
 						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
 						cacti_log(logmessage);
 					}
-				} else {
+				}else{
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Could not call script server\n", host_id, poller_items[i].local_data_id);
 					cacti_log(logmessage);
 					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
 				}
+				thread_mutex_unlock(LOCK_PHP);
 
 				break;
 			default: /* unknown action, generate error */
@@ -616,16 +619,14 @@ void poll_host(int host_id) {
 
 		int j;
 		for (j = 0; j < num_oids; j++) {
-			/* remove double or single quotes from string */
-			snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(strip_quotes(snmp_oids[j].result)));
-
 			if (host->ignore_host) {
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 				cacti_log(logmessage);
 				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 			}else {
 				/* remove double or single quotes from string */
-				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_quotes(snmp_oids[j].result));
+				snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
+				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
 
 				/* detect erroneous non-numeric result */
 				if (!validate_result(snmp_oids[j].result)) {
@@ -711,7 +712,7 @@ int validate_result(char *result) {
 	/* check the easy case first */
 	if (is_numeric(result)) {
 		return TRUE;
-	} else {
+	}else{
 		/* it must have delimiters */
 		if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
 			if (strstr(result, " ") == 0) {
@@ -722,14 +723,14 @@ int validate_result(char *result) {
 				for(i=0; i<strlen(result); i++) {
 					if ((result[i] == ':') || (result[i] == '!')) {
 						delim_cnt = delim_cnt + 1;
-					} else if (result[i] == ' ') {
+					}else if (result[i] == ' ') {
 						space_cnt = space_cnt + 1;
 					}
 				}
 
 				if (space_cnt+1 == delim_cnt) {
 					return TRUE;
-				} else {
+				}else{
 					return FALSE;
 				}
 			}
@@ -817,7 +818,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			bytes_read = read(cmd_fd, result_string, BUFSIZE-1);
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
-			} else {
+			}else{
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command);
 				cacti_log(logmessage);
 				snprintf(result_string, BUFSIZE-1, "U");

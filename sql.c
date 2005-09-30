@@ -75,7 +75,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 			error = FALSE;
 			break;
 		}
-		usleep(100000);
+		usleep(1000);
 		retries++;
 	}
 	thread_mutex_unlock(LOCK_MYSQL);
@@ -107,7 +107,7 @@ int db_connect(char *database, MYSQL *mysql) {
 	}
 
 	/* initialalize my variables */
-	tries = 10;
+	tries = 20;
 	result = 0;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
@@ -115,8 +115,8 @@ int db_connect(char *database, MYSQL *mysql) {
 		cacti_log(logmessage);
 	}
 
-	thread_mutex_lock(LOCK_MYSQL);
 	thread_mutex_lock(LOCK_GHBN);
+	thread_mutex_lock(LOCK_MYSQL);
 	db = mysql_init(mysql);
 	if (db == NULL) {
 		cacti_log("ERROR: MySQL unable to allocate memory and therefore can not connect\n");
@@ -139,6 +139,7 @@ int db_connect(char *database, MYSQL *mysql) {
 				cacti_log(logmessage);
 			}
 		}
+		usleep(2000);
 	}
 
 	free(hostname);
@@ -146,12 +147,12 @@ int db_connect(char *database, MYSQL *mysql) {
 	if (result == 1){
 		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
-		thread_mutex_unlock(LOCK_GHBN);
 		thread_mutex_unlock(LOCK_MYSQL);
+		thread_mutex_unlock(LOCK_GHBN);
 		exit_cactid();
 	}else{
-		thread_mutex_unlock(LOCK_GHBN);
 		thread_mutex_unlock(LOCK_MYSQL);
+		thread_mutex_unlock(LOCK_GHBN);
 		return 0;
 	}
 }

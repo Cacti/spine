@@ -176,7 +176,7 @@ int nft_popen(const char * command, const char * type) {
 				(void)close(pdes[1]);
 				if (twoway)
 					(void)dup2(STDOUT_FILENO, STDIN_FILENO);
-			} else if (twoway && (pdes[1] != STDIN_FILENO))
+			}else if (twoway && (pdes[1] != STDIN_FILENO))
 				(void)dup2(pdes[1], STDIN_FILENO);
 		}else {
 			if (pdes[0] != STDIN_FILENO) {

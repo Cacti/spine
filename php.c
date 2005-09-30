@@ -56,30 +56,32 @@ char *php_cmd(char *php_command) {
 	char command[BUFSIZE];
 	int write_status;
 
+	/* start the script server if required */
+	if (!set.php_sspid) {
+		if (!php_init()) {
+			result_string = strdup("U");
+			cacti_log("ERROR: The PHP Script Server could not be restarted, Script Server command to be ingnored for remainder of polling cycle\n");
+			return result_string;
+		}
+	}
+
 	/* pad command with CR-LF */
 	snprintf(command, sizeof(command)-1, "%s\r\n", php_command);
 
-	thread_mutex_lock(LOCK_PHP);
 	/* send command to the script server */
 	write_status = write(php_pipes.php_write_fd, command, strlen(command));
 	fflush(NULL);
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
-		cacti_log("ERROR: PHP Script Server communications lost, attempting to close and restart\n");
+		result_string = strdup("U");
+		cacti_log("ERROR: PHP Script Server communications lost.\n");
 		php_close();
-		if (!php_init()) {
-			cacti_log("ERROR: The PHP Script Server could not be restarted, Script Server command to be ingnored for remainder of polling cycle\n");
-			result_string = strdup("U");
-			return result_string;
-		}
+	}else{
+		/* read the result from the php_command */
+		result_string = php_readpipe();
 	}
-
-	/* read the result from the php_command */
-	result_string = php_readpipe();
 	
-	thread_mutex_unlock(LOCK_PHP);
-
 	return result_string;
 }
 
@@ -87,6 +89,7 @@ char *php_cmd(char *php_command) {
 /*  php_readpipe - read a line from the PHP script server                     */
 /******************************************************************************/
 char *php_readpipe() {
+	extern errno;
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
@@ -102,14 +105,9 @@ char *php_readpipe() {
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(php_pipes.php_read_fd,&fds);
-	FD_SET(php_pipes.php_write_fd,&fds);
+	numfds = php_pipes.php_read_fd + 1;
 
-	if (php_pipes.php_read_fd > php_pipes.php_write_fd)
-		numfds = php_pipes.php_read_fd + 1;
-	else
-		numfds = php_pipes.php_write_fd + 1;
-
-	/* establish timeout of 25 seconds to have PHP script server respond */
+	/* establish timeout value for the PHP script server to respond */
 	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
 
@@ -117,19 +115,38 @@ char *php_readpipe() {
 	 * should only be the READ pipe */
 	switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 	case -1:
-		snprintf(logmessage, LOGSIZE-1, "ERROR: Fatal select() error\n");
+		switch (errno) {
+			case EBADF:
+				snprintf(logmessage, LOGSIZE-1, "ERROR: An invalid file descriptor was given in one of the sets.\n");
+				break;
+			case EINTR:
+				snprintf(logmessage, LOGSIZE-1, "ERROR: A non blocked signal was caught.\n");
+				break;
+			case EINVAL:
+				snprintf(logmessage, LOGSIZE-1, "ERROR: N is negative or the value contained within timeout is invalid.\n");
+				break;
+			case ENOMEM:
+				snprintf(logmessage, LOGSIZE-1, "ERROR: Select was unable to allocate memory for internal tables.\n");
+				break;
+			default:
+				snprintf(logmessage, LOGSIZE-1, "ERROR: Unknown fatal select() error\n");
+				break;
+		}
+
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE-1, "U");
+
+		/* kill script server because it is misbehaving */
+		php_close();
 		break;
 	case 0:
 		snprintf(logmessage, LOGSIZE-1, "WARNING: The PHP Script Server did not respond in time and will therefore be restarted\n");
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE-1, "U");
 
-		/* restart the script server because of error */
+		/* kill script server because it is misbehaving */
 		php_close();
 		php_init();
-
 		break;
 	default:
 		rescode = read(php_pipes.php_read_fd, result_string, BUFSIZE);
@@ -166,7 +183,6 @@ int php_init() {
 	if (pipe(cacti2php_pdes) < 0) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
-		set.php_sspid = (pid_t)NULL;
 		return FALSE;
 	}
 
@@ -174,7 +190,6 @@ int php_init() {
 	if (pipe(php2cacti_pdes) < 0) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Could not allocate php server pipes\n");
 		cacti_log(logmessage);
-		set.php_sspid = (pid_t)NULL;
 		return FALSE;
 	}
 
@@ -209,7 +224,6 @@ int php_init() {
 			cacti_log(logmessage);
 			pthread_setcancelstate(cancel_state, NULL);
 
-			set.php_sspid = (pid_t)NULL;
 			return FALSE;
 			/* NOTREACHED */
 		case 0:	/* SUCCESS: I am now the child */
@@ -249,14 +263,21 @@ int php_init() {
 	/* check pipe to insure startup took place */
 	result_string = php_readpipe();
 
-	if ((set.verbose >= POLLER_VERBOSITY_DEBUG) && (strstr(result_string, "Started"))) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: Confirmed PHP Script Server Running\n");
+	if (strstr(result_string, "Started")) {
+		if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
+			cacti_log("DEBUG: Confirmed PHP Script Server Running.\n");
+			cacti_log(logmessage);
+		}
+
+		free(result_string);
+		return TRUE;
+	}else{
+		snprintf(logmessage, sizeof(logmessage)-1, "ERROR: Script Server did not start properly return message was: '%s'\n", result_string);
 		cacti_log(logmessage);
+
+		free(result_string);
+		return FALSE;
 	}
-
-	free(result_string);
-
-	return TRUE;
 }
 
 /******************************************************************************/
@@ -272,10 +293,10 @@ void php_close() {
 
 	if (set.php_sspid) {
 		/* tell the script server to close */
-//		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
+		write(php_pipes.php_write_fd, "quit\r\n", sizeof("quit\r\n"));
 
 		/* wait before killing php */
-//		usleep(500000);
+		usleep(1000000);
 
 		/* end the php script server process */
 		kill(set.php_sspid, SIGKILL);
@@ -283,5 +304,7 @@ void php_close() {
 		/* close file descriptors */
 		close(php_pipes.php_write_fd);
 		close(php_pipes.php_read_fd);
+
+		set.php_sspid = 0;
 	}
 }

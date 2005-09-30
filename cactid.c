@@ -196,7 +196,7 @@ int main(int argc, char *argv[]) {
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE-1, "CACTID: Version %s starting\n", VERSION);
 		cacti_log(logmessage);
-	} else {
+	}else{
 		printf("CACTID: Version %s starting\n", VERSION);
 	}
 
@@ -293,7 +293,7 @@ int main(int argc, char *argv[]) {
 					mysql_row = mysql_fetch_row(result);
 					host_id = atoi(mysql_row[0]);
 					ids[device_counter] = host_id;
-				} else {
+				}else{
 					ids[device_counter] = 0;
 				}
 
@@ -474,7 +474,7 @@ int main(int argc, char *argv[]) {
 	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) && (argc != 1)) {
 		snprintf(logmessage, LOGSIZE-1, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		cacti_log(logmessage);
-	} else {
+	}else{
 		printf("CACTID: Execution Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 	}
 

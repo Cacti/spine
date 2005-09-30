@@ -75,7 +75,7 @@ int ping_host(host_t *host, ping_t *ping) {
 			}else if (set.ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);
 			}
-		} else {
+		}else{
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "0.000");
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "PING: Host does not require ping");
 			ping_result = HOST_UP;
@@ -149,7 +149,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		}
 
 		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-	} else {
+	}else{
 		snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "0.00");
 		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host does not require SNMP");
 		if (!(poll_result = strdup("0.00"))) {
@@ -162,7 +162,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
 		free(poll_result);
 		return HOST_DOWN;
-	} else {
+	}else{
 		if (strlen(host->snmp_community) != 0) {
 			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host responded to SNMP");
 			snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "%.5f",((end_time-begin_time)*1000));
@@ -319,7 +319,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* check to see which socket talked */
 				if (FD_ISSET(icmp_socket, &socket_fds)) {
 					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &servername, &fromlen);
-				} else {
+				}else{
 					return_code = -10;
 				}
 
@@ -353,7 +353,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			if (icmp_socket != -1) close(icmp_socket);
 			return HOST_DOWN;
 		}
-	} else {
+	}else{
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		free(packet);
@@ -463,7 +463,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* check to see which socket talked */
 				if (FD_ISSET(udp_socket, &socket_fds)) {
 					return_code = read(udp_socket, socket_reply, BUFSIZE-1);
-				} else {
+				}else{
 					return_code = -10;
 				}
 
@@ -500,7 +500,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			if (udp_socket != -1) close(udp_socket);
 			return HOST_DOWN;
 		}
-	} else {
+	}else{
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 		if (udp_socket != -1) close(udp_socket);
@@ -579,26 +579,26 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 					snprintf(host->status_fail_date, sizeof(host->status_fail_date)-1, "%s", current_date);
 				}
 			/* host is down, but not ready to issue log message */
-			} else {
+			}else{
 				/* host down for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_fail_date, sizeof(host->status_fail_date)-1, "%s", current_date);
 				}
 			}
 		/* host is recovering, put back in failed state */
-		} else if (host->status == HOST_RECOVERING) {
+		}else if (host->status == HOST_RECOVERING) {
 			host->status_event_count = 1;
 			host->status = HOST_DOWN;
 
 		/* host was unknown and now is down */
-		} else if (host->status == HOST_UNKNOWN) {
+		}else if (host->status == HOST_UNKNOWN) {
 			host->status = HOST_DOWN;
 			host->status_event_count = 0;
-		} else {
+		}else{
 			host->status_event_count++;
 		}
 	/* host is up!! */
-	} else {
+	}else{
 		/* update total polls and availability */
 		host->total_polls = host->total_polls + 1;
 		host->availability = hundred_percent * (host->total_polls - host->failed_polls) / host->total_polls;
@@ -642,7 +642,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			if (host->status == HOST_DOWN) {
 				host->status = HOST_RECOVERING;
 				host->status_event_count = 1;
-			} else {
+			}else{
 				host->status_event_count++;
 			}
 
@@ -661,13 +661,13 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				/* reset the event counter */
 				host->status_event_count = 0;
 			/* host is recovering, but not ready to issue log message */
-			} else {
+			}else{
 				/* host recovering for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_rec_date, sizeof(host->status_rec_date)-1, "%s", current_date);
 				}
 			}
-		} else {
+		}else{
 		/* host was unknown and now is up */
 			host->status = HOST_UP;
 			host->status_event_count = 0;
@@ -682,7 +682,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				cacti_log(logmessage);
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
-			} else if (availability_method == AVAIL_SNMP) {
+			}else if (availability_method == AVAIL_SNMP) {
 				if (strlen(host->snmp_community) == 0) {
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: Device does not require SNMP\n", host->id);
 					cacti_log(logmessage);
@@ -690,20 +690,20 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 					cacti_log(logmessage);
 				}
-			} else {
+			}else{
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING: Result %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 			}
-		} else {
+		}else{
 			if (availability_method == AVAIL_SNMP_AND_PING) {
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
-			} else if (availability_method == AVAIL_SNMP) {
+			}else if (availability_method == AVAIL_SNMP) {
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				cacti_log(logmessage);
-			} else {
+			}else{
 				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
 				cacti_log(logmessage);
 			}
@@ -715,7 +715,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if (host->status == HOST_DOWN) {
 			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
 			cacti_log(logmessage);
-		} else {
+		}else{
 			snprintf(logmessage, LOGSIZE-1, "Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
 			cacti_log(logmessage);
 		}
