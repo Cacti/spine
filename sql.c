@@ -115,7 +115,6 @@ int db_connect(char *database, MYSQL *mysql) {
 		cacti_log(logmessage);
 	}
 
-	thread_mutex_lock(LOCK_GHBN);
 	thread_mutex_lock(LOCK_MYSQL);
 	db = mysql_init(mysql);
 	if (db == NULL) {
@@ -148,11 +147,9 @@ int db_connect(char *database, MYSQL *mysql) {
 		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		cacti_log(logmessage);
 		thread_mutex_unlock(LOCK_MYSQL);
-		thread_mutex_unlock(LOCK_GHBN);
 		exit_cactid();
 	}else{
 		thread_mutex_unlock(LOCK_MYSQL);
-		thread_mutex_unlock(LOCK_GHBN);
 		return 0;
 	}
 }
