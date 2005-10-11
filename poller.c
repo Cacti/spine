@@ -359,6 +359,8 @@ void poll_host(int host_id) {
 				free(poll_result);
 			}
 		}
+
+        free(reindex);
 	}
 
 	/* calculate the number of poller items to poll this cycle */
@@ -486,7 +488,7 @@ void poll_host(int host_id) {
 						num_oids = 0;
 					}
 					
-					snmp_host_cleanup(host);
+					snmp_host_cleanup(host->snmp_session);
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
 											poller_items[i].snmp_community,poller_items[i].snmp_username,
 											poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
@@ -682,10 +684,8 @@ void poll_host(int host_id) {
 	if (query3) free(query3);
 	if (poller_items) free(poller_items);
 	if (snmp_oids) free(snmp_oids);
-	if (reindex) free(reindex);
 	if (host) free(host);
 	if (ping) free(ping);
-
 	if (result) mysql_free_result(result);
 
 	#ifndef OLD_MYSQL   
