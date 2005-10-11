@@ -9,7 +9,7 @@ You need to download the UNIX sources of NetSNMP and the MySQL.  Please do not d
 the Windows versions of these source distributions.
 
 MySQL source files available @ www.mysql.com/downloads
-Net-SNMP source files available @ www.netsnmp.org/download
+Net-SNMP source files available @ www.net-snmp.org/download
 
 Build instructions
 
