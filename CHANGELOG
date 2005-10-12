@@ -1,5 +1,9 @@
 The Cacti Group – cactid
 
+0.8.6f-1
+-bug: Two memory leak fixes in poller.c
+-bug: Typo in the README-WINDOWS install file
+
 0.8.6f
 -bug: allow a host to have more than 1 SNMP port defined for those odd devices that have them
 -bug: corrected an issue that caused infrequent segfaults when a host refused a ping request
