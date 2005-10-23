@@ -4,6 +4,8 @@ The Cacti Group – cactid
 -bug: If sysUptime is queried for a host, only do it once
 -bug: Certain SNMP string responses where not being handled properly
 -bug: Increase the allowable size of the logfile entry
+-bug: Change behavior of Availability so that if SNMP and ICMP/UDP are selected, only one has to succeed
+-bug: Cleaned up implementation of Multi OID get logic
 -feature: Added support for MySQL 5.x
 -feature: Made MySQL DEBUG logic more verbose
 
