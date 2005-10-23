@@ -95,8 +95,8 @@ int ping_host(host_t *host, ping_t *ping) {
 		case AVAIL_SNMP_AND_PING:
 			if (snmp_result == HOST_UP)
 				return HOST_UP;
-			if (ping_result == HOST_DOWN)
-				return HOST_DOWN;
+			if (ping_result == HOST_UP)
+				return HOST_UP;
 			else
 				return HOST_DOWN;
 		case AVAIL_SNMP:
@@ -200,21 +200,18 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 
 	/* retry 3 times to contact host */
 	i = 0;
-	thread_mutex_lock(LOCK_GHBN);
 	while (1) {
 		hostinfo = gethostbyname(hostname);
 		if (hostinfo == NULL) {
 			snprintf(logmessage, LOGSIZE-1, "WARNING: Unknown host %s\n", hostname);
 			cacti_log(logmessage);
 			if (i > 3) {
-				thread_mutex_unlock(LOCK_GHBN);
 				return FALSE;
 			}
 			i++;
 			usleep(1000);
 		}else{
 			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-			thread_mutex_unlock(LOCK_GHBN);
 			return TRUE;
 		}
 	}
@@ -350,7 +347,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 			free(packet);
-			if (icmp_socket != -1) close(icmp_socket);
+			close(icmp_socket);
 			return HOST_DOWN;
 		}
 	}else{
@@ -423,7 +420,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Cannot connect to host");
-				if (udp_socket) close(udp_socket);
+				close(udp_socket);
 				return HOST_DOWN;
 			}
 
@@ -497,7 +494,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-			if (udp_socket != -1) close(udp_socket);
+			close(udp_socket);
 			return HOST_DOWN;
 		}
 	}else{
@@ -557,7 +554,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			}else {
 				snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "%s", ping->snmp_response);
 			}
-				break;
+			break;
 		default:
 			snprintf(host->status_last_error, sizeof(host->status_last_error)-1, "%s", ping->ping_response);
 		}

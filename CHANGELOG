@@ -1,5 +1,12 @@
 The Cacti Group – cactid
 
+0.8.6g
+-bug: If sysUptime is queried for a host, only do it once
+-bug: Certain SNMP string responses where not being handled properly
+-bug: Increase the allowable size of the logfile entry
+-feature: Added support for MySQL 5.x
+-feature: Made MySQL DEBUG logic more verbose
+
 0.8.6f-1
 -bug: Two memory leak fixes in poller.c
 -bug: Typo in the README-WINDOWS install file

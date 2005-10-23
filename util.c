@@ -759,40 +759,36 @@ char *strip_quotes(char *string) {
 	int length;
 	char *posptr, *startptr;
 	char type;
-
-	length = strlen(string);
-
-	/* simply return on blank string */
-	if (!length) {
-		return string;
-	}
-
-	/* set starting postion of string */
-	startptr = string;
+	int remove = 0;
 
 	/* find first quote in the string, determine type */
-	if ((posptr = strchr(string, '"')) != NULL) {
-		type = '"';
-	}else if ((posptr = strchr(string, '\'')) != NULL) {
-		type = '\'';
-	}else{
-		return string;
-	}
+	while (1) {
+		length = strlen(string);
 
-	posptr = strchr(string,type);
-
-	/* if the first character is a string, then we are ok */
-	if (startptr == posptr) {
-		/* remove leading quote */
-		memmove(startptr, posptr+1, strlen(string) - 1);
-		string[length] = '\0';
-
-		/* remove trailing quote */
-		posptr = strchr(string,type);
-		if (posptr != NULL) {
-			*posptr = '\0';
+		/* simply return on blank string */
+		if (!length) {
+			return string;
 		}
- 	}
+
+		/* set starting postion of string */
+		startptr = string;
+
+		/* search for quote characters and remove */
+		if (string[0] == '"') {
+			type = '"';
+			memmove(startptr, startptr+1, strlen(string) - 1);
+		}else if (string[0] == '\'') {
+			type = '\'';
+			memmove(startptr, startptr+1, strlen(string) - 1);
+		}else if (string[0] == '\\') {
+			type = '\\';
+			memmove(startptr, startptr+1, strlen(string) - 1);
+		}else{
+			break;
+		}
+
+		string[length-1] = '\0';
+	}
 
 	return string;
 }

@@ -86,6 +86,7 @@ void poll_host(int host_id) {
 	char query6[BUFSIZE];
 	char query7[BUFSIZE];
 	char errstr[BUFSIZE];
+	char *sysUptime;
 	int num_rows;
 	int assert_fail = 0;
 	int spike_kill = 0;
@@ -127,6 +128,18 @@ void poll_host(int host_id) {
 		exit_cactid();
 	}
 	memset(ping, 0, sizeof(ping_t));
+
+	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
+		cacti_log("ERROR: Fatal malloc error: poller.c reindex poll!\n");
+		exit_cactid();
+	}
+	memset(reindex, 0, sizeof(reindex_t));
+
+	if (!(sysUptime = (char *) malloc(BUFSIZE))) {
+		cacti_log("ERROR: Fatal malloc error: poller.c sysUptime\n");
+		exit_cactid();
+	}
+	memset(sysUptime, 0, BUFSIZE);
 
 	#ifndef OLD_MYSQL   
 	mysql_thread_init();
@@ -244,7 +257,7 @@ void poll_host(int host_id) {
 		}
 
 		/* update host table */
-		snprintf(update_sql, sizeof(update_sql)-1, "update host set status='%i',status_event_count='%i', status_fail_date='%s',status_rec_date='%s',status_last_error='%s',min_time='%f',max_time='%f',cur_time='%f',avg_time='%f',total_polls='%i',failed_polls='%i',availability='%.4f' where id='%i'\n",
+		snprintf(update_sql, sizeof(update_sql)-1, "update host set status='%i',status_event_count='%i', status_fail_date='%s',status_rec_date='%s',status_last_error='%s',min_time='%f',max_time='%f',cur_time='%f',avg_time='%f',total_polls='%i',failed_polls='%i',availability='%.4f' where id='%i'",
 			host->status,
 			host->status_event_count,
 			host->status_fail_date,
@@ -267,12 +280,6 @@ void poll_host(int host_id) {
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
-			cacti_log("ERROR: Fatal malloc error: poller.c reindex poll!\n");
-			exit_cactid();
-		}
-		memset(reindex, 0, sizeof(reindex_t));
-
 		result = db_query(&mysql, query4);
 		num_rows = (int)mysql_num_rows(result);
 
@@ -293,7 +300,23 @@ void poll_host(int host_id) {
 
 				switch(reindex->action) {
 				case POLLER_ACTION_SNMP: /* snmp */
-					poll_result = snmp_get(host, reindex->arg1);
+					/* check to see if you are checking uptime */
+					if (strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") != 0) {
+						if (strlen(sysUptime) > 0) {
+							if (!(poll_result = (char *) malloc(BUFSIZE))) {
+								cacti_log("ERROR: Fatal malloc error: poller.c poll_result\n");
+								exit_cactid();
+							}
+							memset(poll_result, 0, BUFSIZE);
+
+							snprintf(poll_result, BUFSIZE-1, "%s", sysUptime);
+						}else{
+							poll_result = snmp_get(host, reindex->arg1);
+							snprintf(sysUptime, BUFSIZE-1, "%s", poll_result);
+						}
+					}else{
+						poll_result = snmp_get(host, reindex->arg1);
+					}
 					break;
 				case POLLER_ACTION_SCRIPT: /* script (popen) */
 					poll_result = exec_poll(host, reindex->arg1);
@@ -359,8 +382,6 @@ void poll_host(int host_id) {
 				free(poll_result);
 			}
 		}
-
-        free(reindex);
 	}
 
 	/* calculate the number of poller items to poll this cycle */
@@ -566,9 +587,10 @@ void poll_host(int host_id) {
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-				thread_mutex_lock(LOCK_PHP);
 				if (set.php_sspid) {
+					thread_mutex_lock(LOCK_PHP);
 					poll_result = php_cmd(poller_items[i].arg1);
+					thread_mutex_unlock(LOCK_PHP);
 
 					/* remove double or single quotes from string */
 					snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
@@ -593,7 +615,6 @@ void poll_host(int host_id) {
 					cacti_log(logmessage);
 					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
 				}
-				thread_mutex_unlock(LOCK_PHP);
 
 				break;
 			default: /* unknown action, generate error */
@@ -681,12 +702,14 @@ void poll_host(int host_id) {
 		snmp_host_cleanup(host->snmp_session);
 	}
 
-	if (query3) free(query3);
-	if (poller_items) free(poller_items);
-	if (snmp_oids) free(snmp_oids);
-	if (host) free(host);
-	if (ping) free(ping);
-	if (result) mysql_free_result(result);
+	free(query3);
+	free(poller_items);
+	free(snmp_oids);
+	free(host);
+	free(reindex);
+	free(sysUptime);
+	free(ping);
+	mysql_free_result(result);
 
 	#ifndef OLD_MYSQL   
 	mysql_thread_end();
@@ -736,7 +759,7 @@ int validate_result(char *result) {
 			}
 		}
 	}
-	
+
 	return FALSE;
 }
 

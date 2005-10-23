@@ -45,10 +45,10 @@
  #undef PACKAGE_BUGREPORT
  #undef PACKAGE_STRING
  #undef PACKAGE_TARNAME
- #include <net-snmp-config.h>
- #include <net-snmp-includes.h>
- #include <config_api.h>
- #include <mib_api.h>
+ #include <net-snmp/net-snmp-config.h>
+ #include <net-snmp/net-snmp-includes.h>
+ #include <net-snmp/config_api.h>
+ #include <net-snmp/mib_api.h>
 #else
  #include <ucd-snmp/ucd-snmp-config.h>
  #include <ucd-snmp/ucd-snmp-includes.h>
@@ -80,7 +80,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
- 	thread_mutex_lock(LOCK_GHBN);
+ 	thread_mutex_lock(LOCK_SNMP);
 	#ifdef USE_NET_SNMP
 	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
 	/* Prevent update of the snmpapp.conf file */
@@ -96,7 +96,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
 	#endif
   	snmp_sess_init(&session);
-	thread_mutex_unlock(LOCK_GHBN);
+	thread_mutex_unlock(LOCK_SNMP);
 
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
@@ -153,9 +153,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	/* open SNMP Session */
- 	thread_mutex_lock(LOCK_GHBN);
+ 	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_GHBN);
+	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem initializing SNMP session '%s'\n", hostname);
@@ -222,6 +222,8 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 				}
 			}
 		}
+
+		snmp_free_pdu(response);
 	}else {
 		status = STAT_DESCRIP_ERROR;
 	}
@@ -231,12 +233,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		snprintf(result_string, BUFSIZE-1, "U");
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
 		snprintf(result_string, BUFSIZE-1, "U");
-	}
-
-	if (current_host->snmp_session != NULL) {
-		if (response != NULL) {
-			snmp_free_pdu(response);
-		}
 	}
 
 	return result_string;
@@ -260,6 +256,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 
 	/* load up oids */
 	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
+	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	for (i = 0; i < num_oids; i++) {
 		namep->name_len = MAX_OID_LEN;
 
@@ -271,6 +268,8 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 				snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
 			}
 			return;
+		}else{
+			snmp_add_null_var(pdu, namep->name, namep->name_len);
 		}
 
 		namep++;
@@ -278,55 +277,48 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 
 	status = STAT_DESCRIP_ERROR;
 
-	if (current_host->snmp_session != NULL) {
-		pdu = snmp_pdu_create(SNMP_MSG_GET);
-		for (i = 0; i < num_oids; i++) {
-			snmp_add_null_var(pdu, name[i].name, name[i].name_len);
-		}
+	/* execute the multi-get request */
+	retry:
+	status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 
-		/* execute the bulk get request */
-		retry:
-		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-
-		/* liftoff, successful poll, process it!! */
-		if (status == STAT_SUCCESS) {
-			if (response == NULL) {
-				status = STAT_DESCRIP_ERROR;
-				cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n");
-			}else{
-				if (response->errstat == SNMP_ERR_NOERROR) {
-					i = 0;
-					for (vars = response->variables; vars; vars = vars->next_variable) {
-						#ifdef USE_NET_SNMP
-						snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
-						#else
-						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-						#endif
-						i++;
+	/* liftoff, successful poll, process it!! */
+	if (status == STAT_SUCCESS) {
+		if (response == NULL) {
+			status = STAT_DESCRIP_ERROR;
+			cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n");
+		}else{
+			if (response->errstat == SNMP_ERR_NOERROR) {
+				i = 0;
+				for (vars = response->variables; vars; vars = vars->next_variable) {
+					#ifdef USE_NET_SNMP
+					snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
+					#else
+					sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+					#endif
+					i++;
+				}
+			}else {
+				if (response->errindex != 0) {
+					/* removed errored OID and then retry */
+					snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
+					int count;
+					for (count = 1, vars = response->variables;
+						vars && count != response->errindex;
+						vars = vars->next_variable, count++) {
+							/*EMPTY*/;
 					}
-				}else {
-					if (response->errindex != 0) {
-						/* removed errored OID and then retry */
-						snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
-						int count;
-						for (count = 1, vars = response->variables;
-							vars && count != response->errindex;
-							vars = vars->next_variable, count++) {
-								/*EMPTY*/;
-						}
 
-						pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
-						snmp_free_pdu(response);
-						response = NULL;
-						if (pdu != NULL) {
-							usleep(50000);
-							goto retry;
-						}else{
-							status = STAT_DESCRIP_ERROR;
-						}
-					}else {
+					pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
+					snmp_free_pdu(response);
+					response = NULL;
+					if (pdu != NULL) {
+						usleep(50);
+						goto retry;
+					}else{
 						status = STAT_DESCRIP_ERROR;
 					}
+				}else {
+					status = STAT_DESCRIP_ERROR;
 				}
 			}
 		}
@@ -339,9 +331,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 		}
 	}
 
-	if (current_host->snmp_session != NULL) {
-		if (response != NULL) {
-			snmp_free_pdu(response);
-		}
+	if (response != NULL) {
+		snmp_free_pdu(response);
 	}
 }

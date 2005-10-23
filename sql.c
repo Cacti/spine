@@ -38,19 +38,30 @@
 
 int db_insert(MYSQL *mysql, char *query) {
 	char logmessage[LOGSIZE];
+	static int queryid = 0;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: SQLCMD: %s\n", query);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query);
 		cacti_log(logmessage);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
+
+
 	if (mysql_query(mysql, query)) {
-		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem with MySQL: %s\n", mysql_error(mysql));
+		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem with MySQL: '%s'\n", mysql_error(mysql));
 		cacti_log(logmessage);
+
+		queryid++;
 		thread_mutex_unlock(LOCK_MYSQL);
 		return FALSE;
 	}else{
+		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+			snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Insert ID '%i': OK\n", queryid);
+			cacti_log(logmessage);
+		}
+
+		queryid++;
 		thread_mutex_unlock(LOCK_MYSQL);
 		return TRUE;
 	}
@@ -58,19 +69,32 @@ int db_insert(MYSQL *mysql, char *query) {
 
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	MYSQL_RES *mysql_res;
+	char logmessage[LOGSIZE];
 	int return_code;
 	int retries;
 	int error;
+	static int queryid = 0;
 	
+	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Query ID '%i': '%s'\n", queryid, query);
+		cacti_log(logmessage);
+	}
+
 	thread_mutex_lock(LOCK_MYSQL);
 	retries = 0;
 	error = FALSE;
 	while (retries < 3) {
 	 	return_code = mysql_query(mysql, query);
 		if (return_code) {
-			cacti_log("MYSQL: ERROR encountered while attempting to retrieve records from query\n");
+			snprintf(logmessage, LOGSIZE-1, "WARNING: MySQL Query Error, retrying query '%s'\n", query);
+			cacti_log(logmessage);
 			error = TRUE;
 		}else{
+			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Query ID '%i': OK\n", queryid);
+				cacti_log(logmessage);
+			}
+
 			mysql_res = mysql_store_result(mysql);
 			error = FALSE;
 			break;
@@ -78,10 +102,12 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 		usleep(1000);
 		retries++;
 	}
+
+	queryid++;
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (error) {
-		cacti_log("MYSQL: ERROR could not obtain results from database, exiting\n");
+		cacti_log("ERROR: Fatal MySQL Query Error, exiting\n");
 		exit_cactid();
 	}
 

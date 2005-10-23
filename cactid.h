@@ -44,7 +44,7 @@
 /* general constants */
 #define MAX_THREADS 100
 #define BUFSIZE 1024
-#define LOGSIZE 1024
+#define LOGSIZE 4096
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul

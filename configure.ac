@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Cactid Poller, 0.8.6f, http://bugs.cacti.net)
+AC_INIT(Cactid Poller, 0.8.6g, http://bugs.cacti.net)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(cactid.c)
 AC_PREFIX_DEFAULT(/usr/local/cactid)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.6f)
+AM_INIT_AUTOMAKE(cactid, 0.8.6g)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
