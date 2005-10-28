@@ -286,39 +286,40 @@ int nft_pchild(int fd) {
 int
 nft_pclose(int fd)
 {
-    struct pid *cur;
-    int		pstat;
-    pid_t	pid;
+	struct pid *cur;
+	int		pstat;
+	pid_t	pid;
 
-    /* Find the appropriate file descriptor. */
-    pthread_mutex_lock(&ListMutex);
-    for (cur = PidList; cur; cur = cur->next)
-	if (cur->fd == fd)
-	    break;
-    pthread_mutex_unlock(&ListMutex);
+	/* Find the appropriate file descriptor. */
+	pthread_mutex_lock(&ListMutex);
+
+	for (cur = PidList; cur; cur = cur->next)
+	if (cur->fd == fd) break;
+
+	pthread_mutex_unlock(&ListMutex);
 	
-    if (cur == NULL) {
+	if (cur == NULL) {
 		errno = EBADF;
 		return -1;
-    }
+	}
 
-    /* The close and waitpid calls below are cancellation points.
-     * We want to ensure that the fd is closed and the PidList
-     * entry freed despite cancellation, so push a cleanup handler.
-     */
-    pthread_cleanup_push(close_cleanup, cur);
+	/* The close and waitpid calls below are cancellation points.
+	 * We want to ensure that the fd is closed and the PidList
+	 * entry freed despite cancellation, so push a cleanup handler.
+	 */
+	pthread_cleanup_push(close_cleanup, cur);
     
 	/* end the process nicely and then forcefully */
-    (void)close(fd);
+	(void)close(fd);
 
-    cur->fd = -1;		/* Prevent the fd being closed twice. */
+	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-    do { pid = waitpid(cur->pid, &pstat, WNOHANG); }
-    while (pid == -1 && errno == EINTR);
+	do { pid = waitpid(cur->pid, &pstat, WNOHANG); }
+	while (pid == -1 && errno == EINTR);
 
-    pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
+	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 
-    return (pid == -1 ? -1 : pstat);
+	return (pid == -1 ? -1 : pstat);
 }
 
 /*------------------------------------------------------------------------------
@@ -328,11 +329,11 @@ nft_pclose(int fd)
 static void
 close_cleanup(void * arg)
 {
-    struct pid * cur = arg;
-    struct pid * prev;
+	struct pid * cur = arg;
+	struct pid * prev;
 
-    /* Close the pipe fd if necessary. */
-    if (cur->fd >= 0) {
+	/* Close the pipe fd if necessary. */
+	if (cur->fd >= 0) {
 		(void)close(cur->fd);
 	}
 
