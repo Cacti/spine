@@ -141,10 +141,19 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
-	argv[0] = "sh";
-	argv[1] = "-c";
-	argv[2] = (char *)command;
-	argv[3] = NULL;
+	/* Split command line into 'dargv' */ 
+	char** dargv = NULL; 
+	int dargc = 0; 
+	char* cmd = strdup(command); 
+	char* pc; 
+	char* s = cmd; 
+	while ((pc = strtok(s, " ")) != NULL) { 
+		dargv = realloc(dargv, sizeof(char*) * (dargc + 1)); 
+		dargv[dargc++] = pc; 
+		s = NULL; 
+	} 
+	dargv = realloc(dargv, sizeof(char*) * (dargc + 1)); 
+	dargv[dargc++] = NULL;
 
 	/* Lock the list mutex prior to forking, to ensure that
 	 * the child process sees PidList in a consistent list state.
@@ -193,10 +202,13 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 
 		/* Execute the command. */
-		execve("/bin/sh", argv, environ);
+		execve(dargv[0], dargv, environ); 
 		_exit(127);
 		/* NOTREACHED */
 	}
+
+	free(dargv); 
+	free(cmd);
 
 	/* Parent. */
     if (*type == 'r') {
@@ -296,10 +308,12 @@ nft_pclose(int fd)
      */
     pthread_cleanup_push(close_cleanup, cur);
     
+	/* end the process nicely and then forcefully */
     (void)close(fd);
+
     cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-    do   { pid =  waitpid(cur->pid, &pstat, 0); }
+    do { pid = waitpid(cur->pid, &pstat, WNOHANG); }
     while (pid == -1 && errno == EINTR);
 
     pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
@@ -318,23 +332,25 @@ close_cleanup(void * arg)
     struct pid * prev;
 
     /* Close the pipe fd if necessary. */
-    if (cur->fd >= 0)
-	(void)close(cur->fd);
+    if (cur->fd >= 0) {
+		(void)close(cur->fd);
+	}
 
     /* Remove the entry from the linked list. */
     pthread_mutex_lock(&ListMutex);
 
-    if (PidList == cur)
-	PidList =  cur->next;
-    else
-    {
-	for (prev = PidList; prev; prev = prev->next)
+	if (PidList == cur) {
+		PidList =  cur->next;
+    }else{
+		for (prev = PidList; prev; prev = prev->next)
 	    if (prev->next == cur) {
-		prev->next =  cur->next;
-		break;
+			prev->next =  cur->next;
+			break;
 	    }
-	assert(prev != NULL);	/* Search should not fail */
+
+		assert(prev != NULL);	/* Search should not fail */
     }
+
     pthread_mutex_unlock(&ListMutex);
 
     free(cur);

@@ -575,7 +575,7 @@ void cacti_log(char *logmessage) {
 
 	if (set.verbose >= POLLER_VERBOSITY_NONE) {
 		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", logmessage);
-		printf(flogmessage);
+		printf("%s", flogmessage);
 	}
 }
 
