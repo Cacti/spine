@@ -6,6 +6,7 @@ The Cacti Group – cactid
 -bug: Increase the allowable size of the logfile entry
 -bug: Change behavior of Availability so that if SNMP and ICMP/UDP are selected, only one has to succeed
 -bug: Cleaned up implementation of Multi OID get logic
+-bug: Don't attempt to allocate a 0 item array when a host has no polling items
 -feature: Added support for MySQL 5.x
 -feature: Made MySQL DEBUG logic more verbose
 

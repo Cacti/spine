@@ -397,85 +397,131 @@ void poll_host(int host_id) {
 		db_query(&mysql, query7);
 	}
 
-	/* retreive each hosts polling items from poller cache and load into array */
-	poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
-	memset(poller_items, 0, sizeof(target_t)*num_rows);
+	if (num_rows > 0) {
+		/* retreive each hosts polling items from poller cache and load into array */
+		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
+		memset(poller_items, 0, sizeof(target_t)*num_rows);
 
-	i = 0;
-	while ((row = mysql_fetch_row(result))) {
-		/* initialize monitored object */
-		poller_items[i].target_id = 0;
-		poller_items[i].action = atoi(row[0]);
+		i = 0;
+		while ((row = mysql_fetch_row(result))) {
+			/* initialize monitored object */
+			poller_items[i].target_id = 0;
+			poller_items[i].action = atoi(row[0]);
 
-		if (row[1] != NULL) snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname)-1, "%s", row[1]);
-		if (row[2] != NULL) {
-			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "%s", row[2]);
-		}else{
-			snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "");
-		}
-		poller_items[i].snmp_version = atoi(row[3]);
-		if (row[4] != NULL) {
-			snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "%s", row[4]);
-		}else{
-			snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "");
-		}
-		if (row[5] != NULL) {
-			snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "%s", row[5]);
-		}else{
-			snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "");
-		}
-		if (row[6] != NULL) snprintf(poller_items[i].rrd_name, sizeof(poller_items[i].rrd_name)-1, "%s", row[6]);
-		if (row[7] != NULL) snprintf(poller_items[i].rrd_path, sizeof(poller_items[i].rrd_path)-1, "%s", row[7]);
-		if (row[8] != NULL) snprintf(poller_items[i].arg1, sizeof(poller_items[i].arg1)-1, "%s", row[8]);
-		if (row[9] != NULL) snprintf(poller_items[i].arg2, sizeof(poller_items[i].arg2)-1, "%s", row[9]);
-		if (row[10] != NULL) snprintf(poller_items[i].arg3, sizeof(poller_items[i].arg3)-1, "%s", row[10]);
-		poller_items[i].local_data_id = atoi(row[11]);
-		poller_items[i].rrd_num = atoi(row[12]);
-		poller_items[i].snmp_port = atoi(row[13]);
-		poller_items[i].snmp_timeout = atoi(row[14]);
-		snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
+			if (row[1] != NULL) snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname)-1, "%s", row[1]);
+			if (row[2] != NULL) {
+				snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "%s", row[2]);
+			}else{
+				snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community)-1, "");
+			}
+			poller_items[i].snmp_version = atoi(row[3]);
+			if (row[4] != NULL) {
+				snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "%s", row[4]);
+			}else{
+				snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username)-1, "");
+			}
+			if (row[5] != NULL) {
+				snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "%s", row[5]);
+			}else{
+				snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password)-1, "");
+			}
+			if (row[6] != NULL) snprintf(poller_items[i].rrd_name, sizeof(poller_items[i].rrd_name)-1, "%s", row[6]);
+			if (row[7] != NULL) snprintf(poller_items[i].rrd_path, sizeof(poller_items[i].rrd_path)-1, "%s", row[7]);
+			if (row[8] != NULL) snprintf(poller_items[i].arg1, sizeof(poller_items[i].arg1)-1, "%s", row[8]);
+			if (row[9] != NULL) snprintf(poller_items[i].arg2, sizeof(poller_items[i].arg2)-1, "%s", row[9]);
+			if (row[10] != NULL) snprintf(poller_items[i].arg3, sizeof(poller_items[i].arg3)-1, "%s", row[10]);
+			poller_items[i].local_data_id = atoi(row[11]);
+			poller_items[i].rrd_num = atoi(row[12]);
+			poller_items[i].snmp_port = atoi(row[13]);
+			poller_items[i].snmp_timeout = atoi(row[14]);
+			snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
 
-		if (poller_items[i].action == POLLER_ACTION_SNMP) {
-			snmp_poller_items++;
-		}
+			if (poller_items[i].action == POLLER_ACTION_SNMP) {
+				snmp_poller_items++;
+			}
 		
-		i++;
-	}
+			i++;
+		}
 
-	/* create an array for snmp oids */
-	snmp_oids = (snmp_oids_t *) calloc(snmp_poller_items, sizeof(snmp_oids_t));
-	memset(snmp_oids, 0, sizeof(snmp_oids_t)*snmp_poller_items);
+		/* create an array for snmp oids */
+		snmp_oids = (snmp_oids_t *) calloc(snmp_poller_items, sizeof(snmp_oids_t));
+		memset(snmp_oids, 0, sizeof(snmp_oids_t)*snmp_poller_items);
 
-	i = 0;
-	while ((i < num_rows) && (!host->ignore_host)) {
-		if (!host->ignore_host) {
-			switch(poller_items[i].action) {
-			case POLLER_ACTION_SNMP: /* raw SNMP poll */
-				/* initialize or reinitialize snmp as required */
-				if (host->snmp_session == NULL) {
-					last_snmp_port = poller_items[i].snmp_port;
-					last_snmp_version = poller_items[i].snmp_version;
-					snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", poller_items[i].snmp_username);
-					snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", poller_items[i].snmp_password);
+		i = 0;
+		while ((i < num_rows) && (!host->ignore_host)) {
+			if (!host->ignore_host) {
+				switch(poller_items[i].action) {
+				case POLLER_ACTION_SNMP: /* raw SNMP poll */
+					/* initialize or reinitialize snmp as required */
+					if (host->snmp_session == NULL) {
+						last_snmp_port = poller_items[i].snmp_port;
+						last_snmp_version = poller_items[i].snmp_version;
+						snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", poller_items[i].snmp_username);
+						snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", poller_items[i].snmp_password);
 					
-					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
-											poller_items[i].snmp_community,poller_items[i].snmp_username,
-											poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
-				}
+						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
+												poller_items[i].snmp_community,poller_items[i].snmp_username,
+												poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+					}
 				
-				/* catch snmp initialization issues */
-				if (host->snmp_session == NULL) {
-					host->ignore_host = 1;
-					break;
-				}
+					/* catch snmp initialization issues */
+					if (host->snmp_session == NULL) {
+						host->ignore_host = 1;
+						break;
+					}
 				
-				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
-				if ((last_snmp_port != poller_items[i].snmp_port) || 
-					(last_snmp_version != poller_items[i].snmp_version) ||
-					(strcmp(last_snmp_username, poller_items[i].snmp_username) != 0) ||
-					(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
+					/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
+					if ((last_snmp_port != poller_items[i].snmp_port) || 
+						(last_snmp_version != poller_items[i].snmp_version) ||
+						(strcmp(last_snmp_username, poller_items[i].snmp_username) != 0) ||
+						(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
 					
-					if (num_oids > 0) {
+						if (num_oids > 0) {
+							snmp_get_multi(host, snmp_oids, num_oids);
+
+							int j;
+							for (j = 0; j < num_oids; j++) {
+								if (host->ignore_host) {
+									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
+									cacti_log(logmessage);
+									snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
+								}else {
+									/* remove double or single quotes from string */
+									snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
+									snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
+								
+									/* detect erroneous non-numeric result */
+									if (!validate_result(snmp_oids[j].result)) {
+										snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
+										snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+										cacti_log(logmessage);
+										snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
+									}
+								}
+
+								snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
+							
+								if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
+									cacti_log(logmessage);
+								}
+							}
+
+							num_oids = 0;
+						}
+					
+						snmp_host_cleanup(host->snmp_session);
+						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
+												poller_items[i].snmp_community,poller_items[i].snmp_username,
+												poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+
+						last_snmp_port = poller_items[i].snmp_port;
+						last_snmp_version = poller_items[i].snmp_version;
+						snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", poller_items[i].snmp_username);
+						snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", poller_items[i].snmp_password);
+					}
+
+					if (num_oids > set.max_get_size) {
 						snmp_get_multi(host, snmp_oids, num_oids);
 
 						int j;
@@ -488,11 +534,11 @@ void poll_host(int host_id) {
 								/* remove double or single quotes from string */
 								snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
 								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
-								
+
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
 									snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
-									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
 									cacti_log(logmessage);
 									snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
 								}
@@ -507,90 +553,19 @@ void poll_host(int host_id) {
 						}
 
 						num_oids = 0;
-					}
-					
-					snmp_host_cleanup(host->snmp_session);
-					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
-											poller_items[i].snmp_community,poller_items[i].snmp_username,
-											poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
-
-					last_snmp_port = poller_items[i].snmp_port;
-					last_snmp_version = poller_items[i].snmp_version;
-					snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", poller_items[i].snmp_username);
-					snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", poller_items[i].snmp_password);
-				}
-
-				if (num_oids > set.max_get_size) {
-					snmp_get_multi(host, snmp_oids, num_oids);
-
-					int j;
-					for (j = 0; j < num_oids; j++) {
-						if (host->ignore_host) {
-							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
-							cacti_log(logmessage);
-							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
-						}else {
-							/* remove double or single quotes from string */
-							snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
-							snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
-
-							/* detect erroneous non-numeric result */
-							if (!validate_result(snmp_oids[j].result)) {
-								snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
-								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
-								cacti_log(logmessage);
-								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
-							}
-						}
-
-						snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
-							
-						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
-							cacti_log(logmessage);
-						}
-					}
-
-					num_oids = 0;
 						
-					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid)-1, "%s", poller_items[i].arg1);
-					snmp_oids[num_oids].array_position = i;
-					num_oids++;
-				}else {
-					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid)-1, "%s", poller_items[i].arg1);
-					snmp_oids[num_oids].array_position = i;
-					num_oids++;
-				}
+						snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid)-1, "%s", poller_items[i].arg1);
+						snmp_oids[num_oids].array_position = i;
+						num_oids++;
+					}else {
+						snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid)-1, "%s", poller_items[i].arg1);
+						snmp_oids[num_oids].array_position = i;
+						num_oids++;
+					}
 				
-				break;
-			case POLLER_ACTION_SCRIPT: /* execute script file */
-				poll_result = exec_poll(host, poller_items[i].arg1);
-
-				/* remove double or single quotes from string */
-				snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
-				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(temp_result));
-
-				free(poll_result);
-
-				/* detect erroneous result. can be non-numeric */
-				if (!validate_result(poller_items[i].result)) {
-					snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
-					cacti_log(logmessage);
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
-				}
-
-				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
-					cacti_log(logmessage);
-				}
-
-				break;
-			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-				if (set.php_sspid) {
-					thread_mutex_lock(LOCK_PHP);
-					poll_result = php_cmd(poller_items[i].arg1);
-					thread_mutex_unlock(LOCK_PHP);
+					break;
+				case POLLER_ACTION_SCRIPT: /* execute script file */
+					poll_result = exec_poll(host, poller_items[i].arg1);
 
 					/* remove double or single quotes from string */
 					snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
@@ -601,114 +576,143 @@ void poll_host(int host_id) {
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
-						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
+						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
 						cacti_log(logmessage);
 						snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
 					}
 
 					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
+						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
 						cacti_log(logmessage);
 					}
-				}else{
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Could not call script server\n", host_id, poller_items[i].local_data_id);
+
+					break;
+				case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
+					if (set.php_sspid) {
+						thread_mutex_lock(LOCK_PHP);
+						poll_result = php_cmd(poller_items[i].arg1);
+						thread_mutex_unlock(LOCK_PHP);
+
+						/* remove double or single quotes from string */
+						snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
+						snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(temp_result));
+
+						free(poll_result);
+
+						/* detect erroneous result. can be non-numeric */
+						if (!validate_result(poller_items[i].result)) {
+							snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
+							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
+							cacti_log(logmessage);
+							snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
+						}
+
+						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
+							cacti_log(logmessage);
+						}
+					}else{
+						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Could not call script server\n", host_id, poller_items[i].local_data_id);
+						cacti_log(logmessage);
+						snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
+					}
+
+					break;
+				default: /* unknown action, generate error */
+					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1);
 					cacti_log(logmessage);
+
+					break;
+				}
+			}
+
+			if (poller_items[i].result != NULL) {
+				/* insert a NaN in place of the actual value if the snmp agent restarts */
+				if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
 					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
 				}
-
-				break;
-			default: /* unknown action, generate error */
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1);
-				cacti_log(logmessage);
-
-				break;
 			}
+
+			i++;
+			rows_processed++;
 		}
 
-		if (poller_items[i].result != NULL) {
-			/* insert a NaN in place of the actual value if the snmp agent restarts */
-			if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
-				snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
-			}
-		}
+		/* process last bulk request if applicable */
+		if (num_oids > 0) {
+			snmp_get_multi(host, snmp_oids, num_oids);
 
-		i++;
-		rows_processed++;
-	}
-
-	/* process last bulk request if applicable */
-	if (num_oids > 0) {
-		snmp_get_multi(host, snmp_oids, num_oids);
-
-		int j;
-		for (j = 0; j < num_oids; j++) {
-			if (host->ignore_host) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
-				cacti_log(logmessage);
-				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
-			}else {
-				/* remove double or single quotes from string */
-				snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
-				snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
-
-				/* detect erroneous non-numeric result */
-				if (!validate_result(snmp_oids[j].result)) {
-					snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+			int j;
+			for (j = 0; j < num_oids; j++) {
+				if (host->ignore_host) {
+					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
 					cacti_log(logmessage);
 					snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
+				}else {
+					/* remove double or single quotes from string */
+					snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(snmp_oids[j].result));
+					snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "%s", strip_alpha(temp_result));
+
+					/* detect erroneous non-numeric result */
+					if (!validate_result(snmp_oids[j].result)) {
+						snprintf(errstr, sizeof(errstr)-1, "%s", snmp_oids[j].result);
+						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr);
+						cacti_log(logmessage);
+						snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result)-1, "U");
+					}
+				}
+
+				snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
+					
+				if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
+					cacti_log(logmessage);
 				}
 			}
-
-			snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
-					
-			if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result);
-				cacti_log(logmessage);
-			}
 		}
-	}
 	
-	/* format database insert */
-	int buffer;
-	char result_string[BUFSIZE];
-	buffer = 600*rows_processed+100;
+		/* format database insert */
+		int buffer;
+		char result_string[BUFSIZE];
+		buffer = 600*rows_processed+100;
 
-	if (!(query3 = (char *)malloc(buffer))) {
-		cacti_log("ERROR: Fatal malloc error: poller.c query3 oids!\n");
-		exit_cactid();
+		if (!(query3 = (char *)malloc(buffer))) {
+			cacti_log("ERROR: Fatal malloc error: poller.c query3 oids!\n");
+			exit_cactid();
+		}
+		memset(query3, 0, buffer);
+
+		snprintf(query3, buffer-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
+
+		i=0;
+		char delim = ' ';
+		while (i < rows_processed) {
+			snprintf(result_string, sizeof(result_string)-1, "%c(%i,'%s','%s','%s')", delim, poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
+			strncat(query3, result_string, strlen(result_string));
+			delim = ',';
+			i++;
+		}
+
+		/* only perform and insert if there is something to insert */
+		if (rows_processed > 0) {
+			/* insert records into database */
+			db_insert(&mysql, query3);
+		}
+
+		/* cleanup memory and prepare for function exit */
+		if (host_id) {
+			snmp_host_cleanup(host->snmp_session);
+		}
+
+		free(query3);
+		free(poller_items);
+		free(snmp_oids);
 	}
-	memset(query3, 0, buffer);
 
-	snprintf(query3, buffer-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
-
-	i=0;
-	char delim = ' ';
-	while (i < rows_processed) {
-		snprintf(result_string, sizeof(result_string)-1, "%c(%i,'%s','%s','%s')", delim, poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
-		strncat(query3, result_string, strlen(result_string));
-		delim = ',';
-		i++;
-	}
-
-	/* only perform and insert if there is something to insert */
-	if (rows_processed > 0) {
-		/* insert records into database */
-		db_insert(&mysql, query3);
-	}
-
-	/* cleanup memory and prepare for function exit */
-	if (host_id) {
-		snmp_host_cleanup(host->snmp_session);
-	}
-
-	free(query3);
-	free(poller_items);
-	free(snmp_oids);
 	free(host);
 	free(reindex);
 	free(sysUptime);
 	free(ping);
+
 	mysql_free_result(result);
 
 	#ifndef OLD_MYSQL   
