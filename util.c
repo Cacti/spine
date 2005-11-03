@@ -504,6 +504,7 @@ void exit_cactid() {
 /******************************************************************************/
 void cacti_log(char *logmessage) {
 	FILE *log_file = NULL;
+	FILE *fp = NULL;
 
 	/* Variables for Time Display */
 	time_t nowbin;
@@ -514,6 +515,9 @@ void cacti_log(char *logmessage) {
 	char flogmessage[LOGSIZE];	/* Formatted Log Message */
 	extern config_t set;
 	int fileopen = 0;
+
+	/* default for "console" messages to go to stdout */
+	fp = stdout;
 
 	/* log message prefix */
 	snprintf(logprefix, sizeof(logprefix)-1, "CACTID: Poller[%i] ", set.poller_id);
@@ -530,7 +534,7 @@ void cacti_log(char *logmessage) {
 				fileopen = 1;
 			}else {
 				if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-					printf("ERROR: Could not open Logfile will not be logging\n");
+					fprintf(stderr, "ERROR: Could not open Logfile will not be logging\n");
 				}
 				break;
 			}
@@ -539,14 +543,14 @@ void cacti_log(char *logmessage) {
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
-		printf("ERROR: Could not get time of day from time()\n");
+		fprintf(stderr, "ERROR: Could not get time of day from time()\n");
 		exit_cactid();
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0)
-		printf("ERROR: Could not get string from strftime()\n");
+		fprintf(stderr, "ERROR: Could not get string from strftime()\n");
 
 	strncat(flogmessage, logprefix, strlen(logprefix));
 	strncat(flogmessage, logmessage, strlen(logmessage));
@@ -574,8 +578,12 @@ void cacti_log(char *logmessage) {
 	}
 
 	if (set.verbose >= POLLER_VERBOSITY_NONE) {
+		if ((strstr(flogmessage,"ERROR")) || (strstr(flogmessage,"WARNING"))) {
+			fp = stderr;
+		}
+
 		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", logmessage);
-		printf("%s", flogmessage);
+		fprintf(fp, "%s", flogmessage);
 	}
 }
 

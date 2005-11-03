@@ -1,6 +1,7 @@
 The Cacti Group – cactid
 
 0.8.6g
+-bug#0000609: [patch] console "error" messages should go to stderr instead of stdout 
 -bug: If sysUptime is queried for a host, only do it once
 -bug: Certain SNMP string responses where not being handled properly
 -bug: Increase the allowable size of the logfile entry
