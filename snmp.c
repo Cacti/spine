@@ -36,9 +36,6 @@
 #include "util.h"
 #include "snmp.h"
 
-/* do not load mibs, Cactid does not use them */
-#define DISABLE_MIB_LOADING 1
-
 #ifdef USE_NET_SNMP
  #undef PACKAGE_NAME
  #undef PACKAGE_VERSION
@@ -46,6 +43,7 @@
  #undef PACKAGE_STRING
  #undef PACKAGE_TARNAME
  #include <net-snmp/net-snmp-config.h>
+ #include <net-snmp/utilities.h>
  #include <net-snmp/net-snmp-includes.h>
  #include <net-snmp/config_api.h>
  #include <net-snmp/mib_api.h>
@@ -86,9 +84,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	/* Prevent update of the snmpapp.conf file */
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
 	#endif
-	netsnmp_ds_set_int(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_OID_OUTPUT_FORMAT, NETSNMP_OID_OUTPUT_NUMERIC);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+	#ifdef NETSNMP_DS_LIB_DONT_PRIT_UNITS
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
+	#endif
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 	#else
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
@@ -291,7 +291,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 				i = 0;
 				for (vars = response->variables; vars; vars = vars->next_variable) {
 					#ifdef USE_NET_SNMP
-					snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
+					snprint_variable(snmp_oids[i].result, 255, vars->name, vars->name_length, vars);
 					#else
 					sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 					#endif
