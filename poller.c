@@ -810,7 +810,7 @@ char *exec_poll(host_t *current_host, char *command) {
 
 		numfds = cmd_fd + 1;
 
-		/* wait 10 seonds for pipe response */
+		/* wait x seonds for pipe response */
 		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {

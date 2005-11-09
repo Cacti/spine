@@ -87,6 +87,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	#ifdef NETSNMP_DS_LIB_DONT_PRIT_UNITS
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
 	#endif
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_NUMERIC_ENUM, 0);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
@@ -120,7 +121,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.timeout = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
-		session.community = snmp_community;
+		session.community = strdup(snmp_community);
 		session.community_len = strlen(snmp_community);
 	}else {
 	    /* set the SNMPv3 user name */
@@ -238,6 +239,24 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	return result_string;
 }
 
+void snmp_snprint_value(char *obuf, size_t buf_len, const oid * objid, size_t objidlen, struct variable_list * variable) {
+	u_char *buf = NULL;
+	size_t out_len = 0;
+
+	if (buf = (u_char *) calloc(buf_len, 1)) {
+		if (sprint_realloc_value(&buf, &buf_len, &out_len, 1,
+				objid, objidlen, variable)) {
+			snprintf(obuf, buf_len, "%s", buf);
+		}else{
+			snprintf(obuf, buf_len, "%s [TRUNCATED]", buf);
+		}
+	}else{
+		snprintf(obuf, buf_len, "U");
+	}
+
+	free(buf);
+}
+
 void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
 	struct snmp_pdu *pdu = NULL;
 	struct snmp_pdu *response = NULL;
@@ -245,9 +264,11 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 	char logmessage[LOGSIZE];
 	int status;
 	int i;
+	size_t out_len = 0;
 	int max_repetitions = 1;
 	int non_repeaters = 0;
 	int names;
+	size_t buffer_size = 255;
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
@@ -291,7 +312,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 				i = 0;
 				for (vars = response->variables; vars; vars = vars->next_variable) {
 					#ifdef USE_NET_SNMP
-					snprint_variable(snmp_oids[i].result, 255, vars->name, vars->name_length, vars);
+					snmp_snprint_value(snmp_oids[i].result, 255, vars->name, vars->name_length, vars);
 					#else
 					sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 					#endif
