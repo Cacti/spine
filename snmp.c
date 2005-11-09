@@ -282,13 +282,11 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
-			cacti_log("ERROR: Problems parsing Multi SNMP OID!\n");
+ 			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid);
+ 			cacti_log(logmessage);
 
-			/* something is wrong with one of the OID's, so return errors for everyone */
-			for (i = 0; i < num_oids; i++) {
-				snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
-			}
-			return;
+ 			/* Mark this OID as "bad" */
+ 			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
 		}else{
 			snmp_add_null_var(pdu, namep->name, namep->name_len);
 		}
@@ -309,24 +307,35 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 			cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n");
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
-				i = 0;
-				for (vars = response->variables; vars; vars = vars->next_variable) {
-					#ifdef USE_NET_SNMP
-					snmp_snprint_value(snmp_oids[i].result, 255, vars->name, vars->name_length, vars);
-					#else
-					sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-					#endif
-					i++;
+				vars = response->variables;
+				for(i = 0; i < num_oids && vars; i++) {
+					if(snmp_oids[i].result[0] != 'U') {
+						#ifdef USE_NET_SNMP
+						snmp_snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
+						#else
+						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+						#endif
+						vars = vars->next_variable;
+					}
 				}
-			}else {
+			}else{
 				if (response->errindex != 0) {
 					/* removed errored OID and then retry */
-					snprintf(snmp_oids[response->errindex].result, sizeof(snmp_oids[response->errindex].result)-1, "U");
 					int count;
+
+					/* Find our index against errindex */
+					count = 0;
+					for(i = 0; i < num_oids && count < response->errindex; i++) {
+						if(snmp_oids[i].result[0] != 'U') {
+							count++;
+						}
+					}
+					i--;
+					snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
+
 					for (count = 1, vars = response->variables;
 						vars && count != response->errindex;
 						vars = vars->next_variable, count++) {
-							/*EMPTY*/;
 					}
 
 					pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
@@ -338,7 +347,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 					}else{
 						status = STAT_DESCRIP_ERROR;
 					}
-				}else {
+				}else{
 					status = STAT_DESCRIP_ERROR;
 				}
 			}
