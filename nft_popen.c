@@ -69,6 +69,10 @@
 
 #include <nft_popen.h>
 
+#ifndef SIGKILL
+ #define SIGKILL 9
+#endif
+
 extern char **environ;
 
 /* An instance of this struct is created for each popen() fd. */
