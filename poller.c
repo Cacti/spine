@@ -92,6 +92,7 @@ void poll_host(int host_id) {
 	int spike_kill = 0;
 	int rows_processed = 0;
 	int i;
+	int j;
 	int num_oids = 0;
 	int snmp_poller_items = 0;
 
@@ -479,7 +480,6 @@ void poll_host(int host_id) {
 						if (num_oids > 0) {
 							snmp_get_multi(host, snmp_oids, num_oids);
 
-							int j;
 							for (j = 0; j < num_oids; j++) {
 								if (host->ignore_host) {
 									snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
@@ -524,7 +524,6 @@ void poll_host(int host_id) {
 					if (num_oids > set.max_get_size) {
 						snmp_get_multi(host, snmp_oids, num_oids);
 
-						int j;
 						for (j = 0; j < num_oids; j++) {
 							if (host->ignore_host) {
 								snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);
@@ -641,7 +640,6 @@ void poll_host(int host_id) {
 		if (num_oids > 0) {
 			snmp_get_multi(host, snmp_oids, num_oids);
 
-			int j;
 			for (j = 0; j < num_oids; j++) {
 				if (host->ignore_host) {
 					snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname);

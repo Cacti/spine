@@ -113,6 +113,11 @@ int nft_popen(const char * command, const char * type) {
 	int    fd, pid, twoway;
 	char   *argv[4];
 	int    cancel_state;
+	char** dargv = NULL; 
+	int    dargc = 0; 
+	char*  cmd = strdup(command); 
+	char*  pc; 
+	char*  s = cmd; 
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -142,11 +147,6 @@ int nft_popen(const char * command, const char * type) {
 	}
 
 	/* Split command line into 'dargv' */ 
-	char** dargv = NULL; 
-	int dargc = 0; 
-	char* cmd = strdup(command); 
-	char* pc; 
-	char* s = cmd; 
 	while ((pc = strtok(s, " ")) != NULL) { 
 		dargv = realloc(dargv, sizeof(char*) * (dargc + 1)); 
 		dargv[dargc++] = pc; 
