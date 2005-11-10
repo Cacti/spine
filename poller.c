@@ -87,6 +87,8 @@ void poll_host(int host_id) {
 	char query7[BUFSIZE];
 	char errstr[BUFSIZE];
 	char *sysUptime;
+	char result_string[BUFSIZE];
+
 	int num_rows;
 	int assert_fail = 0;
 	int spike_kill = 0;
@@ -95,11 +97,13 @@ void poll_host(int host_id) {
 	int j;
 	int num_oids = 0;
 	int snmp_poller_items = 0;
+	int buffer;
 
 	char *poll_result = NULL;
 	char logmessage[LOGSIZE];
 	char update_sql[BUFSIZE];
 	char temp_result[BUFSIZE];
+	char delim = ' ';
 
 	int last_snmp_version = 0;
 	int last_snmp_port = 0;
@@ -669,8 +673,6 @@ void poll_host(int host_id) {
 		}
 	
 		/* format database insert */
-		int buffer;
-		char result_string[BUFSIZE];
 		buffer = 600*rows_processed+100;
 
 		if (!(query3 = (char *)malloc(buffer))) {
@@ -681,8 +683,7 @@ void poll_host(int host_id) {
 
 		snprintf(query3, buffer-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
 
-		i=0;
-		char delim = ' ';
+		i = 0;
 		while (i < rows_processed) {
 			snprintf(result_string, sizeof(result_string)-1, "%c(%i,'%s','%s','%s')", delim, poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
 			strncat(query3, result_string, strlen(result_string));
