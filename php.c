@@ -40,6 +40,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "php.h"
 #include "common.h"
 #include "cactid.h"
@@ -93,6 +94,9 @@ char *php_readpipe() {
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
+	struct timeval now;
+	double begin_time = 0;
+	double end_time = 0;
 	char logmessage[LOGSIZE];
 	char *result_string;
 
@@ -101,6 +105,14 @@ char *php_readpipe() {
 		exit_cactid();
 	}
 	memset(result_string, 0, BUFSIZE);	
+
+	/* record start time */
+	if (gettimeofday(&now, NULL) == -1) {
+		cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+		exit_cactid();
+	}
+
+	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
@@ -113,6 +125,7 @@ char *php_readpipe() {
 
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
+	retry:
 	switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 	case -1:
 		switch (errno) {
@@ -120,7 +133,26 @@ char *php_readpipe() {
 				snprintf(logmessage, LOGSIZE-1, "ERROR: An invalid file descriptor was given in one of the sets.\n");
 				break;
 			case EINTR:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: A non blocked signal was caught.\n");
+				/* take a moment */
+				usleep(20000);
+				
+				/* record end time */
+				if (gettimeofday(&now, NULL) == -1) {
+					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+					exit_cactid();
+				}
+
+				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+
+				/* re-establish new timeout value */
+				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
+				timeout.tv_usec = rint((set.script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+				
+				if ((end_time - begin_time) < set.script_timeout) {
+					goto retry;
+				}else{
+					snprintf(logmessage, LOGSIZE-1, "WARNING: The Script Server Script Timed Out.\n");
+				}
 				break;
 			case EINVAL:
 				snprintf(logmessage, LOGSIZE-1, "ERROR: N is negative or the value contained within timeout is invalid.\n");
@@ -138,6 +170,7 @@ char *php_readpipe() {
 
 		/* kill script server because it is misbehaving */
 		php_close();
+		php_init();
 		break;
 	case 0:
 		snprintf(logmessage, LOGSIZE-1, "WARNING: The PHP Script Server did not respond in time and will therefore be restarted\n");
