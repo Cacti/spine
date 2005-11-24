@@ -166,7 +166,7 @@ int nft_popen(const char * command, const char * type) {
 
     /* Fork. */
 	switch (pid = fork()) {
-	case -1:			/* Error. */
+	case -1:		/* Error. */
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
