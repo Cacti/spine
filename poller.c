@@ -511,6 +511,8 @@ void poll_host(int host_id) {
 								}
 							}
 
+							/* clear snmp_oid's memory and reset num_snmps */
+							memset(snmp_oids, 0, sizeof(snmp_oids_t)*set.max_get_size);
 							num_oids = 0;
 						}
 					
@@ -562,6 +564,8 @@ void poll_host(int host_id) {
 							}
 						}
 
+						/* clear snmp_oid's memory and reset num_snmps */
+						memset(snmp_oids, 0, sizeof(snmp_oids_t)*set.max_get_size);
 						num_oids = 0;
 					}
 						
