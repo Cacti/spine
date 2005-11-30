@@ -80,12 +80,15 @@ int main(int argc, char *argv[]) {
 	char result_string[BUFSIZE];
 	char logmessage[LOGSIZE];
 
+	/* establish php processes and initialize space */
+	php_processes = (php_t*) calloc(10, sizeof(php_t));
+	for (i = 0; i < MAX_PHP_SERVERS; i++) {
+		php_processes[i].php_state = PHP_BUSY;
+	}
+
 	/* set start time for cacti */
 	gettimeofday(&now, NULL);
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
-	/* make sure exit_cactid() works correctly */
-	set.php_sspid = (pid_t)NULL;
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
@@ -220,7 +223,6 @@ int main(int argc, char *argv[]) {
 	set.parent_fork = CACTID_PARENT;
 	if ((ppid = getpid()) > 0) {
 		set.cactid_pid = ppid;
-		set.php_sspid = 0;
 		set.poller_id = 0;
 	}else {
 		cacti_log("ERROR: Problem Getting Parent Process ID\n");
@@ -228,12 +230,12 @@ int main(int argc, char *argv[]) {
 
 	/* initialize the script server */
 	if (set.php_required) {
-		php_init();
+		php_init(PHP_INIT);
 	}
 
 	/* log the parent and php script server process id's */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: Parent pid=%i, Script Server pid=%i\n", set.cactid_pid, set.php_sspid);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: Parent pid=%i", set.cactid_pid);
 		cacti_log(logmessage);
 	}
 
@@ -437,7 +439,7 @@ int main(int argc, char *argv[]) {
 
 	/* close the php script server */
 	if (set.php_required) {
-		php_close();
+		php_close(PHP_INIT);
 	}
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {

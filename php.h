@@ -31,6 +31,7 @@
 */
 
 char *php_cmd(char *php_command);
-char *php_readpipe();
-int php_init();
-void php_close();
+char *php_readpipe(int php_process);
+int php_init(int php_process);
+void php_close(int php_process);
+int php_get_process();

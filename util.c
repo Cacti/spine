@@ -369,9 +369,34 @@ int read_config_options(config_t *set) {
 		set->script_timeout = 25;
 	}
 
-	/* log the concurrent processes variable */
+	/* log the script timeout value */
 	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
 		snprintf(logmessage, LOGSIZE-1, "DEBUG: The script timeout is %i\n" ,set->script_timeout);
+		cacti_log(logmessage);
+	}
+
+	/* get the number of script server processes to run */
+	result = db_query(&mysql, "SELECT value FROM settings WHERE name='php_servers'");
+	num_rows = (int)mysql_num_rows(result);
+
+	if (num_rows > 0) {
+		mysql_row = mysql_fetch_row(result);
+		set->php_servers = atoi(mysql_row[0]);
+
+		if (set->php_servers > 10) {
+			set->php_servers = 10;
+		}
+		
+		if (set->php_servers <= 0) {
+			set->php_servers = 1;
+		}
+	}else{
+		set->php_servers = 2;
+	}
+
+	/* log the script timeout value */
+	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: The number of php script servers to run is %i\n" ,set->php_servers);
 		cacti_log(logmessage);
 	}
 
@@ -486,13 +511,11 @@ void config_defaults(config_t * set) {
 /*                  make sure that the php script server is shut down first.  */
 /******************************************************************************/
 void exit_cactid() {
-	if (set.php_sspid) {
-		if (set.parent_fork == CACTID_PARENT) {
-			php_close();
-			cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
-		}else{
-			cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
-		}
+	if (set.parent_fork == CACTID_PARENT) {
+		php_close(PHP_INIT);
+		cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
+	}else{
+		cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
 	}
 
 	exit(-1);

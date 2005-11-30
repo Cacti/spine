@@ -605,33 +605,25 @@ void poll_host(int host_id) {
 
 					break;
 				case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-					if (set.php_sspid) {
-						thread_mutex_lock(LOCK_PHP);
-						poll_result = php_cmd(poller_items[i].arg1);
-						thread_mutex_unlock(LOCK_PHP);
+					poll_result = php_cmd(poller_items[i].arg1);
 
-						/* remove double or single quotes from string */
-						snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
-						snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(temp_result));
+					/* remove double or single quotes from string */
+					snprintf(temp_result, BUFSIZE-1, "%s", strip_quotes(poll_result));
+					snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "%s", strip_alpha(temp_result));
 
-						free(poll_result);
+					free(poll_result);
 
-						/* detect erroneous result. can be non-numeric */
-						if (!validate_result(poller_items[i].result)) {
-							snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
-							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
-							cacti_log(logmessage);
-							snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
-						}
-
-						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
-							snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
-							cacti_log(logmessage);
-						}
-					}else{
-						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Could not call script server\n", host_id, poller_items[i].local_data_id);
+					/* detect erroneous result. can be non-numeric */
+					if (!validate_result(poller_items[i].result)) {
+						snprintf(errstr, sizeof(errstr)-1, "%s", poller_items[i].result);
+						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr);
 						cacti_log(logmessage);
 						snprintf(poller_items[i].result, sizeof(poller_items[i].result)-1, "U");
+					}
+
+					if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
+						snprintf(logmessage, LOGSIZE-1, "Host[%i] DS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result);
+						cacti_log(logmessage);
 					}
 
 					if (poller_items[i].result != NULL) {

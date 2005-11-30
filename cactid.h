@@ -117,6 +117,13 @@
 #define ICMP_ECHO 8
 #define ICMP_HDR_SIZE 8
 
+/* required for PHP Script Server */
+#define MAX_PHP_SERVERS 10
+#define PHP_READY 0
+#define PHP_BUSY 1
+#define PHP_INIT 999
+#define PHP_ERROR 99
+
 /* required for validation of script results */
 #define RESULT_INIT 0
 #define RESULT_ARGX 1
@@ -157,9 +164,9 @@ typedef struct config_struct {
 	int ping_recovery_count;
 	int verbose;
 	int max_get_size;
-	pid_t php_sspid;
 	pid_t cactid_pid;
 	int php_required;
+	int php_servers;
 	int parent_fork;
 	int num_parent_processes;
 	int script_timeout;
@@ -189,16 +196,18 @@ typedef struct target_struct {
 	char arg3[255];
 } target_t;
 
-typedef struct php_pipe_struct {
-	int php_write_fd;
-	int php_read_fd;
-} php_t;
-
 typedef struct snmp_oids {
 	int array_position;
 	char oid[255];
 	char result[255];
 } snmp_oids_t;
+
+typedef struct php_processes {
+	int php_state;
+	pid_t php_pid;
+	int php_write_fd;
+	int php_read_fd;
+} php_t;
 
 typedef struct host_struct {
 	int id;
@@ -261,11 +270,10 @@ struct icmphdr {
 
 /* Globals */
 config_t set;
-php_t php_pipes;
+php_t *php_processes;
 
 /* Variables for Time Display */
 char start_datetime[20];
-
 char config_paths[CONFIG_PATHS][BUFSIZE];
 
 #endif /* not _CACTID_H_ */

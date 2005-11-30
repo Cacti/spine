@@ -1,19 +1,20 @@
 The Cacti Group – cactid
 
 0.8.6g
--bug#0000609: [patch] console "error" messages should go to stderr instead of stdout 
--bug: If sysUptime is queried for a host, only do it once
--bug: Certain SNMP string responses where not being handled properly
--bug: Increase the allowable size of the logfile entry
--bug: Change behavior of Availability so that if SNMP and ICMP/UDP are selected, only one has to succeed
--bug: Cleaned up implementation of Multi OID get logic
--bug: Don't attempt to allocate a 0 item array when a host has no polling items
--bug: Correct string values returning as blank in *nix environments
--bug: Correct issue where invalid SNMP OID results would cascase to subseqent SNMP OID calls for a host.
--bug#0000618/0000613: Correct invalid assignment of session.community in snmp.c
--bug@0000629: Correct issues with invalid unknown reaults when reducing MAX OID get size.
--feature: Added support for MySQL 5.x
--feature: Made MySQL DEBUG logic more verbose
+-bug#0000609: console "error" messages should go to stderr instead of stdout 
+-bug#0000618/0000613: correct invalid assignment of session.community in snmp.c
+-bug@0000629: correct issues with invalid unknown reaults when reducing MAX OID get size
+-bug: if sysUptime is queried for a host, only do it once
+-bug: certain SNMP string responses where not being handled properly due to net-snmp bug
+-bug: increase the allowable size of the logfile entry
+-bug: change behavior of availability so that if SNMP and ICMP/UDP are selected, only one has to succeed
+-bug: cleaned up implementation of multi SNMP OID get error checking logic
+-bug: don't attempt to allocate a zero item array when a host has no polling items
+-bug: correct string values returning as blank in *nix environments
+-bug: correct issue where invalid SNMP OID results would cascade to subseqent SNMP OID calls for a host
+-feature: added multiple script server process feature to current version
+-feature: added support for MySQL 5.x
+-feature: made MySQL DEBUG logic more verbose
 
 0.8.6f-1
 -bug: Two memory leak fixes in poller.c
