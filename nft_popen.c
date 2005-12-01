@@ -317,7 +317,12 @@ nft_pclose(int fd)
 	(void)close(fd);
 	
 	/* don't be nice to processes that have hung */
-	kill(cur->pid, SIGKILL);
+	kill(cur->pid, SIGTERM);
+
+	cur->fd = -1;		/* Prevent the fd being closed twice. */
+
+	do { pid = waitpid(cur->pid, &pstat, WNOHANG); }
+	while (pid == -1 && errno == EINTR);
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 

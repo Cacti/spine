@@ -370,11 +370,11 @@ void poll_host(int host_id) {
 				 * 1) the assert fails
 				 * 2) the OP code is > or < meaning the current value could have changed without causing
 				 *     the assert to fail */
-				if ((assert_fail == 1) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, ">"))) {
+				if ((assert_fail == 1) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
 					snprintf(query3, 254, "update poller_reindex set assert_value='%s' where host_id='%i' and data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
 					db_insert(&mysql, query3);
 
-					if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
+					if ((assert_fail == 1) && (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0"))) {
 						spike_kill = 1;
 						if (set.verbose >= POLLER_VERBOSITY_MEDIUM) {
 							snprintf(logmessage, LOGSIZE-1, "Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname);

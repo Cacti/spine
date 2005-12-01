@@ -65,7 +65,7 @@
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
 #define DEFAULT_DB_PORT 3306
-#define DEFAULT_LOGFILE "/wwwroot/cacti/log/rrd.log"
+#define DEFAULT_LOGFILE "/wwwroot/cacti/log/cactid.log"
 #define DEFAULT_TIMEOUT 294000000
 
 /* threads constants */
@@ -235,7 +235,7 @@ typedef struct host_struct {
 } host_t;
 
 typedef struct host_reindex_struct {
-	char op[2];
+	char op[4];
 	char assert_value[100];
 	char arg1[100];
 	int data_query_id;

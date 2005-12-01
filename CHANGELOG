@@ -4,6 +4,8 @@ The Cacti Group – cactid
 -bug#0000609: console "error" messages should go to stderr instead of stdout 
 -bug#0000618/0000613: correct invalid assignment of session.community in snmp.c
 -bug#0000629: correct issues with invalid unknown reaults when reducing MAX OID get size
+-bug: correct issue where spike prevention logic was not being activated properly
+-bug: correct issue where host reindex was not operating for uptime goes backwards reindex method
 -bug: if sysUptime is queried for a host, only do it once
 -bug: certain SNMP string responses where not being handled properly due to net-snmp bug
 -bug: increase the allowable size of the logfile entry

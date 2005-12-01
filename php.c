@@ -94,20 +94,20 @@ int php_get_process() {
 	int j = 0;
 		
 	while (1) {
+		thread_mutex_lock(LOCK_PHP);
 		for (i = 0; i < set.php_servers; i++) {
-			thread_mutex_lock(LOCK_PHP);
 			if (php_processes[i].php_state == PHP_READY) {
 				php_processes[i].php_state = PHP_BUSY;
 				thread_mutex_unlock(LOCK_PHP);
 				return i;
 			}
-			thread_mutex_unlock(LOCK_PHP);
 		}
-		
+		thread_mutex_unlock(LOCK_PHP);
+
 		usleep(1000);
 		j++;
 		
-		if (j > 100) {
+		if (j > 4000) {
 			break;
 		}
 	}
