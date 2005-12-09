@@ -232,10 +232,11 @@ int main(int argc, char *argv[]) {
 	if (set.php_required) {
 		php_init(PHP_INIT);
 	}
+	set.php_current_server = 0;
 
 	/* log the parent and php script server process id's */
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: Parent pid=%i", set.cactid_pid);
+		snprintf(logmessage, LOGSIZE-1, "DEBUG: Parent pid=%i\n", set.cactid_pid);
 		cacti_log(logmessage);
 	}
 

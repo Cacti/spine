@@ -301,7 +301,7 @@ nft_pclose(int fd)
 	if (cur->fd == fd) break;
 
 	pthread_mutex_unlock(&ListMutex);
-	
+
 	if (cur == NULL) {
 		errno = EBADF;
 		return -1;
@@ -312,10 +312,10 @@ nft_pclose(int fd)
 	 * entry freed despite cancellation, so push a cleanup handler.
 	 */
 	pthread_cleanup_push(close_cleanup, cur);
-    
+
 	/* end the process nicely and then forcefully */
 	(void)close(fd);
-	
+
 	/* don't be nice to processes that have hung */
 	kill(cur->pid, SIGTERM);
 

@@ -52,35 +52,95 @@ extern char **environ;
 /******************************************************************************/
 /*  php_cmd() - send a command to the script server                           */
 /******************************************************************************/
-char *php_cmd(char *php_command) {
+char *php_cmd(char *php_command, int php_process) {
 	char *result_string;
 	char command[BUFSIZE];
+	char logmessage[LOGSIZE];
 	int write_status;
-	int php_process;
 
-	php_process = php_get_process();
-	
-	if (php_process == PHP_ERROR) {
-		result_string = strdup("U");
-		cacti_log("ERROR: No PHP Script Servers could be contacted.\n");
-		return result_string;
-	}
-	
 	/* pad command with CR-LF */
 	snprintf(command, sizeof(command)-1, "%s\r\n", php_command);
 
+	/* place lock around mutex */
+	switch (php_process) {
+	case 0:
+		thread_mutex_lock(LOCK_PHP_PROC_0);
+		break;
+	case 1:
+		thread_mutex_lock(LOCK_PHP_PROC_1);
+		break;
+	case 2:
+		thread_mutex_lock(LOCK_PHP_PROC_2);
+		break;
+	case 3:
+		thread_mutex_lock(LOCK_PHP_PROC_3);
+		break;
+	case 4:
+		thread_mutex_lock(LOCK_PHP_PROC_4);
+		break;
+	case 5:
+		thread_mutex_lock(LOCK_PHP_PROC_5);
+		break;
+	case 6:
+		thread_mutex_lock(LOCK_PHP_PROC_6);
+		break;
+	case 7:
+		thread_mutex_lock(LOCK_PHP_PROC_7);
+		break;
+	case 8:
+		thread_mutex_lock(LOCK_PHP_PROC_8);
+		break;
+	case 9:
+		thread_mutex_lock(LOCK_PHP_PROC_9);
+		break;
+	}
+
 	/* send command to the script server */
 	write_status = write(php_processes[php_process].php_write_fd, command, strlen(command));
-	fflush(NULL);
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
 		result_string = strdup("U");
-		cacti_log("ERROR: PHP Script Server communications lost.\n");
+		snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] PHP Script Server communications lost.\n", php_process);
+		cacti_log(logmessage);
 		php_close(php_process);
 	}else{
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process);
+	}
+
+	/* unlock around php process */
+	switch (php_process) {
+	case 0:
+		thread_mutex_unlock(LOCK_PHP_PROC_0);
+		break;
+	case 1:
+		thread_mutex_unlock(LOCK_PHP_PROC_1);
+		break;
+	case 2:
+		thread_mutex_unlock(LOCK_PHP_PROC_2);
+		break;
+	case 3:
+		thread_mutex_unlock(LOCK_PHP_PROC_3);
+		break;
+	case 4:
+		thread_mutex_unlock(LOCK_PHP_PROC_4);
+		break;
+	case 5:
+		thread_mutex_unlock(LOCK_PHP_PROC_5);
+		break;
+	case 6:
+		thread_mutex_unlock(LOCK_PHP_PROC_6);
+		break;
+	case 7:
+		thread_mutex_unlock(LOCK_PHP_PROC_7);
+		break;
+	case 8:
+		thread_mutex_unlock(LOCK_PHP_PROC_8);
+		break;
+	case 9:
+		thread_mutex_unlock(LOCK_PHP_PROC_9);
+		break;
 	}
 
 	return result_string;
@@ -91,28 +151,16 @@ char *php_cmd(char *php_command) {
 /******************************************************************************/
 int php_get_process() {
 	int i;
-	int j = 0;
 		
-	while (1) {
-		thread_mutex_lock(LOCK_PHP);
-		for (i = 0; i < set.php_servers; i++) {
-			if (php_processes[i].php_state == PHP_READY) {
-				php_processes[i].php_state = PHP_BUSY;
-				thread_mutex_unlock(LOCK_PHP);
-				return i;
-			}
-		}
-		thread_mutex_unlock(LOCK_PHP);
-
-		usleep(1000);
-		j++;
-		
-		if (j > 4000) {
-			break;
-		}
+	thread_mutex_lock(LOCK_PHP);
+	if (set.php_current_server >= set.php_servers) {
+		set.php_current_server = 0;
 	}
-
-	return PHP_ERROR;
+	i = set.php_current_server;
+	set.php_current_server++;
+	thread_mutex_unlock(LOCK_PHP);
+	
+	return i;
 }
 
 /******************************************************************************/
@@ -159,7 +207,7 @@ char *php_readpipe(int php_process) {
 	case -1:
 		switch (errno) {
 			case EBADF:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: An invalid file descriptor was given in one of the sets.\n");
+				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process);
 				break;
 			case EINTR:
 				/* take a moment */
@@ -180,17 +228,17 @@ char *php_readpipe(int php_process) {
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
 				}else{
-					snprintf(logmessage, LOGSIZE-1, "WARNING: The Script Server Script Timed Out.\n");
+					snprintf(logmessage, LOGSIZE-1, "WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process);
 				}
 				break;
 			case EINVAL:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: N is negative or the value contained within timeout is invalid.\n");
+				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process);
 				break;
 			case ENOMEM:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: Select was unable to allocate memory for internal tables.\n");
+				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process );
 				break;
 			default:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: Unknown fatal select() error\n");
+				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] Unknown fatal select() error\n", php_process);
 				break;
 		}
 
@@ -202,7 +250,7 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	case 0:
-		snprintf(logmessage, LOGSIZE-1, "WARNING: The PHP Script Server did not respond in time and will therefore be restarted\n");
+		snprintf(logmessage, LOGSIZE-1, "WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process);
 		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE-1, "U");
 
@@ -215,10 +263,8 @@ char *php_readpipe(int php_process) {
 		if (rescode == 0) {
 			snprintf(result_string, BUFSIZE-1, "U");
 		}
-		
-		thread_mutex_lock(LOCK_PHP);
+
 		php_processes[php_process].php_state = PHP_READY;
-		thread_mutex_unlock(LOCK_PHP);
 	}
 
 	return result_string;
@@ -248,18 +294,21 @@ int php_init(int php_process) {
 	
 	for (i=0; i < num_processes; i++) {
 		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("DEBUG: PHP Script Server Routine Starting\n");
+			snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] PHP Script Server Routine Starting\n", i);
+			cacti_log(logmessage);
 		}
 
 		/* create the output pipes from cactid to php*/
 		if (pipe(cacti2php_pdes) < 0) {
-			cacti_log("ERROR: Could not allocate php server pipes\n");
+			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Could not allocate php server pipes\n", i);
+			cacti_log(logmessage);
 			return FALSE;
 		}
 
 		/* create the input pipes from php to cactid */
 		if (pipe(php2cacti_pdes) < 0) {
-			cacti_log("ERROR: Could not allocate php server pipes\n");
+			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Could not allocate php server pipes\n", i);
+			cacti_log(logmessage);
 			return FALSE;
 		}
 
@@ -276,7 +325,8 @@ int php_init(int php_process) {
 
 		/* fork a child process */
 		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("DEBUG: PHP Script Server About to FORK Child Process\n");
+			snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i);
+			cacti_log(logmessage);
 		}
 
 		pid = fork();
@@ -289,7 +339,8 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				cacti_log("ERROR: Could not fork php script server\n");
+				snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Cound not fork PHP Script Server\n", i);
+				cacti_log(logmessage);
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
@@ -311,7 +362,8 @@ int php_init(int php_process) {
 				/* NOTREACHED */
 			default: /* I am the parent process */
 				if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-					cacti_log("DEBUG: PHP Script Server Child FORK Success\n");
+					snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i);
+					cacti_log(logmessage);
 				}
 		}
 
@@ -341,17 +393,23 @@ int php_init(int php_process) {
 		}
 
 		if (strstr(result_string, "Started")) {
-			if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-				cacti_log("DEBUG: Confirmed PHP Script Server Running.\n");
-			}
-
 			if (php_process == PHP_INIT) {
+				if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
+					snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] Confirmed PHP Script Server running\n", i);
+					cacti_log(logmessage);
+				}
+
 				php_processes[i].php_state = PHP_READY;
 			}else{
+				if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
+					snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process);
+					cacti_log(logmessage);
+				}
+
 				php_processes[php_process].php_state = PHP_READY;
 			}
 		}else{
-			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: Script Server did not start properly return message was: '%s'\n", result_string);
+			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string);
 			cacti_log(logmessage);
 
 			if (php_process == PHP_INIT) {
@@ -374,7 +432,8 @@ void php_close(int php_process) {
 	int num_processes;
 
 	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: PHP Script Server Shutdown Started\n");
+		snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] Script Server Shutdown Started\n", php_process);
+		cacti_log(logmessage);
 	}
 
 	if (php_process == PHP_INIT) {
@@ -392,7 +451,7 @@ void php_close(int php_process) {
 			usleep(200000);
 
 			/* end the php script server process */
-			kill(php_processes[i].php_pid, SIGKILL);
+			kill(php_processes[i].php_pid, SIGTERM);
 
 			/* close file descriptors */
 			close(php_processes[i].php_write_fd);
@@ -404,7 +463,7 @@ void php_close(int php_process) {
 			usleep(200000);
 
 			/* end the php script server process */
-			kill(php_processes[php_process].php_pid, SIGKILL);
+			kill(php_processes[php_process].php_pid, SIGTERM);
 
 			/* close file descriptors */
 			close(php_processes[php_process].php_write_fd);

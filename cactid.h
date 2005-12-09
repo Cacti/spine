@@ -76,6 +76,16 @@
 #define LOCK_PIPE 4
 #define LOCK_SYSLOG 5
 #define LOCK_PHP 6
+#define LOCK_PHP_PROC_0 7
+#define LOCK_PHP_PROC_1 8
+#define LOCK_PHP_PROC_2 9
+#define LOCK_PHP_PROC_3 10
+#define LOCK_PHP_PROC_4 11
+#define LOCK_PHP_PROC_5 12
+#define LOCK_PHP_PROC_6 13
+#define LOCK_PHP_PROC_7 14
+#define LOCK_PHP_PROC_8 15
+#define LOCK_PHP_PROC_9 16
 
 #define LOCK_SNMP_O 0
 #define LOCK_THREAD_O 1
@@ -84,6 +94,16 @@
 #define LOCK_PIPE_O 4
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
+#define LOCK_PHP_PROC_0_O 7
+#define LOCK_PHP_PROC_1_O 8
+#define LOCK_PHP_PROC_2_O 9
+#define LOCK_PHP_PROC_3_O 10
+#define LOCK_PHP_PROC_4_O 11
+#define LOCK_PHP_PROC_5_O 12
+#define LOCK_PHP_PROC_6_O 13
+#define LOCK_PHP_PROC_7_O 14
+#define LOCK_PHP_PROC_8_O 15
+#define LOCK_PHP_PROC_9_O 16
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -167,6 +187,7 @@ typedef struct config_struct {
 	pid_t cactid_pid;
 	int php_required;
 	int php_servers;
+	int php_current_server;
 	int parent_fork;
 	int num_parent_processes;
 	int script_timeout;

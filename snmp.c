@@ -209,7 +209,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 			if (response == NULL) {
 				cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get\n");
 				snprintf(result_string, BUFSIZE-1, "U");
-				return result_string;
+				status = SNMPERR_UNKNOWN_ENG_ID;
 			}else{
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
@@ -302,8 +302,8 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
 		if (response == NULL) {
-			status = STAT_DESCRIP_ERROR;
 			cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n");
+			status = SNMPERR_UNKNOWN_ENG_ID;
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
