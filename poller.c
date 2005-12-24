@@ -137,34 +137,32 @@ void poll_host(int host_id) {
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
+	#ifndef OLD_MYSQL   
+	mysql_thread_init();
+	#endif 
+
+	db_connect(set.dbdb, &mysql);
+	
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
-		cacti_log("ERROR: Fatal malloc error: poller.c host struct!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: poller.c host struct!\n");
 	}
 	memset(host, 0, sizeof(host));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
-		cacti_log("ERROR: Fatal malloc error: poller.c ping struct!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: poller.c ping struct!\n");
 	}
 	memset(ping, 0, sizeof(ping_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
-		cacti_log("ERROR: Fatal malloc error: poller.c reindex poll!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: poller.c reindex poll!\n");
 	}
 	memset(reindex, 0, sizeof(reindex_t));
 
 	if (!(sysUptime = (char *) malloc(BUFSIZE))) {
-		cacti_log("ERROR: Fatal malloc error: poller.c sysUptime\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: poller.c sysUptime\n");
 	}
 	memset(sysUptime, 0, BUFSIZE);
-
-	#ifndef OLD_MYSQL   
-	mysql_thread_init();
-	#endif 
 
 	/* initialize query strings */
 	snprintf(query1, sizeof(query1)-1,
@@ -218,8 +216,6 @@ void poll_host(int host_id) {
 	snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "down");
 	snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "SNMP not performed due to setting or ping result");
 
-	db_connect(set.dbdb, &mysql);
-	
 	if (host_id) {
 		/* get data about this host */
 		result = db_query(&mysql, query2);
@@ -352,8 +348,7 @@ void poll_host(int host_id) {
 					if (strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") != 0) {
 						if (strlen(sysUptime) > 0) {
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
-								cacti_log("ERROR: Fatal malloc error: poller.c poll_result\n");
-								exit_cactid();
+								die("ERROR: Fatal malloc error: poller.c poll_result\n");
 							}
 							memset(poll_result, 0, BUFSIZE);
 
@@ -372,8 +367,7 @@ void poll_host(int host_id) {
 				}
 
 				if (!(query3 = (char *)malloc(BUFSIZE))) {
-					cacti_log("ERROR: Fatal malloc error: poller.c reindex insert!\n");
-					exit_cactid();
+					die("ERROR: Fatal malloc error: poller.c reindex insert!\n");
 				}
 				memset(query3, 0, BUFSIZE);
 
@@ -718,8 +712,7 @@ void poll_host(int host_id) {
 		buffer = 600*rows_processed+100;
 
 		if (!(query3 = (char *)malloc(buffer))) {
-			cacti_log("ERROR: Fatal malloc error: poller.c query3 oids!\n");
-			exit_cactid();
+			die("ERROR: Fatal malloc error: poller.c query3 oids!\n");
 		}
 		memset(query3, 0, buffer);
 
@@ -837,8 +830,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	char *result_string;
 
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
-		cacti_log("ERROR: Fatal malloc error: poller.c exec_poll!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: poller.c exec_poll!\n");
 	}
 	memset(result_string, 0, BUFSIZE);
 

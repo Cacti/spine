@@ -196,15 +196,13 @@ char *php_readpipe(int php_process) {
 	char *result_string;
 
 	if (!(result_string = (char *)malloc(BUFSIZE))) {
-		cacti_log("ERROR: Fatal malloc error: php.c php_readpipe!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: php.c php_readpipe!\n");
 	}
 	memset(result_string, 0, BUFSIZE);	
 
 	/* record start time */
 	if (gettimeofday(&now, NULL) == -1) {
-		cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-		exit_cactid();
+		die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 	}
 
 	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
@@ -233,8 +231,7 @@ char *php_readpipe(int php_process) {
 				
 				/* record end time */
 				if (gettimeofday(&now, NULL) == -1) {
-					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-					exit_cactid();
+					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 				}
 
 				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
@@ -320,13 +317,13 @@ int php_init(int php_process) {
 			cacti_log("DEBUG: SS[%i] PHP Script Server Routine Starting\n", i);
 		}
 
-		/* create the output pipes from cactid to php*/
+		/* create the output pipes from Cactid to php*/
 		if (pipe(cacti2php_pdes) < 0) {
 			cacti_log("ERROR: SS[%i] Could not allocate php server pipes\n", i);
 			return FALSE;
 		}
 
-		/* create the input pipes from php to cactid */
+		/* create the input pipes from php to Cactid */
 		if (pipe(php2cacti_pdes) < 0) {
 			cacti_log("ERROR: SS[%i] Could not allocate php server pipes\n", i);
 			return FALSE;

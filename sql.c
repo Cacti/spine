@@ -120,8 +120,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (error) {
-		cacti_log("ERROR: Fatal MySQL Query Error, exiting\n");
-		exit_cactid();
+		die("ERROR: Fatal MySQL Query Error, exiting\n");
 	}
 
 	return mysql_res;
@@ -145,8 +144,7 @@ void db_connect(char *database, MYSQL *mysql) {
 	char *socket;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
-		cacti_log("ERROR: malloc(): strdup() failed\n");
-		exit_cactid();
+		die("ERROR: malloc(): strdup() failed\n");
 	}
 
 	if ((socket = strstr(hostname,":"))) {
@@ -164,8 +162,7 @@ void db_connect(char *database, MYSQL *mysql) {
 	thread_mutex_lock(LOCK_MYSQL);
 	db = mysql_init(mysql);
 	if (db == NULL) {
-		cacti_log("ERROR: MySQL unable to allocate memory and therefore can not connect\n");
-		exit_cactid();
+		die("ERROR: MySQL unable to allocate memory and therefore can not connect\n");
 	}
 
 	while (tries > 0){
@@ -190,8 +187,7 @@ void db_connect(char *database, MYSQL *mysql) {
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (!success){
-		cacti_log("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
-		exit_cactid();
+		die("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 	}
 }
 

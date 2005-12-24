@@ -28,9 +28,7 @@
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
-*/
-
-/*!
+ *
  * COMMAND-LINE PARAMETERS
  *
  * -h | --help
@@ -58,7 +56,7 @@
  *
  * -C | -conf=FILE
  *
- *	Specify the location of the cactid configuration file.
+ *	Specify the location of the Cactid configuration file.
  *
  * -R | --readonly
  *
@@ -103,8 +101,30 @@
 int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
-static void show_help(void);
 
+/*! \fn main(int argc, char *argv[])
+ *  \brief The Cactid program entry point
+ *  \param argc The number of arguments passed to the function plus one (+1)
+ *  \param argv An array of the command line arguments
+ *
+ *  The Cactid entry point.  This function performs the following tasks.
+ *  1) Processes command line input parameters
+ *  2) Processes the Cactid configuration file to obtain database access information
+ *  3) Process runtime parameters from the settings table
+ *  4) Initialize the runtime threads and mutexes for the threaded environment
+ *  5) Initialize Net-SNMP, MySQL, and the PHP Script Server (if required)
+ *  6) Spawns X threads in order to process hosts
+ *  7) Loop until either all hosts have been processed or until the poller runtime
+ *     has been exceeded
+ *  8) Close database and free variables
+ *  9) Log poller process statistics if required
+ *  10) Exit
+ *
+ *  Note: Command line runtime parameters override any database settings.
+ *
+ *  \return 0 if SUCCESS, or -1 if FAILED
+ *
+ */
 int main(int argc, char *argv[]) {
 	struct timeval now;
 	char *conf_file = NULL;
@@ -146,15 +166,13 @@ int main(int argc, char *argv[]) {
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
-		printf("ERROR: Could not get time of day from time()\n");
-		exit_cactid();
+		die("ERROR: Could not get time of day from time()\n");
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
 	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
-		printf("ERROR: Could not get string from strftime()\n");
-		exit_cactid();
+		die("ERROR: Could not get string from strftime()\n");
 	}
 
 	/* set default verbosity */
@@ -190,9 +208,11 @@ int main(int argc, char *argv[]) {
 
 	#define MATCH(a, b)	(strcasecmp((a),(b)) == 0)
 
+	/* initialize some global variables */
 	set.start_host_id = -1;
 	set.end_host_id   = -1;
 	set.php_initialized = FALSE;
+	set.logfile_processed = FALSE;
 	set.parent_fork = CACTID_PARENT;
 
 	for (argv++; *argv; argv++) {
@@ -392,13 +412,11 @@ int main(int argc, char *argv[]) {
 	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
-		cacti_log("ERROR: Fatal malloc error: cactid.c threads!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: cactid.c threads!\n");
 	}
 
 	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
-		cacti_log("ERROR: Fatal malloc error: cactid.c host id's!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: cactid.c host id's!\n");
 	}
 
 	/* initialize threads and mutexes */
@@ -553,7 +571,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* tell cactid that it is now parent */
+	/* tell Cactid that it is now parent */
 	set.parent_fork = CACTID_PARENT;
 
 	/* print out stats */
@@ -615,7 +633,7 @@ int main(int argc, char *argv[]) {
 }
 
 /*! \fn static void display_help()
- *  \brief Display cactid usage information to the caller.
+ *  \brief Display Cactid usage information to the caller.
  *
  *	Display the help listing: the first line is created at runtime with
  *	the version information, and the rest is strictly static text which
@@ -635,7 +653,7 @@ static void display_help(void) {
 		"  -p/--poller=X      Poller ID = X",
 		"  -C/--conf=F        Read Cactid configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
-		"  -R/--readonly      This cactid run is readonly with respect to the database",
+		"  -R/--readonly      This Cactid run is readonly with respect to the database",
 		"  -S/--stdout        Logging is performed to the standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
 		"  --snmponly         Only do SNMP polling: no script stuff",
@@ -695,24 +713,4 @@ static char *getarg(char *opt, char ***pargv) {
 
 	die("ERROR: option %s requires a parameter", optname);
 }
-
-/*!  \fn void die(const char *format, ...)
- *  \brief a method to end Cactid while returning the fatal error to stderr
- *
- *	Given a printf-style argument list, format it to the standard
- *	error, append a newline, then exit Cactid.
- *
- */
-void die(const char *format, ...) {
-	va_list	args;
-
-	va_start(args, format);
-	vfprintf(stderr, format, args);
-	va_end(args);
-
-	putc('\n', stderr);
-
-	exit(-1);
-}
-
 

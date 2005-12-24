@@ -142,15 +142,13 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	if (strlen(host->snmp_community) != 0) {
 		/* record start time */
 		if (gettimeofday(&now, NULL) == -1) {
-			cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-			exit_cactid();
+			die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 		}
 
 		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 		if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
-			cacti_log("ERROR: malloc(): strdup() oid ping.c failed\n");
-			exit_cactid();
+			die("ERROR: malloc(): strdup() oid ping.c failed\n");
 		}
 
 		poll_result = snmp_get(host, oid);
@@ -159,8 +157,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 		/* record end time */
 		if (gettimeofday(&now, NULL) == -1) {
-			cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-			exit_cactid();
+			die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 		}
 
 		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
@@ -168,8 +165,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "0.00");
 		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host does not require SNMP");
 		if (!(poll_result = strdup("0.00"))) {
-			cacti_log("ERROR: Fatal malloc error: ping.c ping_snmp\n");
-			exit_cactid();
+			die("ERROR: Fatal malloc error: ping.c ping_snmp\n");
 		}
 	}
 
@@ -234,8 +230,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
 
 	if (!(packet = malloc(packet_len))) {
-		cacti_log("ERROR: Fatal malloc error: ping.c ping_icmp!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: ping.c ping_icmp!\n");
 	}
 	memset(packet, 0, ICMP_HDR_SIZE + strlen(cacti_msg));
 
@@ -245,8 +240,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->un.echo.id = getpid();
 	icmp->un.echo.sequence = seq++;
 	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
-		cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-		exit_cactid();
+		die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 	}
 	
 	icmp->checksum = 0;
@@ -281,8 +275,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* record start time */
 				if (gettimeofday(&now, NULL) == -1) {
-					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-					exit_cactid();
+					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 				}
 				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -303,8 +296,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* record end time */
 				if (gettimeofday(&now, NULL) == -1) {
-					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-					exit_cactid();
+					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 				}
 				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -414,8 +406,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* record start time */
 				if (gettimeofday(&now, NULL) == -1) {
-					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-					exit_cactid();
+					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 				}
 				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -434,8 +425,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* record end time */
 				if (gettimeofday(&now, NULL) == -1) {
-					cacti_log("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-					exit_cactid();
+					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
 				}
 				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
@@ -556,8 +546,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
-		printf("ERROR: Could not get time of day from time()\n");
-		exit_cactid();
+		die("ERROR: Could not get time of day from time()\n");
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;

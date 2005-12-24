@@ -35,10 +35,11 @@ void read_config_options(config_t *set);
 int read_cactid_config(char *file, config_t * set);
 void config_defaults(config_t *);
 
-/* cacti logging and premature shutdown functions */
+/* cacti logging function */
 void cacti_log(const char *format, ...);
-void exit_cactid()
-	__attribute__((noreturn));
+void die(const char *format, ...)
+	__attribute__((noreturn))
+	__attribute__((format(printf, 1, 2)));
 
 /* option processing function */
 void set_option(const char *setting, const char *value);

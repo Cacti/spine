@@ -190,6 +190,7 @@ typedef struct config_struct {
 	int num_parent_processes;
 	int script_timeout;
 	int threads;
+	int logfile_processed;
 	/* debugging options */
 	int snmponly;
 	int SQL_readonly;
@@ -201,7 +202,6 @@ typedef struct config_struct {
 	char dbdb[80];
 	char dbuser[80];
 	char dbpass[80];
-	int dboff;
 	unsigned int dbport;
 	/* path information */
 	char path_logfile[250];
@@ -344,7 +344,7 @@ typedef struct ping_results {
  *
  */
 struct icmphdr {
-    char type;
+	char type;
 	char code;
 	unsigned short checksum;
 	union {
@@ -377,15 +377,12 @@ static struct {
 
 /* Globals */
 static int nopts = 0;
-config_t set;
-php_t *php_processes;
-char start_datetime[20];
-char config_paths[CONFIG_PATHS][BUFSIZE];
+config_t   set;
+php_t      *php_processes;
+char       start_datetime[20];
+char       config_paths[CONFIG_PATHS][BUFSIZE];
 
 static void display_help(void);
 static char *getarg(char *opt, char ***pargv);
-void die(const char *format, ...)
-	__attribute__((noreturn))
-	__attribute__((format(printf, 1, 2)));
 
 #endif /* not _CACTID_H_ */

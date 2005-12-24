@@ -140,7 +140,7 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 }
 
 /*! \fn void read_config_options(config_t *set)
- *  \brief reads default cactid runtime parameters from the database and set's the global array
+ *  \brief Reads the default Cactid runtime parameters from the database and set's the global array
  *  \param *set - A structure containing all global Cactid runtime parameters
  *  
  *  load default values from the database for poller processing
@@ -206,6 +206,7 @@ void read_config_options(config_t *set) {
 			set->log_destination,
 			printable_logdest(set->log_destination));
 	}
+	set->logfile_processed = TRUE;
 
 	/* get PHP Path Information for Scripting */
 	if ((res = getsetting(&mysql, "path_php_binary")) != 0 ) {
@@ -487,25 +488,41 @@ void config_defaults(config_t *set) {
 	set->log_destination = LOGDEST_FILE;
 }
 
-/*! \fn void exit_cactid() 
- *  \brief shut's down Cactid after a fatal error.  Make sure you shut down the script server.
+/*! \fn void die(const char *format, ...)
+ *  \brief a method to end Cactid while returning the fatal error to stderr
+ *
+ *	Given a printf-style argument list, format it to the standard
+ *	error, append a newline, then exit Cactid.
  *
  */
-void exit_cactid() {
+void die(const char *format, ...) {
+	va_list	args;
+	char logmessage[BUFSIZE];
+
+	va_start(args, format);
+	vsprintf(logmessage, format, args);
+	va_end(args);
+	
+	cacti_log(logmessage);
+
 	if (set.parent_fork == CACTID_PARENT) {
 		if (set.php_initialized) {
 			php_close(PHP_INIT);
 		}
-
-		cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
-	}else{
-		cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
+	}
+	
+	if (set.logfile_processed) {
+		if (set.parent_fork == CACTID_PARENT) {
+			cacti_log("FATAL: Cactid Parent process encountered a FATAL error and must exit\n");
+		}else{
+			cacti_log("FATAL: Cactid Fork process encountered a FATAL error and must exit\n");			
+		}
 	}
 
 	exit(-1);
 }
 
-/*! \fn void cacti_log(char *logmessage)
+/*! \fn void cacti_log(const char *format, ...)
  *  \brief output's log information to the desired cacti logfile.
  *  \param *logmessage a pointer to the pre-formated log message.
  *
@@ -525,7 +542,6 @@ void cacti_log(const char *format, ...) {
 	char ulogmessage[LOGSIZE];	/* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];	/* Formatted Log Message */
 	extern config_t set;
-	int fileopen = 0;
 
 	va_start(args, format);
 	vsprintf(ulogmessage, format, args);
@@ -533,6 +549,11 @@ void cacti_log(const char *format, ...) {
 
 	/* default for "console" messages to go to stdout */
 	fp = stdout;
+
+	/* append a line feed to the log message if needed */
+	if (!strstr(ulogmessage, "\n")) {
+		snprintf(ulogmessage, sizeof(ulogmessage)-1, "%s\n", ulogmessage);
+	}
 
 	/* log message prefix */
 	snprintf(logprefix, sizeof(logprefix)-1, "CACTID: Poller[%i] ", set.poller_id);
@@ -543,39 +564,31 @@ void cacti_log(const char *format, ...) {
 	}
 
 	if (((set.log_destination == LOGDEST_FILE) || (set.log_destination == LOGDEST_BOTH)) && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
-		while (!fileopen) {
+		if (set.logfile_processed) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
 			}else {
 				log_file = fopen(set.path_logfile, "a");
-			}
-
-			if (log_file != NULL) {
-				fileopen = 1;
-			}else {
-				if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-					fprintf(stderr, "ERROR: Could not open Logfile will not be logging\n");
-				}
-				break;
 			}
 		}
 	}
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
-		fprintf(stderr, "ERROR: Could not get time of day from time()\n");
-		exit_cactid();
+		die("ERROR: Could not get time of day from time()\n");
 	}
+
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
-	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0)
+	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0) {
 		fprintf(stderr, "ERROR: Could not get string from strftime()\n");
+	}
 
 	strncat(flogmessage, logprefix, strlen(logprefix));
 	strncat(flogmessage, ulogmessage, strlen(ulogmessage));
 
-	if (fileopen != 0) {
+	if (log_file) {
 		fputs(flogmessage, log_file);
 		fclose(log_file);
 	}
@@ -584,15 +597,18 @@ void cacti_log(const char *format, ...) {
 	if ((set.log_destination == LOGDEST_SYSLOG) || (set.log_destination == LOGDEST_BOTH)) {
 		thread_mutex_lock(LOCK_SYSLOG);
 		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
-		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
+		if ((strstr(flogmessage,"ERROR") || (strstr(flogmessage, "FATAL"))) && (set.log_perror)) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
 		}
+
 		if ((strstr(flogmessage,"WARNING")) && (set.log_pwarn)){
 			syslog(LOG_WARNING,"%s\n", flogmessage);
 		}
+
 		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
-				syslog(LOG_NOTICE,"%s\n", flogmessage);
+			syslog(LOG_NOTICE,"%s\n", flogmessage);
 		}
+
 		closelog();
 		thread_mutex_unlock(LOCK_SYSLOG);
 	}
@@ -737,8 +753,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	char *return_str;
 	
 	if (!(return_str = (char *) malloc(BUFSIZE))) {
-		cacti_log("ERROR: Fatal malloc error: util.c add_slashes!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: util.c add_slashes!\n");
 	}
 	memset(return_str, 0, BUFSIZE);
 

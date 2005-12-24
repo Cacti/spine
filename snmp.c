@@ -211,8 +211,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char *result_string;
 	
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
-		cacti_log("ERROR: Fatal malloc error: snmp.c snmp_get!\n");
-		exit_cactid();
+		die("ERROR: Fatal malloc error: snmp.c snmp_get!\n");
 	}
 	memset(result_string, 0, BUFSIZE);
 
