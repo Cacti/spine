@@ -42,9 +42,16 @@
 #include "sql.h"
 #include "ping.h"
 
-/******************************************************************************/
-/*  ping_host() - check for availability using the desired user method.       */
-/******************************************************************************/
+/*  \fn int ping_host(host_t *host, ping_t *ping)
+ *  \brief ping a host to determine if it is reachable for polling
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using the method specified within the system
+ *  configuration and then returns the host status to the calling function.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ */
 int ping_host(host_t *host, ping_t *ping) {
 	int ping_result;
 	int snmp_result;
@@ -60,7 +67,7 @@ int ping_host(host_t *host, ping_t *ping) {
 		if (geteuid() != 0) {
 			set.ping_method = PING_UDP;
 			printf("CACTID: WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
-			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 				cacti_log("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
 			}
 		}
@@ -114,9 +121,17 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 }
 
-/******************************************************************************/
-/*  ping_snmp() - perform an SNMP based ping of host.                         */
-/******************************************************************************/
+/*  \fn int ping_snmp(host_t *host, ping_t *ping)
+ *  \brief ping a host using snmp sysUptime
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using snmp.  It polls sysUptime by default.
+ *  It will modify the ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
 int ping_snmp(host_t *host, ping_t *ping) {
 	struct timeval now;
 	char *poll_result;
@@ -173,53 +188,18 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 }
 
-/******************************************************************************/
-/*  init_socket() - allocate the ICMP socket.                                 */
-/******************************************************************************/
-int init_socket() {
-	int icmp_socket;
-
-	/* error getting socket */
-	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		cacti_log("ERROR: init_socket: cannot open the ICMP socket\n");
-	}
-
-	return(icmp_socket);
-}
-
-/******************************************************************************/
-/*  init_sockaddr - convert host name to internet address                     */
-/******************************************************************************/
-int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
-	struct hostent *hostinfo;
-	int i;
-	char logmessage[LOGSIZE];
-
-	name->sin_family = AF_INET;
-	name->sin_port = htons (port);
-
-	/* retry 3 times to contact host */
-	i = 0;
-	while (1) {
-		hostinfo = gethostbyname(hostname);
-		if (hostinfo == NULL) {
-			snprintf(logmessage, LOGSIZE-1, "WARNING: Unknown host %s\n", hostname);
-			cacti_log(logmessage);
-			if (i > 3) {
-				return FALSE;
-			}
-			i++;
-			usleep(1000);
-		}else{
-			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-			return TRUE;
-		}
-	}
-}
-
-/******************************************************************************/
-/*  ping_icmp() - perform an ICMP ping of a host.                             */
-/******************************************************************************/
+/*  \fn int ping_icmp(host_t *host, ping_t *ping)
+ *  \brief ping a host using an ICMP packet
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using ICMP.  The ICMP packet contains a marker
+ *  to the "Cacti" application so that firewall's can be configured to allow.
+ *  It will modify the ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
 int ping_icmp(host_t *host, ping_t *ping) {
 	extern int errno;
 	int icmp_socket;
@@ -231,7 +211,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in servername;
 	char socket_reply[BUFSIZE];
 	int retry_count;
-	char request[BUFSIZE];
 	char *cacti_msg = "cacti-monitoring-system";
 	int packet_len;
 	int fromlen;
@@ -243,7 +222,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	unsigned char* packet;
 
 	/* get ICMP socket */
- 	icmp_socket = init_socket();
+	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
+		cacti_log("ERROR: ping_icmp: cannot open an ICMP socket\n");
+	}
 
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
@@ -359,30 +340,18 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	}
 }
 
-/******************************************************************************/
-/*  get_checksum() - calculate 16bit checksum of a packet buffer.             */
-/******************************************************************************/
-unsigned short get_checksum(void* buf, int len) {
-	int nleft = len;
-	int sum = 0;
-	unsigned short answer;
-	unsigned short* w = (unsigned short*)buf;
-
-	while (nleft > 1) {
-		sum += *w++;
-		nleft -= 2;
-	}
-	if (nleft == 1)
-		sum += *(unsigned char*)w;
-	sum = (sum >> 16) + (sum & 0xffff);
-	sum += (sum >> 16);
-	answer = ~sum;				/* truncate to 16 bits */
-	return answer;
-}
-
-/******************************************************************************/
-/*  ping_udp() - perform a UDP ping.  Function may vary from OS to OS.        */
-/******************************************************************************/
+/*  \fn int ping_udp(host_t *host, ping_t *ping)
+ *  \brief ping a host using an UDP datagram
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using UDP.  The UDP datagram contains a marker
+ *  to the "Cacti" application so that firewall's can be configured to allow.
+ *  It will modify the ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
 int ping_udp(host_t *host, ping_t *ping) {
 	extern int errno;
 	double begin_time, end_time, total_time;
@@ -391,7 +360,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int udp_socket;
 	struct sockaddr_in servername;
 	char socket_reply[BUFSIZE];
-	char logmessage[LOGSIZE];
 	int retry_count;
 	char request[BUFSIZE];
 	int request_len;
@@ -425,7 +393,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			}
 
 			/* format packet */
-			snprintf(request, sizeof(request)-1, "cacti-monitoring-system"); // the actual test data
+			snprintf(request, sizeof(request)-1, "cacti-monitoring-system"); /* the actual test data */
 			request_len = strlen(request);
 
 			retry_count = 0;
@@ -474,9 +442,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = end_time - begin_time;
 
-				if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-					snprintf(logmessage, LOGSIZE-1, "DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000));
-					cacti_log(logmessage);
+				if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+					cacti_log("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000));
 				}
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
@@ -505,13 +472,78 @@ int ping_udp(host_t *host, ping_t *ping) {
 	}
 }
 
-/******************************************************************************/
-/*  update_host_status - calculate the status of a host and update the host   */
-/*                       table.                                               */
-/******************************************************************************/
+/*  \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
+ *  \brief converts a hostname to an internet address
+ *
+ *  \return TRUE if successful, FALSE otherwise.
+ *
+ */
+int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
+	struct hostent *hostinfo;
+	int i;
+
+	name->sin_family = AF_INET;
+	name->sin_port = htons (port);
+
+	/* retry 3 times to contact host */
+	i = 0;
+	while (1) {
+		hostinfo = gethostbyname(hostname);
+		if (hostinfo == NULL) {
+			cacti_log("WARNING: Unknown host %s\n", hostname);
+
+			if (i > 3) {
+				return FALSE;
+			}
+			i++;
+			usleep(1000);
+		}else{
+			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+			return TRUE;
+		}
+	}
+}
+
+/*  \fn unsigned short get_checksum(void* bug, int len)
+ *  \brief calculates a 16bit checksum of a packet buffer
+ *  \param buf the input buffer to calculate the checksum of
+ *  \param len the size of the input buffer
+ *
+ *  \return 16bit checksum of an input buffer of size len.
+ *
+ */
+unsigned short get_checksum(void* buf, int len) {
+	int nleft = len;
+	int sum = 0;
+	unsigned short answer;
+	unsigned short* w = (unsigned short*)buf;
+
+	while (nleft > 1) {
+		sum += *w++;
+		nleft -= 2;
+	}
+	if (nleft == 1)
+		sum += *(unsigned char*)w;
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	answer = ~sum;				/* truncate to 16 bits */
+	return answer;
+}
+
+/*  \fn void update_host_status(int status, host_t *host, ping_t *ping, int availability_method)
+ *  \brief update the host table in Cacti with the result of the ping of the host.
+ *  \param status the current poll status of the host, either HOST_UP, or HOST_DOWN
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *  \param availability_method the method that was used to poll the host
+ *
+ *  This function will determine if the host is UP, DOWN, or RECOVERING based upon
+ *  the ping result and it's current status.  It will update the Cacti database
+ *  with the calculated status.
+ *
+ */
 void update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
 	int issue_log_message = FALSE;
-	char logmessage[LOGSIZE];
 	double ping_time;
  	double hundred_percent = 100.00;
 	char current_date[40];
@@ -671,38 +703,29 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		}
 	}
 	/* if the user wants a flood of information then flood them */
-	if (set.verbose >= POLLER_VERBOSITY_HIGH) {
+	if (set.log_level >= POLLER_VERBOSITY_HIGH) {
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
-				cacti_log(logmessage);
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
-				cacti_log(logmessage);
+				cacti_log("Host[%i] PING Result: %s\n", host->id, ping->ping_response);
+				cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 			}else if (availability_method == AVAIL_SNMP) {
 				if (strlen(host->snmp_community) == 0) {
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: Device does not require SNMP\n", host->id);
-					cacti_log(logmessage);
+					cacti_log("Host[%i] SNMP Result: Device does not require SNMP\n", host->id);
 				}else{
-					snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
-					cacti_log(logmessage);
+					cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 				}
 			}else{
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING: Result %s\n", host->id, ping->ping_response);
-				cacti_log(logmessage);
+				cacti_log("Host[%i] PING: Result %s\n", host->id, ping->ping_response);
 			}
 		}else{
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
-				cacti_log(logmessage);
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
-				cacti_log(logmessage);
+				cacti_log("Host[%i] PING Result: %s\n", host->id, ping->ping_response);
+				cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 			}else if (availability_method == AVAIL_SNMP) {
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
-				cacti_log(logmessage);
+				cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
 			}else{
-				snprintf(logmessage, LOGSIZE-1, "Host[%i] PING Result: %s\n", host->id, ping->ping_response);
-				cacti_log(logmessage);
+				cacti_log("Host[%i] PING Result: %s\n", host->id, ping->ping_response);
 			}
 		}
 	}
@@ -710,11 +733,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
-			cacti_log(logmessage);
+			cacti_log("Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
 		}else{
-			snprintf(logmessage, LOGSIZE-1, "Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
-			cacti_log(logmessage);
+			cacti_log("Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
 		}
 	}
 }

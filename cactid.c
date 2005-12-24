@@ -11,7 +11,7 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
@@ -30,12 +30,67 @@
  +-------------------------------------------------------------------------+
 */
 
+/*
+ * COMMAND-LINE PARAMETERS
+ *
+ * -h | --help
+ * -v | --version
+ *
+ *	Show a brief help listing, then exit.
+ *
+ * -C | --conf=F
+ *
+ *	Provide the name of the Cactid configuration file, which contains
+ *	the parameters for connecting to the database. In the absense of
+ *	this, it looks [WHERE?]
+ *
+ * -f | --first=ID
+ *
+ *	Start polling with device <ID> (else starts at the beginning)
+ *
+ * -l | --last=ID
+ *
+ *	Stop polling after device <ID> (else ends with the last one)
+ *
+ * -O | --option=setting:value
+ *
+ *	Override a DB-provided value from the settings table in the DB.
+ *
+ * -C | -conf=FILE
+ *
+ *	Specify the location of the cactid configuration file.
+ *
+ * -R | --readonly
+ *
+ *	This processing is readonly with respect to the database: it's
+ *	meant only for developer testing.
+ *
+ * -S | --stdout
+ *
+ *	All logging goes to the standard output
+ *
+ * -V | --verbosity=V
+ *
+ * Set the debug logging verbosity to <V>. Can be 1..5 or
+ *	NONE/LOW/MEDIUM/HIGH/DEBUG (case insensitive).
+ *
+ * The First/Last device IDs are all relative to the "hosts" table in the
+ * Cacti database, and this mechanism allows us to split up the polling
+ * duties across multiple "cactid" instances: each one gets a subset of
+ * the polling range.
+ *
+ * For compatibility with poller.php, we also accept the first and last
+ * device IDs as standalone parameters on the command line.
+*/
+
 #include "common.h"
 #include "cactid.h"
 #include <pthread.h>
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdarg.h>
+#include <assert.h>
 #include "poller.h"
 #include "locks.h"
 #include "snmp.h"
@@ -48,6 +103,7 @@
 int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
+static void show_help(void);
 
 int main(int argc, char *argv[]) {
 	struct timeval now;
@@ -77,11 +133,9 @@ int main(int argc, char *argv[]) {
 	int mutex_status = 0;
 	int thread_status = 0;
 	pid_t ppid;
-	char result_string[BUFSIZE];
-	char logmessage[LOGSIZE];
 
 	/* establish php processes and initialize space */
-	php_processes = (php_t*) calloc(10, sizeof(php_t));
+	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
@@ -104,59 +158,169 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* set default verbosity */
-	set.verbose = POLLER_VERBOSITY_LOW;
+	set.log_level = POLLER_VERBOSITY_LOW;
 
 	/* get static defaults for system */
 	config_defaults(&set);
 
-	/* scan arguments for errors */
-	if ((argc != 1) && (argc != 3)) {
-		if (argc == 2) { 
-			/* return version */ 
-			if ((strcmp(argv[1], "--version") == 0) || 
-               (strcmp(argv[1], "--help") == 0) ||
-               (strcmp(argv[1], "-h") == 0) ||
-               (strcmp(argv[1], "-v") == 0)){ 
-				printf("CACTID %s  Copyright 2002-2005 by The Cacti Group\n\n", VERSION); 
-				printf("Usage: cactid [start_host_id end_host_id]\n\n");
-				printf("If you do not specify [start_host_id end_host_id], Cactid will poll all hosts.\n\n");
-				printf("Cactid relies on the cactid.conf file that can exist in multiple locations.\n");
-				printf("The first location checked is the current directory.  Optionally, it can be\n");
-				printf("placed in the '/etc' directory.\n\n");
-				printf("Cactid is distributed under the Terms of the GNU General\n");
-				printf("Public License Version 2. (www.gnu.org/copyleft/gpl.html)\n\n");
-				printf("For more information, see http://www.cacti.net\n");
-				exit_cactid(); 
-			} 
-		} 
+	/*----------------------------------------------------------------
+	 * PROCESS COMMAND LINE
+	 *
+	 * Run through the list of ARGV words looking for parameters we
+	 * know about. Most have two flavors (-C + --conf), and many
+	 * themselves take a parameter.
+	 *
+	 * These parameters can be structured in two ways:
+	 *
+	 *	--conf=FILE		both parts in one argv[] string
+	 *	--conf FILE		two separate argv[] strings
+	 *
+	 * We set "arg" to point to "--conf", and "opt" to point to FILE.
+	 * The helper routine
+	 *
+	 * In each loop we set "arg" to next argv[] string, then look
+	 * to see if it has an equal sign. If so, we split it in half
+	 * and point to the option separately.
+	 *
+	 * NOTE: most direction to the program is given with dash-type
+	 * parameters, but we also allow standalone numeric device IDs
+	 * in "first last" format: this is how poller.php calls this
+	 * program.
+	 */
 
-		printf("ERROR: Cactid requires either 0 or 2 input parameters\n");
-		printf("USAGE: <cactidpath>/cactid [start_host_id end_host_id]\n");
-		exit_cactid();
+	#define MATCH(a, b)	(strcasecmp((a),(b)) == 0)
+
+	set.start_host_id = -1;
+	set.end_host_id   = -1;
+	set.php_initialized = FALSE;
+	set.parent_fork = CACTID_PARENT;
+
+	for (argv++; *argv; argv++) {
+		char	*arg = *argv;
+		char	*opt = strchr(arg, '=');	/* pick off the =VALUE part */
+
+		if (opt) *opt++ = '\0';
+
+		if (MATCH(arg, "-f") ||
+			MATCH(arg, "--first")) {
+			if (HOSTID_DEFINED(set.start_host_id)) {
+				die("ERROR: %s can only be used once", arg);
+			}
+
+			set.start_host_id = atoi(opt = getarg(opt, &argv));
+
+			if (!HOSTID_DEFINED(set.start_host_id)) {
+				die("ERROR: '%s=%s' is invalid first-host ID", arg, opt);
+			}
+		}
+
+		else if (MATCH(arg, "-l") ||
+				 MATCH(arg, "--last")) {
+			if (HOSTID_DEFINED(set.end_host_id)) {
+				die("ERROR: %s can only be used once", arg);
+			}
+
+			set.end_host_id = atoi(opt = getarg(opt, &argv));
+
+			if (!HOSTID_DEFINED(set.end_host_id)) {
+				die("ERROR: '%s=%s' is invalid last-host ID", arg, opt);
+			}
+		}
+
+		else if (MATCH(arg, "-p") ||
+				 MATCH(arg, "--poller")) {
+			set.poller_id = atoi(getarg(opt, &argv));
+		}
+
+		else if (MATCH(arg, "-h") ||
+				 MATCH(arg, "-v") ||
+				 MATCH(arg, "--help") ||
+				 MATCH(arg, "--version")) {
+			display_help();
+
+			exit(0);
+		}
+
+		else if (MATCH(arg, "-O") ||
+				 MATCH(arg, "--option")) {
+			char	*setting = getarg(opt, &argv);
+			char	*value   = strchr(setting, ':');
+
+			if (*value) {
+				*value++ = '\0';
+			}else{
+				die("ERROR: -O requires setting:value");
+			}
+
+			set_option(setting, value);
+		}
+
+		else if (MATCH(arg, "-R") ||
+				 MATCH(arg, "--readonly") ||
+				 MATCH(arg, "--read-only")) {
+			set.SQL_readonly = TRUE;
+		}
+
+		else if (MATCH(arg, "-C") ||
+				 MATCH(arg, "--conf")) {
+			conf_file = strdup(getarg(opt, &argv));
+		}
+
+		else if (MATCH(arg, "-S") ||
+				 MATCH(arg, "--stdout")) {
+			set_option("log_destination", "STDOUT");
+		}
+
+		else if (MATCH(arg, "-L") ||
+				 MATCH(arg, "--log")) {
+			set_option("log_destination", getarg(opt, &argv));
+		}
+
+		else if (MATCH(arg, "-V") ||
+				 MATCH(arg, "--verbosity")) {
+			set_option("log_verbosity", getarg(opt, &argv));
+		}
+
+		else if (MATCH(arg, "--snmponly") ||
+				 MATCH(arg, "--snmp-only")) {
+			set.snmponly = TRUE;
+		}
+
+		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
+			set.start_host_id = atoi(arg);
+		}
+
+		else if (!HOSTID_DEFINED(set.end_host_id) && all_digits(arg)) {
+			set.end_host_id = atoi(arg);
+		}
+
+		else {
+			die("ERROR: %s is an unknown command-line parameter", arg);
+		}
 	}
 
-	/* return error if the first arg is greater than the second */
-	if (argc == 3) {
-		if (atol(argv[1]) > atol(argv[2])) {
-			printf("ERROR: Invalid row specifications.  First row must be less than the second row\n");
-			exit_cactid();
-		}
+	#undef MATCH
+
+	/* we require either both the first and last hosts, or niether host */
+	if (HOSTID_DEFINED(set.start_host_id) != HOSTID_DEFINED(set.end_host_id)) {
+		die("ERROR: must provide both -f/-l, or neither");
+	}
+
+	if (set.start_host_id > set.end_host_id) {
+		die("ERROR: Invalid row spec; first host_id must be less than the second");
 	}
 
 	/* read configuration file to establish local environment */
 	if (conf_file) {
 		if ((read_cactid_config(conf_file, &set)) < 0) {
-			printf("ERROR: Could not read config file: %s\n", conf_file);
-			exit_cactid();
+			die("ERROR: Could not read config file: %s\n", conf_file);
 		}
 	}else{
-		if (!(conf_file = malloc(BUFSIZE))) {
-			printf("ERROR: Fatal malloc error: cactid.c conf_file!\n");
-			exit_cactid();
+		if (!(conf_file = calloc(1, BUFSIZE))) {
+			die("ERROR: Fatal malloc error: cactid.c conf_file!\n");
 		}
-		memset(conf_file, 0, BUFSIZE);
 
-		for (i = 0; i < CONFIG_PATHS; i++) {
+		for (i=0; i<CONFIG_PATHS; i++) {
 			snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_cactid_config(conf_file, &set) >= 0) {
@@ -167,20 +331,6 @@ int main(int argc, char *argv[]) {
 				snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
 			}
 		}
-	}
-
-	/* get the host_id bounds for polling */
-	switch (argc) {
-		case 3:
-			set.start_host_id = atoi(argv[1]);
-			set.end_host_id = atoi(argv[2]);
-
-			break;
-		default:
-			set.start_host_id = 0;
-			set.end_host_id = 0;
-
-			break;
 	}
 
 	/* read settings table from the database to further establish environment */
@@ -196,9 +346,8 @@ int main(int argc, char *argv[]) {
 	/* calculate the external_tread_sleep value */
 	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 2;
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "CACTID: Version %s starting\n", VERSION);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("CACTID: Version %s starting\n", VERSION);
 	}else{
 		printf("CACTID: Version %s starting\n", VERSION);
 	}
@@ -207,52 +356,37 @@ int main(int argc, char *argv[]) {
 	db_connect(set.dbdb, &mysql);
 
 	/* initialize SNMP */
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing Net-SNMP API\n", VERSION);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("CACTID: Initializing Net-SNMP API\n");
 	}
 	snmp_cactid_init();
 
 	/* initialize PHP if required */
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "CACTID: Initializing PHP Script Server\n", VERSION);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("CACTID: Initializing PHP Script Server\n");
 	}
 
-	/* tell cactid that it is parent, set/initialize the process ids, initialize php script server status and set poller id */
+	/* tell cactid that it is parent, and set the poller id */
 	set.parent_fork = CACTID_PARENT;
-	if ((ppid = getpid()) > 0) {
-		set.cactid_pid = ppid;
-		set.poller_id = 0;
-	}else {
-		cacti_log("ERROR: Problem Getting Parent Process ID\n");
-	}
+	set.poller_id = 0;
 
 	/* initialize the script server */
 	if (set.php_required) {
 		php_init(PHP_INIT);
-	}
-	set.php_current_server = 0;
-
-	/* log the parent and php script server process id's */
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: Parent pid=%i\n", set.cactid_pid);
-		cacti_log(logmessage);
+		set.php_initialized = TRUE;
+		set.php_current_server = 0;
 	}
 
-	/* get the id's to poll */
-	switch (argc) {
-		case 1:
-			result = db_query(&mysql, "SELECT id FROM host WHERE disabled='' ORDER BY id");
+	/* obtain the list of hosts to poll */
+	{
+	char querybuf[256], *qp = querybuf;
 
-			break;
-		case 3:
-			snprintf(result_string, sizeof(result_string)-1, "SELECT id FROM host WHERE (disabled='' and (id >= %s and id <= %s)) ORDER BY id", argv[1], argv[2]);
-			result = db_query(&mysql, result_string);
+	qp += sprintf(qp, "SELECT id FROM host");
+	qp += sprintf(qp, " WHERE disabled=''");
+	qp += append_hostrange(qp, "id", &set);	/* AND id BETWEEN a AND b */
+	qp += sprintf(qp, " ORDER BY id");
 
-			break;
-		default:
-			break;
+	result = db_query(&mysql, querybuf);
 	}
 
 	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
@@ -273,14 +407,13 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: Initial Value of Active Threads is %i\n", active_threads);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: Initial Value of Active Threads is %i\n", active_threads);
 	}
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = CACTID_FORK;
-	
+
 	/* loop through devices until done */
 	while ((device_counter < num_rows) && (canexit == 0)) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
@@ -305,16 +438,15 @@ int main(int argc, char *argv[]) {
 
 				switch (thread_status) {
 					case 0:
-						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+						if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 							cacti_log("DEBUG: Valid Thread to be Created\n");
 						}
 
 						device_counter++;
 						active_threads++;
 
-						if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-							snprintf(logmessage, LOGSIZE-1, "DEBUG: The Value of Active Threads is %i\n", active_threads);
-							cacti_log(logmessage);
+						if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+							cacti_log("DEBUG: The Value of Active Threads is %i\n", active_threads);
 						}
 
 						break;
@@ -423,7 +555,7 @@ int main(int argc, char *argv[]) {
 
 	/* tell cactid that it is now parent */
 	set.parent_fork = CACTID_PARENT;
-	
+
 	/* print out stats */
 	gettimeofday(&now, NULL);
 
@@ -434,7 +566,7 @@ int main(int argc, char *argv[]) {
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Thread Cleanup Complete\n");
 	}
 
@@ -443,7 +575,7 @@ int main(int argc, char *argv[]) {
 		php_close(PHP_INIT);
 	}
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: PHP Script Server Pipes Closed\n");
 	}
 
@@ -452,14 +584,13 @@ int main(int argc, char *argv[]) {
 	free(ids);
 	free(conf_file);
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: Allocated Variable Memory Freed\n");
 	}
 
 	/* shutdown SNMP */
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "CACTID: Shutting down Net-SNMP API\n", VERSION);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("CACTID: Shutting down Net-SNMP API\n");
 	}
 	snmp_cactid_close();
 
@@ -467,20 +598,121 @@ int main(int argc, char *argv[]) {
 	mysql_free_result(result);
 	mysql_close(&mysql);
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		cacti_log("DEBUG: MYSQL Free & Close Completed\n");
 	}
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	if ((set.verbose >= POLLER_VERBOSITY_MEDIUM) && (argc != 1)) {
-		snprintf(logmessage, LOGSIZE-1, "Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
-		cacti_log(logmessage);
+	if ((set.log_level >= POLLER_VERBOSITY_MEDIUM) && (argc != 1)) {
+		cacti_log("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 	}else{
 		printf("CACTID: Execution Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 	}
 
 	exit(0);
 }
+
+/*! \fn static void display_help()
+ *  \brief Display cactid usage information to the caller.
+ *
+ *	Display the help listing: the first line is created at runtime with
+ *	the version information, and the rest is strictly static text which
+ *	is dumped literally.
+ *
+ */
+static void display_help(void) {
+	static const char *const *p;
+	static const char * const helptext[] = {
+		"Usage: cactid [options] [firstid lastid]",
+		"",
+		"Options:",
+		"",
+		"  -h/--help          Show this brief help listing",
+		"  -f/--first=X       Start polling with host X",
+		"  -l/--last=X        End polling with host X",
+		"  -p/--poller=X      Poller ID = X",
+		"  -C/--conf=F        Read Cactid configuration from file F",
+		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
+		"  -R/--readonly      This cactid run is readonly with respect to the database",
+		"  -S/--stdout        Logging is performed to the standard output",
+		"  -V/--verbosity=V   Set logging verbosity to <V>",
+		"  --snmponly         Only do SNMP polling: no script stuff",
+		"",
+		"Either both of --first/--last must be provided, or neither can be,",
+		"and in their absense, all hosts are processed.",
+		"",
+		"Without the --conf parameter, cactid searches for its cactid.conf",
+		"file in the usual places.",
+		"",
+		"Verbosity is one of NONE/LOW/MEDIUM/HIGH/DEBUG or 1..5",
+		"",
+		"Runtime options are read from the 'settings' table in the Cacti",
+		"database, but they can be overridden with the --option=S:V",
+		"parameter.",
+		"",
+		"Cactid is distributed under the Terms of the GNU General",
+		"Public License Version 2. (www.gnu.org/copyleft/gpl.html)",
+		"For more information, see http://www.cacti.net",
+
+		0 /* ENDMARKER */
+	};
+
+	printf("CACTID %s  Copyright 2002-2005 by The Cacti Group\n\n", VERSION);
+
+	for (p = helptext; *p; p++) {
+		puts(*p);	/* automatically adds a newline */
+	}
+}
+
+/*! \fn static char *getarg()
+ *  \brief A function to parse calling parameters
+ *
+ *	This is a helper for the main arg-processing loop: we work with
+ *	options which are either of the form "-X=FOO" or "-X FOO"; we
+ *	want an easy way to handle either one.
+ *
+ *	The idea is that if the parameter has an = sign, we use the rest
+ *	of that same argv[X] string, otherwise we have to get the *next*
+ *	argv[X] string. But it's an error if an option-requiring param
+ *	is at the end of the list with no argument to follow.
+ *
+ *	The option name could be of the form "-C" or "--conf", but we
+ *	grab it from the existing argv[] so we can report it well.
+ *
+ * \return character pointer to the argument
+ *
+ */
+static char *getarg(char *opt, char ***pargv) {
+	const char *const optname = **pargv;
+
+	/* option already set? */
+	if (opt) return opt;
+
+	/* advance to next argv[] and try that one */
+	if ((opt = *++(*pargv)) != 0) return opt;
+
+	die("ERROR: option %s requires a parameter", optname);
+}
+
+/*  \fn void die(const char *format, ...)
+ *  \brief a method to end Cactid while returning the fatal error to stderr
+ *
+ *	Given a printf-style argument list, format it to the standard
+ *	error, append a newline, then exit Cactid.
+ *
+ */
+void die(const char *format, ...) {
+	va_list	args;
+
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+
+	putc('\n', stderr);
+
+	exit(-1);
+}
+
 

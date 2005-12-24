@@ -35,59 +35,143 @@
 #include <netdb.h>
 #include <syslog.h>
 #include <errno.h>
+#include <assert.h>
 #include "common.h"
 #include "cactid.h"
 #include "util.h"
 #include "snmp.h"
+#include "locks.h"
 #include "sql.h"
+#include "php.h"
 
-/******************************************************************************/
-/*  read_config_options() - load default values from the database for poller  */
-/*                          processing.                                       */
-/******************************************************************************/
-int read_config_options(config_t *set) {
-	MYSQL mysql;
+/*! \fn void set_option()
+ *  \brief Override cactid setting from the Cacti settings table.
+ *
+ *	Called from the command-line processing code, this provides a value
+ *	to replace any DB-stored option settings.
+ *
+ */
+void set_option(const char *option, const char *value) {
+	opttable[nopts  ].opt = option;
+	opttable[nopts++].val = value;
+}
+
+/*! \fn static const char *getsetting()
+ *  \brief Returns a character pointer to a Cacti setting.
+ *
+ *  Given a pointer to a database and the name of a setting, return the string
+ *  which represents the value from the settings table. Return NULL if we
+ *  can't find a setting for whatever reason.
+ *
+ *  NOTE: if the user has provided one of these options on the command line,
+ *  it's intercepted here and returned, overriding the database setting.
+ *
+ *  ===TODO: use a prepared statement?
+ *
+ *  \return the database option setting
+ *
+ */
+static const char *getsetting(MYSQL *psql, const char *setting) {
+	char      qstring[256];
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
+	int       i;
+
+	assert(psql    != 0);
+	assert(setting != 0);
+
+	/* see if it's in the option table */
+	for (i=0; i<nopts; i++) {
+		if (strcasecmp(setting, opttable[i].opt) == 0) {
+			/* FOUND IT! */
+			return opttable[i].val;
+		}
+	}
+
+	sprintf(qstring, "SELECT value FROM settings WHERE name = '%s'", setting);
+
+	result = db_query(psql, qstring);
+
+	if ((mysql_num_rows(result) > 0) &&
+		(mysql_row = mysql_fetch_row(result)) != 0)	{
+		return mysql_row[0];
+	}else{
+		return 0;
+	}
+}
+
+/*! \fn static int getboolsetting()
+ *  \brief Obtains a boolean option from the database.
+ *
+ *	Given the parameters for fetching a setting from the database,
+ *	do so for a *Boolean* value. We parse the usual set of words
+ *	meaning true/false, and if we don't get a value, or if we don't
+ *	understand what we fetched, we use the default value provided.
+ *
+ *  \return boolean TRUE or FALSE based upon database setting or the DEFAULT if not found
+ */
+static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
+	const char *rc;
+
+	assert(psql    != 0);
+	assert(setting != 0);
+
+	rc = getsetting(psql, setting);
+
+	if (rc == 0) return dflt;
+
+	if (strcasecmp(rc, "on"  ) == 0 ||
+		strcasecmp(rc, "yes" ) == 0 ||
+		strcasecmp(rc, "true") == 0 ||
+		strcasecmp(rc, "1"   ) == 0 ) {
+		return TRUE;
+	}
+
+	if (strcasecmp(rc, "off"  ) == 0 ||
+		strcasecmp(rc, "no"   ) == 0 ||
+		strcasecmp(rc, "false") == 0 ||
+		strcasecmp(rc, "0"    ) == 0 ) {
+		return FALSE;
+	}
+
+	/* doesn't really match one of our keywords: what to do? */
+
+	return dflt;
+}
+
+/*! \fn void read_config_options(contif_t *set)
+ *  \brief reads default cactid runtime parameters from the database and set's the global array
+ *  \param *set - A structure containing all global Cactid runtime parameters
+ *  
+ *  load default values from the database for poller processing
+ *
+ */
+void read_config_options(config_t *set) {
+	MYSQL mysql;
+	MYSQL_RES *result;
 	int num_rows;
-	char logmessage[LOGSIZE];
 	char web_root[BUFSIZE];
-	char result_string[BUFSIZE];
+	char sqlbuf[256], *sqlp = sqlbuf;
+	const char *res;
 
 	db_connect(set->dbdb, &mysql);
 
 	/* get logging level from database - overrides cactid.conf */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_verbosity'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (atoi(mysql_row[0])) {
-			set->verbose = atoi(mysql_row[0]);
-		}
+	if ((res = getsetting(&mysql, "log_verbosity")) != 0 ) {
+		const int n = atoi(res);
+		if (n != 0) set->log_level = n;
 	}
 
 	/* determine script server path operation and default log file processing */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_webroot'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		snprintf(set->path_php_server, sizeof(set->path_php_server)-1, "%s/script_server.php", mysql_row[0]);
-		snprintf(web_root, sizeof(web_root)-1, "%s", mysql_row[0]);
+	if ((res = getsetting(&mysql, "path_webroot")) != 0 ) {
+		snprintf(set->path_php_server, sizeof(set->path_php_server)-1, "%s/script_server.php", res);
+		snprintf(web_root, sizeof(web_root)-1, "%s", res);
 	}
 
 	/* determine logfile path */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_cactilog'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (strlen(mysql_row[0]) != 0) {
-			snprintf(set->path_logfile, sizeof(set->path_logfile)-1, mysql_row[0]);
+	if ((res = getsetting(&mysql, "path_cactilog")) != 0 ) {
+		if (strlen(res) != 0) {
+			snprintf(set->path_logfile, sizeof(set->path_logfile)-1, res);
 		}else{
 			if (strlen(web_root) != 0) {
 				snprintf(set->path_logfile, sizeof(set->path_logfile)-1, "%s/log/cacti.log", web_root);
@@ -100,268 +184,167 @@ int read_config_options(config_t *set) {
  	}
 
 	/* log the path_webroot variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The path_php_server variable is %s\n" ,set->path_php_server);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The path_php_server variable is %s\n", set->path_php_server);
 	}
 
 	/* log the path_cactilog variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The path_cactilog variable is %s\n" ,set->path_logfile);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The path_cactilog variable is %s\n", set->path_logfile);
 	}
 
 	/* determine log file, syslog or both, default is 1 or log file only */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_destination'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->log_destination = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "log_destination")) != 0 ) {
+		set->log_destination = parse_logdest(res, LOGDEST_FILE);
 	}else{
-		set->log_destination = 1;
+		set->log_destination = LOGDEST_FILE;
 	}
 
 	/* log the log_destination variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_destination variable is %i\n" ,set->log_destination);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The log_destination variable is %i (%s)\n",
+			set->log_destination,
+			printable_logdest(set->log_destination));
 	}
 
 	/* get PHP Path Information for Scripting */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='path_php_binary'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		snprintf(set->path_php, sizeof(set->path_php)-1, "%s", mysql_row[0]);
+	if ((res = getsetting(&mysql, "path_php_binary")) != 0 ) {
+		STRNCOPY(set->path_php, res);
 	}
 
 	/* log the path_php variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The path_php variable is %s\n" ,set->path_php);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The path_php variable is %s\n", set->path_php);
 	}
 
 	/* set availability_method */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='availability_method'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		set->availability_method = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "availability_method")) != 0 ) {
+		set->availability_method = atoi(res);
 	}
 
 	/* log the availability_method variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The availability_method variable is %i\n" ,set->availability_method);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The availability_method variable is %i\n", set->availability_method);
 	}
 
 	/* set ping_recovery_count */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_recovery_count'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		set->ping_recovery_count = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "ping_recovery_count")) != 0 ) {
+		set->ping_recovery_count = atoi(res);
 	}
 
 	/* log the ping_recovery_count variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_recovery_count variable is %i\n" ,set->ping_recovery_count);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The ping_recovery_count variable is %i\n", set->ping_recovery_count);
 	}
 
 	/* set ping_failure_count */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_failure_count'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		set->ping_failure_count = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "ping_failure_count")) != 0) {
+		set->ping_failure_count = atoi(res);
 	}
 
 	/* log the ping_failure_count variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_failure_count variable is %i\n" ,set->ping_failure_count);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The ping_failure_count variable is %i\n", set->ping_failure_count);
 	}
 
 	/* set ping_method */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_method'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		set->ping_method = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "ping_method")) != 0 ) {
+		set->ping_method = atoi(res);
 	}
 
 	/* log the ping_method variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_method variable is %i\n" ,set->ping_method);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The ping_method variable is %i\n", set->ping_method);
 	}
 
 	/* set ping_retries */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_retries'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		set->ping_retries = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "ping_retries")) != 0 ) {
+		set->ping_retries = atoi(res);
 	}
 
 	/* log the ping_retries variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_retries variable is %i\n" ,set->ping_retries);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The ping_retries variable is %i\n", set->ping_retries);
 	}
 
 	/* set ping_timeout */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='ping_timeout'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		set->ping_timeout = atoi(mysql_row[0]);
+	if ( (res = getsetting(&mysql, "ping_timeout")) != 0 ) {
+		set->ping_timeout = atoi(res);
 	}
 
 	/* log the ping_timeout variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The ping_timeout variable is %i\n" ,set->ping_timeout);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The ping_timeout variable is %i\n", set->ping_timeout);
 	}
 
 	/* set logging option for errors */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_perror'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (!strcmp(mysql_row[0],"on")) {
-			set->log_perror = 1;
-		}else {
-			set->log_perror = 0;
-		}
-	}
+	set->log_perror = getboolsetting(&mysql, "log_perror", FALSE);
 
 	/* log the log_perror variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_perror variable is %i\n" ,set->log_perror);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The log_perror variable is %i\n", set->log_perror);
 	}
 
 	/* set logging option for errors */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pwarn'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (!strcmp(mysql_row[0],"on")) {
-			set->log_pwarn = 1;
-		}else {
-			set->log_pwarn = 0;
-		}
-	}
+	set->log_pwarn = getboolsetting(&mysql, "log_pwarn", FALSE);
 
 	/* log the log_pwarn variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_pwarn variable is %i\n" ,set->log_pwarn);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The log_pwarn variable is %i\n", set->log_pwarn);
 	}
 
 	/* set logging option for statistics */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='log_pstats'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-
-		if (!strcmp(mysql_row[0],"on")) {
-			set->log_pstats = 1;
-		}else {
-			set->log_pstats = 0;
-		}
-	}
+	set->log_pstats = getboolsetting(&mysql, "log_pstats", FALSE);
 
 	/* log the log_pstats variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The log_pstats variable is %i\n" ,set->log_pstats);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The log_pstats variable is %i\n", set->log_pstats);
 	}
 
 	/* get Cacti defined max threads override cactid.conf */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_threads'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->threads = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "max_threads")) != 0 ) {
+		set->threads = atoi(res);
 		if (set->threads > MAX_THREADS) {
 			set->threads = MAX_THREADS;
 		}
 	}
 
 	/* log the threads variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The threads variable is %i\n" ,set->threads);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The threads variable is %i\n", set->threads);
 	}
 
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='poller_interval'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->poller_interval = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "poller_interval")) != 0 ) {
+		set->poller_interval = atoi(res);
 	}else{
 		set->poller_interval = 0;
 	}
 
 	/* log the poller_interval variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
 		if (set->poller_interval == 0) {
-			snprintf(logmessage, LOGSIZE-1, "DEBUG: The polling interval is the system default\n" ,set->poller_interval);
+			cacti_log("DEBUG: The polling interval is the system default\n");
 		}else{
-			snprintf(logmessage, LOGSIZE-1, "DEBUG: The polling interval is %i seconds\n" ,set->poller_interval);
+			cacti_log("DEBUG: The polling interval is %i seconds\n", set->poller_interval);
 		}
-		cacti_log(logmessage);
 	}
 
 	/* get the concurrent_processes variable to determine thread sleep values */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='concurrent_processes'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->num_parent_processes = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "concurrent_processes")) != 0 ) {
+		set->num_parent_processes = atoi(res);
 	}else{
 		set->num_parent_processes = 1;
 	}
 
 	/* log the concurrent processes variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The number of concurrent processes is %i\n" ,set->num_parent_processes);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The number of concurrent processes is %i\n", set->num_parent_processes);
 	}
 
 	/* get the script timeout to establish timeouts */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='script_timeout'");
-	num_rows = (int)mysql_num_rows(result);
-
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->script_timeout = atoi(mysql_row[0]);
+	if ((res = getsetting(&mysql, "script_timeout")) != 0 ) {
+		set->script_timeout = atoi(res);
 		if (set->script_timeout < 5) {
 			set->script_timeout = 5;
 		}
@@ -370,21 +353,16 @@ int read_config_options(config_t *set) {
 	}
 
 	/* log the script timeout value */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The script timeout is %i\n" ,set->script_timeout);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The script timeout is %i\n", set->script_timeout);
 	}
 
 	/* get the number of script server processes to run */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='php_servers'");
-	num_rows = (int)mysql_num_rows(result);
+	if ((res = getsetting(&mysql, "php_servers")) != 0 ) {
+		set->php_servers = atoi(res);
 
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->php_servers = atoi(mysql_row[0]);
-
-		if (set->php_servers > 10) {
-			set->php_servers = 10;
+		if (set->php_servers > MAX_PHP_SERVERS) {
+			set->php_servers = MAX_PHP_SERVERS;
 		}
 		
 		if (set->php_servers <= 0) {
@@ -395,68 +373,67 @@ int read_config_options(config_t *set) {
 	}
 
 	/* log the script timeout value */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: The number of php script servers to run is %i\n" ,set->php_servers);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The number of php script servers to run is %i\n", set->php_servers);
 	}
 
-	/* determine if the php script server is required */
-	if (set->end_host_id == 0) {
-		snprintf(result_string, sizeof(result_string)-1, "SELECT action FROM poller_item WHERE action=2");
-	}else{
-		snprintf(result_string, sizeof(result_string)-1, "SELECT action FROM poller_item WHERE ((host_id >= %i) AND (host_id <= %i) AND (action=2))", set->start_host_id, set->end_host_id);
-	}
+	/*----------------------------------------------------------------
+	 * determine if the php script server is required by searching for
+	 * all the host records for an action of POLLER_ACTION_PHP_SCRIPT_SERVER.
+	 * If we get even one, it means we have to deal with the PHP script
+	 * server.
+	 *
+	 */
+	set->php_required = FALSE;		/* assume no */
 
-	result = db_query(&mysql, result_string);
+	sqlp = sqlbuf;
+	sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+	sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+	sqlp += append_hostrange(sqlp, "host_id", set);
+	sqlp += sprintf(sqlp, " LIMIT 1");
+
+	result = db_query(&mysql, sqlbuf);
 	num_rows = (int)mysql_num_rows(result);
 
-	if (num_rows > 0) {
-		set->php_required = 1;
-	}else{
-		set->php_required = 0;
-	}
+	if (num_rows > 0) set->php_required = TRUE;
 
 	/* log the requirement for the script server */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'\n" ,set->start_host_id,set->end_host_id,num_rows);
-		cacti_log(logmessage);
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'\n", set->start_host_id,set->end_host_id,num_rows);
 
-		if (set->php_required == 0) {
-			snprintf(logmessage, LOGSIZE-1, "DEBUG: The PHP Script Server is Not Required\n" ,set->poller_interval);
-		}else{
-			snprintf(logmessage, LOGSIZE-1, "DEBUG: The PHP Script Server is Required\n" ,set->poller_interval);
-		}
-		cacti_log(logmessage);
+		cacti_log("DEBUG: The PHP Script Server is %sRequired\n",
+			set->php_required
+			? ""
+			: "Not ");
 	}
 
-	/* determine log file, syslog or both, default is 1 or log file only */
-	result = db_query(&mysql, "SELECT value FROM settings WHERE name='max_get_size'");
-	num_rows = (int)mysql_num_rows(result);
+	/* determine the maximum oid's to obtain in a single get request */
+	if ((res = getsetting(&mysql, "max_get_size")) != 0 ) {
+		set->snmp_max_get_size = atoi(res);
 
-	if (num_rows > 0) {
-		mysql_row = mysql_fetch_row(result);
-		set->max_get_size = atoi(mysql_row[0]);
-		if (set->max_get_size > 128) {
-			set->max_get_size = 128;
+		if (set->snmp_max_get_size > 128) {
+			set->snmp_max_get_size = 128;
 		}
 	}else{
-		set->max_get_size = 25;
+		set->snmp_max_get_size = 25;
 	}
 
-	/* log the max_get_size variable */
-	if (set->verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG:  The Maximum SNMP OID Get Size is %i\n" ,set->max_get_size);
-		cacti_log(logmessage);
+	/* log the snmp_max_get_size variable */
+	if (set->log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: The Maximum SNMP OID Get Size is %i\n", set->snmp_max_get_size);
 	}
 
 	mysql_free_result(result);
 	db_disconnect(&mysql);
 }
 
-/******************************************************************************/
-/*  read_cactid_config() - read the CACTID configuration files to obtain      */
-/*                         environment settings.                              */
-/******************************************************************************/
+/*! \fn int read_cactid_config(char *file, config_t *set) 
+ *  \brief obtain default startup variables from the cactid.conf file.
+ *  \param file the cactid config file
+ *  \param set global runtime parameters
+ *
+ *  \return 0 if successful or -1 if the file could not be opened
+ */
 int read_cactid_config(char *file, config_t *set) {
 	FILE *fp;
 	char buff[BUFSIZE];
@@ -464,7 +441,7 @@ int read_cactid_config(char *file, config_t *set) {
 	char p2[BUFSIZE];
 
 	if ((fp = fopen(file, "rb")) == NULL) {
-		if (set->verbose == POLLER_VERBOSITY_DEBUG) {
+		if (set->log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("ERROR: Could not open config file [%s]\n", file);
 		}
 		return -1;
@@ -490,29 +467,36 @@ int read_cactid_config(char *file, config_t *set) {
 	}
 }
 
-/******************************************************************************/
-/*  config_defaults() - populate system variables with default values.        */
-/******************************************************************************/
-void config_defaults(config_t * set) {
+/*! \fn void config_defaults(config_t *set)
+ *  \brief populates the global configuration structure with default cactid.conf file settings
+ *  \param *set global runtime parameters
+ *
+ */
+void config_defaults(config_t *set) {
 	set->threads = DEFAULT_THREADS;
 	set->dbport = DEFAULT_DB_PORT;
 
-	snprintf(set->dbhost, sizeof(set->dbhost)-1, DEFAULT_DB_HOST);
-	snprintf(set->dbdb, sizeof(set->dbdb)-1, DEFAULT_DB_DB);
-	snprintf(set->dbuser, sizeof(set->dbuser)-1, DEFAULT_DB_USER);
-	snprintf(set->dbpass, sizeof(set->dbpass)-1, DEFAULT_DB_PASS);
+	STRNCOPY(set->dbhost, DEFAULT_DB_HOST);
+	STRNCOPY(set->dbdb,   DEFAULT_DB_DB  );
+	STRNCOPY(set->dbuser, DEFAULT_DB_USER);
+	STRNCOPY(set->dbpass, DEFAULT_DB_PASS);
 
-	snprintf(config_paths[0], sizeof(config_paths[0])-1, CONFIG_PATH_1);
-	snprintf(config_paths[1], sizeof(config_paths[1])-1, CONFIG_PATH_2);
+	STRNCOPY(config_paths[0], CONFIG_PATH_1);
+	STRNCOPY(config_paths[1], CONFIG_PATH_2);
+
+	set->log_destination = LOGDEST_FILE;
 }
 
-/******************************************************************************/
-/*  exit_cactid() - if there is a serious error and cactid can't continue     */
-/*                  make sure that the php script server is shut down first.  */
-/******************************************************************************/
+/*! \fn void exit_cactid() 
+ *  \brief shut's down Cactid after a fatal error.  Make sure you shut down the script server.
+ *
+ */
 void exit_cactid() {
 	if (set.parent_fork == CACTID_PARENT) {
-		php_close(PHP_INIT);
+		if (set.php_initialized) {
+			php_close(PHP_INIT);
+		}
+
 		cacti_log("ERROR: Cactid Parent Process Encountered a Serious Error and Must Exit\n");
 	}else{
 		cacti_log("ERROR: Cactid Fork Process Encountered a Serious Error and Must Exit\n");			
@@ -521,23 +505,31 @@ void exit_cactid() {
 	exit(-1);
 }
 
-/******************************************************************************/
-/*  cacti_log() - output user messages to the Cacti logfile facility.         */
-/*                Can also output to the syslog facility if desired.          */
-/******************************************************************************/
-void cacti_log(char *logmessage) {
+/*! \fn void cacti_log(char *logmessage)
+ *  \brief output's log information to the desired cacti logfile.
+ *  \param *logmessage a pointer to the pre-formated log message.
+ *
+ */
+void cacti_log(const char *format, ...) {
+	va_list	args;
+
 	FILE *log_file = NULL;
 	FILE *fp = NULL;
 
-	/* Variables for Time Display */
+	/* variables for time display */
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
 
 	char logprefix[40]; /* Formatted Log Prefix */
+	char ulogmessage[LOGSIZE];	/* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];	/* Formatted Log Message */
 	extern config_t set;
 	int fileopen = 0;
+
+	va_start(args, format);
+	vsprintf(ulogmessage, format, args);
+	va_end(args);
 
 	/* default for "console" messages to go to stdout */
 	fp = stdout;
@@ -545,7 +537,12 @@ void cacti_log(char *logmessage) {
 	/* log message prefix */
 	snprintf(logprefix, sizeof(logprefix)-1, "CACTID: Poller[%i] ", set.poller_id);
 
-	if (((set.log_destination == 1) || (set.log_destination == 2)) && (set.verbose != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
+	if (set.log_destination == LOGDEST_STDOUT) {
+		puts(ulogmessage);
+		return;
+	}
+
+	if (((set.log_destination == LOGDEST_FILE) || (set.log_destination == LOGDEST_BOTH)) && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
 		while (!fileopen) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
@@ -556,7 +553,7 @@ void cacti_log(char *logmessage) {
 			if (log_file != NULL) {
 				fileopen = 1;
 			}else {
-				if (set.verbose == POLLER_VERBOSITY_DEBUG) {
+				if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 					fprintf(stderr, "ERROR: Could not open Logfile will not be logging\n");
 				}
 				break;
@@ -576,7 +573,7 @@ void cacti_log(char *logmessage) {
 		fprintf(stderr, "ERROR: Could not get string from strftime()\n");
 
 	strncat(flogmessage, logprefix, strlen(logprefix));
-	strncat(flogmessage, logmessage, strlen(logmessage));
+	strncat(flogmessage, ulogmessage, strlen(ulogmessage));
 
 	if (fileopen != 0) {
 		fputs(flogmessage, log_file);
@@ -584,7 +581,7 @@ void cacti_log(char *logmessage) {
 	}
 
 	/* output to syslog/eventlog */
-	if ((set.log_destination == 2) || (set.log_destination == 3)) {
+	if ((set.log_destination == LOGDEST_SYSLOG) || (set.log_destination == LOGDEST_BOTH)) {
 		thread_mutex_lock(LOCK_SYSLOG);
 		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 		if ((strstr(flogmessage,"ERROR")) && (set.log_perror)) {
@@ -600,20 +597,24 @@ void cacti_log(char *logmessage) {
 		thread_mutex_unlock(LOCK_SYSLOG);
 	}
 
-	if (set.verbose >= POLLER_VERBOSITY_NONE) {
+	if (set.log_level >= POLLER_VERBOSITY_NONE) {
 		if ((strstr(flogmessage,"ERROR")) || (strstr(flogmessage,"WARNING"))) {
 			fp = stderr;
 		}
 
-		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", logmessage);
+		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", ulogmessage);
 		fprintf(fp, "%s", flogmessage);
 	}
 }
 
-/******************************************************************************/
-/*  file_exists - check for the existance of a file.                          */
-/******************************************************************************/
-int file_exists(char *filename) {
+/*! \fn int file_exists(const char *filename)
+ *  \brief checks for the existance of a file.
+ *  \param *filename the name of the file to check for.
+ *
+ *  \return TRUE if found FALSE if not.
+ *
+ */
+int file_exists(const char *filename) {
 	struct stat file_stat;
 
 	if (stat(filename, &file_stat)) {
@@ -623,12 +624,36 @@ int file_exists(char *filename) {
 	}
 }
 
-/******************************************************************************/
-/*  is_numeric() - check to see if a string is long or double.                */
-/******************************************************************************/
-int is_numeric(char *string)
+/*! \fn all_digits(const char *string)
+ *  \brief verifies that a string is contains only numeric characters
+ *  \param string the string to check
+ *
+ *  This function has no leeway: spaces and minus signs and decimal points
+ *  are not digits, and an empty string is (by convention) not
+ *  all-digits too.
+ *
+ *  \return TRUE if not alpha or special characters found, FALSE if non numeric found
+ *
+ */
+int all_digits(const char *string) {
+	/* empty string is not all digits */
+	if ( *string == '\0' ) return FALSE;
+
+	while ( isdigit(*string) )
+		string++;
+
+	return *string == '\0';
+}
+
+/*! \fn int is_numeric(const char *string)
+ *  \brief check to see if a string is long or double
+ *  \param string the string to check
+ *
+ *  \return TRUE if long or double, FALSE if not
+ *
+ */
+int is_numeric(const char *string)
 {
-	extern int errno;
 	long local_lval;
 	double local_dval;
 	char *end_ptr_long, *end_ptr_double;
@@ -671,26 +696,13 @@ int is_numeric(char *string)
  	}
 }
 
-/******************************************************************************/
-/*  string_to_argv() - convert a string to an argc/argv combination           */
-/******************************************************************************/
-char **string_to_argv(char *argstring, int *argc){
-	char *p, **argv;
-	char *last;
-	int i = 0;
-
-	for((*argc)=1, i=0; i<strlen(argstring); i++) if(argstring[i]==' ') (*argc)++;
-
-	argv = (char **)malloc((*argc) * sizeof(char**));
-	for((p = strtok_r(argstring, " ", &last)), i=0; p; (p = strtok_r(NULL, " ", &last)), i++) argv[i] = p;
-	argv[i] = NULL;
-
-	return argv;
-}
-
-/******************************************************************************/
-/*  strip_alpha() - remove trailing alpha characters from a string.           */
-/******************************************************************************/
+/*! \fn char *string_alpha(char *string)
+ *  \brief remove trailing alpha characters from a string.
+ *  \param string the string to string characters from
+ *
+ *  \return a pointer to the modified string
+ *
+ */
 char *strip_alpha(char *string)
 {
 	int i;
@@ -709,9 +721,14 @@ char *strip_alpha(char *string)
 	return string;
 }
 
-/******************************************************************************/
-/*  add_slashes() - compensate for back slashes in arguments for scripts.     */
-/******************************************************************************/
+/*! \fn char *add_slashes(char *string, int arguments_2_string)
+ *  \brief change all backslashes to forward slashes for the first n arguements.
+ *  \param string the string to replace slashes
+ *  \param arguemnts_2_string the number of space delimited arguments to reverse
+ *
+ *  \return a pointer to the modified string. Variable must be freed by parent.
+ *
+ */
 char *add_slashes(char *string, int arguments_2_strip) {
 	int length;
 	int space_count;
@@ -760,9 +777,13 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	return(return_str);
 }
 
-/******************************************************************************/
-/*  strip_string_crlf() - remove control conditions from a string             */
-/******************************************************************************/
+/*! \fn char *string_string_crlf(char *string)
+ *  \brief remove trailing cr-lf from a string
+ *  \param string the string that requires trimming
+ *
+ *  \return a pointer to the modified string.
+ *
+ */
 char *strip_string_crlf(char *string) {
 	char *posptr;
 
@@ -783,14 +804,17 @@ char *strip_string_crlf(char *string) {
 	return(string);
 } 
 
-/******************************************************************************/
-/*  strip_quotes() - remove beginning and ending quotes from a string         */
-/******************************************************************************/
+/*! \fn char *strip_quotes(char *string)
+ *  \brief remove single and double quotes from a string
+ *  \param string the string that requires trimming
+ *
+ *  \return a pointer to the modified string.
+ *
+ */
 char *strip_quotes(char *string) {
 	int length;
-	char *posptr, *startptr;
+	char *startptr;
 	char type;
-	int remove = 0;
 
 	/* find first quote in the string, determine type */
 	while (1) {
@@ -822,4 +846,32 @@ char *strip_quotes(char *string) {
 	}
 
 	return string;
+}
+
+/*! \fn char *strncopy(char *dst, const char *src, size_t obuf)
+ *  \brief copies source to destination add a NUL terminator
+ *
+ *	Copy from source to destination, insuring a NUL termination.
+ *	The size of the buffer *includes* the terminating NUL. Note
+ *	that strncpy() does NOT NUL terminate if the source is the
+ *	size of the destination (yuck).
+ *
+ *	NOTE: it's very common to call this as:
+ *
+ *	  strncopy(buf, src, sizeof buf)
+ *
+ *	so we provide an STRNCOPY() macro which adds the size.
+ *
+ *  \return pointer to destination string
+ *
+ */
+char *strncopy(char *dst, const char *src, size_t obuf) {
+	assert(dst != 0);
+	assert(src != 0);
+
+	strncpy(dst, src, --obuf);
+
+	dst[obuf] = '\0';
+
+	return dst;
 }

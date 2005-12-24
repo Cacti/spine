@@ -36,29 +36,36 @@
 #include "util.h"
 #include "sql.h"
 
+/*! \fn int db_insert(MYSQL *mysql, char *query)
+ *  \brief inserts a row or rows in a database table.
+ *  \param mysql the database connection object
+ *  \param query the database query to execute
+ *
+ *	Unless the SQL_readonly boolean is set to TRUE, the function will execute
+ *	the SQL statement specified in the query variable.
+ *
+ *  \return TRUE if successful, or FALSE if not.
+ *
+ */
 int db_insert(MYSQL *mysql, char *query) {
-	char logmessage[LOGSIZE];
 	static int queryid = 0;
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query);
-		cacti_log(logmessage);
+	if (set.SQL_readonly == TRUE) { return TRUE; }
+	
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
-
-
 	if (mysql_query(mysql, query)) {
-		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem with MySQL: '%s'\n", mysql_error(mysql));
-		cacti_log(logmessage);
+		cacti_log("ERROR: Problem with MySQL: '%s'\n", mysql_error(mysql));
 
 		queryid++;
 		thread_mutex_unlock(LOCK_MYSQL);
 		return FALSE;
 	}else{
-		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Insert ID '%i': OK\n", queryid);
-			cacti_log(logmessage);
+		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+			cacti_log("DEBUG: MySQL Insert ID '%i': OK\n", queryid);
 		}
 
 		queryid++;
@@ -67,17 +74,25 @@ int db_insert(MYSQL *mysql, char *query) {
 	}
 }
 
+/*! \fn MYSQL_RES *db_query(MYSQL *mysql, char *query)
+ *  \brief executes a query and returns a pointer to the result set.
+ *  \param mysql the database connection object
+ *  \param query the database query to execute
+ *
+ *	This function will execute the SQL statement specified in the query variable.
+ *
+ *  \return MYSQL_RES a MySQL result structure
+ *
+ */
 MYSQL_RES *db_query(MYSQL *mysql, char *query) {
-	MYSQL_RES *mysql_res;
-	char logmessage[LOGSIZE];
+	MYSQL_RES *mysql_res = 0;
 	int return_code;
 	int retries;
 	int error;
 	static int queryid = 0;
 	
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Query ID '%i': '%s'\n", queryid, query);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: MySQL Query ID '%i': '%s'\n", queryid, query);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
@@ -86,13 +101,11 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	while (retries < 3) {
 	 	return_code = mysql_query(mysql, query);
 		if (return_code) {
-			snprintf(logmessage, LOGSIZE-1, "WARNING: MySQL Query Error, retrying query '%s'\n", query);
-			cacti_log(logmessage);
+			cacti_log("WARNING: MySQL Query Error, retrying query '%s'\n", query);
 			error = TRUE;
 		}else{
-			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE-1, "DEBUG: MySQL Query ID '%i': OK\n", queryid);
-				cacti_log(logmessage);
+			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+				cacti_log("DEBUG: MySQL Query ID '%i': OK\n", queryid);
 			}
 
 			mysql_res = mysql_store_result(mysql);
@@ -114,17 +127,25 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	return mysql_res;
 }
 
-int db_connect(char *database, MYSQL *mysql) {
-	char logmessage[LOGSIZE];
+/*! \fn void db_connect(char *database, MYSQL *mysql)
+ *  \brief opens a connection to a MySQL databse.
+ *  \param database a string pointer to the database name
+ *  \param mysql a pointer to a mysql database connection object
+ *
+ *	This function will attempt to open a connection to a MySQL database and then
+ *	return the connection object to the calling function.  If the database connection
+ *  fails more than 20 times, the function will fail and Cactid will terminate.
+ *
+ */
+void db_connect(char *database, MYSQL *mysql) {
 	MYSQL *db;
 	int tries;
-	int result;
+	int success;
 	char *hostname;
 	char *socket;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
-		snprintf(logmessage, LOGSIZE-1, "ERROR: malloc(): strdup() failed\n");
-		cacti_log(logmessage);
+		cacti_log("ERROR: malloc(): strdup() failed\n");
 		exit_cactid();
 	}
 
@@ -134,11 +155,10 @@ int db_connect(char *database, MYSQL *mysql) {
 
 	/* initialalize my variables */
 	tries = 20;
-	result = 0;
+	success = FALSE;
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
@@ -151,17 +171,15 @@ int db_connect(char *database, MYSQL *mysql) {
 	while (tries > 0){
 		tries--;
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
-			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
-				cacti_log(logmessage);
+			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+				cacti_log("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 			}
-			result = 1;
+			success = FALSE;
 		}else{
 			tries = 0;
-			result = 0;
-			if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-				snprintf(logmessage, LOGSIZE-1, "MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
-				cacti_log(logmessage);
+			success = TRUE;
+			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+				cacti_log("MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 			}
 		}
 		usleep(2000);
@@ -169,19 +187,46 @@ int db_connect(char *database, MYSQL *mysql) {
 
 	free(hostname);
 
-	if (result == 1){
-		snprintf(logmessage, LOGSIZE-1, "MYSQL: Connection Failed: %s\n", mysql_error(mysql));
-		cacti_log(logmessage);
-		thread_mutex_unlock(LOCK_MYSQL);
+	thread_mutex_unlock(LOCK_MYSQL);
+
+	if (!success){
+		cacti_log("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 		exit_cactid();
-	}else{
-		thread_mutex_unlock(LOCK_MYSQL);
-		return 0;
 	}
 }
 
+/*! \fn void db_disconnect(MYSQL *mysql)
+ *  \brief closes connection to MySQL database
+ *  \param mysql the database connection object
+ *
+ */
 void db_disconnect(MYSQL *mysql) {
 	mysql_close(mysql);
 }
 
-
+/*! \fn int append_hostrange(char *obuf, const char *colname, const config_t *set)
+ *  \brief appends a host range to a sql select statement
+ *  \param obuf the sql select statment to have the host range appended
+ *  \param colname the sql column name that will have the host range checked
+ *  \param set global runtime settings
+ * 
+ *	Several places in the code need to limit the range of hosts to
+ *	those with a certain ID range, but only if those range values
+ *	are actually nonzero.
+ *
+ *	This appends the SQL clause if necessary, returning the # of
+ *	characters added to the buffer. Else return 0.
+ *
+ *  \return the number of characters added to the end of the character buffer
+ *
+ */
+int append_hostrange(char *obuf, const char *colname, const config_t *set) {
+	if (HOSTID_DEFINED(set->start_host_id) && HOSTID_DEFINED(set->end_host_id)) {
+		return sprintf(obuf, " AND %s BETWEEN %d AND %d",
+			colname,
+			set->start_host_id,
+			set->end_host_id);
+	}else{
+		return 0;
+	}
+}

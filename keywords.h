@@ -30,12 +30,12 @@
  +-------------------------------------------------------------------------+
 */
 
-/* Host availability functions */
-int ping_host(host_t *host, ping_t *ping);
-int ping_snmp(host_t *host, ping_t *ping);
-int ping_icmp(host_t *host, ping_t *ping);
-int ping_udp(host_t *host, ping_t *ping);
-void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
-int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port);
-unsigned short get_checksum(void* buf, int len);
+const char *printable_log_level(int token);
+int parse_log_level(const char *word, int dflt);
+
+const char *printable_logdest(int token);
+int parse_logdest(const char *word, int dflt);
+
+const char *printable_action(int token);
+int parse_action(const char *word, int dflt);
 

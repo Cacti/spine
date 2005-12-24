@@ -61,21 +61,38 @@
 
 #define OIDSIZE(p) (sizeof(p)/sizeof(oid))
 
+/*! \fn void snmp_cactid_init()
+ *  \brief wrapper function for init_snmp
+ * 
+ *	Initializes snmp with the engine ID of "cactid".
+ *
+ */
 void snmp_cactid_init() {
 	init_snmp("cactid");
 }
 
+/*! \fn void snmp_cactid_close()
+ *  \brief wrapper function for the snmp_shutdown function
+ * 
+ *	Closes the snmp api for the engine ID of "cactid".
+ *
+ */
 void snmp_cactid_close() {
 	snmp_shutdown("cactid");
 }
 
+/*! \fn void snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community
+ *                          char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout)
+ *  \brief initializes an snmp_session object for a Cactid host
+ * 
+ *	This function will initialize NET-SNMP or UCD-SNMP for the Cactid host
+ *  in question.
+ *
+ */
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community, 
 					char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout) {
-	char logmessage[LOGSIZE];
 	void *sessp = NULL;
 	struct snmp_session session;
-
-	char hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
  	thread_mutex_lock(LOCK_SNMP);
@@ -106,25 +123,21 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}else if (snmp_version == 3) {
 		session.version = SNMP_VERSION_3;
 	}else {
-		snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname);
-		cacti_log(logmessage);
-		return;
+		cacti_log("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname);
+		return 0;
 	}		
 
-	/* net-snmp likes the hostname in 'host:port' format */
-	snprintf(hostnameport, BUFSIZE-1, "%s:%i", hostname, snmp_port);
-
-	session.peername = hostnameport;
+	session.peername = hostname;
 	session.retries = 3;
 	session.remote_port = snmp_port;
 	session.timeout = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
-		session.community = strdup(snmp_community);
+		session.community = snmp_community;
 		session.community_len = strlen(snmp_community);
 	}else {
 	    /* set the SNMPv3 user name */
-	    session.securityName = strdup(snmp_username);
+	    session.securityName = snmp_username;
 	    session.securityNameLen = strlen(session.securityName);
 
 		session.securityAuthKeyLen = USM_AUTH_KU_LEN;
@@ -158,24 +171,39 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		snprintf(logmessage, LOGSIZE-1, "ERROR: Problem initializing SNMP session '%s'\n", hostname);
-		cacti_log(logmessage);
+		cacti_log("ERROR: Problem initializing SNMP session '%s'\n", hostname);
 	}
 	
 	return sessp;
 }
 
+/*! \fn void snmp_host_cleanup(void *snmp_session)
+ *  \brief closes an established snmp session
+ * 
+ *	This function performs cleanup of the snmp sessions once polling is completed
+ *  for a host.
+ *
+ */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {	
 		snmp_sess_close(snmp_session);
 	}
 }
 
+/*! \fn char *snmp_get(host_t *current_host, char *snmp_oid)
+ *  \brief performs a single snmp_get for a specific snmp OID
+ * 
+ *	This function will poll a specific snmp OID for a host.  The host snmp
+ *  session must already be established.
+ *
+ *  \return returns the character representaton of the snmp OID, or "U" if
+ *  unsuccessful.
+ *
+ */
 char *snmp_get(host_t *current_host, char *snmp_oid) {
 	struct snmp_pdu *pdu = NULL;
 	struct snmp_pdu *response = NULL;
 	struct variable_list *vars = NULL;
-	char logmessage[LOGSIZE];
 	oid anOID[MAX_OID_LEN];
 	size_t anOID_len = MAX_OID_LEN;
 	int status;
@@ -238,11 +266,20 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	return result_string;
 }
 
-void snmp_snprint_value(char *obuf, size_t buf_len, const oid * objid, size_t objidlen, struct variable_list * variable) {
+/*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, 
+ *                              size_t objidlen, struct variable list *variable)
+ *  \brief replacement for the buggy net-snmp.org snprint_value function
+ * 
+ *	This function format an output buffer with the correct string representation
+ *  of an snmp OID result fetched with snmp_get_multi.  The buffer pointed to by
+ *  the function is modified.
+ *
+ */
+void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable) {
 	u_char *buf = NULL;
 	size_t out_len = 0;
 
-	if (buf = (u_char *) calloc(buf_len, 1)) {
+	if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
 		if (sprint_realloc_value(&buf, &buf_len, &out_len, 1,
 				objid, objidlen, variable)) {
 			snprintf(obuf, buf_len, "%s", buf);
@@ -256,18 +293,22 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid * objid, size_t ob
 	free(buf);
 }
 
-void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
+/*! \fn char *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
+ *  \brief performs multiple OID snmp_get's in a single network call
+ * 
+ *	This function will a group of snmp OID's for a host.  The host snmp
+ *  session must already be established.  The function will modify elements of
+ *  the snmp_oids array with the results from the snmp api call.
+ *
+ */
+void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
 	struct snmp_pdu *pdu = NULL;
 	struct snmp_pdu *response = NULL;
 	struct variable_list *vars = NULL;
-	char logmessage[LOGSIZE];
 	int status;
 	int i;
-	size_t out_len = 0;
 	int max_repetitions = 1;
 	int non_repeaters = 0;
-	int names;
-	size_t buffer_size = 255;
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
@@ -281,8 +322,7 @@ void *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
- 			snprintf(logmessage, LOGSIZE-1, "Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid);
- 			cacti_log(logmessage);
+ 			cacti_log("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid);
 
  			/* Mark this OID as "bad" */
  			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");

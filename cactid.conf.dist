@@ -24,7 +24,7 @@
 # | DB_Host      'localhost' or socket file for unix                        |
 # |              IP Address for Windows                                     |
 # | DB_Database  Database name, typically 'cacti'                           |
-# | DB_Port		 The database port to use									|
+# | DB_Port      The database port to use                                   |
 # | DB_User      The user to access the database, typically 'cactiuser'     |
 # | DB_Pass      The password for the Cacti user                            |
 # +-------------------------------------------------------------------------+
@@ -32,3 +32,4 @@ DB_Host         localhost
 DB_Database     cacti
 DB_User         cactiuser
 DB_Pass         cactiuser
+DB_Port         3306

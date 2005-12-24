@@ -30,23 +30,30 @@
  +-------------------------------------------------------------------------+
 */
 
-/* Cacti config reading utilities */
-int read_config_options(config_t *set);
+/* cacti config reading functions */
+void read_config_options(config_t *set);
 int read_cactid_config(char *file, config_t * set);
 void config_defaults(config_t *);
 
-/* Cacti premature shutdown utility */
-void exit_cactid();
+/* cacti logging and premature shutdown functions */
+void cacti_log(const char *format, ...);
+void exit_cactid()
+	__attribute__((noreturn));
 
-/* Cacti logging utilities */
-void cacti_log(char *logmessage);
+/* option processing function */
+void set_option(const char *setting, const char *value);
 
-/* Number validation tools */
-int is_numeric(char *string);
+/* number validation functions */
+int is_numeric(const char *string);
+int all_digits(const char *str);
 
-/* String and file utilities */
+/* string and file functions */
 char *add_slashes(char *string, int arguments_2_strip);
-int file_exists(char *filename);
+int file_exists(const char *filename);
 char *strip_string_crlf(char *string);
 char *strip_quotes(char *string);
 char *strip_alpha(char *string);
+char *strncopy(char *dst, const char *src, size_t n);
+
+/* macro to copy string to string with an ending null */
+#define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))

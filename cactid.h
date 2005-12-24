@@ -38,8 +38,15 @@
 #define FALSE 0
 #endif
 #ifndef TRUE
-#define TRUE !FALSE
+#define TRUE 1
 #endif
+
+#ifndef __GNUC__
+# define __attribute__(x)  /* NOTHING */
+#endif
+
+/* if a host is legal, return TRUE */
+#define HOSTID_DEFINED(x)	((x) >= 0)
 
 /* general constants */
 #define MAX_THREADS 100
@@ -113,6 +120,15 @@
 /* reindex constants */
 #define POLLER_COMMAND_REINDEX 1
 
+/* log destinations */
+#define LOGDEST_FILE   1
+#define LOGDEST_BOTH   2
+#define LOGDEST_SYSLOG 3
+#define LOGDEST_STDOUT 4
+
+#define IS_LOGGING_TO_FILE(ld)   ((ld) == LOGDEST_FILE   || (ld) == LOGDEST_BOTH)
+#define IS_LOGGING_TO_SYSLOG(ld) ((ld) == LOGDEST_SYSLOG || (ld) == LOGDEST_BOTH)
+
 /* logging levels */
 #define POLLER_VERBOSITY_NONE 1
 #define POLLER_VERBOSITY_LOW 2
@@ -159,48 +175,71 @@
 #define SNMP_3 3
 #define SNMP_NONE 4
 
-/* Typedefs */
+/* Config Structure
+ *
+ * This structure holds Cactid database configuration information and/or override values
+ * obtained via either accessing the database or reading the runtime options.  In addition,
+ * it contains runtime status information.
+ *
+ */
 typedef struct config_struct {
+	/* general configuration/runtime settings */
 	int poller_id;
 	int poller_interval;
+	int parent_fork;
+	int num_parent_processes;
+	int script_timeout;
+	int threads;
+	/* debugging options */
+	int snmponly;
+	int SQL_readonly;
+	/* host range to be poller with this cactid process */
+	int start_host_id;
+	int end_host_id;
+	/* database connection information */
 	char dbhost[80];
 	char dbdb[80];
 	char dbuser[80];
 	char dbpass[80];
 	int dboff;
 	unsigned int dbport;
+	/* path information */
 	char path_logfile[250];
 	char path_php[250];
 	char path_php_server[250];
+	/* logging options */
+	int log_level;
 	int log_destination;
 	int log_perror;
 	int log_pwarn;
 	int log_pstats;
+	/* ping settings */
 	int availability_method;
 	int ping_method;
 	int ping_retries;
 	int ping_timeout;
 	int ping_failure_count;
 	int ping_recovery_count;
-	int verbose;
-	int max_get_size;
-	pid_t cactid_pid;
+	/* snmp options */
+	int snmp_max_get_size;
+	int snmp_retries;
+	/* PHP Script Server Options */
 	int php_required;
+	int php_initialized;
 	int php_servers;
 	int php_current_server;
-	int parent_fork;
-	int num_parent_processes;
-	int script_timeout;
-	int threads;
-	int start_host_id;
-	int end_host_id;
 } config_t;
 
+/* Target Structure
+ *
+ * This structure holds the contents of the Poller Items table and the results
+ * of each polling action.
+ *
+ */
 typedef struct target_struct {
 	int target_id;
 	char result[512];
 	int local_data_id;
-	int rrd_num;
 	int action;
 	char command[256];
 	char hostname[250];
@@ -212,17 +251,29 @@ typedef struct target_struct {
 	int snmp_timeout;
 	char rrd_name[30];
 	char rrd_path[255];
+	int rrd_num;
 	char arg1[255];
 	char arg2[255];
 	char arg3[255];
 } target_t;
 
+/* SNMP OID's Structure
+ *
+ * This structure holds SNMP get results temporarily while polling is taking place.
+ *
+ */
 typedef struct snmp_oids {
 	int array_position;
 	char oid[255];
 	char result[255];
 } snmp_oids_t;
 
+/* PHP Script Server Structure
+ *
+ * This structure holds status and PID information for all the running
+ * PHP Script Server processes.
+ *
+ */
 typedef struct php_processes {
 	int php_state;
 	pid_t php_pid;
@@ -230,6 +281,12 @@ typedef struct php_processes {
 	int php_read_fd;
 } php_t;
 
+/* Host Structure
+ *
+ * This structure holds host information from the host table and is used throughout
+ * the application.
+ *
+ */
 typedef struct host_struct {
 	int id;
 	char hostname[250];
@@ -255,6 +312,11 @@ typedef struct host_struct {
 	void *snmp_session;
 } host_t;
 
+/* Host Reindex Structure
+ *
+ * This structure holds the results of the host re-index checks and values.
+ *
+ */
 typedef struct host_reindex_struct {
 	char op[4];
 	char assert_value[100];
@@ -263,6 +325,11 @@ typedef struct host_reindex_struct {
 	int action;
 } reindex_t;
 
+/* Ping Result Struction
+ *
+ * This structure holds the results of a host ping.
+ *
+ */
 typedef struct ping_results {
 	char hostname[255];
 	char ping_status[50];
@@ -271,6 +338,11 @@ typedef struct ping_results {
 	char snmp_response[50];
 } ping_t;
 
+/* ICMP Ping Structure
+ *
+ * This structure is required to craft a raw ICMP packet in order to ping a host.
+ *
+ */
 struct icmphdr {
     char type;
 	char code;
@@ -288,13 +360,32 @@ struct icmphdr {
 	} un;
 };
 
+/* Override Options Structure
+ *
+ * When we fetch a setting from the database, we allow the user to override
+ * it from the command line. These overrides are provided with the --option
+ * parameter and stored in this table: we *use* them when the config code
+ * reads from the DB.
+ *
+ * It's not an error to set an option which is unknown, but maybe should be.
+ *
+ */
+static struct {
+	const char *opt;
+	const char *val;
+} opttable[256];
 
 /* Globals */
+static int nopts = 0;
 config_t set;
 php_t *php_processes;
-
-/* Variables for Time Display */
 char start_datetime[20];
 char config_paths[CONFIG_PATHS][BUFSIZE];
+
+static void display_help(void);
+static char *getarg(char *opt, char ***pargv);
+void die(const char *format, ...)
+	__attribute__((noreturn))
+	__attribute__((format(printf, 1, 2)));
 
 #endif /* not _CACTID_H_ */

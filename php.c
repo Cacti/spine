@@ -47,15 +47,22 @@
 #include "locks.h"
 #include "util.h"
 
-extern char **environ;
-
-/******************************************************************************/
-/*  php_cmd() - send a command to the script server                           */
-/******************************************************************************/
+/*  \fn char *php_cmd(char *php_command, in php_process)
+ *  \brief calls the script server and executes a script command
+ *  \param php_command the formatted php script server command
+ *  \param php_process the php script server process to call
+ *
+ *  This function is called directly by the Cactid poller when a script server
+ *  request has been initiated for a host.  It will place the PHP Script Server
+ *  command on it's output pipe and then wait the pre-defined timeout period for
+ *  a response on the PHP Script Servers output pipe.
+ *
+ *  \return pointer to the string results.  Must be freed by the parent.
+ *
+ */
 char *php_cmd(char *php_command, int php_process) {
 	char *result_string;
 	char command[BUFSIZE];
-	char logmessage[LOGSIZE];
 	int write_status;
 
 	/* pad command with CR-LF */
@@ -101,8 +108,7 @@ char *php_cmd(char *php_command, int php_process) {
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
 		result_string = strdup("U");
-		snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] PHP Script Server communications lost.\n", php_process);
-		cacti_log(logmessage);
+		cacti_log("ERROR: SS[%i] PHP Script Server communications lost.\n", php_process);
 		php_close(php_process);
 	}else{
 		/* read the result from the php_command */
@@ -146,9 +152,15 @@ char *php_cmd(char *php_command, int php_process) {
 	return result_string;
 }
 
-/******************************************************************************/
-/*  php_get_process() - get an available php script server process from queue */
-/******************************************************************************/
+/*  \fn in php_get_process()
+ *  \brief returns the next php script server process to utilize
+ *
+ *  This very simple function simply returns the next PHP Script Server
+ *  process id to poll using a round robin algorithm.
+ *
+ *  \return the integer number of the next script server to use
+ *
+ */
 int php_get_process() {
 	int i;
 		
@@ -163,18 +175,24 @@ int php_get_process() {
 	return i;
 }
 
-/******************************************************************************/
-/*  php_readpipe - read a line from the PHP script server                     */
-/******************************************************************************/
+/*  \fn char *php_readpipe(int php_process)
+ *  \brief read a line from a PHP Script Server process
+ *  \param php_process the PHP Script Server process to obtain output from
+ *
+ *  This function will read the output pipe from the PHP Script Server process
+ *  and return that string to the Cactid thread requesting the output.  If for
+ *  some reason the PHP Script Server process does not respond in time, it will
+ *  be closed using the php_close function, then restarted.
+ *
+ *  \return a string pointer to the PHP Script Server response
+ */
 char *php_readpipe(int php_process) {
-	extern errno;
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
 	struct timeval now;
 	double begin_time = 0;
 	double end_time = 0;
-	char logmessage[LOGSIZE];
 	char *result_string;
 
 	if (!(result_string = (char *)malloc(BUFSIZE))) {
@@ -207,7 +225,7 @@ char *php_readpipe(int php_process) {
 	case -1:
 		switch (errno) {
 			case EBADF:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process);
+				cacti_log("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process);
 				break;
 			case EINTR:
 				/* take a moment */
@@ -228,21 +246,20 @@ char *php_readpipe(int php_process) {
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
 				}else{
-					snprintf(logmessage, LOGSIZE-1, "WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process);
+					cacti_log("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process);
 				}
 				break;
 			case EINVAL:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process);
+				cacti_log("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process);
 				break;
 			case ENOMEM:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process );
+				cacti_log("ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process );
 				break;
 			default:
-				snprintf(logmessage, LOGSIZE-1, "ERROR: SS[%i] Unknown fatal select() error\n", php_process);
+				cacti_log("ERROR: SS[%i] Unknown fatal select() error\n", php_process);
 				break;
 		}
 
-		cacti_log(logmessage);
 		snprintf(result_string, BUFSIZE-1, "U");
 
 		/* kill script server because it is misbehaving */
@@ -250,8 +267,7 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	case 0:
-		snprintf(logmessage, LOGSIZE-1, "WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process);
-		cacti_log(logmessage);
+		cacti_log("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process);
 		snprintf(result_string, BUFSIZE-1, "U");
 
 		/* kill script server because it is misbehaving */
@@ -270,18 +286,25 @@ char *php_readpipe(int php_process) {
 	return result_string;
 }
 
-/******************************************************************************/
-/*  php_init() - initialize the PHP script server process or processes        */
-/******************************************************************************/
+/*  \fn int php_init(int php_process)
+ *  \brief initialize either a specific PHP Script Server or all of them.
+ *  \param php_process the process number to start or PHP_INIT
+ *
+ *  This function will either start an individual PHP Script Server process
+ *  or all of them if the input parameter is the PHP_INIT constant.  The function
+ *  will check the status of the process to verify that it is ready to process
+ *  scripts as well.
+ *
+ *  \return TRUE if the PHP Script Server is know running or FALSE otherwise
+ */
 int php_init(int php_process) {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
 	pid_t  pid;
-	char logmessage[LOGSIZE];
 	char poller_id[11];
 	char *argv[5];
 	int  cancel_state;
-	char *result_string;
+	char *result_string = 0;
 	int num_processes;
 	int i;
 
@@ -293,22 +316,19 @@ int php_init(int php_process) {
 	}
 	
 	for (i=0; i < num_processes; i++) {
-		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] PHP Script Server Routine Starting\n", i);
-			cacti_log(logmessage);
+		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+			cacti_log("DEBUG: SS[%i] PHP Script Server Routine Starting\n", i);
 		}
 
 		/* create the output pipes from cactid to php*/
 		if (pipe(cacti2php_pdes) < 0) {
-			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Could not allocate php server pipes\n", i);
-			cacti_log(logmessage);
+			cacti_log("ERROR: SS[%i] Could not allocate php server pipes\n", i);
 			return FALSE;
 		}
 
 		/* create the input pipes from php to cactid */
 		if (pipe(php2cacti_pdes) < 0) {
-			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Could not allocate php server pipes\n", i);
-			cacti_log(logmessage);
+			cacti_log("ERROR: SS[%i] Could not allocate php server pipes\n", i);
 			return FALSE;
 		}
 
@@ -324,9 +344,8 @@ int php_init(int php_process) {
 		argv[4] = NULL;
 
 		/* fork a child process */
-		if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-			snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i);
-			cacti_log(logmessage);
+		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+			cacti_log("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i);
 		}
 
 		pid = fork();
@@ -339,8 +358,7 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Cound not fork PHP Script Server\n", i);
-				cacti_log(logmessage);
+				cacti_log("ERROR: SS[%i] Cound not fork PHP Script Server\n", i);
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
@@ -361,9 +379,8 @@ int php_init(int php_process) {
 				_exit(127);
 				/* NOTREACHED */
 			default: /* I am the parent process */
-				if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-					snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i);
-					cacti_log(logmessage);
+				if (set.log_level >= POLLER_VERBOSITY_DEBUG) {
+					cacti_log("DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i);
 				}
 		}
 
@@ -394,23 +411,20 @@ int php_init(int php_process) {
 
 		if (strstr(result_string, "Started")) {
 			if (php_process == PHP_INIT) {
-				if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-					snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] Confirmed PHP Script Server running\n", i);
-					cacti_log(logmessage);
+				if (set.log_level >= POLLER_VERBOSITY_DEBUG) {
+					cacti_log("DEBUG: SS[%i] Confirmed PHP Script Server running\n", i);
 				}
 
 				php_processes[i].php_state = PHP_READY;
 			}else{
-				if (set.verbose >= POLLER_VERBOSITY_DEBUG) {
-					snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process);
-					cacti_log(logmessage);
+				if (set.log_level >= POLLER_VERBOSITY_DEBUG) {
+					cacti_log("DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process);
 				}
 
 				php_processes[php_process].php_state = PHP_READY;
 			}
 		}else{
-			snprintf(logmessage, sizeof(logmessage)-1, "ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string);
-			cacti_log(logmessage);
+			cacti_log("ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string);
 
 			if (php_process == PHP_INIT) {
 				php_processes[i].php_state = PHP_BUSY;
@@ -421,19 +435,29 @@ int php_init(int php_process) {
 	}
 
 	free(result_string);
+
+	return TRUE;
 }
 
-/******************************************************************************/
-/*  php_close - close the pipes and wait for the status of the child.         */
-/******************************************************************************/
+/*  \fn void php_close(int php_process)
+ *  \brief close the php script server process
+ *  \param php_process the process to close or PHP_INIT
+ *
+ *  This function will take an input parameter of either a specially coded
+ *  PHP_INIT parameter or an integer stating the process number.  With that
+ *  information is will close and/or terminate the child PHP Script Server
+ *  process and then return to the calling function.
+ *
+ *  TODO: Make ending of the child process not be reliant on SIG_TERM in cases
+ *  where the child process is hung for one reason or another.
+ *
+ */
 void php_close(int php_process) {
-	char logmessage[LOGSIZE];
 	int i;
 	int num_processes;
 
-	if (set.verbose == POLLER_VERBOSITY_DEBUG) {
-		snprintf(logmessage, sizeof(logmessage)-1, "DEBUG: SS[%i] Script Server Shutdown Started\n", php_process);
-		cacti_log(logmessage);
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+		cacti_log("DEBUG: SS[%i] Script Server Shutdown Started\n", php_process);
 	}
 
 	if (php_process == PHP_INIT) {

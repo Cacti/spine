@@ -115,7 +115,6 @@ int nft_popen(const char * command, const char * type) {
 	struct pid *p;
     int    pdes[2];
 	int    fd, pid, twoway;
-	char   *argv[4];
 	int    cancel_state;
 	char** dargv = NULL; 
 	int    dargc = 0; 
