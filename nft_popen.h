@@ -26,7 +26,7 @@
 
 #include <pthread.h>
 
-/*
+/*!
  *  The nft_popen() function forks a command in a child process, and returns
  *  a pipe that is connected to the child's standard input and output. It is
  *  like the standard popen() call, except that it returns the file descriptor,
@@ -47,7 +47,7 @@
 int	nft_popen(const char * command, const char * mode);
 
 
-/*
+/*!
  *  nft_pchild
  *
  *  Get the pid of the child process for an fd created by ntf_popen().
@@ -60,7 +60,7 @@ int	nft_popen(const char * command, const char * mode);
 int	nft_pchild(int fd);
 
 
-/*
+/*!
  *  nft_pclose
  *
  *  Close the pipe and wait for the status of the child process.

@@ -44,7 +44,7 @@
 #include "sql.h"
 #include "php.h"
 
-/*! \fn void set_option()
+/*! \fn void set_option(const char *option, const char *value)
  *  \brief Override cactid setting from the Cacti settings table.
  *
  *	Called from the command-line processing code, this provides a value
@@ -56,7 +56,7 @@ void set_option(const char *option, const char *value) {
 	opttable[nopts++].val = value;
 }
 
-/*! \fn static const char *getsetting()
+/*! \fn static const char *getsetting(MYSQL *psql, const char *setting)
  *  \brief Returns a character pointer to a Cacti setting.
  *
  *  Given a pointer to a database and the name of a setting, return the string
@@ -100,7 +100,7 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 	}
 }
 
-/*! \fn static int getboolsetting()
+/*! \fn static int getboolsetting(MYSQL *psql, const char *setting, int dflt)
  *  \brief Obtains a boolean option from the database.
  *
  *	Given the parameters for fetching a setting from the database,
@@ -139,7 +139,7 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 	return dflt;
 }
 
-/*! \fn void read_config_options(contif_t *set)
+/*! \fn void read_config_options(config_t *set)
  *  \brief reads default cactid runtime parameters from the database and set's the global array
  *  \param *set - A structure containing all global Cactid runtime parameters
  *  
@@ -696,7 +696,7 @@ int is_numeric(const char *string)
  	}
 }
 
-/*! \fn char *string_alpha(char *string)
+/*! \fn char *strip_alpha(char *string)
  *  \brief remove trailing alpha characters from a string.
  *  \param string the string to string characters from
  *
@@ -721,10 +721,10 @@ char *strip_alpha(char *string)
 	return string;
 }
 
-/*! \fn char *add_slashes(char *string, int arguments_2_string)
+/*! \fn char *add_slashes(char *string, int arguments_2_strip)
  *  \brief change all backslashes to forward slashes for the first n arguements.
  *  \param string the string to replace slashes
- *  \param arguemnts_2_string the number of space delimited arguments to reverse
+ *  \param arguments_2_strip the number of space delimited arguments to reverse
  *
  *  \return a pointer to the modified string. Variable must be freed by parent.
  *
@@ -777,7 +777,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	return(return_str);
 }
 
-/*! \fn char *string_string_crlf(char *string)
+/*! \fn char *strip_string_crlf(char *string)
  *  \brief remove trailing cr-lf from a string
  *  \param string the string that requires trimming
  *

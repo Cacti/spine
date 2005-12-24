@@ -47,7 +47,7 @@
 #include "locks.h"
 #include "util.h"
 
-/*  \fn char *php_cmd(char *php_command, in php_process)
+/*! \fn char *php_cmd(char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
  *  \param php_process the php script server process to call
@@ -152,7 +152,7 @@ char *php_cmd(char *php_command, int php_process) {
 	return result_string;
 }
 
-/*  \fn in php_get_process()
+/*!  \fn in php_get_process()
  *  \brief returns the next php script server process to utilize
  *
  *  This very simple function simply returns the next PHP Script Server
@@ -175,7 +175,7 @@ int php_get_process() {
 	return i;
 }
 
-/*  \fn char *php_readpipe(int php_process)
+/*! \fn char *php_readpipe(int php_process)
  *  \brief read a line from a PHP Script Server process
  *  \param php_process the PHP Script Server process to obtain output from
  *
@@ -286,7 +286,7 @@ char *php_readpipe(int php_process) {
 	return result_string;
 }
 
-/*  \fn int php_init(int php_process)
+/*! \fn int php_init(int php_process)
  *  \brief initialize either a specific PHP Script Server or all of them.
  *  \param php_process the process number to start or PHP_INIT
  *
@@ -439,7 +439,7 @@ int php_init(int php_process) {
 	return TRUE;
 }
 
-/*  \fn void php_close(int php_process)
+/*! \fn void php_close(int php_process)
  *  \brief close the php script server process
  *  \param php_process the process to close or PHP_INIT
  *

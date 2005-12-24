@@ -42,7 +42,7 @@
 #include "sql.h"
 #include "ping.h"
 
-/*  \fn int ping_host(host_t *host, ping_t *ping)
+/*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
  *  \param host a pointer to the current host structure
  *  \param ping a pointer to the current hosts ping structure
@@ -121,7 +121,7 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 }
 
-/*  \fn int ping_snmp(host_t *host, ping_t *ping)
+/*! \fn int ping_snmp(host_t *host, ping_t *ping)
  *  \brief ping a host using snmp sysUptime
  *  \param host a pointer to the current host structure
  *  \param ping a pointer to the current hosts ping structure
@@ -188,7 +188,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 }
 
-/*  \fn int ping_icmp(host_t *host, ping_t *ping)
+/*! \fn int ping_icmp(host_t *host, ping_t *ping)
  *  \brief ping a host using an ICMP packet
  *  \param host a pointer to the current host structure
  *  \param ping a pointer to the current hosts ping structure
@@ -340,7 +340,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	}
 }
 
-/*  \fn int ping_udp(host_t *host, ping_t *ping)
+/*! \fn int ping_udp(host_t *host, ping_t *ping)
  *  \brief ping a host using an UDP datagram
  *  \param host a pointer to the current host structure
  *  \param ping a pointer to the current hosts ping structure
@@ -472,7 +472,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	}
 }
 
-/*  \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
+/*! \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
  *  \brief converts a hostname to an internet address
  *
  *  \return TRUE if successful, FALSE otherwise.
@@ -504,7 +504,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	}
 }
 
-/*  \fn unsigned short get_checksum(void* bug, int len)
+/*! \fn unsigned short get_checksum(void* buf, int len)
  *  \brief calculates a 16bit checksum of a packet buffer
  *  \param buf the input buffer to calculate the checksum of
  *  \param len the size of the input buffer
@@ -530,7 +530,7 @@ unsigned short get_checksum(void* buf, int len) {
 	return answer;
 }
 
-/*  \fn void update_host_status(int status, host_t *host, ping_t *ping, int availability_method)
+/*! \fn void update_host_status(int status, host_t *host, ping_t *ping, int availability_method)
  *  \brief update the host table in Cacti with the result of the ping of the host.
  *  \param status the current poll status of the host, either HOST_UP, or HOST_DOWN
  *  \param host a pointer to the current host structure

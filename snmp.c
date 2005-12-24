@@ -81,8 +81,9 @@ void snmp_cactid_close() {
 	snmp_shutdown("cactid");
 }
 
-/*! \fn void snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community
- *                          char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout)
+/*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version, 
+ * char *snmp_community, char *snmp_username, char *snmp_password, int snmp_port, 
+ * int snmp_timeout)
  *  \brief initializes an snmp_session object for a Cactid host
  * 
  *	This function will initialize NET-SNMP or UCD-SNMP for the Cactid host
@@ -266,8 +267,8 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	return result_string;
 }
 
-/*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, 
- *                              size_t objidlen, struct variable list *variable)
+/*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
+ *
  *  \brief replacement for the buggy net-snmp.org snprint_value function
  * 
  *	This function format an output buffer with the correct string representation

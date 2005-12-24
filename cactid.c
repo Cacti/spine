@@ -30,7 +30,7 @@
  +-------------------------------------------------------------------------+
 */
 
-/*
+/*!
  * COMMAND-LINE PARAMETERS
  *
  * -h | --help
@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
 	/* get static defaults for system */
 	config_defaults(&set);
 
-	/*----------------------------------------------------------------
+	/*! ----------------------------------------------------------------
 	 * PROCESS COMMAND LINE
 	 *
 	 * Run through the list of ARGV words looking for parameters we
@@ -666,7 +666,7 @@ static void display_help(void) {
 	}
 }
 
-/*! \fn static char *getarg()
+/*! \fn static char *getarg(char *opt, char ***pargv)
  *  \brief A function to parse calling parameters
  *
  *	This is a helper for the main arg-processing loop: we work with
@@ -696,7 +696,7 @@ static char *getarg(char *opt, char ***pargv) {
 	die("ERROR: option %s requires a parameter", optname);
 }
 
-/*  \fn void die(const char *format, ...)
+/*!  \fn void die(const char *format, ...)
  *  \brief a method to end Cactid while returning the fatal error to stderr
  *
  *	Given a printf-style argument list, format it to the standard

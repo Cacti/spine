@@ -28,6 +28,8 @@
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
+*/
+/*!
  *
  *	This module provides keyword-lookup support for various cactid
  *	objects. The idea is that we can do a two-way translation: given
@@ -58,7 +60,7 @@ struct keyword {
 	int         value;
 };
 
-/*  Boolword Structure
+/*! Boolword Structure
  *
  *	Structure that helps map a common TRUE/FALSE text string to the correct
  *	boolean response.
@@ -76,7 +78,7 @@ static const struct keyword boolword[] = {
 	{ 0, 0 }	/* ENDMARKER */
 };
 
-/*  Log Level Structure
+/*! Log Level Structure
  *
  *	Structure that helps map either an integer value to a text logging level or
  *	vice versa.
@@ -92,7 +94,7 @@ static const struct keyword log_level[] = {
 	{ 0, 0 }	/* ENDMARKER */
 };
 
-/*  Log Destination Structure
+/*! Log Destination Structure
  *
  *	Structure that helps map either an integer value to a text logging destination
  *  or vice versa.
@@ -107,7 +109,7 @@ static const struct keyword logdest[] = {
 	{ 0, 0 }	/* ENDMARKER */
 };
 
-/*  Poller Action Structure
+/*! Poller Action Structure
  *
  *	Structure that helps map either an integer value to a text poller action
  *  or vice versa.

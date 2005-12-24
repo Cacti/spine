@@ -175,7 +175,7 @@
 #define SNMP_3 3
 #define SNMP_NONE 4
 
-/* Config Structure
+/*! Config Structure
  *
  * This structure holds Cactid database configuration information and/or override values
  * obtained via either accessing the database or reading the runtime options.  In addition,
@@ -230,7 +230,7 @@ typedef struct config_struct {
 	int php_current_server;
 } config_t;
 
-/* Target Structure
+/*! Target Structure
  *
  * This structure holds the contents of the Poller Items table and the results
  * of each polling action.
@@ -257,7 +257,7 @@ typedef struct target_struct {
 	char arg3[255];
 } target_t;
 
-/* SNMP OID's Structure
+/*! SNMP OID's Structure
  *
  * This structure holds SNMP get results temporarily while polling is taking place.
  *
@@ -268,7 +268,7 @@ typedef struct snmp_oids {
 	char result[255];
 } snmp_oids_t;
 
-/* PHP Script Server Structure
+/*! PHP Script Server Structure
  *
  * This structure holds status and PID information for all the running
  * PHP Script Server processes.
@@ -281,7 +281,7 @@ typedef struct php_processes {
 	int php_read_fd;
 } php_t;
 
-/* Host Structure
+/*! Host Structure
  *
  * This structure holds host information from the host table and is used throughout
  * the application.
@@ -312,7 +312,7 @@ typedef struct host_struct {
 	void *snmp_session;
 } host_t;
 
-/* Host Reindex Structure
+/*! Host Reindex Structure
  *
  * This structure holds the results of the host re-index checks and values.
  *
@@ -325,7 +325,7 @@ typedef struct host_reindex_struct {
 	int action;
 } reindex_t;
 
-/* Ping Result Struction
+/*! Ping Result Struction
  *
  * This structure holds the results of a host ping.
  *
@@ -338,7 +338,7 @@ typedef struct ping_results {
 	char snmp_response[50];
 } ping_t;
 
-/* ICMP Ping Structure
+/*! ICMP Ping Structure
  *
  * This structure is required to craft a raw ICMP packet in order to ping a host.
  *
@@ -360,7 +360,7 @@ struct icmphdr {
 	} un;
 };
 
-/* Override Options Structure
+/*! Override Options Structure
  *
  * When we fetch a setting from the database, we allow the user to override
  * it from the command line. These overrides are provided with the --option
