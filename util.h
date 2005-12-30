@@ -31,30 +31,32 @@
 */
 
 /* cacti config reading functions */
-void read_config_options(config_t *set);
-int read_cactid_config(char *file, config_t * set);
-void config_defaults(config_t *);
+extern void read_config_options(config_t *set);
+extern int read_cactid_config(char *file, config_t * set);
+extern void config_defaults(config_t *);
 
 /* cacti logging function */
-void cacti_log(const char *format, ...);
-void die(const char *format, ...)
+extern void cacti_log(const char *format, ...)
+	__attribute__((format(printf, 1, 2)));
+
+extern void die(const char *format, ...)
 	__attribute__((noreturn))
 	__attribute__((format(printf, 1, 2)));
 
 /* option processing function */
-void set_option(const char *setting, const char *value);
+extern void set_option(const char *setting, const char *value);
 
 /* number validation functions */
-int is_numeric(const char *string);
-int all_digits(const char *str);
+extern int is_numeric(const char *string);
+extern int all_digits(const char *str);
 
 /* string and file functions */
-char *add_slashes(char *string, int arguments_2_strip);
-int file_exists(const char *filename);
-char *strip_string_crlf(char *string);
-char *strip_quotes(char *string);
-char *strip_alpha(char *string);
-char *strncopy(char *dst, const char *src, size_t n);
+extern char *add_slashes(char *string, int arguments_2_strip);
+extern int file_exists(const char *filename);
+extern char *strip_string_crlf(char *string);
+extern char *strip_quotes(char *string);
+extern char *strip_alpha(char *string);
+extern char *strncopy(char *dst, const char *src, size_t n);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))

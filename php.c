@@ -372,7 +372,7 @@ int php_init(int php_process) {
 				(void)close(cacti2php_pdes[1]);
 
 				/* start the php script server process */
-				execve(argv[0], argv, environ);
+				execv(argv[0], argv);
 				_exit(127);
 				/* NOTREACHED */
 			default: /* I am the parent process */

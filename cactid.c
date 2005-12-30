@@ -102,6 +102,14 @@ int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
 
+config_t set;
+php_t	*php_processes = 0;
+char	 start_datetime[20];
+char	 config_paths[CONFIG_PATHS][BUFSIZE];
+
+static char *getarg(char *opt, char ***pargv);
+static void display_help(void);
+
 /*! \fn main(int argc, char *argv[])
  *  \brief The Cactid program entry point
  *  \param argc The number of arguments passed to the function plus one (+1)
@@ -152,7 +160,6 @@ int main(int argc, char *argv[]) {
 	int i;
 	int mutex_status = 0;
 	int thread_status = 0;
-	pid_t ppid;
 
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));

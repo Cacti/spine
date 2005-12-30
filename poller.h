@@ -30,7 +30,7 @@
  +-------------------------------------------------------------------------+
 */
 
-void *child(void *arg);
-void poll_host(int host_id);
-char *exec_poll(host_t *current_host, char *command);
-int validate_result(char *result);
+extern void *child(void *arg);
+extern void poll_host(int host_id);
+extern char *exec_poll(host_t *current_host, char *command);
+extern int validate_result(char *result);

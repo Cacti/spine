@@ -52,7 +52,6 @@
  *
  */
 void *child(void *arg) {
-	extern int active_threads;
 	int host_id = *(int *) arg;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
@@ -820,7 +819,6 @@ int validate_result(char *result) {
  *
  */
 char *exec_poll(host_t *current_host, char *command) {
-	extern int errno;
 	int cmd_fd;
 	int bytes_read;
 	fd_set fds;

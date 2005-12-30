@@ -360,29 +360,12 @@ struct icmphdr {
 	} un;
 };
 
-/*! Override Options Structure
- *
- * When we fetch a setting from the database, we allow the user to override
- * it from the command line. These overrides are provided with the --option
- * parameter and stored in this table: we *use* them when the config code
- * reads from the DB.
- *
- * It's not an error to set an option which is unknown, but maybe should be.
- *
- */
-static struct {
-	const char *opt;
-	const char *val;
-} opttable[256];
 
 /* Globals */
-static int nopts = 0;
-config_t   set;
-php_t      *php_processes;
-char       start_datetime[20];
-char       config_paths[CONFIG_PATHS][BUFSIZE];
-
-static void display_help(void);
-static char *getarg(char *opt, char ***pargv);
+extern config_t   set;
+extern php_t      *php_processes;
+extern char       start_datetime[20];
+extern char       config_paths[CONFIG_PATHS][BUFSIZE];
+extern int        active_threads;
 
 #endif /* not _CACTID_H_ */

@@ -73,8 +73,6 @@
  #define SIGKILL 9
 #endif
 
-extern char **environ;
-
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
 {
@@ -205,7 +203,7 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 
 		/* Execute the command. */
-		execve(dargv[0], dargv, environ); 
+		execv(dargv[0], dargv);
 		_exit(127);
 		/* NOTREACHED */
 	}

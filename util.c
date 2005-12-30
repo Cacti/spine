@@ -36,13 +36,33 @@
 #include <syslog.h>
 #include <errno.h>
 #include <assert.h>
+#include <stdarg.h>
+#include <ctype.h>
 #include "common.h"
 #include "cactid.h"
 #include "util.h"
+#include "keywords.h"
 #include "snmp.h"
 #include "locks.h"
 #include "sql.h"
 #include "php.h"
+
+static int nopts = 0;
+
+/*! Override Options Structure
+ *
+ * When we fetch a setting from the database, we allow the user to override
+ * it from the command line. These overrides are provided with the --option
+ * parameter and stored in this table: we *use* them when the config code
+ * reads from the DB.
+ *
+ * It's not an error to set an option which is unknown, but maybe should be.
+ *
+ */
+static struct {
+	const char *opt;
+	const char *val;
+} opttable[256];
 
 /*! \fn void set_option(const char *option, const char *value)
  *  \brief Override cactid setting from the Cacti settings table.
@@ -541,7 +561,6 @@ void cacti_log(const char *format, ...) {
 	char logprefix[40]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];	/* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];	/* Formatted Log Message */
-	extern config_t set;
 
 	va_start(args, format);
 	vsprintf(ulogmessage, format, args);

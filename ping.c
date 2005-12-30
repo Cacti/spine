@@ -197,7 +197,6 @@ int ping_snmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
-	extern int errno;
 	int icmp_socket;
 
 	double begin_time, end_time, total_time;
@@ -345,7 +344,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_udp(host_t *host, ping_t *ping) {
-	extern int errno;
 	double begin_time, end_time, total_time;
 	struct timeval now;
 	struct timeval timeout;
@@ -541,8 +539,6 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
-
-	extern config_t set;
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {

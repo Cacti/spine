@@ -44,7 +44,7 @@
  *	ENOMEM  malloc() failed.
  *	EAGAIN  fork() failed.
  */
-int	nft_popen(const char * command, const char * mode);
+extern int	nft_popen(const char * command, const char * mode);
 
 
 /*!
@@ -57,7 +57,7 @@ int	nft_popen(const char * command, const char * mode);
  *  
  *    EBADF	The fd is not an active nft_popen() file descriptor.
  */
-int	nft_pchild(int fd);
+extern int	nft_pchild(int fd);
 
 
 /*!
@@ -71,7 +71,7 @@ int	nft_pchild(int fd);
  *	EBADF	The fd is not an active popen() file descriptor.
  *	ECHILD	waitpid() failed.
  */
-int	nft_pclose(int fd);
+extern int	nft_pclose(int fd);
 
 
 #endif	/* nft_popen_h */

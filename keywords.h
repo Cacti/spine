@@ -30,12 +30,12 @@
  +-------------------------------------------------------------------------+
 */
 
-const char *printable_log_level(int token);
-int parse_log_level(const char *word, int dflt);
+extern const char *printable_log_level(int token);
+extern int parse_log_level(const char *word, int dflt);
 
-const char *printable_logdest(int token);
-int parse_logdest(const char *word, int dflt);
+extern const char *printable_logdest(int token);
+extern int parse_logdest(const char *word, int dflt);
 
-const char *printable_action(int token);
-int parse_action(const char *word, int dflt);
+extern const char *printable_action(int token);
+extern int parse_action(const char *word, int dflt);
 
