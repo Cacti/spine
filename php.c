@@ -108,7 +108,7 @@ char *php_cmd(char *php_command, int php_process) {
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
 		result_string = strdup("U");
-		cacti_log("ERROR: SS[%i] PHP Script Server communications lost.\n", php_process);
+		CACTID_LOG(("ERROR: SS[%i] PHP Script Server communications lost.\n", php_process));
 		php_close(php_process);
 	}else{
 		/* read the result from the php_command */
@@ -223,7 +223,7 @@ char *php_readpipe(int php_process) {
 	case -1:
 		switch (errno) {
 			case EBADF:
-				cacti_log("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process);
+				CACTID_LOG(("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process));
 				break;
 			case EINTR:
 				/* take a moment */
@@ -243,17 +243,17 @@ char *php_readpipe(int php_process) {
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
 				}else{
-					cacti_log("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process);
+					CACTID_LOG(("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process));
 				}
 				break;
 			case EINVAL:
-				cacti_log("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process);
+				CACTID_LOG(("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process));
 				break;
 			case ENOMEM:
-				cacti_log("ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process );
+				CACTID_LOG(("ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process));
 				break;
 			default:
-				cacti_log("ERROR: SS[%i] Unknown fatal select() error\n", php_process);
+				CACTID_LOG(("ERROR: SS[%i] Unknown fatal select() error\n", php_process));
 				break;
 		}
 
@@ -264,7 +264,7 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	case 0:
-		cacti_log("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process);
+		CACTID_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process));
 		snprintf(result_string, BUFSIZE-1, "U");
 
 		/* kill script server because it is misbehaving */
@@ -313,19 +313,17 @@ int php_init(int php_process) {
 	}
 	
 	for (i=0; i < num_processes; i++) {
-		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("DEBUG: SS[%i] PHP Script Server Routine Starting\n", i);
-		}
+		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting\n", i));
 
 		/* create the output pipes from Cactid to php*/
 		if (pipe(cacti2php_pdes) < 0) {
-			cacti_log("ERROR: SS[%i] Could not allocate php server pipes\n", i);
+			CACTID_LOG(("ERROR: SS[%i] Could not allocate php server pipes\n", i));
 			return FALSE;
 		}
 
 		/* create the input pipes from php to Cactid */
 		if (pipe(php2cacti_pdes) < 0) {
-			cacti_log("ERROR: SS[%i] Could not allocate php server pipes\n", i);
+			CACTID_LOG(("ERROR: SS[%i] Could not allocate php server pipes\n", i));
 			return FALSE;
 		}
 
@@ -341,9 +339,7 @@ int php_init(int php_process) {
 		argv[4] = NULL;
 
 		/* fork a child process */
-		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i);
-		}
+		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i));
 
 		pid = fork();
 
@@ -355,7 +351,7 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				cacti_log("ERROR: SS[%i] Cound not fork PHP Script Server\n", i);
+				CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server\n", i));
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
@@ -376,9 +372,7 @@ int php_init(int php_process) {
 				_exit(127);
 				/* NOTREACHED */
 			default: /* I am the parent process */
-				if (set.log_level >= POLLER_VERBOSITY_DEBUG) {
-					cacti_log("DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i);
-				}
+				CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i));
 		}
 
 		/* Parent */
@@ -408,20 +402,16 @@ int php_init(int php_process) {
 
 		if (strstr(result_string, "Started")) {
 			if (php_process == PHP_INIT) {
-				if (set.log_level >= POLLER_VERBOSITY_DEBUG) {
-					cacti_log("DEBUG: SS[%i] Confirmed PHP Script Server running\n", i);
-				}
+				CACTID_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running\n", i));
 
 				php_processes[i].php_state = PHP_READY;
 			}else{
-				if (set.log_level >= POLLER_VERBOSITY_DEBUG) {
-					cacti_log("DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process);
-				}
+				CACTID_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process));
 
 				php_processes[php_process].php_state = PHP_READY;
 			}
 		}else{
-			cacti_log("ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string);
+			CACTID_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string));
 
 			if (php_process == PHP_INIT) {
 				php_processes[i].php_state = PHP_BUSY;
@@ -453,9 +443,7 @@ void php_close(int php_process) {
 	int i;
 	int num_processes;
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: SS[%i] Script Server Shutdown Started\n", php_process);
-	}
+	CACTID_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started\n", php_process));
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;

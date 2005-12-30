@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
 	set.log_level = POLLER_VERBOSITY_LOW;
 
 	/* get static defaults for system */
-	config_defaults(&set);
+	config_defaults();
 
 	/*! ----------------------------------------------------------------
 	 * PROCESS COMMAND LINE
@@ -339,7 +339,7 @@ int main(int argc, char *argv[]) {
 
 	/* read configuration file to establish local environment */
 	if (conf_file) {
-		if ((read_cactid_config(conf_file, &set)) < 0) {
+		if ((read_cactid_config(conf_file)) < 0) {
 			die("ERROR: Could not read config file: %s\n", conf_file);
 		}
 	}else{
@@ -350,7 +350,7 @@ int main(int argc, char *argv[]) {
 		for (i=0; i<CONFIG_PATHS; i++) {
 			snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
-			if (read_cactid_config(conf_file, &set) >= 0) {
+			if (read_cactid_config(conf_file) >= 0) {
 				break;
 			}
 
@@ -361,7 +361,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* read settings table from the database to further establish environment */
-	read_config_options(&set);
+	read_config_options();
 
 	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
@@ -374,7 +374,7 @@ int main(int argc, char *argv[]) {
 	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 2;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("CACTID: Version %s starting\n", VERSION);
+		CACTID_LOG_DEBUG(("CACTID: Version %s starting\n", VERSION));
 	}else{
 		printf("CACTID: Version %s starting\n", VERSION);
 	}
@@ -383,15 +383,11 @@ int main(int argc, char *argv[]) {
 	db_connect(set.dbdb, &mysql);
 
 	/* initialize SNMP */
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("CACTID: Initializing Net-SNMP API\n");
-	}
+	CACTID_LOG_DEBUG(("CACTID: Initializing Net-SNMP API\n"));
 	snmp_cactid_init();
 
 	/* initialize PHP if required */
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("CACTID: Initializing PHP Script Server\n");
-	}
+	CACTID_LOG_DEBUG(("CACTID: Initializing PHP Script Server\n"));
 
 	/* tell cactid that it is parent, and set the poller id */
 	set.parent_fork = CACTID_PARENT;
@@ -410,7 +406,7 @@ int main(int argc, char *argv[]) {
 
 	qp += sprintf(qp, "SELECT id FROM host");
 	qp += sprintf(qp, " WHERE disabled=''");
-	qp += append_hostrange(qp, "id", &set);	/* AND id BETWEEN a AND b */
+	qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
 	qp += sprintf(qp, " ORDER BY id");
 
 	result = db_query(&mysql, querybuf);
@@ -432,9 +428,7 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: Initial Value of Active Threads is %i\n", active_threads);
-	}
+	CACTID_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i\n", active_threads));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = CACTID_FORK;
@@ -463,29 +457,25 @@ int main(int argc, char *argv[]) {
 
 				switch (thread_status) {
 					case 0:
-						if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-							cacti_log("DEBUG: Valid Thread to be Created\n");
-						}
+						CACTID_LOG_DEBUG(("DEBUG: Valid Thread to be Created\n"));
 
 						device_counter++;
 						active_threads++;
 
-						if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-							cacti_log("DEBUG: The Value of Active Threads is %i\n", active_threads);
-						}
+						CACTID_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n", active_threads));
 
 						break;
 					case EAGAIN:
-						cacti_log("ERROR: The System Lacked the Resources to Create a Thread\n");
+						CACTID_LOG(("ERROR: The System Lacked the Resources to Create a Thread\n"));
 						break;
 					case EFAULT:
-						cacti_log("ERROR: The Thread or Attribute Was Invalid\n");
+						CACTID_LOG(("ERROR: The Thread or Attribute Was Invalid\n"));
 						break;
 					case EINVAL:
-						cacti_log("ERROR: The Thread Attribute is Not Initialized\n");
+						CACTID_LOG(("ERROR: The Thread Attribute is Not Initialized\n"));
 						break;
 					default:
-						cacti_log("ERROR: Unknown Thread Creation Error\n");
+						CACTID_LOG(("ERROR: Unknown Thread Creation Error\n"));
 						break;
 				}
 				usleep(internal_thread_sleep);
@@ -496,7 +486,7 @@ int main(int argc, char *argv[]) {
 					current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 					if ((current_time - begin_time + 6) > poller_interval) {
-						cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
+						CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
 						canexit = 1;
 						break;
 					}
@@ -511,18 +501,18 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EDEADLK:
-			cacti_log("ERROR: Deadlock Occured\n");
+			CACTID_LOG(("ERROR: Deadlock Occured\n"));
 			break;
 		case EBUSY:
 			break;
 		case EINVAL:
-			cacti_log("ERROR: Attempt to Unlock an Uninitialized Mutex\n");
+			CACTID_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex\n"));
 			break;
 		case EFAULT:
-			cacti_log("ERROR: Attempt to Unlock an Invalid Mutex\n");
+			CACTID_LOG(("ERROR: Attempt to Unlock an Invalid Mutex\n"));
 			break;
 		default:
-			cacti_log("ERROR: Unknown Mutex Lock Error Code Returned\n");
+			CACTID_LOG(("ERROR: Unknown Mutex Lock Error Code Returned\n"));
 			break;
 		}
 
@@ -534,7 +524,7 @@ int main(int argc, char *argv[]) {
 			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 			if ((current_time - begin_time + 6) > poller_interval) {
-				cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
+				CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
 				canexit = 1;
 				break;
 			}
@@ -567,7 +557,7 @@ int main(int argc, char *argv[]) {
 			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
 			if ((current_time - begin_time + 6) > poller_interval) {
-				cacti_log("ERROR: Cactid Timed Out While Processing Hosts Internal\n");
+				CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
 				canexit = 1;
 				break;
 			}
@@ -591,47 +581,38 @@ int main(int argc, char *argv[]) {
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: Thread Cleanup Complete\n");
-	}
+	CACTID_LOG_DEBUG(("DEBUG: Thread Cleanup Complete\n"));
 
 	/* close the php script server */
 	if (set.php_required) {
 		php_close(PHP_INIT);
 	}
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: PHP Script Server Pipes Closed\n");
-	}
+	CACTID_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed\n"));
 
 	/* free malloc'd variables */
 	free(threads);
 	free(ids);
 	free(conf_file);
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: Allocated Variable Memory Freed\n");
-	}
+	CACTID_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed\n"));
 
 	/* shutdown SNMP */
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("CACTID: Shutting down Net-SNMP API\n");
-	}
 	snmp_cactid_close();
+
+	CACTID_LOG_DEBUG(("CACTID: Net-SNMP API Shutdown Completed\n"));
 
 	/* close mysql */
 	mysql_free_result(result);
 	mysql_close(&mysql);
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: MYSQL Free & Close Completed\n");
-	}
+	CACTID_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed\n"));
 
 	/* finally add some statistics to the log and exit */
 	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
 
-	if ((set.log_level >= POLLER_VERBOSITY_MEDIUM) && (argc != 1)) {
-		cacti_log("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+	if (argc != 1) {
+		CACTID_LOG_MEDIUM(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
 	}else{
 		printf("CACTID: Execution Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 	}

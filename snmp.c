@@ -124,7 +124,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}else if (snmp_version == 3) {
 		session.version = SNMP_VERSION_3;
 	}else {
-		cacti_log("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname);
+		CACTID_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname));
 		return 0;
 	}		
 
@@ -162,7 +162,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 						strlen(snmp_password),
 	                    session.securityAuthKey,
 	                    &(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
-	        cacti_log("SNMP: Error generating SNMPv3 Ku from authentication pass phrase.");
+	        CACTID_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
 		}
 	}
 
@@ -172,7 +172,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		cacti_log("ERROR: Problem initializing SNMP session '%s'\n", hostname);
+		CACTID_LOG(("ERROR: Problem initializing SNMP session '%s'\n", hostname));
 	}
 	
 	return sessp;
@@ -222,7 +222,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			cacti_log("ERROR: Problems parsing SNMP OID\n");
+			CACTID_LOG(("ERROR: Problems parsing SNMP OID\n"));
 			snprintf(result_string, BUFSIZE-1, "U");
 			return result_string;
 		}else{
@@ -235,7 +235,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get\n");
+				CACTID_LOG(("ERROR: Some internal error caused snmp to return null response in snmp_get\n"));
 				snprintf(result_string, BUFSIZE-1, "U");
 				status = SNMPERR_UNKNOWN_ENG_ID;
 			}else{
@@ -322,7 +322,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
- 			cacti_log("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid);
+ 			CACTID_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid));
 
  			/* Mark this OID as "bad" */
  			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
@@ -342,7 +342,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
 		if (response == NULL) {
-			cacti_log("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n");
+			CACTID_LOG(("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n"));
 			status = SNMPERR_UNKNOWN_ENG_ID;
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {

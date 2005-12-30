@@ -66,10 +66,7 @@ int ping_host(host_t *host, ping_t *ping) {
 		#ifndef __CYGWIN__
 		if (geteuid() != 0) {
 			set.ping_method = PING_UDP;
-			printf("CACTID: WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
-			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-				cacti_log("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n");
-			}
+			CACTID_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n"));
 		}
 		#endif
 
@@ -218,7 +215,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		cacti_log("ERROR: ping_icmp: cannot open an ICMP socket\n");
+		CACTID_LOG(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
 	}
 
 	/* establish timeout value */
@@ -430,9 +427,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = end_time - begin_time;
 
-				if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-					cacti_log("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000));
-				}
+				CACTID_LOG_DEBUG(("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000)));
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 					if ((total_time * 1000) <= set.ping_timeout) {
@@ -478,7 +473,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	while (1) {
 		hostinfo = gethostbyname(hostname);
 		if (hostinfo == NULL) {
-			cacti_log("WARNING: Unknown host %s\n", hostname);
+			CACTID_LOG(("WARNING: Unknown host %s\n", hostname));
 
 			if (i > 3) {
 				return FALSE;
@@ -692,25 +687,25 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				cacti_log("Host[%i] PING Result: %s\n", host->id, ping->ping_response);
-				cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
+				CACTID_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
 				if (strlen(host->snmp_community) == 0) {
-					cacti_log("Host[%i] SNMP Result: Device does not require SNMP\n", host->id);
+					CACTID_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP\n", host->id));
 				}else{
-					cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
+					CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 				}
 			}else{
-				cacti_log("Host[%i] PING: Result %s\n", host->id, ping->ping_response);
+				CACTID_LOG_HIGH(("Host[%i] PING: Result %s\n", host->id, ping->ping_response));
 			}
 		}else{
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				cacti_log("Host[%i] PING Result: %s\n", host->id, ping->ping_response);
-				cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
+				CACTID_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
-				cacti_log("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response);
+				CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else{
-				cacti_log("Host[%i] PING Result: %s\n", host->id, ping->ping_response);
+				CACTID_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
 			}
 		}
 	}
@@ -718,9 +713,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			cacti_log("Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error);
+			CACTID_LOG(("Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error));
 		}else{
-			cacti_log("Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id);
+			CACTID_LOG(("Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id));
 		}
 	}
 }

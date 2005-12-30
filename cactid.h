@@ -48,6 +48,13 @@
 /* if a host is legal, return TRUE */
 #define HOSTID_DEFINED(x)	((x) >= 0)
 
+/* logging macros */
+#define CACTID_LOG(format)        (void)(cacti_log format)
+#define CACTID_LOG_LOW(format)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && cacti_log format)
+#define CACTID_LOG_MEDIUM(format) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && cacti_log format)
+#define CACTID_LOG_HIGH(format)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && cacti_log format)
+#define CACTID_LOG_DEBUG(format)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && cacti_log format)
+
 /* general constants */
 #define MAX_THREADS 100
 #define BUFSIZE 1024

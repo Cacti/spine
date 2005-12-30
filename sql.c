@@ -52,21 +52,17 @@ int db_insert(MYSQL *mysql, char *query) {
 
 	if (set.SQL_readonly == TRUE) { return TRUE; }
 	
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query);
-	}
+	CACTID_LOG_DEBUG(("DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query));
 
 	thread_mutex_lock(LOCK_MYSQL);
 	if (mysql_query(mysql, query)) {
-		cacti_log("ERROR: Problem with MySQL: '%s'\n", mysql_error(mysql));
+		CACTID_LOG(("ERROR: Problem with MySQL: '%s'\n", mysql_error(mysql)));
 
 		queryid++;
 		thread_mutex_unlock(LOCK_MYSQL);
 		return FALSE;
 	}else{
-		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			cacti_log("DEBUG: MySQL Insert ID '%i': OK\n", queryid);
-		}
+		CACTID_LOG_DEBUG(("DEBUG: MySQL Insert ID '%i': OK\n", queryid));
 
 		queryid++;
 		thread_mutex_unlock(LOCK_MYSQL);
@@ -91,9 +87,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	int error;
 	static int queryid = 0;
 	
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("DEBUG: MySQL Query ID '%i': '%s'\n", queryid, query);
-	}
+	CACTID_LOG_DEBUG(("DEBUG: MySQL Query ID '%i': '%s'\n", queryid, query));
 
 	thread_mutex_lock(LOCK_MYSQL);
 	retries = 0;
@@ -101,12 +95,10 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
 	while (retries < 3) {
 	 	return_code = mysql_query(mysql, query);
 		if (return_code) {
-			cacti_log("WARNING: MySQL Query Error, retrying query '%s'\n", query);
+			CACTID_LOG(("WARNING: MySQL Query Error, retrying query '%s'\n", query));
 			error = TRUE;
 		}else{
-			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-				cacti_log("DEBUG: MySQL Query ID '%i': OK\n", queryid);
-			}
+			CACTID_LOG_DEBUG(("DEBUG: MySQL Query ID '%i': OK\n", queryid));
 
 			mysql_res = mysql_store_result(mysql);
 			error = FALSE;
@@ -155,9 +147,7 @@ void db_connect(char *database, MYSQL *mysql) {
 	tries = 20;
 	success = FALSE;
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		cacti_log("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
-	}
+	CACTID_LOG_DEBUG(("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost));
 
 	thread_mutex_lock(LOCK_MYSQL);
 	db = mysql_init(mysql);
@@ -168,16 +158,14 @@ void db_connect(char *database, MYSQL *mysql) {
 	while (tries > 0){
 		tries--;
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
-			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-				cacti_log("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
-			}
+			CACTID_LOG_DEBUG(("MYSQL: Connection Failed: %s\n", mysql_error(mysql)));
+
 			success = FALSE;
 		}else{
+			CACTID_LOG_DEBUG(("MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost));
+
 			tries = 0;
 			success = TRUE;
-			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-				cacti_log("MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost);
-			}
 		}
 		usleep(2000);
 	}
@@ -216,12 +204,12 @@ void db_disconnect(MYSQL *mysql) {
  *  \return the number of characters added to the end of the character buffer
  *
  */
-int append_hostrange(char *obuf, const char *colname, const config_t *set) {
-	if (HOSTID_DEFINED(set->start_host_id) && HOSTID_DEFINED(set->end_host_id)) {
+int append_hostrange(char *obuf, const char *colname) {
+	if (HOSTID_DEFINED(set.start_host_id) && HOSTID_DEFINED(set.end_host_id)) {
 		return sprintf(obuf, " AND %s BETWEEN %d AND %d",
 			colname,
-			set->start_host_id,
-			set->end_host_id);
+			set.start_host_id,
+			set.end_host_id);
 	}else{
 		return 0;
 	}

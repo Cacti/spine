@@ -31,12 +31,12 @@
 */
 
 /* cacti config reading functions */
-extern void read_config_options(config_t *set);
-extern int read_cactid_config(char *file, config_t * set);
-extern void config_defaults(config_t *);
+extern void read_config_options(void);
+extern int read_cactid_config(char *file);
+extern void config_defaults(void);
 
 /* cacti logging function */
-extern void cacti_log(const char *format, ...)
+extern int cacti_log(const char *format, ...)
 	__attribute__((format(printf, 1, 2)));
 
 extern void die(const char *format, ...)
