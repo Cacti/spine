@@ -1,7 +1,7 @@
 The Cacti Group – cactid
 
 0.8.6g
--bug#0000609: console "error" messages should go to stderr instead of stdout 
+-bug#0000609: console "error" messages should go to stderr instead of stdout
 -bug#0000618/0000613: correct invalid assignment of session.community in snmp.c
 -bug#0000629: correct issues with invalid unknown reaults when reducing MAX OID get size
 -bug: correct issue where spike prevention logic was not being activated properly
@@ -14,9 +14,13 @@ The Cacti Group – cactid
 -bug: don't attempt to allocate a zero item array when a host has no polling items
 -bug: correct string values returning as blank in *nix environments
 -bug: correct issue where invalid SNMP OID results would cascade to subseqent SNMP OID calls for a host
+-optimization: change logging logic to cleanup code and add varadic formatting
+-optimization: complete audit of code for portability complements of Steve @ http://www.unixwiz.net
+-optimization: documentation, documentation, documentation...
+-feature: added command line argument handling including database overrides complements of Steve @ http://www.unixwiz.net
 -feature: added multiple script server process feature to current version
 -feature: added support for MySQL 5.x
--feature: made MySQL DEBUG logic more verbose
+-feature: added more verbose MySQL DEBUG logic
 
 0.8.6f-1
 -bug: Two memory leak fixes in poller.c
