@@ -152,7 +152,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 		total_time = (end_time - begin_time) * one_thousand;
 
-		if ((strlen(poll_result) == 0) || (strcmp(poll_result, "U") == 0)) {
+		if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
 			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
 			free(poll_result);
 			return HOST_DOWN;

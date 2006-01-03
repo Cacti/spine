@@ -250,7 +250,7 @@ char *php_readpipe(int php_process) {
 				break;
 		}
 
-		snprintf(result_string, BUFSIZE-1, "U");
+		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
 		php_close(php_process);
@@ -258,7 +258,7 @@ char *php_readpipe(int php_process) {
 		break;
 	case 0:
 		CACTID_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process));
-		snprintf(result_string, BUFSIZE-1, "U");
+		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
 		php_close(php_process);
@@ -267,7 +267,7 @@ char *php_readpipe(int php_process) {
 	default:
 		rescode = read(php_processes[php_process].php_read_fd, result_string, BUFSIZE);
 		if (rescode == 0) {
-			snprintf(result_string, BUFSIZE-1, "U");
+			SET_UNDEFINED(result_string);
 		}
 
 		php_processes[php_process].php_state = PHP_READY;

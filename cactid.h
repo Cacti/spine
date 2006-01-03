@@ -250,6 +250,14 @@
 /* convert timeval to double (rounding to the nearest microsecond) */
 #define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000))
 
+/* When any kind of poller wants to set an undefined value; this particular
+ * value used ('U') springs from the requirements of rrdupdate. We also
+ * include the corresponding test macro which looks for the literal string
+ * "U". This *could* use strcmp(), but this is more efficient.
+ */
+#define SET_UNDEFINED(buf)	( (buf)[0] = 'U', (buf)[1] = '\0' )
+#define IS_UNDEFINED(buf)	( (buf)[0] == 'U'  && (buf)[1] == '\0')
+
 /*! Config Structure
  *
  * This structure holds Cactid database configuration information and/or override values

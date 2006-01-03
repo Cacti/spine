@@ -61,24 +61,26 @@
 
 #define OIDSIZE(p) (sizeof(p)/sizeof(oid))
 
+static const char application_id[] = "cactid";
+
 /*! \fn void snmp_cactid_init()
  *  \brief wrapper function for init_snmp
  * 
- *	Initializes snmp with the engine ID of "cactid".
+ *	Initializes snmp for the given application ID
  *
  */
-void snmp_cactid_init() {
-	init_snmp("cactid");
+void snmp_cactid_init(void) {
+	init_snmp(application_id);
 }
 
 /*! \fn void snmp_cactid_close()
  *  \brief wrapper function for the snmp_shutdown function
  * 
- *	Closes the snmp api for the engine ID of "cactid".
+ *	Closes the snmp api for the given application ID
  *
  */
-void snmp_cactid_close() {
-	snmp_shutdown("cactid");
+void snmp_cactid_close(void) {
+	snmp_shutdown(application_id);
 }
 
 /*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version, 
@@ -213,7 +215,8 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!\n");
 	}
-	memset(result_string, 0, BUFSIZE);
+	result_string[0] = '\0';
+
 
 	status = STAT_DESCRIP_ERROR;
 
@@ -223,7 +226,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
 			CACTID_LOG(("ERROR: Problems parsing SNMP OID\n"));
-			snprintf(result_string, BUFSIZE-1, "U");
+			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
 			snmp_add_null_var(pdu, anOID, anOID_len);
@@ -236,7 +239,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
 				CACTID_LOG(("ERROR: Some internal error caused snmp to return null response in snmp_get\n"));
-				snprintf(result_string, BUFSIZE-1, "U");
+				SET_UNDEFINED(result_string);
 				status = SNMPERR_UNKNOWN_ENG_ID;
 			}else{
 				if (response->errstat == SNMP_ERR_NOERROR) {
@@ -258,9 +261,9 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
 		current_host->ignore_host = 1;
-		snprintf(result_string, BUFSIZE-1, "U");
+		SET_UNDEFINED(result_string);
 	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
-		snprintf(result_string, BUFSIZE-1, "U");
+		SET_UNDEFINED(result_string);
 	}
 
 	return result_string;
@@ -287,7 +290,7 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 			snprintf(obuf, buf_len, "%s [TRUNCATED]", buf);
 		}
 	}else{
-		snprintf(obuf, buf_len, "U");
+		SET_UNDEFINED(obuf);
 	}
 
 	free(buf);
@@ -325,7 +328,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
  			CACTID_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid));
 
  			/* Mark this OID as "bad" */
- 			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
+			SET_UNDEFINED(snmp_oids[i].result);
 		}else{
 			snmp_add_null_var(pdu, namep->name, namep->name_len);
 		}
@@ -348,7 +351,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
 				for(i = 0; i < num_oids && vars; i++) {
-					if(snmp_oids[i].result[0] != 'U') {
+					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						#ifdef USE_NET_SNMP
 						snmp_snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, vars->name, vars->name_length, vars);
 						#else
@@ -365,12 +368,12 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 					/* Find our index against errindex */
 					count = 0;
 					for(i = 0; i < num_oids && count < response->errindex; i++) {
-						if(snmp_oids[i].result[0] != 'U') {
+						if ( ! IS_UNDEFINED(snmp_oids[i].result) ) {
 							count++;
 						}
 					}
 					i--;
-					snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
+					SET_UNDEFINED(snmp_oids[i].result);
 
 					for (count = 1, vars = response->variables;
 						vars && count != response->errindex;
@@ -396,7 +399,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	if (status != STAT_SUCCESS) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
-			snprintf(snmp_oids[i].result, sizeof(snmp_oids[i].result)-1, "U");
+			SET_UNDEFINED(snmp_oids[i].result);
 		}
 	}
 
