@@ -35,118 +35,47 @@
 #include <pthread.h>
 #include "locks.h"
 
-pthread_mutex_t snmp_lock;
-pthread_mutex_t threads_lock;
-pthread_mutex_t mysql_lock;
-pthread_mutex_t time_lock;
-pthread_mutex_t pipe_lock;
-pthread_mutex_t syslog_lock;
-pthread_mutex_t php_lock;
-pthread_mutex_t php_proc_0_lock;
-pthread_mutex_t php_proc_1_lock;
-pthread_mutex_t php_proc_2_lock;
-pthread_mutex_t php_proc_3_lock;
-pthread_mutex_t php_proc_4_lock;
-pthread_mutex_t php_proc_5_lock;
-pthread_mutex_t php_proc_6_lock;
-pthread_mutex_t php_proc_7_lock;
-pthread_mutex_t php_proc_8_lock;
-pthread_mutex_t php_proc_9_lock;
 
-pthread_once_t snmp_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t threads_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t mysql_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t time_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t pipe_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t syslog_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_0_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_1_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_2_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_3_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_4_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_5_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_6_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_7_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_8_lock_o = PTHREAD_ONCE_INIT;
-pthread_once_t php_proc_9_lock_o = PTHREAD_ONCE_INIT;
+/*
+ * each lock requires a handful of parts: a mutex, an init structure, and an
+ * init helper function. We are NOT allowed to use these in an array (doesn
+ * not work with pthreads), so we are stuck setting these up individually.
+ * This macro defines these helpers in a single step.
+ */
 
-static void init_snmp_lock(void) {
-	pthread_mutex_init(&snmp_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
+#define DEFINE_CACTID_LOCK(name)	\
+	static pthread_mutex_t name ## _lock; \
+	static pthread_once_t name ## _lock_o = PTHREAD_ONCE_INIT; \
+	static void init_ ## name ## _lock(void) { \
+	    pthread_mutex_init(&name ## _lock, PTHREAD_MUTEXATTR_DEFAULT); \
+	}
 
-static void init_thread_lock(void) {
-	pthread_mutex_init(&threads_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_mysql_lock(void) {
-	pthread_mutex_init(&mysql_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_time_lock(void) {
-	pthread_mutex_init(&time_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_pipe_lock(void) {
-	pthread_mutex_init(&pipe_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_syslog_lock(void) {
-	pthread_mutex_init(&syslog_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_lock(void) {
-	pthread_mutex_init(&php_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_0_lock(void) {
-	pthread_mutex_init(&php_proc_0_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_1_lock(void) {
-	pthread_mutex_init(&php_proc_1_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_2_lock(void) {
-	pthread_mutex_init(&php_proc_2_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_3_lock(void) {
-	pthread_mutex_init(&php_proc_3_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_4_lock(void) {
-	pthread_mutex_init(&php_proc_4_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_5_lock(void) {
-	pthread_mutex_init(&php_proc_5_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_6_lock(void) {
-	pthread_mutex_init(&php_proc_6_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_7_lock(void) {
-	pthread_mutex_init(&php_proc_7_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_8_lock(void) {
-	pthread_mutex_init(&php_proc_8_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
-
-static void init_php_proc_9_lock(void) {
-	pthread_mutex_init(&php_proc_9_lock, PTHREAD_MUTEXATTR_DEFAULT);
-}
+DEFINE_CACTID_LOCK(snmp)
+DEFINE_CACTID_LOCK(thread)
+DEFINE_CACTID_LOCK(mysql)
+DEFINE_CACTID_LOCK(ghbn)
+DEFINE_CACTID_LOCK(pipe)
+DEFINE_CACTID_LOCK(syslog)
+DEFINE_CACTID_LOCK(php)
+DEFINE_CACTID_LOCK(php_proc_0)
+DEFINE_CACTID_LOCK(php_proc_1)
+DEFINE_CACTID_LOCK(php_proc_2)
+DEFINE_CACTID_LOCK(php_proc_3)
+DEFINE_CACTID_LOCK(php_proc_4)
+DEFINE_CACTID_LOCK(php_proc_5)
+DEFINE_CACTID_LOCK(php_proc_6)
+DEFINE_CACTID_LOCK(php_proc_7)
+DEFINE_CACTID_LOCK(php_proc_8)
+DEFINE_CACTID_LOCK(php_proc_9)
 
 void init_mutexes() {
-	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O), init_snmp_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O), init_thread_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_MYSQL_O), init_mysql_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O), init_time_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O), init_pipe_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O), init_syslog_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O), init_php_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),       init_snmp_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O),     init_thread_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_MYSQL_O),      init_mysql_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),       init_ghbn_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O),       init_pipe_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O),     init_syslog_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O),        init_php_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_0_O), init_php_proc_0_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_1_O), init_php_proc_1_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_2_O), init_php_proc_2_lock);
@@ -163,57 +92,23 @@ pthread_mutex_t* get_lock(int lock) {
 	pthread_mutex_t *ret_val = NULL;
 
 	switch (lock) {
-	case LOCK_SNMP:
-		ret_val = &snmp_lock;
-		break;
-	case LOCK_THREAD:
-		ret_val = &threads_lock;
-		break;
-	case LOCK_MYSQL:
-		ret_val = &mysql_lock;
-		break;
-	case LOCK_GHBN:
-		ret_val = &time_lock;
-		break;
-	case LOCK_PIPE:
-		ret_val = &pipe_lock;
-		break;
-	case LOCK_SYSLOG:
-		ret_val = &syslog_lock;
-		break;
-	case LOCK_PHP:
-		ret_val = &php_lock;
-		break;
-	case LOCK_PHP_PROC_0:
-		ret_val = &php_proc_0_lock;
-		break;
-	case LOCK_PHP_PROC_1:
-		ret_val = &php_proc_1_lock;
-		break;
-	case LOCK_PHP_PROC_2:
-		ret_val = &php_proc_2_lock;
-		break;
-	case LOCK_PHP_PROC_3:
-		ret_val = &php_proc_3_lock;
-		break;
-	case LOCK_PHP_PROC_4:
-		ret_val = &php_proc_4_lock;
-		break;
-	case LOCK_PHP_PROC_5:
-		ret_val = &php_proc_5_lock;
-		break;
-	case LOCK_PHP_PROC_6:
-		ret_val = &php_proc_6_lock;
-		break;
-	case LOCK_PHP_PROC_7:
-		ret_val = &php_proc_7_lock;
-		break;
-	case LOCK_PHP_PROC_8:
-		ret_val = &php_proc_8_lock;
-		break;
-	case LOCK_PHP_PROC_9:
-		ret_val = &php_proc_9_lock;
-		break;
+	case LOCK_SNMP:       ret_val = &snmp_lock;       break;
+	case LOCK_THREAD:     ret_val = &thread_lock;     break;
+	case LOCK_MYSQL:      ret_val = &mysql_lock;      break;
+	case LOCK_GHBN:       ret_val = &ghbn_lock;       break;
+	case LOCK_PIPE:       ret_val = &pipe_lock;       break;
+	case LOCK_SYSLOG:     ret_val = &syslog_lock;     break;
+	case LOCK_PHP:        ret_val = &php_lock;        break;
+	case LOCK_PHP_PROC_0: ret_val = &php_proc_0_lock; break;
+	case LOCK_PHP_PROC_1: ret_val = &php_proc_1_lock; break;
+	case LOCK_PHP_PROC_2: ret_val = &php_proc_2_lock; break;
+	case LOCK_PHP_PROC_3: ret_val = &php_proc_3_lock; break;
+	case LOCK_PHP_PROC_4: ret_val = &php_proc_4_lock; break;
+	case LOCK_PHP_PROC_5: ret_val = &php_proc_5_lock; break;
+	case LOCK_PHP_PROC_6: ret_val = &php_proc_6_lock; break;
+	case LOCK_PHP_PROC_7: ret_val = &php_proc_7_lock; break;
+	case LOCK_PHP_PROC_8: ret_val = &php_proc_8_lock; break;
+	case LOCK_PHP_PROC_9: ret_val = &php_proc_9_lock; break;
 	}
 
 	return ret_val;
@@ -223,57 +118,23 @@ pthread_once_t* get_attr(int locko) {
 	pthread_once_t *ret_val = NULL;
 
 	switch (locko) {
-	case LOCK_SNMP_O:
-		ret_val = &snmp_lock_o;
-		break;
-	case LOCK_THREAD_O:
-		ret_val = &threads_lock_o;
-		break;
-	case LOCK_MYSQL_O:
-		ret_val = &mysql_lock_o;
-		break;
-	case LOCK_GHBN_O:
-		ret_val = &time_lock_o;
-		break;
-	case LOCK_PIPE_O:
-		ret_val = &pipe_lock_o;
-		break;
-	case LOCK_SYSLOG_O:
-		ret_val = &syslog_lock_o;
-		break;
-	case LOCK_PHP_O:
-		ret_val = &php_lock_o;
-		break;
-	case LOCK_PHP_PROC_0_O:
-		ret_val = &php_proc_0_lock_o;
-		break;
-	case LOCK_PHP_PROC_1_O:
-		ret_val = &php_proc_1_lock_o;
-		break;
-	case LOCK_PHP_PROC_2_O:
-		ret_val = &php_proc_2_lock_o;
-		break;
-	case LOCK_PHP_PROC_3_O:
-		ret_val = &php_proc_3_lock_o;
-		break;
-	case LOCK_PHP_PROC_4_O:
-		ret_val = &php_proc_4_lock_o;
-		break;
-	case LOCK_PHP_PROC_5_O:
-		ret_val = &php_proc_5_lock_o;
-		break;
-	case LOCK_PHP_PROC_6_O:
-		ret_val = &php_proc_6_lock_o;
-		break;
-	case LOCK_PHP_PROC_7_O:
-		ret_val = &php_proc_7_lock_o;
-		break;
-	case LOCK_PHP_PROC_8_O:
-		ret_val = &php_proc_8_lock_o;
-		break;
-	case LOCK_PHP_PROC_9_O:
-		ret_val = &php_proc_9_lock_o;
-		break;
+	case LOCK_SNMP_O:       ret_val = &snmp_lock_o;       break;
+	case LOCK_THREAD_O:     ret_val = &thread_lock_o;     break;
+	case LOCK_MYSQL_O:      ret_val = &mysql_lock_o;      break;
+	case LOCK_GHBN_O:       ret_val = &ghbn_lock_o;       break;
+	case LOCK_PIPE_O:       ret_val = &pipe_lock_o;       break;
+	case LOCK_SYSLOG_O:     ret_val = &syslog_lock_o;     break;
+	case LOCK_PHP_O:        ret_val = &php_lock_o;        break;
+	case LOCK_PHP_PROC_0_O: ret_val = &php_proc_0_lock_o; break;
+	case LOCK_PHP_PROC_1_O: ret_val = &php_proc_1_lock_o; break;
+	case LOCK_PHP_PROC_2_O: ret_val = &php_proc_2_lock_o; break;
+	case LOCK_PHP_PROC_3_O: ret_val = &php_proc_3_lock_o; break;
+	case LOCK_PHP_PROC_4_O: ret_val = &php_proc_4_lock_o; break;
+	case LOCK_PHP_PROC_5_O: ret_val = &php_proc_5_lock_o; break;
+	case LOCK_PHP_PROC_6_O: ret_val = &php_proc_6_lock_o; break;
+	case LOCK_PHP_PROC_7_O: ret_val = &php_proc_7_lock_o; break;
+	case LOCK_PHP_PROC_8_O: ret_val = &php_proc_8_lock_o; break;
+	case LOCK_PHP_PROC_9_O: ret_val = &php_proc_9_lock_o; break;
 	}
 
 	return ret_val;
@@ -290,3 +151,4 @@ void thread_mutex_unlock(int mutex) {
 int thread_mutex_trylock(int mutex) {
 	return pthread_mutex_trylock(get_lock(mutex));
 }
+
