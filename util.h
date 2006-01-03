@@ -60,3 +60,6 @@ extern char *strncopy(char *dst, const char *src, size_t n);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))
+
+/* get highres time as double */
+extern double get_time_as_double(void);

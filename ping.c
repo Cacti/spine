@@ -89,7 +89,7 @@ int ping_host(host_t *host, ping_t *ping) {
 	/* snmp test */
 	if ((set.availability_method == AVAIL_SNMP) || ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result == HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
-	}else {
+	}else{
 		if ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP)) {
 			snmp_result = HOST_DOWN;
 		}
@@ -130,53 +130,41 @@ int ping_host(host_t *host, ping_t *ping) {
  *
  */
 int ping_snmp(host_t *host, ping_t *ping) {
-	struct timeval now;
 	char *poll_result;
 	char *oid;
-	double begin_time = 0;
-	double end_time = 0;
+	double begin_time, end_time, total_time;
+	double one_thousand = 1000.00;
 
 	if (strlen(host->snmp_community) != 0) {
-		/* record start time */
-		if (gettimeofday(&now, NULL) == -1) {
-			die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-		}
-
-		begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
 		if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
 			die("ERROR: malloc(): strdup() oid ping.c failed\n");
 		}
 
+		/* record start time */
+		begin_time = get_time_as_double();
+
 		poll_result = snmp_get(host, oid);
+
+		/* record end time */
+		end_time = get_time_as_double();
 
 		free(oid);
 
-		/* record end time */
-		if (gettimeofday(&now, NULL) == -1) {
-			die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-		}
+		total_time = (end_time - begin_time) * one_thousand;
 
-		end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+		if ((strlen(poll_result) == 0) || (strcmp(poll_result, "U") == 0)) {
+			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
+			free(poll_result);
+			return HOST_DOWN;
+		}else{
+			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host responded to SNMP");
+			snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "%.5f", total_time);
+			free(poll_result);
+			return HOST_UP;
+		}
 	}else{
 		snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "0.00");
 		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host does not require SNMP");
-		if (!(poll_result = strdup("0.00"))) {
-			die("ERROR: Fatal malloc error: ping.c ping_snmp\n");
-		}
-	}
-
-	if ((strlen(poll_result) == 0) || (strcmp(poll_result, "U") == 0)) {
-		snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
-		free(poll_result);
-		return HOST_DOWN;
-	}else{
-		if (strlen(host->snmp_community) != 0) {
-			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host responded to SNMP");
-			snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "%.5f",((end_time-begin_time)*1000));
-		}
-
-		free(poll_result);
 		return HOST_UP;
 	}
 }
@@ -197,7 +185,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int icmp_socket;
 
 	double begin_time, end_time, total_time;
-	struct timeval now;
+	double one_thousand = 1000.00;
 	struct timeval timeout;
 
 	struct sockaddr_in servername;
@@ -270,16 +258,16 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				if (gettimeofday(&now, NULL) == -1) {
-					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-				}
-				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+				begin_time = get_time_as_double();
 
 				/* send packet to destination */
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
 
 				/* wait for a response on the socket */
 				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+
+				/* record end time */
+				end_time = get_time_as_double();
 
 	   			fromlen = sizeof(servername);
 
@@ -290,14 +278,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					return_code = -10;
 				}
 
-				/* record end time */
-				if (gettimeofday(&now, NULL) == -1) {
-					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-				}
-				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
 				/* caculate total time */
-				total_time = (end_time - begin_time) * 1000;
+				total_time = (end_time - begin_time) * one_thousand;
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 					if (total_time < set.ping_timeout) {
@@ -342,7 +324,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
  */
 int ping_udp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
-	struct timeval now;
+	double one_thousand = 1000.00;
 	struct timeval timeout;
 	int udp_socket;
 	struct sockaddr_in servername;
@@ -400,16 +382,16 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				if (gettimeofday(&now, NULL) == -1) {
-					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-				}
-				begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+				begin_time = get_time_as_double();
 
 				/* send packet to destination */
 				send(udp_socket, request, request_len, 0);
 
 				/* wait for a response on the socket */
 				select(numfds, &socket_fds, NULL, NULL, &timeout);
+
+				/* record end time */
+				end_time = get_time_as_double();
 
 				/* check to see which socket talked */
 				if (FD_ISSET(udp_socket, &socket_fds)) {
@@ -418,21 +400,15 @@ int ping_udp(host_t *host, ping_t *ping) {
 					return_code = -10;
 				}
 
-				/* record end time */
-				if (gettimeofday(&now, NULL) == -1) {
-					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-				}
-				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
-
 				/* caculate total time */
-				total_time = end_time - begin_time;
+				total_time = (end_time - begin_time) * one_thousand;
 
 				CACTID_LOG_DEBUG(("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n",return_code,errno,(total_time*1000)));
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if ((total_time * 1000) <= set.ping_timeout) {
+					if (total_time <= set.ping_timeout) {
 						snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Host is Alive");
-						snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", (total_time*1000));
+						snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", total_time);
 						close(udp_socket);
 						return HOST_UP;
 					}

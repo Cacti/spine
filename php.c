@@ -47,7 +47,7 @@
 #include "locks.h"
 #include "util.h"
 
-/*! \fn char *php_cmd(char *php_command, int php_process)
+/*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
  *  \param php_process the php script server process to call
@@ -60,10 +60,12 @@
  *  \return pointer to the string results.  Must be freed by the parent.
  *
  */
-char *php_cmd(char *php_command, int php_process) {
+char *php_cmd(const char *php_command, int php_process) {
 	char *result_string;
 	char command[BUFSIZE];
 	int write_status;
+
+	assert(php_command != 0);
 
 	/* pad command with CR-LF */
 	snprintf(command, sizeof(command)-1, "%s\r\n", php_command);
@@ -161,7 +163,7 @@ char *php_cmd(char *php_command, int php_process) {
  *  \return the integer number of the next script server to use
  *
  */
-int php_get_process() {
+int php_get_process(void) {
 	int i;
 		
 	thread_mutex_lock(LOCK_PHP);
@@ -190,7 +192,6 @@ char *php_readpipe(int php_process) {
 	fd_set fds;
 	int rescode, numfds;
 	struct timeval timeout;
-	struct timeval now;
 	double begin_time = 0;
 	double end_time = 0;
 	char *result_string;
@@ -201,11 +202,7 @@ char *php_readpipe(int php_process) {
 	memset(result_string, 0, BUFSIZE);	
 
 	/* record start time */
-	if (gettimeofday(&now, NULL) == -1) {
-		die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-	}
-
-	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+	begin_time = get_time_as_double();
 
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
@@ -230,11 +227,7 @@ char *php_readpipe(int php_process) {
 				usleep(20000);
 				
 				/* record end time */
-				if (gettimeofday(&now, NULL) == -1) {
-					die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
-				}
-
-				end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
 				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
@@ -452,31 +445,48 @@ void php_close(int php_process) {
 	}
 	
 	for(i = 0; i < num_processes; i++) {
+
+		php_t *phpp;
+
 		/* tell the script server to close */
 		if (php_process == PHP_INIT) {
-			write(php_processes[i].php_write_fd, "quit\r\n", sizeof("quit\r\n"));
-
-			/* wait before killing php */
-			usleep(200000);
-
-			/* end the php script server process */
-			kill(php_processes[i].php_pid, SIGTERM);
-
-			/* close file descriptors */
-			close(php_processes[i].php_write_fd);
-			close(php_processes[i].php_read_fd);
+			phpp = &php_processes[i];
 		}else{
-			write(php_processes[php_process].php_write_fd, "quit\r\n", sizeof("quit\r\n"));
+			phpp = &php_processes[php_process];
+		}
+
+		/* If we still have a valid write pipe, tell PHP to close down
+		 * by sending a "quit" message, then closing the input channel
+		 * so it gets an EOF.
+		 *
+		 * Then we wait a moment before actually killing it to allow for
+		 * a clean shutdown.
+		 */
+		if (phpp->php_write_fd >= 0) {
+			static const char quit[] = " quit\r\n";
+
+			write(phpp->php_write_fd, quit, strlen(quit));
+
+			close(phpp->php_write_fd);
+			phpp->php_write_fd = -1;
 
 			/* wait before killing php */
-			usleep(200000);
+			usleep(200000);			/* 200 msec */
+		}
 
+		/* only try to kill the process if the PID looks valid.
+		 * Trying to kill a negative number is bad news (it's
+	 	 * a process group leader), and PID 1 is "init".
+	  	 */
+		if (phpp->php_pid > 1) {
 			/* end the php script server process */
-			kill(php_processes[php_process].php_pid, SIGTERM);
+			kill(phpp->php_pid, SIGTERM);
 
-			/* close file descriptors */
-			close(php_processes[php_process].php_write_fd);
-			close(php_processes[php_process].php_read_fd);
-		}			
+			/* reset this PID variable? */
+		}
+
+		/* close file descriptors */
+		close(phpp->php_read_fd);
+		phpp->php_read_fd  = -1;
 	}
 }

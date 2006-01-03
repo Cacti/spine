@@ -34,9 +34,9 @@
 #include "cactid.h"
 #include <mysql.h>
 
-extern int db_insert(MYSQL *mysql, char *query);
-extern MYSQL_RES *db_query(MYSQL *mysql, char *query);
-extern void db_connect(char *database, MYSQL *mysql);
+extern int db_insert(MYSQL *mysql, const char *query);
+extern MYSQL_RES *db_query(MYSQL *mysql, const char *query);
+extern void db_connect(const char *database, MYSQL *mysql);
 extern void db_disconnect(MYSQL *mysql);
 
 extern int append_hostrange(char *obuf, const char *colname);

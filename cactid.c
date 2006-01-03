@@ -161,6 +161,8 @@ int main(int argc, char *argv[]) {
 	int mutex_status = 0;
 	int thread_status = 0;
 
+	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
+
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
@@ -168,8 +170,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* set start time for cacti */
-	gettimeofday(&now, NULL);
-	begin_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+	begin_time = get_time_as_double();
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
@@ -213,8 +214,6 @@ int main(int argc, char *argv[]) {
 	 * program.
 	 */
 
-	#define MATCH(a, b)	(strcasecmp((a),(b)) == 0)
-
 	/* initialize some global variables */
 	set.start_host_id = -1;
 	set.end_host_id   = -1;
@@ -228,8 +227,8 @@ int main(int argc, char *argv[]) {
 
 		if (opt) *opt++ = '\0';
 
-		if (MATCH(arg, "-f") ||
-			MATCH(arg, "--first")) {
+		if (STRIMATCH(arg, "-f") ||
+			STRIMATCH(arg, "--first")) {
 			if (HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -241,8 +240,8 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (MATCH(arg, "-l") ||
-				 MATCH(arg, "--last")) {
+		else if (STRIMATCH(arg, "-l") ||
+				 STRIMATCH(arg, "--last")) {
 			if (HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -254,22 +253,22 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (MATCH(arg, "-p") ||
-				 MATCH(arg, "--poller")) {
+		else if (STRIMATCH(arg, "-p") ||
+				 STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
-		else if (MATCH(arg, "-h") ||
-				 MATCH(arg, "-v") ||
-				 MATCH(arg, "--help") ||
-				 MATCH(arg, "--version")) {
+		else if (STRIMATCH(arg, "-h") ||
+				 STRIMATCH(arg, "-v") ||
+				 STRIMATCH(arg, "--help") ||
+				 STRIMATCH(arg, "--version")) {
 			display_help();
 
-			exit(0);
+			exit(EXIT_SUCCESS);
 		}
 
-		else if (MATCH(arg, "-O") ||
-				 MATCH(arg, "--option")) {
+		else if (STRIMATCH(arg, "-O") ||
+				 STRIMATCH(arg, "--option")) {
 			char	*setting = getarg(opt, &argv);
 			char	*value   = strchr(setting, ':');
 
@@ -282,34 +281,34 @@ int main(int argc, char *argv[]) {
 			set_option(setting, value);
 		}
 
-		else if (MATCH(arg, "-R") ||
-				 MATCH(arg, "--readonly") ||
-				 MATCH(arg, "--read-only")) {
+		else if (STRIMATCH(arg, "-R") ||
+				 STRIMATCH(arg, "--readonly") ||
+				 STRIMATCH(arg, "--read-only")) {
 			set.SQL_readonly = TRUE;
 		}
 
-		else if (MATCH(arg, "-C") ||
-				 MATCH(arg, "--conf")) {
+		else if (STRIMATCH(arg, "-C") ||
+				 STRIMATCH(arg, "--conf")) {
 			conf_file = strdup(getarg(opt, &argv));
 		}
 
-		else if (MATCH(arg, "-S") ||
-				 MATCH(arg, "--stdout")) {
+		else if (STRIMATCH(arg, "-S") ||
+				 STRIMATCH(arg, "--stdout")) {
 			set_option("log_destination", "STDOUT");
 		}
 
-		else if (MATCH(arg, "-L") ||
-				 MATCH(arg, "--log")) {
+		else if (STRIMATCH(arg, "-L") ||
+				 STRIMATCH(arg, "--log")) {
 			set_option("log_destination", getarg(opt, &argv));
 		}
 
-		else if (MATCH(arg, "-V") ||
-				 MATCH(arg, "--verbosity")) {
+		else if (STRIMATCH(arg, "-V") ||
+				 STRIMATCH(arg, "--verbosity")) {
 			set_option("log_verbosity", getarg(opt, &argv));
 		}
 
-		else if (MATCH(arg, "--snmponly") ||
-				 MATCH(arg, "--snmp-only")) {
+		else if (STRIMATCH(arg, "--snmponly") ||
+				 STRIMATCH(arg, "--snmp-only")) {
 			set.snmponly = TRUE;
 		}
 
@@ -325,8 +324,6 @@ int main(int argc, char *argv[]) {
 			die("ERROR: %s is an unknown command-line parameter", arg);
 		}
 	}
-
-	#undef MATCH
 
 	/* we require either both the first and last hosts, or niether host */
 	if (HOSTID_DEFINED(set.start_host_id) != HOSTID_DEFINED(set.end_host_id)) {
@@ -482,8 +479,7 @@ int main(int argc, char *argv[]) {
 
 				/* get current time and exit program if time limit exceeded */
 				if (poller_counter >= 20) {
-					gettimeofday(&now, NULL);
-					current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+					current_time = get_time_as_double();
 
 					if ((current_time - begin_time + 6) > poller_interval) {
 						CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
@@ -520,8 +516,7 @@ int main(int argc, char *argv[]) {
 
 		/* get current time and exit program if time limit exceeded */
 		if (poller_counter >= 20) {
-			gettimeofday(&now, NULL);
-			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+			current_time = get_time_as_double();
 
 			if ((current_time - begin_time + 6) > poller_interval) {
 				CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
@@ -553,8 +548,7 @@ int main(int argc, char *argv[]) {
 
 		/* get current time and exit program if time limit exceeded */
 		if (poller_counter >= 20) {
-			gettimeofday(&now, NULL);
-			current_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+			current_time = get_time_as_double();
 
 			if ((current_time - begin_time + 6) > poller_interval) {
 				CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
@@ -609,15 +603,11 @@ int main(int argc, char *argv[]) {
 	CACTID_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed\n"));
 
 	/* finally add some statistics to the log and exit */
-	end_time = (double) now.tv_usec / 1000000 + now.tv_sec;
+	end_time = TIMEVAL_TO_DOUBLE(now);
 
-	if (argc != 1) {
-		CACTID_LOG_MEDIUM(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
-	}else{
-		printf("CACTID: Execution Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
-	}
+	CACTID_LOG_MEDIUM(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
 
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 
 /*! \fn static void display_help()

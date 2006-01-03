@@ -48,12 +48,68 @@
 /* if a host is legal, return TRUE */
 #define HOSTID_DEFINED(x)	((x) >= 0)
 
-/* logging macros */
-#define CACTID_LOG(format)        (void)(cacti_log format)
-#define CACTID_LOG_LOW(format)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && cacti_log format)
-#define CACTID_LOG_MEDIUM(format) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && cacti_log format)
-#define CACTID_LOG_HIGH(format)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && cacti_log format)
-#define CACTID_LOG_DEBUG(format)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && cacti_log format)
+/* warning-suppression macros
+ *
+ * There are times when we cannot avoid using a parameter or variable which
+ * is not used, and these correctly generate compiler warnings. But when we
+ * *know* that the variable is actually intended to be unused, we can use one
+ * of these macros inside the function to suppress it. This has the effect
+ * of suppressing the warning (a good thing), plus documenting to the reader
+ * that this is intentional.
+ *
+ * Both do the same thing - they're just for different semantics.
+ */
+
+#define UNUSED_VARIABLE(p)      (void)(p)
+#define UNUSED_PARAMETER(p)     (void)(p)
+
+
+/* logging macros
+ *
+ * These all perform conditional logging based on the current runtime logging
+ * level, and it relies on a bit of tricky (but entirely portable) preprocessor
+ * techniques.
+ *
+ * Standard C does not support variadic macros (macros with a variable number
+ * of parameters), and though GNU C does, it's not at all portable. So we instead
+ * rely on the fact that putting parens around something turn multiple params
+ * into one:
+ *
+ *	CACTID_LOG_DEBUG(("n=%d string=%s foo=%f", n, string, foo));
+ *
+ * This macros has *one* parameter:
+ *
+ *		("n=%d string=%s foo=%f", n, string, foo)
+ *
+ * and the parentheses are part of it. When we call this macro, we pass the
+ * "single" parameter unadorned, so that
+ *
+ *		cacti_log args
+ *
+ * expands to
+ *
+ *		cacti_log ("n=%d string=%s foo=%f", n, string, foo)
+ *
+ * Voila: it's a normal printf-like call.
+ *
+ * The second part of this is the conditional test, and the obvious approach
+ * of using an "if" statement is exceptionally bad form: there are all kinds
+ * of pitfalls which arise in this case. Instead, we should try to use an
+ * *expression*, which has none of these problems.
+ *
+ * The conditional tests are modelled after the assert() mechanism, which
+ * checks the first parameter, and if it's true, it evaluates the second
+ * paramater. If the test is not true, then the second part is *guaranteed*
+ * not to be evaluated.
+ *
+ * The (void) prefix is to forestall compiler warnings about expressions
+ * not being used.
+ */
+#define CACTID_LOG(format_and_args)        (cacti_log format_and_args)
+#define CACTID_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && cacti_log format_and_args)
+#define CACTID_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && cacti_log format_and_args)
+#define CACTID_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && cacti_log format_and_args)
+#define CACTID_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && cacti_log format_and_args)
 
 /* general constants */
 #define MAX_THREADS 100
@@ -133,8 +189,9 @@
 #define LOGDEST_SYSLOG 3
 #define LOGDEST_STDOUT 4
 
-#define IS_LOGGING_TO_FILE(ld)   ((ld) == LOGDEST_FILE   || (ld) == LOGDEST_BOTH)
-#define IS_LOGGING_TO_SYSLOG(ld) ((ld) == LOGDEST_SYSLOG || (ld) == LOGDEST_BOTH)
+#define IS_LOGGING_TO_FILE()   ((set.log_destination) == LOGDEST_FILE   || (set.log_destination) == LOGDEST_BOTH)
+#define IS_LOGGING_TO_SYSLOG() ((set.log_destination) == LOGDEST_SYSLOG || (set.log_destination) == LOGDEST_BOTH)
+#define IS_LOGGING_TO_STDOUT() ((set.log_destination) == LOGDEST_STDOUT )
 
 /* logging levels */
 #define POLLER_VERBOSITY_NONE 1
@@ -181,6 +238,17 @@
 #define SNMP_2c 1
 #define SNMP_3 3
 #define SNMP_NONE 4
+
+/* These are used to perform string matches, returning TRUE/VALUE values.
+ * For strcmp() this is not really that useful, but the case-insensitive
+ * one has slight portability issues. Better to abstract them here.
+ */
+#define STRMATCH(a,b)	(strcmp((a),(b)) == 0)
+#define STRIMATCH(a,b)	(strcasecmp((a),(b)) == 0)
+
+
+/* convert timeval to double (rounding to the nearest microsecond) */
+#define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000))
 
 /*! Config Structure
  *

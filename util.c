@@ -102,7 +102,7 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 
 	/* see if it's in the option table */
 	for (i=0; i<nopts; i++) {
-		if (strcasecmp(setting, opttable[i].opt) == 0) {
+		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
 			return opttable[i].val;
 		}
@@ -140,17 +140,17 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 
 	if (rc == 0) return dflt;
 
-	if (strcasecmp(rc, "on"  ) == 0 ||
-		strcasecmp(rc, "yes" ) == 0 ||
-		strcasecmp(rc, "true") == 0 ||
-		strcasecmp(rc, "1"   ) == 0 ) {
+	if (STRIMATCH(rc, "on"  ) ||
+		STRIMATCH(rc, "yes" ) ||
+		STRIMATCH(rc, "true") ||
+		STRIMATCH(rc, "1"   ) ) {
 		return TRUE;
 	}
 
-	if (strcasecmp(rc, "off"  ) == 0 ||
-		strcasecmp(rc, "no"   ) == 0 ||
-		strcasecmp(rc, "false") == 0 ||
-		strcasecmp(rc, "0"    ) == 0 ) {
+	if (STRIMATCH(rc, "off"  ) ||
+		STRIMATCH(rc, "no"   ) ||
+		STRIMATCH(rc, "false") ||
+		STRIMATCH(rc, "0"    ) ) {
 		return FALSE;
 	}
 
@@ -435,11 +435,11 @@ int read_cactid_config(char *file) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (!strcasecmp(p1, "DB_Host")) snprintf(set.dbhost, sizeof(set.dbhost)-1, "%s", p2);
-				else if (!strcasecmp(p1, "DB_Database")) snprintf(set.dbdb, sizeof(set.dbdb)-1, "%s", p2);
-				else if (!strcasecmp(p1, "DB_User")) snprintf(set.dbuser, sizeof(set.dbuser)-1, "%s", p2);
-				else if (!strcasecmp(p1, "DB_Pass")) snprintf(set.dbpass, sizeof(set.dbpass)-1, "%s", p2);
-				else if (!strcasecmp(p1, "DB_Port")) set.dbport = atoi(p2);
+				if (STRIMATCH(p1, "DB_Host")) snprintf(set.dbhost, sizeof(set.dbhost)-1, "%s", p2);
+				else if (STRIMATCH(p1, "DB_Database")) snprintf(set.dbdb, sizeof(set.dbdb)-1, "%s", p2);
+				else if (STRIMATCH(p1, "DB_User")) snprintf(set.dbuser, sizeof(set.dbuser)-1, "%s", p2);
+				else if (STRIMATCH(p1, "DB_Pass")) snprintf(set.dbpass, sizeof(set.dbpass)-1, "%s", p2);
+				else if (STRIMATCH(p1, "DB_Port")) set.dbport = atoi(p2);
 				else {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
@@ -539,12 +539,12 @@ int cacti_log(const char *format, ...) {
 	/* log message prefix */
 	snprintf(logprefix, sizeof(logprefix)-1, "CACTID: Poller[%i] ", set.poller_id);
 
-	if (set.log_destination == LOGDEST_STDOUT) {
+	if (IS_LOGGING_TO_STDOUT()) {
 		puts(ulogmessage);
 		return TRUE;
 	}
 
-	if (((set.log_destination == LOGDEST_FILE) || (set.log_destination == LOGDEST_BOTH)) && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
+	if (IS_LOGGING_TO_FILE() && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
 		if (set.logfile_processed) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
@@ -573,7 +573,7 @@ int cacti_log(const char *format, ...) {
 	}
 
 	/* output to syslog/eventlog */
-	if ((set.log_destination == LOGDEST_SYSLOG) || (set.log_destination == LOGDEST_BOTH)) {
+	if (IS_LOGGING_TO_SYSLOG()) {
 		thread_mutex_lock(LOCK_SYSLOG);
 		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 		if ((strstr(flogmessage,"ERROR") || (strstr(flogmessage, "FATAL"))) && (set.log_perror)) {
@@ -707,7 +707,7 @@ char *strip_alpha(char *string)
 	i = strlen(string);
 
 	while (i >= 0) {
-		if ((string[i] > 47) && (string[i] < 58)) {
+		if (isdigit(string[i])) {
 			break;
 		}else{
 			string[i] = '\0';
@@ -804,6 +804,10 @@ char *strip_string_crlf(char *string) {
  *  \brief remove single and double quotes from a string
  *  \param string the string that requires trimming
  *
+ *	Some SNMP agents return strings surrounded with single or double quotes,
+ *	and we need to strip these off; We remove only *leading and trailing*
+ *	quotes, not intermediate ones.
+ *
  *  \return a pointer to the modified string.
  *
  */
@@ -870,4 +874,17 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	dst[obuf] = '\0';
 
 	return dst;
+}
+
+/*! \fn double get_time_as_double()
+ *  \brief fetches system time as a double-precison value
+ *
+ *  \return system time (at microsecond resolution) as a double
+ */
+double get_time_as_double(void) {
+	struct timeval now;
+
+	gettimeofday(&now, NULL);
+
+	return TIMEVAL_TO_DOUBLE(now);
 }

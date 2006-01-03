@@ -36,7 +36,7 @@
 #include "util.h"
 #include "sql.h"
 
-/*! \fn int db_insert(MYSQL *mysql, char *query)
+/*! \fn int db_insert(MYSQL *mysql, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
  *  \param query the database query to execute
@@ -47,10 +47,10 @@
  *  \return TRUE if successful, or FALSE if not.
  *
  */
-int db_insert(MYSQL *mysql, char *query) {
+int db_insert(MYSQL *mysql, const char *query) {
 	static int queryid = 0;
 
-	if (set.SQL_readonly == TRUE) { return TRUE; }
+	if (set.SQL_readonly) { return TRUE; }
 	
 	CACTID_LOG_DEBUG(("DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query));
 
@@ -70,7 +70,7 @@ int db_insert(MYSQL *mysql, char *query) {
 	}
 }
 
-/*! \fn MYSQL_RES *db_query(MYSQL *mysql, char *query)
+/*! \fn MYSQL_RES *db_query(MYSQL *mysql, const char *query)
  *  \brief executes a query and returns a pointer to the result set.
  *  \param mysql the database connection object
  *  \param query the database query to execute
@@ -80,7 +80,7 @@ int db_insert(MYSQL *mysql, char *query) {
  *  \return MYSQL_RES a MySQL result structure
  *
  */
-MYSQL_RES *db_query(MYSQL *mysql, char *query) {
+MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 	MYSQL_RES *mysql_res = 0;
 	int return_code;
 	int retries;
@@ -128,7 +128,7 @@ MYSQL_RES *db_query(MYSQL *mysql, char *query) {
  *  fails more than 20 times, the function will fail and Cactid will terminate.
  *
  */
-void db_connect(char *database, MYSQL *mysql) {
+void db_connect(const char *database, MYSQL *mysql) {
 	MYSQL *db;
 	int tries;
 	int success;

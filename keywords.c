@@ -153,7 +153,7 @@ static int find_keyword_by_word(const struct keyword *tbl, const char *word, int
 	}
 
 	for (; tbl->word; tbl++) {
-		if (strcasecmp(word, tbl->word) == 0) {
+		if (STRIMATCH(word, tbl->word)) {
 			return tbl->value;
 		}
 	}
