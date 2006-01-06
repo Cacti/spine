@@ -254,15 +254,21 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 			}
 		}
 
-		snmp_free_pdu(response);
-	}else {
+		if (response) {
+			snmp_free_pdu(response);
+			response = NULL;
+		}
+	}else{
 		status = STAT_DESCRIP_ERROR;
 	}
 
-	if ((status == STAT_TIMEOUT) || (status != STAT_SUCCESS)) {
-		current_host->ignore_host = 1;
-		SET_UNDEFINED(result_string);
-	}else if (!(status == STAT_SUCCESS && response->errstat == SNMP_ERR_NOERROR)) {
+	if (status == STAT_SUCCESS && response && response->errstat == SNMP_ERR_NOERROR) {
+		/* ALL OK */
+	}else{
+		if (status != STAT_SUCCESS) {
+			current_host->ignore_host = TRUE;
+		}
+
 		SET_UNDEFINED(result_string);
 	}
 
