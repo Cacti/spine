@@ -217,7 +217,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	}
 	result_string[0] = '\0';
 
-
 	status = STAT_DESCRIP_ERROR;
 
 	if (current_host->snmp_session != NULL) {
@@ -262,12 +261,8 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		status = STAT_DESCRIP_ERROR;
 	}
 
-	if (status == STAT_SUCCESS && response && response->errstat == SNMP_ERR_NOERROR) {
-		/* ALL OK */
-	}else{
-		if (status != STAT_SUCCESS) {
-			current_host->ignore_host = TRUE;
-		}
+	if (status != STAT_SUCCESS) {
+		current_host->ignore_host = TRUE;
 
 		SET_UNDEFINED(result_string);
 	}
