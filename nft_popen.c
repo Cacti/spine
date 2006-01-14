@@ -65,13 +65,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/wait.h>
 
 #include <nft_popen.h>
-
-#ifndef SIGKILL
- #define SIGKILL 9
-#endif
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
