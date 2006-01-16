@@ -109,13 +109,12 @@ void poll_host(int host_id) {
 	int j;
 	int num_oids = 0;
 	int snmp_poller_items = 0;
-	int buffer;
+	int out_buffer;
 	int php_process;
 
 	char *poll_result = NULL;
 	char update_sql[BUFSIZE];
 	char temp_result[BUFSIZE];
-	char delim = ' ';
 
 	int last_snmp_version = 0;
 	int last_snmp_port = 0;
@@ -681,26 +680,52 @@ void poll_host(int host_id) {
 			}
 		}
 
-		/* format database insert */
-		buffer = 600*rows_processed+100;
-
-		if (!(query3 = (char *)malloc(buffer))) {
+		/* insert the query results into the database */
+		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE))) {
 			die("ERROR: Fatal malloc error: poller.c query3 oids!\n");
 		}
-		memset(query3, 0, buffer);
+		query3[0] = '\0';
 
-		snprintf(query3, buffer-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
-
+		int new_buffer = TRUE;
+		
+		snprintf(query3, MAX_MYSQL_BUF_SIZE-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
+		out_buffer = strlen(query3);
+		
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, sizeof(result_string)-1, "%c(%i,'%s','%s','%s')", delim, poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
+			snprintf(result_string, sizeof(result_string)-1, " (%i,'%s','%s','%s')", poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
+			
+			/* if the next element to the buffer will overflow it, write to the database */
+			if ((out_buffer + strlen(result_string)) >= MAX_MYSQL_BUF_SIZE) {
+				/* insert the record */
+				db_insert(&mysql, query3);
+
+				/* re-initialize the query buffer */
+				snprintf(query3, MAX_MYSQL_BUF_SIZE-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
+
+				/* reset the output buffer length */
+				out_buffer = strlen(query3);
+
+				/* set binary, let the system know we are a new buffer */
+				new_buffer = TRUE;
+			}
+			
+			/* if this is our first pass, or we just outputted to the database, need to change the delimeter */
+			if (new_buffer) {
+				result_string[0] = ' ';
+			}else{
+				result_string[0] = ',';
+			}
+							
+			out_buffer = out_buffer + strlen(result_string);
 			strncat(query3, result_string, strlen(result_string));
-			delim = ',';
+
+			new_buffer = FALSE;
 			i++;
 		}
 
-		/* only perform and insert if there is something to insert */
-		if (rows_processed > 0) {
+		/* perform the last insert if required */
+		if (out_buffer > 0) {
 			/* insert records into database */
 			db_insert(&mysql, query3);
 		}

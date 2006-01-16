@@ -1,5 +1,8 @@
 The Cacti Group – cactid
 
+0.8.6h
+-bug: Only output as much as MySQL can handle in 1 insert
+
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout
 -bug#0000618/0000613: correct invalid assignment of session.community in snmp.c

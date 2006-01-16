@@ -121,6 +121,7 @@
 #define STAT_DESCRIP_ERROR 99
 #define CACTID_PARENT 1
 #define CACTID_FORK 0
+#define MAX_MYSQL_BUF_SIZE 1400
 
 /* locations to search for the config file */
 #define CONFIG_PATHS 2
