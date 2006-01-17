@@ -72,36 +72,16 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* place lock around mutex */
 	switch (php_process) {
-	case 0:
-		thread_mutex_lock(LOCK_PHP_PROC_0);
-		break;
-	case 1:
-		thread_mutex_lock(LOCK_PHP_PROC_1);
-		break;
-	case 2:
-		thread_mutex_lock(LOCK_PHP_PROC_2);
-		break;
-	case 3:
-		thread_mutex_lock(LOCK_PHP_PROC_3);
-		break;
-	case 4:
-		thread_mutex_lock(LOCK_PHP_PROC_4);
-		break;
-	case 5:
-		thread_mutex_lock(LOCK_PHP_PROC_5);
-		break;
-	case 6:
-		thread_mutex_lock(LOCK_PHP_PROC_6);
-		break;
-	case 7:
-		thread_mutex_lock(LOCK_PHP_PROC_7);
-		break;
-	case 8:
-		thread_mutex_lock(LOCK_PHP_PROC_8);
-		break;
-	case 9:
-		thread_mutex_lock(LOCK_PHP_PROC_9);
-		break;
+	case 0: thread_mutex_lock(LOCK_PHP_PROC_0);	break;
+	case 1: thread_mutex_lock(LOCK_PHP_PROC_1);	break;
+	case 2: thread_mutex_lock(LOCK_PHP_PROC_2);	break;
+	case 3: thread_mutex_lock(LOCK_PHP_PROC_3);	break;
+	case 4: thread_mutex_lock(LOCK_PHP_PROC_4);	break;
+	case 5: thread_mutex_lock(LOCK_PHP_PROC_5);	break;
+	case 6: thread_mutex_lock(LOCK_PHP_PROC_6);	break;
+	case 7: thread_mutex_lock(LOCK_PHP_PROC_7);	break;
+	case 8: thread_mutex_lock(LOCK_PHP_PROC_8);	break;
+	case 9: thread_mutex_lock(LOCK_PHP_PROC_9);	break;
 	}
 
 	/* send command to the script server */
@@ -119,36 +99,16 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* unlock around php process */
 	switch (php_process) {
-	case 0:
-		thread_mutex_unlock(LOCK_PHP_PROC_0);
-		break;
-	case 1:
-		thread_mutex_unlock(LOCK_PHP_PROC_1);
-		break;
-	case 2:
-		thread_mutex_unlock(LOCK_PHP_PROC_2);
-		break;
-	case 3:
-		thread_mutex_unlock(LOCK_PHP_PROC_3);
-		break;
-	case 4:
-		thread_mutex_unlock(LOCK_PHP_PROC_4);
-		break;
-	case 5:
-		thread_mutex_unlock(LOCK_PHP_PROC_5);
-		break;
-	case 6:
-		thread_mutex_unlock(LOCK_PHP_PROC_6);
-		break;
-	case 7:
-		thread_mutex_unlock(LOCK_PHP_PROC_7);
-		break;
-	case 8:
-		thread_mutex_unlock(LOCK_PHP_PROC_8);
-		break;
-	case 9:
-		thread_mutex_unlock(LOCK_PHP_PROC_9);
-		break;
+	case 0: thread_mutex_unlock(LOCK_PHP_PROC_0); break;
+	case 1: thread_mutex_unlock(LOCK_PHP_PROC_1); break;
+	case 2: thread_mutex_unlock(LOCK_PHP_PROC_2); break;
+	case 3: thread_mutex_unlock(LOCK_PHP_PROC_3); break;
+	case 4: thread_mutex_unlock(LOCK_PHP_PROC_4); break;
+	case 5: thread_mutex_unlock(LOCK_PHP_PROC_5); break;
+	case 6: thread_mutex_unlock(LOCK_PHP_PROC_6); break;
+	case 7: thread_mutex_unlock(LOCK_PHP_PROC_7); break;
+	case 8: thread_mutex_unlock(LOCK_PHP_PROC_8); break;
+	case 9: thread_mutex_unlock(LOCK_PHP_PROC_9); break;
 	}
 
 	return result_string;
@@ -445,7 +405,6 @@ void php_close(int php_process) {
 	}
 	
 	for(i = 0; i < num_processes; i++) {
-
 		php_t *phpp;
 
 		/* tell the script server to close */
@@ -471,7 +430,7 @@ void php_close(int php_process) {
 			phpp->php_write_fd = -1;
 
 			/* wait before killing php */
-			usleep(200000);			/* 200 msec */
+			usleep(50000);			/* 50 msec */
 		}
 
 		/* only try to kill the process if the PID looks valid.
