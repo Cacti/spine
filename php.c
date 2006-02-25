@@ -39,6 +39,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <math.h>
 #include "php.h"
@@ -184,7 +185,7 @@ char *php_readpipe(int php_process) {
 				break;
 			case EINTR:
 				/* take a moment */
-				usleep(20000);
+				usleep(2000);
 				
 				/* record end time */
 				end_time = get_time_as_double();
@@ -422,7 +423,7 @@ void php_close(int php_process) {
 		 * a clean shutdown.
 		 */
 		if (phpp->php_write_fd >= 0) {
-			static const char quit[] = " quit\r\n";
+			static const char quit[] = "quit\r\n";
 
 			write(phpp->php_write_fd, quit, strlen(quit));
 

@@ -281,11 +281,13 @@ void poll_host(int host_id) {
 		 * if the host down from an snmp perspective, don't poll it.
 		 * function sets the ignore_host bit */
 		if ((set.availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
+			host->ignore_host = 0;
 			update_host_status(HOST_UP, host, ping, set.availability_method);
 
 			CACTID_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
 		}else{
 			if (ping_host(host, ping) == HOST_UP) {
+				host->ignore_host = 0;
 				update_host_status(HOST_UP, host, ping, set.availability_method);
 			}else{
 				host->ignore_host = 1;
@@ -370,13 +372,13 @@ void poll_host(int host_id) {
 					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
-				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) <= strtoll(poll_result, (char **)NULL, 10))) {
+				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
 					CACTID_LOG_MEDIUM(("ASSERT: '%s .gt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
-				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) >= strtoll(poll_result, (char **)NULL, 10))) {
+				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
 					CACTID_LOG_MEDIUM(("ASSERT: '%s .lt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);

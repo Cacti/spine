@@ -96,6 +96,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout) {
 	void *sessp = NULL;
 	struct snmp_session session;
+	char hostnameport[BUFSIZE];   
 
 	/* initialize SNMP */
  	thread_mutex_lock(LOCK_SNMP);
@@ -130,7 +131,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		return 0;
 	}		
 
-	session.peername = hostname;
+	snprintf(hostnameport, sizeof(hostnameport), "%s:%i", hostname, snmp_port);
+	session.peername = hostnameport;
 	session.retries = 3;
 	session.remote_port = snmp_port;
 	session.timeout = (snmp_timeout * 1000); /* net-snmp likes microseconds */

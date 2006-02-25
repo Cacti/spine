@@ -435,17 +435,22 @@ int read_cactid_config(char *file) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (STRIMATCH(p1, "DB_Host")) snprintf(set.dbhost, sizeof(set.dbhost)-1, "%s", p2);
-				else if (STRIMATCH(p1, "DB_Database")) snprintf(set.dbdb, sizeof(set.dbdb)-1, "%s", p2);
-				else if (STRIMATCH(p1, "DB_User")) snprintf(set.dbuser, sizeof(set.dbuser)-1, "%s", p2);
-				else if (STRIMATCH(p1, "DB_Pass")) snprintf(set.dbpass, sizeof(set.dbpass)-1, "%s", p2);
-				else if (STRIMATCH(p1, "DB_Port")) set.dbport = atoi(p2);
+				if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.dbhost, p2);
+				else if (STRIMATCH(p1, "DB_Database")) STRNCOPY(set.dbdb, p2);
+				else if (STRIMATCH(p1, "DB_User"))     STRNCOPY(set.dbuser, p2);
+				else if (STRIMATCH(p1, "DB_Pass"))     STRNCOPY(set.dbpass, p2);
+				else if (STRIMATCH(p1, "DB_Port"))     set.dbport = atoi(p2);
 				else {
 					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
+
+				*p1 = '\0';
+				*p2 = '\0';
 			}
 		}
 
+		if (strlen(set.dbpass) == 0) *set.dbpass = '\0';
+		
 		return 0;
 	}
 }
