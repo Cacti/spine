@@ -7,6 +7,7 @@ The Cacti Group – cactid
 -bug#0000699: Tick counts not being detected
 -bug#0000706: cactid didn't start PHP scripts when host didn't answer SNMP (but icmp is ok) 
 -bug#0000710: cactid.conf doesn't allow for no mysql password
+-bug#0000714: POPEN timed out with perl/php script 
 
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout

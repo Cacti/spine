@@ -41,6 +41,7 @@
 #include "poller.h"
 #include "nft_popen.h"
 #include <errno.h>
+#include <math.h>
 
 /*! \fn void *child(void *arg)
  *  \brief function is called via the fork command and initiates a poll of a host
@@ -822,6 +823,8 @@ char *exec_poll(host_t *current_host, char *command) {
 	int bytes_read;
 	fd_set fds;
 	int numfds;
+	double begin_time = 0;
+	double end_time = 0;
 	struct timeval timeout;
 	char *proc_command;
 	char *result_string;
@@ -838,6 +841,9 @@ char *exec_poll(host_t *current_host, char *command) {
 	/* compensate for back slashes in arguments */
 	proc_command = add_slashes(command, 2);
 
+	/* record start time */
+	begin_time = get_time_as_double();
+
 	cmd_fd = nft_popen((char *)proc_command, "r");
 	free(proc_command);
 
@@ -851,25 +857,40 @@ char *exec_poll(host_t *current_host, char *command) {
 		numfds = cmd_fd + 1;
 
 		/* wait x seonds for pipe response */
+		retry:
 		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {
-				case EBADF:
-					CACTID_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id));
+			case EBADF:
+				CACTID_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id));
+				SET_UNDEFINED(result_string);
+				break;
+			case EINTR:
+				/* take a moment */
+				usleep(2000);
+				
+				/* record end time */
+				end_time = get_time_as_double();
+
+				/* re-establish new timeout value */
+				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
+				timeout.tv_usec = rint((set.script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+				
+				if ((end_time - begin_time) < set.script_timeout) {
+					goto retry;
+				}else{
+					CACTID_LOG(("WARNING: A script timed out while processing EINTR's.\n"));
 					SET_UNDEFINED(result_string);
-					break;
-				case EINTR:
-					CACTID_LOG(("Host[%i] ERROR: The function was interrupted before any of the selected events occurred and before the timeout interval expired.\n", current_host->id));
-					SET_UNDEFINED(result_string);
-					break;
-				case EINVAL:
-					CACTID_LOG(("Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id));
-					SET_UNDEFINED(result_string);
-					break;
-				default:
-					CACTID_LOG(("Host[%i] ERROR: The script/command select() failed\n", current_host->id));
-					SET_UNDEFINED(result_string);
-					break;
+				}
+				break;
+			case EINVAL:
+				CACTID_LOG(("Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id));
+				SET_UNDEFINED(result_string);
+				break;
+			default:
+				CACTID_LOG(("Host[%i] ERROR: The script/command select() failed\n", current_host->id));
+				SET_UNDEFINED(result_string);
+				break;
 			}
 		case 0:
 			CACTID_LOG(("Host[%i] ERROR: The POPEN timed out\n", current_host->id));
