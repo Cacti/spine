@@ -491,14 +491,14 @@ char *remove_tcp_udp_from_hostname(char *hostname) {
 	
 	if (!strncasecmp(hostname, "TCP:", 4) ||
 		!strncasecmp(hostname, "UDP:", 4)) {
-		if (!(cleaned_hostname = (char *) malloc(sizeof(hostname)-4))) {
+		if (!(cleaned_hostname = (char *) malloc(strlen(hostname)-4))) {
 			die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
 		}
 
 		memcpy(cleaned_hostname, hostname+4, strlen(hostname)-4);
 		cleaned_hostname[strlen(hostname)-4] = '\0';
 	}else{
-		if (!(cleaned_hostname = (char *) malloc(sizeof(hostname)))) {
+		if (!(cleaned_hostname = (char *) malloc(strlen(hostname)))) {
 			die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
 		}
 		strcpy(cleaned_hostname, hostname);
