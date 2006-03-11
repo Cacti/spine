@@ -114,6 +114,7 @@ void poll_host(int host_id) {
 	int php_process;
 
 	char *poll_result = NULL;
+	char *host_time = NULL;
 	char update_sql[BUFSIZE];
 	char temp_result[BUFSIZE];
 
@@ -204,6 +205,9 @@ void poll_host(int host_id) {
 		" SET rrd_next_step=rrd_step-%i"
 		" WHERE rrd_next_step < 0 and host_id=%i",
 			set.poller_interval, host_id);
+
+	/* get the host polling time */
+	host_time = get_host_poll_time();
 
 	/* initialize the ping structure variables */
 	snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
@@ -696,7 +700,7 @@ void poll_host(int host_id) {
 		
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, sizeof(result_string)-1, " (%i,'%s','%s','%s')", poller_items[i].local_data_id, poller_items[i].rrd_name, start_datetime, poller_items[i].result);
+			snprintf(result_string, sizeof(result_string)-1, " (%i,'%s','%s','%s')", poller_items[i].local_data_id, poller_items[i].rrd_name, host_time, poller_items[i].result);
 			
 			/* if the next element to the buffer will overflow it, write to the database */
 			if ((out_buffer + strlen(result_string)) >= MAX_MYSQL_BUF_SIZE) {
@@ -727,8 +731,8 @@ void poll_host(int host_id) {
 			i++;
 		}
 
-		/* perform the last insert if required */
-		if (out_buffer > 0) {
+		/* perform the last insert if required, the default query length is 69 characters */
+		if (out_buffer > 70) {
 			/* insert records into database */
 			db_insert(&mysql, query3);
 		}
@@ -744,6 +748,7 @@ void poll_host(int host_id) {
 	}
 
 	free(host);
+	free(host_time);
 	free(reindex);
 	free(sysUptime);
 	free(ping);

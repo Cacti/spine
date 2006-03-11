@@ -104,7 +104,6 @@ int active_threads = 0;
 
 config_t set;
 php_t	*php_processes = 0;
-char	 start_datetime[20];
 char	 config_paths[CONFIG_PATHS][BUFSIZE];
 
 static char *getarg(char *opt, char ***pargv);
@@ -144,9 +143,6 @@ int main(int argc, char *argv[]) {
 	int last_active_threads = 0;
 	long int EXTERNAL_THREAD_SLEEP = 100000;
 	long int internal_thread_sleep;
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
@@ -171,17 +167,6 @@ int main(int argc, char *argv[]) {
 
 	/* set start time for cacti */
 	begin_time = get_time_as_double();
-
-	/* get time for poller_output table */
-	if (time(&nowbin) == (time_t) - 1) {
-		die("ERROR: Could not get time of day from time()\n");
-	}
-	localtime_r(&nowbin,&now_time);
-	now_ptr = &now_time;
-
-	if (strftime(start_datetime, sizeof(start_datetime), "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
-		die("ERROR: Could not get string from strftime()\n");
-	}
 
 	/* set default verbosity */
 	set.log_level = POLLER_VERBOSITY_LOW;

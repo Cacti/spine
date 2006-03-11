@@ -63,3 +63,6 @@ extern char *strncopy(char *dst, const char *src, size_t n);
 
 /* get highres time as double */
 extern double get_time_as_double(void);
+
+/* get host polling time */
+extern char *get_host_poll_time(void);

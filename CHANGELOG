@@ -3,11 +3,14 @@ The Cacti Group – cactid
 0.8.6h
 -bug: Only output as much as MySQL can handle in 1 insert
 -bug: Faulty Script Server shutdown was causing race condition
+-bug: Allow ICMP or UDP ping to work if host begins with either "TCP:" or "UDP:"
+-bug#0000682: Allow storing of each hosts polling start time
 -bug#0000691: Cactid fails with custom snmp port 
 -bug#0000699: Tick counts not being detected
--bug#0000706: cactid didn't start PHP scripts when host didn't answer SNMP (but icmp is ok) 
+-bug#0000706: Cactid didn't start PHP scripts when host didn't answer SNMP (but icmp is ok) 
 -bug#0000710: cactid.conf doesn't allow for no mysql password
--bug#0000714: POPEN timed out with perl/php script 
+-bug#0000716: Don't attempt to save output for a host if there is none.
+-bug#0000717: Allow numeric double results to start with '+', '-', '.'
 
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout

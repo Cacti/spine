@@ -198,8 +198,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	fd_set socket_fds;
 
 	static unsigned int seq = 0;
-	struct icmphdr* icmp;
-	unsigned char* packet;
+	struct icmphdr *icmp;
+	unsigned char *packet;
+	char *new_hostname;
+	
+	/* remove "tcp:" from hostname */
+	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
 	/* get ICMP socket */
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
@@ -238,10 +242,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "default");
 
 		/* set the socket timeout */
-		setsockopt(icmp_socket,SOL_SOCKET,SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+		setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, host->hostname, 7)) {
+		if (init_sockaddr(&servername, new_hostname, 7)) {
 			retry_count = 0;
 
 			/* initialize file descriptor to review for input/output */
@@ -252,6 +256,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				if (retry_count >= set.ping_retries) {
 					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+					free(new_hostname);
 					free(packet);
 					close(icmp_socket);
 					return HOST_DOWN;
@@ -285,6 +290,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					if (total_time < set.ping_timeout) {
 						snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Host is Alive");
 						snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", total_time);
+						free(new_hostname);
 						free(packet);
 						close(icmp_socket);
 						return HOST_UP;
@@ -297,6 +303,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+			free(new_hostname);
 			free(packet);
 			close(icmp_socket);
 			return HOST_DOWN;
@@ -304,6 +311,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	}else{
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+		free(new_hostname);
 		free(packet);
   		if (icmp_socket != -1) close(icmp_socket);
 		return HOST_DOWN;
@@ -335,6 +343,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int return_code;
 	fd_set socket_fds;
 	int numfds;
+	char *new_hostname;
+	
+	/* remove "udp:" from hostname */
+	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
@@ -353,10 +365,11 @@ int ping_udp(host_t *host, ping_t *ping) {
 		setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, host->hostname, 33439)) {
+		if (init_sockaddr(&servername, new_hostname, 33439)) {
 			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
 				snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Cannot connect to host");
+				free(new_hostname);
 				close(udp_socket);
 				return HOST_DOWN;
 			}
@@ -377,6 +390,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				if (retry_count >= set.ping_retries) {
 					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Ping timed out");
 					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+					free(new_hostname);
 					close(udp_socket);
 					return HOST_DOWN;
 				}
@@ -409,6 +423,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 					if (total_time <= set.ping_timeout) {
 						snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Host is Alive");
 						snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "%.5f", total_time);
+						free(new_hostname);
 						close(udp_socket);
 						return HOST_UP;
 					}
@@ -420,12 +435,14 @@ int ping_udp(host_t *host, ping_t *ping) {
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+			free(new_hostname);
 			close(udp_socket);
 			return HOST_DOWN;
 		}
 	}else{
 		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+		free(new_hostname);
 		if (udp_socket != -1) close(udp_socket);
 		return HOST_DOWN;
 	}
@@ -461,6 +478,33 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 			return TRUE;
 		}
 	}
+}
+
+/*! \fn char *remove_tcp_udp_from_hostname(char *hostname)
+ *  \brief removes 'TCP:' or 'UDP:' from a hostname required to ping
+ *
+ *  \return char hostname a trimmed hostname
+ *
+ */
+char *remove_tcp_udp_from_hostname(char *hostname) {
+	char *cleaned_hostname;
+	
+	if (!strncasecmp(hostname, "TCP:", 4) ||
+		!strncasecmp(hostname, "UDP:", 4)) {
+		if (!(cleaned_hostname = (char *) malloc(sizeof(hostname)-4))) {
+			die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
+		}
+
+		memcpy(cleaned_hostname, hostname+4, strlen(hostname)-4);
+		cleaned_hostname[strlen(hostname)-4] = '\0';
+	}else{
+		if (!(cleaned_hostname = (char *) malloc(sizeof(hostname)))) {
+			die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
+		}
+		strcpy(cleaned_hostname, hostname);
+	}
+
+	return(cleaned_hostname);
 }
 
 /*! \fn unsigned short get_checksum(void* buf, int len)

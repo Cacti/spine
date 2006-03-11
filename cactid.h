@@ -247,7 +247,6 @@
 #define STRMATCH(a,b)	(strcmp((a),(b)) == 0)
 #define STRIMATCH(a,b)	(strcasecmp((a),(b)) == 0)
 
-
 /* convert timeval to double (rounding to the nearest microsecond) */
 #define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000))
 
