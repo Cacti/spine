@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2005 The Cacti Group                                 |
+ | Copyright (C) 2002-2006 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -70,7 +70,22 @@ static const char application_id[] = "cactid";
  *
  */
 void snmp_cactid_init(void) {
+	#ifdef USE_NET_SNMP
+	/* check that the headers we compiled with match the library we linked with - 
+	   apparently not defined in UCD-SNMP... 
+	*/
+	CACTID_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
+	CACTID_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
+
+	if(STRIMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
+		init_snmp(application_id);
+	}else{
+		/* report the error and quit cactid */
+		die("ERROR: SNMP Library Version Mismatch (%s vs %s)\n",PACKAGE_VERSION,netsnmp_get_version());
+	}
+	#else
 	init_snmp(application_id);
+	#endif
 }
 
 /*! \fn void snmp_cactid_close()
@@ -105,7 +120,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	/* Prevent update of the snmpapp.conf file */
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
 	#endif
-	#ifdef NETSNMP_DS_LIB_DONT_PRIT_UNITS
+	#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
 	#endif
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);

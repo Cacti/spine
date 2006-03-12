@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2005 The Cacti Group                                 |
+ | Copyright (C) 2002-2006 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -397,8 +397,6 @@ void php_close(int php_process) {
 	int i;
 	int num_processes;
 
-	CACTID_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started\n", php_process));
-
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
 	}else{
@@ -407,6 +405,8 @@ void php_close(int php_process) {
 	
 	for(i = 0; i < num_processes; i++) {
 		php_t *phpp;
+
+		CACTID_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started\n", i));
 
 		/* tell the script server to close */
 		if (php_process == PHP_INIT) {

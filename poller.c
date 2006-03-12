@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2005 The Cacti Group                                 |
+ | Copyright (C) 2002-2006 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -98,6 +98,7 @@ void poll_host(int host_id) {
 	char query5[BUFSIZE];
 	char query6[BUFSIZE];
 	char query7[BUFSIZE];
+	char query8[BUFSIZE];
 	char errstr[BUFSIZE];
 	char *sysUptime;
 	char result_string[BUFSIZE];
@@ -205,6 +206,10 @@ void poll_host(int host_id) {
 		" SET rrd_next_step=rrd_step-%i"
 		" WHERE rrd_next_step < 0 and host_id=%i",
 			set.poller_interval, host_id);
+			
+	snprintf(query8, sizeof(query8)-1,
+		"INSERT INTO poller_output"
+		" (local_data_id,rrd_name,time,output) VALUES");
 
 	/* get the host polling time */
 	host_time = get_host_poll_time();
@@ -695,7 +700,7 @@ void poll_host(int host_id) {
 
 		int new_buffer = TRUE;
 		
-		snprintf(query3, MAX_MYSQL_BUF_SIZE-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
+		strncopy(query3, query8, strlen(query8));
 		out_buffer = strlen(query3);
 		
 		i = 0;
@@ -708,7 +713,7 @@ void poll_host(int host_id) {
 				db_insert(&mysql, query3);
 
 				/* re-initialize the query buffer */
-				snprintf(query3, MAX_MYSQL_BUF_SIZE-1, "INSERT INTO poller_output (local_data_id,rrd_name,time,output) VALUES");
+				strncopy(query3, query8, strlen(query8));
 
 				/* reset the output buffer length */
 				out_buffer = strlen(query3);
@@ -731,8 +736,8 @@ void poll_host(int host_id) {
 			i++;
 		}
 
-		/* perform the last insert if required, the default query length is 69 characters */
-		if (out_buffer > 70) {
+		/* perform the last insert if there is data to process */
+		if (out_buffer > strlen(query8)) {
 			/* insert records into database */
 			db_insert(&mysql, query3);
 		}

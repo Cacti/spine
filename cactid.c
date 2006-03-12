@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2005 The Cacti Group                                 |
+ | Copyright (C) 2002-2006 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -369,7 +369,7 @@ int main(int argc, char *argv[]) {
 	snmp_cactid_init();
 
 	/* initialize PHP if required */
-	CACTID_LOG_DEBUG(("CACTID: Initializing PHP Script Server\n"));
+	CACTID_LOG_DEBUG(("CACTID: Initializing PHP Script Server(s)\n"));
 
 	/* tell cactid that it is parent, and set the poller id */
 	set.parent_fork = CACTID_PARENT;
@@ -633,14 +633,14 @@ static void display_help(void) {
 		"database, but they can be overridden with the --option=S:V",
 		"parameter.",
 		"",
-		"Cactid is distributed under the Terms of the GNU General",
-		"Public License Version 2. (www.gnu.org/copyleft/gpl.html)",
+		"Cactid is distributed under the Terms of the GNU Lessor",
+		"General Public License Version 2.1. (http://www.gnu.org/licenses/lgpl.txt)",
 		"For more information, see http://www.cacti.net",
 
 		0 /* ENDMARKER */
 	};
 
-	printf("CACTID %s  Copyright 2002-2005 by The Cacti Group\n\n", VERSION);
+	printf("CACTID %s  Copyright 2002-2006 by The Cacti Group\n\n", VERSION);
 
 	for (p = helptext; *p; p++) {
 		puts(*p);	/* automatically adds a newline */

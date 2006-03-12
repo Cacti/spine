@@ -1,6 +1,6 @@
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2005 The Cacti Group                                 |
+ | Copyright (C) 2002-2006 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -489,18 +489,15 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 char *remove_tcp_udp_from_hostname(char *hostname) {
 	char *cleaned_hostname;
 	
+	if (!(cleaned_hostname = (char *) malloc(strlen(hostname)))) {
+		die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
+	}
+
 	if (!strncasecmp(hostname, "TCP:", 4) ||
 		!strncasecmp(hostname, "UDP:", 4)) {
-		if (!(cleaned_hostname = (char *) malloc(strlen(hostname)-4))) {
-			die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
-		}
-
 		memcpy(cleaned_hostname, hostname+4, strlen(hostname)-4);
 		cleaned_hostname[strlen(hostname)-4] = '\0';
 	}else{
-		if (!(cleaned_hostname = (char *) malloc(strlen(hostname)))) {
-			die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
-		}
 		strcpy(cleaned_hostname, hostname);
 	}
 

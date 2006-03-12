@@ -11,6 +11,7 @@ The Cacti Group – cactid
 -bug#0000710: cactid.conf doesn't allow for no mysql password
 -bug#0000716: Don't attempt to save output for a host if there is none.
 -bug#0000717: Allow numeric double results to start with '+', '-', '.'
+-feature: add Net-SNMP Library vs. Header check prior to execution.
 
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout
