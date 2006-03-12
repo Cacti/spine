@@ -379,19 +379,19 @@ void poll_host(int host_id) {
 				}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
 					CACTID_LOG_MEDIUM(("ASSERT: '%s .eq. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
 					CACTID_LOG_MEDIUM(("ASSERT: '%s .gt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
 					CACTID_LOG_MEDIUM(("ASSERT: '%s .lt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host_id, reindex->data_query_id);
+					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
 				}
