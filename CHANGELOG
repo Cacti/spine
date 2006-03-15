@@ -4,6 +4,7 @@ The Cacti Group – cactid
 -bug: Only output as much as MySQL can handle in 1 insert
 -bug: Faulty Script Server shutdown was causing race condition
 -bug: Allow ICMP or UDP ping to work if host begins with either "TCP:" or "UDP:"
+-bug: Change assert logging to HIGH to more closely match cmd.php
 -bug#0000682: Allow storing of each hosts polling start time
 -bug#0000691: Cactid fails with custom snmp port 
 -bug#0000699: Tick counts not being detected
