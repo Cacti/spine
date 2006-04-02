@@ -116,9 +116,10 @@ if test -z "$MYSQL_INC_DIR"; then
 fi
 
 for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
-   MYSQL_LIB_CHK($i/lib)
-   MYSQL_LIB_CHK($i/lib64)
-   MYSQL_LIB_CHK($i/lib/mysql)
+    MYSQL_LIB_CHK($i/lib)
+    MYSQL_LIB_CHK($i/lib64)
+    MYSQL_LIB_CHK($i/lib/mysql)
+    MYSQL_LIB_CHK($i/lib64/mysql)
 done
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
