@@ -340,14 +340,14 @@ void poll_host(int host_id) {
 
 				reindex->data_query_id = atoi(row[0]);
 				reindex->action = atoi(row[1]);
-				if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op)-1, "%s", row[2]);
+				if (row[2] != NULL) snprintf(reindex->op,           sizeof(reindex->op)-1,           "%s", row[2]);
 				if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value)-1, "%s", row[3]);
-				if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1)-1, "%s", row[4]);
+				if (row[4] != NULL) snprintf(reindex->arg1,         sizeof(reindex->arg1)-1,         "%s", row[4]);
 
 				switch(reindex->action) {
 				case POLLER_ACTION_SNMP: /* snmp */
 					/* check to see if you are checking uptime */
-					if (strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") != 0) {
+					if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
 						if (strlen(sysUptime) > 0) {
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result\n");
@@ -376,22 +376,22 @@ void poll_host(int host_id) {
 				/* assume ok if host is up and result wasn't obtained */
 				if(IS_UNDEFINED(poll_result)) {
 					assert_fail = 0;
-				}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result) != 0)) {
-					CACTID_LOG_HIGH(("ASSERT: '%s .eq. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+				}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
+					CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+					snprintf(query3, BUFSIZE, "replace into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
-					CACTID_LOG_HIGH(("ASSERT: '%s .gt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+					CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+					snprintf(query3, BUFSIZE, "replace into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
 				}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-					CACTID_LOG_HIGH(("ASSERT: '%s .lt. %s' failed. Recaching host '%s', data query #%i\n", reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+					CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-					snprintf(query3, 254, "insert into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+					snprintf(query3, BUFSIZE, "replace into poller_command (poller_id,time,action,command) values (0,NOW(),%i,'%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 					db_insert(&mysql, query3);
 					assert_fail = 1;
 				}

@@ -6,6 +6,7 @@ The Cacti Group – cactid
 -bug: Allow ICMP or UDP ping to work if host begins with either "TCP:" or "UDP:"
 -bug: Change assert logging to HIGH to more closely match cmd.php
 -bug: Allow Cactid to make on 64bit x86 Platforms - thanks to Reuben Farrelly
+-bug: Quiet reindex insert errors by changing syntax from "insert into to replace into"
 -bug#0000682: Allow storing of each hosts polling start time
 -bug#0000691: Cactid fails with custom snmp port 
 -bug#0000699: Tick counts not being detected
