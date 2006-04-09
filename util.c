@@ -598,7 +598,7 @@ int cacti_log(const char *format, ...) {
 	}
 
 	if (set.log_level >= POLLER_VERBOSITY_NONE) {
-		if ((strstr(flogmessage,"ERROR")) || (strstr(flogmessage,"WARNING") || (strstr(flogmessage,"FATAL"))) {
+		if ((strstr(flogmessage,"ERROR")) || (strstr(flogmessage,"WARNING")) || (strstr(flogmessage,"FATAL"))) {
 			fp = stderr;
 		}
 
