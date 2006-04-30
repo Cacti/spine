@@ -32,9 +32,6 @@
 
 #include "common.h"
 #include "cactid.h"
-#include "locks.h"
-#include "util.h"
-#include "snmp.h"
 
 #ifdef USE_NET_SNMP
  #undef PACKAGE_NAME

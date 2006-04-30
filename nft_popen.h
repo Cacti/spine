@@ -21,10 +21,6 @@
  *
  ******************************************************************************
  */
-#ifndef nft_popen_h
-#define nft_popen_h
-
-#include <pthread.h>
 
 /*!
  *  The nft_popen() function forks a command in a child process, and returns
@@ -46,7 +42,6 @@
  */
 extern int	nft_popen(const char * command, const char * mode);
 
-
 /*!
  *  nft_pchild
  *
@@ -58,7 +53,6 @@ extern int	nft_popen(const char * command, const char * mode);
  *    EBADF	The fd is not an active nft_popen() file descriptor.
  */
 extern int	nft_pchild(int fd);
-
 
 /*!
  *  nft_pclose
@@ -72,6 +66,3 @@ extern int	nft_pchild(int fd);
  *	ECHILD	waitpid() failed.
  */
 extern int	nft_pclose(int fd);
-
-
-#endif	/* nft_popen_h */

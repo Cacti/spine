@@ -32,9 +32,6 @@
 
 #include "common.h"
 #include "cactid.h"
-#include "locks.h"
-#include "util.h"
-#include "sql.h"
 
 /*! \fn int db_insert(MYSQL *mysql, const char *query)
  *  \brief inserts a row or rows in a database table.

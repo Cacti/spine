@@ -30,10 +30,6 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "cactid.h"
-#include <mysql.h>
-
 extern int db_insert(MYSQL *mysql, const char *query);
 extern MYSQL_RES *db_query(MYSQL *mysql, const char *query);
 extern void db_connect(const char *database, MYSQL *mysql);

@@ -30,17 +30,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <syslog.h>
-#include <errno.h>
 #include "common.h"
 #include "cactid.h"
-#include "util.h"
-#include "snmp.h"
-#include "sql.h"
-#include "ping.h"
 
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling

@@ -83,19 +83,6 @@
 
 #include "common.h"
 #include "cactid.h"
-#include <pthread.h>
-#include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdarg.h>
-#include <assert.h>
-#include "poller.h"
-#include "locks.h"
-#include "snmp.h"
-#include "php.h"
-#include "sql.h"
-#include "util.h"
-#include "nft_popen.h"
 
 /* Global Variables */
 int entries = 0;
@@ -159,6 +146,9 @@ int main(int argc, char *argv[]) {
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
+	/* install the cactid signal handler */
+	install_cactid_signal_handler();
+
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
@@ -171,6 +161,9 @@ int main(int argc, char *argv[]) {
 	/* set default verbosity */
 	set.log_level = POLLER_VERBOSITY_LOW;
 
+	/* set the default exit code */
+	set.exit_code = 0;
+	
 	/* get static defaults for system */
 	config_defaults();
 
@@ -591,6 +584,9 @@ int main(int argc, char *argv[]) {
 	end_time = TIMEVAL_TO_DOUBLE(now);
 
 	CACTID_LOG_MEDIUM(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
+
+	/* uninstall the cactid signal handler */
+	uninstall_cactid_signal_handler();
 
 	exit(EXIT_SUCCESS);
 }

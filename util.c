@@ -30,22 +30,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <syslog.h>
-#include <errno.h>
-#include <assert.h>
-#include <stdarg.h>
-#include <ctype.h>
 #include "common.h"
 #include "cactid.h"
-#include "util.h"
-#include "keywords.h"
-#include "snmp.h"
-#include "locks.h"
-#include "sql.h"
-#include "php.h"
 
 static int nopts = 0;
 
@@ -485,12 +471,21 @@ void config_defaults() {
 void die(const char *format, ...) {
 	va_list	args;
 	char logmessage[BUFSIZE];
+	char flogmessage[BUFSIZE];
 
 	va_start(args, format);
 	vsprintf(logmessage, format, args);
 	va_end(args);
 	
-	CACTID_LOG((logmessage));
+	if (set.logfile_processed) {
+		if (set.parent_fork == CACTID_PARENT) {
+			snprintf(flogmessage, sizeof(flogmessage), "%s (parent)", logmessage);
+		}else{
+			snprintf(flogmessage, sizeof(flogmessage), "%s (fork)", logmessage);
+		}
+	}
+
+	CACTID_LOG((flogmessage));
 
 	if (set.parent_fork == CACTID_PARENT) {
 		if (set.php_initialized) {
@@ -498,15 +493,7 @@ void die(const char *format, ...) {
 		}
 	}
 	
-	if (set.logfile_processed) {
-		if (set.parent_fork == CACTID_PARENT) {
-			CACTID_LOG(("FATAL: Cactid Parent process encountered a FATAL error and must exit\n"));
-		}else{
-			CACTID_LOG(("FATAL: Cactid Fork process encountered a FATAL error and must exit\n"));			
-		}
-	}
-
-	exit(-1);
+	exit(set.exit_code);
 }
 
 /*! \fn void cacti_log(const char *format, ...)
@@ -566,7 +553,13 @@ int cacti_log(const char *format, ...) {
 	now_ptr = &now_time;
 
 	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0) {
-		fprintf(stderr, "ERROR: Could not get string from strftime()\n");
+		#ifdef DISABLE_STDERR
+		fp = stdout;
+		#else
+		fp = stderr;
+		#endif
+
+		fprintf(fp, "ERROR: Could not get string from strftime()\n");
 	}
 
 	strncat(flogmessage, logprefix, strlen(logprefix));
@@ -598,8 +591,14 @@ int cacti_log(const char *format, ...) {
 	}
 
 	if (set.log_level >= POLLER_VERBOSITY_NONE) {
-		if ((strstr(flogmessage,"ERROR")) || (strstr(flogmessage,"WARNING")) || (strstr(flogmessage,"FATAL"))) {
+		if ((strstr(flogmessage,"ERROR"))   || 
+			(strstr(flogmessage,"WARNING")) || 
+			(strstr(flogmessage,"FATAL"))) {
+#ifdef DISABLE_STDERR
+			fp = stdout;
+#else
 			fp = stderr;
+#endif
 		}
 
 		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", ulogmessage);

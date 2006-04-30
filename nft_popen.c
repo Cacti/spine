@@ -60,15 +60,8 @@
  * SUCH DAMAGE.
  */
 
-#include <assert.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/wait.h>
-
-#include <nft_popen.h>
+#include "common.h"
+#include "cactid.h"
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid

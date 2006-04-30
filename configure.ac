@@ -65,7 +65,6 @@ AC_ARG_ENABLE(warnings,
    fi],AC_MSG_RESULT(no))
 
 # Checks for libraries.
-AC_CHECK_LIB(kstat, kstat_lookup)
 AC_CHECK_LIB(nsl, gethostbyname)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
@@ -75,7 +74,10 @@ AC_CHECK_LIB(z, deflate)
 
 # Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS(malloc.h ctype.h sys/time.h netinet/in.h)
+AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
+AC_CHECK_HEADERS(assert.h ctype.h errno.h signal.h math.h malloc.h netdb.h)
+AC_CHECK_HEADERS(signal.h stdarg.h stdio.h syslog.h)
+AC_CHECK_HEADERS(netinet/in.h)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_TYPES([unsigned long long, long long])
@@ -86,7 +88,7 @@ AC_STRUCT_TM
 
 # Checks for library functions.
 AC_TYPE_SIGNAL
-AC_CHECK_FUNCS(gettimeofday strerror strtoll)
+AC_CHECK_FUNCS(malloc calloc gettimeofday strerror strtoll)
 
 # ****************** MySQL Checks ***********************
 
@@ -183,8 +185,8 @@ AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   AC_MSG_RESULT(no))
 
 if test "$SNMP_SSL" = "yes"; then
-  LDFLAGS="-L/usr/local/ssl/lib $LDFLAGS"
-  AC_CHECK_LIB(crypto, CRYPTO_free,[],[AC_MSG_ERROR(libcrypto not found!)])
+  LDFLAGS="-L/usr/local/ssl/lib -L/usr/lib $LDFLAGS"
+  AC_CHECK_LIB(crypto, CRYPTO_realloc,[],[AC_MSG_ERROR(libcrypto not found!)])
 fi
 
 AC_CHECK_LIB(netsnmp, snmp_timeout,

@@ -45,6 +45,11 @@
 # define __attribute__(x)  /* NOTHING */
 #endif
 
+/* Windows does not support stderr.  Therefore, don't use it. */
+#ifdef __CYGWIN__
+#define DISABLE_STDERR
+#endif
+
 /* if a host is legal, return TRUE */
 #define HOSTID_DEFINED(x)	((x) >= 0)
 
@@ -62,7 +67,6 @@
 
 #define UNUSED_VARIABLE(p)      (void)(p)
 #define UNUSED_PARAMETER(p)     (void)(p)
-
 
 /* logging macros
  *
@@ -311,6 +315,8 @@ typedef struct config_struct {
 	int php_initialized;
 	int php_servers;
 	int php_current_server;
+	/* Exit code if we need it */
+	int exit_code;
 } config_t;
 
 /*! Target Structure
@@ -403,7 +409,7 @@ typedef struct host_struct {
 typedef struct host_reindex_struct {
 	char op[4];
 	char assert_value[100];
-	char arg1[100];
+	char arg1[255];
 	int data_query_id;
 	int action;
 } reindex_t;
@@ -443,6 +449,17 @@ struct icmphdr {
 	} un;
 };
 
+/* Include all Standard Cactid Headers */
+#include "poller.h"
+#include "locks.h"
+#include "keywords.h"
+#include "snmp.h"
+#include "php.h"
+#include "ping.h"
+#include "sql.h"
+#include "util.h"
+#include "nft_popen.h"
+#include "error.h"
 
 /* Globals */
 extern config_t   set;

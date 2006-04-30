@@ -59,11 +59,7 @@
 
 #define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
 
-#if HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
-#include <stdio.h>
+#include "config/config.h"
 
 #if STDC_HEADERS
 #  include <stdlib.h>
@@ -102,6 +98,20 @@
 #  include <pthread.h>
 #endif
 
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <math.h>
+#include <mysql.h>
+#include <netdb.h>
 #include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <syslog.h>
 
 #endif /* CACTID_COMMON_H */

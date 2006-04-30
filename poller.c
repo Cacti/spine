@@ -32,16 +32,6 @@
 
 #include "common.h"
 #include "cactid.h"
-#include "sql.h"
-#include "snmp.h"
-#include "util.h"
-#include "php.h"
-#include "ping.h"
-#include "locks.h"
-#include "poller.h"
-#include "nft_popen.h"
-#include <errno.h>
-#include <math.h>
 
 /*! \fn void *child(void *arg)
  *  \brief function is called via the fork command and initiates a poll of a host
@@ -66,6 +56,8 @@ void *child(void *arg) {
 	CACTID_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n" ,active_threads));
 
 	pthread_exit(0);
+
+	exit(0);
 }
 
 /*! \fn void poll_host(int host_id)

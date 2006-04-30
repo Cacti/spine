@@ -32,9 +32,6 @@
 
 #include "common.h"
 #include "cactid.h"
-#include <pthread.h>
-#include "locks.h"
-
 
 /*
  * each lock requires a handful of parts: a mutex, an init structure, and an

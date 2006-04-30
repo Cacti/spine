@@ -42,40 +42,12 @@
  *
 */
 
-#include <sys/stat.h>
-#include <syslog.h>
-#include <errno.h>
-#include <stdarg.h>
-#include <assert.h>
 #include "common.h"
 #include "cactid.h"
-#include "util.h"
-#include "snmp.h"
-#include "locks.h"
-#include "sql.h"
-#include "php.h"
 
 struct keyword {
 	const char *word;
 	int         value;
-};
-
-/*! Boolword Structure
- *
- *	Structure that helps map a common TRUE/FALSE text string to the correct
- *	boolean response.
- *
- */
-static const struct keyword boolword[] = {
-	{ "true",	TRUE	},
-	{ "yes",	TRUE	},
-	{ "on",		TRUE	},
-
-	{ "false",	FALSE	},
-	{ "no",		FALSE	},
-	{ "off",	FALSE	},
-
-	{ 0, 0 }	/* ENDMARKER */
 };
 
 /*! Log Level Structure
