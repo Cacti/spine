@@ -685,7 +685,7 @@ void poll_host(int host_id) {
 		}
 
 		/* insert the query results into the database */
-		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE))) {
+		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE+BUFSIZE))) {
 			die("ERROR: Fatal malloc error: poller.c query3 oids!\n");
 		}
 		query3[0] = '\0';
