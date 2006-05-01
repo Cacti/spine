@@ -14,38 +14,38 @@ AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
 AC_ARG_WITH(static,
-	AC_HELP_STRING(
-		[--with-static],
-		[Build using static libraries]),
-	[CFLAGS="-static $CFLAGS"])
+  AC_HELP_STRING(
+    [--with-static],
+    [Build using static libraries]),
+  [CFLAGS="-static $CFLAGS"])
 
 # mysql
 AC_ARG_WITH(mysql,
-	AC_HELP_STRING(
-		[--with-mysql],
-		[MySQL include directory [[/usr/include/mysql]]]),
-	[MYSQL_DIR=$withval],
-	[MYSQL_DIR="/usr"])
+  AC_HELP_STRING(
+    [--with-mysql],
+    [MySQL include directory [[/usr/include/mysql]]]),
+  [MYSQL_DIR=$withval],
+  [MYSQL_DIR="/usr"])
 
 # snmp
 AC_ARG_WITH(snmp,
-	AC_HELP_STRING(
-		[--with-snmp],
-		[SNMP include base directory [[/usr/(local/)include]]]),
-	[SNMP_DIR=$withval])
+  AC_HELP_STRING(
+    [--with-snmp],
+    [SNMP include base directory [[/usr/(local/)include]]]),
+  [SNMP_DIR=$withval])
 
 # if host_alias is empty, ac_cv_host_alias may still have the info
 if test -z "$host_alias"; then
-    host_alias=$ac_cv_host_alias
+  host_alias=$ac_cv_host_alias
 fi
 
 # Platform-specific tweaks
 case $host_alias in
 *solaris*)
-    CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
+  CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
 *freebsd*)
-    LIBS="$LIBS -pthread"
-    AC_DEFINE(HAVE_LIBPTHREAD, 1);;
+  LIBS="$LIBS -pthread"
+  AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 esac
 
 # Checks for programs.
@@ -93,20 +93,20 @@ AC_CHECK_FUNCS(malloc calloc gettimeofday strerror strtoll)
 # ****************** MySQL Checks ***********************
 
 AC_DEFUN([MYSQL_LIB_CHK],[
-	str="$1/libmysqlclient.*"
-	for j in `echo $str`; do
-		if test -r $j; then
-		MYSQL_LIB_DIR=$1
-		break 2
-	fi
-	done
+  str="$1/libmysqlclient.*"
+  for j in `echo $str`; do
+    if test -r $j; then
+      MYSQL_LIB_DIR=$1
+      break 2
+    fi
+  done
 ])
 
 # Determine MySQL installation paths
 for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
-   test -f $i/include/mysql.h                    && MYSQL_INC_DIR=$i/include
-   test -f $i/include/mysql/mysql.h              && MYSQL_INC_DIR=$i/include/mysql
-   test -f $i/mysql/include/mysql.h              && MYSQL_INC_DIR=$i/mysql/include
+  test -f $i/include/mysql.h                    && MYSQL_INC_DIR=$i/include
+  test -f $i/include/mysql/mysql.h              && MYSQL_INC_DIR=$i/include/mysql
+  test -f $i/mysql/include/mysql.h              && MYSQL_INC_DIR=$i/mysql/include
 done
 
 if test -z "$MYSQL_INC_DIR"; then
@@ -118,46 +118,48 @@ if test -z "$MYSQL_INC_DIR"; then
 fi
 
 for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
-    MYSQL_LIB_CHK($i/lib)
-    MYSQL_LIB_CHK($i/lib64)
-    MYSQL_LIB_CHK($i/lib/mysql)
-    MYSQL_LIB_CHK($i/lib64/mysql)
+  MYSQL_LIB_CHK($i/lib)
+  MYSQL_LIB_CHK($i/lib64)
+  MYSQL_LIB_CHK($i/lib/mysql)
+  MYSQL_LIB_CHK($i/lib64/mysql)
 done
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="-lmysqlclient $LIBS",
-	AC_MSG_ERROR([MySQL libraries not found.]))
+AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="$LIBS",
+  AC_MSG_ERROR([MySQL libraries not found.]))
 AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
-	AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version]))
+  AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version]))
 
 # ****************** Net-SNMP/UCD-SNMP Checks ***********************
 
 # Determine UCD or Net-SNMP installation paths
 if test "x$SNMP_DIR" != "x"; then
-    for i in / /ucd-snmp /include/ucd-snmp; do
-       test -f $SNMP_DIR/$i/snmp.h             && SNMP_INCDIR=$SNMP_DIR$i
-    done
-    for i in / /net-snmp /include/net-snmp; do
-       test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i
-    done
+  for i in / /ucd-snmp /include/ucd-snmp; do
+    test -f $SNMP_DIR/$i/snmp.h             && SNMP_INCDIR=$SNMP_DIR$i
+  done
 
-    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
-    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
+  for i in / /net-snmp /include/net-snmp; do
+    test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i
+  done
+
+  test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
+  test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
 else
-    for i in /usr/include /usr/local/include; do
-      test -f $i/snmp.h                       && SNMP_INCDIR=$i
-      test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
-      test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
-      test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp
-      test -f $i/snmp/include/ucd-snmp/snmp.h && SNMP_INCDIR=$i/snmp/include/ucd-snmp
-      test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp
-    done
-    for i in /usr /usr/snmp /usr/local /usr/local/snmp; do
-      test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib
-      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib
-    done
+  for i in /usr/include /usr/local/include; do
+    test -f $i/snmp.h                       && SNMP_INCDIR=$i
+    test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
+    test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
+    test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp
+    test -f $i/snmp/include/ucd-snmp/snmp.h && SNMP_INCDIR=$i/snmp/include/ucd-snmp
+    test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp
+  done
+
+  for i in /usr /usr/snmp /usr/local /usr/local/snmp; do
+    test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib
+    test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib
+  done
 fi
 
 if test -z "$SNMP_INCDIR"; then
@@ -169,7 +171,7 @@ if test -z "$SNMP_INCDIR"; then
 fi
 
 LDFLAGS="-L$SNMP_LIBDIR $LDFLAGS"
-CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR/.. $CFLAGS"
+CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR $CFLAGS"
 
 # Net/UCD-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if UCD-SNMP needs crypto support])
@@ -190,16 +192,16 @@ if test "$SNMP_SSL" = "yes"; then
 fi
 
 AC_CHECK_LIB(netsnmp, snmp_timeout,
-       [ LIBS="-lnetsnmp $LIBS"
-         AC_DEFINE(USE_NET_SNMP, 1, New Net SNMP Version)
-	 USE_NET_SNMP=yes ],
-       [ AC_MSG_RESULT(Cannot find NET-SNMP libraries(snmp)... checking UCD-SNMP)
-         USE_NET_SNMP=no ])
+  [ LIBS="-lnetsnmp $LIBS"
+    AC_DEFINE(USE_NET_SNMP, 1, New Net SNMP Version)
+    USE_NET_SNMP=yes ],
+    [ AC_MSG_RESULT(Cannot find NET-SNMP libraries(snmp)... checking UCD-SNMP)
+    USE_NET_SNMP=no ])
 
 if test "$USE_NET_SNMP" = "no"; then
- AC_CHECK_LIB(snmp, snmp_timeout,
-       LIBS="-lsnmp $LIBS",
-       AC_MSG_ERROR(Cannot find UCD-SNMP libraries(snmp)))
+  AC_CHECK_LIB(snmp, snmp_timeout,
+    LIBS="-lsnmp $LIBS",
+    AC_MSG_ERROR(Cannot find UCD-SNMP libraries(snmp)))
 fi
 
 AC_OUTPUT(Makefile)
