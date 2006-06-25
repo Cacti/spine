@@ -594,11 +594,11 @@ int cacti_log(const char *format, ...) {
 		if ((strstr(flogmessage,"ERROR"))   || 
 			(strstr(flogmessage,"WARNING")) || 
 			(strstr(flogmessage,"FATAL"))) {
-#ifdef DISABLE_STDERR
+			#ifdef DISABLE_STDERR
 			fp = stdout;
-#else
+			#else
 			fp = stderr;
-#endif
+			#endif
 		}
 
 		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", ulogmessage);
