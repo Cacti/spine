@@ -78,12 +78,8 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 
 	/* snmp test */
-	if ((set.availability_method == AVAIL_SNMP) || ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result == HOST_UP))) {
+	if ((set.availability_method == AVAIL_SNMP) || ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
-	}else{
-		if ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP)) {
-			snmp_result = HOST_DOWN;
-		}
 	}
 
 	switch (set.availability_method) {
