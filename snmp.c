@@ -117,6 +117,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	/* Prevent update of the snmpapp.conf file */
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
 	#endif
+	#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
+	/* Prevent update of the snmpapp.conf file */
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
+	#endif
 	#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
 	#endif
@@ -399,7 +403,6 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 					snmp_free_pdu(response);
 					response = NULL;
 					if (pdu != NULL) {
-						usleep(50);
 						goto retry;
 					}else{
 						status = STAT_DESCRIP_ERROR;

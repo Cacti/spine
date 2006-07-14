@@ -41,6 +41,9 @@ fi
 
 # Platform-specific tweaks
 case $host_alias in
+*sparc-sun-solaris2.8)
+  CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS"
+  AC_DEFINE(SOLAR_THREAD, 1, [Correct issue areund Solaris threading model]);;
 *solaris*)
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
 *freebsd*)
@@ -103,7 +106,7 @@ AC_DEFUN([MYSQL_LIB_CHK],[
 ])
 
 # Determine MySQL installation paths
-for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
+for i in $MYSQL_DIR /usr/local /usr /usr/pkg /usr/local/mysql; do
   test -f $i/include/mysql.h                    && MYSQL_INC_DIR=$i/include
   test -f $i/include/mysql/mysql.h              && MYSQL_INC_DIR=$i/include/mysql
   test -f $i/mysql/include/mysql.h              && MYSQL_INC_DIR=$i/mysql/include
@@ -117,7 +120,7 @@ if test -z "$MYSQL_INC_DIR"; then
   fi
 fi
 
-for i in $MYSQL_DIR /usr/local /usr /usr/local/mysql; do
+for i in $MYSQL_DIR /usr/local /usr /usr/pkg /usr/local/mysql; do
   MYSQL_LIB_CHK($i/lib)
   MYSQL_LIB_CHK($i/lib64)
   MYSQL_LIB_CHK($i/lib/mysql)
@@ -152,7 +155,7 @@ if test "x$SNMP_DIR" != "x"; then
   test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
 else
-  for i in /usr/include /usr/local/include; do
+  for i in /usr/include /usr/pkg/include /usr/local/include; do
     test -f $i/snmp.h                       && SNMP_INCDIR=$i
     test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
     test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
@@ -162,13 +165,13 @@ else
   done
 
   # Accomodate 32-Bit Libraries
-  for i in /usr /usr/snmp /usr/local /usr/local/snmp; do
+  for i in /usr /usr/pkg /usr/snmp /usr/snmp /usr/local /usr/local/snmp; do
     test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib
     test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib
   done
 
   # Accomodate 64-Bit Libraries
-  for i in /usr /usr/snmp /usr/local /usr/local/snmp; do
+  for i in /usr /usr/pkg /usr/snmp /usr/local /usr/local/snmp; do
     test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so && SNMP_LIBDIR=$i/lib64
     test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64
   done

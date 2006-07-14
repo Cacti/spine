@@ -6,7 +6,8 @@ The Cacti Group – cactid
 -bug: Allow ICMP or UDP ping to work if host begins with either "TCP:" or "UDP:"
 -bug: Change assert logging to HIGH to more closely match cmd.php
 -bug: Allow Cactid to make on 64bit x86 Platforms - thanks to Reuben Farrelly
--bug: Quiet reindex insert errors by changing syntax from "insert into to replace into"
+-bug: Changing syntax from "insert into to replace into" for reindex inserts
+-bug: Don't perform a reindex a check for a data query if you already have to reindex
 -bug: Make sure to log FATAL to stderr
 -bug#0000682: Allow storing of each hosts polling start time
 -bug#0000691: Cactid fails with custom snmp port 
@@ -17,7 +18,11 @@ The Cacti Group – cactid
 -bug#0000717: Allow numeric double results to start with '+', '-', '.'
 -bug#0000724: cactid truncate script command when reindex 
 -bug#0000736: Solaris 8 : Alarm Clock message
--bug#0000750: After Ping failure, SNMP is not checked.
+-bug#0000745: cactid: search path for mysql and snmp does not include /usr/pkg
+-bug#0000748: cactid doesn't handle special charectors
+-bug#0000749: Cactid 0.8.6g won't accept special characters from data template
+-bug#0000750: poller doesn't check for snmp if udp ping fails
+-bug#0000752: Problem with OID truncation with cactid
 -feature: add Net-SNMP Library vs. Header check prior to execution
 -feature: enabled signal handling in cactid
 

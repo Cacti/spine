@@ -453,7 +453,7 @@ int main(int argc, char *argv[]) {
 						CACTID_LOG(("ERROR: Unknown Thread Creation Error\n"));
 						break;
 				}
-				usleep(internal_thread_sleep);
+				USLEEP(internal_thread_sleep);
 
 				/* get current time and exit program if time limit exceeded */
 				if (poller_counter >= 20) {
@@ -490,7 +490,7 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		usleep(internal_thread_sleep);
+		USLEEP(internal_thread_sleep);
 
 		/* get current time and exit program if time limit exceeded */
 		if (poller_counter >= 20) {
@@ -522,7 +522,7 @@ int main(int argc, char *argv[]) {
 			thread_mutex_unlock(LOCK_THREAD);
 		}
 
-		usleep(EXTERNAL_THREAD_SLEEP);
+		USLEEP(EXTERNAL_THREAD_SLEEP);
 
 		/* get current time and exit program if time limit exceeded */
 		if (poller_counter >= 20) {

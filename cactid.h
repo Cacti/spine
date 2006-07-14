@@ -252,7 +252,7 @@
 #define STRIMATCH(a,b)	(strcasecmp((a),(b)) == 0)
 
 /* convert timeval to double (rounding to the nearest microsecond) */
-#define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000))
+#define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000) )
 
 /* When any kind of poller wants to set an undefined value; this particular
  * value used ('U') springs from the requirements of rrdupdate. We also
@@ -260,7 +260,7 @@
  * "U". This *could* use strcmp(), but this is more efficient.
  */
 #define SET_UNDEFINED(buf)	( (buf)[0] = 'U', (buf)[1] = '\0' )
-#define IS_UNDEFINED(buf)	( (buf)[0] == 'U'  && (buf)[1] == '\0')
+#define IS_UNDEFINED(buf)	( (buf)[0] == 'U' && (buf)[1] == '\0' )
 
 /*! Config Structure
  *
@@ -341,7 +341,7 @@ typedef struct target_struct {
 	char rrd_name[30];
 	char rrd_path[255];
 	int rrd_num;
-	char arg1[255];
+	char arg1[512];
 	char arg2[255];
 	char arg3[255];
 } target_t;
@@ -353,8 +353,8 @@ typedef struct target_struct {
  */
 typedef struct snmp_oids {
 	int array_position;
-	char oid[255];
-	char result[255];
+	char oid[512];
+	char result[512];
 } snmp_oids_t;
 
 /*! PHP Script Server Structure
@@ -409,7 +409,7 @@ typedef struct host_struct {
 typedef struct host_reindex_struct {
 	char op[4];
 	char assert_value[100];
-	char arg1[255];
+	char arg1[512];
 	int data_query_id;
 	int action;
 } reindex_t;
@@ -460,6 +460,12 @@ struct icmphdr {
 #include "util.h"
 #include "nft_popen.h"
 #include "error.h"
+
+/* Custom sleep function to work around Solaris issues */
+#ifdef SOLAR_THREAD
+#define USLEEP(microseconds) (uninstall_cactid_signal_handler(); usleep(microseconds); uninstall_cactid_signal_handler();)
+#endif
+#define USLEEP(microseconds) ( usleep(microseconds) )
 
 /* Globals */
 extern config_t   set;

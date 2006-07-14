@@ -103,12 +103,8 @@ int nft_popen(const char * command, const char * type) {
 	struct pid *p;
     int    pdes[2];
 	int    fd, pid, twoway;
+	char   *argv[4];
 	int    cancel_state;
-	char** dargv = NULL; 
-	int    dargc = 0; 
-	char*  cmd = strdup(command); 
-	char*  pc; 
-	char*  s = cmd; 
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -137,14 +133,10 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
-	/* Split command line into 'dargv' */ 
-	while ((pc = strtok(s, " ")) != NULL) { 
-		dargv = realloc(dargv, sizeof(char*) * (dargc + 1)); 
-		dargv[dargc++] = pc; 
-		s = NULL; 
-	} 
-	dargv = realloc(dargv, sizeof(char*) * (dargc + 1)); 
-	dargv[dargc++] = NULL;
+	argv[0] = "sh";
+	argv[1] = "-c";
+	argv[2] = (char *)command;
+	argv[3] = NULL;
 
 	/* Lock the list mutex prior to forking, to ensure that
 	 * the child process sees PidList in a consistent list state.
@@ -193,13 +185,10 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 
 		/* Execute the command. */
-		execv(dargv[0], dargv);
+		execve("/bin/sh", argv, environ);
 		_exit(127);
 		/* NOTREACHED */
 	}
-
-	free(dargv); 
-	free(cmd);
 
 	/* Parent. */
     if (*type == 'r') {

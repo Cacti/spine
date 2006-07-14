@@ -101,7 +101,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 			error = FALSE;
 			break;
 		}
-		usleep(1000);
+		USLEEP(1000);
 		retries++;
 	}
 
@@ -164,7 +164,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 			tries = 0;
 			success = TRUE;
 		}
-		usleep(2000);
+		USLEEP(2000);
 	}
 
 	free(hostname);

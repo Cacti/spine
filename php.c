@@ -170,7 +170,7 @@ char *php_readpipe(int php_process) {
 				break;
 			case EINTR:
 				/* take a moment */
-				usleep(2000);
+				USLEEP(2000);
 				
 				/* record end time */
 				end_time = get_time_as_double();
@@ -416,7 +416,7 @@ void php_close(int php_process) {
 			phpp->php_write_fd = -1;
 
 			/* wait before killing php */
-			usleep(50000);			/* 50 msec */
+			USLEEP(50000);			/* 50 msec */
 		}
 
 		/* only try to kill the process if the PID looks valid.
