@@ -67,22 +67,48 @@ static const char application_id[] = "cactid";
  *
  */
 void snmp_cactid_init(void) {
-	#ifdef USE_NET_SNMP
-	/* check that the headers we compiled with match the library we linked with - 
-	   apparently not defined in UCD-SNMP... 
-	*/
-	CACTID_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
-	CACTID_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
+	struct snmp_session session;
 
-	if(STRIMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
-		init_snmp(application_id);
-	}else{
-		/* report the error and quit cactid */
-		die("ERROR: SNMP Library Version Mismatch (%s vs %s)\n",PACKAGE_VERSION,netsnmp_get_version());
-	}
+	#ifdef USE_NET_SNMP
+		/* check that the headers we compiled with match the library we linked with -
+		   apparently not defined in UCD-SNMP...
+		*/
+		CACTID_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
+		CACTID_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
+
+		if(STRIMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
+			init_snmp("cactid");
+		}else{
+			/* report the error and quit cactid */
+			die("ERROR: SNMP Library Version Mismatch (%s vs %s)\n",PACKAGE_VERSION,netsnmp_get_version());
+		}
+		/* Prevent update of the snmpapp.conf file */
+		#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+		#endif
+
+		/* Prevent update of the snmpapp.conf file */
+		#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
+			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
+		#endif
+
+		#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
+			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
+		#endif
+
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 	#else
-	init_snmp(application_id);
+		init_snmp("cactid");
+
+		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
+		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
+		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
 	#endif
+
+	/* initialize SNMP */
+  	snmp_sess_init(&session);
 }
 
 /*! \fn void snmp_cactid_close()
@@ -111,29 +137,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char hostnameport[BUFSIZE];   
 
 	/* initialize SNMP */
- 	thread_mutex_lock(LOCK_SNMP);
-	#ifdef USE_NET_SNMP
-	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
-	/* Prevent update of the snmpapp.conf file */
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
-	#endif
-	#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
-	/* Prevent update of the snmpapp.conf file */
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
-	#endif
-	#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
-	#endif
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
-	#else
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
-	#endif
   	snmp_sess_init(&session);
-	thread_mutex_unlock(LOCK_SNMP);
 
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
