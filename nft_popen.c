@@ -105,6 +105,7 @@ int nft_popen(const char * command, const char * type) {
 	int    fd, pid, twoway;
 	char   *argv[4];
 	int    cancel_state;
+	extern char **environ;
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -185,7 +186,7 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 
 		/* Execute the command. */
-		execve("/bin/sh", argv, environ);
+		execve("/bin/sh", argv, (char *const) environ);
 		_exit(127);
 		/* NOTREACHED */
 	}
