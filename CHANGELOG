@@ -9,6 +9,7 @@ The Cacti Group – cactid
 -bug: Changing syntax from "insert into to replace into" for reindex inserts
 -bug: Don't perform a reindex a check for a data query if you already have to reindex
 -bug: Make sure to log FATAL to stderr
+-bug: Do not re-index a host if the re-index value is a "No Such Instance" result.
 -bug#0000682: Allow storing of each hosts polling start time
 -bug#0000691: Cactid fails with custom snmp port 
 -bug#0000699: Tick counts not being detected
