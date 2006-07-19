@@ -384,7 +384,7 @@ void poll_host(int host_id) {
 					memset(query3, 0, BUFSIZE);
 
 					/* assume ok if host is up and result wasn't obtained */
-					if(IS_UNDEFINED(poll_result)) {
+					if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 						assert_fail = FALSE;
 					}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
 						CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));

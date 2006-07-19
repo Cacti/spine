@@ -476,7 +476,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 char *remove_tcp_udp_from_hostname(char *hostname) {
 	char *cleaned_hostname;
 	
-	if (!(cleaned_hostname = (char *) malloc(strlen(hostname)))) {
+	if (!(cleaned_hostname = (char *) malloc(strlen(hostname)+1))) {
 		die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
 	}
 
