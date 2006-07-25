@@ -186,7 +186,7 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 
 		/* Execute the command. */
-		execve("/bin/sh", argv, (char *const) environ);
+		execve("/bin/sh", argv, environ);
 		_exit(127);
 		/* NOTREACHED */
 	}
