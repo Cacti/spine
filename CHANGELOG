@@ -1,6 +1,6 @@
 The Cacti Group – cactid
 
-0.8.6h
+0.8.6i
 -bug: Only output as much as MySQL can handle in 1 insert
 -bug: Faulty Script Server shutdown was causing race condition
 -bug: Allow ICMP or UDP ping to work if host begins with either "TCP:" or "UDP:"
@@ -26,6 +26,9 @@ The Cacti Group – cactid
 -bug#0000752: Problem with OID truncation with cactid
 -feature: add Net-SNMP Library vs. Header check prior to execution
 -feature: enabled signal handling in cactid
+
+0.8.6h
+Not released.  Syncing with Cacti distribution again.
 
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout
