@@ -159,7 +159,7 @@ void poll_host(int host_id) {
 	memset(sysUptime, 0, BUFSIZE);
 
 	/* initialize query strings */
-	snprintf(query1, sizeof(query1)-1,
+	snprintf(query1, sizeof(query1),
 		"SELECT action,hostname,snmp_community,"
 			"snmp_version,snmp_username,snmp_password,"
 			"rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,"
@@ -168,7 +168,7 @@ void poll_host(int host_id) {
 		" WHERE host_id=%i"
 		" ORDER BY arg1", host_id);
 
-	snprintf(query2, sizeof(query2)-1,
+	snprintf(query2, sizeof(query2),
 		"SELECT id, hostname,snmp_community,"
 			"snmp_username,snmp_password,snmp_version,"
 			"snmp_port,snmp_timeout,status,"
@@ -179,12 +179,12 @@ void poll_host(int host_id) {
 		" FROM host"
 		" WHERE id=%i", host_id);
 
-	snprintf(query4, sizeof(query4)-1,
+	snprintf(query4, sizeof(query4),
 		"SELECT data_query_id,action,op,assert_value,arg1"
 			" FROM poller_reindex"
 			" WHERE host_id=%i", host_id);
 
-	snprintf(query5, sizeof(query5)-1,
+	snprintf(query5, sizeof(query5),
 		"SELECT action,hostname,snmp_community,snmp_version,"
 			"snmp_username,snmp_password,rrd_name,"
 			"rrd_path,arg1,arg2,arg3,local_data_id,"
@@ -193,18 +193,18 @@ void poll_host(int host_id) {
 		" WHERE host_id=%i and rrd_next_step <=0"
 		" ORDER by rrd_path,rrd_name", host_id);
 
-	snprintf(query6, sizeof(query6)-1,
+	snprintf(query6, sizeof(query6),
 		"UPDATE poller_item"
 		" SET rrd_next_step=rrd_next_step-%i"
 		" WHERE host_id=%i", set.poller_interval, host_id);
 
-	snprintf(query7, sizeof(query7)-1,
+	snprintf(query7, sizeof(query7),
 		"UPDATE poller_item"
 		" SET rrd_next_step=rrd_step-%i"
 		" WHERE rrd_next_step < 0 and host_id=%i",
 			set.poller_interval, host_id);
 			
-	snprintf(query8, sizeof(query8)-1,
+	snprintf(query8, sizeof(query8),
 		"INSERT INTO poller_output"
 		" (local_data_id,rrd_name,time,output) VALUES");
 
@@ -714,7 +714,7 @@ void poll_host(int host_id) {
 
 		int new_buffer = TRUE;
 		
-		strncopy(query3, query8, strlen(query8));
+		STRNCOPY(query3, query8, strlen(query8));
 		out_buffer = strlen(query3);
 		
 		i = 0;
@@ -727,7 +727,7 @@ void poll_host(int host_id) {
 				db_insert(&mysql, query3);
 
 				/* re-initialize the query buffer */
-				strncopy(query3, query8, strlen(query8));
+				STRNCOPY(query3, query8, strlen(query8));
 
 				/* reset the output buffer length */
 				out_buffer = strlen(query3);
@@ -889,10 +889,13 @@ char *exec_poll(host_t *current_host, char *command) {
 				CACTID_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
+			case EAGAIN:
 			case EINTR:
+				#ifndef SOLAR_THREAD
 				/* take a moment */
-				USLEEP(2000);
-				
+				usleep(2000);
+				#endif
+								
 				/* record end time */
 				end_time = get_time_as_double();
 

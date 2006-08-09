@@ -559,7 +559,13 @@ int cacti_log(const char *format, ...) {
 		fp = stderr;
 		#endif
 
-		fprintf(fp, "ERROR: Could not get string from strftime()\n");
+		if ((set.stderr_notty) && (fp == stderr)) {
+			/* do nothing stderr does not exist */
+		}else if ((set.stdout_notty) && (fp == stdout)) {
+			/* do nothing stdout does not exist */
+		}else{
+			fprintf(fp, "ERROR: Could not get string from strftime()\n");
+		}
 	}
 
 	strncat(flogmessage, logprefix, strlen(logprefix));
@@ -602,7 +608,14 @@ int cacti_log(const char *format, ...) {
 		}
 
 		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", ulogmessage);
-		fprintf(fp, "%s", flogmessage);
+
+		if ((set.stderr_notty) && (fp == stderr)) {
+			/* do nothing stderr does not exist */
+		}else if ((set.stdout_notty) && (fp == stdout)) {
+			/* do nothing stdout does not exist */
+		}else{
+			fprintf(fp, "%s", flogmessage);
+		}
 	}
 	
 	return TRUE;

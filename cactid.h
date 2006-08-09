@@ -270,6 +270,9 @@
  *
  */
 typedef struct config_struct {
+	/* stdout, stderr TTY protection */
+	int stdout_notty;
+	int stderr_notty;
 	/* general configuration/runtime settings */
 	int poller_id;
 	int poller_interval;
@@ -460,12 +463,6 @@ struct icmphdr {
 #include "util.h"
 #include "nft_popen.h"
 #include "error.h"
-
-/* Custom sleep function to work around Solaris issues */
-#ifdef SOLAR_THREAD
-#define USLEEP(microseconds) (uninstall_cactid_signal_handler(); usleep(microseconds); uninstall_cactid_signal_handler();)
-#endif
-#define USLEEP(microseconds) ( usleep(microseconds) )
 
 /* Globals */
 extern config_t   set;

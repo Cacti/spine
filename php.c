@@ -168,10 +168,13 @@ char *php_readpipe(int php_process) {
 			case EBADF:
 				CACTID_LOG(("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process));
 				break;
+			case EAGAIN:
 			case EINTR:
+				#ifndef SOLAR_THREAD
 				/* take a moment */
-				USLEEP(2000);
-				
+				usleep(2000);
+				#endif
+								
 				/* record end time */
 				end_time = get_time_as_double();
 
@@ -416,7 +419,9 @@ void php_close(int php_process) {
 			phpp->php_write_fd = -1;
 
 			/* wait before killing php */
-			USLEEP(50000);			/* 50 msec */
+			#ifndef SOLAR_THREAD
+			usleep(50000);			/* 50 msec */
+			#endif
 		}
 
 		/* only try to kill the process if the PID looks valid.

@@ -98,14 +98,7 @@ void install_cactid_signal_handler(void) {
 			sigaction(cactid_fatal_signals[i], &action, NULL);
 		}
 	}
-	#ifdef SOLAR_THREAD
-	/* Set SIGALRM to be ignored -- necessary on Solaris */
-	sigaction(SIGALRM, NULL, &action);
-	if ( action.sa_handler == SIG_DFL ) {
-		action.sa_handler = SIG_IGN;
-		sigaction(SIGALRM, &action, NULL);
-	}
-	#endif
+
 	void (*ohandler)(int);
 
 	for ( i=0; cactid_fatal_signals[i]; ++i ) {

@@ -119,15 +119,18 @@ int ping_host(host_t *host, ping_t *ping) {
 int ping_snmp(host_t *host, ping_t *ping) {
 	char *poll_result;
 	char *oid;
+	int num_oids_checked = 0;
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 
 	if (strlen(host->snmp_community) != 0) {
+		/* by default, we look at sysUptime */
 		if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
 			die("ERROR: malloc(): strdup() oid ping.c failed\n");
 		}
 
 		/* record start time */
+		retry:
 		begin_time = get_time_as_double();
 
 		poll_result = snmp_get(host, oid);
@@ -140,9 +143,19 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		total_time = (end_time - begin_time) * one_thousand;
 
 		if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
-			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
-			free(poll_result);
-			return HOST_DOWN;
+			if (num_oids_checked == 0) {
+				/* use sysDescription as a backup if sysUptime fails */
+				if ((oid = strdup(".1.3.6.1.2.1.1.1.0")) == NULL) {
+					die("ERROR: malloc(): strdup() oid ping.c failed\n");
+				}
+				free(poll_result);
+				num_oids_checked++;
+				goto retry;
+			}else{
+				snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host did not respond to SNMP");
+				free(poll_result);
+				return HOST_DOWN;
+			}
 		}else{
 			snprintf(ping->snmp_response, sizeof(ping->snmp_response)-1, "Host responded to SNMP");
 			snprintf(ping->snmp_status, sizeof(ping->snmp_status)-1, "%.5f", total_time);
@@ -285,7 +298,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				retry_count++;
+				#ifndef SOLAR_THREAD
 				usleep(1000);
+				#endif
 			}
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Destination hostname invalid");
@@ -417,7 +432,9 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}
 
 				retry_count++;
+				#ifndef SOLAR_THREAD
 				usleep(1000);
+				#endif
 			}
 		}else{
 			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "UDP: Destination hostname invalid");
@@ -459,7 +476,9 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				return FALSE;
 			}
 			i++;
+			#ifndef SOLAR_THREAD
 			usleep(1000);
+			#endif
 		}else{
 			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 			return TRUE;

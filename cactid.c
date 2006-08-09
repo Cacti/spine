@@ -155,6 +155,19 @@ int main(int argc, char *argv[]) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
 
+	/* detect and compensate for stdin/stderr ttys */
+	if (!isatty(fileno(stdout))) {
+		set.stdout_notty = TRUE;
+	}else{
+		set.stdout_notty = FALSE;
+	}
+
+	if (!isatty(fileno(stderr))) {
+		set.stderr_notty = TRUE;
+	}else{
+		set.stderr_notty = FALSE;
+	}
+
 	/* set start time for cacti */
 	begin_time = get_time_as_double();
 
@@ -453,7 +466,7 @@ int main(int argc, char *argv[]) {
 						CACTID_LOG(("ERROR: Unknown Thread Creation Error\n"));
 						break;
 				}
-				USLEEP(internal_thread_sleep);
+				usleep(internal_thread_sleep);
 
 				/* get current time and exit program if time limit exceeded */
 				if (poller_counter >= 20) {
@@ -490,7 +503,7 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		USLEEP(internal_thread_sleep);
+		usleep(internal_thread_sleep);
 
 		/* get current time and exit program if time limit exceeded */
 		if (poller_counter >= 20) {
@@ -522,7 +535,7 @@ int main(int argc, char *argv[]) {
 			thread_mutex_unlock(LOCK_THREAD);
 		}
 
-		USLEEP(EXTERNAL_THREAD_SLEEP);
+		usleep(EXTERNAL_THREAD_SLEEP);
 
 		/* get current time and exit program if time limit exceeded */
 		if (poller_counter >= 20) {

@@ -101,7 +101,9 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 			error = FALSE;
 			break;
 		}
-		USLEEP(1000);
+		#ifndef SOLAR_THREAD
+		usleep(1000);
+		#endif
 		retries++;
 	}
 
@@ -164,7 +166,9 @@ void db_connect(const char *database, MYSQL *mysql) {
 			tries = 0;
 			success = TRUE;
 		}
-		USLEEP(2000);
+		#ifndef SOLAR_THREAD
+		usleep(2000);
+		#endif
 	}
 
 	free(hostname);
