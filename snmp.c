@@ -132,6 +132,30 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	/* initialize SNMP */
   	snmp_sess_init(&session);
 
+	#ifdef USE_NET_SNMP
+		/* Prevent update of the snmpapp.conf file */
+		#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+		#endif
+
+		/* Prevent update of the snmpapp.conf file */
+		#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
+			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
+		#endif
+
+		#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
+			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
+		#endif
+
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
+	#else
+		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
+		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
+		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
+	#endif
+
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
 		session.version = SNMP_VERSION_2c;
