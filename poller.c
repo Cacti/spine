@@ -160,35 +160,35 @@ void poll_host(int host_id) {
 
 	/* initialize query strings */
 	snprintf(query1, sizeof(query1),
-		"SELECT action,hostname,snmp_community,"
-			"snmp_version,snmp_username,snmp_password,"
-			"rrd_name,rrd_path,arg1,arg2,arg3,local_data_id,"
-			"rrd_num,snmp_port,snmp_timeout"
+		"SELECT action, hostname, snmp_community, "
+			"snmp_version, snmp_username, snmp_password, "
+			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+			"rrd_num, snmp_port, snmp_timeout"
 		" FROM poller_item"
 		" WHERE host_id=%i"
 		" ORDER BY arg1", host_id);
 
 	snprintf(query2, sizeof(query2),
-		"SELECT id, hostname,snmp_community,"
-			"snmp_username,snmp_password,snmp_version,"
-			"snmp_port,snmp_timeout,status,"
-			"status_event_count,status_fail_date,"
-			"status_rec_date,status_last_error,"
-			"min_time,max_time,cur_time,avg_time,"
-			"total_polls,failed_polls,availability"
+		"SELECT id, hostname, snmp_community, "
+			"snmp_username, snmp_password, snmp_version, "
+			"snmp_port, snmp_timeout, status, "
+			"status_event_count, status_fail_date, "
+			"status_rec_date, status_last_error, "
+			"min_time, max_time, cur_time, avg_time, "
+			"total_polls, failed_polls, availability "
 		" FROM host"
 		" WHERE id=%i", host_id);
 
 	snprintf(query4, sizeof(query4),
-		"SELECT data_query_id,action,op,assert_value,arg1"
+		"SELECT data_query_id, action, op, assert_value, arg1"
 			" FROM poller_reindex"
 			" WHERE host_id=%i", host_id);
 
 	snprintf(query5, sizeof(query5),
-		"SELECT action,hostname,snmp_community,snmp_version,"
-			"snmp_username,snmp_password,rrd_name,"
-			"rrd_path,arg1,arg2,arg3,local_data_id,"
-			"rrd_num,snmp_port,snmp_timeout"
+		"SELECT action, hostname, snmp_community, snmp_version, "
+			"snmp_username, snmp_password, rrd_name, "
+			"rrd_path, arg1, arg2, arg3, local_data_id, "
+			"rrd_num, snmp_port, snmp_timeout"
 		" FROM poller_item"
 		" WHERE host_id=%i and rrd_next_step <=0"
 		" ORDER by rrd_path,rrd_name", host_id);
