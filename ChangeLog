@@ -25,6 +25,7 @@ The Cacti Group – cactid
 -bug#0000750: poller doesn't check for snmp if udp ping fails
 -bug#0000752: Problem with OID truncation with cactid
 -bug: add kstat checking for Net-SNMP v5.3.x
+-bug: get more intelegent.  move cactid.conf.dist to /etc during install
 -feature: add Net-SNMP Library vs. Header check prior to execution
 -feature: enabled signal handling in cactid
 
