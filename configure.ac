@@ -74,6 +74,7 @@ AC_CHECK_LIB(m, floor)
 AC_CHECK_LIB(pthread, pthread_exit)
 # Some builds of MySQL require libz - try to detect
 AC_CHECK_LIB(z, deflate)
+AC_CHECK_LIB(kstat, kstat_close)
 
 # Checks for header files.
 AC_HEADER_STDC
