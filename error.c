@@ -90,6 +90,7 @@ void install_cactid_signal_handler(void) {
 	/* Set a handler for any fatal signal not already handled */
 	int i;
 	struct sigaction action;
+	void (*ohandler)(int);
 
 	for ( i=0; cactid_fatal_signals[i]; ++i ) {
 		sigaction(cactid_fatal_signals[i], NULL, &action);
@@ -98,8 +99,6 @@ void install_cactid_signal_handler(void) {
 			sigaction(cactid_fatal_signals[i], &action, NULL);
 		}
 	}
-
-	void (*ohandler)(int);
 
 	for ( i=0; cactid_fatal_signals[i]; ++i ) {
 		ohandler = signal(cactid_fatal_signals[i], cactid_signal_handler);
@@ -118,6 +117,7 @@ void uninstall_cactid_signal_handler(void) {
 	/* Remove a handler for any fatal signal handled */
 	int i;
 	struct sigaction action;
+	void (*ohandler)(int);
 
 	for ( i=0; cactid_fatal_signals[i]; ++i ) {
 		sigaction(cactid_fatal_signals[i], NULL, &action);
@@ -126,8 +126,6 @@ void uninstall_cactid_signal_handler(void) {
 			sigaction(cactid_fatal_signals[i], &action, NULL);
 		}
 	}
-
-	void (*ohandler)(int);
 
 	for ( i=0; cactid_fatal_signals[i]; ++i ) {
 		ohandler = signal(cactid_fatal_signals[i], SIG_DFL);

@@ -120,6 +120,7 @@ void poll_host(int host_id) {
 	int previous_assert_failure = FALSE;
 	int last_data_query_id = 0;
 	int perform_assert = TRUE;
+	int new_buffer = TRUE;
 
 	reindex_t *reindex;
 	host_t *host;
@@ -711,8 +712,6 @@ void poll_host(int host_id) {
 			die("ERROR: Fatal malloc error: poller.c query3 oids!\n");
 		}
 		query3[0] = '\0';
-
-		int new_buffer = TRUE;
 
 		strncat(query3, query8, sizeof(query8));
 		out_buffer = strlen(query3);
