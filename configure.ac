@@ -131,7 +131,7 @@ if test -z "$MYSQL_INC_DIR"; then
   fi
 fi
 
-for i in $MYSQL_DIR /usr/local /usr /opt /usr/pkg /usr/local/mysql; do
+for i in $MYSQL_DIR /usr/local /usr /opt /opt/mysql /usr/pkg /usr/local/mysql; do
   MYSQL_LIB_CHK($i/lib)
   MYSQL_LIB_CHK($i/lib64)
   MYSQL_LIB_CHK($i/lib/mysql)
