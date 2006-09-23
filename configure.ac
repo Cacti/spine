@@ -16,22 +16,28 @@ AM_CONFIG_HEADER(config/config.h)
 AC_ARG_WITH(static,
   AC_HELP_STRING(
     [--with-static],
-    [Build using static libraries]),
-  [CFLAGS="-static $CFLAGS"])
+    [Build using static libraries]
+  ),
+  [CFLAGS="-static $CFLAGS"]
+)
 
 # mysql
 AC_ARG_WITH(mysql,
   AC_HELP_STRING(
     [--with-mysql],
-    [MySQL include directory [[/usr/include/mysql]]]),
-  [MYSQL_DIR=$withval])
+    [MySQL include directory [[/usr/include/mysql]]]
+  ),
+  [MYSQL_DIR=$withval]
+)
 
 # snmp
 AC_ARG_WITH(snmp,
   AC_HELP_STRING(
     [--with-snmp],
-    [SNMP include base directory [[/usr/(local/)include]]]),
-  [SNMP_DIR=$withval])
+    [SNMP include base directory [[/usr/(local/)include]]]
+  ),
+  [SNMP_DIR=$withval]
+)
 
 # if host_alias is empty, ac_cv_host_alias may still have the info
 if test -z "$host_alias"; then
@@ -60,11 +66,14 @@ AC_PROG_RANLIB
 
 AC_MSG_CHECKING([whether to enable -Wall])
 AC_ARG_ENABLE(warnings,
-  [  --enable-warnings       Enable -Wall if using gcc.],
-  [ if test -n "$GCC"; then
+  [--enable-warnings Enable -Wall if using gcc.],
+  [if test -n "$GCC"; then
     AC_MSG_RESULT(adding -Wall to CFLAGS.)
-        CFLAGS="$CFLAGS -Wall"
-   fi],AC_MSG_RESULT(no))
+    CFLAGS="$CFLAGS -Wall"
+   fi
+  ],
+  AC_MSG_RESULT(no)
+)
 
 # Checks for libraries.
 AC_CHECK_LIB(nsl, gethostbyname)
@@ -96,15 +105,16 @@ AC_CHECK_FUNCS(malloc calloc gettimeofday strerror strtoll)
 
 # ****************** MySQL Checks ***********************
 
-AC_DEFUN([MYSQL_LIB_CHK],[
-  str="$1/libmysqlclient.*"
-  for j in `echo $str`; do
-    if test -r $j; then
-      MYSQL_LIB_DIR=$1
-      break 2
-    fi
-  done
-])
+AC_DEFUN([MYSQL_LIB_CHK],
+  [ str="$1/libmysqlclient.*"
+    for j in `echo $str`; do
+      if test -r $j; then
+        MYSQL_LIB_DIR=$1
+        break 2
+      fi
+    done 
+  ]
+)
 
 # Determine MySQL installation paths
 for i in $MYSQL_DIR /usr/local /usr /opt /opt/mysql /usr/pkg /usr/local/mysql; do
@@ -132,9 +142,12 @@ LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="$LIBS",
-  AC_MSG_ERROR([MySQL libraries not found.]))
+  AC_MSG_ERROR([MySQL libraries not found.])
+)
+
 AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
-  AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version]))
+  AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version])
+)
 
 # ****************** Net-SNMP/UCD-SNMP Checks ***********************
 
@@ -188,20 +201,25 @@ if test -z "$SNMP_INCDIR"; then
 fi
 
 LDFLAGS="-L$SNMP_LIBDIR $LDFLAGS"
-CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR $CFLAGS"
+CFLAGS="-I$SNMP_INCDIR $CFLAGS"
 
 # Net/UCD-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if UCD-SNMP needs crypto support])
 SNMP_SSL=no
 AC_TRY_COMPILE([#include <ucd-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   [  AC_MSG_RESULT(yes)
-     SNMP_SSL=yes ],
-  AC_MSG_RESULT(no))
+     SNMP_SSL=yes 
+  ],
+  AC_MSG_RESULT(no)
+)
+
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
 AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   [  AC_MSG_RESULT(yes)
-     SNMP_SSL=yes ],
-  AC_MSG_RESULT(no))
+     SNMP_SSL=yes 
+  ],
+  AC_MSG_RESULT(no)
+)
 
 if test "$SNMP_SSL" = "yes"; then
   LDFLAGS="-L/usr/local/ssl/lib -L/usr/lib $LDFLAGS"
