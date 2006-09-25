@@ -169,7 +169,7 @@ if test "x$SNMP_DIR" != "x"; then
   test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
 else
-  for i in /usr/include /usr/pkg/include /usr/local/include /opt; do
+  for i in /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
     test -f $i/snmp.h                       && SNMP_INCDIR=$i
     test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
     test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
