@@ -172,6 +172,7 @@ else
   for i in /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
     test -f $i/snmp.h                       && SNMP_INCDIR=$i
     test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
+    test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include/net-snmp
     test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
     test -f $i/net-snmp/include/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp/include
     test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp
