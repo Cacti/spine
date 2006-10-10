@@ -140,9 +140,8 @@ done
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
-LIBS="-lnetsnmp $LIBS"
 
-AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="$LIBS",
+AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="-lmysql $LIBS",
   AC_MSG_ERROR([MySQL libraries not found.])
 )
 
