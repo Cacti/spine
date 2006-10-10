@@ -34,6 +34,11 @@
 #include "cactid.h"
 
 #ifdef USE_NET_SNMP
+ #undef PACKAGE_NAME
+ #undef PACKAGE_VERSION
+ #undef PACKAGE_BUGREPORT
+ #undef PACKAGE_STRING
+ #undef PACKAGE_TARNAME
  #include <net-snmp/net-snmp-config.h>
  #include <net-snmp/utilities.h>
  #include <net-snmp/net-snmp-includes.h>
@@ -61,6 +66,7 @@
  */
 void snmp_cactid_init(void) {
 #ifdef USE_NET_SNMP
+	#ifdef PACKAGE_VERSION
 	/* check that the headers we compiled with match the library we linked with -
 	   apparently not defined in UCD-SNMP...
 	*/
@@ -73,6 +79,8 @@ void snmp_cactid_init(void) {
 		/* report the error and quit cactid */
 		die("ERROR: SNMP Library Version Mismatch (%s vs %s)\n",PACKAGE_VERSION,netsnmp_get_version());
 	}
+	#endif
+
 	/* Prevent update of the snmpapp.conf file */
 	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
 		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
