@@ -34,11 +34,6 @@
 #include "cactid.h"
 
 #ifdef USE_NET_SNMP
- #undef PACKAGE_NAME
- #undef PACKAGE_VERSION
- #undef PACKAGE_BUGREPORT
- #undef PACKAGE_STRING
- #undef PACKAGE_TARNAME
  #include <net-snmp/net-snmp-config.h>
  #include <net-snmp/utilities.h>
  #include <net-snmp/net-snmp-includes.h>
