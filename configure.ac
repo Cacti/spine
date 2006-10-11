@@ -173,7 +173,7 @@ else
   for i in /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
     test -f $i/snmp.h                       && SNMP_INCDIR=$i
     test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
-    test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include
+    test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include/net-snmp
     test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
     test -f $i/net-snmp/include/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp/include
     test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp
@@ -203,7 +203,7 @@ if test -z "$SNMP_INCDIR"; then
 fi
 
 LDFLAGS="-L$SNMP_LIBDIR $LDFLAGS"
-CFLAGS="-I$SNMP_INCDIR $CFLAGS"
+CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR/.. $CFLAGS"
 
 # Net/UCD-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if UCD-SNMP needs crypto support])
