@@ -84,6 +84,7 @@ AC_CHECK_LIB(pthread, pthread_exit)
 # Some builds of MySQL require libz - try to detect
 AC_CHECK_LIB(z, deflate)
 AC_CHECK_LIB(kstat, kstat_close)
+AC_CHECK_LIB(crypto, CRYPTO_realloc)
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -141,12 +142,12 @@ done
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_CHECK_LIB(mysqlclient, mysql_init, LIBS="-lmysql $LIBS",
+AC_CHECK_LIB(mysqlclient,mysql_init, LIBS="-lmysqlclient $LIBS",
   AC_MSG_ERROR([MySQL libraries not found.])
 )
 
-AC_CHECK_LIB(mysqlclient, mysql_thread_init, [],
-  AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version])
+AC_CHECK_LIB(mysqlclient,mysql_thread_init,[],
+  AC_DEFINE(OLD_MYSQL,1,[Old MySQL version])
 )
 
 # ****************** Net-SNMP/UCD-SNMP Checks ***********************
@@ -221,11 +222,6 @@ AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   ],
   AC_MSG_RESULT(no)
 )
-
-if test "$SNMP_SSL" = "yes"; then
-  LDFLAGS="-L/usr/local/ssl/lib -L/usr/lib $LDFLAGS"
-  AC_CHECK_LIB(crypto, CRYPTO_realloc,[],[AC_MSG_ERROR(libcrypto not found!)])
-fi
 
 AC_CHECK_LIB(netsnmp, snmp_timeout,
   [ LIBS="-lnetsnmp $LIBS"
