@@ -79,6 +79,9 @@ void snmp_cactid_init(void) {
 		/* report the error and quit cactid */
 		die("ERROR: SNMP Library Version Mismatch (%s vs %s)\n",PACKAGE_VERSION,netsnmp_get_version());
 	}
+	#else
+		CACTID_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
+		init_snmp("cactid");
 	#endif
 
 	/* Prevent update of the snmpapp.conf file */
