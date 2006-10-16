@@ -170,7 +170,7 @@ if test "x$SNMP_DIR" != "x"; then
   test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
 else
-  for i in /usr /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
+  for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
     test -f $i/snmp.h                       && SNMP_INCDIR=$i
     test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
     test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include/net-snmp
@@ -182,13 +182,13 @@ else
   done
 
   # Accomodate 32-Bit Libraries
-  for i in /usr /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/snmp /usr/local /usr/local/snmp; do
+  for i in /usr /usr/local /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/snmp /usr/local /usr/local/snmp; do
     test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib
     test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib
   done
 
   # Accomodate 64-Bit Libraries
-  for i in /usr /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local /usr/local/snmp; do
+  for i in /usr /usr/local /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local /usr/local/snmp; do
     test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so && SNMP_LIBDIR=$i/lib64
     test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64
   done
