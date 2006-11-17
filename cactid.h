@@ -126,7 +126,7 @@
 #define CACTID_PARENT 1
 #define CACTID_FORK 0
 #define MAX_MYSQL_BUF_SIZE 1400
-#define MAX_SIMULTANEOUS_SCRIPTS 5
+#define MAX_SIMULTANEOUS_SCRIPTS 10
 
 /* locations to search for the config file */
 #define CONFIG_PATHS 2
