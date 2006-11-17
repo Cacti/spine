@@ -246,6 +246,7 @@ int php_init(int php_process) {
 	char *result_string = 0;
 	int num_processes;
 	int i;
+	int retry_count = 0;
 
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
@@ -283,11 +284,39 @@ int php_init(int php_process) {
 		/* fork a child process */
 		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i));
 
-		pid = fork();
+		pid = vfork();
 
 		/* check the pid status and process as required */
+		retry:
 		switch (pid) {
 			case -1: /* ERROR: Could not fork() */
+				switch (errno) {
+				case EAGAIN:
+					if (retry_count < 3) {
+						retry_count++;
+						#ifndef SOLAR_THREAD
+						/* take a moment */
+						usleep(50000);
+						#endif
+						goto retry;
+					}else{
+						CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Resources\n", i));
+					}
+				case ENOMEM:
+					if (retry_count < 3) {
+						retry_count++;
+						#ifndef SOLAR_THREAD
+						/* take a moment */
+						usleep(50000);
+						#endif
+						goto retry;
+					}else{
+						CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Memory\n", i));
+					}
+				default:
+					CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Unknown Reason\n", i));
+				}
+
 				close(php2cacti_pdes[0]);
 				close(php2cacti_pdes[1]);
 				close(cacti2php_pdes[0]);

@@ -88,6 +88,7 @@
 int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
+int active_scripts = 0;
 
 config_t set;
 php_t	*php_processes = 0;

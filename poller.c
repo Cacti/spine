@@ -842,6 +842,7 @@ int validate_result(char *result) {
  *
  */
 char *exec_poll(host_t *current_host, char *command) {
+	extern int active_scripts;
 	int cmd_fd;
 	int bytes_read;
 	fd_set fds;
@@ -867,12 +868,25 @@ char *exec_poll(host_t *current_host, char *command) {
 	/* record start time */
 	begin_time = get_time_as_double();
 
+	/* don't run too many scripts, cactid does not like that. */
+	thread_mutex_lock(LOCK_PIPE);
+	while (1) {
+		if (active_scripts > MAX_SIMULTANEOUS_SCRIPTS) {
+			thread_mutex_unlock(LOCK_PIPE);
+			usleep(50000);
+		}else{
+			active_scripts++;
+			thread_mutex_unlock(LOCK_PIPE);
+			break;
+		}
+	}
+
 	cmd_fd = nft_popen((char *)proc_command, "r");
 	free(proc_command);
 
 	CACTID_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd));
 
-	if (cmd_fd >= 0) {
+	if (cmd_fd > 0) {
 		/* Initialize File Descriptors to Review for Input/Output */
 		FD_ZERO(&fds);
 		FD_SET(cmd_fd,&fds);
@@ -939,6 +953,11 @@ char *exec_poll(host_t *current_host, char *command) {
 		CACTID_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command));
 		SET_UNDEFINED(result_string);
 	}
+
+	/* reduce the active script count */
+	thread_mutex_lock(LOCK_PIPE);
+	active_scripts--;
+	thread_mutex_unlock(LOCK_PIPE);
 
 	return result_string;
 }

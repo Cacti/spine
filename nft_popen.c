@@ -106,6 +106,7 @@ int nft_popen(const char * command, const char * type) {
 	char   *argv[4];
 	int    cancel_state;
 	extern char **environ;
+	int    retry_count = 0;
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -145,8 +146,36 @@ int nft_popen(const char * command, const char * type) {
 	pthread_mutex_lock(&ListMutex);
 
     /* Fork. */
-	switch (pid = fork()) {
+	retry:
+	switch (pid = vfork()) {
 	case -1:		/* Error. */
+		switch (errno) {
+		case EAGAIN:
+			if (retry_count < 3) {
+				retry_count++;
+				#ifndef SOLAR_THREAD
+				/* take a moment */
+				usleep(50000);
+				#endif
+				goto retry;
+			}else{
+				CACTID_LOG(("ERROR: SCRIPT: Cound not fork PHP Script Server Out of Resources\n"));
+			}
+		case ENOMEM:
+			if (retry_count < 3) {
+				retry_count++;
+				#ifndef SOLAR_THREAD
+				/* take a moment */
+				usleep(50000);
+				#endif
+				goto retry;
+			}else{
+				CACTID_LOG(("ERROR: SCRIPT Cound not fork PHP Script Server Out of Memory\n"));
+			}
+		default:
+			CACTID_LOG(("ERROR: SCRIPT Cound not fork PHP Script Server Unknown Reason\n"));
+		}
+
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
