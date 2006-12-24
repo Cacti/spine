@@ -241,7 +241,7 @@ int php_init(int php_process) {
 	int  php2cacti_pdes[2];
 	pid_t  pid;
 	char poller_id[11];
-	char *argv[5];
+	char *argv[6];
 	int  cancel_state;
 	char *result_string = 0;
 	int num_processes;
@@ -275,11 +275,12 @@ int php_init(int php_process) {
 
 		/* establish arguments for script server execution */
 		argv[0] = set.path_php;
-		argv[1] = set.path_php_server;
-		argv[2] = "cactid";
+		argv[1] = "-q";
+		argv[2] = set.path_php_server;
+		argv[3] = "cactid";
 		snprintf(poller_id, sizeof(poller_id)-1, "%d", set.poller_id);
-		argv[3] = poller_id;
-		argv[4] = NULL;
+		argv[4] = poller_id;
+		argv[5] = NULL;
 
 		/* fork a child process */
 		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i));
