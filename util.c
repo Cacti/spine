@@ -411,11 +411,16 @@ int read_cactid_config(char *file) {
 
 	if ((fp = fopen(file, "rb")) == NULL) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("ERROR: Could not open config file [%s]\n", file);
+			if (!set.stderr_notty) {
+				fprintf(stderr, "ERROR: Could not open config file [%s]\n", file);
+			}
 		}
 		return -1;
 	}else{
-		printf("CACTID: Using cactid config file [%s]\n", file);
+		if (!set.stdout_notty) {
+			fprintf(stdout, "CACTID: Using cactid config file [%s]\n", file);
+		}
+
 		while(!feof(fp)) {
 			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
@@ -426,8 +431,8 @@ int read_cactid_config(char *file) {
 				else if (STRIMATCH(p1, "DB_User"))     STRNCOPY(set.dbuser, p2);
 				else if (STRIMATCH(p1, "DB_Pass"))     STRNCOPY(set.dbpass, p2);
 				else if (STRIMATCH(p1, "DB_Port"))     set.dbport = atoi(p2);
-				else {
-					printf("WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
+				else if (!set.stderr_notty) {
+					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}
 
 				*p1 = '\0';

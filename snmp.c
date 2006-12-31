@@ -316,6 +316,84 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	return result_string;
 }
 
+/*! \fn char *snmp_getnext(host_t *current_host, char *snmp_oid)
+ *  \brief performs a single snmp_getnext for a specific snmp OID
+ *
+ *	This function will poll a specific snmp OID for a host.  The host snmp
+ *  session must already be established.
+ *
+ *  \return returns the character representaton of the snmp OID, or "U" if
+ *  unsuccessful.
+ *
+ */
+char *snmp_getnext(host_t *current_host, char *snmp_oid) {
+	struct snmp_pdu *pdu = NULL;
+	struct snmp_pdu *response = NULL;
+	struct variable_list *vars = NULL;
+	oid anOID[MAX_OID_LEN];
+	size_t anOID_len = MAX_OID_LEN;
+	int status;
+	char *result_string;
+
+	if (!(result_string = (char *) malloc(BUFSIZE))) {
+		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
+	}
+	result_string[0] = '\0';
+
+	status = STAT_DESCRIP_ERROR;
+
+	if (current_host->snmp_session != NULL) {
+		anOID_len = MAX_OID_LEN;
+		pdu = snmp_pdu_create(SNMP_MSG_GETNEXT);
+
+		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
+			CACTID_LOG(("ERROR: Problems parsing SNMP OID\n"));
+			SET_UNDEFINED(result_string);
+			return result_string;
+		}else{
+			snmp_add_null_var(pdu, anOID, anOID_len);
+		}
+
+		/* poll host */
+		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+
+		/* liftoff, successful poll, process it!! */
+		if (status == STAT_SUCCESS) {
+			if (response == NULL) {
+				CACTID_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
+
+				SET_UNDEFINED(result_string);
+				status = STAT_ERROR;
+			}else{
+				if (response->errstat == SNMP_ERR_NOERROR) {
+					vars = response->variables;
+
+					#ifdef USE_NET_SNMP
+					snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+					#else
+					sprint_value(result_string, anOID, anOID_len, vars);
+					#endif
+				}
+			}
+		}
+
+		if (response) {
+			snmp_free_pdu(response);
+			response = NULL;
+		}
+	}else{
+		status = STAT_DESCRIP_ERROR;
+	}
+
+	if (status != STAT_SUCCESS) {
+		current_host->ignore_host = TRUE;
+
+		SET_UNDEFINED(result_string);
+	}
+
+	return result_string;
+}
+
 /*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
  *
  *  \brief replacement for the buggy net-snmp.org snprint_value function

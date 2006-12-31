@@ -43,6 +43,9 @@
 #undef __WIN__
 #undef __WIN32__
 #define HAVE_ERRNO_AS_DEFINE
+
+/* Cygwin supports only 64 open file descriptors, let's increase it a bit. */
+#define FD_SETSIZE 512
 #endif /* __CYGWIN__ */
 
 #define _THREAD_SAFE

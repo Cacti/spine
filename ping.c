@@ -125,7 +125,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 	if (strlen(host->snmp_community) != 0) {
 		/* by default, we look at sysUptime */
-		if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
+		if ((oid = strdup(".1")) == NULL) {
 			die("ERROR: malloc(): strdup() oid ping.c failed");
 		}
 
@@ -133,7 +133,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		retry:
 		begin_time = get_time_as_double();
 
-		poll_result = snmp_get(host, oid);
+		poll_result = snmp_getnext(host, oid);
 
 		/* record end time */
 		end_time = get_time_as_double();
@@ -143,11 +143,19 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		total_time = (end_time - begin_time) * one_thousand;
 
 		if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
-			if (num_oids_checked == 0) {
-				/* use sysDescription as a backup if sysUptime fails */
-				if ((oid = strdup(".1.3.6.1.2.1.1.1.0")) == NULL) {
-					die("ERROR: malloc(): strdup() oid ping.c failed");
+			if (num_oids_checked > 1) {
+				if (num_oids_checked == 0) {
+					/* use sysUptime as a backup if the generic OID fails */
+					if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
+						die("ERROR: malloc(): strdup() oid ping.c failed");
+					}
+				}else{
+					/* use sysDescription as a backup if sysUptime fails */
+					if ((oid = strdup(".1.3.6.1.2.1.1.1.0")) == NULL) {
+						die("ERROR: malloc(): strdup() oid ping.c failed");
+					}
 				}
+
 				free(poll_result);
 				num_oids_checked++;
 				goto retry;
@@ -193,6 +201,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int retry_count;
 	char *cacti_msg = "cacti-monitoring-system";
 	int packet_len;
+	int numfds;
 	int fromlen;
 	int return_code;
 	fd_set socket_fds;
@@ -252,6 +261,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			FD_ZERO(&socket_fds);
 			FD_SET(icmp_socket,&socket_fds);
 
+			numfds = icmp_socket + 1;
+
 			while (1) {
 				if (retry_count >= set.ping_retries) {
 					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
@@ -269,7 +280,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
 
 				/* wait for a response on the socket */
-				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				select(numfds, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();

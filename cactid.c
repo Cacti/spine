@@ -365,7 +365,9 @@ int main(int argc, char *argv[]) {
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		CACTID_LOG_DEBUG(("CACTID: Version %s starting\n", VERSION));
 	}else{
-		printf("CACTID: Version %s starting\n", VERSION);
+		if (!set.stdout_notty) {
+			printf("CACTID: Version %s starting\n", VERSION);
+		}
 	}
 
 	/* connect to database */
@@ -597,7 +599,14 @@ int main(int argc, char *argv[]) {
 	/* finally add some statistics to the log and exit */
 	end_time = TIMEVAL_TO_DOUBLE(now);
 
-	CACTID_LOG_MEDIUM(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
+	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
+		CACTID_LOG(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
+	}else{
+		/* provide output if running from command line */
+		if (!set.stdout_notty) {
+			fprintf(stdout,"CACTID: Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+		}
+	}
 
 	/* uninstall the cactid signal handler */
 	uninstall_cactid_signal_handler();
