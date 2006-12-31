@@ -111,7 +111,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (error) {
-		die("ERROR: Fatal MySQL Query Error, exiting\n");
+		die("ERROR: Fatal MySQL Query Error, exiting!");
 	}
 
 	return mysql_res;
@@ -135,7 +135,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	char *socket;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
-		die("ERROR: malloc(): strdup() failed\n");
+		die("ERROR: malloc(): strdup() failed");
 	}
 
 	if ((socket = strstr(hostname,":"))) {
@@ -143,7 +143,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	}
 
 	/* initialalize my variables */
-	tries = 20;
+	tries = 5;
 	success = FALSE;
 
 	CACTID_LOG_DEBUG(("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost));
@@ -151,7 +151,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	thread_mutex_lock(LOCK_MYSQL);
 	db = mysql_init(mysql);
 	if (db == NULL) {
-		die("ERROR: MySQL unable to allocate memory and therefore can not connect\n");
+		die("ERROR: MySQL unable to allocate memory and therefore can not connect");
 	}
 
 	while (tries > 0){
@@ -176,7 +176,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (!success){
-		die("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
+		die("MYSQL: Connection Failed: %s", mysql_error(mysql));
 	}
 }
 

@@ -1,6 +1,7 @@
 The Cacti Group – cactid
 
 0.8.6j
+-bug#0000879/0000872: cactid doesn't always report error messages before dying 
 -bug: Windows can not handle large quantities of running scripts, therefore, limit to 5 at a time
 -bug: If the system is out of resources when trying to fork(), retry three more times
 -bug: Use vfork instead of fork.  It's more efficient with resources.

@@ -476,13 +476,15 @@ void die(const char *format, ...) {
 	va_start(args, format);
 	vsprintf(logmessage, format, args);
 	va_end(args);
-	
+
 	if (set.logfile_processed) {
 		if (set.parent_fork == CACTID_PARENT) {
-			snprintf(flogmessage, sizeof(flogmessage), "%s (parent)", logmessage);
+			snprintf(flogmessage, sizeof(flogmessage), "%s (Cactid parent)", logmessage);
 		}else{
-			snprintf(flogmessage, sizeof(flogmessage), "%s (fork)", logmessage);
+			snprintf(flogmessage, sizeof(flogmessage), "%s (Cactid thread)", logmessage);
 		}
+	}else{
+		snprintf(flogmessage, sizeof(flogmessage), "%s (Cactid init)", logmessage);
 	}
 
 	CACTID_LOG((flogmessage));
@@ -756,7 +758,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	char *return_str;
 	
 	if (!(return_str = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: util.c add_slashes!\n");
+		die("ERROR: Fatal malloc error: util.c add_slashes!");
 	}
 	memset(return_str, 0, BUFSIZE);
 
@@ -925,19 +927,19 @@ char *get_host_poll_time() {
 	#define HOST_TIME_STRING_LEN 20
 	
 	if (!(host_time = (char *) malloc(HOST_TIME_STRING_LEN))) {
-		die("ERROR: Fatal malloc error: util.c host_time\n");
+		die("ERROR: Fatal malloc error: util.c host_time");
 	}
 	memset(host_time, 0, HOST_TIME_STRING_LEN);
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
-		die("ERROR: Could not get time of day from time() util.c get_host_poll_time()\n");
+		die("ERROR: Could not get time of day from time() util.c get_host_poll_time()");
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
 	if (strftime(host_time, HOST_TIME_STRING_LEN, "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
-		die("ERROR: Could not get string from strftime() util.c get_host_poll_time()\n");
+		die("ERROR: Could not get string from strftime() util.c get_host_poll_time()");
 	}
 	
 	return(host_time);

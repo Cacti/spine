@@ -143,7 +143,7 @@ char *php_readpipe(int php_process) {
 	char *result_string;
 
 	if (!(result_string = (char *)malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: php.c php_readpipe!\n");
+		die("ERROR: Fatal malloc error: php.c php_readpipe!");
 	}
 	memset(result_string, 0, BUFSIZE);	
 

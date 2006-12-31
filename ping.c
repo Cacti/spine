@@ -126,7 +126,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	if (strlen(host->snmp_community) != 0) {
 		/* by default, we look at sysUptime */
 		if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
-			die("ERROR: malloc(): strdup() oid ping.c failed\n");
+			die("ERROR: malloc(): strdup() oid ping.c failed");
 		}
 
 		/* record start time */
@@ -146,7 +146,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			if (num_oids_checked == 0) {
 				/* use sysDescription as a backup if sysUptime fails */
 				if ((oid = strdup(".1.3.6.1.2.1.1.1.0")) == NULL) {
-					die("ERROR: malloc(): strdup() oid ping.c failed\n");
+					die("ERROR: malloc(): strdup() oid ping.c failed");
 				}
 				free(poll_result);
 				num_oids_checked++;
@@ -218,7 +218,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
 
 	if (!(packet = malloc(packet_len))) {
-		die("ERROR: Fatal malloc error: ping.c ping_icmp!\n");
+		die("ERROR: Fatal malloc error: ping.c ping_icmp!");
 	}
 	memset(packet, 0, ICMP_HDR_SIZE + strlen(cacti_msg));
 
@@ -228,7 +228,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->un.echo.id = getpid();
 	icmp->un.echo.sequence = seq++;
 	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
-		die("ERROR: Function gettimeofday failed.  Exiting cactid\n");
+		die("ERROR: Function gettimeofday failed.  Exiting cactid");
 	}
 	
 	icmp->checksum = 0;
@@ -496,7 +496,7 @@ char *remove_tcp_udp_from_hostname(char *hostname) {
 	char *cleaned_hostname;
 	
 	if (!(cleaned_hostname = (char *) malloc(strlen(hostname)+1))) {
-		die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname\n");
+		die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname");
 	}
 
 	if (!strncasecmp(hostname, "TCP:", 4) ||
@@ -560,7 +560,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
-		die("ERROR: Could not get time of day from time()\n");
+		die("ERROR: Could not get time of day from time()");
 	}
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;

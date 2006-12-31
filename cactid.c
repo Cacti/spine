@@ -329,11 +329,11 @@ int main(int argc, char *argv[]) {
 	/* read configuration file to establish local environment */
 	if (conf_file) {
 		if ((read_cactid_config(conf_file)) < 0) {
-			die("ERROR: Could not read config file: %s\n", conf_file);
+			die("ERROR: Could not read config file: %s", conf_file);
 		}
 	}else{
 		if (!(conf_file = calloc(1, BUFSIZE))) {
-			die("ERROR: Fatal malloc error: cactid.c conf_file!\n");
+			die("ERROR: Fatal malloc error: cactid.c conf_file!");
 		}
 
 		for (i=0; i<CONFIG_PATHS; i++) {
@@ -404,11 +404,11 @@ int main(int argc, char *argv[]) {
 	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
-		die("ERROR: Fatal malloc error: cactid.c threads!\n");
+		die("ERROR: Fatal malloc error: cactid.c threads!");
 	}
 
 	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
-		die("ERROR: Fatal malloc error: cactid.c host id's!\n");
+		die("ERROR: Fatal malloc error: cactid.c host id's!");
 	}
 
 	/* initialize threads and mutexes */
@@ -417,7 +417,7 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	CACTID_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i\n", active_threads));
+	CACTID_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", active_threads));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = CACTID_FORK;

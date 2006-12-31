@@ -77,7 +77,7 @@ void snmp_cactid_init(void) {
 		init_snmp("cactid");
 	}else{
 		/* report the error and quit cactid */
-		die("ERROR: SNMP Library Version Mismatch (%s vs %s)\n",PACKAGE_VERSION,netsnmp_get_version());
+		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
 	}
 	#else
 		CACTID_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
@@ -258,7 +258,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char *result_string;
 	
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: snmp.c snmp_get!\n");
+		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
 	result_string[0] = '\0';
 
@@ -282,9 +282,10 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				CACTID_LOG(("ERROR: Some internal error caused snmp to return null response in snmp_get\n"));
+				CACTID_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
+
 				SET_UNDEFINED(result_string);
-				status = SNMPERR_UNKNOWN_ENG_ID;
+				status = STAT_ERROR;
 			}else{
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
@@ -391,8 +392,8 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
 		if (response == NULL) {
-			CACTID_LOG(("ERROR: Some internal error caused snmp to return null response in snmp_get_multi.\n"));
-			status = SNMPERR_UNKNOWN_ENG_ID;
+			CACTID_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi\n"));
+			status = STAT_ERROR;
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;

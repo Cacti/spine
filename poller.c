@@ -140,22 +140,22 @@ void poll_host(int host_id) {
 	
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
-		die("ERROR: Fatal malloc error: poller.c host struct!\n");
+		die("ERROR: Fatal malloc error: poller.c host struct!");
 	}
 	memset(host, 0, sizeof(host));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
-		die("ERROR: Fatal malloc error: poller.c ping struct!\n");
+		die("ERROR: Fatal malloc error: poller.c ping struct!");
 	}
 	memset(ping, 0, sizeof(ping_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
-		die("ERROR: Fatal malloc error: poller.c reindex poll!\n");
+		die("ERROR: Fatal malloc error: poller.c reindex poll!");
 	}
 	memset(reindex, 0, sizeof(reindex_t));
 
 	if (!(sysUptime = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: poller.c sysUptime\n");
+		die("ERROR: Fatal malloc error: poller.c sysUptime");
 	}
 	memset(sysUptime, 0, BUFSIZE);
 
@@ -361,7 +361,7 @@ void poll_host(int host_id) {
 						if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
 							if (strlen(sysUptime) > 0) {
 								if (!(poll_result = (char *) malloc(BUFSIZE))) {
-									die("ERROR: Fatal malloc error: poller.c poll_result\n");
+									die("ERROR: Fatal malloc error: poller.c poll_result");
 								}
 								memset(poll_result, 0, BUFSIZE);
 
@@ -380,7 +380,7 @@ void poll_host(int host_id) {
 					}
 
 					if (!(query3 = (char *)malloc(BUFSIZE))) {
-						die("ERROR: Fatal malloc error: poller.c reindex insert!\n");
+						die("ERROR: Fatal malloc error: poller.c reindex insert!");
 					}
 					memset(query3, 0, BUFSIZE);
 
@@ -709,7 +709,7 @@ void poll_host(int host_id) {
 
 		/* insert the query results into the database */
 		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE+BUFSIZE))) {
-			die("ERROR: Fatal malloc error: poller.c query3 oids!\n");
+			die("ERROR: Fatal malloc error: poller.c query3 oids!");
 		}
 		query3[0] = '\0';
 
@@ -854,7 +854,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	char *result_string;
 
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: poller.c exec_poll!\n");
+		die("ERROR: Fatal malloc error: poller.c exec_poll!");
 	}
 	memset(result_string, 0, BUFSIZE);
 
