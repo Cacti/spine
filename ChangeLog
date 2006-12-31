@@ -6,6 +6,7 @@ The Cacti Group – cactid
 -bug: If the system is out of resources when trying to fork(), retry three more times
 -bug: Use vfork instead of fork.  It's more efficient with resources.
 -bug: Cactid Script Server would not work with cgi version of php.  Now it does.
+-bug: Changes in SNMP Community from poller item to poller item were not being considered.
 
 0.8.6i
 -bug: Only output as much as MySQL can handle in 1 insert

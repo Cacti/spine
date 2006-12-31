@@ -113,6 +113,7 @@ void poll_host(int host_id) {
 
 	int last_snmp_version = 0;
 	int last_snmp_port = 0;
+	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
 
@@ -282,8 +283,10 @@ void poll_host(int host_id) {
 		/* save snmp status data for future use */
 		last_snmp_port = host->snmp_port;
 		last_snmp_version = host->snmp_version;
-		snprintf(last_snmp_username, sizeof(last_snmp_username)-1, "%s", host->snmp_username);
-		snprintf(last_snmp_password, sizeof(last_snmp_password)-1, "%s", host->snmp_password);
+
+		STRNCOPY(last_snmp_community, host->snmp_community);
+		STRNCOPY(last_snmp_username, host->snmp_username);
+		STRNCOPY(last_snmp_password, host->snmp_password);
 
 		/* perform a check to see if the host is alive by polling it's SysDesc
 		 * if the host down from an snmp perspective, don't poll it.
@@ -504,6 +507,7 @@ void poll_host(int host_id) {
 						last_snmp_port = poller_items[i].snmp_port;
 						last_snmp_version = poller_items[i].snmp_version;
 
+						STRNCOPY(last_snmp_community, poller_items[i].snmp_community);
 						STRNCOPY(last_snmp_username, poller_items[i].snmp_username);
 						STRNCOPY(last_snmp_password, poller_items[i].snmp_password);
 
@@ -521,6 +525,7 @@ void poll_host(int host_id) {
 					/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 					if ((last_snmp_port != poller_items[i].snmp_port) || 
 						(last_snmp_version != poller_items[i].snmp_version) ||
+						(strcmp(last_snmp_community, poller_items[i].snmp_community) != 0) ||
 						(strcmp(last_snmp_username, poller_items[i].snmp_username) != 0) ||
 						(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
 					
@@ -562,6 +567,7 @@ void poll_host(int host_id) {
 						last_snmp_port = poller_items[i].snmp_port;
 						last_snmp_version = poller_items[i].snmp_version;
 
+						STRNCOPY(last_snmp_community, poller_items[i].snmp_community);
 						STRNCOPY(last_snmp_username, poller_items[i].snmp_username);
 						STRNCOPY(last_snmp_password, poller_items[i].snmp_password);
 					}
