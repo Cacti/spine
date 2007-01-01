@@ -4,6 +4,7 @@ The Cacti Group – cactid
 -bug#0000879/0000872: cactid doesn't always report error messages before dying 
 -bug#0000856: Slight documentation change
 -bug#0000861: Downed Host Detection on non-SNMP devices wrong
+-bug#0000886: SNMP Ping to Utilize The snmpgetnext instead of snmpget
 -bug: By default, Cygwin can not handle large quantities of running scripts, therefore, limit to 20
 -bug: Increase the number of file descriptors in Cygwin to 512, 64 does not work for large systems.
 -bug: If the system is out of resources when trying to fork(), retry three more times
@@ -11,7 +12,6 @@ The Cacti Group – cactid
 -bug: Cactid Script Server would not work with cgi version of php.  Now it does.
 -bug: Changes in SNMP Community from poller item to poller item were not being considered.
 -bug: Restore meaningful notices when running from command line
--bug: Allow the use of snmpgetnext instead of snmpget for snmp_ping.  This should be very reliable.
 
 0.8.6i
 -bug: Only output as much as MySQL can handle in 1 insert
