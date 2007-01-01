@@ -3,6 +3,7 @@ The Cacti Group – cactid
 0.8.6j
 -bug#0000879/0000872: cactid doesn't always report error messages before dying 
 -bug#0000856: Slight documentation change
+-bug#0000861: Downed Host Detection on non-SNMP devices wrong
 -bug: By default, Cygwin can not handle large quantities of running scripts, therefore, limit to 20
 -bug: Increase the number of file descriptors in Cygwin to 512, 64 does not work for large systems.
 -bug: If the system is out of resources when trying to fork(), retry three more times

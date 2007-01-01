@@ -84,6 +84,11 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	switch (set.availability_method) {
 		case AVAIL_SNMP_AND_PING:
+			if (strlen(host->snmp_community) == 0)
+				if (ping_result == HOST_UP)
+					return HOST_UP;
+				else
+					return HOST_DOWN;
 			if (snmp_result == HOST_UP)
 				return HOST_UP;
 			if (ping_result == HOST_UP)
