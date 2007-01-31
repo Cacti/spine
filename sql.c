@@ -130,7 +130,9 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 void db_connect(const char *database, MYSQL *mysql) {
 	MYSQL *db;
 	int tries;
+	int options_error;
 	int success;
+	int timeout;
 	char *hostname;
 	char *socket;
 
@@ -145,6 +147,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	/* initialalize my variables */
 	tries = 5;
 	success = FALSE;
+	timeout = 5;
 
 	CACTID_LOG_DEBUG(("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost));
 
@@ -152,6 +155,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	db = mysql_init(mysql);
 	if (db == NULL) {
 		die("ERROR: MySQL unable to allocate memory and therefore can not connect");
+	timeout = 5;
 	}
 
 	while (tries > 0){

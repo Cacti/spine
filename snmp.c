@@ -74,14 +74,14 @@ void snmp_cactid_init(void) {
 	CACTID_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
 
 	if(STRIMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
-		init_snmp("cactid");
+		init_snmp("");
 	}else{
 		/* report the error and quit cactid */
 		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
 	}
 	#else
 		CACTID_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
-		init_snmp("cactid");
+		init_snmp("");
 	#endif
 
 	/* Prevent update of the snmpapp.conf file */
@@ -102,7 +102,7 @@ void snmp_cactid_init(void) {
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 #else
-	init_snmp("cactid");
+	init_snmp("");
 
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
