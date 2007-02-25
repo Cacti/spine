@@ -155,7 +155,11 @@ void db_connect(const char *database, MYSQL *mysql) {
 	db = mysql_init(mysql);
 	if (db == NULL) {
 		die("ERROR: MySQL unable to allocate memory and therefore can not connect");
-	timeout = 5;
+	}
+
+	options_error = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
+	if (options_error < 0) {
+		die("FATAL: MySQL options unable to set timeout value\n");
 	}
 
 	while (tries > 0){
