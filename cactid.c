@@ -332,19 +332,19 @@ int main(int argc, char *argv[]) {
 			die("ERROR: Could not read config file: %s", conf_file);
 		}
 	}else{
-		if (!(conf_file = calloc(1, BUFSIZE))) {
+		if (!(conf_file = calloc(CONFIG_PATHS, BUFSIZE))) {
 			die("ERROR: Fatal malloc error: cactid.c conf_file!");
 		}
 
 		for (i=0; i<CONFIG_PATHS; i++) {
-			snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
+			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_cactid_config(conf_file) >= 0) {
 				break;
 			}
 
 			if (i == CONFIG_PATHS-1) {
-				snprintf(conf_file, BUFSIZE-1, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
+				snprintf(conf_file, BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
 			}
 		}
 	}

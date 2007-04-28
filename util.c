@@ -156,7 +156,7 @@ void read_config_options() {
 	MYSQL_RES *result;
 	int num_rows;
 	char web_root[BUFSIZE];
-	char sqlbuf[256], *sqlp = sqlbuf;
+	char sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
 	const char *res;
 
 	db_connect(set.dbdb, &mysql);
@@ -169,23 +169,23 @@ void read_config_options() {
 
 	/* determine script server path operation and default log file processing */
 	if ((res = getsetting(&mysql, "path_webroot")) != 0 ) {
-		snprintf(set.path_php_server, sizeof(set.path_php_server)-1, "%s/script_server.php", res);
-		snprintf(web_root, sizeof(web_root)-1, "%s", res);
+		snprintf(set.path_php_server, sizeof(set.path_php_server), "%s/script_server.php", res);
+		snprintf(web_root, BUFSIZE, "%s", res);
 	}
 
 	/* determine logfile path */
 	if ((res = getsetting(&mysql, "path_cactilog")) != 0 ) {
 		if (strlen(res) != 0) {
-			snprintf(set.path_logfile, sizeof(set.path_logfile)-1, res);
+			snprintf(set.path_logfile, SMALL_BUFSIZE, res);
 		}else{
 			if (strlen(web_root) != 0) {
-				snprintf(set.path_logfile, sizeof(set.path_logfile)-1, "%s/log/cacti.log", web_root);
+				snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
 			}else{
-				memset(set.path_logfile, 0, sizeof(set.path_logfile));
+				memset(set.path_logfile, 0, SMALL_BUFSIZE);
 			}
 		}
 	}else{
-		snprintf(set.path_logfile, sizeof(set.path_logfile)-1, "%s/log/cacti.log", web_root);
+		snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
 
 	/* log the path_webroot variable */
@@ -484,12 +484,12 @@ void die(const char *format, ...) {
 
 	if (set.logfile_processed) {
 		if (set.parent_fork == CACTID_PARENT) {
-			snprintf(flogmessage, sizeof(flogmessage), "%s (Cactid parent)", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Cactid parent)", logmessage);
 		}else{
-			snprintf(flogmessage, sizeof(flogmessage), "%s (Cactid thread)", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Cactid thread)", logmessage);
 		}
 	}else{
-		snprintf(flogmessage, sizeof(flogmessage), "%s (Cactid init)", logmessage);
+		snprintf(flogmessage, BUFSIZE, "%s (Cactid init)", logmessage);
 	}
 
 	CACTID_LOG((flogmessage));
@@ -519,7 +519,7 @@ int cacti_log(const char *format, ...) {
 	struct tm now_time;
 	struct tm *now_ptr;
 
-	char logprefix[40]; /* Formatted Log Prefix */
+	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];	/* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];	/* Formatted Log Message */
 
@@ -532,11 +532,11 @@ int cacti_log(const char *format, ...) {
 
 	/* append a line feed to the log message if needed */
 	if (!strstr(ulogmessage, "\n")) {
-		snprintf(ulogmessage, sizeof(ulogmessage)-1, "%s\n", ulogmessage);
+		snprintf(ulogmessage, BUFSIZE, "%s\n", ulogmessage);
 	}
 
 	/* log message prefix */
-	snprintf(logprefix, sizeof(logprefix)-1, "CACTID: Poller[%i] ", set.poller_id);
+	snprintf(logprefix, SMALL_BUFSIZE, "CACTID: Poller[%i] ", set.poller_id);
 
 	if (IS_LOGGING_TO_STDOUT()) {
 		puts(ulogmessage);
@@ -614,7 +614,7 @@ int cacti_log(const char *format, ...) {
 			#endif
 		}
 
-		snprintf(flogmessage, LOGSIZE-1, "CACTID: %s", ulogmessage);
+		snprintf(flogmessage, LOGSIZE, "CACTID: %s", ulogmessage);
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */

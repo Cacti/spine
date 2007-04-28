@@ -117,7 +117,11 @@
 
 /* general constants */
 #define MAX_THREADS 100
+#define TINY_BUFSIZE 16
+#define SMALL_BUFSIZE 256
 #define BUFSIZE 1024
+#define BIG_BUFSIZE 65535
+#define MEGA_BUFSIZE 1024000
 #define LOGSIZE 4096
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
@@ -289,15 +293,15 @@ typedef struct config_struct {
 	int start_host_id;
 	int end_host_id;
 	/* database connection information */
-	char dbhost[80];
-	char dbdb[80];
-	char dbuser[80];
-	char dbpass[80];
+	char dbhost[SMALL_BUFSIZE];
+	char dbdb[SMALL_BUFSIZE];
+	char dbuser[SMALL_BUFSIZE];
+	char dbpass[SMALL_BUFSIZE];
 	unsigned int dbport;
 	/* path information */
-	char path_logfile[250];
-	char path_php[250];
-	char path_php_server[250];
+	char path_logfile[SMALL_BUFSIZE];
+	char path_php[SMALL_BUFSIZE];
+	char path_php_server[SMALL_BUFSIZE];
 	/* logging options */
 	int log_level;
 	int log_destination;
@@ -424,7 +428,7 @@ typedef struct host_reindex_struct {
  *
  */
 typedef struct ping_results {
-	char hostname[255];
+	char hostname[SMALL_BUFSIZE];
 	char ping_status[50];
 	char ping_response[50];
 	char snmp_status[50];

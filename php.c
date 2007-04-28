@@ -54,7 +54,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	assert(php_command != 0);
 
 	/* pad command with CR-LF */
-	snprintf(command, sizeof(command)-1, "%s\r\n", php_command);
+	snprintf(command, BUFSIZE, "%s\r\n", php_command);
 
 	/* place lock around mutex */
 	switch (php_process) {
@@ -240,7 +240,7 @@ int php_init(int php_process) {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
 	pid_t  pid;
-	char poller_id[11];
+	char poller_id[TINY_BUFSIZE];
 	char *argv[6];
 	int  cancel_state;
 	char *result_string = 0;
@@ -278,7 +278,7 @@ int php_init(int php_process) {
 		argv[1] = "-q";
 		argv[2] = set.path_php_server;
 		argv[3] = "cactid";
-		snprintf(poller_id, sizeof(poller_id)-1, "%d", set.poller_id);
+		snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
 		argv[4] = poller_id;
 		argv[5] = NULL;
 
