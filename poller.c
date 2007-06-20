@@ -893,6 +893,7 @@ int validate_result(char *result) {
 char *exec_poll(host_t *current_host, char *command) {
 	extern int active_scripts;
 	int cmd_fd;
+	FILE *fd;
 	int bytes_read;
 	fd_set fds;
 	int numfds;
@@ -930,7 +931,13 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 	}
 
+	#ifdef USING_NIFTY
 	cmd_fd = nft_popen((char *)proc_command, "r");
+	#else
+	fd = popen((char *)proc_command, "r");
+	cmd_fd = fileno(fd);
+	#endif
+
 	free(proc_command);
 
 	CACTID_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd));
@@ -997,7 +1004,11 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 
 		/* close pipe */
+		#ifdef USING_NIFTY
 		nft_pclose(cmd_fd);
+		#else
+		pclose(fd);
+		#endif
 	}else{
 		CACTID_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command));
 		SET_UNDEFINED(result_string);

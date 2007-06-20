@@ -206,7 +206,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int retry_count;
 	char *cacti_msg = "cacti-monitoring-system";
 	int packet_len;
-	int numfds;
 	int fromlen;
 	int return_code;
 	fd_set socket_fds;
@@ -266,8 +265,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			FD_ZERO(&socket_fds);
 			FD_SET(icmp_socket,&socket_fds);
 
-			numfds = icmp_socket + 1;
-
 			while (1) {
 				if (retry_count >= set.ping_retries) {
 					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
@@ -285,7 +282,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
 
 				/* wait for a response on the socket */
-				select(numfds, &socket_fds, NULL, NULL, &timeout);
+				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -360,7 +357,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int request_len;
 	int return_code;
 	fd_set socket_fds;
-	int numfds;
 	char *new_hostname;
 	
 	/* remove "udp:" from hostname */
@@ -402,8 +398,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 			FD_ZERO(&socket_fds);
 			FD_SET(udp_socket,&socket_fds);
 
-			numfds = udp_socket + 1;
-
 			while (1) {
 				if (retry_count >= set.ping_retries) {
 					snprintf(ping->ping_response, sizeof(ping->ping_response), "UDP: Ping timed out");
@@ -420,7 +414,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				send(udp_socket, request, request_len, 0);
 
 				/* wait for a response on the socket */
-				select(numfds, &socket_fds, NULL, NULL, &timeout);
+				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();

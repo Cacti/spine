@@ -136,7 +136,7 @@ int php_get_process(void) {
  */
 char *php_readpipe(int php_process) {
 	fd_set fds;
-	int rescode, numfds;
+	int rescode;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
@@ -153,7 +153,6 @@ char *php_readpipe(int php_process) {
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(php_processes[php_process].php_read_fd,&fds);
-	numfds = php_processes[php_process].php_read_fd + 1;
 
 	/* establish timeout value for the PHP script server to respond */
 	timeout.tv_sec = set.script_timeout;
@@ -162,7 +161,7 @@ char *php_readpipe(int php_process) {
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
 	retry:
-	switch (select(numfds, &fds, NULL, NULL, &timeout)) {
+	switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
 	case -1:
 		switch (errno) {
 			case EBADF:
@@ -285,10 +284,11 @@ int php_init(int php_process) {
 		/* fork a child process */
 		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i));
 
+		retry:
+
 		pid = vfork();
 
 		/* check the pid status and process as required */
-		retry:
 		switch (pid) {
 			case -1: /* ERROR: Could not fork() */
 				switch (errno) {

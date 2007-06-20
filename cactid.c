@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
 	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 2;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		CACTID_LOG_DEBUG(("CACTID: Version %s starting\n", VERSION));
+		CACTID_LOG_DEBUG(("Version %s starting\n", VERSION));
 	}else{
 		if (!set.stdout_notty) {
 			printf("CACTID: Version %s starting\n", VERSION);

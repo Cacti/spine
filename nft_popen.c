@@ -159,7 +159,7 @@ int nft_popen(const char * command, const char * type) {
 				#endif
 				goto retry;
 			}else{
-				CACTID_LOG(("ERROR: SCRIPT: Cound not fork PHP Script Server Out of Resources\n"));
+				CACTID_LOG(("ERROR: SCRIPT: Cound not fork. Out of Resources nft_popen.c\n"));
 			}
 		case ENOMEM:
 			if (retry_count < 3) {
@@ -170,10 +170,10 @@ int nft_popen(const char * command, const char * type) {
 				#endif
 				goto retry;
 			}else{
-				CACTID_LOG(("ERROR: SCRIPT Cound not fork PHP Script Server Out of Memory\n"));
+				CACTID_LOG(("ERROR: SCRIPT Cound not fork. Out of Memory nft_popen.c\n"));
 			}
 		default:
-			CACTID_LOG(("ERROR: SCRIPT Cound not fork PHP Script Server Unknown Reason\n"));
+			CACTID_LOG(("ERROR: SCRIPT Cound not fork. Unknown Reason nft_popen.c\n"));
 		}
 
 		(void)close(pdes[0]);
@@ -298,6 +298,7 @@ nft_pclose(int fd)
 {
 	struct pid *cur;
 	int		pstat;
+	int     i;
 	pid_t	pid;
 
 	/* Find the appropriate file descriptor. */
@@ -324,8 +325,14 @@ nft_pclose(int fd)
 
 	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-	do { pid = waitpid(cur->pid, &pstat, 0); }
-	while (pid == -1 && errno == EINTR);
+	i = 0;
+	do { pid = waitpid(cur->pid, &pstat, 0);
+		if (i > 0) {
+			cacti_log("WaitPID > 0, '%i'");
+		}
+
+		i++;
+	} while (pid == -1 && errno == EINTR);
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 

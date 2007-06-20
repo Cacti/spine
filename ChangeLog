@@ -12,6 +12,8 @@ The Cacti Group – cactid
 -bug: Cactid Script Server would not work with cgi version of php.  Now it does.
 -bug: Changes in SNMP Community from poller item to poller item were not being considered.
 -bug: Restore meaningful notices when running from command line
+-feature: Allow users to use the traditional popen instead of nifty if required.
+-feature: Properly support INNODB database engine in MySQL
 
 0.8.6i
 -bug: Only output as much as MySQL can handle in 1 insert

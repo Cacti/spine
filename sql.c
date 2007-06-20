@@ -1,4 +1,5 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
  | Copyright (C) 2002-2006 The Cacti Group                                 |
  |                                                                         |
@@ -47,23 +48,47 @@
 int db_insert(MYSQL *mysql, const char *query) {
 	static int queryid = 0;
 
-	if (set.SQL_readonly) { return TRUE; }
+	int    error;
+	int    error_count = 0;
+	char   query_frag[SMALL_BUFSIZE];
 	
-	CACTID_LOG_DEBUG(("DEBUG: MySQL Insert ID '%i': '%s'\n", queryid, query));
+	/* save a fragment just in case */
+	snprintf(query_frag, SMALL_BUFSIZE, "%s", query);
 
-	thread_mutex_lock(LOCK_MYSQL);
-	if (mysql_query(mysql, query)) {
-		CACTID_LOG(("ERROR: Problem with MySQL: '%s'\n", mysql_error(mysql)));
+	/* show the sql query */
+	if (set.log_level == 5) {
+		CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
+	}
+	
+	queryid++;
+	while(1) {
+		if (set.SQL_readonly == FALSE) {
+			if (mysql_query(mysql, query)) {
+				error = mysql_errno(mysql);
+				
+				if ((error == 1213) || (error == 1205)) {
+					usleep(50000);
+					error_count++;
+					
+					if (error_count > 30) {
+						snprintf(query_frag, SMALL_BUFSIZE, "%200s", query);
+						CACTID_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
+						return FALSE;
+					}
 
-		queryid++;
-		thread_mutex_unlock(LOCK_MYSQL);
-		return FALSE;
-	}else{
-		CACTID_LOG_DEBUG(("DEBUG: MySQL Insert ID '%i': OK\n", queryid));
-
-		queryid++;
-		thread_mutex_unlock(LOCK_MYSQL);
-		return TRUE;
+					continue;
+				}else{
+					snprintf(query_frag, SMALL_BUFSIZE, "%200s", query);
+					CACTID_LOG(("ERROR: A database insert failed! Error:'%i', SQL Fragment:'%s'\n", error, query_frag));
+					return FALSE;
+				}
+			}else{
+				queryid++;
+				return TRUE;
+			}
+		}else{
+			return TRUE;
+		}
 	}
 }
 
@@ -78,43 +103,49 @@ int db_insert(MYSQL *mysql, const char *query) {
  *
  */
 MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
-	MYSQL_RES *mysql_res = 0;
-	int return_code;
-	int retries;
-	int error;
+	MYSQL_RES  *mysql_res = 0;
 	static int queryid = 0;
-	
-	CACTID_LOG_DEBUG(("DEBUG: MySQL Query ID '%i': '%s'\n", queryid, query));
 
-	thread_mutex_lock(LOCK_MYSQL);
-	retries = 0;
-	error = FALSE;
-	while (retries < 3) {
-	 	return_code = mysql_query(mysql, query);
-		if (return_code) {
-			CACTID_LOG(("WARNING: MySQL Query Error, retrying query '%s'\n", query));
-			error = TRUE;
+	int    error;
+	int    error_count;
+	char   query_frag[SMALL_BUFSIZE];
+
+	/* save a fragment just in case */
+	snprintf(query_frag, SMALL_BUFSIZE, "%s", query);
+
+	/* show the sql query */
+	CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
+	
+	error = 0;
+
+	queryid++;
+
+	while (1) {
+		if (mysql_query(mysql, query)) {
+			error = mysql_errno(mysql);
+				
+			if ((error == 1213) || (error == 1205)) {
+				#ifndef SOLAR_THREAD
+				usleep(50000);
+				#endif
+				error_count++;
+					
+				if (error_count > 30) {
+					CACTID_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
+
+					die("ERROR: Fatal MySQL Query Error, exiting!");
+				}
+
+				continue;
+			}		
 		}else{
 			CACTID_LOG_DEBUG(("DEBUG: MySQL Query ID '%i': OK\n", queryid));
 
 			mysql_res = mysql_store_result(mysql);
-			error = FALSE;
-			break;
+
+			return mysql_res;
 		}
-		#ifndef SOLAR_THREAD
-		usleep(1000);
-		#endif
-		retries++;
 	}
-
-	queryid++;
-	thread_mutex_unlock(LOCK_MYSQL);
-
-	if (error) {
-		die("ERROR: Fatal MySQL Query Error, exiting!");
-	}
-
-	return mysql_res;
 }
 
 /*! \fn void db_connect(char *database, MYSQL *mysql)
@@ -128,33 +159,35 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
  *
  */
 void db_connect(const char *database, MYSQL *mysql) {
-	MYSQL *db;
-	int tries;
-	int options_error;
-	int success;
-	int timeout;
-	char *hostname;
-	char *socket;
+	MYSQL  *db;
+	int    tries;
+	int    timeout;
+	int    options_error;
+	int    success;
+	char   *hostname;
+	char   *socket;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
-		die("ERROR: malloc(): strdup() failed");
+		die("FATAL: malloc(): strdup() failed");
 	}
 
 	if ((socket = strstr(hostname,":"))) {
 		*socket++ = 0x0;
 	}
 
-	/* initialalize my variables */
-	tries = 5;
+	/* initialalize variables */
+	tries   = 5;
 	success = FALSE;
 	timeout = 5;
 
-	CACTID_LOG_DEBUG(("MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost));
+	if (set.log_level == 5) {
+		printf("CACTD: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+	}
 
 	thread_mutex_lock(LOCK_MYSQL);
 	db = mysql_init(mysql);
 	if (db == NULL) {
-		die("ERROR: MySQL unable to allocate memory and therefore can not connect");
+		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
 	}
 
 	options_error = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
@@ -165,13 +198,12 @@ void db_connect(const char *database, MYSQL *mysql) {
 	while (tries > 0){
 		tries--;
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
-			CACTID_LOG_DEBUG(("MYSQL: Connection Failed: %s\n", mysql_error(mysql)));
+			printf("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 
 			success = FALSE;
 		}else{
-			CACTID_LOG_DEBUG(("MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost));
-
-			tries = 0;
+			CACTID_LOG_DEBUG(("DEBUG: MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost));
+			tries   = 0;
 			success = TRUE;
 		}
 		#ifndef SOLAR_THREAD
@@ -184,7 +216,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (!success){
-		die("MYSQL: Connection Failed: %s", mysql_error(mysql));
+		die("FATAL: Connection Failed: %s", mysql_error(mysql));
 	}
 }
 
