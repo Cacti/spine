@@ -50,10 +50,10 @@ int db_insert(MYSQL *mysql, const char *query) {
 
 	int    error;
 	int    error_count = 0;
-	char   query_frag[SMALL_BUFSIZE];
+	char   query_frag[BUFSIZE];
 	
 	/* save a fragment just in case */
-	snprintf(query_frag, SMALL_BUFSIZE, "%s", query);
+	snprintf(query_frag, BUFSIZE, "%s", query);
 
 	/* show the sql query */
 	if (set.log_level == 5) {
@@ -71,14 +71,12 @@ int db_insert(MYSQL *mysql, const char *query) {
 					error_count++;
 					
 					if (error_count > 30) {
-						snprintf(query_frag, SMALL_BUFSIZE, "%200s", query);
 						CACTID_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
 						return FALSE;
 					}
 
 					continue;
 				}else{
-					snprintf(query_frag, SMALL_BUFSIZE, "%200s", query);
 					CACTID_LOG(("ERROR: A database insert failed! Error:'%i', SQL Fragment:'%s'\n", error, query_frag));
 					return FALSE;
 				}
@@ -105,19 +103,16 @@ int db_insert(MYSQL *mysql, const char *query) {
 MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 	MYSQL_RES  *mysql_res = 0;
 	static int queryid = 0;
-
-	int    error;
-	int    error_count;
-	char   query_frag[SMALL_BUFSIZE];
+	int    error = 0;
+	int    error_count = 0;
+	char   query_frag[BUFSIZE];
 
 	/* save a fragment just in case */
-	snprintf(query_frag, SMALL_BUFSIZE, "%s", query);
+	snprintf(query_frag, BUFSIZE, "%s", query);
 
 	/* show the sql query */
 	CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
 	
-	error = 0;
-
 	queryid++;
 
 	while (1) {

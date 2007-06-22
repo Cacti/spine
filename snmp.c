@@ -436,7 +436,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	int status;
 	int i;
 	int max_repetitions = 1;
-	int non_repeaters = 0;
+	int non_repeaters   = 0;
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];

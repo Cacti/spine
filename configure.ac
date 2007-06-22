@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Cactid Poller, 0.8.6i, http://bugs.cacti.net)
+AC_INIT(Cactid Poller, 0.8.6j, http://bugs.cacti.net)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(cactid.c)
 AC_PREFIX_DEFAULT(/usr/local/cactid)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.6i)
+AM_INIT_AUTOMAKE(cactid, 0.8.6j)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
@@ -66,7 +66,7 @@ AC_PROG_RANLIB
 
 AC_MSG_CHECKING([whether to enable -Wall])
 AC_ARG_ENABLE(warnings,
-  [--enable-warnings Enable -Wall if using gcc.],
+  [  --enable-warnings       Enable -Wall if using gcc.],
   [if test -n "$GCC"; then
     AC_MSG_RESULT(adding -Wall to CFLAGS.)
     CFLAGS="$CFLAGS -Wall"
@@ -155,11 +155,11 @@ AC_CHECK_LIB(mysqlclient,mysql_thread_init,[],
 # Determine UCD or Net-SNMP installation paths
 if test "x$SNMP_DIR" != "x"; then
   for i in / /ucd-snmp /include/ucd-snmp; do
-    test -f $SNMP_DIR/$i/snmp.h             && SNMP_INCDIR=$SNMP_DIR$i
+    test -f $SNMP_DIR/$i/snmp.h             && SNMP_INCDIR=$SNMP_DIR$i && break
   done
 
   for i in / /net-snmp /include/net-snmp; do
-    test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i
+    test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i && break
   done
 
   # Accomodate 32-Bit Libraries
@@ -171,26 +171,26 @@ if test "x$SNMP_DIR" != "x"; then
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
 else
   for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
-    test -f $i/snmp.h                       && SNMP_INCDIR=$i
-    test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp
-    test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include/net-snmp
-    test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp
-    test -f $i/net-snmp/include/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp/include
-    test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp
-    test -f $i/snmp/include/ucd-snmp/snmp.h && SNMP_INCDIR=$i/snmp/include/ucd-snmp
-    test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp
+    test -f $i/snmp.h                       && SNMP_INCDIR=$i && break
+    test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp && break
+    test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include/net-snmp && break
+    test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp && break
+    test -f $i/net-snmp/include/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp/include && break
+    test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp && break
+    test -f $i/snmp/include/ucd-snmp/snmp.h && SNMP_INCDIR=$i/snmp/include/ucd-snmp && break
+    test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp && break
   done
 
   # Accomodate 32-Bit Libraries
   for i in /usr /usr/local /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/snmp /usr/local /usr/local/snmp; do
-    test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib
-    test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib
+    test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib && break
+    test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib && break
   done
 
   # Accomodate 64-Bit Libraries
   for i in /usr /usr/local /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local /usr/local/snmp; do
-    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so && SNMP_LIBDIR=$i/lib64
-    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64
+    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so && SNMP_LIBDIR=$i/lib64 && break
+    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64 && break
   done
 fi
 
@@ -234,6 +234,24 @@ if test "$USE_NET_SNMP" = "no"; then
   AC_CHECK_LIB(snmp, snmp_timeout,
     LIBS="-lsnmp $LIBS",
     AC_MSG_ERROR(Cannot find UCD-SNMP libraries(snmp)))
+fi
+
+# ****************** Nifty Popen Check ***********************
+
+# If we should use the system popen or nifty popen
+AC_MSG_CHECKING(If we should use nifty popen or the systems popen command)
+AC_ARG_ENABLE(nifty-popen,
+    [  --enable-nifty-popen    Enable the nifty popen implementation of popen (default: disabled)],
+    [ ENABLED_NIFTY=$enableval ],
+    [ ENABLED_NIFTY=no ]
+    )
+if test "$ENABLED_NIFTY" = "yes"
+then
+  AC_MSG_RESULT([yes])
+  AC_DEFINE([USING_NIFTY], [1],
+            [If nifty popen should be enabled by default])
+else
+  AC_MSG_RESULT([no])
 fi
 
 AC_OUTPUT(Makefile)

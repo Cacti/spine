@@ -298,7 +298,6 @@ nft_pclose(int fd)
 {
 	struct pid *cur;
 	int		pstat;
-	int     i;
 	pid_t	pid;
 
 	/* Find the appropriate file descriptor. */
@@ -325,13 +324,7 @@ nft_pclose(int fd)
 
 	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-	i = 0;
 	do { pid = waitpid(cur->pid, &pstat, 0);
-		if (i > 0) {
-			cacti_log("WaitPID > 0, '%i'");
-		}
-
-		i++;
 	} while (pid == -1 && errno == EINTR);
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */

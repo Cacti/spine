@@ -109,14 +109,13 @@ void poll_host(int host_id) {
 	int php_process;
 
 	char *poll_result = NULL;
-	char *host_time = NULL;
+	char *host_time   = NULL;
 	char update_sql[BUFSIZE];
 	char temp_result[BUFSIZE];
 
-	int num_snmp_agents = 0;
-	int agent_up = TRUE;
+	int num_snmp_agents   = 0;
 	int last_snmp_version = 0;
-	int last_snmp_port = 0;
+	int last_snmp_port    = 0;
 	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
