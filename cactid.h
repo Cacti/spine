@@ -119,7 +119,9 @@
 #define MAX_THREADS 100
 #define TINY_BUFSIZE 16
 #define SMALL_BUFSIZE 256
+#define MEDIUM_BUFSIZE 512
 #define BUFSIZE 1024
+#define DBL_BUFSIZE 2048
 #define BIG_BUFSIZE 65535
 #define MEGA_BUFSIZE 1024000
 #define LOGSIZE 4096
@@ -129,7 +131,7 @@
 #define STAT_DESCRIP_ERROR 99
 #define CACTID_PARENT 1
 #define CACTID_FORK 0
-#define MAX_MYSQL_BUF_SIZE 1400
+#define MAX_MYSQL_BUF_SIZE 35000
 #define MAX_SIMULTANEOUS_SCRIPTS 20
 
 /* locations to search for the config file */
@@ -334,21 +336,21 @@ typedef struct config_struct {
  *
  */
 typedef struct target_struct {
-	int target_id;
-	char result[512];
-	int local_data_id;
-	int action;
+	int  target_id;
+	char result[BUFSIZE];
+	int  local_data_id;
+	int  action;
 	char command[256];
 	char hostname[250];
 	char snmp_community[100];
-	int snmp_version;
+	int  snmp_version;
 	char snmp_username[50];
 	char snmp_password[50];
-	int snmp_port;
-	int snmp_timeout;
+	int  snmp_port;
+	int  snmp_timeout;
 	char rrd_name[30];
 	char rrd_path[255];
-	int rrd_num;
+	int  rrd_num;
 	char arg1[512];
 	char arg2[255];
 	char arg3[255];
@@ -360,9 +362,9 @@ typedef struct target_struct {
  *
  */
 typedef struct snmp_oids {
-	int array_position;
+	int  array_position;
 	char oid[512];
-	char result[512];
+	char result[BUFSIZE];
 } snmp_oids_t;
 
 /*! PHP Script Server Structure
@@ -386,27 +388,27 @@ typedef struct php_processes {
  */
 typedef struct host_struct {
 	int id;
-	char hostname[250];
-	char snmp_community[100];
-	char snmp_username[50];
-	char snmp_password[50];
-	int snmp_version;
-	int snmp_port;
-	int snmp_timeout;
-	int status;
-	int status_event_count;
-	char status_fail_date[40];
-	char status_rec_date[40];
-	char status_last_error[100];
+	char   hostname[250];
+	char   snmp_community[100];
+	char   snmp_username[50];
+	char   snmp_password[50];
+	int    snmp_version;
+	int    snmp_port;
+	int    snmp_timeout;
+	int    status;
+	int    status_event_count;
+	char   status_fail_date[40];
+	char   status_rec_date[40];
+	char   status_last_error[SMALL_BUFSIZE];
 	double min_time;
 	double max_time;
 	double cur_time;
 	double avg_time;
-	int total_polls;
-	int failed_polls;
+	int    total_polls;
+	int    failed_polls;
 	double availability;
-	int ignore_host;
-	void *snmp_session;
+	int    ignore_host;
+	void   *snmp_session;
 } host_t;
 
 /*! Host Reindex Structure
@@ -430,9 +432,9 @@ typedef struct host_reindex_struct {
 typedef struct ping_results {
 	char hostname[SMALL_BUFSIZE];
 	char ping_status[50];
-	char ping_response[50];
+	char ping_response[SMALL_BUFSIZE];
 	char snmp_status[50];
-	char snmp_response[50];
+	char snmp_response[SMALL_BUFSIZE];
 } ping_t;
 
 /*! ICMP Ping Structure

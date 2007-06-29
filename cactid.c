@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
 	int device_counter = 0;
 	int poller_counter = 0;
 	int last_active_threads = 0;
-	long int EXTERNAL_THREAD_SLEEP = 100000;
+	long int EXTERNAL_THREAD_SLEEP = 5000;
 	long int internal_thread_sleep;
 
 	pthread_t* threads = NULL;
@@ -207,11 +207,11 @@ int main(int argc, char *argv[]) {
 	 */
 
 	/* initialize some global variables */
-	set.start_host_id = -1;
-	set.end_host_id   = -1;
-	set.php_initialized = FALSE;
+	set.start_host_id     = -1;
+	set.end_host_id       = -1;
+	set.php_initialized   = FALSE;
 	set.logfile_processed = FALSE;
-	set.parent_fork = CACTID_PARENT;
+	set.parent_fork       = CACTID_PARENT;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -360,7 +360,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* calculate the external_tread_sleep value */
-	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 2;
+	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 50;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		CACTID_LOG_DEBUG(("Version %s starting\n", VERSION));
@@ -372,6 +372,15 @@ int main(int argc, char *argv[]) {
 
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
+
+	/* see if mysql is thread safe */
+	if (mysql_thread_safe()) {
+		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+			printf("NOTE: MySQL is Thread Safe!\n");
+		}
+	}else{
+		printf("CACTID: WARNING: MySQL is NOT Thread Safe!\n");
+	}
 
 	/* initialize SNMP */
 	CACTID_LOG_DEBUG(("CACTID: Initializing Net-SNMP API\n"));
@@ -387,13 +396,13 @@ int main(int argc, char *argv[]) {
 	/* initialize the script server */
 	if (set.php_required) {
 		php_init(PHP_INIT);
-		set.php_initialized = TRUE;
+		set.php_initialized    = TRUE;
 		set.php_current_server = 0;
 	}
 
 	/* obtain the list of hosts to poll */
 	{
-	char querybuf[256], *qp = querybuf;
+	char querybuf[SMALL_BUFSIZE], *qp = querybuf;
 
 	qp += sprintf(qp, "SELECT id FROM host");
 	qp += sprintf(qp, " WHERE disabled=''");

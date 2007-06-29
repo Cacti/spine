@@ -142,10 +142,14 @@ char *php_readpipe(int php_process) {
 	double end_time = 0;
 	char *result_string;
 
+	int  i;
+	char *cp;
+	char *bptr;
+
 	if (!(result_string = (char *)malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: php.c php_readpipe!");
 	}
-	memset(result_string, 0, BUFSIZE);	
+	result_string[0] = '\0';
 
 	/* record start time */
 	begin_time = get_time_as_double();
@@ -213,9 +217,33 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	default:
-		rescode = read(php_processes[php_process].php_read_fd, result_string, BUFSIZE);
-		if (rescode == 0) {
-			SET_UNDEFINED(result_string);
+		bptr = result_string;
+
+		while (1) {
+			i = read(php_processes[php_process].php_read_fd,bptr,BUFSIZE-(bptr-result_string));
+
+			if (i <= 0) {
+				SET_UNDEFINED(result_string);
+				break;
+			}
+
+			bptr += i;
+			*bptr = '\0';	/* make what we've got into a string */
+
+			if (cp = strstr(result_string,"\n")) {
+				*cp = '\0';
+
+				if (cp = strstr(result_string,"\r")) {
+					*cp = '\0';
+				}
+
+				break;
+			}
+
+			if (bptr >= result_string+BUFSIZE) {
+				CACTID_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range\n", php_process));
+				SET_UNDEFINED(result_string);
+			}
 		}
 
 		php_processes[php_process].php_state = PHP_READY;

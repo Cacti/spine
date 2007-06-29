@@ -52,9 +52,9 @@
 #define _PTHREADS
 #define _P __P
 
-#ifndef _REENTRANT 
-#define _REENTRANT 
-#endif 
+#ifndef _REENTRANT
+#define _REENTRANT
+#endif
 
 #ifndef _LIBC_REENTRANT
 #define _LIBC_REENTRANT

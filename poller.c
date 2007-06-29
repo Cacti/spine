@@ -50,11 +50,14 @@ void *child(void *arg) {
 	poll_host(host_id);
 
 	thread_mutex_lock(LOCK_THREAD);
+
 	active_threads--;
-	thread_mutex_unlock(LOCK_THREAD);
 
 	CACTID_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n" ,active_threads));
 
+	thread_mutex_unlock(LOCK_THREAD);
+
+	/* end the thread */
 	pthread_exit(0);
 
 	exit(0);
@@ -96,6 +99,7 @@ void poll_host(int host_id) {
 	char errstr[BUFSIZE];
 	char *sysUptime;
 	char result_string[BUFSIZE];
+	int  result_length;
 
 	int num_rows;
 	int assert_fail = 0;
@@ -113,32 +117,28 @@ void poll_host(int host_id) {
 	char update_sql[BUFSIZE];
 	char temp_result[BUFSIZE];
 
-	int num_snmp_agents   = 0;
-	int last_snmp_version = 0;
-	int last_snmp_port    = 0;
+	int  num_snmp_agents   = 0;
+	int  last_snmp_version = 0;
+	int  last_snmp_port    = 0;
 	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
 
 	/* reindex shortcuts to speed polling */
 	int previous_assert_failure = FALSE;
-	int last_data_query_id = 0;
-	int perform_assert = TRUE;
-	int new_buffer = TRUE;
+	int last_data_query_id      = 0;
+	int perform_assert          = TRUE;
+	int new_buffer              = TRUE;
 
-	reindex_t *reindex;
-	host_t *host;
-	ping_t *ping;
-	target_t *poller_items;
+	reindex_t   *reindex;
+	host_t      *host;
+	ping_t      *ping;
+	target_t    *poller_items;
 	snmp_oids_t *snmp_oids;
 
-	MYSQL mysql;
+	MYSQL     mysql;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
-
-	#ifndef OLD_MYSQL   
-	mysql_thread_init();
-	#endif 
 
 	db_connect(set.dbdb, &mysql);
 	
@@ -146,25 +146,22 @@ void poll_host(int host_id) {
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
 		die("ERROR: Fatal malloc error: poller.c host struct!");
 	}
-	memset(host, 0, sizeof(host));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
 		die("ERROR: Fatal malloc error: poller.c ping struct!");
 	}
-	memset(ping, 0, sizeof(ping_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
 	}
-	memset(reindex, 0, sizeof(reindex_t));
 
 	if (!(sysUptime = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: poller.c sysUptime");
 	}
-	memset(sysUptime, 0, BUFSIZE);
+	sysUptime[0] = '\0';
 
 	/* single polling interval query for items */
-	snprintf(query1, sizeof(query1),
+	snprintf(query1, BUFSIZE,
 		"SELECT action, hostname, snmp_community, "
 			"snmp_version, snmp_username, snmp_password, "
 			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
@@ -174,7 +171,7 @@ void poll_host(int host_id) {
 		" ORDER BY snmp_port", host_id);
 
 	/* host structure for uptime checks */
-	snprintf(query2, sizeof(query2),
+	snprintf(query2, BUFSIZE,
 		"SELECT id, hostname, snmp_community, "
 			"snmp_username, snmp_password, snmp_version, "
 			"snmp_port, snmp_timeout, status, "
@@ -186,13 +183,13 @@ void poll_host(int host_id) {
 		" WHERE id=%i", host_id);
 
 	/* data query structure for reindex detection */
-	snprintf(query4, sizeof(query4),
+	snprintf(query4, BUFSIZE,
 		"SELECT data_query_id, action, op, assert_value, arg1"
 			" FROM poller_reindex"
 			" WHERE host_id=%i", host_id);
 
 	/* multiple polling interval query for items */
-	snprintf(query5, sizeof(query5),
+	snprintf(query5, BUFSIZE,
 		"SELECT action, hostname, snmp_community, snmp_version, "
 			"snmp_username, snmp_password, rrd_name, "
 			"rrd_path, arg1, arg2, arg3, local_data_id, "
@@ -202,32 +199,32 @@ void poll_host(int host_id) {
 		" ORDER by snmp_port", host_id);
 
 	/* query to setup the next polling interval in cacti */
-	snprintf(query6, sizeof(query6),
+	snprintf(query6, BUFSIZE,
 		"UPDATE poller_item"
 		" SET rrd_next_step=rrd_next_step-%i"
 		" WHERE host_id=%i", set.poller_interval, host_id);
 
 	/* query to setup the next polling interval in cacti */
-	snprintf(query7, sizeof(query7),
+	snprintf(query7, BUFSIZE,
 		"UPDATE poller_item"
 		" SET rrd_next_step=rrd_step-%i"
 		" WHERE rrd_next_step < 0 and host_id=%i",
 			set.poller_interval, host_id);
 			
 	/* query to add output records to the poller output table */
-	snprintf(query8, sizeof(query8),
+	snprintf(query8, BUFSIZE,
 		"INSERT INTO poller_output"
 		" (local_data_id, rrd_name, time, output) VALUES");
 
 	/* number of agent's count for single polling interval */
-	snprintf(query9, sizeof(query9),
+	snprintf(query9, BUFSIZE,
 		"SELECT snmp_port, count(snmp_port)"
 		" FROM poller_item"
 		" WHERE host_id=%i"
 		" GROUP BY snmp_port", host_id);
 
 	/* number of agent's count for multiple polling intervals */
-	snprintf(query10, sizeof(query10),
+	snprintf(query10, BUFSIZE,
 		"SELECT snmp_port, count(snmp_port)"
 		" FROM poller_item"
 		" WHERE host_id=%i"
@@ -238,294 +235,362 @@ void poll_host(int host_id) {
 	host_time = get_host_poll_time();
 
 	/* initialize the ping structure variables */
-	snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
-	snprintf(ping->ping_response, sizeof(ping->ping_response), "Ping not performed due to setting.");
-	snprintf(ping->snmp_status, sizeof(ping->snmp_status), "down");
-	snprintf(ping->snmp_response, sizeof(ping->snmp_response), "SNMP not performed due to setting or ping result");
+	snprintf(ping->ping_status,   50,            "down");
+	snprintf(ping->ping_response, SMALL_BUFSIZE, "Ping not performed due to setting.");
+	snprintf(ping->snmp_status,   50,            "down");
+	snprintf(ping->snmp_response, SMALL_BUFSIZE, "SNMP not performed due to setting or ping result");
 
+	/* if the host is a real host.  Note host_id=0 is not host based data source */
 	if (host_id) {
 		/* get data about this host */
-		result = db_query(&mysql, query2);
-		num_rows = (int)mysql_num_rows(result);
+		if (result = db_query(&mysql, query2)) {
+			num_rows = (int)mysql_num_rows(result);
 
-		if (num_rows != 1) {
-			CACTID_LOG(("Host[%i] ERROR: Unknown Host ID", host_id));
+			if (num_rows != 1) {
+				CACTID_LOG(("Host[%i] ERROR: Multiple Hosts with Host ID", host_id));
 
-			mysql_free_result(result);
-			#ifndef OLD_MYSQL   
-			mysql_thread_end();
-			#endif 
-			mysql_close(&mysql);
+				mysql_free_result(result);
+				mysql_close(&mysql);
 
-			return;
-		}
+				#ifndef OLD_MYSQL
+				mysql_thread_end();
+				#endif
 
-		row = mysql_fetch_row(result);
-
-		/* free the host result */
-		mysql_free_result(result);
-
-		/* populate host structure */
-		host->ignore_host = 0;
-		host->id = atoi(row[0]);
-
-		host->hostname[0] = '\0';
-		host->snmp_community[0] = '\0';
-		host->snmp_username[0] = '\0';
-		host->snmp_password[0] = '\0';
-
-		if (row[1] != NULL) STRNCOPY(host->hostname,       row[1]);
-		if (row[2] != NULL) STRNCOPY(host->snmp_community, row[2]);
-		if (row[3] != NULL) STRNCOPY(host->snmp_username,  row[3]);
-		if (row[4] != NULL) STRNCOPY(host->snmp_password,  row[4]);
-
-		host->snmp_version = atoi(row[5]);
-		host->snmp_port = atoi(row[6]);
-		host->snmp_timeout = atoi(row[7]);
-		host->status = atoi(row[8]);
-		host->status_event_count = atoi(row[9]);
-
-		STRNCOPY(host->status_fail_date, row[10]);
-		STRNCOPY(host->status_rec_date,  row[11]);
-
-		host->status_last_error[0] = '\0';
-
-		if (row[12] != NULL) STRNCOPY(host->status_last_error, row[12]);
-
-		host->min_time = atof(row[13]);
-		host->max_time = atof(row[14]);
-		host->cur_time = atof(row[15]);
-		host->avg_time = atof(row[16]);
-		host->total_polls = atoi(row[17]);
-		host->failed_polls = atoi(row[18]);
-		host->availability = atof(row[19]);
-
-		if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) || (host->snmp_version == 3)) {
-			host->snmp_session = snmp_host_init(host->id, host->hostname, host->snmp_version, host->snmp_community,
-									host->snmp_username, host->snmp_password, host->snmp_port, host->snmp_timeout);
-		}else{
-			host->snmp_session = NULL;
-		}
-
-		/* save snmp status data for future use */
-		last_snmp_port = host->snmp_port;
-		last_snmp_version = host->snmp_version;
-
-		STRNCOPY(last_snmp_community, host->snmp_community);
-		STRNCOPY(last_snmp_username, host->snmp_username);
-		STRNCOPY(last_snmp_password, host->snmp_password);
-
-		/* perform a check to see if the host is alive by polling it's SysDesc
-		 * if the host down from an snmp perspective, don't poll it.
-		 * function sets the ignore_host bit */
-		if ((set.availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
-			host->ignore_host = 0;
-			update_host_status(HOST_UP, host, ping, set.availability_method);
-
-			CACTID_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
-		}else{
-			if (ping_host(host, ping) == HOST_UP) {
-				host->ignore_host = 0;
-				update_host_status(HOST_UP, host, ping, set.availability_method);
-			}else{
-				host->ignore_host = 1;
-				update_host_status(HOST_DOWN, host, ping, set.availability_method);
+				return;
 			}
+
+			/* fetch the result */
+			row = mysql_fetch_row(result);
+
+			if (row) {
+				/* initialize variables first */
+				host->id                   = 0;
+				host->hostname[0]          = '\0';
+				host->snmp_community[0]    = '\0';
+				host->snmp_username[0]     = '\0';
+				host->snmp_password[0]     = '\0';
+				host->snmp_port            = 161;
+				host->snmp_version         = 1;
+				host->snmp_timeout         = 500;
+				host->snmp_port            = 161;
+				host->status               = HOST_UP;
+				host->status_event_count   = 0;
+				host->status_last_error[0] = '\0';
+				host->min_time             = 0;
+				host->max_time             = 0;
+				host->cur_time             = 0;
+				host->avg_time             = 0;
+				host->total_polls          = 0;
+				host->failed_polls         = 0;
+				host->availability         = 100;
+
+				/* populate host structure */
+				host->ignore_host = FALSE;
+				if (row[0] != NULL) host->id = atoi(row[0]);
+
+				if (row[1] != NULL) STRNCOPY(host->hostname,       row[1]);
+				if (row[2] != NULL) STRNCOPY(host->snmp_community, row[2]);
+				if (row[4] != NULL) STRNCOPY(host->snmp_password,  row[4]);
+				if (row[3] != NULL) STRNCOPY(host->snmp_username,  row[3]);
+
+				if (row[5] != NULL) host->snmp_version       = atoi(row[5]);
+				if (row[6] != NULL) host->snmp_port          = atoi(row[6]);
+				if (row[7] != NULL)	host->snmp_timeout       = atoi(row[7]);
+				if (row[8] != NULL) host->status             = atoi(row[8]);
+				if (row[9] != NULL) host->status_event_count = atoi(row[9]);
+
+				if (row[10] != NULL) STRNCOPY(host->status_fail_date, row[10]);
+				if (row[11] != NULL) STRNCOPY(host->status_rec_date,  row[11]);
+
+				if (row[12] != NULL) STRNCOPY(host->status_last_error, row[12]);
+
+				if (row[13] != NULL) host->min_time     = atof(row[13]);
+				if (row[14] != NULL) host->max_time     = atof(row[14]);
+				if (row[15] != NULL) host->cur_time     = atof(row[15]);
+				if (row[16] != NULL) host->avg_time     = atof(row[16]);
+				if (row[17] != NULL) host->total_polls  = atoi(row[17]);
+				if (row[18] != NULL) host->failed_polls = atoi(row[18]);
+				if (row[19] != NULL) host->availability = atof(row[19]);
+
+				/* free the host result */
+				mysql_free_result(result);
+
+				if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) || (host->snmp_version == 3)) {
+					host->snmp_session = snmp_host_init(host->id, host->hostname, host->snmp_version, host->snmp_community,
+											host->snmp_username, host->snmp_password, host->snmp_port, host->snmp_timeout);
+				}else{
+					host->snmp_session = NULL;
+				}
+
+				/* save snmp status data for future use */
+				last_snmp_port = host->snmp_port;
+				last_snmp_version = host->snmp_version;
+
+				STRNCOPY(last_snmp_community, host->snmp_community);
+				STRNCOPY(last_snmp_username, host->snmp_username);
+				STRNCOPY(last_snmp_password, host->snmp_password);
+
+				/* perform a check to see if the host is alive by polling it's SysDesc
+				 * if the host down from an snmp perspective, don't poll it.
+				 * function sets the ignore_host bit */
+				if ((set.availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
+					host->ignore_host = FALSE;
+					update_host_status(HOST_UP, host, ping, set.availability_method);
+
+					CACTID_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
+				}else{
+					if (ping_host(host, ping) == HOST_UP) {
+						host->ignore_host = FALSE;
+						update_host_status(HOST_UP, host, ping, set.availability_method);
+					}else{
+						host->ignore_host = FALSE;
+						update_host_status(HOST_DOWN, host, ping, set.availability_method);
+					}
+				}
+
+				/* update host table */
+				snprintf(update_sql, BUFSIZE, "UPDATE host "
+					"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+						" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+						" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+						" failed_polls='%i', availability='%.4f' "
+					"WHERE id='%i'",
+					host->status,
+					host->status_event_count,
+					host->status_fail_date,
+					host->status_rec_date,
+					host->status_last_error,
+					host->min_time,
+					host->max_time,
+					host->cur_time,
+					host->avg_time,
+					host->total_polls,
+					host->failed_polls,
+					host->availability,
+					host->id);
+
+				db_insert(&mysql, update_sql);
+			}else{
+				CACTID_LOG(("Host[%i] ERROR: Could MySQL Returned a Null Host Result", host->id));
+				num_rows = 0;
+				host->ignore_host = TRUE;
+			}
+		}else{
+			num_rows = 0;
+			host->ignore_host = TRUE;
 		}
-
-		/* update host table */
-		snprintf(update_sql, BUFSIZE, "update host set status='%i', status_event_count='%i', status_fail_date='%s', status_rec_date='%s', status_last_error='%s', min_time='%f', max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i', failed_polls='%i', availability='%.4f' where id='%i'",
-			host->status,
-			host->status_event_count,
-			host->status_fail_date,
-			host->status_rec_date,
-			host->status_last_error,
-			host->min_time,
-			host->max_time,
-			host->cur_time,
-			host->avg_time,
-			host->total_polls,
-			host->failed_polls,
-			host->availability,
-			host->id);
-
-		db_insert(&mysql, update_sql);
 	}else{
 		host->id = 0;
-		host->ignore_host = 0;
+		host->ignore_host = FALSE;
 	}
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		result = db_query(&mysql, query4);
-		num_rows = (int)mysql_num_rows(result);
+		if (result = db_query(&mysql, query4)) {
+			num_rows = (int)mysql_num_rows(result);
 
-		if (num_rows > 0) {
-			CACTID_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname));
+			if (num_rows > 0) {
+				CACTID_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname));
 
-			while ((row = mysql_fetch_row(result))) {
-				assert_fail = FALSE;
+				while ((row = mysql_fetch_row(result))) {
+					assert_fail = FALSE;
 
-				reindex->data_query_id = atoi(row[0]);
-				reindex->action = atoi(row[1]);
-				if (row[2] != NULL) snprintf(reindex->op,           sizeof(reindex->op),           "%s", row[2]);
-				if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
-				if (row[4] != NULL) snprintf(reindex->arg1,         sizeof(reindex->arg1),         "%s", row[4]);
+					/* initialize the reindex struction */
+					reindex->data_query_id   = 0;
+					reindex->action          = -1;
+					reindex->op[0]           = '\0';
+					reindex->assert_value[0] = '\0';
+					reindex->arg1[0]         = '\0';
 
-				/* shortcut assertion checks if a data query reindex has already been queued */
-				if ((last_data_query_id == reindex->data_query_id) &&
-					(!previous_assert_failure)) {
-					perform_assert = TRUE;
-				}else if (last_data_query_id != reindex->data_query_id) {
-					last_data_query_id = reindex->data_query_id;
-					perform_assert = TRUE;
-					previous_assert_failure = FALSE;
-				}else{
-					perform_assert = FALSE;
-				}
+					if (row[0] != NULL) reindex->data_query_id = atoi(row[0]);
+					if (row[1] != NULL) reindex->action        = atoi(row[1]);
 
-				if (perform_assert) {
-					switch(reindex->action) {
-					case POLLER_ACTION_SNMP: /* snmp */
-						/* check to see if you are checking uptime */
-						if (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")) {
-							if (strlen(sysUptime) > 0) {
-								if (!(poll_result = (char *) malloc(BUFSIZE))) {
-									die("ERROR: Fatal malloc error: poller.c poll_result");
+					if (row[2] != NULL) snprintf(reindex->op,           sizeof(reindex->op),           "%s", row[2]);
+					if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
+					if (row[4] != NULL) snprintf(reindex->arg1,         sizeof(reindex->arg1),         "%s", row[4]);
+
+					/* shortcut assertion checks if a data query reindex has already been queued */
+					if ((last_data_query_id == reindex->data_query_id) &&
+						(!previous_assert_failure)) {
+						perform_assert = TRUE;
+					}else if (last_data_query_id != reindex->data_query_id) {
+						last_data_query_id = reindex->data_query_id;
+						perform_assert = TRUE;
+						previous_assert_failure = FALSE;
+					}else{
+						perform_assert = FALSE;
+					}
+
+					if (perform_assert) {
+						switch(reindex->action) {
+						case POLLER_ACTION_SNMP: /* snmp */
+							/* check to see if you are checking uptime */
+							if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+								if (strlen(sysUptime) > 0) {
+									if (!(poll_result = (char *) malloc(BUFSIZE))) {
+										die("ERROR: Fatal malloc error: poller.c poll_result");
+									}
+									poll_result[0] = '\0';
+
+									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
+								}else{
+									poll_result = snmp_get(host, reindex->arg1);
+									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
 								}
-								memset(poll_result, 0, BUFSIZE);
-
-								snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 							}else{
 								poll_result = snmp_get(host, reindex->arg1);
-								snprintf(sysUptime, BUFSIZE, "%s", poll_result);
 							}
-						}else{
-							poll_result = snmp_get(host, reindex->arg1);
+							break;
+						case POLLER_ACTION_SCRIPT: /* script (popen) */
+							poll_result = exec_poll(host, reindex->arg1);
+							break;
+						default:
+							cacti_log("Host[%i] ERROR: Unknown Assert Action!\n", host->id);
+							poll_result = strdup("U");
 						}
-						break;
-					case POLLER_ACTION_SCRIPT: /* script (popen) */
-						poll_result = exec_poll(host, reindex->arg1);
-						break;
-					}
 
-					if (!(query3 = (char *)malloc(BUFSIZE))) {
-						die("ERROR: Fatal malloc error: poller.c reindex insert!");
-					}
-					memset(query3, 0, BUFSIZE);
-
-					/* assume ok if host is up and result wasn't obtained */
-					if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
-						assert_fail = FALSE;
-					}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
-						CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
-
-						snprintf(query3, BUFSIZE, "replace into poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-						db_insert(&mysql, query3);
-						assert_fail = TRUE;
-						previous_assert_failure = TRUE;
-					}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
-						CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
-
-						snprintf(query3, BUFSIZE, "replace into poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-						db_insert(&mysql, query3);
-						assert_fail = TRUE;
-						previous_assert_failure = TRUE;
-					}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-						CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
-
-						snprintf(query3, BUFSIZE, "replace into poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-						db_insert(&mysql, query3);
-						assert_fail = TRUE;
-						previous_assert_failure = TRUE;
-					}
-
-					/* update 'poller_reindex' with the correct information if:
-					 * 1) the assert fails
-					 * 2) the OP code is > or < meaning the current value could have changed without causing
-					 *     the assert to fail */
-					if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
-						snprintf(query3, 254, "update poller_reindex set assert_value='%s' where host_id='%i' and data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
-						db_insert(&mysql, query3);
-
-						if ((assert_fail) && (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0"))) {
-							spike_kill = TRUE;
-							CACTID_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
+						if (!(query3 = (char *)malloc(BUFSIZE))) {
+							die("ERROR: Fatal malloc error: poller.c reindex insert!");
 						}
-					}
+						query3[0] = '\0';
 
-					free(query3);
-					free(poll_result);
+						/* assume ok if host is up and result wasn't obtained */
+						if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+							assert_fail = FALSE;
+						}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
+							CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+
+							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+							db_insert(&mysql, query3);
+							assert_fail = TRUE;
+							previous_assert_failure = TRUE;
+						}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
+							CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+
+							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+							db_insert(&mysql, query3);
+							assert_fail = TRUE;
+							previous_assert_failure = TRUE;
+						}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
+							CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+
+							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+							db_insert(&mysql, query3);
+							assert_fail = TRUE;
+							previous_assert_failure = TRUE;
+						}
+
+						/* update 'poller_reindex' with the correct information if:
+						 * 1) the assert fails
+						 * 2) the OP code is > or < meaning the current value could have changed without causing
+						 *     the assert to fail */
+						if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
+							snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
+							db_insert(&mysql, query3);
+
+							if ((assert_fail) && (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0"))) {
+								spike_kill = TRUE;
+								CACTID_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
+							}
+						}
+
+						free(query3);
+						free(poll_result);
+					}
 				}
+			}else{
+				CACTID_LOG_HIGH(("Host[%i] Host has no information for recache.", host->id));
 			}
-		}
 
-		/* free the host result */
-		mysql_free_result(result);
+			/* free the host result */
+			mysql_free_result(result);
+		}else{
+			CACTID_LOG(("Host[%i] ERROR: Recache Query Returned Null Result!", host->id));
+		}
 	}
 
 	/* calculate the number of poller items to poll this cycle */
+	num_rows = 0;
 	if (set.poller_interval == 0) {
 		/* get the number of agents */
-		result = db_query(&mysql, query9);
-		num_snmp_agents = (int)mysql_num_rows(result);
-		mysql_free_result(result);
+		if (result = db_query(&mysql, query9)) {
+			num_snmp_agents = (int)mysql_num_rows(result);
+			mysql_free_result(result);
 
-		/* get the poller items */
-		result = db_query(&mysql, query1);
-		num_rows = (int)mysql_num_rows(result);
+			/* get the poller items */
+			if (result = db_query(&mysql, query1)) {
+				num_rows = (int)mysql_num_rows(result);
+			}else{
+				CACTID_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
+			}
+		}else{
+			CACTID_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
+		}
 	}else{
 		/* get the number of agents */
-		result = db_query(&mysql, query10);
-		num_snmp_agents = (int)mysql_num_rows(result);
-		mysql_free_result(result);
+		if (result = db_query(&mysql, query10)) {
+			num_snmp_agents = (int)mysql_num_rows(result);
+			mysql_free_result(result);
 
-		/* get the poller items */
-		result = db_query(&mysql, query5);
-		num_rows = (int)mysql_num_rows(result);
-		
-		/* update poller_items table for next polling interval */
-		db_query(&mysql, query6);
-		db_query(&mysql, query7);
+			/* get the poller items */
+			if (result = db_query(&mysql, query5)) {
+				num_rows = (int)mysql_num_rows(result);
+
+				/* update poller_items table for next polling interval */
+				db_query(&mysql, query6);
+				db_query(&mysql, query7);
+			}else{
+				CACTID_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
+			}
+		}else{
+			CACTID_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
+		}
 	}
 
 	if (num_rows > 0) {
 		/* retreive each hosts polling items from poller cache and load into array */
 		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
-		memset(poller_items, 0, sizeof(target_t)*num_rows);
 
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
 			/* initialize monitored object */
-			poller_items[i].target_id = 0;
-			poller_items[i].action = atoi(row[0]);
+			poller_items[i].target_id         = 0;
+			poller_items[i].action            = -1;
+			poller_items[i].hostname[0]       = '\0';
+			poller_items[i].snmp_community[0] = '\0';
+			poller_items[i].snmp_version      = 1;
+			poller_items[i].snmp_username[0]  = '\0';
+			poller_items[i].snmp_password[0]  = '\0';
+			poller_items[i].rrd_name[0]       = '\0';
+			poller_items[i].rrd_path[0]       = '\0';
+			poller_items[i].arg1[0]           = '\0';
+			poller_items[i].arg2[0]           = '\0';
+			poller_items[i].arg3[0]           = '\0';
+			poller_items[i].local_data_id     = 0;
+			poller_items[i].rrd_num           = 0;
+			poller_items[i].snmp_port         = 161;
+			poller_items[i].snmp_timeout      = 500;
 
-			if (row[1] != NULL) snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname), "%s", row[1]);
-			if (row[2] != NULL) {
-				snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community), "%s", row[2]);
-			}else{
-				poller_items[i].snmp_community[0] = '\0';
-			}
-			poller_items[i].snmp_version = atoi(row[3]);
-			if (row[4] != NULL) {
-				snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username), "%s", row[4]);
-			}else{
-				poller_items[i].snmp_username[0] = '\0';
-			}
-			if (row[5] != NULL) {
-				snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password), "%s", row[5]);
-			}else{
-				poller_items[i].snmp_password[0] = '\0';
-			}
-			if (row[6] != NULL) snprintf(poller_items[i].rrd_name, sizeof(poller_items[i].rrd_name), "%s", row[6]);
-			if (row[7] != NULL) snprintf(poller_items[i].rrd_path, sizeof(poller_items[i].rrd_path), "%s", row[7]);
-			if (row[8] != NULL) snprintf(poller_items[i].arg1, sizeof(poller_items[i].arg1), "%s", row[8]);
-			if (row[9] != NULL) snprintf(poller_items[i].arg2, sizeof(poller_items[i].arg2), "%s", row[9]);
-			if (row[10] != NULL) snprintf(poller_items[i].arg3, sizeof(poller_items[i].arg3), "%s", row[10]);
-			poller_items[i].local_data_id = atoi(row[11]);
-			poller_items[i].rrd_num = atoi(row[12]);
-			poller_items[i].snmp_port = atoi(row[13]);
-			poller_items[i].snmp_timeout = atoi(row[14]);
+			if (row[0] != NULL)  poller_items[i].action = atoi(row[0]);
+
+			if (row[1] != NULL)  snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname), "%s", row[1]);
+			if (row[2] != NULL)  snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community), "%s", row[2]);
+
+			if (row[3] != NULL)  poller_items[i].snmp_version = atoi(row[3]);
+
+			if (row[4] != NULL)  snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username), "%s", row[4]);
+			if (row[5] != NULL)  snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password), "%s", row[5]);
+			if (row[6]  != NULL) snprintf(poller_items[i].rrd_name,      sizeof(poller_items[i].rrd_name),      "%s", row[6]);
+			if (row[7]  != NULL) snprintf(poller_items[i].rrd_path,      sizeof(poller_items[i].rrd_path),      "%s", row[7]);
+			if (row[8]  != NULL) snprintf(poller_items[i].arg1,          sizeof(poller_items[i].arg1),          "%s", row[8]);
+			if (row[9]  != NULL) snprintf(poller_items[i].arg2,          sizeof(poller_items[i].arg2),          "%s", row[9]);
+			if (row[10] != NULL) snprintf(poller_items[i].arg3,          sizeof(poller_items[i].arg3),          "%s", row[10]);
+
+			if (row[11] != NULL) poller_items[i].local_data_id = atoi(row[11]);
+			if (row[12] != NULL) poller_items[i].rrd_num       = atoi(row[12]);
+			if (row[13] != NULL) poller_items[i].snmp_port     = atoi(row[13]);
+			if (row[14] != NULL) poller_items[i].snmp_timeout  = atoi(row[14]);
+
 			SET_UNDEFINED(poller_items[i].result);
 
 			if (poller_items[i].action == POLLER_ACTION_SNMP) {
@@ -535,9 +600,11 @@ void poll_host(int host_id) {
 			i++;
 		}
 
+		/* free the mysql result */
+		mysql_free_result(result);
+
 		/* create an array for snmp oids */
 		snmp_oids = (snmp_oids_t *) calloc(set.snmp_max_get_size, sizeof(snmp_oids_t));
-		memset(snmp_oids, 0, sizeof(snmp_oids_t)*set.snmp_max_get_size);
 
 		i = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
@@ -545,13 +612,13 @@ void poll_host(int host_id) {
 				switch(poller_items[i].action) {
 				case POLLER_ACTION_SNMP: /* raw SNMP poll */
 					/* initialize or reinitialize snmp as required */
-					if (host->snmp_session == NULL) {
+					if (!host->snmp_session) {
 						last_snmp_port = poller_items[i].snmp_port;
 						last_snmp_version = poller_items[i].snmp_version;
 
 						STRNCOPY(last_snmp_community, poller_items[i].snmp_community);
-						STRNCOPY(last_snmp_username, poller_items[i].snmp_username);
-						STRNCOPY(last_snmp_password, poller_items[i].snmp_password);
+						STRNCOPY(last_snmp_username,  poller_items[i].snmp_username);
+						STRNCOPY(last_snmp_password,  poller_items[i].snmp_password);
 
 						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
 												poller_items[i].snmp_community,poller_items[i].snmp_username,
@@ -559,8 +626,8 @@ void poll_host(int host_id) {
 					}
 				
 					/* catch snmp initialization issues */
-					if (host->snmp_session == NULL) {
-						host->ignore_host = 1;
+					if (!host->snmp_session) {
+						host->ignore_host = TRUE;
 						break;
 					}
 				
@@ -581,11 +648,11 @@ void poll_host(int host_id) {
 								}else {
 									/* remove double or single quotes from string */
 									snprintf(temp_result, BUFSIZE, "%s", strip_quotes(snmp_oids[j].result));
-									snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result), "%s", strip_alpha(temp_result));
+									snprintf(snmp_oids[j].result, BUFSIZE, "%s", strip_alpha(temp_result));
 								
 									/* detect erroneous non-numeric result */
 									if (!validate_result(snmp_oids[j].result)) {
-										snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
+										snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
 										CACTID_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
 										SET_UNDEFINED(snmp_oids[j].result);
 									}
@@ -596,8 +663,7 @@ void poll_host(int host_id) {
 								CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
 
-							/* clear snmp_oid's memory and reset num_snmps */
-							memset(snmp_oids, 0, sizeof(snmp_oids_t)*set.snmp_max_get_size);
+							/* reset num_snmps */
 							num_oids = 0;
 						}
 					
@@ -624,17 +690,17 @@ void poll_host(int host_id) {
 							}else {
 								/* remove double or single quotes from string */
 								snprintf(temp_result, BUFSIZE, "%s", strip_quotes(snmp_oids[j].result));
-								snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result), "%s", strip_alpha(temp_result));
+								snprintf(snmp_oids[j].result, BUFSIZE, "%s", strip_alpha(temp_result));
 
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
-									snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
+									snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
 									CACTID_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
 									SET_UNDEFINED(snmp_oids[j].result);
 								}
 							}
 
-							snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
+							snprintf(poller_items[snmp_oids[j].array_position].result, BUFSIZE, "%s", snmp_oids[j].result);
 							
 							CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
@@ -646,8 +712,7 @@ void poll_host(int host_id) {
 							}
 						}
 
-						/* clear snmp_oid's memory and reset num_snmps */
-						memset(snmp_oids, 0, sizeof(snmp_oids_t)*set.snmp_max_get_size);
+						/* reset num_snmps */
 						num_oids = 0;
 					}
 						
@@ -761,21 +826,27 @@ void poll_host(int host_id) {
 		}
 		query3[0] = '\0';
 
-		strncat(query3, query8, sizeof(query8));
+		strncat(query3, query8, strlen(query8));
 		out_buffer = strlen(query3);
 
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, sizeof(result_string), " (%i,'%s','%s','%s')", poller_items[i].local_data_id, poller_items[i].rrd_name, host_time, poller_items[i].result);
+			snprintf(result_string, BUFSIZE, " (%i,'%s','%s','%s')",
+				poller_items[i].local_data_id,
+				poller_items[i].rrd_name,
+				host_time,
+				poller_items[i].result);
 			
+			result_length = strlen(result_string);
+
 			/* if the next element to the buffer will overflow it, write to the database */
-			if ((out_buffer + strlen(result_string)) >= MAX_MYSQL_BUF_SIZE) {
+			if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
 				/* insert the record */
 				db_insert(&mysql, query3);
 
 				/* re-initialize the query buffer */
 				query3[0] = '\0';
-				strncat(query3, query8, sizeof(query8));
+				strncat(query3, query8, strlen(query8));
 
 				/* reset the output buffer length */
 				out_buffer = strlen(query3);
@@ -791,8 +862,8 @@ void poll_host(int host_id) {
 				result_string[0] = ',';
 			}
 							
-			out_buffer = out_buffer + strlen(result_string);
 			strncat(query3, result_string, strlen(result_string));
+			out_buffer = out_buffer + strlen(result_string);
 			new_buffer = FALSE;
 			i++;
 		}
@@ -819,13 +890,11 @@ void poll_host(int host_id) {
 	free(sysUptime);
 	free(ping);
 
-	mysql_free_result(result);
-
-	#ifndef OLD_MYSQL   
-	mysql_thread_end();
-	#endif 
-
 	mysql_close(&mysql);
+
+	#ifndef OLD_MYSQL
+	mysql_thread_end();
+	#endif
 
 	CACTID_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function\n", host_id));
 }
@@ -845,31 +914,31 @@ int validate_result(char *result) {
 	int delim_cnt = 0;
 	int i;
 
-	/* check the easy case first */
-	if (is_numeric(result)) {
-		return TRUE;
-	}else{
-		/* it must have delimiters */
-		if (((strstr(result, ":") != 0) || (strstr(result, "!") != 0))) {
-			if (strstr(result, " ") == 0) {
-				return TRUE;
-			}
-
-			if (strstr(result, " ") != 0) {
-				const int len = strlen(result);
-
-				for(i=0; i<len; i++) {
-					if ((result[i] == ':') || (result[i] == '!')) {
-						delim_cnt = delim_cnt + 1;
-					}else if (result[i] == ' ') {
-						space_cnt = space_cnt + 1;
-					}
-				}
-
-				if (space_cnt+1 == delim_cnt) {
+	/* check the easy cases first */
+	if (result) {
+		if (is_numeric(result)) {
+			return TRUE;
+		}else{
+			/* it must have delimiters */
+			if ((strstr(result, ":")) || (strstr(result, "!"))) {
+				if (!strstr(result, " ")) {
 					return TRUE;
 				}else{
-					return FALSE;
+					const int len = strlen(result);
+
+					for(i=0; i<len; i++) {
+						if ((result[i] == ':') || (result[i] == '!')) {
+							delim_cnt = delim_cnt + 1;
+						}else if (result[i] == ' ') {
+							space_cnt = space_cnt + 1;
+						}
+					}
+
+					if (space_cnt+1 == delim_cnt) {
+						return TRUE;
+					}else{
+						return FALSE;
+					}
 				}
 			}
 		}
@@ -895,7 +964,6 @@ char *exec_poll(host_t *current_host, char *command) {
 	FILE *fd;
 	int bytes_read;
 	fd_set fds;
-	int numfds;
 	double begin_time = 0;
 	double end_time = 0;
 	struct timeval timeout;
@@ -905,7 +973,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: poller.c exec_poll!");
 	}
-	memset(result_string, 0, BUFSIZE);
+	result_string[0] = '\0';
 
 	/* establish timeout of 25 seconds for pipe response */
 	timeout.tv_sec = set.script_timeout;
@@ -917,9 +985,9 @@ char *exec_poll(host_t *current_host, char *command) {
 	/* record start time */
 	begin_time = get_time_as_double();
 
-	/* don't run too many scripts, cactid does not like that. */
-	thread_mutex_lock(LOCK_PIPE);
+	/* don't run too many scripts, operating systems do not like that. */
 	while (1) {
+		thread_mutex_lock(LOCK_PIPE);
 		if (active_scripts > MAX_SIMULTANEOUS_SCRIPTS) {
 			thread_mutex_unlock(LOCK_PIPE);
 			usleep(50000);
@@ -946,11 +1014,9 @@ char *exec_poll(host_t *current_host, char *command) {
 		FD_ZERO(&fds);
 		FD_SET(cmd_fd,&fds);
 
-		numfds = cmd_fd + 1;
-
 		/* wait x seonds for pipe response */
 		retry:
-		switch (select(numfds, &fds, NULL, NULL, &timeout)) {
+		switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {
 			case EBADF:

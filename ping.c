@@ -71,8 +71,8 @@ int ping_host(host_t *host, ping_t *ping) {
 				ping_result = ping_udp(host, ping);
 			}
 		}else{
-			snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "0.000");
-			snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "PING: Host does not require ping");
+			snprintf(ping->ping_status, 50, "0.000");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Host does not require ping");
 			ping_result = HOST_UP;
 		}
 	}
@@ -173,19 +173,19 @@ int ping_snmp(host_t *host, ping_t *ping) {
 				num_oids_checked++;
 				goto retry;
 			}else{
-				snprintf(ping->snmp_response, sizeof(ping->snmp_response), "Host did not respond to SNMP");
+				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host did not respond to SNMP");
 				free(poll_result);
 				return HOST_DOWN;
 			}
 		}else{
-			snprintf(ping->snmp_response, sizeof(ping->snmp_response), "Host responded to SNMP");
-			snprintf(ping->snmp_status, sizeof(ping->snmp_status), "%.5f", total_time);
+			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host responded to SNMP");
+			snprintf(ping->snmp_status, 50, "%.5f", total_time);
 			free(poll_result);
 			return HOST_UP;
 		}
 	}else{
-		snprintf(ping->snmp_status, sizeof(ping->snmp_status), "0.00");
-		snprintf(ping->snmp_response, sizeof(ping->snmp_response), "Host does not require SNMP");
+		snprintf(ping->snmp_status, 50, "0.00");
+		snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host does not require SNMP");
 		return HOST_UP;
 	}
 }
@@ -259,8 +259,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
 		/* initialize variables */
-		snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
-		snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "default");
+		snprintf(ping->ping_status, 50, "down");
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* set the socket timeout */
 		setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -275,8 +275,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 			while (1) {
 				if (retry_count >= set.ping_retries) {
-					snprintf(ping->ping_response, sizeof(ping->ping_response)-1, "ICMP: Ping timed out");
-					snprintf(ping->ping_status, sizeof(ping->ping_status)-1, "down");
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
+					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
 					free(packet);
 					close(icmp_socket);
@@ -309,8 +309,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 					if (total_time < set.ping_timeout) {
-						snprintf(ping->ping_response, sizeof(ping->ping_response), "ICMP: Host is Alive");
-						snprintf(ping->ping_status, sizeof(ping->ping_status), "%.5f", total_time);
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
 						free(packet);
 						close(icmp_socket);
@@ -324,16 +324,16 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				#endif
 			}
 		}else{
-			snprintf(ping->ping_response, sizeof(ping->ping_response), "ICMP: Destination hostname invalid");
-			snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
+			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
 			free(packet);
 			close(icmp_socket);
 			return HOST_DOWN;
 		}
 	}else{
-		snprintf(ping->ping_response, sizeof(ping->ping_response), "ICMP: Destination address not specified");
-		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
+		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
 		free(packet);
   		if (icmp_socket != -1) close(icmp_socket);
@@ -380,8 +380,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && (udp_socket != -1)) {
 		/* initialize variables */
-		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
-		snprintf(ping->ping_response, sizeof(ping->ping_response), "default");
+		snprintf(ping->ping_status, 50, "down");
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* set the socket timeout */
 		setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -389,8 +389,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 		/* get address of hostname */
 		if (init_sockaddr(&servername, new_hostname, 33439)) {
 			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
-				snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
-				snprintf(ping->ping_response, sizeof(ping->ping_response), "UDP: Cannot connect to host");
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Cannot connect to host");
 				free(new_hostname);
 				close(udp_socket);
 				return HOST_DOWN;
@@ -408,8 +408,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			while (1) {
 				if (retry_count >= set.ping_retries) {
-					snprintf(ping->ping_response, sizeof(ping->ping_response), "UDP: Ping timed out");
-					snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
+					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
 					close(udp_socket);
 					return HOST_DOWN;
@@ -441,8 +441,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 					if (total_time <= set.ping_timeout) {
-						snprintf(ping->ping_response, sizeof(ping->ping_response), "UDP: Host is Alive");
-						snprintf(ping->ping_status, sizeof(ping->ping_status), "%.5f", total_time);
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
 						close(udp_socket);
 						return HOST_UP;
@@ -455,15 +455,15 @@ int ping_udp(host_t *host, ping_t *ping) {
 				#endif
 			}
 		}else{
-			snprintf(ping->ping_response, sizeof(ping->ping_response), "UDP: Destination hostname invalid");
-			snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
+			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
 			close(udp_socket);
 			return HOST_DOWN;
 		}
 	}else{
-		snprintf(ping->ping_response, sizeof(ping->ping_response), "UDP: Destination address invalid or unable to create socket");
-		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
+		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
 		if (udp_socket != -1) close(udp_socket);
 		return HOST_DOWN;
@@ -486,7 +486,9 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	/* retry 3 times to contact host */
 	i = 0;
 	while (1) {
+		thread_mutex_lock(LOCK_GHBN);
 		hostinfo = gethostbyname(hostname);
+		thread_mutex_unlock(LOCK_GHBN);
 		if (hostinfo == NULL) {
 			CACTID_LOG(("WARNING: Unknown host %s\n", hostname));
 
@@ -583,7 +585,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
-	strftime(current_date, sizeof(current_date), "%Y-%m-%d %H:%M", now_ptr);
+	strftime(current_date, 40, "%Y-%m-%d %H:%M", now_ptr);
 
 	/* host is down */
 	if (status == HOST_DOWN) {
@@ -596,20 +598,20 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		switch (availability_method) {
 		case AVAIL_SNMP_AND_PING:
 			if (strlen(host->snmp_community) == 0) {
-				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
+				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
 			}else {
-				snprintf(host->status_last_error, sizeof(host->status_last_error),"%s, %s",ping->snmp_response,ping->ping_response);
+				snprintf(host->status_last_error, SMALL_BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
 			if (strlen(host->snmp_community) == 0) {
-				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", "Device does not require SNMP");
+				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", "Device does not require SNMP");
 			}else {
-				snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->snmp_response);
+				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->snmp_response);
 			}
 			break;
 		default:
-			snprintf(host->status_last_error, sizeof(host->status_last_error), "%s", ping->ping_response);
+			snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
 		}
 
 		/* determine if to send an alert and update remainder of statistics */
@@ -626,13 +628,13 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 				/* update the failure date only if the failure count is 1 */
 				if (set.ping_failure_count == 1) {
-					snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", current_date);
+					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			/* host is down, but not ready to issue log message */
 			}else{
 				/* host down for the first time, set event date */
 				if (host->status_event_count == 1) {
-					snprintf(host->status_fail_date, sizeof(host->status_fail_date), "%s", current_date);
+					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			}
 		/* host is recovering, put back in failed state */
@@ -705,7 +707,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 				/* update the recovery date only if the recovery count is 1 */
 				if (set.ping_recovery_count == 1) {
-					snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", current_date);
+					snprintf(host->status_rec_date, 40, "%s", current_date);
 				}
 
 				/* reset the event counter */
@@ -714,7 +716,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			}else{
 				/* host recovering for the first time, set event date */
 				if (host->status_event_count == 1) {
-					snprintf(host->status_rec_date, sizeof(host->status_rec_date), "%s", current_date);
+					snprintf(host->status_rec_date, 40, "%s", current_date);
 				}
 			}
 		}else{

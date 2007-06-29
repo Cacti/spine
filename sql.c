@@ -46,8 +46,6 @@
  *
  */
 int db_insert(MYSQL *mysql, const char *query) {
-	static int queryid = 0;
-
 	int    error;
 	int    error_count = 0;
 	char   query_frag[BUFSIZE];
@@ -60,7 +58,6 @@ int db_insert(MYSQL *mysql, const char *query) {
 		CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
 	}
 	
-	queryid++;
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
 			if (mysql_query(mysql, query)) {
@@ -81,7 +78,6 @@ int db_insert(MYSQL *mysql, const char *query) {
 					return FALSE;
 				}
 			}else{
-				queryid++;
 				return TRUE;
 			}
 		}else{
@@ -102,9 +98,10 @@ int db_insert(MYSQL *mysql, const char *query) {
  */
 MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 	MYSQL_RES  *mysql_res = 0;
-	static int queryid = 0;
-	int    error = 0;
+
+	int    error       = 0;
 	int    error_count = 0;
+	
 	char   query_frag[BUFSIZE];
 
 	/* save a fragment just in case */
@@ -113,8 +110,6 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 	/* show the sql query */
 	CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
 	
-	queryid++;
-
 	while (1) {
 		if (mysql_query(mysql, query)) {
 			error = mysql_errno(mysql);
@@ -132,10 +127,10 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				}
 
 				continue;
-			}		
-		}else{
-			CACTID_LOG_DEBUG(("DEBUG: MySQL Query ID '%i': OK\n", queryid));
+			}
 
+			break;
+		}else{
 			mysql_res = mysql_store_result(mysql);
 
 			return mysql_res;
@@ -154,7 +149,6 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
  *
  */
 void db_connect(const char *database, MYSQL *mysql) {
-	MYSQL  *db;
 	int    tries;
 	int    timeout;
 	int    options_error;
@@ -175,13 +169,13 @@ void db_connect(const char *database, MYSQL *mysql) {
 	success = FALSE;
 	timeout = 5;
 
-	if (set.log_level == 5) {
+	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		printf("CACTD: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
-	db = mysql_init(mysql);
-	if (db == NULL) {
+	mysql_init(mysql);
+	if (mysql == NULL) {
 		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
 	}
 
@@ -197,7 +191,9 @@ void db_connect(const char *database, MYSQL *mysql) {
 
 			success = FALSE;
 		}else{
-			CACTID_LOG_DEBUG(("DEBUG: MYSQL: Connected to MySQL database '%s' on '%s'...\n", database, set.dbhost));
+			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+				printf("DEBUG: MYSQL: Connected to MySQL database '%s' on '%s'\n", database, set.dbhost);
+			}
 			tries   = 0;
 			success = TRUE;
 		}

@@ -169,7 +169,7 @@ void read_config_options() {
 
 	/* determine script server path operation and default log file processing */
 	if ((res = getsetting(&mysql, "path_webroot")) != 0 ) {
-		snprintf(set.path_php_server, sizeof(set.path_php_server), "%s/script_server.php", res);
+		snprintf(set.path_php_server, SMALL_BUFSIZE, "%s/script_server.php", res);
 		snprintf(web_root, BUFSIZE, "%s", res);
 	}
 
@@ -181,7 +181,7 @@ void read_config_options() {
 			if (strlen(web_root) != 0) {
 				snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
 			}else{
-				memset(set.path_logfile, 0, SMALL_BUFSIZE);
+				set.path_logfile[0] ='\0';
 			}
 		}
 	}else{
@@ -520,8 +520,8 @@ int cacti_log(const char *format, ...) {
 	struct tm *now_ptr;
 
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
-	char ulogmessage[LOGSIZE];	/* Un-Formatted Log Message */
-	char flogmessage[LOGSIZE];	/* Formatted Log Message */
+	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
+	char flogmessage[LOGSIZE];     /* Formatted Log Message */
 
 	va_start(args, format);
 	vsprintf(ulogmessage, format, args);
@@ -543,18 +543,8 @@ int cacti_log(const char *format, ...) {
 		return TRUE;
 	}
 
-	if (IS_LOGGING_TO_FILE() && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
-		if (set.logfile_processed) {
-			if (!file_exists(set.path_logfile)) {
-				log_file = fopen(set.path_logfile, "w");
-			}else {
-				log_file = fopen(set.path_logfile, "a");
-			}
-		}
-	}
-
 	/* get time for poller_output table */
-	time(&nowbin);
+	nowbin = time(&nowbin);
 
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
@@ -575,12 +565,20 @@ int cacti_log(const char *format, ...) {
 		}
 	}
 
-	strncat(flogmessage, logprefix, strlen(logprefix));
-	strncat(flogmessage, ulogmessage, strlen(ulogmessage));
+	strncat(flogmessage, logprefix,   sizeof(flogmessage)-1);
+	strncat(flogmessage, ulogmessage, sizeof(flogmessage)-1);
 
-	if (log_file) {
-		fputs(flogmessage, log_file);
-		fclose(log_file);
+	if (IS_LOGGING_TO_FILE() && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
+		if (set.logfile_processed) {
+			if (!file_exists(set.path_logfile)) {
+				log_file = fopen(set.path_logfile, "w");
+			}else {
+				log_file = fopen(set.path_logfile, "a");
+			}
+
+			fputs(flogmessage, log_file);
+			fclose(log_file);
+		}
 	}
 
 	/* output to syslog/eventlog */
@@ -613,8 +611,6 @@ int cacti_log(const char *format, ...) {
 			fp = stderr;
 			#endif
 		}
-
-		snprintf(flogmessage, LOGSIZE, "CACTID: %s", ulogmessage);
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */
@@ -765,7 +761,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	if (!(return_str = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: util.c add_slashes!");
 	}
-	memset(return_str, 0, BUFSIZE);
+	return_str[0] = '\0';
 
 	length = strlen(string);
 	space_count = 0;
@@ -898,9 +894,19 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	assert(dst != 0);
 	assert(src != 0);
 
-	strncpy(dst, src, --obuf);
+	int len;
 
-	dst[obuf] = '\0';
+	len = strlen(src);
+
+	if (!len) {
+		dst[0] = '\0';
+	}else if (len < obuf) {
+		strncpy(dst, src, len);
+		dst[len] = '\0';
+	}else{
+		strncpy(dst, src, --obuf);
+		dst[obuf] = '\0';
+	}
 
 	return dst;
 }
@@ -934,7 +940,7 @@ char *get_host_poll_time() {
 	if (!(host_time = (char *) malloc(HOST_TIME_STRING_LEN))) {
 		die("ERROR: Fatal malloc error: util.c host_time");
 	}
-	memset(host_time, 0, HOST_TIME_STRING_LEN);
+	host_time[0] = '\0';
 
 	/* get time for poller_output table */
 	if (time(&nowbin) == (time_t) - 1) {
