@@ -107,7 +107,7 @@ AC_CHECK_FUNCS(malloc calloc gettimeofday strerror strtoll)
 # ****************** MySQL Checks ***********************
 
 AC_DEFUN([MYSQL_LIB_CHK],
-  [ str="$1/libmysqlclient.*"
+  [ str="$1/libmysqlclient_r.*"
     for j in `echo $str`; do
       if test -r $j; then
         MYSQL_LIB_DIR=$1
@@ -118,10 +118,10 @@ AC_DEFUN([MYSQL_LIB_CHK],
 )
 
 # Determine MySQL installation paths
-for i in $MYSQL_DIR /usr/local /usr /opt /opt/mysql /usr/pkg /usr/local/mysql; do
-  test -f $i/include/mysql.h                    && MYSQL_INC_DIR=$i/include
-  test -f $i/include/mysql/mysql.h              && MYSQL_INC_DIR=$i/include/mysql
-  test -f $i/mysql/include/mysql.h              && MYSQL_INC_DIR=$i/mysql/include
+for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
+  test -f $i/include/mysql.h        && MYSQL_INC_DIR=$i/include        && break
+  test -f $i/include/mysql/mysql.h  && MYSQL_INC_DIR=$i/include/mysql  && break
+  test -f $i/mysql/include/mysql.h  && MYSQL_INC_DIR=$i/mysql/include  && break
 done
 
 if test -z "$MYSQL_INC_DIR"; then
@@ -132,7 +132,7 @@ if test -z "$MYSQL_INC_DIR"; then
   fi
 fi
 
-for i in $MYSQL_DIR /usr/local /usr /opt /opt/mysql /usr/pkg /usr/local/mysql; do
+for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
   MYSQL_LIB_CHK($i/lib)
   MYSQL_LIB_CHK($i/lib64)
   MYSQL_LIB_CHK($i/lib/mysql)
@@ -142,11 +142,11 @@ done
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_CHECK_LIB(mysqlclient,mysql_init, LIBS="-lmysqlclient $LIBS",
+AC_CHECK_LIB(mysqlclient_r,mysql_init, LIBS="-lmysqlclient_r $LIBS",
   AC_MSG_ERROR([MySQL libraries not found.])
 )
 
-AC_CHECK_LIB(mysqlclient,mysql_thread_init,[],
+AC_CHECK_LIB(mysqlclient_r,mysql_thread_init,[],
   AC_DEFINE(OLD_MYSQL,1,[Old MySQL version])
 )
 
@@ -171,25 +171,25 @@ if test "x$SNMP_DIR" != "x"; then
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
 else
   for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
-    test -f $i/snmp.h                       && SNMP_INCDIR=$i && break
-    test -f $i/ucd-snmp/snmp.h              && SNMP_INCDIR=$i/ucd-snmp && break
-    test -f $i/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/include/net-snmp && break
-    test -f $i/net-snmp/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp && break
-    test -f $i/net-snmp/include/net-snmp-config.h   && SNMP_INCDIR=$i/net-snmp/include && break
-    test -f $i/snmp/snmp.h                  && SNMP_INCDIR=$i/snmp && break
-    test -f $i/snmp/include/ucd-snmp/snmp.h && SNMP_INCDIR=$i/snmp/include/ucd-snmp && break
+    test -f $i/snmp.h                                  && SNMP_INCDIR=$i                       && break
+    test -f $i/ucd-snmp/snmp.h                         && SNMP_INCDIR=$i/ucd-snmp              && break
+    test -f $i/include/net-snmp/net-snmp-config.h      && SNMP_INCDIR=$i/include/net-snmp      && break
+    test -f $i/net-snmp/net-snmp-config.h              && SNMP_INCDIR=$i/net-snmp              && break
+    test -f $i/net-snmp/include/net-snmp-config.h      && SNMP_INCDIR=$i/net-snmp/include      && break
+    test -f $i/snmp/snmp.h                             && SNMP_INCDIR=$i/snmp                  && break
+    test -f $i/snmp/include/ucd-snmp/snmp.h            && SNMP_INCDIR=$i/snmp/include/ucd-snmp && break
     test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp && break
   done
 
   # Accomodate 32-Bit Libraries
-  for i in /usr /usr/local /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/snmp /usr/local /usr/local/snmp; do
-    test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so && SNMP_LIBDIR=$i/lib && break
+  for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
+    test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so       && SNMP_LIBDIR=$i/lib && break
     test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib && break
   done
 
   # Accomodate 64-Bit Libraries
-  for i in /usr /usr/local /usr/pkg /usr/snmp /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local /usr/local/snmp; do
-    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so && SNMP_LIBDIR=$i/lib64 && break
+  for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
+    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so       && SNMP_LIBDIR=$i/lib64 && break
     test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64 && break
   done
 fi
