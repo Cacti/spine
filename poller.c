@@ -445,7 +445,7 @@ void poll_host(int host_id) {
 							poll_result = exec_poll(host, reindex->arg1);
 							break;
 						default:
-							cacti_log("Host[%i] ERROR: Unknown Assert Action!\n", host->id);
+							CACTID_LOG(("Host[%i] ERROR: Unknown Assert Action!\n", host->id));
 							poll_result = strdup("U");
 						}
 
