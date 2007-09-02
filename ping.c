@@ -53,8 +53,10 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	/* icmp/udp ping test */
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
-		/* test for asroot */
+		/* set and then test for asroot */
 		#ifndef __CYGWIN__
+		seteuid(0);
+
 		if (geteuid() != 0) {
 			set.ping_method = PING_UDP;
 			CACTID_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n"));
@@ -64,8 +66,10 @@ int ping_host(host_t *host, ping_t *ping) {
 		if (!strstr(host->hostname, "localhost")) {
 			if (set.ping_method == PING_ICMP) {
 				ping_result = ping_icmp(host, ping);
+
+				/* give up root privileges */
 				#ifndef __CYGWIN__
-				setuid(getuid());
+				seteuid(getuid());
 				#endif
 			}else if (set.ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);

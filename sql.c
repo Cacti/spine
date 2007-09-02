@@ -155,12 +155,21 @@ void db_connect(const char *database, MYSQL *mysql) {
 	int    success;
 	char   *hostname;
 	char   *socket;
+	struct stat socket_stat;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
 		die("FATAL: malloc(): strdup() failed");
 	}
 
-	if ((socket = strstr(hostname,":"))) {
+	/* see if the hostname variable is a file reference.  If so,
+	 * and if it is a socket file, setup mysql to use it.
+	 */
+	if (stat(hostname, &socket_stat) == 0) {
+		if (socket_stat.st_mode && S_IFSOCK) {
+			socket = strdup (set.dbhost);
+			hostname = NULL;
+		}
+	}else if ((socket = strstr(hostname,":"))) {
 		*socket++ = 0x0;
 	}
 
@@ -170,7 +179,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	timeout = 5;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		printf("CACTD: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+		printf("CACTID: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
