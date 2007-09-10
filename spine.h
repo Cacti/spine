@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -30,8 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#ifndef _CACTID_H_
-#define _CACTID_H_
+#ifndef _SPINE_H_
+#define _SPINE_H_
 
 /* Defines */
 #ifndef FALSE
@@ -79,7 +80,7 @@
  * rely on the fact that putting parens around something turn multiple params
  * into one:
  *
- *	CACTID_LOG_DEBUG(("n=%d string=%s foo=%f", n, string, foo));
+ *	SPINE_LOG_DEBUG(("n=%d string=%s foo=%f", n, string, foo));
  *
  * This macros has *one* parameter:
  *
@@ -109,11 +110,11 @@
  * The (void) prefix is to forestall compiler warnings about expressions
  * not being used.
  */
-#define CACTID_LOG(format_and_args)        (cacti_log format_and_args)
-#define CACTID_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && cacti_log format_and_args)
-#define CACTID_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && cacti_log format_and_args)
-#define CACTID_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && cacti_log format_and_args)
-#define CACTID_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && cacti_log format_and_args)
+#define SPINE_LOG(format_and_args)        (cacti_log format_and_args)
+#define SPINE_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && cacti_log format_and_args)
+#define SPINE_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && cacti_log format_and_args)
+#define SPINE_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && cacti_log format_and_args)
+#define SPINE_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && cacti_log format_and_args)
 
 /* general constants */
 #define MAX_THREADS 100
@@ -129,8 +130,8 @@
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
 #define STAT_DESCRIP_ERROR 99
-#define CACTID_PARENT 1
-#define CACTID_FORK 0
+#define SPINE_PARENT 1
+#define SPINE_FORK 0
 #define MAX_MYSQL_BUF_SIZE 35000
 #define MAX_SIMULTANEOUS_SCRIPTS 20
 
@@ -141,14 +142,14 @@
 #define CONFIG_PATH_3 "./etc/"
 
 /* config file defaults */
-#define DEFAULT_CONF_FILE "cactid.conf"
+#define DEFAULT_CONF_FILE "spine.conf"
 #define DEFAULT_THREADS 5
 #define DEFAULT_DB_HOST "localhost"
 #define DEFAULT_DB_DB "cacti"
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
 #define DEFAULT_DB_PORT 3306
-#define DEFAULT_LOGFILE "/wwwroot/cacti/log/cactid.log"
+#define DEFAULT_LOGFILE "/wwwroot/cacti/log/spine.log"
 #define DEFAULT_TIMEOUT 294000000
 
 /* threads constants */
@@ -272,7 +273,7 @@
 
 /*! Config Structure
  *
- * This structure holds Cactid database configuration information and/or override values
+ * This structure holds Spine database configuration information and/or override values
  * obtained via either accessing the database or reading the runtime options.  In addition,
  * it contains runtime status information.
  *
@@ -292,7 +293,7 @@ typedef struct config_struct {
 	/* debugging options */
 	int snmponly;
 	int SQL_readonly;
-	/* host range to be poller with this cactid process */
+	/* host range to be poller with this spine process */
 	int start_host_id;
 	int end_host_id;
 	/* database connection information */
@@ -460,7 +461,7 @@ struct icmphdr {
 	} un;
 };
 
-/* Include all Standard Cactid Headers */
+/* Include all Standard Spine Headers */
 #include "poller.h"
 #include "locks.h"
 #include "keywords.h"
@@ -479,4 +480,4 @@ extern char       start_datetime[20];
 extern char       config_paths[CONFIG_PATHS][BUFSIZE];
 extern int        active_threads;
 
-#endif /* not _CACTID_H_ */
+#endif /* not _SPINE_H_ */

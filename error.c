@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -18,7 +19,7 @@
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -30,49 +31,49 @@
  +-------------------------------------------------------------------------+
 */
 
-/* These functions handle simple singal handling functions for Cactid.  It was
+/* These functions handle simple singal handling functions for Spine.  It was
    written to handle specifically issues with the Solaris threading model in
    version 2.8.
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
-/*! \fn static void cactid_signal_handler(int cactid_signal)
+/*! \fn static void spine_signal_handler(int spine_signal)
  *  \brief interupts the os default signal handler as appropriate.
  *
  */
-static void cactid_signal_handler(int cactid_signal) {
-	signal(cactid_signal, SIG_DFL);
+static void spine_signal_handler(int spine_signal) {
+	signal(spine_signal, SIG_DFL);
 
-	set.exit_code = cactid_signal;
+	set.exit_code = spine_signal;
 
-	switch (cactid_signal) {
+	switch (spine_signal) {
 		case SIGINT:
-			die("FATAL: Cactid Interrupted by Console Operator");
+			die("FATAL: Spine Interrupted by Console Operator");
 			break;
 		case SIGSEGV:
-			die("FATAL: Cactid Encountered a Segmentation Fault");
+			die("FATAL: Spine Encountered a Segmentation Fault");
 			break;
 		case SIGBUS:
-			die("FATAL: Cactid Encountered a Bus Error");
+			die("FATAL: Spine Encountered a Bus Error");
 			break;
 		case SIGFPE:
-			die("FATAL: Cactid Encountered a Floating Point Exception");
+			die("FATAL: Spine Encountered a Floating Point Exception");
 			break;
 		case SIGQUIT:
-			die("FATAL: Cactid Encountered a Keyboard Quit Command");
+			die("FATAL: Spine Encountered a Keyboard Quit Command");
 			break;
 		case SIGPIPE:
-			die("FATAL: Cactid Encountered a Broken Pipe");
+			die("FATAL: Spine Encountered a Broken Pipe");
 			break;
 		default:
-			die("FATAL: Cactid Encountered An Unhandled Exception Signal Number: '%d'", cactid_signal);
+			die("FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'", spine_signal);
 			break;
 	}
 }
 
-static int cactid_fatal_signals[] = {
+static int spine_fatal_signals[] = {
 	SIGINT,
 	SIGSEGV,
 	SIGBUS,
@@ -81,56 +82,56 @@ static int cactid_fatal_signals[] = {
 	0
 };
 
-/*! \fn void install_cactid_signal_handler(void)
- *  \brief installs the cactid signal handler to stop certain calls from 
- *         abending Cactid.
+/*! \fn void install_spine_signal_handler(void)
+ *  \brief installs the spine signal handler to stop certain calls from
+ *         abending Spine.
  *
  */
-void install_cactid_signal_handler(void) {
+void install_spine_signal_handler(void) {
 	/* Set a handler for any fatal signal not already handled */
 	int i;
 	struct sigaction action;
 	void (*ohandler)(int);
 
-	for ( i=0; cactid_fatal_signals[i]; ++i ) {
-		sigaction(cactid_fatal_signals[i], NULL, &action);
+	for ( i=0; spine_fatal_signals[i]; ++i ) {
+		sigaction(spine_fatal_signals[i], NULL, &action);
 		if ( action.sa_handler == SIG_DFL ) {
-			action.sa_handler = cactid_signal_handler;
-			sigaction(cactid_fatal_signals[i], &action, NULL);
+			action.sa_handler = spine_signal_handler;
+			sigaction(spine_fatal_signals[i], &action, NULL);
 		}
 	}
 
-	for ( i=0; cactid_fatal_signals[i]; ++i ) {
-		ohandler = signal(cactid_fatal_signals[i], cactid_signal_handler);
+	for ( i=0; spine_fatal_signals[i]; ++i ) {
+		ohandler = signal(spine_fatal_signals[i], spine_signal_handler);
 		if ( ohandler != SIG_DFL ) {
-			signal(cactid_fatal_signals[i], ohandler);
+			signal(spine_fatal_signals[i], ohandler);
 		}
 	}
 	return;
 }
 
-/*! \fn void uninstall_cactid_signal_handler(void)
- *  \brief uninstalls the cactid signal handler.
+/*! \fn void uninstall_spine_signal_handler(void)
+ *  \brief uninstalls the spine signal handler.
  *
  */
-void uninstall_cactid_signal_handler(void) {
+void uninstall_spine_signal_handler(void) {
 	/* Remove a handler for any fatal signal handled */
 	int i;
 	struct sigaction action;
 	void (*ohandler)(int);
 
-	for ( i=0; cactid_fatal_signals[i]; ++i ) {
-		sigaction(cactid_fatal_signals[i], NULL, &action);
-		if ( action.sa_handler == cactid_signal_handler ) {
+	for ( i=0; spine_fatal_signals[i]; ++i ) {
+		sigaction(spine_fatal_signals[i], NULL, &action);
+		if ( action.sa_handler == spine_signal_handler ) {
 			action.sa_handler = SIG_DFL;
-			sigaction(cactid_fatal_signals[i], &action, NULL);
+			sigaction(spine_fatal_signals[i], &action, NULL);
 		}
 	}
 
-	for ( i=0; cactid_fatal_signals[i]; ++i ) {
-		ohandler = signal(cactid_fatal_signals[i], SIG_DFL);
-		if ( ohandler != cactid_signal_handler ) {
-			signal(cactid_fatal_signals[i], ohandler);
+	for ( i=0; spine_fatal_signals[i]; ++i ) {
+		ohandler = signal(spine_fatal_signals[i], SIG_DFL);
+		if ( ohandler != spine_signal_handler ) {
+			signal(spine_fatal_signals[i], ohandler);
 		}
 	}
 }

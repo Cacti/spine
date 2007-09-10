@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -18,7 +19,7 @@
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -38,7 +39,7 @@
  *
  * -C | --conf=F
  *
- *	Provide the name of the Cactid configuration file, which contains
+ *	Provide the name of the Spine configuration file, which contains
  *	the parameters for connecting to the database. In the absense of
  *	this, it looks [WHERE?]
  *
@@ -56,7 +57,7 @@
  *
  * -C | -conf=FILE
  *
- *	Specify the location of the Cactid configuration file.
+ *	Specify the location of the Spine configuration file.
  *
  * -R | --readonly
  *
@@ -74,7 +75,7 @@
  *
  * The First/Last device IDs are all relative to the "hosts" table in the
  * Cacti database, and this mechanism allows us to split up the polling
- * duties across multiple "cactid" instances: each one gets a subset of
+ * duties across multiple "spine" instances: each one gets a subset of
  * the polling range.
  *
  * For compatibility with poller.php, we also accept the first and last
@@ -82,7 +83,7 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /* Global Variables */
 int entries = 0;
@@ -98,13 +99,13 @@ static char *getarg(char *opt, char ***pargv);
 static void display_help(void);
 
 /*! \fn main(int argc, char *argv[])
- *  \brief The Cactid program entry point
+ *  \brief The Spine program entry point
  *  \param argc The number of arguments passed to the function plus one (+1)
  *  \param argv An array of the command line arguments
  *
- *  The Cactid entry point.  This function performs the following tasks.
+ *  The Spine entry point.  This function performs the following tasks.
  *  1) Processes command line input parameters
- *  2) Processes the Cactid configuration file to obtain database access information
+ *  2) Processes the Spine configuration file to obtain database access information
  *  3) Process runtime parameters from the settings table
  *  4) Initialize the runtime threads and mutexes for the threaded environment
  *  5) Initialize Net-SNMP, MySQL, and the PHP Script Server (if required)
@@ -147,8 +148,8 @@ int main(int argc, char *argv[]) {
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
-	/* install the cactid signal handler */
-	install_cactid_signal_handler();
+	/* install the spine signal handler */
+	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
@@ -177,7 +178,7 @@ int main(int argc, char *argv[]) {
 
 	/* set the default exit code */
 	set.exit_code = 0;
-	
+
 	/* get static defaults for system */
 	config_defaults();
 
@@ -211,7 +212,7 @@ int main(int argc, char *argv[]) {
 	set.end_host_id       = -1;
 	set.php_initialized   = FALSE;
 	set.logfile_processed = FALSE;
-	set.parent_fork       = CACTID_PARENT;
+	set.parent_fork       = SPINE_PARENT;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -328,18 +329,18 @@ int main(int argc, char *argv[]) {
 
 	/* read configuration file to establish local environment */
 	if (conf_file) {
-		if ((read_cactid_config(conf_file)) < 0) {
+		if ((read_spine_config(conf_file)) < 0) {
 			die("ERROR: Could not read config file: %s", conf_file);
 		}
 	}else{
 		if (!(conf_file = calloc(CONFIG_PATHS, BUFSIZE))) {
-			die("ERROR: Fatal malloc error: cactid.c conf_file!");
+			die("ERROR: Fatal malloc error: spine.c conf_file!");
 		}
 
 		for (i=0; i<CONFIG_PATHS; i++) {
 			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
-			if (read_cactid_config(conf_file) >= 0) {
+			if (read_spine_config(conf_file) >= 0) {
 				break;
 			}
 
@@ -363,10 +364,10 @@ int main(int argc, char *argv[]) {
 	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 50;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		CACTID_LOG_DEBUG(("Version %s starting\n", VERSION));
+		SPINE_LOG_DEBUG(("Version %s starting\n", VERSION));
 	}else{
 		if (!set.stdout_notty) {
-			printf("CACTID: Version %s starting\n", VERSION);
+			printf("SPINE: Version %s starting\n", VERSION);
 		}
 	}
 
@@ -379,18 +380,18 @@ int main(int argc, char *argv[]) {
 			printf("NOTE: MySQL is Thread Safe!\n");
 		}
 	}else{
-		printf("CACTID: WARNING: MySQL is NOT Thread Safe!\n");
+		printf("SPINE: WARNING: MySQL is NOT Thread Safe!\n");
 	}
 
 	/* initialize SNMP */
-	CACTID_LOG_DEBUG(("CACTID: Initializing Net-SNMP API\n"));
-	snmp_cactid_init();
+	SPINE_LOG_DEBUG(("SPINE: Initializing Net-SNMP API\n"));
+	snmp_spine_init();
 
 	/* initialize PHP if required */
-	CACTID_LOG_DEBUG(("CACTID: Initializing PHP Script Server(s)\n"));
+	SPINE_LOG_DEBUG(("SPINE: Initializing PHP Script Server(s)\n"));
 
-	/* tell cactid that it is parent, and set the poller id */
-	set.parent_fork = CACTID_PARENT;
+	/* tell spine that it is parent, and set the poller id */
+	set.parent_fork = SPINE_PARENT;
 	set.poller_id = 0;
 
 	/* initialize the script server */
@@ -415,11 +416,11 @@ int main(int argc, char *argv[]) {
 	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
-		die("ERROR: Fatal malloc error: cactid.c threads!");
+		die("ERROR: Fatal malloc error: spine.c threads!");
 	}
 
 	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
-		die("ERROR: Fatal malloc error: cactid.c host id's!");
+		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
 
 	/* initialize threads and mutexes */
@@ -428,10 +429,10 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	CACTID_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", active_threads));
+	SPINE_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", active_threads));
 
 	/* tell fork processes that they are now active */
-	set.parent_fork = CACTID_FORK;
+	set.parent_fork = SPINE_FORK;
 
 	/* loop through devices until done */
 	while ((device_counter < num_rows) && (canexit == 0)) {
@@ -457,25 +458,25 @@ int main(int argc, char *argv[]) {
 
 				switch (thread_status) {
 					case 0:
-						CACTID_LOG_DEBUG(("DEBUG: Valid Thread to be Created\n"));
+						SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created\n"));
 
 						device_counter++;
 						active_threads++;
 
-						CACTID_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n", active_threads));
+						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n", active_threads));
 
 						break;
 					case EAGAIN:
-						CACTID_LOG(("ERROR: The System Lacked the Resources to Create a Thread\n"));
+						SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread\n"));
 						break;
 					case EFAULT:
-						CACTID_LOG(("ERROR: The Thread or Attribute Was Invalid\n"));
+						SPINE_LOG(("ERROR: The Thread or Attribute Was Invalid\n"));
 						break;
 					case EINVAL:
-						CACTID_LOG(("ERROR: The Thread Attribute is Not Initialized\n"));
+						SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized\n"));
 						break;
 					default:
-						CACTID_LOG(("ERROR: Unknown Thread Creation Error\n"));
+						SPINE_LOG(("ERROR: Unknown Thread Creation Error\n"));
 						break;
 				}
 				usleep(internal_thread_sleep);
@@ -485,7 +486,7 @@ int main(int argc, char *argv[]) {
 					current_time = get_time_as_double();
 
 					if ((current_time - begin_time + 6) > poller_interval) {
-						CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
+						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
 						canexit = 1;
 						break;
 					}
@@ -500,18 +501,18 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EDEADLK:
-			CACTID_LOG(("ERROR: Deadlock Occured\n"));
+			SPINE_LOG(("ERROR: Deadlock Occured\n"));
 			break;
 		case EBUSY:
 			break;
 		case EINVAL:
-			CACTID_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex\n"));
+			SPINE_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex\n"));
 			break;
 		case EFAULT:
-			CACTID_LOG(("ERROR: Attempt to Unlock an Invalid Mutex\n"));
+			SPINE_LOG(("ERROR: Attempt to Unlock an Invalid Mutex\n"));
 			break;
 		default:
-			CACTID_LOG(("ERROR: Unknown Mutex Lock Error Code Returned\n"));
+			SPINE_LOG(("ERROR: Unknown Mutex Lock Error Code Returned\n"));
 			break;
 		}
 
@@ -522,7 +523,7 @@ int main(int argc, char *argv[]) {
 			current_time = get_time_as_double();
 
 			if ((current_time - begin_time + 6) > poller_interval) {
-				CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
 				canexit = 1;
 				break;
 			}
@@ -554,7 +555,7 @@ int main(int argc, char *argv[]) {
 			current_time = get_time_as_double();
 
 			if ((current_time - begin_time + 6) > poller_interval) {
-				CACTID_LOG(("ERROR: Cactid Timed Out While Processing Hosts Internal\n"));
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
 				canexit = 1;
 				break;
 			}
@@ -565,8 +566,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* tell Cactid that it is now parent */
-	set.parent_fork = CACTID_PARENT;
+	/* tell Spine that it is now parent */
+	set.parent_fork = SPINE_PARENT;
 
 	/* print out stats */
 	gettimeofday(&now, NULL);
@@ -578,53 +579,53 @@ int main(int argc, char *argv[]) {
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
 
-	CACTID_LOG_DEBUG(("DEBUG: Thread Cleanup Complete\n"));
+	SPINE_LOG_DEBUG(("DEBUG: Thread Cleanup Complete\n"));
 
 	/* close the php script server */
 	if (set.php_required) {
 		php_close(PHP_INIT);
 	}
 
-	CACTID_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed\n"));
+	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed\n"));
 
 	/* free malloc'd variables */
 	free(threads);
 	free(ids);
 	free(conf_file);
 
-	CACTID_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed\n"));
+	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed\n"));
 
 	/* shutdown SNMP */
-	snmp_cactid_close();
+	snmp_spine_close();
 
-	CACTID_LOG_DEBUG(("CACTID: Net-SNMP API Shutdown Completed\n"));
+	SPINE_LOG_DEBUG(("SPINE: Net-SNMP API Shutdown Completed\n"));
 
 	/* close mysql */
 	mysql_free_result(result);
 	mysql_close(&mysql);
 
-	CACTID_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed\n"));
+	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed\n"));
 
 	/* finally add some statistics to the log and exit */
 	end_time = TIMEVAL_TO_DOUBLE(now);
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
-		CACTID_LOG(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
+		SPINE_LOG(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
 	}else{
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
-			fprintf(stdout,"CACTID: Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
 	}
 
-	/* uninstall the cactid signal handler */
-	uninstall_cactid_signal_handler();
+	/* uninstall the spine signal handler */
+	uninstall_spine_signal_handler();
 
 	exit(EXIT_SUCCESS);
 }
 
 /*! \fn static void display_help()
- *  \brief Display Cactid usage information to the caller.
+ *  \brief Display Spine usage information to the caller.
  *
  *	Display the help listing: the first line is created at runtime with
  *	the version information, and the rest is strictly static text which
@@ -634,7 +635,7 @@ int main(int argc, char *argv[]) {
 static void display_help(void) {
 	static const char *const *p;
 	static const char * const helptext[] = {
-		"Usage: cactid [options] [firstid lastid]",
+		"Usage: spine [options] [firstid lastid]",
 		"",
 		"Options:",
 		"",
@@ -642,9 +643,9 @@ static void display_help(void) {
 		"  -f/--first=X       Start polling with host X",
 		"  -l/--last=X        End polling with host X",
 		"  -p/--poller=X      Poller ID = X",
-		"  -C/--conf=F        Read Cactid configuration from file F",
+		"  -C/--conf=F        Read Spine configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
-		"  -R/--readonly      This Cactid run is readonly with respect to the database",
+		"  -R/--readonly      This Spine run is readonly with respect to the database",
 		"  -S/--stdout        Logging is performed to the standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
 		"  --snmponly         Only do SNMP polling: no script stuff",
@@ -652,7 +653,7 @@ static void display_help(void) {
 		"Either both of --first/--last must be provided, or neither can be,",
 		"and in their absense, all hosts are processed.",
 		"",
-		"Without the --conf parameter, cactid searches for its cactid.conf",
+		"Without the --conf parameter, spine searches for its spine.conf",
 		"file in the usual places.",
 		"",
 		"Verbosity is one of NONE/LOW/MEDIUM/HIGH/DEBUG or 1..5",
@@ -661,14 +662,14 @@ static void display_help(void) {
 		"database, but they can be overridden with the --option=S:V",
 		"parameter.",
 		"",
-		"Cactid is distributed under the Terms of the GNU Lessor",
+		"Spine is distributed under the Terms of the GNU Lessor",
 		"General Public License Version 2.1. (http://www.gnu.org/licenses/lgpl.txt)",
 		"For more information, see http://www.cacti.net",
 
 		0 /* ENDMARKER */
 	};
 
-	printf("CACTID %s  Copyright 2002-2006 by The Cacti Group\n\n", VERSION);
+	printf("SPINE %s  Copyright 2002-2007 by The Cacti Group\n\n", VERSION);
 
 	for (p = helptext; *p; p++) {
 		puts(*p);	/* automatically adds a newline */

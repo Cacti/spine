@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -18,7 +19,7 @@
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -30,5 +31,5 @@
  +-------------------------------------------------------------------------+
 */
 
-extern void install_cactid_signal_handler(void);
-extern void uninstall_cactid_signal_handler(void);
+extern void install_spine_signal_handler(void);
+extern void uninstall_spine_signal_handler(void);

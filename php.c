@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -31,14 +32,14 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
  *  \param php_process the php script server process to call
  *
- *  This function is called directly by the Cactid poller when a script server
+ *  This function is called directly by the spine poller when a script server
  *  request has been initiated for a host.  It will place the PHP Script Server
  *  command on it's output pipe and then wait the pre-defined timeout period for
  *  a response on the PHP Script Servers output pipe.
@@ -76,7 +77,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
 		result_string = strdup("U");
-		CACTID_LOG(("ERROR: SS[%i] PHP Script Server communications lost.\n", php_process));
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.\n", php_process));
 		php_close(php_process);
 	}else{
 		/* read the result from the php_command */
@@ -111,7 +112,7 @@ char *php_cmd(const char *php_command, int php_process) {
  */
 int php_get_process(void) {
 	int i;
-		
+
 	thread_mutex_lock(LOCK_PHP);
 	if (set.php_current_server >= set.php_servers) {
 		set.php_current_server = 0;
@@ -119,7 +120,7 @@ int php_get_process(void) {
 	i = set.php_current_server;
 	set.php_current_server++;
 	thread_mutex_unlock(LOCK_PHP);
-	
+
 	return i;
 }
 
@@ -128,7 +129,7 @@ int php_get_process(void) {
  *  \param php_process the PHP Script Server process to obtain output from
  *
  *  This function will read the output pipe from the PHP Script Server process
- *  and return that string to the Cactid thread requesting the output.  If for
+ *  and return that string to the Spine thread requesting the output.  If for
  *  some reason the PHP Script Server process does not respond in time, it will
  *  be closed using the php_close function, then restarted.
  *
@@ -136,7 +137,6 @@ int php_get_process(void) {
  */
 char *php_readpipe(int php_process) {
 	fd_set fds;
-	int rescode;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
@@ -169,7 +169,7 @@ char *php_readpipe(int php_process) {
 	case -1:
 		switch (errno) {
 			case EBADF:
-				CACTID_LOG(("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process));
+				SPINE_LOG(("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.\n", php_process));
 				break;
 			case EAGAIN:
 			case EINTR:
@@ -177,28 +177,28 @@ char *php_readpipe(int php_process) {
 				/* take a moment */
 				usleep(2000);
 				#endif
-								
+
 				/* record end time */
 				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
 				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
 				timeout.tv_usec = rint((set.script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
-				
+
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
 				}else{
-					CACTID_LOG(("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process));
+					SPINE_LOG(("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.\n", php_process));
 				}
 				break;
 			case EINVAL:
-				CACTID_LOG(("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process));
+				SPINE_LOG(("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.\n", php_process));
 				break;
 			case ENOMEM:
-				CACTID_LOG(("ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process));
+				SPINE_LOG(("ERROR: SS[%i] Select was unable to allocate memory for internal tables.\n", php_process));
 				break;
 			default:
-				CACTID_LOG(("ERROR: SS[%i] Unknown fatal select() error\n", php_process));
+				SPINE_LOG(("ERROR: SS[%i] Unknown fatal select() error\n", php_process));
 				break;
 		}
 
@@ -209,7 +209,7 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	case 0:
-		CACTID_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process));
+		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted\n", php_process));
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
@@ -241,7 +241,7 @@ char *php_readpipe(int php_process) {
 			}
 
 			if (bptr >= result_string+BUFSIZE) {
-				CACTID_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range\n", php_process));
+				SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range\n", php_process));
 				SET_UNDEFINED(result_string);
 			}
 		}
@@ -281,19 +281,19 @@ int php_init(int php_process) {
 	}else{
 		num_processes = 1;
 	}
-	
-	for (i=0; i < num_processes; i++) {
-		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting\n", i));
 
-		/* create the output pipes from Cactid to php*/
+	for (i=0; i < num_processes; i++) {
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting\n", i));
+
+		/* create the output pipes from Spine to php*/
 		if (pipe(cacti2php_pdes) < 0) {
-			CACTID_LOG(("ERROR: SS[%i] Could not allocate php server pipes\n", i));
+			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes\n", i));
 			return FALSE;
 		}
 
-		/* create the input pipes from php to Cactid */
+		/* create the input pipes from php to Spine */
 		if (pipe(php2cacti_pdes) < 0) {
-			CACTID_LOG(("ERROR: SS[%i] Could not allocate php server pipes\n", i));
+			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes\n", i));
 			return FALSE;
 		}
 
@@ -304,13 +304,13 @@ int php_init(int php_process) {
 		argv[0] = set.path_php;
 		argv[1] = "-q";
 		argv[2] = set.path_php_server;
-		argv[3] = "cactid";
+		argv[3] = "spine";
 		snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
 		argv[4] = poller_id;
 		argv[5] = NULL;
 
 		/* fork a child process */
-		CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i));
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process\n", i));
 
 		retry:
 
@@ -329,7 +329,7 @@ int php_init(int php_process) {
 						#endif
 						goto retry;
 					}else{
-						CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Resources\n", i));
+						SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Resources\n", i));
 					}
 				case ENOMEM:
 					if (retry_count < 3) {
@@ -340,10 +340,10 @@ int php_init(int php_process) {
 						#endif
 						goto retry;
 					}else{
-						CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Memory\n", i));
+						SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Memory\n", i));
 					}
 				default:
-					CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Unknown Reason\n", i));
+					SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Unknown Reason\n", i));
 				}
 
 				close(php2cacti_pdes[0]);
@@ -351,7 +351,7 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				CACTID_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server\n", i));
+				SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server\n", i));
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
@@ -372,7 +372,7 @@ int php_init(int php_process) {
 				_exit(127);
 				/* NOTREACHED */
 			default: /* I am the parent process */
-				CACTID_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i));
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child FORK Success\n", i));
 		}
 
 		/* Parent */
@@ -402,16 +402,16 @@ int php_init(int php_process) {
 
 		if (strstr(result_string, "Started")) {
 			if (php_process == PHP_INIT) {
-				CACTID_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running\n", i));
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running\n", i));
 
 				php_processes[i].php_state = PHP_READY;
 			}else{
-				CACTID_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process));
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running\n", php_process));
 
 				php_processes[php_process].php_state = PHP_READY;
 			}
 		}else{
-			CACTID_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string));
+			SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'\n", php_process, result_string));
 
 			if (php_process == PHP_INIT) {
 				php_processes[i].php_state = PHP_BUSY;
@@ -448,11 +448,11 @@ void php_close(int php_process) {
 	}else{
 		num_processes = 1;
 	}
-	
+
 	for(i = 0; i < num_processes; i++) {
 		php_t *phpp;
 
-		CACTID_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started\n", i));
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started\n", i));
 
 		/* tell the script server to close */
 		if (php_process == PHP_INIT) {

@@ -1,8 +1,8 @@
 Prerequisites
 
 A working cygwin enviroment available @ www.cygwin.com
-You will need at least GCC from the cygwin distrubution in order to compile cactid.  I
-that you build cactid on a full development system and then transfer the binary to
+You will need at least GCC from the cygwin distrubution in order to compile spine.  I
+that you build spine on a full development system and then transfer the binary to
 a minimal build system to run.
 
 You need to download the UNIX sources of NetSNMP and the MySQL.  Please do not download
@@ -15,7 +15,7 @@ Build instructions
 
 MySQL
 
-Only the client libraries are needed for cactid so MySQL can be configured with the following option:
+Only the client libraries are needed for spine so MySQL can be configured with the following option:
 
 ./configure --without-server
 
@@ -31,7 +31,7 @@ Use the experimental reentrant configure flag
 make
 make install
 
-Cactid
+Spine
 
 nothing special required
 

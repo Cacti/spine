@@ -1,22 +1,27 @@
-The Cacti Group – cactid
+The Cacti Group – spine
+
+0.8.7
+-feature: Rename to spine
+-feature: Update copywright
+-feature: Add tab stops and autoindent
 
 0.8.6j
--bug#0000879/0000872: cactid doesn't always report error messages before dying 
+-bug#0000879/0000872: cactid doesn't always report error messages before dying
 -bug#0000856: Slight documentation change
 -bug#0000861: Downed Host Detection on non-SNMP devices wrong
 -bug#0000886: SNMP Ping to Utilize The snmpgetnext instead of snmpget
 -bug#0000889: Use configure script's sysconfdir variable for placement of cactid.conf
--bug#0000929: Cactid with setuid root falls back to UDP after first host
+-bug#0000929: Spine with setuid root falls back to UDP after first host
 -bug#0000939: cactid use custom hostname, snmp_community,snmp_username and snmp_password in datasource
 -bug#0000940: Increasing BUFSIZE in cactid.h will still not allow longer output from scripts
--bug#0000951: Cactid SNMP polling does not strip enum values
+-bug#0000951: Spine SNMP polling does not strip enum values
 -bug#0000960: cactid truncating responses from scripts to 511 characters
 -bug#0000987: cactid can't use a socket unix
 -bug: By default, Cygwin can not handle large quantities of running scripts, therefore, limit to 20
 -bug: Increase the number of file descriptors in Cygwin to 512, 64 does not work for large systems.
 -bug: If the system is out of resources when trying to fork(), retry three more times
 -bug: Use vfork instead of fork.  It's more efficient with resources.
--bug: Cactid Script Server would not work with cgi version of php.  Now it does.
+-bug: Spine Script Server would not work with cgi version of php.  Now it does.
 -bug: Changes in SNMP Community from poller item to poller item were not being considered.
 -bug: Restore meaningful notices when running from command line
 -feature: Allow users to use the traditional popen instead of nifty if required.
@@ -27,23 +32,23 @@ The Cacti Group – cactid
 -bug: Faulty Script Server shutdown was causing race condition
 -bug: Allow ICMP or UDP ping to work if host begins with either "TCP:" or "UDP:"
 -bug: Change assert logging to HIGH to more closely match cmd.php
--bug: Allow Cactid to make on 64bit x86 Platforms - thanks to Reuben Farrelly
+-bug: Allow Spine to make on 64bit x86 Platforms - thanks to Reuben Farrelly
 -bug: Changing syntax from "insert into to replace into" for reindex inserts
 -bug: Don't perform a reindex a check for a data query if you already have to reindex
 -bug: Make sure to log FATAL to stderr
 -bug: Do not re-index a host if the re-index value is a "No Such Instance" result.
 -bug#0000682: Allow storing of each hosts polling start time
--bug#0000691: Cactid fails with custom snmp port 
+-bug#0000691: Spine fails with custom snmp port
 -bug#0000699: Tick counts not being detected
--bug#0000706: Cactid didn't start PHP scripts when host didn't answer SNMP (but icmp is ok) 
+-bug#0000706: Spine didn't start PHP scripts when host didn't answer SNMP (but icmp is ok)
 -bug#0000710: cactid.conf doesn't allow for no mysql password
 -bug#0000716: Don't attempt to save output for a host if there is none.
 -bug#0000717: Allow numeric double results to start with '+', '-', '.'
--bug#0000724: cactid truncate script command when reindex 
+-bug#0000724: cactid truncate script command when reindex
 -bug#0000736: Solaris 8 : Alarm Clock message
 -bug#0000745: cactid: search path for mysql and snmp does not include /usr/pkg
 -bug#0000748: cactid doesn't handle special charectors
--bug#0000749: Cactid 0.8.6g won't accept special characters from data template
+-bug#0000749: Spine 0.8.6g won't accept special characters from data template
 -bug#0000750: poller doesn't check for snmp if udp ping fails
 -bug#0000752: Problem with OID truncation with cactid
 -bug: add kstat checking for Net-SNMP v5.3.x

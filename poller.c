@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -31,13 +32,13 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /*! \fn void *child(void *arg)
  *  \brief function is called via the fork command and initiates a poll of a host
  *  \param arg a pointer to an integer point to the host_id to be polled
  *
- *	This function will call the primary Cactid polling function to poll a host
+ *	This function will call the primary Spine polling function to poll a host
  *  and then reduce the number of active threads by one so that the next host
  *  can be polled.
  *
@@ -45,7 +46,7 @@
 void *child(void *arg) {
 	int host_id = *(int *) arg;
 
-	CACTID_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host\n"));
+	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host\n"));
 
 	poll_host(host_id);
 
@@ -53,7 +54,7 @@ void *child(void *arg) {
 
 	active_threads--;
 
-	CACTID_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n" ,active_threads));
+	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n" ,active_threads));
 
 	thread_mutex_unlock(LOCK_THREAD);
 
@@ -64,24 +65,24 @@ void *child(void *arg) {
 }
 
 /*! \fn void poll_host(int host_id)
- *  \brief core Cactid function that polls a host
+ *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
- *	This function is core to Cactid.  It will take a host_id and then poll it.
+ *	This function is core to Spine.  It will take a host_id and then poll it.
  *
  *  Prior to the poll, the system will ping the host to verifiy that it is up.
- *  In addition, the system will check to see if any reindexing of data query's 
+ *  In addition, the system will check to see if any reindexing of data query's
  *  is required.
  *
  *  If reindexing is required, the Cacti poller.php function will spawn that
  *  reindexing process.
  *
  *  In the case of hosts that require reindexing because of a sysUptime
- *  rollback, Cactid will store an unknown (NaN) value for all objects to prevent
+ *  rollback, Spine will store an unknown (NaN) value for all objects to prevent
  *  spikes in the graphs.
  *
  *  With regard to snmp calls, if the host has multiple snmp agents running
- *  Cactid will re-initialize the snmp session and poll under those new ports
+ *  Spine will re-initialize the snmp session and poll under those new ports
  *  as the host poller_items table dictates.
  *
  */
@@ -141,7 +142,7 @@ void poll_host(int host_id) {
 	MYSQL_ROW row;
 
 	db_connect(set.dbdb, &mysql);
-	
+
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
 		die("ERROR: Fatal malloc error: poller.c host struct!");
@@ -210,7 +211,7 @@ void poll_host(int host_id) {
 		" SET rrd_next_step=rrd_step-%i"
 		" WHERE rrd_next_step < 0 and host_id=%i",
 			set.poller_interval, host_id);
-			
+
 	/* query to add output records to the poller output table */
 	snprintf(query8, BUFSIZE,
 		"INSERT INTO poller_output"
@@ -247,7 +248,7 @@ void poll_host(int host_id) {
 			num_rows = (int)mysql_num_rows(result);
 
 			if (num_rows != 1) {
-				CACTID_LOG(("Host[%i] ERROR: Multiple Hosts with Host ID", host_id));
+				SPINE_LOG(("Host[%i] ERROR: Multiple Hosts with Host ID", host_id));
 
 				mysql_free_result(result);
 				mysql_close(&mysql);
@@ -337,7 +338,7 @@ void poll_host(int host_id) {
 					host->ignore_host = FALSE;
 					update_host_status(HOST_UP, host, ping, set.availability_method);
 
-					CACTID_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
+					SPINE_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
 				}else{
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;
@@ -371,7 +372,7 @@ void poll_host(int host_id) {
 
 				db_insert(&mysql, update_sql);
 			}else{
-				CACTID_LOG(("Host[%i] ERROR: Could MySQL Returned a Null Host Result", host->id));
+				SPINE_LOG(("Host[%i] ERROR: Could MySQL Returned a Null Host Result", host->id));
 				num_rows = 0;
 				host->ignore_host = TRUE;
 			}
@@ -390,7 +391,7 @@ void poll_host(int host_id) {
 			num_rows = (int)mysql_num_rows(result);
 
 			if (num_rows > 0) {
-				CACTID_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname));
+				SPINE_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname));
 
 				while ((row = mysql_fetch_row(result))) {
 					assert_fail = FALSE;
@@ -445,7 +446,7 @@ void poll_host(int host_id) {
 							poll_result = exec_poll(host, reindex->arg1);
 							break;
 						default:
-							CACTID_LOG(("Host[%i] ERROR: Unknown Assert Action!\n", host->id));
+							SPINE_LOG(("Host[%i] ERROR: Unknown Assert Action!\n", host->id));
 							poll_result = strdup("U");
 						}
 
@@ -458,21 +459,21 @@ void poll_host(int host_id) {
 						if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 							assert_fail = FALSE;
 						}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
-							CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 							db_insert(&mysql, query3);
 							assert_fail = TRUE;
 							previous_assert_failure = TRUE;
 						}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
-							CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 							db_insert(&mysql, query3);
 							assert_fail = TRUE;
 							previous_assert_failure = TRUE;
 						}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-							CACTID_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 							db_insert(&mysql, query3);
@@ -490,7 +491,7 @@ void poll_host(int host_id) {
 
 							if ((assert_fail) && (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0"))) {
 								spike_kill = TRUE;
-								CACTID_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
+								SPINE_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
 							}
 						}
 
@@ -499,13 +500,13 @@ void poll_host(int host_id) {
 					}
 				}
 			}else{
-				CACTID_LOG_HIGH(("Host[%i] Host has no information for recache.", host->id));
+				SPINE_LOG_HIGH(("Host[%i] Host has no information for recache.", host->id));
 			}
 
 			/* free the host result */
 			mysql_free_result(result);
 		}else{
-			CACTID_LOG(("Host[%i] ERROR: Recache Query Returned Null Result!", host->id));
+			SPINE_LOG(("Host[%i] ERROR: Recache Query Returned Null Result!", host->id));
 		}
 	}
 
@@ -521,10 +522,10 @@ void poll_host(int host_id) {
 			if (result = db_query(&mysql, query1)) {
 				num_rows = (int)mysql_num_rows(result);
 			}else{
-				CACTID_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
+				SPINE_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
 			}
 		}else{
-			CACTID_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
+			SPINE_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
 		}
 	}else{
 		/* get the number of agents */
@@ -540,10 +541,10 @@ void poll_host(int host_id) {
 				db_query(&mysql, query6);
 				db_query(&mysql, query7);
 			}else{
-				CACTID_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
+				SPINE_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
 			}
 		}else{
-			CACTID_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
+			SPINE_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
 		}
 	}
 
@@ -596,7 +597,7 @@ void poll_host(int host_id) {
 			if (poller_items[i].action == POLLER_ACTION_SNMP) {
 				snmp_poller_items++;
 			}
-		
+
 			i++;
 		}
 
@@ -624,49 +625,49 @@ void poll_host(int host_id) {
 												poller_items[i].snmp_community,poller_items[i].snmp_username,
 												poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
 					}
-				
+
 					/* catch snmp initialization issues */
 					if (!host->snmp_session) {
 						host->ignore_host = TRUE;
 						break;
 					}
-				
+
 					/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
-					if ((last_snmp_port != poller_items[i].snmp_port) || 
+					if ((last_snmp_port != poller_items[i].snmp_port) ||
 						(last_snmp_version != poller_items[i].snmp_version) ||
 						(strcmp(last_snmp_community, poller_items[i].snmp_community) != 0) ||
 						(strcmp(last_snmp_username, poller_items[i].snmp_username) != 0) ||
 						(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
-					
+
 						if (num_oids > 0) {
 							snmp_get_multi(host, snmp_oids, num_oids);
 
 							for (j = 0; j < num_oids; j++) {
 								if (host->ignore_host) {
-									CACTID_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+									SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 									SET_UNDEFINED(snmp_oids[j].result);
 								}else {
 									/* remove double or single quotes from string */
 									snprintf(temp_result, BUFSIZE, "%s", strip_quotes(snmp_oids[j].result));
 									snprintf(snmp_oids[j].result, BUFSIZE, "%s", strip_alpha(temp_result));
-								
+
 									/* detect erroneous non-numeric result */
 									if (!validate_result(snmp_oids[j].result)) {
 										snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
-										CACTID_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+										SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
 										SET_UNDEFINED(snmp_oids[j].result);
 									}
 								}
 
 								snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
-							
-								CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+
+								SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
 
 							/* reset num_snmps */
 							num_oids = 0;
 						}
-					
+
 						snmp_host_cleanup(host->snmp_session);
 						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
 												poller_items[i].snmp_community,poller_items[i].snmp_username,
@@ -685,7 +686,7 @@ void poll_host(int host_id) {
 
 						for (j = 0; j < num_oids; j++) {
 							if (host->ignore_host) {
-								CACTID_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+								SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else {
 								/* remove double or single quotes from string */
@@ -695,14 +696,14 @@ void poll_host(int host_id) {
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
 									snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
-									CACTID_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+									SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
 									SET_UNDEFINED(snmp_oids[j].result);
 								}
 							}
 
 							snprintf(poller_items[snmp_oids[j].array_position].result, BUFSIZE, "%s", snmp_oids[j].result);
-							
-							CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+
+							SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
 							if (poller_items[snmp_oids[j].array_position].result != NULL) {
 								/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -715,11 +716,11 @@ void poll_host(int host_id) {
 						/* reset num_snmps */
 						num_oids = 0;
 					}
-						
+
 					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid), "%s", poller_items[i].arg1);
 					snmp_oids[num_oids].array_position = i;
 					num_oids++;
-				
+
 					break;
 				case POLLER_ACTION_SCRIPT: /* execute script file */
 					poll_result = exec_poll(host, poller_items[i].arg1);
@@ -733,11 +734,11 @@ void poll_host(int host_id) {
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-						CACTID_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
+						SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
 						SET_UNDEFINED(poller_items[i].result);
 					}
 
-					CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 
 					if (poller_items[i].result != NULL) {
 						/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -761,11 +762,11 @@ void poll_host(int host_id) {
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-						CACTID_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
+						SPINE_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
 						SET_UNDEFINED(poller_items[i].result);
 					}
 
-					CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 
 					if (poller_items[i].result != NULL) {
 						/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -776,7 +777,7 @@ void poll_host(int host_id) {
 
 					break;
 				default: /* unknown action, generate error */
-					CACTID_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
+					SPINE_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
 
 					break;
 				}
@@ -792,7 +793,7 @@ void poll_host(int host_id) {
 
 			for (j = 0; j < num_oids; j++) {
 				if (host->ignore_host) {
-					CACTID_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+					SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
 				}else{
 					/* remove double or single quotes from string */
@@ -802,14 +803,14 @@ void poll_host(int host_id) {
 					/* detect erroneous non-numeric result */
 					if (!validate_result(snmp_oids[j].result)) {
 						snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
-						CACTID_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+						SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
 						SET_UNDEFINED(snmp_oids[j].result);
 					}
 				}
 
 				snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
-					
-				CACTID_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+
+				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
 				if (poller_items[snmp_oids[j].array_position].result != NULL) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -836,7 +837,7 @@ void poll_host(int host_id) {
 				poller_items[i].rrd_name,
 				host_time,
 				poller_items[i].result);
-			
+
 			result_length = strlen(result_string);
 
 			/* if the next element to the buffer will overflow it, write to the database */
@@ -854,14 +855,14 @@ void poll_host(int host_id) {
 				/* set binary, let the system know we are a new buffer */
 				new_buffer = TRUE;
 			}
-			
+
 			/* if this is our first pass, or we just outputted to the database, need to change the delimeter */
 			if (new_buffer) {
 				result_string[0] = ' ';
 			}else{
 				result_string[0] = ',';
 			}
-							
+
 			strncat(query3, result_string, strlen(result_string));
 			out_buffer = out_buffer + strlen(result_string);
 			new_buffer = FALSE;
@@ -896,7 +897,7 @@ void poll_host(int host_id) {
 	mysql_thread_end();
 	#endif
 
-	CACTID_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function\n", host_id));
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function\n", host_id));
 }
 
 /*! \fn int validate_result(char *result)
@@ -1007,7 +1008,7 @@ char *exec_poll(host_t *current_host, char *command) {
 
 	free(proc_command);
 
-	CACTID_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd));
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd));
 
 	if (cmd_fd > 0) {
 		/* Initialize File Descriptors to Review for Input/Output */
@@ -1020,7 +1021,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		case -1:
 			switch (errno) {
 			case EBADF:
-				CACTID_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id));
+				SPINE_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
 			case EAGAIN:
@@ -1029,32 +1030,32 @@ char *exec_poll(host_t *current_host, char *command) {
 				/* take a moment */
 				usleep(2000);
 				#endif
-								
+
 				/* record end time */
 				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
 				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
 				timeout.tv_usec = rint((set.script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
-				
+
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
 				}else{
-					CACTID_LOG(("WARNING: A script timed out while processing EINTR's.\n"));
+					SPINE_LOG(("WARNING: A script timed out while processing EINTR's.\n"));
 					SET_UNDEFINED(result_string);
 				}
 				break;
 			case EINVAL:
-				CACTID_LOG(("Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id));
+				SPINE_LOG(("Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
 			default:
-				CACTID_LOG(("Host[%i] ERROR: The script/command select() failed\n", current_host->id));
+				SPINE_LOG(("Host[%i] ERROR: The script/command select() failed\n", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
 			}
 		case 0:
-			CACTID_LOG(("Host[%i] ERROR: The POPEN timed out\n", current_host->id));
+			SPINE_LOG(("Host[%i] ERROR: The POPEN timed out\n", current_host->id));
 			SET_UNDEFINED(result_string);
 			break;
 		default:
@@ -1063,7 +1064,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
 			}else{
-				CACTID_LOG(("Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command));
+				SPINE_LOG(("Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command));
 				SET_UNDEFINED(result_string);
 			}
 		}
@@ -1075,7 +1076,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		pclose(fd);
 		#endif
 	}else{
-		CACTID_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command));
+		SPINE_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command));
 		SET_UNDEFINED(result_string);
 	}
 

@@ -1,18 +1,18 @@
 ------------------------------------------
-cactid: a backend data gatherer for cacti
+spine: a backend data gatherer for cacti
 ------------------------------------------
 
 Support will not be provided for this poller at this point!
 
 Below are some random notes about installing:
 
-- to minimize the impact of MIB files for net-snmp, utilize the 
+- to minimize the impact of MIB files for net-snmp, utilize the
   --disable-mib-loading configure option in net-snmp (vers 5.1 and above).
 - sometimes ./configure detects ucd-snmp when you really have net-snmp.
   I was able to remedy this by deleting my old ucd-snmp libraries in
   /usr/lib/libsnmp*
-- right now cactid requires -lmysqlclient_r to compile (which may be
+- right now spine requires -lmysqlclient_r to compile (which may be
   removed in the future). It seems that the default Redhat (at least
   RH9) RPM's have trouble with this. The mysql.com RPMs work fine
   though.
-- Make sure to edit cactid.conf
+- Make sure to edit spine.conf

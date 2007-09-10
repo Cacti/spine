@@ -11,7 +11,7 @@
 # | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
 # | GNU General Public License for more details.                            |
 # +-------------------------------------------------------------------------+
-# | cactid: a backend data gatherer for Cacti                               |
+# | spine: a backend data gatherer for Cacti                               |
 # +-------------------------------------------------------------------------+
 # | This poller would not have been possible without:                       |
 # |   - Larry Adams (current development and enhancements)                  |

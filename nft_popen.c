@@ -1,19 +1,20 @@
 /*******************************************************************************
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  * (C) Xenadyne Inc. 2002.	All Rights Reserved
- * 
+ *
  * Permission to use, copy, modify and distribute this software for
- * any purpose and without fee is hereby granted, provided that the 
+ * any purpose and without fee is hereby granted, provided that the
  * above copyright notice appears in all copies. Also note the
  * University of California copyright below.
- * 
- * XENADYNE INC DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, 
- * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS.  
- * IN NO EVENT SHALL XENADYNE BE LIABLE FOR ANY SPECIAL, INDIRECT OR 
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM THE 
- * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, 
- * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN 
+ *
+ * XENADYNE INC DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS.
+ * IN NO EVENT SHALL XENADYNE BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+ * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM THE
+ * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+ * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- * 
+ *
  * File: nft_popen.c
  *
  * Description: A thread-safe replacement for popen()/pclose().
@@ -61,7 +62,7 @@
  */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
@@ -86,7 +87,7 @@ static void	close_cleanup(void *);
  *  file descriptor in order to return a stdio FILE *. This is useful if you
  *  wish to use select()- or poll()-driven IO.
  *
- *  The mode argument is defined as in standard popen(). 
+ *  The mode argument is defined as in standard popen().
  *
  *  On success, returns a file descriptor, or -1 on error.
  *  On failure, returns -1, with errno set to one of:
@@ -127,7 +128,7 @@ int nft_popen(const char * command, const char * type) {
 
 	/* Disable thread cancellation from this point forward. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
-    
+
 	if ((cur = malloc(sizeof(struct pid))) == NULL) {
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
@@ -159,7 +160,7 @@ int nft_popen(const char * command, const char * type) {
 				#endif
 				goto retry;
 			}else{
-				CACTID_LOG(("ERROR: SCRIPT: Cound not fork. Out of Resources nft_popen.c\n"));
+				SPINE_LOG(("ERROR: SCRIPT: Cound not fork. Out of Resources nft_popen.c\n"));
 			}
 		case ENOMEM:
 			if (retry_count < 3) {
@@ -170,10 +171,10 @@ int nft_popen(const char * command, const char * type) {
 				#endif
 				goto retry;
 			}else{
-				CACTID_LOG(("ERROR: SCRIPT Cound not fork. Out of Memory nft_popen.c\n"));
+				SPINE_LOG(("ERROR: SCRIPT Cound not fork. Out of Memory nft_popen.c\n"));
 			}
 		default:
-			CACTID_LOG(("ERROR: SCRIPT Cound not fork. Unknown Reason nft_popen.c\n"));
+			SPINE_LOG(("ERROR: SCRIPT Cound not fork. Unknown Reason nft_popen.c\n"));
 		}
 
 		(void)close(pdes[0]);
@@ -247,12 +248,12 @@ int nft_popen(const char * command, const char * type) {
  *  nft_pchild
  *
  *  Get the pid of the child process for an fd created by ntf_popen().
- *  
+ *
  *  On success, the pid of the child process is returned.
  *  On failure, nft_pchild() returns -1, with errno set to:
- *  
+ *
  *    EBADF	The fd is not an active nft_popen() file descriptor.
- *  
+ *
  *------------------------------------------------------------------------------
  */
 int nft_pchild(int fd) {
@@ -268,7 +269,7 @@ int nft_pchild(int fd) {
 	}
 
     pthread_mutex_unlock(&ListMutex);
-	
+
 	if (cur == NULL) {
 		errno = EBADF;
 		return -1;
@@ -282,13 +283,13 @@ int nft_pchild(int fd) {
  *  nft_pclose
  *
  *  Close the pipe and wait for the status of the child process.
- *  
+ *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
- *  
+ *
  *    EBADF	The fd is not an active popen() file descriptor.
  *    ECHILD	The waitpid() call failed.
- *  
+ *
  *  This call is cancellable.
  *
  *------------------------------------------------------------------------------

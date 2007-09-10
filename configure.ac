@@ -1,15 +1,15 @@
 AC_PREREQ(2.53)
-AC_INIT(Cactid Poller, 0.8.6j, http://bugs.cacti.net)
+AC_INIT(Spine Poller, 0.8.7, http://bugs.cacti.net)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
 
 AC_CANONICAL_HOST
-AC_CONFIG_SRCDIR(cactid.c)
-AC_PREFIX_DEFAULT(/usr/local/cactid)
+AC_CONFIG_SRCDIR(spine.c)
+AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(cactid, 0.8.6j)
+AM_INIT_AUTOMAKE(spine, 0.8.6j)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
@@ -113,7 +113,7 @@ AC_DEFUN([MYSQL_LIB_CHK],
         MYSQL_LIB_DIR=$1
         break 2
       fi
-    done 
+    done
   ]
 )
 
@@ -133,17 +133,17 @@ if test -z "$MYSQL_INC_DIR"; then
 fi
 
 for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
-  MYSQL_LIB_CHK($i/lib)
   MYSQL_LIB_CHK($i/lib64)
-  MYSQL_LIB_CHK($i/lib/mysql)
   MYSQL_LIB_CHK($i/lib64/mysql)
+  MYSQL_LIB_CHK($i/lib)
+  MYSQL_LIB_CHK($i/lib/mysql)
 done
 
 LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 AC_CHECK_LIB(mysqlclient_r,mysql_init, LIBS="-lmysqlclient_r $LIBS",
-  AC_MSG_ERROR([MySQL libraries not found.])
+  AC_MSG_ERROR([MySQL libraries not found])
 )
 
 AC_CHECK_LIB(mysqlclient_r,mysql_thread_init,[],
@@ -162,13 +162,15 @@ if test "x$SNMP_DIR" != "x"; then
     test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i && break
   done
 
-  # Accomodate 32-Bit Libraries
-  test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
-  test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
-
   # Accomodate 64-Bit Libraries
-  test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
+  test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so       && SNMP_LIBDIR=$SNMP_DIR/lib64
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
+
+  if test -z "$SNMP_LIBDIR"; then
+    # Accomodate 32-Bit Libraries
+    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so       && SNMP_LIBDIR=$SNMP_DIR/lib
+    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
+  fi
 else
   for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
     test -f $i/snmp.h                                  && SNMP_INCDIR=$i                       && break
@@ -181,17 +183,20 @@ else
     test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp && break
   done
 
-  # Accomodate 32-Bit Libraries
-  for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
-    test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so       && SNMP_LIBDIR=$i/lib && break
-    test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib && break
-  done
-
   # Accomodate 64-Bit Libraries
   for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
     test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so       && SNMP_LIBDIR=$i/lib64 && break
     test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64 && break
   done
+
+  # Only check for 32 Bit libraries if the 64 bit are not found
+  if test -z "$SNMP_LIBDIR"; then
+    # Accomodate 32-Bit Libraries
+    for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
+      test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so       && SNMP_LIBDIR=$i/lib && break
+      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib && break
+    done
+  fi
 fi
 
 if test -z "$SNMP_INCDIR"; then
@@ -210,7 +215,7 @@ AC_MSG_CHECKING([if UCD-SNMP needs crypto support])
 SNMP_SSL=no
 AC_TRY_COMPILE([#include <ucd-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   [  AC_MSG_RESULT(yes)
-     SNMP_SSL=yes 
+     SNMP_SSL=yes
   ],
   AC_MSG_RESULT(no)
 )
@@ -218,7 +223,7 @@ AC_TRY_COMPILE([#include <ucd-snmp-config.h>], [exit(USE_OPENSSL != 1);],
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
 AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   [  AC_MSG_RESULT(yes)
-     SNMP_SSL=yes 
+     SNMP_SSL=yes
   ],
   AC_MSG_RESULT(no)
 )

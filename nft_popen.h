@@ -1,4 +1,6 @@
 /******************************************************************************
+ ex: set tabstop=4 shiftwidth=4 autoindent:
+ *
  * (C) Copyright Xenadyne, Inc. 2002  All rights reserved.
  * 
  * Permission to use, copy, modify and distribute this software for

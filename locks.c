@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -31,7 +32,7 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /*
  * each lock requires a handful of parts: a mutex, an init structure, and an
@@ -40,30 +41,30 @@
  * This macro defines these helpers in a single step.
  */
 
-#define DEFINE_CACTID_LOCK(name)	\
+#define DEFINE_SPINE_LOCK(name)	\
 	static pthread_mutex_t name ## _lock; \
 	static pthread_once_t name ## _lock_o = PTHREAD_ONCE_INIT; \
 	static void init_ ## name ## _lock(void) { \
 	    pthread_mutex_init(&name ## _lock, PTHREAD_MUTEXATTR_DEFAULT); \
 	}
 
-DEFINE_CACTID_LOCK(snmp)
-DEFINE_CACTID_LOCK(thread)
-DEFINE_CACTID_LOCK(mysql)
-DEFINE_CACTID_LOCK(ghbn)
-DEFINE_CACTID_LOCK(pipe)
-DEFINE_CACTID_LOCK(syslog)
-DEFINE_CACTID_LOCK(php)
-DEFINE_CACTID_LOCK(php_proc_0)
-DEFINE_CACTID_LOCK(php_proc_1)
-DEFINE_CACTID_LOCK(php_proc_2)
-DEFINE_CACTID_LOCK(php_proc_3)
-DEFINE_CACTID_LOCK(php_proc_4)
-DEFINE_CACTID_LOCK(php_proc_5)
-DEFINE_CACTID_LOCK(php_proc_6)
-DEFINE_CACTID_LOCK(php_proc_7)
-DEFINE_CACTID_LOCK(php_proc_8)
-DEFINE_CACTID_LOCK(php_proc_9)
+DEFINE_SPINE_LOCK(snmp)
+DEFINE_SPINE_LOCK(thread)
+DEFINE_SPINE_LOCK(mysql)
+DEFINE_SPINE_LOCK(ghbn)
+DEFINE_SPINE_LOCK(pipe)
+DEFINE_SPINE_LOCK(syslog)
+DEFINE_SPINE_LOCK(php)
+DEFINE_SPINE_LOCK(php_proc_0)
+DEFINE_SPINE_LOCK(php_proc_1)
+DEFINE_SPINE_LOCK(php_proc_2)
+DEFINE_SPINE_LOCK(php_proc_3)
+DEFINE_SPINE_LOCK(php_proc_4)
+DEFINE_SPINE_LOCK(php_proc_5)
+DEFINE_SPINE_LOCK(php_proc_6)
+DEFINE_SPINE_LOCK(php_proc_7)
+DEFINE_SPINE_LOCK(php_proc_8)
+DEFINE_SPINE_LOCK(php_proc_9)
 
 void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),       init_snmp_lock);

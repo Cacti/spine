@@ -1,6 +1,7 @@
-/*
+/
+ ex: set tabstop=4 shiftwidth=4 autoindent:*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -32,7 +33,7 @@
 
 /* cacti config reading functions */
 extern void read_config_options(void);
-extern int read_cactid_config(char *file);
+extern int read_spine_config(char *file);
 extern void config_defaults(void);
 
 /* cacti logging function */

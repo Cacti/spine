@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -31,7 +32,7 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 static int nopts = 0;
 
@@ -51,7 +52,7 @@ static struct {
 } opttable[256];
 
 /*! \fn void set_option(const char *option, const char *value)
- *  \brief Override cactid setting from the Cacti settings table.
+ *  \brief Override spine setting from the Cacti settings table.
  *
  *	Called from the command-line processing code, this provides a value
  *	to replace any DB-stored option settings.
@@ -146,8 +147,8 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 }
 
 /*! \fn void read_config_options(void)
- *  \brief Reads the default Cactid runtime parameters from the database and set's the global array
- *  
+ *  \brief Reads the default Spine runtime parameters from the database and set's the global array
+ *
  *  load default values from the database for poller processing
  *
  */
@@ -161,7 +162,7 @@ void read_config_options() {
 
 	db_connect(set.dbdb, &mysql);
 
-	/* get logging level from database - overrides cactid.conf */
+	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, "log_verbosity")) != 0 ) {
 		const int n = atoi(res);
 		if (n != 0) set.log_level = n;
@@ -189,10 +190,10 @@ void read_config_options() {
  	}
 
 	/* log the path_webroot variable */
-	CACTID_LOG_DEBUG(("DEBUG: The path_php_server variable is %s\n", set.path_php_server));
+	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s\n", set.path_php_server));
 
 	/* log the path_cactilog variable */
-	CACTID_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s\n", set.path_logfile));
+	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s\n", set.path_logfile));
 
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, "log_destination")) != 0 ) {
@@ -202,7 +203,7 @@ void read_config_options() {
 	}
 
 	/* log the log_destination variable */
-	CACTID_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)\n",
+	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)\n",
 			set.log_destination,
 			printable_logdest(set.log_destination)));
 	set.logfile_processed = TRUE;
@@ -213,7 +214,7 @@ void read_config_options() {
 	}
 
 	/* log the path_php variable */
-	CACTID_LOG_DEBUG(("DEBUG: The path_php variable is %s\n", set.path_php));
+	SPINE_LOG_DEBUG(("DEBUG: The path_php variable is %s\n", set.path_php));
 
 	/* set availability_method */
 	if ((res = getsetting(&mysql, "availability_method")) != 0 ) {
@@ -221,7 +222,7 @@ void read_config_options() {
 	}
 
 	/* log the availability_method variable */
-	CACTID_LOG_DEBUG(("DEBUG: The availability_method variable is %i\n", set.availability_method));
+	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i\n", set.availability_method));
 
 	/* set ping_recovery_count */
 	if ((res = getsetting(&mysql, "ping_recovery_count")) != 0 ) {
@@ -229,7 +230,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_recovery_count variable */
-	CACTID_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i\n", set.ping_recovery_count));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i\n", set.ping_recovery_count));
 
 	/* set ping_failure_count */
 	if ((res = getsetting(&mysql, "ping_failure_count")) != 0) {
@@ -237,7 +238,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_failure_count variable */
-	CACTID_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i\n", set.ping_failure_count));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i\n", set.ping_failure_count));
 
 	/* set ping_method */
 	if ((res = getsetting(&mysql, "ping_method")) != 0 ) {
@@ -245,7 +246,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_method variable */
-	CACTID_LOG_DEBUG(("DEBUG: The ping_method variable is %i\n", set.ping_method));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i\n", set.ping_method));
 
 	/* set ping_retries */
 	if ((res = getsetting(&mysql, "ping_retries")) != 0 ) {
@@ -253,7 +254,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_retries variable */
-	CACTID_LOG_DEBUG(("DEBUG: The ping_retries variable is %i\n", set.ping_retries));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i\n", set.ping_retries));
 
 	/* set ping_timeout */
 	if ( (res = getsetting(&mysql, "ping_timeout")) != 0 ) {
@@ -261,27 +262,27 @@ void read_config_options() {
 	}
 
 	/* log the ping_timeout variable */
-	CACTID_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i\n", set.ping_timeout));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i\n", set.ping_timeout));
 
 	/* set logging option for errors */
 	set.log_perror = getboolsetting(&mysql, "log_perror", FALSE);
 
 	/* log the log_perror variable */
-	CACTID_LOG_DEBUG(("DEBUG: The log_perror variable is %i\n", set.log_perror));
+	SPINE_LOG_DEBUG(("DEBUG: The log_perror variable is %i\n", set.log_perror));
 
 	/* set logging option for errors */
 	set.log_pwarn = getboolsetting(&mysql, "log_pwarn", FALSE);
 
 	/* log the log_pwarn variable */
-	CACTID_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i\n", set.log_pwarn));
+	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i\n", set.log_pwarn));
 
 	/* set logging option for statistics */
 	set.log_pstats = getboolsetting(&mysql, "log_pstats", FALSE);
 
 	/* log the log_pstats variable */
-	CACTID_LOG_DEBUG(("DEBUG: The log_pstats variable is %i\n", set.log_pstats));
+	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i\n", set.log_pstats));
 
-	/* get Cacti defined max threads override cactid.conf */
+	/* get Cacti defined max threads override spine.conf */
 	if ((res = getsetting(&mysql, "max_threads")) != 0 ) {
 		set.threads = atoi(res);
 		if (set.threads > MAX_THREADS) {
@@ -290,7 +291,7 @@ void read_config_options() {
 	}
 
 	/* log the threads variable */
-	CACTID_LOG_DEBUG(("DEBUG: The threads variable is %i\n", set.threads));
+	SPINE_LOG_DEBUG(("DEBUG: The threads variable is %i\n", set.threads));
 
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
 	if ((res = getsetting(&mysql, "poller_interval")) != 0 ) {
@@ -301,9 +302,9 @@ void read_config_options() {
 
 	/* log the poller_interval variable */
 	if (set.poller_interval == 0) {
-		CACTID_LOG_DEBUG(("DEBUG: The polling interval is the system default\n"));
+		SPINE_LOG_DEBUG(("DEBUG: The polling interval is the system default\n"));
 	}else{
-		CACTID_LOG_DEBUG(("DEBUG: The polling interval is %i seconds\n", set.poller_interval));
+		SPINE_LOG_DEBUG(("DEBUG: The polling interval is %i seconds\n", set.poller_interval));
 	}
 
 
@@ -315,7 +316,7 @@ void read_config_options() {
 	}
 
 	/* log the concurrent processes variable */
-	CACTID_LOG_DEBUG(("DEBUG: The number of concurrent processes is %i\n", set.num_parent_processes));
+	SPINE_LOG_DEBUG(("DEBUG: The number of concurrent processes is %i\n", set.num_parent_processes));
 
 	/* get the script timeout to establish timeouts */
 	if ((res = getsetting(&mysql, "script_timeout")) != 0 ) {
@@ -328,7 +329,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	CACTID_LOG_DEBUG(("DEBUG: The script timeout is %i\n", set.script_timeout));
+	SPINE_LOG_DEBUG(("DEBUG: The script timeout is %i\n", set.script_timeout));
 
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, "php_servers")) != 0 ) {
@@ -337,7 +338,7 @@ void read_config_options() {
 		if (set.php_servers > MAX_PHP_SERVERS) {
 			set.php_servers = MAX_PHP_SERVERS;
 		}
-		
+
 		if (set.php_servers <= 0) {
 			set.php_servers = 1;
 		}
@@ -346,7 +347,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	CACTID_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i\n", set.php_servers));
+	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i\n", set.php_servers));
 
 	/*----------------------------------------------------------------
 	 * determine if the php script server is required by searching for
@@ -369,12 +370,12 @@ void read_config_options() {
 	if (num_rows > 0) set.php_required = TRUE;
 
 	/* log the requirement for the script server */
-	CACTID_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'\n", 
+	SPINE_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'\n",
 		set.start_host_id,
 		set.end_host_id,
 		num_rows));
 
-	CACTID_LOG_DEBUG(("DEBUG: The PHP Script Server is %sRequired\n",
+	SPINE_LOG_DEBUG(("DEBUG: The PHP Script Server is %sRequired\n",
 		set.php_required
 		? ""
 		: "Not "));
@@ -391,19 +392,19 @@ void read_config_options() {
 	}
 
 	/* log the snmp_max_get_size variable */
-	CACTID_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i\n", set.snmp_max_get_size));
+	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i\n", set.snmp_max_get_size));
 
 	mysql_free_result(result);
 	db_disconnect(&mysql);
 }
 
-/*! \fn int read_cactid_config(char *file) 
- *  \brief obtain default startup variables from the cactid.conf file.
- *  \param file the cactid config file
+/*! \fn int read_spine_config(char *file)
+ *  \brief obtain default startup variables from the spine.conf file.
+ *  \param file the spine config file
  *
  *  \return 0 if successful or -1 if the file could not be opened
  */
-int read_cactid_config(char *file) {
+int read_spine_config(char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
@@ -418,7 +419,7 @@ int read_cactid_config(char *file) {
 		return -1;
 	}else{
 		if (!set.stdout_notty) {
-			fprintf(stdout, "CACTID: Using cactid config file [%s]\n", file);
+			fprintf(stdout, "SPINE: Using spine config file [%s]\n", file);
 		}
 
 		while(!feof(fp)) {
@@ -441,13 +442,13 @@ int read_cactid_config(char *file) {
 		}
 
 		if (strlen(set.dbpass) == 0) *set.dbpass = '\0';
-		
+
 		return 0;
 	}
 }
 
 /*! \fn void config_defaults(void)
- *  \brief populates the global configuration structure with default cactid.conf file settings
+ *  \brief populates the global configuration structure with default spine.conf file settings
  *  \param *set global runtime parameters
  *
  */
@@ -467,10 +468,10 @@ void config_defaults() {
 }
 
 /*! \fn void die(const char *format, ...)
- *  \brief a method to end Cactid while returning the fatal error to stderr
+ *  \brief a method to end Spine while returning the fatal error to stderr
  *
  *	Given a printf-style argument list, format it to the standard
- *	error, append a newline, then exit Cactid.
+ *	error, append a newline, then exit Spine.
  *
  */
 void die(const char *format, ...) {
@@ -483,23 +484,23 @@ void die(const char *format, ...) {
 	va_end(args);
 
 	if (set.logfile_processed) {
-		if (set.parent_fork == CACTID_PARENT) {
-			snprintf(flogmessage, BUFSIZE, "%s (Cactid parent)", logmessage);
+		if (set.parent_fork == SPINE_PARENT) {
+			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)", logmessage);
 		}else{
-			snprintf(flogmessage, BUFSIZE, "%s (Cactid thread)", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)", logmessage);
 		}
 	}else{
-		snprintf(flogmessage, BUFSIZE, "%s (Cactid init)", logmessage);
+		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
-	CACTID_LOG((flogmessage));
+	SPINE_LOG((flogmessage));
 
-	if (set.parent_fork == CACTID_PARENT) {
+	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
 			php_close(PHP_INIT);
 		}
 	}
-	
+
 	exit(set.exit_code);
 }
 
@@ -536,7 +537,7 @@ int cacti_log(const char *format, ...) {
 	}
 
 	/* log message prefix */
-	snprintf(logprefix, SMALL_BUFSIZE, "CACTID: Poller[%i] ", set.poller_id);
+	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] ", set.poller_id);
 
 	if (IS_LOGGING_TO_STDOUT()) {
 		puts(ulogmessage);
@@ -602,8 +603,8 @@ int cacti_log(const char *format, ...) {
 	}
 
 	if (set.log_level >= POLLER_VERBOSITY_NONE) {
-		if ((strstr(flogmessage,"ERROR"))   || 
-			(strstr(flogmessage,"WARNING")) || 
+		if ((strstr(flogmessage,"ERROR"))   ||
+			(strstr(flogmessage,"WARNING")) ||
 			(strstr(flogmessage,"FATAL"))) {
 			#ifdef DISABLE_STDERR
 			fp = stdout;
@@ -620,7 +621,7 @@ int cacti_log(const char *format, ...) {
 			fprintf(fp, "%s", flogmessage);
 		}
 	}
-	
+
 	return TRUE;
 }
 
@@ -690,7 +691,7 @@ int is_numeric(const char *string)
 		if (end_ptr_long == string + length) { /* integer string */
 			return TRUE;
 		}else if (end_ptr_long == string) {
-			if (*end_ptr_long != '\0' && 
+			if (*end_ptr_long != '\0' &&
 				*end_ptr_long != '.' &&
 				*end_ptr_long != '-' &&
 				*end_ptr_long != '+') { /* ignore partial string matches but doubles can begin with '+', '-', '.' */
@@ -728,7 +729,7 @@ int is_numeric(const char *string)
 char *strip_alpha(char *string)
 {
 	int i;
-	
+
 	i = strlen(string);
 
 	while (i >= 0) {
@@ -757,7 +758,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	int position;
 	int new_position;
 	char *return_str;
-	
+
 	if (!(return_str = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: util.c add_slashes!");
 	}
@@ -775,7 +776,7 @@ char *add_slashes(char *string, int arguments_2_strip) {
 
 	while (position < length) {
 		/* backslash detected, change to forward slash */
-		if (string[position] == '\\') {	
+		if (string[position] == '\\') {
 			/* only add slashes for first x arguments */
 			if (space_count < arguments_2_strip) {
 				return_str[new_position] = '/';
@@ -823,7 +824,7 @@ char *strip_string_crlf(char *string) {
 	}
 
 	return(string);
-} 
+}
 
 /*! \fn char *strip_quotes(char *string)
  *  \brief remove single and double quotes from a string
@@ -936,7 +937,7 @@ char *get_host_poll_time() {
 	char *host_time;
 
 	#define HOST_TIME_STRING_LEN 20
-	
+
 	if (!(host_time = (char *) malloc(HOST_TIME_STRING_LEN))) {
 		die("ERROR: Fatal malloc error: util.c host_time");
 	}
@@ -952,8 +953,8 @@ char *get_host_poll_time() {
 	if (strftime(host_time, HOST_TIME_STRING_LEN, "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
 		die("ERROR: Could not get string from strftime() util.c get_host_poll_time()");
 	}
-	
+
 	return(host_time);
 }
 
-	
+

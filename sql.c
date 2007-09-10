@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -12,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -32,7 +32,7 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /*! \fn int db_insert(MYSQL *mysql, const char *query)
  *  \brief inserts a row or rows in a database table.
@@ -49,32 +49,32 @@ int db_insert(MYSQL *mysql, const char *query) {
 	int    error;
 	int    error_count = 0;
 	char   query_frag[BUFSIZE];
-	
+
 	/* save a fragment just in case */
 	snprintf(query_frag, BUFSIZE, "%s", query);
 
 	/* show the sql query */
 	if (set.log_level == 5) {
-		CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
+		SPINE_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
 	}
-	
+
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
 			if (mysql_query(mysql, query)) {
 				error = mysql_errno(mysql);
-				
+
 				if ((error == 1213) || (error == 1205)) {
 					usleep(50000);
 					error_count++;
-					
+
 					if (error_count > 30) {
-						CACTID_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
+						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
 						return FALSE;
 					}
 
 					continue;
 				}else{
-					CACTID_LOG(("ERROR: A database insert failed! Error:'%i', SQL Fragment:'%s'\n", error, query_frag));
+					SPINE_LOG(("ERROR: A database insert failed! Error:'%i', SQL Fragment:'%s'\n", error, query_frag));
 					return FALSE;
 				}
 			}else{
@@ -101,27 +101,27 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 
 	int    error       = 0;
 	int    error_count = 0;
-	
+
 	char   query_frag[BUFSIZE];
 
 	/* save a fragment just in case */
 	snprintf(query_frag, BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	CACTID_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
-	
+	SPINE_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
+
 	while (1) {
 		if (mysql_query(mysql, query)) {
 			error = mysql_errno(mysql);
-				
+
 			if ((error == 1213) || (error == 1205)) {
 				#ifndef SOLAR_THREAD
 				usleep(50000);
 				#endif
 				error_count++;
-					
+
 				if (error_count > 30) {
-					CACTID_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
+					SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
 
 					die("ERROR: Fatal MySQL Query Error, exiting!");
 				}
@@ -132,10 +132,10 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 			break;
 		}else{
 			mysql_res = mysql_store_result(mysql);
-
-			return mysql_res;
 		}
 	}
+
+	return mysql_res;
 }
 
 /*! \fn void db_connect(char *database, MYSQL *mysql)
@@ -145,7 +145,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
  *
  *	This function will attempt to open a connection to a MySQL database and then
  *	return the connection object to the calling function.  If the database connection
- *  fails more than 20 times, the function will fail and Cactid will terminate.
+ *  fails more than 20 times, the function will fail and Spine will terminate.
  *
  */
 void db_connect(const char *database, MYSQL *mysql) {
@@ -154,7 +154,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	int    options_error;
 	int    success;
 	char   *hostname;
-	char   *socket;
+	char   *socket = NULL;
 	struct stat socket_stat;
 
 	if ((hostname = strdup(set.dbhost)) == NULL) {
@@ -179,7 +179,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	timeout = 5;
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		printf("CACTID: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
+		printf("SPINE: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
 	}
 
 	thread_mutex_lock(LOCK_MYSQL);
@@ -234,7 +234,7 @@ void db_disconnect(MYSQL *mysql) {
  *  \param obuf the sql select statment to have the host range appended
  *  \param colname the sql column name that will have the host range checked
  *  \param set global runtime settings
- * 
+ *
  *	Several places in the code need to limit the range of hosts to
  *	those with a certain ID range, but only if those range values
  *	are actually nonzero.

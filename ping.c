@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -31,7 +32,7 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
@@ -59,7 +60,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 		if (geteuid() != 0) {
 			set.ping_method = PING_UDP;
-			CACTID_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/cactid\" to resolve.\n"));
+			SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve.\n"));
 		}
 		#endif
 
@@ -226,13 +227,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct icmphdr *icmp;
 	unsigned char *packet;
 	char *new_hostname;
-	
+
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
 	/* get ICMP socket */
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		CACTID_LOG(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
+		SPINE_LOG(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
 	}
 
 	/* establish timeout value */
@@ -253,9 +254,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->un.echo.id = getpid();
 	icmp->un.echo.sequence = seq++;
 	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
-		die("ERROR: Function gettimeofday failed.  Exiting cactid");
+		die("ERROR: Function gettimeofday failed.  Exiting spine");
 	}
-	
+
 	icmp->checksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
 	icmp->checksum = get_checksum(packet, packet_len);
@@ -370,7 +371,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int return_code;
 	fd_set socket_fds;
 	char *new_hostname;
-	
+
 	/* remove "udp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
@@ -441,7 +442,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				CACTID_LOG_DEBUG(("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
+				SPINE_LOG_DEBUG(("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
 					if (total_time <= set.ping_timeout) {
@@ -494,7 +495,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 		hostinfo = gethostbyname(hostname);
 		thread_mutex_unlock(LOCK_GHBN);
 		if (hostinfo == NULL) {
-			CACTID_LOG(("WARNING: Unknown host %s\n", hostname));
+			SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
 
 			if (i > 3) {
 				return FALSE;
@@ -518,7 +519,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
  */
 char *remove_tcp_udp_from_hostname(char *hostname) {
 	char *cleaned_hostname;
-	
+
 	if (!(cleaned_hostname = (char *) malloc(strlen(hostname)+1))) {
 		die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname");
 	}
@@ -734,25 +735,25 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				CACTID_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
-				CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
 				if (strlen(host->snmp_community) == 0) {
-					CACTID_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP\n", host->id));
+					SPINE_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP\n", host->id));
 				}else{
-					CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+					SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 				}
 			}else{
-				CACTID_LOG_HIGH(("Host[%i] PING: Result %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] PING: Result %s\n", host->id, ping->ping_response));
 			}
 		}else{
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				CACTID_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
-				CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
-				CACTID_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else{
-				CACTID_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
 			}
 		}
 	}
@@ -760,9 +761,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			CACTID_LOG(("Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error));
+			SPINE_LOG(("Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error));
 		}else{
-			CACTID_LOG(("Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id));
+			SPINE_LOG(("Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id));
 		}
 	}
 }

@@ -1,6 +1,7 @@
 /*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2006 The Cacti Group                                 |
+ | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -11,14 +12,14 @@
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
  | GNU Lesser General Public License for more details.                     |
- |                                                                         | 
+ |                                                                         |
  | You should have received a copy of the GNU Lesser General Public        |
  | License along with this library; if not, write to the Free Software     |
  | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
  | 02110-1301, USA                                                         |
  |                                                                         |
  +-------------------------------------------------------------------------+
- | cactid: a backend data gatherer for cacti                               |
+ | spine: a backend data gatherer for cacti                                |
  +-------------------------------------------------------------------------+
  | This poller would not have been possible without:                       |
  |   - Larry Adams (current development and enhancements)                  |
@@ -31,7 +32,7 @@
 */
 
 #include "common.h"
-#include "cactid.h"
+#include "spine.h"
 
 #ifdef USE_NET_SNMP
  #undef PACKAGE_NAME
@@ -58,13 +59,13 @@
 
 #define OIDSIZE(p) (sizeof(p)/sizeof(oid))
 
-/*! \fn void snmp_cactid_init()
+/*! \fn void snmp_spine_init()
  *  \brief wrapper function for init_snmp
- * 
+ *
  *	Initializes snmp for the given application ID
  *
  */
-void snmp_cactid_init(void) {
+void snmp_spine_init(void) {
 #ifdef USE_NET_SNMP
 	/* Only do numeric output */
 	#ifdef NETSNMP_DS_LIB_PRINT_NUMERIC_ENUM
@@ -93,17 +94,17 @@ void snmp_cactid_init(void) {
 	/* check that the headers we compiled with match the library we linked with -
 	   apparently not defined in UCD-SNMP...
 	*/
-	CACTID_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
-	CACTID_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
+	SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
+	SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
 
 	if(STRIMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
 		init_snmp("snmpapp");
 	}else{
-		/* report the error and quit cactid */
+		/* report the error and quit spine */
 		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
 	}
 	#else
-		CACTID_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
+		SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
 		init_snmp("snmpapp");
 	#endif
 #else
@@ -115,30 +116,30 @@ void snmp_cactid_init(void) {
 #endif
 }
 
-/*! \fn void snmp_cactid_close()
+/*! \fn void snmp_spine_close()
  *  \brief wrapper function for the snmp_shutdown function
- * 
+ *
  *	Closes the snmp api for the given application ID
  *
  */
-void snmp_cactid_close(void) {
-	snmp_shutdown("cactid");
+void snmp_spine_close(void) {
+	snmp_shutdown("spine");
 }
 
-/*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version, 
- * char *snmp_community, char *snmp_username, char *snmp_password, int snmp_port, 
+/*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
+ * char *snmp_community, char *snmp_username, char *snmp_password, int snmp_port,
  * int snmp_timeout)
- *  \brief initializes an snmp_session object for a Cactid host
- * 
- *	This function will initialize NET-SNMP or UCD-SNMP for the Cactid host
+ *  \brief initializes an snmp_session object for a Spine host
+ *
+ *	This function will initialize NET-SNMP or UCD-SNMP for the Spine host
  *  in question.
  *
  */
-void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community, 
+void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
 					char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout) {
 	void *sessp = NULL;
 	struct snmp_session session;
-	char hostnameport[BUFSIZE];   
+	char hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
   	snmp_sess_init(&session);
@@ -175,9 +176,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}else if (snmp_version == 3) {
 		session.version = SNMP_VERSION_3;
 	}else {
-		CACTID_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname));
+		SPINE_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname));
 		return 0;
-	}		
+	}
 
 	snprintf(hostnameport, sizeof(hostnameport), "%s:%i", hostname, snmp_port);
 	session.peername = hostnameport;
@@ -208,13 +209,13 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
 
 	    /* set the authentication key to the hashed version. The password must me at least 8 char */
-	    if (generate_Ku(session.securityAuthProto, 
+	    if (generate_Ku(session.securityAuthProto,
 						session.securityAuthProtoLen,
 						(u_char *) snmp_password,
 						strlen(snmp_password),
 	                    session.securityAuthKey,
 	                    &(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
-	        CACTID_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+	        SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
 		}
 	}
 
@@ -224,28 +225,28 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		CACTID_LOG(("ERROR: Problem initializing SNMP session '%s'\n", hostname));
+		SPINE_LOG(("ERROR: Problem initializing SNMP session '%s'\n", hostname));
 	}
-	
+
 	return sessp;
 }
 
 /*! \fn void snmp_host_cleanup(void *snmp_session)
  *  \brief closes an established snmp session
- * 
+ *
  *	This function performs cleanup of the snmp sessions once polling is completed
  *  for a host.
  *
  */
 void snmp_host_cleanup(void *snmp_session) {
-	if (snmp_session != NULL) {	
+	if (snmp_session != NULL) {
 		snmp_sess_close(snmp_session);
 	}
 }
 
 /*! \fn char *snmp_get(host_t *current_host, char *snmp_oid)
  *  \brief performs a single snmp_get for a specific snmp OID
- * 
+ *
  *	This function will poll a specific snmp OID for a host.  The host snmp
  *  session must already be established.
  *
@@ -261,7 +262,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	size_t anOID_len = MAX_OID_LEN;
 	int status;
 	char *result_string;
-	
+
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
@@ -274,7 +275,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			CACTID_LOG(("ERROR: Problems parsing SNMP OID\n"));
+			SPINE_LOG(("ERROR: Problems parsing SNMP OID\n"));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -287,7 +288,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				CACTID_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
+				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -352,7 +353,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		pdu = snmp_pdu_create(SNMP_MSG_GETNEXT);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			CACTID_LOG(("ERROR: Problems parsing SNMP OID\n"));
+			SPINE_LOG(("ERROR: Problems parsing SNMP OID\n"));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -365,7 +366,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				CACTID_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
+				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -402,7 +403,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 /*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
  *
  *  \brief replacement for the buggy net-snmp.org snprint_value function
- * 
+ *
  *	This function format an output buffer with the correct string representation
  *  of an snmp OID result fetched with snmp_get_multi.  The buffer pointed to by
  *  the function is modified.
@@ -428,7 +429,7 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 
 /*! \fn char *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
  *  \brief performs multiple OID snmp_get's in a single network call
- * 
+ *
  *	This function will a group of snmp OID's for a host.  The host snmp
  *  session must already be established.  The function will modify elements of
  *  the snmp_oids array with the results from the snmp api call.
@@ -455,7 +456,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
- 			CACTID_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid));
+ 			SPINE_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid));
 
  			/* Mark this OID as "bad" */
 			SET_UNDEFINED(snmp_oids[i].result);
@@ -475,7 +476,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
 		if (response == NULL) {
-			CACTID_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi\n"));
+			SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi\n"));
 			status = STAT_ERROR;
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
