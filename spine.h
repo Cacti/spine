@@ -139,7 +139,7 @@
 #define CONFIG_PATHS 3
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
-#define CONFIG_PATH_3 "./etc/"
+#define CONFIG_PATH_3 "../etc/"
 
 /* config file defaults */
 #define DEFAULT_CONF_FILE "spine.conf"
