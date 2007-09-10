@@ -1,8 +1,9 @@
 The Cacti Group – spine
 
 0.8.7
+-bug: Fix configure issues with hybrid 64 bit OS'
 -feature: Rename to spine
--feature: Update copywright
+-feature: Update copyright
 -feature: Add tab stops and autoindent
 
 0.8.6j
