@@ -139,7 +139,7 @@
 #define CONFIG_PATHS 3
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
-#define CONFIG_PATH_3 "../etc/"
+#define CONFIG_PATH_3 "./etc/"
 
 /* config file defaults */
 #define DEFAULT_CONF_FILE "spine.conf"
@@ -280,55 +280,55 @@
  */
 typedef struct config_struct {
 	/* stdout, stderr TTY protection */
-	int stdout_notty;
-	int stderr_notty;
+	int    stdout_notty;
+	int    stderr_notty;
 	/* general configuration/runtime settings */
-	int poller_id;
-	int poller_interval;
-	int parent_fork;
-	int num_parent_processes;
-	int script_timeout;
-	int threads;
+	int    poller_id;
+	int    poller_interval;
+	int    parent_fork;
+	int    num_parent_processes;
+	int    script_timeout;
+	int    threads;
 	int logfile_processed;
 	/* debugging options */
-	int snmponly;
-	int SQL_readonly;
+	int    snmponly;
+	int    SQL_readonly;
 	/* host range to be poller with this spine process */
-	int start_host_id;
-	int end_host_id;
+	int    start_host_id;
+	int    end_host_id;
 	/* database connection information */
-	char dbhost[SMALL_BUFSIZE];
-	char dbdb[SMALL_BUFSIZE];
-	char dbuser[SMALL_BUFSIZE];
-	char dbpass[SMALL_BUFSIZE];
+	char   dbhost[SMALL_BUFSIZE];
+	char   dbdb[SMALL_BUFSIZE];
+	char   dbuser[SMALL_BUFSIZE];
+	char   dbpass[SMALL_BUFSIZE];
 	unsigned int dbport;
 	/* path information */
-	char path_logfile[SMALL_BUFSIZE];
-	char path_php[SMALL_BUFSIZE];
-	char path_php_server[SMALL_BUFSIZE];
+	char   path_logfile[SMALL_BUFSIZE];
+	char   path_php[SMALL_BUFSIZE];
+	char   path_php_server[SMALL_BUFSIZE];
 	/* logging options */
-	int log_level;
-	int log_destination;
-	int log_perror;
-	int log_pwarn;
-	int log_pstats;
+	int    log_level;
+	int    log_destination;
+	int    log_perror;
+	int    log_pwarn;
+	int    log_pstats;
 	/* ping settings */
-	int availability_method;
-	int ping_method;
-	int ping_retries;
-	int ping_timeout;
-	int ping_failure_count;
-	int ping_recovery_count;
+	int    availability_method;
+	int    ping_method;
+	int    ping_retries;
+	int    ping_timeout;
+	int    ping_failure_count;
+	int    ping_recovery_count;
 	/* snmp options */
-	int snmp_max_get_size;
-	int snmp_retries;
+	int    snmp_max_get_size;
+	int    snmp_retries;
 	/* PHP Script Server Options */
-	int php_required;
-	int php_initialized;
-	int php_servers;
-	int php_current_server;
+	int    php_required;
+	int    php_initialized;
+	int    php_servers;
+	int    php_current_server;
 	/* Exit code if we need it */
-	int exit_code;
+	int    exit_code;
 } config_t;
 
 /*! Target Structure
@@ -338,24 +338,32 @@ typedef struct config_struct {
  *
  */
 typedef struct target_struct {
-	int  target_id;
-	char result[BUFSIZE];
-	int  local_data_id;
-	int  action;
-	char command[256];
-	char hostname[250];
-	char snmp_community[100];
-	int  snmp_version;
-	char snmp_username[50];
-	char snmp_password[50];
-	int  snmp_port;
-	int  snmp_timeout;
-	char rrd_name[30];
-	char rrd_path[255];
-	int  rrd_num;
-	char arg1[512];
-	char arg2[255];
-	char arg3[255];
+	int    target_id;
+	char   result[BUFSIZE];
+	int    local_data_id;
+	int    action;
+	char   command[256];
+	char   hostname[250];
+	char   snmp_community[100];
+	int    snmp_version;
+	char   snmp_username[50];
+	char   snmp_password[50];
+	char   snmp_auth_protocol[5];
+	char   snmp_priv_passphrase[200];
+	char   snmp_priv_protocol[6];
+	int    snmp_port;
+	int    snmp_timeout;
+	int    availability_method;
+	int    ping_method;
+	int    ping_port;
+	int    ping_timeout;
+	int    ping_retries;
+	char   rrd_name[30];
+	char   rrd_path[255];
+	int    rrd_num;
+	char   arg1[512];
+	char   arg2[255];
+	char   arg3[255];
 } target_t;
 
 /*! SNMP OID's Structure
@@ -364,9 +372,9 @@ typedef struct target_struct {
  *
  */
 typedef struct snmp_oids {
-	int  array_position;
-	char oid[512];
-	char result[BUFSIZE];
+	int    array_position;
+	char   oid[512];
+	char   result[BUFSIZE];
 } snmp_oids_t;
 
 /*! PHP Script Server Structure
@@ -376,10 +384,10 @@ typedef struct snmp_oids {
  *
  */
 typedef struct php_processes {
-	int php_state;
-	pid_t php_pid;
-	int php_write_fd;
-	int php_read_fd;
+	int    php_state;
+	pid_t  php_pid;
+	int    php_write_fd;
+	int    php_read_fd;
 } php_t;
 
 /*! Host Structure
@@ -389,14 +397,22 @@ typedef struct php_processes {
  *
  */
 typedef struct host_struct {
-	int id;
+	int    id;
 	char   hostname[250];
 	char   snmp_community[100];
+	int    snmp_version;
 	char   snmp_username[50];
 	char   snmp_password[50];
-	int    snmp_version;
+	char   snmp_auth_protocol[5];
+	char   snmp_priv_passphrase[200];
+	char   snmp_priv_protocol[6];
 	int    snmp_port;
 	int    snmp_timeout;
+	int    availability_method;
+	int    ping_method;
+	int    ping_port;
+	int    ping_timeout;
+	int    ping_retries;
 	int    status;
 	int    status_event_count;
 	char   status_fail_date[40];
@@ -419,11 +435,11 @@ typedef struct host_struct {
  *
  */
 typedef struct host_reindex_struct {
-	char op[4];
-	char assert_value[100];
-	char arg1[512];
-	int data_query_id;
-	int action;
+	char   op[4];
+	char   assert_value[100];
+	char   arg1[512];
+	int    data_query_id;
+	int    action;
 } reindex_t;
 
 /*! Ping Result Struction
@@ -432,11 +448,11 @@ typedef struct host_reindex_struct {
  *
  */
 typedef struct ping_results {
-	char hostname[SMALL_BUFSIZE];
-	char ping_status[50];
-	char ping_response[SMALL_BUFSIZE];
-	char snmp_status[50];
-	char snmp_response[SMALL_BUFSIZE];
+	char   hostname[SMALL_BUFSIZE];
+	char   ping_status[50];
+	char   ping_response[SMALL_BUFSIZE];
+	char   snmp_status[50];
+	char   snmp_response[SMALL_BUFSIZE];
 } ping_t;
 
 /*! ICMP Ping Structure
@@ -445,8 +461,8 @@ typedef struct ping_results {
  *
  */
 struct icmphdr {
-	char type;
-	char code;
+	char   type;
+	char   code;
 	unsigned short checksum;
 	union {
 		struct {
@@ -474,10 +490,10 @@ struct icmphdr {
 #include "error.h"
 
 /* Globals */
-extern config_t   set;
-extern php_t      *php_processes;
-extern char       start_datetime[20];
-extern char       config_paths[CONFIG_PATHS][BUFSIZE];
-extern int        active_threads;
+extern config_t set;
+extern php_t  *php_processes;
+extern char   start_datetime[20];
+extern char   config_paths[CONFIG_PATHS][BUFSIZE];
+extern int    active_threads;
 
 #endif /* not _SPINE_H_ */

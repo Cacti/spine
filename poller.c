@@ -1,5 +1,5 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
+ ex: set tabstop=2 shiftwidth=2 autoindent:
  +-------------------------------------------------------------------------+
  | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
@@ -124,6 +124,9 @@ void poll_host(int host_id) {
 	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
+	char last_snmp_auth_protocol[5];
+	char last_snmp_priv_passphrase[200];
+	char last_snmp_priv_protocol[6];
 
 	/* reindex shortcuts to speed polling */
 	int previous_assert_failure = FALSE;
@@ -166,17 +169,19 @@ void poll_host(int host_id) {
 		"SELECT action, hostname, snmp_community, "
 			"snmp_version, snmp_username, snmp_password, "
 			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-			"rrd_num, snmp_port, snmp_timeout"
+			"rrd_num, snmp_port, snmp_timeout, snmp_timeout, "
+			"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol "
 		" FROM poller_item"
 		" WHERE host_id=%i"
 		" ORDER BY snmp_port", host_id);
 
 	/* host structure for uptime checks */
 	snprintf(query2, BUFSIZE,
-		"SELECT id, hostname, snmp_community, "
-			"snmp_username, snmp_password, snmp_version, "
-			"snmp_port, snmp_timeout, status, "
-			"status_event_count, status_fail_date, "
+		"SELECT id, hostname, snmp_community, snmp_version, "
+			"snmp_username, snmp_password, snmp_auth_protocol, "
+			"snmp_priv_passphrase, snmp_priv_protocol, snmp_port, snmp_timeout, "
+			"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
+			"status, status_event_count, status_fail_date, "
 			"status_rec_date, status_last_error, "
 			"min_time, max_time, cur_time, avg_time, "
 			"total_polls, failed_polls, availability "
@@ -191,10 +196,11 @@ void poll_host(int host_id) {
 
 	/* multiple polling interval query for items */
 	snprintf(query5, BUFSIZE,
-		"SELECT action, hostname, snmp_community, snmp_version, "
-			"snmp_username, snmp_password, rrd_name, "
-			"rrd_path, arg1, arg2, arg3, local_data_id, "
-			"rrd_num, snmp_port, snmp_timeout"
+		"SELECT action, hostname, snmp_community, "
+			"snmp_version, snmp_username, snmp_password, "
+			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+			"rrd_num, snmp_port, snmp_timeout, snmp_timeout, "
+			"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol "
 		" FROM poller_item"
 		" WHERE host_id=%i and rrd_next_step <=0"
 		" ORDER by snmp_port", host_id);
@@ -265,71 +271,103 @@ void poll_host(int host_id) {
 
 			if (row) {
 				/* initialize variables first */
-				host->id                   = 0;
-				host->hostname[0]          = '\0';
-				host->snmp_community[0]    = '\0';
-				host->snmp_username[0]     = '\0';
-				host->snmp_password[0]     = '\0';
-				host->snmp_port            = 161;
-				host->snmp_version         = 1;
-				host->snmp_timeout         = 500;
-				host->snmp_port            = 161;
-				host->status               = HOST_UP;
-				host->status_event_count   = 0;
-				host->status_last_error[0] = '\0';
-				host->min_time             = 0;
-				host->max_time             = 0;
-				host->cur_time             = 0;
-				host->avg_time             = 0;
-				host->total_polls          = 0;
-				host->failed_polls         = 0;
-				host->availability         = 100;
+				host->id                      = 0;
+				host->hostname[0]             = '\0';
+				host->snmp_community[0]       = '\0';
+				host->snmp_username[0]        = '\0';
+				host->snmp_password[0]        = '\0';
+				host->snmp_auth_protocol[0]   = '\0';
+				host->snmp_priv_passphrase[0] = '\0';
+				host->snmp_port               = 161;
+				host->snmp_version            = 1;
+				host->snmp_timeout            = 500;
+				host->snmp_port               = 161;
+				host->availability_method     = 0;
+				host->ping_method             = 0;
+				host->ping_method             = 3;
+				host->ping_timeout            = 500;
+				host->ping_retries            = 2;
+				host->status                  = HOST_UP;
+				host->status_event_count      = 0;
+				host->status_last_error[0]    = '\0';
+				host->min_time                = 0;
+				host->max_time                = 0;
+				host->cur_time                = 0;
+				host->avg_time                = 0;
+				host->total_polls             = 0;
+				host->failed_polls            = 0;
+				host->availability            = 100;
 
 				/* populate host structure */
 				host->ignore_host = FALSE;
-				if (row[0] != NULL) host->id = atoi(row[0]);
+				if (row[0] != NULL)  host->id = atoi(row[0]);
 
-				if (row[1] != NULL) STRNCOPY(host->hostname,       row[1]);
-				if (row[2] != NULL) STRNCOPY(host->snmp_community, row[2]);
-				if (row[4] != NULL) STRNCOPY(host->snmp_password,  row[4]);
-				if (row[3] != NULL) STRNCOPY(host->snmp_username,  row[3]);
+				if (row[1] != NULL)  STRNCOPY(host->hostname,             row[1]);
+				if (row[2] != NULL)  STRNCOPY(host->snmp_community,       row[2]);
 
-				if (row[5] != NULL) host->snmp_version       = atoi(row[5]);
-				if (row[6] != NULL) host->snmp_port          = atoi(row[6]);
-				if (row[7] != NULL)	host->snmp_timeout       = atoi(row[7]);
-				if (row[8] != NULL) host->status             = atoi(row[8]);
-				if (row[9] != NULL) host->status_event_count = atoi(row[9]);
+				if (row[3] != NULL)  host->snmp_version = atoi(row[3]);
 
-				if (row[10] != NULL) STRNCOPY(host->status_fail_date, row[10]);
-				if (row[11] != NULL) STRNCOPY(host->status_rec_date,  row[11]);
+				if (row[4] != NULL)  STRNCOPY(host->snmp_password,        row[4]);
+				if (row[5] != NULL)  STRNCOPY(host->snmp_username,        row[5]);
+				if (row[6] != NULL)  STRNCOPY(host->snmp_auth_protocol,   row[6]);
+				if (row[7] != NULL)  STRNCOPY(host->snmp_priv_passphrase, row[7]);
+				if (row[8] != NULL)  STRNCOPY(host->snmp_priv_protocol,   row[8]);
 
-				if (row[12] != NULL) STRNCOPY(host->status_last_error, row[12]);
+				if (row[9]  != NULL) host->snmp_port           = atoi(row[9]);
+				if (row[10] != NULL) host->snmp_timeout        = atoi(row[10]);
 
-				if (row[13] != NULL) host->min_time     = atof(row[13]);
-				if (row[14] != NULL) host->max_time     = atof(row[14]);
-				if (row[15] != NULL) host->cur_time     = atof(row[15]);
-				if (row[16] != NULL) host->avg_time     = atof(row[16]);
-				if (row[17] != NULL) host->total_polls  = atoi(row[17]);
-				if (row[18] != NULL) host->failed_polls = atoi(row[18]);
-				if (row[19] != NULL) host->availability = atof(row[19]);
+				if (row[11] != NULL) host->availability_method = atoi(row[11]);
+				if (row[12] != NULL) host->ping_method         = atoi(row[12]);
+				if (row[13] != NULL) host->ping_port           = atoi(row[13]);
+				if (row[14] != NULL) host->ping_timeout        = atoi(row[14]);
+				if (row[15] != NULL) host->ping_retries        = atoi(row[15]);
+
+				if (row[16] != NULL) host->status              = atoi(row[16]);
+				if (row[17] != NULL) host->status_event_count  = atoi(row[17]);
+
+				if (row[18] != NULL) STRNCOPY(host->status_fail_date, row[18]);
+				if (row[19] != NULL) STRNCOPY(host->status_rec_date,  row[19]);
+
+				if (row[20] != NULL) STRNCOPY(host->status_last_error, row[20]);
+
+				if (row[21] != NULL) host->min_time     = atof(row[21]);
+				if (row[22] != NULL) host->max_time     = atof(row[22]);
+				if (row[23] != NULL) host->cur_time     = atof(row[23]);
+				if (row[24] != NULL) host->avg_time     = atof(row[24]);
+				if (row[25] != NULL) host->total_polls  = atoi(row[25]);
+				if (row[26] != NULL) host->failed_polls = atoi(row[26]);
+				if (row[27] != NULL) host->availability = atof(row[27]);
 
 				/* free the host result */
 				mysql_free_result(result);
 
-				if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) || (host->snmp_version == 3)) {
-					host->snmp_session = snmp_host_init(host->id, host->hostname, host->snmp_version, host->snmp_community,
-											host->snmp_username, host->snmp_password, host->snmp_port, host->snmp_timeout);
+				if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) ||
+					(host->snmp_version == 3)) {
+					host->snmp_session = snmp_host_init(host->id,
+						host->hostname,
+						host->snmp_version,
+						host->snmp_community,
+						host->snmp_username,
+						host->snmp_password,
+						host->snmp_auth_protocol,
+						host->snmp_priv_passphrase,
+						host->snmp_priv_protocol,
+						host->snmp_port,
+						host->snmp_timeout);
 				}else{
 					host->snmp_session = NULL;
 				}
 
 				/* save snmp status data for future use */
-				last_snmp_port = host->snmp_port;
+				last_snmp_port    = host->snmp_port;
 				last_snmp_version = host->snmp_version;
 
 				STRNCOPY(last_snmp_community, host->snmp_community);
 				STRNCOPY(last_snmp_username, host->snmp_username);
 				STRNCOPY(last_snmp_password, host->snmp_password);
+				STRNCOPY(last_snmp_auth_protocol, host->snmp_auth_protocol);
+				STRNCOPY(last_snmp_priv_passphrase, host->snmp_priv_passphrase);
+				STRNCOPY(last_snmp_priv_protocol, host->snmp_priv_protocol);
 
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
@@ -555,22 +593,25 @@ void poll_host(int host_id) {
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
 			/* initialize monitored object */
-			poller_items[i].target_id         = 0;
-			poller_items[i].action            = -1;
-			poller_items[i].hostname[0]       = '\0';
-			poller_items[i].snmp_community[0] = '\0';
-			poller_items[i].snmp_version      = 1;
-			poller_items[i].snmp_username[0]  = '\0';
-			poller_items[i].snmp_password[0]  = '\0';
-			poller_items[i].rrd_name[0]       = '\0';
-			poller_items[i].rrd_path[0]       = '\0';
-			poller_items[i].arg1[0]           = '\0';
-			poller_items[i].arg2[0]           = '\0';
-			poller_items[i].arg3[0]           = '\0';
-			poller_items[i].local_data_id     = 0;
-			poller_items[i].rrd_num           = 0;
-			poller_items[i].snmp_port         = 161;
-			poller_items[i].snmp_timeout      = 500;
+			poller_items[i].target_id                = 0;
+			poller_items[i].action                   = -1;
+			poller_items[i].hostname[0]              = '\0';
+			poller_items[i].snmp_community[0]        = '\0';
+			poller_items[i].snmp_version             = 1;
+			poller_items[i].snmp_username[0]         = '\0';
+			poller_items[i].snmp_password[0]         = '\0';
+			poller_items[i].snmp_auth_protocol[0]    = '\0';
+			poller_items[i].snmp_priv_passphrase[0]  = '\0';
+			poller_items[i].snmp_priv_protocol[0]    = '\0';
+			poller_items[i].snmp_port                = 161;
+			poller_items[i].snmp_timeout             = 500;
+			poller_items[i].rrd_name[0]              = '\0';
+			poller_items[i].rrd_path[0]              = '\0';
+			poller_items[i].arg1[0]                  = '\0';
+			poller_items[i].arg2[0]                  = '\0';
+			poller_items[i].arg3[0]                  = '\0';
+			poller_items[i].local_data_id            = 0;
+			poller_items[i].rrd_num                  = 0;
 
 			if (row[0] != NULL)  poller_items[i].action = atoi(row[0]);
 
@@ -581,6 +622,7 @@ void poll_host(int host_id) {
 
 			if (row[4] != NULL)  snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username), "%s", row[4]);
 			if (row[5] != NULL)  snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password), "%s", row[5]);
+
 			if (row[6]  != NULL) snprintf(poller_items[i].rrd_name,      sizeof(poller_items[i].rrd_name),      "%s", row[6]);
 			if (row[7]  != NULL) snprintf(poller_items[i].rrd_path,      sizeof(poller_items[i].rrd_path),      "%s", row[7]);
 			if (row[8]  != NULL) snprintf(poller_items[i].arg1,          sizeof(poller_items[i].arg1),          "%s", row[8]);
@@ -588,9 +630,17 @@ void poll_host(int host_id) {
 			if (row[10] != NULL) snprintf(poller_items[i].arg3,          sizeof(poller_items[i].arg3),          "%s", row[10]);
 
 			if (row[11] != NULL) poller_items[i].local_data_id = atoi(row[11]);
+
 			if (row[12] != NULL) poller_items[i].rrd_num       = atoi(row[12]);
 			if (row[13] != NULL) poller_items[i].snmp_port     = atoi(row[13]);
 			if (row[14] != NULL) poller_items[i].snmp_timeout  = atoi(row[14]);
+
+			if (row[15] != NULL)  snprintf(poller_items[i].snmp_auth_protocol,
+				sizeof(poller_items[i].snmp_auth_protocol), "%s", row[15]);
+			if (row[16] != NULL)  snprintf(poller_items[i].snmp_priv_passphrase,
+				sizeof(poller_items[i].snmp_priv_passphrase), "%s", row[16]);
+			if (row[17] != NULL)  snprintf(poller_items[i].snmp_priv_protocol,
+				sizeof(poller_items[i].snmp_priv_protocol), "%s", row[17]);
 
 			SET_UNDEFINED(poller_items[i].result);
 
@@ -617,13 +667,19 @@ void poll_host(int host_id) {
 						last_snmp_port = poller_items[i].snmp_port;
 						last_snmp_version = poller_items[i].snmp_version;
 
-						STRNCOPY(last_snmp_community, poller_items[i].snmp_community);
-						STRNCOPY(last_snmp_username,  poller_items[i].snmp_username);
-						STRNCOPY(last_snmp_password,  poller_items[i].snmp_password);
+						STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
+						STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
+						STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
+						STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
+						STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
+						STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
 
-						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
-												poller_items[i].snmp_community,poller_items[i].snmp_username,
-												poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
+												poller_items[i].snmp_version, poller_items[i].snmp_community,
+												poller_items[i].snmp_username, poller_items[i].snmp_password,
+												poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
+												poller_items[i].snmp_priv_protocol, poller_items[i].snmp_port,
+												poller_items[i].snmp_timeout);
 					}
 
 					/* catch snmp initialization issues */
@@ -635,9 +691,12 @@ void poll_host(int host_id) {
 					/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 					if ((last_snmp_port != poller_items[i].snmp_port) ||
 						(last_snmp_version != poller_items[i].snmp_version) ||
-						(strcmp(last_snmp_community, poller_items[i].snmp_community) != 0) ||
-						(strcmp(last_snmp_username, poller_items[i].snmp_username) != 0) ||
-						(strcmp(last_snmp_password, poller_items[i].snmp_password) != 0)) {
+						(strcmp(last_snmp_community,       poller_items[i].snmp_community)       != 0) ||
+						(strcmp(last_snmp_username,        poller_items[i].snmp_username)        != 0) ||
+						(strcmp(last_snmp_password,        poller_items[i].snmp_password)        != 0) ||
+						(strcmp(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol)   != 0) ||
+						(strcmp(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase) != 0) ||
+						(strcmp(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol)   != 0)) {
 
 						if (num_oids > 0) {
 							snmp_get_multi(host, snmp_oids, num_oids);
@@ -669,16 +728,22 @@ void poll_host(int host_id) {
 						}
 
 						snmp_host_cleanup(host->snmp_session);
-						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname, poller_items[i].snmp_version,
-												poller_items[i].snmp_community,poller_items[i].snmp_username,
-												poller_items[i].snmp_password, poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
+												poller_items[i].snmp_version, poller_items[i].snmp_community,
+												poller_items[i].snmp_username, poller_items[i].snmp_password,
+												poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
+												poller_items[i].snmp_priv_protocol, poller_items[i].snmp_port,
+												poller_items[i].snmp_timeout);
 
-						last_snmp_port = poller_items[i].snmp_port;
+						last_snmp_port    = poller_items[i].snmp_port;
 						last_snmp_version = poller_items[i].snmp_version;
 
-						STRNCOPY(last_snmp_community, poller_items[i].snmp_community);
-						STRNCOPY(last_snmp_username, poller_items[i].snmp_username);
-						STRNCOPY(last_snmp_password, poller_items[i].snmp_password);
+						STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
+						STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
+						STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
+						STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
+						STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
+						STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
 					}
 
 					if (num_oids >= set.snmp_max_get_size) {

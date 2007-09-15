@@ -136,7 +136,10 @@ void snmp_spine_close(void) {
  *
  */
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
-					char *snmp_username, char *snmp_password, int snmp_port, int snmp_timeout) {
+					char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
+					char *snmp_priv_passphrase, char *snmp_priv_protocol,
+					int snmp_port, int snmp_timeout) {
+
 	void *sessp = NULL;
 	struct snmp_session session;
 	char hostnameport[BUFSIZE];
@@ -181,32 +184,31 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	snprintf(hostnameport, sizeof(hostnameport), "%s:%i", hostname, snmp_port);
-	session.peername = hostnameport;
-	session.retries = 3;
+	session.peername    = hostnameport;
+	session.retries     = 3;
 	session.remote_port = snmp_port;
-	session.timeout = (snmp_timeout * 1000); /* net-snmp likes microseconds */
+	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
-		session.community = snmp_community;
+		session.community     = snmp_community;
 		session.community_len = strlen(snmp_community);
 	}else {
 	    /* set the SNMPv3 user name */
-	    session.securityName = snmp_username;
-	    session.securityNameLen = strlen(session.securityName);
+	    session.securityName         = snmp_username;
+	    session.securityNameLen      = strlen(session.securityName);
 
-		session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
 
-	    /* set the authentication method to MD5 */
-	    session.securityAuthProto = snmp_duplicate_objid(usmHMACMD5AuthProtocol, OIDSIZE(usmHMACMD5AuthProtocol));
-	    session.securityAuthProtoLen = OIDSIZE(usmHMACMD5AuthProtocol);
-
-		/* set the privacy protocol to none */
-		session.securityPrivProto = usmNoPrivProtocol;
-		session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
-		session.securityPrivKeyLen = USM_PRIV_KU_LEN;
-
-	    /* set the security level to authenticate, but not encrypted */
-		session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
+		/* set the authentication protocol */
+		if (strcmp(snmp_auth_protocol, "MD5") == 0) {
+			/* set the authentication method to MD5 */
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, OIDSIZE(usmHMACMD5AuthProtocol));
+			session.securityAuthProtoLen = OIDSIZE(usmHMACMD5AuthProtocol);
+		}else{
+			/* set the authentication method to SHA1 */
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, OIDSIZE(usmHMACSHA1AuthProtocol));
+			session.securityAuthProtoLen = OIDSIZE(usmHMACSHA1AuthProtocol);
+		}
 
 	    /* set the authentication key to the hashed version. The password must me at least 8 char */
 	    if (generate_Ku(session.securityAuthProto,
@@ -216,6 +218,42 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	                    session.securityAuthKey,
 	                    &(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
 	        SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+		}
+
+		/* set the privacy protocol to none */
+		if (strcmp(snmp_auth_protocol, "[None]") == 0) {
+			session.securityPrivProto    = usmNoPrivProtocol;
+			session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
+			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
+
+		    /* set the security level to authenticate, but not encrypted */
+			session.securityLevel        = SNMP_SEC_LEVEL_AUTHNOPRIV;
+		}else{
+			if (strcmp(snmp_auth_protocol, "DES") == 0) {
+				session.securityPrivProto    = usmDESPrivProtocol;
+				session.securityPrivProtoLen = OIDSIZE(usmDESPrivProtocol);
+				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
+
+				/* set the security level to authenticate, and encrypted */
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+			}else{
+				session.securityPrivProto    = usmAES128PrivProtocol;
+				session.securityPrivProtoLen = OIDSIZE(usmAES128PrivProtocol);
+				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
+
+			    /* set the security level to authenticate, and encrypted */
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+			}
+
+		    /* set the privacy key to the hashed version. */
+		    if (generate_Ku(session.securityPrivProto,
+				session.securityPrivProtoLen,
+				(u_char *) snmp_priv_passphrase,
+				strlen(snmp_priv_passphrase),
+				session.securityPrivKey,
+				&(session.securityPrivKeyLen)) != SNMPERR_SUCCESS) {
+		        SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+			}
 		}
 	}
 
@@ -255,13 +293,13 @@ void snmp_host_cleanup(void *snmp_session) {
  *
  */
 char *snmp_get(host_t *current_host, char *snmp_oid) {
-	struct snmp_pdu *pdu = NULL;
-	struct snmp_pdu *response = NULL;
+	struct snmp_pdu *pdu       = NULL;
+	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
-	oid anOID[MAX_OID_LEN];
-	size_t anOID_len = MAX_OID_LEN;
-	int status;
-	char *result_string;
+	size_t anOID_len           = MAX_OID_LEN;
+	oid    anOID[MAX_OID_LEN];
+	int    status;
+	char   *result_string;
 
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
@@ -333,24 +371,24 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
  *
  */
 char *snmp_getnext(host_t *current_host, char *snmp_oid) {
-	struct snmp_pdu *pdu = NULL;
-	struct snmp_pdu *response = NULL;
+	struct snmp_pdu *pdu       = NULL;
+	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
-	oid anOID[MAX_OID_LEN];
-	size_t anOID_len = MAX_OID_LEN;
-	int status;
-	char *result_string;
+	size_t anOID_len           = MAX_OID_LEN;
+	oid    anOID[MAX_OID_LEN];
+	int    status;
+	char   *result_string;
 
 	if (!(result_string = (char *) malloc(BUFSIZE))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
 	result_string[0] = '\0';
 
-	status = STAT_DESCRIP_ERROR;
+	status           = STAT_DESCRIP_ERROR;
 
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
-		pdu = snmp_pdu_create(SNMP_MSG_GETNEXT);
+		pdu       = snmp_pdu_create(SNMP_MSG_GETNEXT);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
 			SPINE_LOG(("ERROR: Problems parsing SNMP OID\n"));
@@ -410,7 +448,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
  *
  */
 void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable) {
-	u_char *buf = NULL;
+	u_char *buf    = NULL;
 	size_t out_len = 0;
 
 	if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
@@ -436,8 +474,8 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
  *
  */
 void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) {
-	struct snmp_pdu *pdu = NULL;
-	struct snmp_pdu *response = NULL;
+	struct snmp_pdu *pdu       = NULL;
+	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
 	int status;
 	int i;
