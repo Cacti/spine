@@ -26,7 +26,7 @@ NetSNMP
 
 Use the experimental reentrant configure flag
 
-./configure --enable-reentrant --disable-mib-loading
+./configure --enable-reentrant --disable-agent --disable-mibs --with-perl-modules=no --disable-mib-loading --with-defaults
 
 make
 make install

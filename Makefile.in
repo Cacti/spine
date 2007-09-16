@@ -81,27 +81,28 @@ am__include = @am__include@
 am__quote = @am__quote@
 install_sh = @install_sh@
 
-cactid_SOURCES = sql.c cactid.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c
+spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 
-include_HEADERS = cactid.h common.h snmp.h locks.h sql.h util.h poller.h nft_popen.h php.h ping.h keywords.h
+configdir = $(sysconfdir)
+config_DATA = spine.conf.dist
 
-bin_PROGRAMS = cactid
+bin_PROGRAMS = spine
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 mkinstalldirs = $(SHELL) $(top_srcdir)/config/mkinstalldirs
 CONFIG_HEADER = $(top_builddir)/config/config.h
 CONFIG_CLEAN_FILES =
-bin_PROGRAMS = cactid$(EXEEXT)
+bin_PROGRAMS = spine$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS)
 
-am_cactid_OBJECTS = sql.$(OBJEXT) cactid.$(OBJEXT) util.$(OBJEXT) \
+am_spine_OBJECTS = sql.$(OBJEXT) spine.$(OBJEXT) util.$(OBJEXT) \
 	snmp.$(OBJEXT) locks.$(OBJEXT) poller.$(OBJEXT) \
 	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
-	keywords.$(OBJEXT)
-cactid_OBJECTS = $(am_cactid_OBJECTS)
-cactid_LDADD = $(LDADD)
-cactid_DEPENDENCIES =
-cactid_LDFLAGS =
+	keywords.$(OBJEXT) error.$(OBJEXT)
+spine_OBJECTS = $(am_spine_OBJECTS)
+spine_LDADD = $(LDADD)
+spine_DEPENDENCIES =
+spine_LDFLAGS =
 
 DEFS = @DEFS@
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)/config
@@ -110,25 +111,26 @@ LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
-@AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/cactid.Po ./$(DEPDIR)/keywords.Po \
+@AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/error.Po ./$(DEPDIR)/keywords.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/locks.Po ./$(DEPDIR)/nft_popen.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/php.Po ./$(DEPDIR)/ping.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/poller.Po ./$(DEPDIR)/snmp.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/sql.Po ./$(DEPDIR)/util.Po
+@AMDEP_TRUE@	./$(DEPDIR)/spine.Po ./$(DEPDIR)/sql.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/util.Po
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 CFLAGS = @CFLAGS@
-DIST_SOURCES = $(cactid_SOURCES)
-HEADERS = $(include_HEADERS)
+DIST_SOURCES = $(spine_SOURCES)
+DATA = $(config_DATA)
 
-DIST_COMMON = README $(include_HEADERS) ./config/config.h.in AUTHORS \
-	COPYING ChangeLog INSTALL Makefile.am Makefile.in NEWS \
-	aclocal.m4 config/config.guess config/config.sub config/depcomp \
+DIST_COMMON = README ./config/config.h.in AUTHORS COPYING ChangeLog \
+	INSTALL Makefile.am Makefile.in NEWS aclocal.m4 \
+	config/config.guess config/config.sub config/depcomp \
 	config/install-sh config/missing config/mkinstalldirs configure \
 	configure.ac
-SOURCES = $(cactid_SOURCES)
+SOURCES = $(spine_SOURCES)
 
 all: all-am
 
@@ -139,7 +141,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno
 $(srcdir)/Makefile.in:  Makefile.am  $(top_srcdir)/configure.ac $(ACLOCAL_M4)
 	cd $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign  Makefile
+	  $(AUTOMAKE) --gnu  Makefile
 Makefile:  $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) && $(SHELL) ./config.status $@ $(am__depfiles_maybe)
 
@@ -191,9 +193,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-cactid$(EXEEXT): $(cactid_OBJECTS) $(cactid_DEPENDENCIES) 
-	@rm -f cactid$(EXEEXT)
-	$(LINK) $(cactid_LDFLAGS) $(cactid_OBJECTS) $(cactid_LDADD) $(LIBS)
+spine$(EXEEXT): $(spine_OBJECTS) $(spine_DEPENDENCIES) 
+	@rm -f spine$(EXEEXT)
+	$(LINK) $(spine_LDFLAGS) $(spine_OBJECTS) $(spine_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT) core *.core
@@ -201,7 +203,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cactid.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/error.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/keywords.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/locks.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nft_popen.Po@am__quote@
@@ -209,6 +211,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ping.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/poller.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/snmp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/spine.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/util.Po@am__quote@
 
@@ -228,23 +231,23 @@ distclean-depend:
 	$(COMPILE) -c `cygpath -w $<`
 CCDEPMODE = @CCDEPMODE@
 uninstall-info-am:
-includeHEADERS_INSTALL = $(INSTALL_HEADER)
-install-includeHEADERS: $(include_HEADERS)
+configDATA_INSTALL = $(INSTALL_DATA)
+install-configDATA: $(config_DATA)
 	@$(NORMAL_INSTALL)
-	$(mkinstalldirs) $(DESTDIR)$(includedir)
-	@list='$(include_HEADERS)'; for p in $$list; do \
+	$(mkinstalldirs) $(DESTDIR)$(configdir)
+	@list='$(config_DATA)'; for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  f="`echo $$p | sed -e 's|^.*/||'`"; \
-	  echo " $(includeHEADERS_INSTALL) $$d$$p $(DESTDIR)$(includedir)/$$f"; \
-	  $(includeHEADERS_INSTALL) $$d$$p $(DESTDIR)$(includedir)/$$f; \
+	  echo " $(configDATA_INSTALL) $$d$$p $(DESTDIR)$(configdir)/$$f"; \
+	  $(configDATA_INSTALL) $$d$$p $(DESTDIR)$(configdir)/$$f; \
 	done
 
-uninstall-includeHEADERS:
+uninstall-configDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(include_HEADERS)'; for p in $$list; do \
+	@list='$(config_DATA)'; for p in $$list; do \
 	  f="`echo $$p | sed -e 's|^.*/||'`"; \
-	  echo " rm -f $(DESTDIR)$(includedir)/$$f"; \
-	  rm -f $(DESTDIR)$(includedir)/$$f; \
+	  echo " rm -f $(DESTDIR)$(configdir)/$$f"; \
+	  rm -f $(DESTDIR)$(configdir)/$$f; \
 	done
 
 ETAGS = etags
@@ -373,10 +376,10 @@ distcleancheck: distclean
 	       exit 1; } >&2
 check-am: all-am
 check: check-am
-all-am: Makefile $(PROGRAMS) $(HEADERS)
+all-am: Makefile $(PROGRAMS) $(DATA)
 
 installdirs:
-	$(mkinstalldirs) $(DESTDIR)$(bindir) $(DESTDIR)$(includedir)
+	$(mkinstalldirs) $(DESTDIR)$(bindir) $(DESTDIR)$(configdir)
 
 install: install-am
 install-exec: install-exec-am
@@ -419,7 +422,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-includeHEADERS
+install-data-am: install-configDATA
 
 install-exec-am: install-binPROGRAMS
 
@@ -438,7 +441,7 @@ mostlyclean: mostlyclean-am
 
 mostlyclean-am: mostlyclean-compile mostlyclean-generic
 
-uninstall-am: uninstall-binPROGRAMS uninstall-includeHEADERS \
+uninstall-am: uninstall-binPROGRAMS uninstall-configDATA \
 	uninstall-info-am
 
 .PHONY: GTAGS all all-am check check-am clean clean-binPROGRAMS \
@@ -446,12 +449,12 @@ uninstall-am: uninstall-binPROGRAMS uninstall-includeHEADERS \
 	distclean-compile distclean-depend distclean-generic \
 	distclean-hdr distclean-tags distcleancheck distdir dvi dvi-am \
 	info info-am install install-am install-binPROGRAMS \
-	install-data install-data-am install-exec install-exec-am \
-	install-includeHEADERS install-info install-info-am install-man \
+	install-configDATA install-data install-data-am install-exec \
+	install-exec-am install-info install-info-am install-man \
 	install-strip installcheck installcheck-am installdirs \
 	maintainer-clean maintainer-clean-generic mostlyclean \
 	mostlyclean-compile mostlyclean-generic tags uninstall \
-	uninstall-am uninstall-binPROGRAMS uninstall-includeHEADERS \
+	uninstall-am uninstall-binPROGRAMS uninstall-configDATA \
 	uninstall-info-am
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

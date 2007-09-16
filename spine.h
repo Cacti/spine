@@ -351,6 +351,7 @@ typedef struct target_struct {
 	char   snmp_auth_protocol[5];
 	char   snmp_priv_passphrase[200];
 	char   snmp_priv_protocol[6];
+	char   snmp_context[65];
 	int    snmp_port;
 	int    snmp_timeout;
 	int    availability_method;
@@ -406,8 +407,10 @@ typedef struct host_struct {
 	char   snmp_auth_protocol[5];
 	char   snmp_priv_passphrase[200];
 	char   snmp_priv_protocol[6];
+	char   snmp_context[65];
 	int    snmp_port;
 	int    snmp_timeout;
+	int    max_oids;
 	int    availability_method;
 	int    ping_method;
 	int    ping_port;

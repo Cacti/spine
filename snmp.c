@@ -127,8 +127,9 @@ void snmp_spine_close(void) {
 }
 
 /*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
- * char *snmp_community, char *snmp_username, char *snmp_password, int snmp_port,
- * int snmp_timeout)
+ * char *snmp_community, char *snmp_username, char *snmp_password,
+ * char *snmp_auth_protocol, char *snmp_priv_passphrase, char *snmp_priv_protocol,
+ * char *snmp_context, int snmp_port, int snmp_timeout)
  *  \brief initializes an snmp_session object for a Spine host
  *
  *	This function will initialize NET-SNMP or UCD-SNMP for the Spine host
@@ -138,7 +139,7 @@ void snmp_spine_close(void) {
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
 					char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 					char *snmp_priv_passphrase, char *snmp_priv_protocol,
-					int snmp_port, int snmp_timeout) {
+					char *snmp_context, int snmp_port, int snmp_timeout) {
 
 	void *sessp = NULL;
 	struct snmp_session session;
@@ -196,6 +197,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	    /* set the SNMPv3 user name */
 	    session.securityName         = snmp_username;
 	    session.securityNameLen      = strlen(session.securityName);
+
+		session.contextName          = snmp_context;
+		session.contextNameLen       = strlen(session.contextName);
 
 		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
 

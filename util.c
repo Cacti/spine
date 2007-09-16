@@ -153,11 +153,11 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
  *
  */
 void read_config_options() {
-	MYSQL mysql;
-	MYSQL_RES *result;
-	int num_rows;
-	char web_root[BUFSIZE];
-	char sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
+	MYSQL      mysql;
+	MYSQL_RES  *result;
+	int        num_rows;
+	char       web_root[BUFSIZE];
+	char       sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
 	const char *res;
 
 	db_connect(set.dbdb, &mysql);

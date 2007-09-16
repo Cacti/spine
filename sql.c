@@ -128,10 +128,10 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 
 				continue;
 			}
-
-			break;
 		}else{
 			mysql_res = mysql_store_result(mysql);
+
+			break;
 		}
 	}
 
@@ -165,7 +165,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	 * and if it is a socket file, setup mysql to use it.
 	 */
 	if (stat(hostname, &socket_stat) == 0) {
-		if (socket_stat.st_mode && S_IFSOCK) {
+		if (socket_stat.st_mode & S_IFSOCK) {
 			socket = strdup (set.dbhost);
 			hostname = NULL;
 		}
@@ -193,22 +193,25 @@ void db_connect(const char *database, MYSQL *mysql) {
 		die("FATAL: MySQL options unable to set timeout value\n");
 	}
 
-	while (tries > 0){
+	while (tries > 0) {
 		tries--;
+
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
 			printf("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
 
 			success = FALSE;
+
+			#ifndef SOLAR_THREAD
+			usleep(2000);
+			#endif
 		}else{
 			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 				printf("DEBUG: MYSQL: Connected to MySQL database '%s' on '%s'\n", database, set.dbhost);
 			}
+
 			tries   = 0;
 			success = TRUE;
 		}
-		#ifndef SOLAR_THREAD
-		usleep(2000);
-		#endif
 	}
 
 	free(hostname);

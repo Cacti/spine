@@ -4,7 +4,9 @@ The Cacti Group – spine
 -bug: Fix configure issues with hybrid 64 bit OS'
 -feature: Rename to spine
 -feature: Update copyright
--feature: Add tab stops and autoindent
+-feature: Add tab stops and autoindent to source code
+-feature: Make spike detection more generic
+-feature: Add snmpv3 support including contexts
 
 0.8.6j
 -bug#0000879/0000872: cactid doesn't always report error messages before dying
