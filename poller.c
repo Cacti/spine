@@ -286,7 +286,7 @@ void poll_host(int host_id) {
 				host->snmp_port               = 161;
 				host->availability_method     = 0;
 				host->ping_method             = 0;
-				host->ping_method             = 3;
+				host->ping_port               = 23;
 				host->ping_timeout            = 500;
 				host->ping_retries            = 2;
 				host->status                  = HOST_UP;

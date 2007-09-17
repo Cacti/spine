@@ -52,17 +52,19 @@ int ping_host(host_t *host, ping_t *ping) {
 	ping_result = 0;
 	snmp_result = 0;
 
-	/* icmp/udp ping test */
+	/* icmp/tcp/udp ping test */
 	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
-		/* set and then test for asroot */
-		#ifndef __CYGWIN__
-		seteuid(0);
+		if (set.ping_method == PING_ICMP) {
+			/* set and then test for asroot */
+			#ifndef __CYGWIN__
+			seteuid(0);
 
-		if (geteuid() != 0) {
-			set.ping_method = PING_UDP;
-			SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve.\n"));
+			if (geteuid() != 0) {
+				set.ping_method = PING_UDP;
+				SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve.\n"));
+			}
+			#endif
 		}
-		#endif
 
 		if (!strstr(host->hostname, "localhost")) {
 			if (set.ping_method == PING_ICMP) {
@@ -74,6 +76,8 @@ int ping_host(host_t *host, ping_t *ping) {
 				#endif
 			}else if (set.ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);
+			}else if (set.ping_method == PING_TCP) {
+				ping_result = ping_tcp(host, ping);
 			}
 		}else{
 			snprintf(ping->ping_status, 50, "0.000");
@@ -83,7 +87,8 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 
 	/* snmp test */
-	if ((set.availability_method == AVAIL_SNMP) || ((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP))) {
+	if ((set.availability_method == AVAIL_SNMP) ||
+		((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
 	}
 
@@ -118,6 +123,8 @@ int ping_host(host_t *host, ping_t *ping) {
 			}else{
 				return HOST_DOWN;
 			}
+		case AVAIL_NONE:
+			return HOST_UP;
 		default:
 			return HOST_DOWN;
 	}
@@ -208,25 +215,25 @@ int ping_snmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
-	int icmp_socket;
+	int    icmp_socket;
 
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 
 	struct sockaddr_in servername;
-	char socket_reply[BUFSIZE];
-	int retry_count;
-	char *cacti_msg = "cacti-monitoring-system";
-	int packet_len;
-	int fromlen;
-	int return_code;
+	char   socket_reply[BUFSIZE];
+	int    retry_count;
+	char   *cacti_msg = "cacti-monitoring-system";
+	int    packet_len;
+	int    fromlen;
+	int    return_code;
 	fd_set socket_fds;
 
-	static unsigned int seq = 0;
-	struct icmphdr *icmp;
+	static   unsigned int seq = 0;
+	struct   icmphdr *icmp;
 	unsigned char *packet;
-	char *new_hostname;
+	char     *new_hostname;
 
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
@@ -362,15 +369,15 @@ int ping_udp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
-	int udp_socket;
+	int    udp_socket;
 	struct sockaddr_in servername;
-	char socket_reply[BUFSIZE];
-	int retry_count;
-	char request[BUFSIZE];
-	int request_len;
-	int return_code;
+	char   socket_reply[BUFSIZE];
+	int    retry_count;
+	char   request[BUFSIZE];
+	int    request_len;
+	int    return_code;
 	fd_set socket_fds;
-	char *new_hostname;
+	char   *new_hostname;
 
 	/* remove "udp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
@@ -471,6 +478,136 @@ int ping_udp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
 		if (udp_socket != -1) close(udp_socket);
+		return HOST_DOWN;
+	}
+}
+
+
+/*! \fn int ping_tcp(host_t *host, ping_t *ping)
+ *  \brief ping a host using an TCP syn
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using TCP.  The TCP socket contains a marker
+ *  to the "Cacti" application so that firewall's can be configured to allow.
+ *  It will modify the ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
+int ping_tcp(host_t *host, ping_t *ping) {
+	double begin_time, end_time, total_time;
+	double one_thousand = 1000.00;
+	struct timeval timeout;
+	int    tcp_socket;
+	struct sockaddr_in servername;
+	char   socket_reply[BUFSIZE];
+	int    retry_count;
+	char   request[BUFSIZE];
+	int    request_len;
+	int    return_code;
+	fd_set socket_fds;
+	char   *new_hostname;
+
+	/* remove "tcp:" from hostname */
+	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
+
+	/* establish timeout value */
+	timeout.tv_sec  = 0;
+	timeout.tv_usec = set.ping_timeout * 1000;
+
+	/* initilize the socket */
+	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+	/* hostname must be nonblank */
+	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
+		/* initialize variables */
+		snprintf(ping->ping_status, 50, "down");
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
+
+		/* set the socket timeout */
+		setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+
+		/* get address of hostname */
+		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
+			if (connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
+				free(new_hostname);
+				close(tcp_socket);
+				return HOST_DOWN;
+			}
+
+			/* format packet */
+			snprintf(request, BUFSIZE, "cacti-monitoring-system"); /* the actual test data */
+			request_len = strlen(request);
+
+			retry_count = 0;
+
+			/* initialize file descriptor to review for input/output */
+			FD_ZERO(&socket_fds);
+			FD_SET(tcp_socket,&socket_fds);
+
+			while (1) {
+				if (retry_count >= set.ping_retries) {
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Ping timed out");
+					snprintf(ping->ping_status, 50, "down");
+					free(new_hostname);
+					close(tcp_socket);
+					return HOST_DOWN;
+				}
+
+				/* record start time */
+				begin_time = get_time_as_double();
+
+				/* send packet to destination */
+				send(tcp_socket, request, request_len, 0);
+
+				/* wait for a response on the socket */
+				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+
+				/* record end time */
+				end_time = get_time_as_double();
+
+				/* check to see which socket talked */
+				if (FD_ISSET(tcp_socket, &socket_fds)) {
+					return_code = read(tcp_socket, socket_reply, BUFSIZE);
+				}else{
+					return_code = -10;
+				}
+
+				/* caculate total time */
+				total_time = (end_time - begin_time) * one_thousand;
+
+				SPINE_LOG_DEBUG(("DEBUG: The TCP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
+
+				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
+					if (total_time <= set.ping_timeout) {
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
+						free(new_hostname);
+						close(tcp_socket);
+						return HOST_UP;
+					}
+				}
+
+				retry_count++;
+				#ifndef SOLAR_THREAD
+				usleep(1000);
+				#endif
+			}
+		}else{
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
+			snprintf(ping->ping_status, 50, "down");
+			free(new_hostname);
+			close(tcp_socket);
+			return HOST_DOWN;
+		}
+	}else{
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
+		snprintf(ping->ping_status, 50, "down");
+		free(new_hostname);
+		if (tcp_socket != -1) close(tcp_socket);
 		return HOST_DOWN;
 	}
 }
