@@ -180,7 +180,7 @@ void poll_host(int host_id) {
 	snprintf(query2, BUFSIZE,
 		"SELECT id, hostname, snmp_community, snmp_version, "
 			"snmp_username, snmp_password, snmp_auth_protocol, "
-			"snmp_priv_passphrase, snmp_priv_protocol, snmp_port, snmp_timeout, max_oids, "
+			"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_port, snmp_timeout, max_oids, "
 			"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
 			"status, status_event_count, status_fail_date, "
 			"status_rec_date, status_last_error, "
@@ -201,7 +201,7 @@ void poll_host(int host_id) {
 			"snmp_version, snmp_username, snmp_password, "
 			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 			"rrd_num, snmp_port, snmp_timeout, snmp_timeout, "
-			"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol "
+			"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
 		" FROM poller_item"
 		" WHERE host_id=%i and rrd_next_step <=0"
 		" ORDER by snmp_port", host_id);
@@ -275,15 +275,16 @@ void poll_host(int host_id) {
 				host->id                      = 0;
 				host->hostname[0]             = '\0';
 				host->snmp_community[0]       = '\0';
+				host->snmp_version            = 1;
 				host->snmp_username[0]        = '\0';
 				host->snmp_password[0]        = '\0';
 				host->snmp_auth_protocol[0]   = '\0';
 				host->snmp_priv_passphrase[0] = '\0';
+				host->snmp_priv_protocol[0]   = '\0';
+				host->snmp_context[0]         = '\0';
 				host->snmp_port               = 161;
-				host->snmp_version            = 1;
 				host->snmp_timeout            = 500;
 				host->max_oids                = 10;
-				host->snmp_port               = 161;
 				host->availability_method     = 0;
 				host->ping_method             = 0;
 				host->ping_port               = 23;
@@ -291,6 +292,8 @@ void poll_host(int host_id) {
 				host->ping_retries            = 2;
 				host->status                  = HOST_UP;
 				host->status_event_count      = 0;
+				host->status_fail_date[0]     = '\0';
+				host->status_rec_date[0]      = '\0';
 				host->status_last_error[0]    = '\0';
 				host->min_time                = 0;
 				host->max_time                = 0;
@@ -302,64 +305,68 @@ void poll_host(int host_id) {
 
 				/* populate host structure */
 				host->ignore_host = FALSE;
-				if (row[0] != NULL)  host->id = atoi(row[0]);
+				if (row[0]  != NULL) host->id = atoi(row[0]);
 
-				if (row[1] != NULL)  STRNCOPY(host->hostname,             row[1]);
-				if (row[2] != NULL)  STRNCOPY(host->snmp_community,       row[2]);
+				if (row[1]  != NULL) STRNCOPY(host->hostname,             row[1]);
+				if (row[2]  != NULL) STRNCOPY(host->snmp_community,       row[2]);
 
-				if (row[3] != NULL)  host->snmp_version = atoi(row[3]);
+				if (row[3]  != NULL) host->snmp_version = atoi(row[3]);
 
-				if (row[4] != NULL)  STRNCOPY(host->snmp_password,        row[4]);
-				if (row[5] != NULL)  STRNCOPY(host->snmp_username,        row[5]);
-				if (row[6] != NULL)  STRNCOPY(host->snmp_auth_protocol,   row[6]);
-				if (row[7] != NULL)  STRNCOPY(host->snmp_priv_passphrase, row[7]);
-				if (row[8] != NULL)  STRNCOPY(host->snmp_priv_protocol,   row[8]);
+				if (row[4]  != NULL) STRNCOPY(host->snmp_password,        row[4]);
+				if (row[5]  != NULL) STRNCOPY(host->snmp_username,        row[5]);
+				if (row[6]  != NULL) STRNCOPY(host->snmp_auth_protocol,   row[6]);
+				if (row[7]  != NULL) STRNCOPY(host->snmp_priv_passphrase, row[7]);
+				if (row[8]  != NULL) STRNCOPY(host->snmp_priv_protocol,   row[8]);
+				if (row[9]  != NULL) STRNCOPY(host->snmp_context,         row[9]);
 
-				if (row[9]  != NULL) host->snmp_port           = atoi(row[9]);
-				if (row[10] != NULL) host->snmp_timeout        = atoi(row[10]);
-				if (row[11] != NULL) host->max_oids            = atoi(row[11]);
+				if (row[10] != NULL) host->snmp_port           = atoi(row[10]);
+				if (row[11] != NULL) host->snmp_timeout        = atoi(row[11]);
+				if (row[12] != NULL) host->max_oids            = atoi(row[12]);
 
-				if (row[12] != NULL) host->availability_method = atoi(row[12]);
-				if (row[13] != NULL) host->ping_method         = atoi(row[13]);
-				if (row[14] != NULL) host->ping_port           = atoi(row[14]);
-				if (row[15] != NULL) host->ping_timeout        = atoi(row[15]);
-				if (row[16] != NULL) host->ping_retries        = atoi(row[16]);
+				if (row[13] != NULL) host->availability_method = atoi(row[13]);
+				if (row[14] != NULL) host->ping_method         = atoi(row[14]);
+				if (row[15] != NULL) host->ping_port           = atoi(row[15]);
+				if (row[16] != NULL) host->ping_timeout        = atoi(row[16]);
+				if (row[17] != NULL) host->ping_retries        = atoi(row[17]);
 
-				if (row[17] != NULL) host->status              = atoi(row[17]);
-				if (row[18] != NULL) host->status_event_count  = atoi(row[18]);
+				if (row[18] != NULL) host->status              = atoi(row[18]);
+				if (row[19] != NULL) host->status_event_count  = atoi(row[19]);
 
-				if (row[19] != NULL) STRNCOPY(host->status_fail_date, row[19]);
-				if (row[20] != NULL) STRNCOPY(host->status_rec_date,  row[20]);
+				if (row[20] != NULL) STRNCOPY(host->status_fail_date, row[20]);
+				if (row[21] != NULL) STRNCOPY(host->status_rec_date,  row[21]);
 
-				if (row[21] != NULL) STRNCOPY(host->status_last_error, row[21]);
+				if (row[22] != NULL) STRNCOPY(host->status_last_error, row[22]);
 
-				if (row[22] != NULL) host->min_time     = atof(row[22]);
-				if (row[23] != NULL) host->max_time     = atof(row[23]);
-				if (row[24] != NULL) host->cur_time     = atof(row[24]);
-				if (row[25] != NULL) host->avg_time     = atof(row[25]);
-				if (row[26] != NULL) host->total_polls  = atoi(row[26]);
-				if (row[27] != NULL) host->failed_polls = atoi(row[27]);
-				if (row[28] != NULL) host->availability = atof(row[28]);
+				if (row[23] != NULL) host->min_time     = atof(row[23]);
+				if (row[24] != NULL) host->max_time     = atof(row[24]);
+				if (row[25] != NULL) host->cur_time     = atof(row[25]);
+				if (row[26] != NULL) host->avg_time     = atof(row[26]);
+				if (row[27] != NULL) host->total_polls  = atoi(row[27]);
+				if (row[28] != NULL) host->failed_polls = atoi(row[28]);
+				if (row[29] != NULL) host->availability = atof(row[29]);
 
 				/* free the host result */
 				mysql_free_result(result);
 
-				if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) ||
-					(host->snmp_version == 3)) {
-					host->snmp_session = snmp_host_init(host->id,
-						host->hostname,
-						host->snmp_version,
-						host->snmp_community,
-						host->snmp_username,
-						host->snmp_password,
-						host->snmp_auth_protocol,
-						host->snmp_priv_passphrase,
-						host->snmp_priv_protocol,
-						host->snmp_context,
-						host->snmp_port,
-						host->snmp_timeout);
-				}else{
-					host->snmp_session = NULL;
+				if ((host->availability_method == 1) ||
+					(host->availability_method == 2)) {
+					if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) ||
+						(host->snmp_version == 3)) {
+						host->snmp_session = snmp_host_init(host->id,
+							host->hostname,
+							host->snmp_version,
+							host->snmp_community,
+							host->snmp_username,
+							host->snmp_password,
+							host->snmp_auth_protocol,
+							host->snmp_priv_passphrase,
+							host->snmp_priv_protocol,
+							host->snmp_context,
+							host->snmp_port,
+							host->snmp_timeout);
+					}else{
+						host->snmp_session = NULL;
+					}
 				}
 
 				/* save snmp status data for future use */
@@ -376,18 +383,18 @@ void poll_host(int host_id) {
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
 				 * function sets the ignore_host bit */
-				if ((set.availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
+				if ((host->availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
 					host->ignore_host = FALSE;
-					update_host_status(HOST_UP, host, ping, set.availability_method);
+					update_host_status(HOST_UP, host, ping, host->availability_method);
 
 					SPINE_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
 				}else{
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;
-						update_host_status(HOST_UP, host, ping, set.availability_method);
+						update_host_status(HOST_UP, host, ping, host->availability_method);
 					}else{
 						host->ignore_host = FALSE;
-						update_host_status(HOST_DOWN, host, ping, set.availability_method);
+						update_host_status(HOST_DOWN, host, ping, host->availability_method);
 					}
 				}
 
@@ -661,7 +668,7 @@ void poll_host(int host_id) {
 		mysql_free_result(result);
 
 		/* create an array for snmp oids */
-		snmp_oids = (snmp_oids_t *) calloc(set.snmp_max_get_size, sizeof(snmp_oids_t));
+		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
 
 		i = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {

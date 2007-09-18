@@ -53,30 +53,30 @@ int ping_host(host_t *host, ping_t *ping) {
 	snmp_result = 0;
 
 	/* icmp/tcp/udp ping test */
-	if ((set.availability_method == AVAIL_SNMP_AND_PING) || (set.availability_method == AVAIL_PING)) {
-		if (set.ping_method == PING_ICMP) {
+	if ((host->availability_method == AVAIL_SNMP_AND_PING) || (host->availability_method == AVAIL_PING)) {
+		if (host->ping_method == PING_ICMP) {
 			/* set and then test for asroot */
 			#ifndef __CYGWIN__
 			seteuid(0);
 
 			if (geteuid() != 0) {
-				set.ping_method = PING_UDP;
+				host->ping_method = PING_UDP;
 				SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve.\n"));
 			}
 			#endif
 		}
 
 		if (!strstr(host->hostname, "localhost")) {
-			if (set.ping_method == PING_ICMP) {
+			if (host->ping_method == PING_ICMP) {
 				ping_result = ping_icmp(host, ping);
 
 				/* give up root privileges */
 				#ifndef __CYGWIN__
 				seteuid(getuid());
 				#endif
-			}else if (set.ping_method == PING_UDP) {
+			}else if (host->ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);
-			}else if (set.ping_method == PING_TCP) {
+			}else if (host->ping_method == PING_TCP) {
 				ping_result = ping_tcp(host, ping);
 			}
 		}else{
@@ -87,12 +87,12 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 
 	/* snmp test */
-	if ((set.availability_method == AVAIL_SNMP) ||
-		((set.availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP))) {
+	if ((host->availability_method == AVAIL_SNMP) ||
+		((host->availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
 	}
 
-	switch (set.availability_method) {
+	switch (host->availability_method) {
 		case AVAIL_SNMP_AND_PING:
 			if (strlen(host->snmp_community) == 0) {
 				if (ping_result == HOST_UP) {
@@ -245,7 +245,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
-	timeout.tv_usec = set.ping_timeout * 1000;
+	timeout.tv_usec = host->ping_timeout * 1000;
 
 	/* allocate the packet in memory */
 	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
@@ -286,7 +286,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			FD_SET(icmp_socket,&socket_fds);
 
 			while (1) {
-				if (retry_count >= set.ping_retries) {
+				if (retry_count >= host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
@@ -320,7 +320,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				total_time = (end_time - begin_time) * one_thousand;
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if (total_time < set.ping_timeout) {
+					if (total_time < host->ping_timeout) {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
@@ -384,7 +384,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
-	timeout.tv_usec = set.ping_timeout * 1000;
+	timeout.tv_usec = host->ping_timeout * 1000;
 
 	/* initilize the socket */
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -419,7 +419,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			FD_SET(udp_socket,&socket_fds);
 
 			while (1) {
-				if (retry_count >= set.ping_retries) {
+				if (retry_count >= host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
@@ -452,7 +452,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				SPINE_LOG_DEBUG(("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if (total_time <= set.ping_timeout) {
+					if (total_time <= host->ping_timeout) {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
@@ -514,7 +514,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
-	timeout.tv_usec = set.ping_timeout * 1000;
+	timeout.tv_usec = host->ping_timeout * 1000;
 
 	/* initilize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -549,7 +549,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 			FD_SET(tcp_socket,&socket_fds);
 
 			while (1) {
-				if (retry_count >= set.ping_retries) {
+				if (retry_count >= host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
@@ -561,29 +561,19 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				begin_time = get_time_as_double();
 
 				/* send packet to destination */
-				send(tcp_socket, request, request_len, 0);
-
-				/* wait for a response on the socket */
-				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				return_code = send(tcp_socket, request, request_len, 0);
 
 				/* record end time */
 				end_time = get_time_as_double();
-
-				/* check to see which socket talked */
-				if (FD_ISSET(tcp_socket, &socket_fds)) {
-					return_code = read(tcp_socket, socket_reply, BUFSIZE);
-				}else{
-					return_code = -10;
-				}
 
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
 				SPINE_LOG_DEBUG(("DEBUG: The TCP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
 
-				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if (total_time <= set.ping_timeout) {
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
+				if (return_code >= 0) {
+					if (total_time <= host->ping_timeout) {
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
 						close(tcp_socket);
@@ -620,10 +610,10 @@ int ping_tcp(host_t *host, ping_t *ping) {
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
-	int i;
+	int    i;
 
 	name->sin_family = AF_INET;
-	name->sin_port = htons (port);
+	name->sin_port   = htons (port);
 
 	/* retry 3 times to contact host */
 	i = 0;
@@ -711,10 +701,10 @@ unsigned short get_checksum(void* buf, int len) {
  *
  */
 void update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
-	int issue_log_message = FALSE;
+	int    issue_log_message = FALSE;
 	double ping_time;
  	double hundred_percent = 100.00;
-	char current_date[40];
+	char   current_date[40];
 
 	time_t nowbin;
 	struct tm now_time;
@@ -811,6 +801,8 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			}else {
 				ping_time = atof(ping->snmp_status);
 			}
+		}else if (availability_method == AVAIL_NONE) {
+			ping_time = 0.000;
 		}else {
 			ping_time = atof(ping->ping_status);
 		}
@@ -880,6 +872,8 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				}else{
 					SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 				}
+			}else if (availability_method == AVAIL_NONE) {
+				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected\n", host->id));
 			}else{
 				SPINE_LOG_HIGH(("Host[%i] PING: Result %s\n", host->id, ping->ping_response));
 			}
@@ -889,6 +883,8 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
 				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+			}else if (availability_method == AVAIL_NONE) {
+				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected\n", host->id));
 			}else{
 				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
 			}
