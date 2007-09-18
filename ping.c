@@ -399,7 +399,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 		setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, new_hostname, 33439)) {
+		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
 			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, 50, "down");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Cannot connect to host");
