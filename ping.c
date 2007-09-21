@@ -620,11 +620,11 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	while (1) {
 		thread_mutex_lock(LOCK_GHBN);
 		hostinfo = gethostbyname(hostname);
-		thread_mutex_unlock(LOCK_GHBN);
 		if (hostinfo == NULL) {
 			SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
 
 			if (i > 3) {
+				thread_mutex_unlock(LOCK_GHBN);
 				return FALSE;
 			}
 			i++;
@@ -633,6 +633,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 			#endif
 		}else{
 			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+			thread_mutex_unlock(LOCK_GHBN);
 			return TRUE;
 		}
 	}
