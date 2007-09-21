@@ -130,6 +130,7 @@ int main(int argc, char *argv[]) {
 	int device_counter = 0;
 	int poller_counter = 0;
 	int last_active_threads = 0;
+	int valid_conf_file = FALSE;
 	long int EXTERNAL_THREAD_SLEEP = 5000;
 	long int internal_thread_sleep;
 
@@ -220,8 +221,8 @@ int main(int argc, char *argv[]) {
 
 		if (opt) *opt++ = '\0';
 
-		if (STRIMATCH(arg, "-f") ||
-			STRIMATCH(arg, "--first")) {
+		if (STRMATCH(arg, "-f") ||
+			STRMATCH(arg, "--first")) {
 			if (HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -233,7 +234,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRIMATCH(arg, "-l") ||
+		else if (STRMATCH(arg, "-l") ||
 				 STRIMATCH(arg, "--last")) {
 			if (HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: %s can only be used once", arg);
@@ -246,21 +247,21 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRIMATCH(arg, "-p") ||
+		else if (STRMATCH(arg, "-p") ||
 				 STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
-		else if (STRIMATCH(arg, "-h") ||
-				 STRIMATCH(arg, "-v") ||
-				 STRIMATCH(arg, "--help") ||
-				 STRIMATCH(arg, "--version")) {
+		else if (STRMATCH(arg, "-h") ||
+				 STRMATCH(arg, "-v") ||
+				 STRMATCH(arg, "--help") ||
+				 STRMATCH(arg, "--version")) {
 			display_help();
 
 			exit(EXIT_SUCCESS);
 		}
 
-		else if (STRIMATCH(arg, "-O") ||
+		else if (STRMATCH(arg, "-O") ||
 				 STRIMATCH(arg, "--option")) {
 			char	*setting = getarg(opt, &argv);
 			char	*value   = strchr(setting, ':');
@@ -274,34 +275,34 @@ int main(int argc, char *argv[]) {
 			set_option(setting, value);
 		}
 
-		else if (STRIMATCH(arg, "-R") ||
-				 STRIMATCH(arg, "--readonly") ||
-				 STRIMATCH(arg, "--read-only")) {
+		else if (STRMATCH(arg, "-R") ||
+				 STRMATCH(arg, "--readonly") ||
+				 STRMATCH(arg, "--read-only")) {
 			set.SQL_readonly = TRUE;
 		}
 
-		else if (STRIMATCH(arg, "-C") ||
-				 STRIMATCH(arg, "--conf")) {
+		else if (STRMATCH(arg, "-C") ||
+				 STRMATCH(arg, "--conf")) {
 			conf_file = strdup(getarg(opt, &argv));
 		}
 
-		else if (STRIMATCH(arg, "-S") ||
-				 STRIMATCH(arg, "--stdout")) {
+		else if (STRMATCH(arg, "-S") ||
+				 STRMATCH(arg, "--stdout")) {
 			set_option("log_destination", "STDOUT");
 		}
 
-		else if (STRIMATCH(arg, "-L") ||
-				 STRIMATCH(arg, "--log")) {
+		else if (STRMATCH(arg, "-L") ||
+				 STRMATCH(arg, "--log")) {
 			set_option("log_destination", getarg(opt, &argv));
 		}
 
-		else if (STRIMATCH(arg, "-V") ||
-				 STRIMATCH(arg, "--verbosity")) {
+		else if (STRMATCH(arg, "-V") ||
+				 STRMATCH(arg, "--verbosity")) {
 			set_option("log_verbosity", getarg(opt, &argv));
 		}
 
-		else if (STRIMATCH(arg, "--snmponly") ||
-				 STRIMATCH(arg, "--snmp-only")) {
+		else if (STRMATCH(arg, "--snmponly") ||
+				 STRMATCH(arg, "--snmp-only")) {
 			set.snmponly = TRUE;
 		}
 
@@ -331,6 +332,8 @@ int main(int argc, char *argv[]) {
 	if (conf_file) {
 		if ((read_spine_config(conf_file)) < 0) {
 			die("ERROR: Could not read config file: %s", conf_file);
+		}else{
+			valid_conf_file = TRUE;
 		}
 	}else{
 		if (!(conf_file = calloc(CONFIG_PATHS, BUFSIZE))) {
@@ -341,6 +344,7 @@ int main(int argc, char *argv[]) {
 			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_spine_config(conf_file) >= 0) {
+				valid_conf_file = TRUE;
 				break;
 			}
 
@@ -350,8 +354,12 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* read settings table from the database to further establish environment */
-	read_config_options();
+	if (valid_conf_file) {
+		/* read settings table from the database to further establish environment */
+		read_config_options();
+	}else{
+		die("FATAL: Unable to read configuration file!");
+	}
 
 	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
