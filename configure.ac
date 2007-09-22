@@ -12,6 +12,9 @@ AC_LANG(C)
 AM_INIT_AUTOMAKE(spine, 0.8.7)
 AM_CONFIG_HEADER(config/config.h)
 
+# specific for Darwin build
+m4_pattern_allow([^AC_PROG_LIBTOOL$])
+
 # static libraries
 AC_ARG_WITH(static,
   AC_HELP_STRING(
@@ -45,6 +48,9 @@ if test -z "$host_alias"; then
 fi
 
 # Platform-specific tweaks
+ShLib="so"
+RANLIB="yes"
+
 case $host_alias in
 *sparc-sun-solaris2.8)
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS"
@@ -54,6 +60,9 @@ case $host_alias in
 *freebsd*)
   LIBS="$LIBS -pthread"
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
+*darwin*)
+  RANLIB="no"
+  ShLib="dylib";;
 esac
 
 # Checks for programs.
@@ -62,7 +71,12 @@ AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
-AC_PROG_RANLIB
+
+if test "$RANLIB" = "yes";then
+  AC_PROG_RANLIB
+else
+  AC_PROG_LIBTOOL
+fi
 
 AC_MSG_CHECKING([whether to enable -Wall])
 AC_ARG_ENABLE(warnings,
@@ -163,13 +177,13 @@ if test "x$SNMP_DIR" != "x"; then
   done
 
   # Accomodate 64-Bit Libraries
-  test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so       && SNMP_LIBDIR=$SNMP_DIR/lib64
-  test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
+  test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.$ShLib       && SNMP_LIBDIR=$SNMP_DIR/lib64
+  test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib64
 
   if test -z "$SNMP_LIBDIR"; then
     # Accomodate 32-Bit Libraries
-    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so       && SNMP_LIBDIR=$SNMP_DIR/lib
-    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
+    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.$ShLib       && SNMP_LIBDIR=$SNMP_DIR/lib
+    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib
   fi
 else
   for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
@@ -185,16 +199,16 @@ else
 
   # Accomodate 64-Bit Libraries
   for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
-    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so       && SNMP_LIBDIR=$i/lib64 && break
-    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64 && break
+    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.$ShLib       && SNMP_LIBDIR=$i/lib64 && break
+    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib64 && break
   done
 
   # Only check for 32 Bit libraries if the 64 bit are not found
   if test -z "$SNMP_LIBDIR"; then
     # Accomodate 32-Bit Libraries
     for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
-      test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so       && SNMP_LIBDIR=$i/lib && break
-      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib && break
+      test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.$ShLib       && SNMP_LIBDIR=$i/lib && break
+      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib && break
     done
   fi
 fi
@@ -244,7 +258,7 @@ fi
 # ****************** Nifty Popen Check ***********************
 
 # If we should use the system popen or nifty popen
-AC_MSG_CHECKING(If we should use nifty popen or the systems popen command)
+AC_MSG_CHECKING(whether we are using nifty popen)
 AC_ARG_ENABLE(nifty-popen,
     [  --enable-nifty-popen    Enable the nifty popen implementation of popen (default: disabled)],
     [ ENABLED_NIFTY=$enableval ],

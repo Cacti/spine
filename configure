@@ -2103,7 +2103,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=spine
- VERSION=0.8.6j
+ VERSION=0.8.7
 
 
 cat >>confdefs.h <<_ACEOF
@@ -2252,6 +2252,9 @@ ac_config_headers="$ac_config_headers config/config.h"
 
 
 
+# specific for Darwin build
+
+
 # static libraries
 
 # Check whether --with-static was given.
@@ -2285,6 +2288,9 @@ if test -z "$host_alias"; then
 fi
 
 # Platform-specific tweaks
+ShLib="so"
+RANLIB="yes"
+
 case $host_alias in
 *sparc-sun-solaris2.8)
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS"
@@ -2301,6 +2307,9 @@ _ACEOF
 #define HAVE_LIBPTHREAD 1
 _ACEOF
 ;;
+*darwin*)
+  RANLIB="no"
+  ShLib="dylib";;
 esac
 
 # Checks for programs.
@@ -3728,7 +3737,9 @@ else
 echo "${ECHO_T}no, using $LN_S" >&6; }
 fi
 
-if test -n "$ac_tool_prefix"; then
+
+if test "$RANLIB" = "yes";then
+  if test -n "$ac_tool_prefix"; then
   # Extract the first word of "${ac_tool_prefix}ranlib", so it can be a program name with args.
 set dummy ${ac_tool_prefix}ranlib; ac_word=$2
 { echo "$as_me:$LINENO: checking for $ac_word" >&5
@@ -3824,6 +3835,9 @@ else
   RANLIB="$ac_cv_prog_RANLIB"
 fi
 
+else
+  AC_PROG_LIBTOOL
+fi
 
 { echo "$as_me:$LINENO: checking whether to enable -Wall" >&5
 echo $ECHO_N "checking whether to enable -Wall... $ECHO_C" >&6; }
@@ -6145,13 +6159,13 @@ if test "x$SNMP_DIR" != "x"; then
   done
 
   # Accomodate 64-Bit Libraries
-  test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.so       && SNMP_LIBDIR=$SNMP_DIR/lib64
-  test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib64
+  test -f $SNMP_DIR/lib64/libsnmp.a -o -f $SNMP_DIR/lib64/libsnmp.$ShLib       && SNMP_LIBDIR=$SNMP_DIR/lib64
+  test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib64
 
   if test -z "$SNMP_LIBDIR"; then
     # Accomodate 32-Bit Libraries
-    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.so       && SNMP_LIBDIR=$SNMP_DIR/lib
-    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.so && SNMP_LIBDIR=$SNMP_DIR/lib
+    test -f $SNMP_DIR/lib/libsnmp.a -o -f $SNMP_DIR/lib/libsnmp.$ShLib       && SNMP_LIBDIR=$SNMP_DIR/lib
+    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib
   fi
 else
   for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/ucd-snmp /opt/net-snmp /opt/snmp; do
@@ -6167,16 +6181,16 @@ else
 
   # Accomodate 64-Bit Libraries
   for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
-    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.so       && SNMP_LIBDIR=$i/lib64 && break
-    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.so && SNMP_LIBDIR=$i/lib64 && break
+    test -f $i/lib64/libsnmp.a -o -f $i/lib64/libsnmp.$ShLib       && SNMP_LIBDIR=$i/lib64 && break
+    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib64 && break
   done
 
   # Only check for 32 Bit libraries if the 64 bit are not found
   if test -z "$SNMP_LIBDIR"; then
     # Accomodate 32-Bit Libraries
     for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/ucd-snmp /opt/snmp /usr/local/snmp; do
-      test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.so       && SNMP_LIBDIR=$i/lib && break
-      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.so && SNMP_LIBDIR=$i/lib && break
+      test -f $i/lib/libsnmp.a -o -f $i/lib/libsnmp.$ShLib       && SNMP_LIBDIR=$i/lib && break
+      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib && break
     done
   fi
 fi
@@ -6447,8 +6461,8 @@ fi
 # ****************** Nifty Popen Check ***********************
 
 # If we should use the system popen or nifty popen
-{ echo "$as_me:$LINENO: checking If we should use nifty popen or the systems popen command" >&5
-echo $ECHO_N "checking If we should use nifty popen or the systems popen command... $ECHO_C" >&6; }
+{ echo "$as_me:$LINENO: checking whether we are using nifty popen" >&5
+echo $ECHO_N "checking whether we are using nifty popen... $ECHO_C" >&6; }
 # Check whether --enable-nifty-popen was given.
 if test "${enable_nifty_popen+set}" = set; then
   enableval=$enable_nifty_popen;  ENABLED_NIFTY=$enableval
