@@ -12,9 +12,6 @@ AC_LANG(C)
 AM_INIT_AUTOMAKE(spine, 0.8.7)
 AM_CONFIG_HEADER(config/config.h)
 
-# specific for Darwin build
-m4_pattern_allow([^AC_PROG_LIBTOOL$])
-
 # static libraries
 AC_ARG_WITH(static,
   AC_HELP_STRING(
@@ -49,7 +46,6 @@ fi
 
 # Platform-specific tweaks
 ShLib="so"
-RANLIB="yes"
 
 case $host_alias in
 *sparc-sun-solaris2.8)
@@ -61,7 +57,6 @@ case $host_alias in
   LIBS="$LIBS -pthread"
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
-  RANLIB="no"
   ShLib="dylib";;
 esac
 
@@ -71,12 +66,7 @@ AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
-
-if test "$RANLIB" = "yes";then
-  AC_PROG_RANLIB
-else
-  AC_PROG_LIBTOOL
-fi
+AC_PROG_LIBTOOL
 
 AC_MSG_CHECKING([whether to enable -Wall])
 AC_ARG_ENABLE(warnings,
