@@ -463,6 +463,7 @@ void config_defaults() {
 
 	STRNCOPY(config_paths[0], CONFIG_PATH_1);
 	STRNCOPY(config_paths[1], CONFIG_PATH_2);
+	STRNCOPY(config_paths[2], CONFIG_PATH_3);
 
 	set.log_destination = LOGDEST_FILE;
 }
