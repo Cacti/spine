@@ -385,10 +385,10 @@ int main(int argc, char *argv[]) {
 	/* see if mysql is thread safe */
 	if (mysql_thread_safe()) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("NOTE: MySQL is Thread Safe!\n");
+			SPINE_LOG(("DEBUG: MySQL is Thread Safe!"));
 		}
 	}else{
-		printf("SPINE: WARNING: MySQL is NOT Thread Safe!\n");
+		SPINE_LOG(("WARNING: MySQL is NOT Thread Safe!\n"));
 	}
 
 	/* initialize SNMP */

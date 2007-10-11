@@ -178,10 +178,6 @@ void db_connect(const char *database, MYSQL *mysql) {
 	success = FALSE;
 	timeout = 5;
 
-	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		printf("SPINE: MYSQL: Connecting to MySQL database '%s' on '%s'...\n", database, set.dbhost);
-	}
-
 	thread_mutex_lock(LOCK_MYSQL);
 	mysql_init(mysql);
 	if (mysql == NULL) {
@@ -205,10 +201,6 @@ void db_connect(const char *database, MYSQL *mysql) {
 			usleep(2000);
 			#endif
 		}else{
-			if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-				printf("DEBUG: MYSQL: Connected to MySQL database '%s' on '%s'\n", database, set.dbhost);
-			}
-
 			tries   = 0;
 			success = TRUE;
 		}

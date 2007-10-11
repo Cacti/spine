@@ -230,10 +230,10 @@ char *php_readpipe(int php_process) {
 			bptr += i;
 			*bptr = '\0';	/* make what we've got into a string */
 
-			if (cp = strstr(result_string,"\n")) {
+			if ((cp = strstr(result_string,"\n")) > 0) {
 				*cp = '\0';
 
-				if (cp = strstr(result_string,"\r")) {
+				if ((cp = strstr(result_string,"\r")) > 0) {
 					*cp = '\0';
 				}
 

@@ -91,18 +91,18 @@ void snmp_spine_init(void) {
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
 	#ifdef PACKAGE_VERSION
-	/* check that the headers we compiled with match the library we linked with -
-	   apparently not defined in UCD-SNMP...
-	*/
-	SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
-	SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
+		/* check that the headers we compiled with match the library we linked with -
+		   apparently not defined in UCD-SNMP...
+		*/
+		SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
+		SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
 
-	if(STRIMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
-		init_snmp("snmpapp");
-	}else{
-		/* report the error and quit spine */
-		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
-	}
+		if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
+			init_snmp("snmpapp");
+		}else{
+			/* report the error and quit spine */
+			die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
+		}
 	#else
 		SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
 		init_snmp("snmpapp");
@@ -141,9 +141,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					char *snmp_priv_passphrase, char *snmp_priv_protocol,
 					char *snmp_context, int snmp_port, int snmp_timeout) {
 
-	void *sessp = NULL;
+	void   *sessp = NULL;
 	struct snmp_session session;
-	char hostnameport[BUFSIZE];
+	char   hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
   	snmp_sess_init(&session);
@@ -184,7 +184,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		return 0;
 	}
 
-	snprintf(hostnameport, sizeof(hostnameport), "%s:%i", hostname, snmp_port);
+	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
 	session.peername    = hostnameport;
 	session.retries     = 3;
 	session.remote_port = snmp_port;

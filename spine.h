@@ -89,11 +89,11 @@
  * and the parentheses are part of it. When we call this macro, we pass the
  * "single" parameter unadorned, so that
  *
- *		cacti_log args
+ *		spine_log args
  *
  * expands to
  *
- *		cacti_log ("n=%d string=%s foo=%f", n, string, foo)
+ *		spine_log ("n=%d string=%s foo=%f", n, string, foo)
  *
  * Voila: it's a normal printf-like call.
  *
@@ -110,11 +110,11 @@
  * The (void) prefix is to forestall compiler warnings about expressions
  * not being used.
  */
-#define SPINE_LOG(format_and_args)        (cacti_log format_and_args)
-#define SPINE_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && cacti_log format_and_args)
-#define SPINE_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && cacti_log format_and_args)
-#define SPINE_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && cacti_log format_and_args)
-#define SPINE_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && cacti_log format_and_args)
+#define SPINE_LOG(format_and_args)        (spine_log format_and_args)
+#define SPINE_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && spine_log format_and_args)
+#define SPINE_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && spine_log format_and_args)
+#define SPINE_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && spine_log format_and_args)
+#define SPINE_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && spine_log format_and_args)
 
 /* general constants */
 #define MAX_THREADS 100

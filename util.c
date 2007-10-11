@@ -505,12 +505,12 @@ void die(const char *format, ...) {
 	exit(set.exit_code);
 }
 
-/*! \fn void cacti_log(const char *format, ...)
+/*! \fn void spine_log(const char *format, ...)
  *  \brief output's log information to the desired cacti logfile.
  *  \param *logmessage a pointer to the pre-formated log message.
  *
  */
-int cacti_log(const char *format, ...) {
+int spine_log(const char *format, ...) {
 	va_list	args;
 
 	FILE *log_file = NULL;
@@ -534,7 +534,7 @@ int cacti_log(const char *format, ...) {
 
 	/* append a line feed to the log message if needed */
 	if (!strstr(ulogmessage, "\n")) {
-		snprintf(ulogmessage, BUFSIZE, "%s\n", ulogmessage);
+		strncat(ulogmessage, "\n", 1);
 	}
 
 	/* log message prefix */
@@ -570,7 +570,9 @@ int cacti_log(const char *format, ...) {
 	strncat(flogmessage, logprefix,   sizeof(flogmessage)-1);
 	strncat(flogmessage, ulogmessage, sizeof(flogmessage)-1);
 
-	if (IS_LOGGING_TO_FILE() && (set.log_level != POLLER_VERBOSITY_NONE) && (strlen(set.path_logfile) != 0)) {
+	if ((IS_LOGGING_TO_FILE() && 
+		(set.log_level != POLLER_VERBOSITY_NONE) && 
+		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");

@@ -37,7 +37,7 @@ extern int read_spine_config(char *file);
 extern void config_defaults(void);
 
 /* cacti logging function */
-extern int cacti_log(const char *format, ...)
+extern int spine_log(const char *format, ...)
 	__attribute__((format(printf, 1, 2)));
 
 extern void die(const char *format, ...)

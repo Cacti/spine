@@ -1,5 +1,5 @@
 /*
- ex: set tabstop=2 shiftwidth=2 autoindent:
+ ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
  | Copyright (C) 2002-2007 The Cacti Group                                 |
  |                                                                         |
@@ -98,7 +98,7 @@ void poll_host(int host_id) {
 	char query9[BUFSIZE];
 	char query10[BUFSIZE];
 	char errstr[BUFSIZE];
-	char *sysUptime;
+	char sysUptime[40];
 	char result_string[BUFSIZE];
 	int  result_length;
 
@@ -160,9 +160,6 @@ void poll_host(int host_id) {
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
 	}
 
-	if (!(sysUptime = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: poller.c sysUptime");
-	}
 	sysUptime[0] = '\0';
 
 	/* single polling interval query for items */
@@ -251,7 +248,7 @@ void poll_host(int host_id) {
 	/* if the host is a real host.  Note host_id=0 is not host based data source */
 	if (host_id) {
 		/* get data about this host */
-		if (result = db_query(&mysql, query2)) {
+		if ((result = db_query(&mysql, query2)) > 0) {
 			num_rows = (int)mysql_num_rows(result);
 
 			if (num_rows != 1) {
@@ -348,25 +345,23 @@ void poll_host(int host_id) {
 				/* free the host result */
 				mysql_free_result(result);
 
-				if ((host->availability_method == 1) ||
-					(host->availability_method == 2)) {
-					if (((host->snmp_version <= 2) && (strlen(host->snmp_community) > 0)) ||
-						(host->snmp_version == 3)) {
-						host->snmp_session = snmp_host_init(host->id,
-							host->hostname,
-							host->snmp_version,
-							host->snmp_community,
-							host->snmp_username,
-							host->snmp_password,
-							host->snmp_auth_protocol,
-							host->snmp_priv_passphrase,
-							host->snmp_priv_protocol,
-							host->snmp_context,
-							host->snmp_port,
-							host->snmp_timeout);
-					}else{
-						host->snmp_session = NULL;
-					}
+				if (((host->snmp_version >= 1) && (host->snmp_version <= 2) && 
+					(strlen(host->snmp_community) > 0)) ||
+					(host->snmp_version == 3)) {
+					host->snmp_session = snmp_host_init(host->id,
+						host->hostname,
+						host->snmp_version,
+						host->snmp_community,
+						host->snmp_username,
+						host->snmp_password,
+						host->snmp_auth_protocol,
+						host->snmp_priv_passphrase,
+						host->snmp_priv_protocol,
+						host->snmp_context,
+						host->snmp_port,
+						host->snmp_timeout);
+				}else{
+					host->snmp_session = NULL;
 				}
 
 				/* save snmp status data for future use */
@@ -436,7 +431,7 @@ void poll_host(int host_id) {
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		if (result = db_query(&mysql, query4)) {
+		if ((result = db_query(&mysql, query4)) > 0) {
 			num_rows = (int)mysql_num_rows(result);
 
 			if (num_rows > 0) {
@@ -490,9 +485,11 @@ void poll_host(int host_id) {
 							}else{
 								poll_result = snmp_get(host, reindex->arg1);
 							}
+
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
 							poll_result = exec_poll(host, reindex->arg1);
+
 							break;
 						default:
 							SPINE_LOG(("Host[%i] ERROR: Unknown Assert Action!\n", host->id));
@@ -564,12 +561,12 @@ void poll_host(int host_id) {
 	num_rows = 0;
 	if (set.poller_interval == 0) {
 		/* get the number of agents */
-		if (result = db_query(&mysql, query9)) {
+		if ((result = db_query(&mysql, query9)) > 0) {
 			num_snmp_agents = (int)mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if (result = db_query(&mysql, query1)) {
+			if ((result = db_query(&mysql, query1)) > 0) {
 				num_rows = (int)mysql_num_rows(result);
 			}else{
 				SPINE_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
@@ -579,12 +576,12 @@ void poll_host(int host_id) {
 		}
 	}else{
 		/* get the number of agents */
-		if (result = db_query(&mysql, query10)) {
+		if ((result = db_query(&mysql, query10)) > 0) {
 			num_snmp_agents = (int)mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if (result = db_query(&mysql, query5)) {
+			if ((result = db_query(&mysql, query5)) > 0) {
 				num_rows = (int)mysql_num_rows(result);
 
 				/* update poller_items table for next polling interval */
@@ -969,7 +966,6 @@ void poll_host(int host_id) {
 	free(host);
 	free(host_time);
 	free(reindex);
-	free(sysUptime);
 	free(ping);
 
 	mysql_close(&mysql);
