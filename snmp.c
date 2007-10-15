@@ -226,7 +226,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 		/* set the privacy protocol to none */
 		if (strcmp(snmp_priv_protocol, "[None]") == 0) {
-			session.securityPrivProto    = usmNoPrivProtocol;
+			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OIDSIZE(usmNoPrivProtocol));
 			session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
@@ -234,14 +234,14 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityLevel        = SNMP_SEC_LEVEL_AUTHNOPRIV;
 		}else{
 			if (strcmp(snmp_priv_protocol, "DES") == 0) {
-				session.securityPrivProto    = usmDESPrivProtocol;
+				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, OIDSIZE(usmDESPrivProtocol));
 				session.securityPrivProtoLen = OIDSIZE(usmDESPrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 			}else{
-				session.securityPrivProto    = usmAES128PrivProtocol;
+				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OIDSIZE(usmAES128PrivProtocol));
 				session.securityPrivProtoLen = OIDSIZE(usmAES128PrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
@@ -250,8 +250,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 
 			/* set the privacy key to the hashed version. */
-			if (generate_Ku(session.securityPrivProto,
-				session.securityPrivProtoLen,
+			if (generate_Ku(session.securityAuthProto,
+				session.securityAuthProtoLen,
 				(u_char *) snmp_priv_passphrase,
 				strlen(snmp_priv_passphrase),
 				session.securityPrivKey,
