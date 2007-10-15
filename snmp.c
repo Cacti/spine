@@ -214,26 +214,26 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProtoLen = OIDSIZE(usmHMACSHA1AuthProtocol);
 		}
 
-	    /* set the authentication key to the hashed version. The password must me at least 8 char */
-	    if (generate_Ku(session.securityAuthProto,
-						session.securityAuthProtoLen,
-						(u_char *) snmp_password,
-						strlen(snmp_password),
-	                    session.securityAuthKey,
-	                    &(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
-	        SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+		/* set the authentication key to the hashed version. The password must me at least 8 char */
+		if (generate_Ku(session.securityAuthProto,
+			session.securityAuthProtoLen,
+			(u_char *) snmp_password,
+			strlen(snmp_password),
+			session.securityAuthKey,
+			&(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
+			SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
 		}
 
 		/* set the privacy protocol to none */
-		if (strcmp(snmp_auth_protocol, "[None]") == 0) {
+		if (strcmp(snmp_priv_protocol, "[None]") == 0) {
 			session.securityPrivProto    = usmNoPrivProtocol;
 			session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
-		    /* set the security level to authenticate, but not encrypted */
+			/* set the security level to authenticate, but not encrypted */
 			session.securityLevel        = SNMP_SEC_LEVEL_AUTHNOPRIV;
 		}else{
-			if (strcmp(snmp_auth_protocol, "DES") == 0) {
+			if (strcmp(snmp_priv_protocol, "DES") == 0) {
 				session.securityPrivProto    = usmDESPrivProtocol;
 				session.securityPrivProtoLen = OIDSIZE(usmDESPrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
@@ -245,18 +245,18 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivProtoLen = OIDSIZE(usmAES128PrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
-			    /* set the security level to authenticate, and encrypted */
+				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 			}
 
-		    /* set the privacy key to the hashed version. */
-		    if (generate_Ku(session.securityPrivProto,
+			/* set the privacy key to the hashed version. */
+			if (generate_Ku(session.securityPrivProto,
 				session.securityPrivProtoLen,
 				(u_char *) snmp_priv_passphrase,
 				strlen(snmp_priv_passphrase),
 				session.securityPrivKey,
 				&(session.securityPrivKeyLen)) != SNMPERR_SUCCESS) {
-		        SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+				SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from privacy pass phrase."));
 			}
 		}
 	}
