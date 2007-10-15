@@ -33,8 +33,13 @@ make install
 
 Spine
 
-nothing special required
+nothing too special required
 
+aclocal
+libtoolize --force
+autoheader
+automake
+autoconf
 ./configure
 
 make
