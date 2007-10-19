@@ -15,16 +15,18 @@ Build instructions
 
 MySQL
 
-Only the client libraries are needed for spine so MySQL can be configured with the following option:
+Only the client libraries are needed for cactid so MySQL can be configured with the following option:
 
-./configure --without-server
+./configure --without-server --enable-thread-safe-client
 
 make
 make install
 
 NetSNMP
 
-Use the experimental reentrant configure flag
+Use the experimental reentrant configure flag.  Also, these options works with the 5.3++ net-snmp, but may not work
+with prior versions.  The big thing to note when compiling net-snmp on Cygwin is to avoid all PERL related
+options as perlmod's do not compile in windows in general.
 
 ./configure --enable-reentrant --disable-agent --disable-mibs --with-perl-modules=no --disable-mib-loading --with-defaults
 
