@@ -521,6 +521,9 @@ int spine_log(const char *format, ...) {
 	struct tm now_time;
 	struct tm *now_ptr;
 
+	/* keep track of an errored log file */
+	static int log_error = FALSE;
+
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
@@ -580,8 +583,15 @@ int spine_log(const char *format, ...) {
 				log_file = fopen(set.path_logfile, "a");
 			}
 
-			fputs(flogmessage, log_file);
-			fclose(log_file);
+			if (log_file) {
+				fputs(flogmessage, log_file);
+				fclose(log_file);
+			}else{
+				if (!log_error) {
+					printf("ERROR: Spine Log File Could Not Be Opened/Created\n");
+					log_error = TRUE;
+				}
+			}
 		}
 	}
 
