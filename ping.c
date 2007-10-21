@@ -221,7 +221,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 
-	struct sockaddr_in servername;
+	struct sockaddr_in recvname;
+	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
 	char   *cacti_msg = "cacti-monitoring-system";
@@ -232,6 +233,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	static   unsigned int seq = 0;
 	struct   icmphdr *icmp;
+	struct   icmp *pkt;
 	unsigned char *packet;
 	char     *new_hostname;
 
@@ -253,13 +255,23 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	if (!(packet = malloc(packet_len))) {
 		die("ERROR: Fatal malloc error: ping.c ping_icmp!");
 	}
-	memset(packet, 0, ICMP_HDR_SIZE + strlen(cacti_msg));
+	memset(packet, 0, packet_len);
+
+	/* set the memory of the ping address */
+	memset(&fromname, 0, sizeof(struct sockaddr_in));
+	memset(&recvname, 0, sizeof(struct sockaddr_in));
 
 	icmp = (struct icmphdr*)packet;
+
 	icmp->type = ICMP_ECHO;
 	icmp->code = 0;
-	icmp->un.echo.id = getpid();
+	icmp->un.echo.id = getpid() & 0xFFFF;
+
+	/* lock set/get the sequence and unlock */
+	thread_mutex_lock(LOCK_GHBN);
 	icmp->un.echo.sequence = seq++;
+	thread_mutex_unlock(LOCK_GHBN);
+	
 	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
 		die("ERROR: Function gettimeofday failed.  Exiting spine");
 	}
@@ -274,11 +286,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
-		/* set the socket timeout */
+		/* set the socket send and receive timeout */
 		setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+		setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, new_hostname, 7)) {
+		if (init_sockaddr(&fromname, new_hostname, 7)) {
 			retry_count = 0;
 
 			/* initialize file descriptor to review for input/output */
@@ -299,34 +312,46 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				begin_time = get_time_as_double();
 
 				/* send packet to destination */
-				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &servername, sizeof(servername));
+				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
 
-				/* wait for a response on the socket */
-				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
-
-				/* record end time */
-				end_time = get_time_as_double();
-
-	   			fromlen = sizeof(servername);
+	   			fromlen = sizeof(fromname);
 
 				/* check to see which socket talked */
-				if (FD_ISSET(icmp_socket, &socket_fds)) {
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &servername, &fromlen);
+				return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+
+				if (return_code < 0) {
+					if (errno == EINTR) {
+						/* call was interrupted by some system event */
+						continue;
+					}
 				}else{
-					return_code = -10;
-				}
+					/* record end time */
+					end_time = get_time_as_double();
 
-				/* caculate total time */
-				total_time = (end_time - begin_time) * one_thousand;
+					/* caculate total time */
+					total_time = (end_time - begin_time) * one_thousand;
 
-				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if (total_time < host->ping_timeout) {
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
-						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						free(new_hostname);
-						free(packet);
-						close(icmp_socket);
-						return HOST_UP;
+					struct iphdr *iphdr = (struct iphdr *) socket_reply;
+
+					pkt = (struct icmp *) (socket_reply + (iphdr->ihl << 2));
+
+					if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
+						if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
+							if (total_time < host->ping_timeout) {
+								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
+								snprintf(ping->ping_status, 50, "%.5f", total_time);
+								free(new_hostname);
+								free(packet);
+								close(icmp_socket);
+								return HOST_UP;
+							}
+						}else{
+							/* received a response other than an echo reply */
+							continue;
+						}
+					}else{
+						continue;
+						/* another host responded */
 					}
 				}
 
@@ -501,7 +526,6 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	struct timeval timeout;
 	int    tcp_socket;
 	struct sockaddr_in servername;
-	char   socket_reply[BUFSIZE];
 	int    retry_count;
 	char   request[BUFSIZE];
 	int    request_len;
@@ -895,9 +919,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			SPINE_LOG(("Host[%i] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->status_last_error));
+			SPINE_LOG(("Host[%i] Hostname[%s] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->hostname, host->status_last_error));
 		}else{
-			SPINE_LOG(("Host[%i] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id));
+			SPINE_LOG(("Host[%i] Hostnanme[%s] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id, host->hostname));
 		}
 	}
 }
