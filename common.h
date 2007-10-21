@@ -83,6 +83,7 @@
 
 #if HAVE_NETINET_IN_H
 #  include <netinet/in.h>
+#  include <netinet/ip_icmp.h>
 #endif
 
 #if TIME_WITH_SYS_TIME

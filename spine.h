@@ -460,28 +460,6 @@ typedef struct ping_results {
 	char   snmp_response[SMALL_BUFSIZE];
 } ping_t;
 
-/*! ICMP Ping Structure
- *
- * This structure is required to craft a raw ICMP packet in order to ping a host.
- *
- */
-struct icmphdr {
-	char   type;
-	char   code;
-	unsigned short checksum;
-	union {
-		struct {
-			unsigned short id;
-			unsigned short sequence;
-		} echo;
-		unsigned int gateway;
-		struct {
-			unsigned short unused;
-    		unsigned short mtu;
-		} frag;
-	} un;
-};
-
 /* Include all Standard Spine Headers */
 #include "poller.h"
 #include "locks.h"
