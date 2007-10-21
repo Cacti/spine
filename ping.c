@@ -551,15 +551,28 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 		/* set the socket timeout */
 		setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+		setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
 		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
-			if (connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
-				snprintf(ping->ping_status, 50, "down");
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-				free(new_hostname);
-				close(tcp_socket);
-				return HOST_DOWN;
+			/* first attempt a connect */
+			retry_count = 0;
+
+			while (1) {
+				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
+				if (return_code < 0) {
+					if (retry_count > host->ping_retries) { 
+						snprintf(ping->ping_status, 50, "down");
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
+						free(new_hostname);
+						close(tcp_socket);
+						return HOST_DOWN;
+					}else{
+						retry_count++;
+					}
+				}else{
+					break;
+				}
 			}
 
 			/* format packet */
