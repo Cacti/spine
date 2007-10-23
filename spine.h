@@ -149,7 +149,7 @@
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
 #define DEFAULT_DB_PORT 3306
-#define DEFAULT_LOGFILE "/wwwroot/cacti/log/spine.log"
+#define DEFAULT_LOGFILE "/var/www/html/cacti/log/cacti.log"
 #define DEFAULT_TIMEOUT 294000000
 
 /* threads constants */
