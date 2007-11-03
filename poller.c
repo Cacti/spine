@@ -669,6 +669,9 @@ void poll_host(int host_id) {
 		/* create an array for snmp oids */
 		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
 
+		/* initialize all the memory to insure we don't get issues */
+		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
+
 		i = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
 			if (!host->ignore_host) {
