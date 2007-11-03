@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 0.8.7, http://bugs.cacti.net)
+AC_INIT(Spine Poller, 0.8.7, http://www.cacti.net/bugs.php)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)

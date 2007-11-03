@@ -1,5 +1,8 @@
 The Cacti Group – spine
 
+0.8.7a
+-bug#0001056: Spine/Cactid configure reports incorrect URL for bug reporting
+
 0.8.7
 -bug: Fix configure issues with hybrid 64 bit OS'
 -feature: Rename to spine
