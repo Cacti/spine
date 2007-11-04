@@ -6,4 +6,8 @@ This code represents high speed poller replacement for cmd.php.
 It has come quite a ways from it's initial development.  It is 100% compatible
 with the legacy cmd.php processor.
 
+Make sure that you have a good development environment setup to compile spine.
+This includes compilers, header files and things such as libtool.  If you have
+questions, use the forums.
+
 -Larry Adams (aka TheWitness)

@@ -1,6 +1,7 @@
 The Cacti Group – spine
 
 0.8.7a
+-bug#0001054: Cactid/Spine installation instructions are missing dependencies
 -bug#0001056: Spine/Cactid configure reports incorrect URL for bug reporting
 
 0.8.7
