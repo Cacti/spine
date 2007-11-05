@@ -485,6 +485,8 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	int i;
 	int max_repetitions = 1;
 	int non_repeaters   = 0;
+	int array_count;
+	int index_count;
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
@@ -523,6 +525,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
+
 				for(i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						#ifdef USE_NET_SNMP
@@ -530,36 +533,45 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 						#else
 						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 						#endif
+						
 						vars = vars->next_variable;
 					}
 				}
 			}else{
 				if (response->errindex != 0) {
-					/* removed errored OID and then retry */
-					int count;
+					index_count = 1;
+					array_count = 0;
 
 					/* Find our index against errindex */
-					count = 0;
-					for(i = 0; i < num_oids && count < response->errindex; i++) {
-						if ( ! IS_UNDEFINED(snmp_oids[i].result) ) {
-							count++;
+					while (array_count < num_oids) {
+						if (IS_UNDEFINED(snmp_oids[array_count].result) ) {
+							array_count++;
+						}else{
+							/* if we have found our error, exit */
+							if (index_count == response->errindex) {
+								SET_UNDEFINED(snmp_oids[array_count].result);
+
+								break;
+							}
+							array_count++;
+							index_count++;
 						}
-					}
-					i--;
-					SET_UNDEFINED(snmp_oids[i].result);
 
-					for (count = 1, vars = response->variables;
-						vars && count != response->errindex;
-						vars = vars->next_variable, count++) {
 					}
 
+					/* remote the invalid OID from the PDU */
 					pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
+
+					/* free the previous response */
 					snmp_free_pdu(response);
+
 					response = NULL;
 					if (pdu != NULL) {
+						/* retry the request */
 						goto retry;
 					}else{
-						status = STAT_DESCRIP_ERROR;
+					    /* all OID's errored out so exit cleanly */
+						status = STAT_SUCCESS;
 					}
 				}else{
 					status = STAT_DESCRIP_ERROR;

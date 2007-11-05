@@ -82,6 +82,7 @@
 #endif
 
 #if HAVE_NETINET_IN_H
+#  include <netinet/ip.h>
 #  include <netinet/in.h>
 #  include <netinet/ip_icmp.h>
 #endif

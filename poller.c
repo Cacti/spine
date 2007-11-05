@@ -742,6 +742,9 @@ void poll_host(int host_id) {
 
 							/* reset num_snmps */
 							num_oids = 0;
+
+							/* initialize all the memory to insure we don't get issues */
+							memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 						}
 
 						snmp_host_cleanup(host->snmp_session);
@@ -798,6 +801,9 @@ void poll_host(int host_id) {
 
 						/* reset num_snmps */
 						num_oids = 0;
+		
+						/* initialize all the memory to insure we don't get issues */
+						memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 					}
 
 					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid), "%s", poller_items[i].arg1);
