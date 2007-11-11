@@ -32,29 +32,6 @@
 */
 
 #ifdef __CYGWIN__
-#ifndef icmphdr
-/* defines for several missing objects in cygwin */
-struct icmphdr
-{
-  u_int8_t type;		/* message type */
-  u_int8_t code;		/* type sub-code */
-  u_int16_t checksum;
-  union
-  {
-    struct
-    {
-      u_int16_t	id;
-      u_int16_t	sequence;
-    } echo;			/* echo datagram */
-    u_int32_t	gateway;	/* gateway address */
-    struct
-    {
-      u_int16_t	__unused;
-      u_int16_t	mtu;
-    } frag;			/* path mtu discovery */
-  } un;
-};
-#endif
 
 #ifndef ICMP_ECHOREPLY
 #define ICMP_ECHOREPLY		0	/* Echo Reply			*/

@@ -96,7 +96,7 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
 AC_CHECK_HEADERS(assert.h ctype.h errno.h signal.h math.h malloc.h netdb.h)
 AC_CHECK_HEADERS(signal.h stdarg.h stdio.h syslog.h)
-AC_CHECK_HEADERS(netinet/in.h netinet/ip.h netinet/ip_icmp.h)
+AC_CHECK_HEADERS(netinet/in_systm.h netinet/in.h netinet/ip.h netinet/ip_icmp.h)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_TYPES([unsigned long long, long long])

@@ -232,9 +232,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	fd_set socket_fds;
 
 	static   unsigned int seq = 0;
-	struct   icmphdr *icmp;
-	struct   icmp *pkt;
-	unsigned char *packet;
+	struct   icmp  *icmp;
+	struct   ip    *ip;
+	struct   icmp  *pkt;
+	unsigned char  *packet;
 	char     *new_hostname;
 
 	/* remove "tcp:" from hostname */
@@ -261,24 +262,24 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	memset(&fromname, 0, sizeof(struct sockaddr_in));
 	memset(&recvname, 0, sizeof(struct sockaddr_in));
 
-	icmp = (struct icmphdr*)packet;
+	icmp = (struct icmp*) packet;
 
-	icmp->type = ICMP_ECHO;
-	icmp->code = 0;
-	icmp->un.echo.id = getpid() & 0xFFFF;
+	icmp->icmp_type = ICMP_ECHO;
+	icmp->icmp_code = 0;
+	icmp->icmp_id   = getpid() & 0xFFFF;
 
 	/* lock set/get the sequence and unlock */
 	thread_mutex_lock(LOCK_GHBN);
-	icmp->un.echo.sequence = seq++;
+	icmp->icmp_seq = seq++;
 	thread_mutex_unlock(LOCK_GHBN);
 	
 	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
 		die("ERROR: Function gettimeofday failed.  Exiting spine");
 	}
 
-	icmp->checksum = 0;
+	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
-	icmp->checksum = get_checksum(packet, packet_len);
+	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
@@ -331,9 +332,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					/* caculate total time */
 					total_time = (end_time - begin_time) * one_thousand;
 
-					struct iphdr *iphdr = (struct iphdr *) socket_reply;
+					ip = (struct ip *) socket_reply;
 
-					pkt = (struct icmp *) (socket_reply + (iphdr->ihl << 2));
+					pkt   = (struct icmp *)  (socket_reply + (ip->ip_hl << 2));
 
 					if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 						if ((pkt->icmp_type == ICMP_ECHOREPLY)) {

@@ -77,13 +77,30 @@
 #  include <unistd.h>
 #endif
 
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <math.h>
+#include <mysql.h>
+#include <netdb.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <syslog.h>
+
+
 #if HAVE_STDINT_H
 #  include <stdint.h>
 #endif
 
 #if HAVE_NETINET_IN_H
-#  include <netinet/ip.h>
+#  include <netinet/in_systm.h>
 #  include <netinet/in.h>
+#  include <netinet/ip.h>
 #  include <netinet/ip_icmp.h>
 #endif
 
@@ -103,21 +120,5 @@
 #else
 #  include <pthread.h>
 #endif
-
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
-#include <math.h>
-#include <mysql.h>
-#include <netdb.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <syslog.h>
 
 #endif /* SPINE_COMMON_H */
