@@ -218,6 +218,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_socket;
 
 	double begin_time, end_time, total_time;
+	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 
@@ -246,9 +247,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		SPINE_LOG(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
 	}
 
-	/* establish timeout value */
-	timeout.tv_sec  = 0;
-	timeout.tv_usec = host->ping_timeout * 1000;
+	/* convert the host timeout to a double precision number in seconds */
+	host_timeout = host->ping_timeout;
 
 	/* allocate the packet in memory */
 	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
@@ -287,20 +287,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
-		/* set the socket send and receive timeout */
-		setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-		setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
 		/* get address of hostname */
 		if (init_sockaddr(&fromname, new_hostname, 7)) {
 			retry_count = 0;
+			total_time  = 0;
 
 			/* initialize file descriptor to review for input/output */
 			FD_ZERO(&socket_fds);
 			FD_SET(icmp_socket,&socket_fds);
 
 			while (1) {
-				if (retry_count >= host->ping_retries) {
+				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
@@ -310,52 +307,79 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				begin_time = get_time_as_double();
+				if (total_time == 0) { 
+					/* establish timeout value */
+					timeout.tv_sec  = 0;
+					timeout.tv_usec = host->ping_timeout * 1000;
+
+					/* set the socket send and receive timeout */
+					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+
+					begin_time = get_time_as_double();
+				}else{
+					/* decrement the timeout value by the total time */
+					timeout.tv_usec = (host->ping_timeout - total_time) * 1000;
+				}
 
 				/* send packet to destination */
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
 
 	   			fromlen = sizeof(fromname);
 
+				/* wait for a response on the socket */
+				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+
+				/* record end time */
+				end_time = get_time_as_double();
+
+				/* caculate total time */
+				total_time = (end_time - begin_time) * one_thousand;
+
 				/* check to see which socket talked */
-				return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+				if (total_time < host_timeout) {
+					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 
-				if (return_code < 0) {
-					if (errno == EINTR) {
-						/* call was interrupted by some system event */
-						continue;
-					}
-				}else{
-					/* record end time */
-					end_time = get_time_as_double();
+					if (return_code < 0) {
+						if (errno == EINTR) {
+							/* call was interrupted by some system event */
+							continue;
+						}
+					}else{
+						ip = (struct ip *) socket_reply;
+	
+						pkt   = (struct icmp *)  (socket_reply + (ip->ip_hl << 2));
 
-					/* caculate total time */
-					total_time = (end_time - begin_time) * one_thousand;
-
-					ip = (struct ip *) socket_reply;
-
-					pkt   = (struct icmp *)  (socket_reply + (ip->ip_hl << 2));
-
-					if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-						if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
-							if (total_time < host->ping_timeout) {
+						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
+							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(new_hostname);
 								free(packet);
 								close(icmp_socket);
 								return HOST_UP;
+							}else{
+								/* received a response other than an echo reply */
+								if (total_time > host_timeout) {
+									retry_count++;
+									total_time = 0;
+								}
+
+								continue;
 							}
 						}else{
-							/* received a response other than an echo reply */
+							/* another host responded */
+							if (total_time > host_timeout) {
+								retry_count++;
+								total_time = 0;
+							}
+
 							continue;
 						}
-					}else{
-						continue;
-						/* another host responded */
 					}
 				}
 
+				total_time = 0;
 				retry_count++;
 				#ifndef SOLAR_THREAD
 				usleep(1000);
@@ -393,6 +417,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
  */
 int ping_udp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
+	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 	int    udp_socket;
@@ -411,6 +436,9 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
 	timeout.tv_usec = host->ping_timeout * 1000;
+
+	/* convert the host timeout to a double precision number in seconds */
+	host_timeout = host->ping_timeout;
 
 	/* initilize the socket */
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -445,7 +473,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			FD_SET(udp_socket,&socket_fds);
 
 			while (1) {
-				if (retry_count >= host->ping_retries) {
+				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
@@ -475,10 +503,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				SPINE_LOG_DEBUG(("DEBUG: The UDP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
+				SPINE_LOG_DEBUG(("DEBUG: UDP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
 
 				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if (total_time <= host->ping_timeout) {
+					if (total_time <= host_timeout) {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
@@ -523,6 +551,7 @@ int ping_udp(host_t *host, ping_t *ping) {
  */
 int ping_tcp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
+	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 	int    tcp_socket;
@@ -540,6 +569,9 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	/* establish timeout value */
 	timeout.tv_sec  = 0;
 	timeout.tv_usec = host->ping_timeout * 1000;
+
+	/* convert the host timeout to a double precision number in seconds */
+	host_timeout = host->ping_timeout;
 
 	/* initilize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -587,7 +619,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 			FD_SET(tcp_socket,&socket_fds);
 
 			while (1) {
-				if (retry_count >= host->ping_retries) {
+				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(new_hostname);
@@ -607,10 +639,10 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				SPINE_LOG_DEBUG(("DEBUG: The TCP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
+				SPINE_LOG_DEBUG(("DEBUG: TCP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
 
 				if (return_code >= 0) {
-					if (total_time <= host->ping_timeout) {
+					if (total_time <= host_timeout) {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
@@ -625,14 +657,14 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				#endif
 			}
 		}else{
-			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
 			close(tcp_socket);
 			return HOST_DOWN;
 		}
 	}else{
-		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
 		if (tcp_socket != -1) close(tcp_socket);

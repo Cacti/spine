@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 0.8.7a, http://bugs.cacti.net)
+AC_INIT(Spine Poller, 0.8.7b, http://bugs.cacti.net)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -9,9 +9,8 @@ AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(spine, 0.8.7a)
+AM_INIT_AUTOMAKE(spine, 0.8.7b)
 AM_CONFIG_HEADER(config/config.h)
-
 
 # static libraries
 AC_ARG_WITH(static,

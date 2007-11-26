@@ -378,7 +378,9 @@ void poll_host(int host_id) {
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
 				 * function sets the ignore_host bit */
-				if ((host->availability_method == AVAIL_SNMP) && (strlen(host->snmp_community) == 0)) {
+				if ((host->availability_method == AVAIL_SNMP) && 
+					(strlen(host->snmp_community) == 0) &&
+					(host->snmp_version < 3)) {
 					host->ignore_host = FALSE;
 					update_host_status(HOST_UP, host, ping, host->availability_method);
 
@@ -388,7 +390,7 @@ void poll_host(int host_id) {
 						host->ignore_host = FALSE;
 						update_host_status(HOST_UP, host, ping, host->availability_method);
 					}else{
-						host->ignore_host = FALSE;
+						host->ignore_host = TRUE;
 						update_host_status(HOST_DOWN, host, ping, host->availability_method);
 					}
 				}
@@ -730,7 +732,11 @@ void poll_host(int host_id) {
 									/* detect erroneous non-numeric result */
 									if (!validate_result(snmp_oids[j].result)) {
 										snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
-										SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+
+										if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
+											SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+										}
+
 										SET_UNDEFINED(snmp_oids[j].result);
 									}
 								}
@@ -782,7 +788,11 @@ void poll_host(int host_id) {
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
 									snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
-									SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+
+									if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
+										SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+									}
+
 									SET_UNDEFINED(snmp_oids[j].result);
 								}
 							}
@@ -823,7 +833,11 @@ void poll_host(int host_id) {
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-						SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
+
+						if (!STRIMATCH(poller_items[i].result, "Nan")) {
+							SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
+						}
+
 						SET_UNDEFINED(poller_items[i].result);
 					}
 
@@ -851,7 +865,11 @@ void poll_host(int host_id) {
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-						SPINE_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
+
+						if (!STRIMATCH(poller_items[i].result, "Nan")) {
+							SPINE_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
+						}
+
 						SET_UNDEFINED(poller_items[i].result);
 					}
 
@@ -892,7 +910,11 @@ void poll_host(int host_id) {
 					/* detect erroneous non-numeric result */
 					if (!validate_result(snmp_oids[j].result)) {
 						snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
-						SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+
+						if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
+							SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+						}
+
 						SET_UNDEFINED(snmp_oids[j].result);
 					}
 				}
