@@ -739,8 +739,7 @@ int is_numeric(const char *string)
  *  \return a pointer to the modified string
  *
  */
-char *strip_alpha(char *string)
-{
+char *strip_alpha(char *string) {
 	int i;
 
 	i = strlen(string);
