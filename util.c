@@ -676,6 +676,32 @@ int all_digits(const char *string) {
 	return *string == '\0';
 }
 
+/*! \fn is_ipaddress(const char *string)
+ *  \brief verifies that a string is an ip address either v4 or v6
+ *  \param string the string to check
+ *
+ *  This function simply checks to see if a string object is an ip address.
+ *  If it is, it returns true else false.
+ *
+ *  \return TRUE if an ip address, or FALSE if non
+ *
+ */
+int is_ipaddress(const char *string) {
+	while (*string) {
+		if ((isdigit(*string)) ||
+			(*string == '.') ||
+			(*string == ':')) {
+			string++;
+
+			continue;
+		}
+
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /*! \fn int is_numeric(const char *string)
  *  \brief check to see if a string is long or double
  *  \param string the string to check
@@ -683,8 +709,7 @@ int all_digits(const char *string) {
  *  \return TRUE if long or double, FALSE if not
  *
  */
-int is_numeric(const char *string)
-{
+int is_numeric(const char *string) {
 	long local_lval;
 	double local_dval;
 	char *end_ptr_long, *end_ptr_double;

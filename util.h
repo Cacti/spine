@@ -49,6 +49,7 @@ extern void set_option(const char *setting, const char *value);
 
 /* number validation functions */
 extern int is_numeric(const char *string);
+extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
 
 /* string and file functions */

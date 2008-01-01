@@ -244,7 +244,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		SPINE_LOG(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
+		die(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
 	}
 
 	/* convert the host timeout to a double precision number in seconds */
@@ -346,9 +346,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							continue;
 						}
 					}else{
-						ip = (struct ip *) socket_reply;
-	
-						pkt   = (struct icmp *)  (socket_reply + (ip->ip_hl << 2));
+						ip  = (struct ip *) socket_reply;
+						pkt = (struct icmp *)  (socket_reply + (ip->ip_hl << 2));
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {

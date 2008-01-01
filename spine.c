@@ -493,7 +493,7 @@ int main(int argc, char *argv[]) {
 				if (poller_counter >= 20) {
 					current_time = get_time_as_double();
 
-					if ((current_time - begin_time + 6) > poller_interval) {
+					if ((current_time - begin_time + .2) > poller_interval) {
 						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
 						canexit = 1;
 						break;
@@ -530,7 +530,7 @@ int main(int argc, char *argv[]) {
 		if (poller_counter >= 20) {
 			current_time = get_time_as_double();
 
-			if ((current_time - begin_time + 6) > poller_interval) {
+			if ((current_time - begin_time + .2) > poller_interval) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
 				canexit = 1;
 				break;
@@ -562,7 +562,7 @@ int main(int argc, char *argv[]) {
 		if (poller_counter >= 20) {
 			current_time = get_time_as_double();
 
-			if ((current_time - begin_time + 6) > poller_interval) {
+			if ((current_time - begin_time + .2) > poller_interval) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
 				canexit = 1;
 				break;
