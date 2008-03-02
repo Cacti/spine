@@ -116,7 +116,6 @@ void poll_host(int host_id) {
 	char *poll_result = NULL;
 	char *host_time   = NULL;
 	char update_sql[BUFSIZE];
-	char temp_result[BUFSIZE];
 
 	int  num_snmp_agents   = 0;
 	int  last_snmp_version = 0;

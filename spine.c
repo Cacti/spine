@@ -603,11 +603,6 @@ int main(int argc, char *argv[]) {
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed\n"));
 
-	/* shutdown SNMP */
-	snmp_spine_close();
-
-	SPINE_LOG_DEBUG(("SPINE: Net-SNMP API Shutdown Completed\n"));
-
 	/* close mysql */
 	mysql_free_result(result);
 	mysql_close(&mysql);
