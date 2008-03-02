@@ -39,17 +39,13 @@
 #define MSG_WAITALL 0x100
 #endif
 
-#ifndef icmp_ra_addr
+#ifdef __CYGWIN__
 struct icmp_ra_addr
 {
   u_int32_t ira_addr;
   u_int32_t ira_preference;
 };
-#endif
-
-#ifndef iphdr
-struct iphdr
-  {
+struct iphdr {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
     unsigned int ihl:4;
     unsigned int version:4;
@@ -69,10 +65,7 @@ struct iphdr
     u_int32_t saddr;
     u_int32_t daddr;
     /*The options start here. */
-  };
-#endif
-
-#ifndef icmp
+};
 struct icmp
 {
   u_int8_t  icmp_type;	/* type of message, see below */
