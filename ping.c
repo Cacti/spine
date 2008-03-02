@@ -742,7 +742,7 @@ char *remove_tcp_udp_from_hostname(char *hostname) {
  */
 unsigned short get_checksum(void* buf, int len) {
 	int nleft = len;
-	int sum = 0;
+	int sum   = 0;
 	unsigned short answer;
 	unsigned short* w = (unsigned short*)buf;
 
@@ -750,11 +750,15 @@ unsigned short get_checksum(void* buf, int len) {
 		sum += *w++;
 		nleft -= 2;
 	}
-	if (nleft == 1)
+
+	if (nleft == 1) {
 		sum += *(unsigned char*)w;
-	sum = (sum >> 16) + (sum & 0xffff);
-	sum += (sum >> 16);
+	}
+
+	sum    = (sum >> 16) + (sum & 0xffff);
+	sum   += (sum >> 16);
 	answer = ~sum;				/* truncate to 16 bits */
+
 	return answer;
 }
 

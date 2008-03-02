@@ -55,10 +55,12 @@ extern int all_digits(const char *str);
 /* string and file functions */
 extern char *add_slashes(char *string, int arguments_2_strip);
 extern int file_exists(const char *filename);
-extern char *strip_string_crlf(char *string);
-extern char *strip_quotes(char *string);
 extern char *strip_alpha(char *string);
 extern char *strncopy(char *dst, const char *src, size_t n);
+extern char *trim(char *str);
+extern char *rtrim(char *str);
+extern char *ltrim(char *str);
+extern char *reverse(char *str);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))

@@ -726,8 +726,7 @@ void poll_host(int host_id) {
 									SET_UNDEFINED(snmp_oids[j].result);
 								}else {
 									/* remove double or single quotes from string */
-									snprintf(temp_result, BUFSIZE, "%s", strip_quotes(snmp_oids[j].result));
-									snprintf(snmp_oids[j].result, BUFSIZE, "%s", strip_alpha(temp_result));
+									snprintf(snmp_oids[j].result, 254, strip_alpha(trim(snmp_oids[j].result)));
 
 									/* detect erroneous non-numeric result */
 									if (!validate_result(snmp_oids[j].result)) {
@@ -782,8 +781,7 @@ void poll_host(int host_id) {
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else {
 								/* remove double or single quotes from string */
-								snprintf(temp_result, BUFSIZE, "%s", strip_quotes(snmp_oids[j].result));
-								snprintf(snmp_oids[j].result, BUFSIZE, "%s", strip_alpha(temp_result));
+								snprintf(snmp_oids[j].result, 254, strip_alpha(trim(snmp_oids[j].result)));
 
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
@@ -825,8 +823,7 @@ void poll_host(int host_id) {
 					poll_result = exec_poll(host, poller_items[i].arg1);
 
 					/* remove double or single quotes from string */
-					snprintf(temp_result, BUFSIZE, "%s", strip_quotes(poll_result));
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result), "%s", strip_alpha(temp_result));
+					snprintf(poller_items[i].result, 254, strip_alpha(trim(poll_result)));
 
 					free(poll_result);
 
@@ -857,8 +854,7 @@ void poll_host(int host_id) {
 					poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 					/* remove double or single quotes from string */
-					snprintf(temp_result, BUFSIZE, "%s", strip_quotes(poll_result));
-					snprintf(poller_items[i].result, sizeof(poller_items[i].result), "%s", strip_alpha(temp_result));
+					snprintf(poller_items[i].result, 254, strip_alpha(trim(poll_result)));
 
 					free(poll_result);
 
@@ -904,8 +900,7 @@ void poll_host(int host_id) {
 					SET_UNDEFINED(snmp_oids[j].result);
 				}else{
 					/* remove double or single quotes from string */
-					snprintf(temp_result, BUFSIZE, "%s", strip_quotes(snmp_oids[j].result));
-					snprintf(snmp_oids[j].result, sizeof(snmp_oids[j].result), "%s", strip_alpha(temp_result));
+					snprintf(snmp_oids[j].result, 254, strip_alpha(trim(snmp_oids[j].result)));
 
 					/* detect erroneous non-numeric result */
 					if (!validate_result(snmp_oids[j].result)) {

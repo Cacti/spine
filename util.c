@@ -836,81 +836,6 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	return(return_str);
 }
 
-/*! \fn char *strip_string_crlf(char *string)
- *  \brief remove trailing cr-lf from a string
- *  \param string the string that requires trimming
- *
- *  \return a pointer to the modified string.
- *
- */
-char *strip_string_crlf(char *string) {
-	char *posptr;
-
-	posptr = strchr(string,'\n');
-
-	while(posptr != NULL) {
-		*posptr = '\0';
-		posptr = strchr(string,'\n');
-	}
-
-	posptr = strchr(string,'\r');
-
-	while(posptr != NULL) {
-		*posptr = '\0';
-		posptr = strchr(string,'\r');
-	}
-
-	return(string);
-}
-
-/*! \fn char *strip_quotes(char *string)
- *  \brief remove single and double quotes from a string
- *  \param string the string that requires trimming
- *
- *	Some SNMP agents return strings surrounded with single or double quotes,
- *	and we need to strip these off; We remove only *leading and trailing*
- *	quotes, not intermediate ones.
- *
- *  \return a pointer to the modified string.
- *
- */
-char *strip_quotes(char *string) {
-	int length;
-	char *startptr;
-	char type;
-
-	/* find first quote in the string, determine type */
-	while (1) {
-		length = strlen(string);
-
-		/* simply return on blank string */
-		if (!length) {
-			return string;
-		}
-
-		/* set starting postion of string */
-		startptr = string;
-
-		/* search for quote characters and remove */
-		if (string[0] == '"') {
-			type = '"';
-			memmove(startptr, startptr+1, strlen(string) - 1);
-		}else if (string[0] == '\'') {
-			type = '\'';
-			memmove(startptr, startptr+1, strlen(string) - 1);
-		}else if (string[0] == '\\') {
-			type = '\\';
-			memmove(startptr, startptr+1, strlen(string) - 1);
-		}else{
-			break;
-		}
-
-		string[length-1] = '\0';
-	}
-
-	return string;
-}
-
 /*! \fn char *strncopy(char *dst, const char *src, size_t obuf)
  *  \brief copies source to destination add a NUL terminator
  *
@@ -994,4 +919,77 @@ char *get_host_poll_time() {
 	return(host_time);
 }
 
+/*! \fn trim()
+ *  \brief removes leading and trailing blanks, tabs, line feeds and
+ *         carriage returns from a string.
+ *
+ *  \return the trimmed string.
+ */
+char *trim(char *str) {
+	return ltrim(rtrim(str));
+}
+
+/*! \fn rtrim()
+ *  \brief removes trailing blanks, tabs, line feeds, carriage returns
+ *         single and double quotes and back-slashed from a string.
+ *
+ *  \return the trimmed string.
+ */
+char *rtrim(char *str) {
+	char    *end;
+	char    *trim = " \"\'\\\t\n\r";
+
+	if (!str) return NULL;
+
+	end = str + strlen(str);
+
+	while (end-- > str) {
+		if (!strchr(trim, *end)) return str;
+
+		*end = 0;
+	}
+
+	return str;
+}
+
+/*! \fn ltrim()
+ *  \brief removes leading blanks, tabs, line feeds, carriage returns
+ *         single and double quotes and back-slashed from a string.
+ *
+ *  \return the trimmed string.
+ */
+char *ltrim(char *str) {
+	char    *trim = " \"\'\\\t\n\r";
+
+	if (!str) return NULL;
+
+	while (*str) {
+		if (!strchr(trim, *str)) return str;
+
+		++str;
+	}
+
+	return str;
+}
+
+/*! \fn reverse()
+ *  \brief reverses a string in place.
+ *
+ *  \return the reversed string.
+ */
+char *reverse(char* str) {
+	int end   = strlen(str)-1;
+	int start = 0;
+
+	while (start < end) {
+		str[start] ^= str[end];
+		str[end]   ^= str[start];
+		str[start] ^= str[end];
+
+		++start;
+		--end;
+	}
+
+	return str;
+}
 

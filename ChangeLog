@@ -1,8 +1,9 @@
 The Cacti Group – spine
 
 0.8.7c
--bug#0001097: Spine: Patch to allow unknown values 
+-bug#0001097: Spine: Patch to allow unknown values
 -bug#0001101: spine hangs and timed out
+-bug#0001147: spine doesn't trim white space from data template OIDs
 -bug: Correct a buffer overrun issue in poller.c
 
 0.8.7a

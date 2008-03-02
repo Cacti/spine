@@ -31,8 +31,6 @@
  +-------------------------------------------------------------------------+
 */
 
-#ifdef __CYGWIN__
-
 #ifndef ICMP_ECHOREPLY
 #define ICMP_ECHOREPLY		0	/* Echo Reply			*/
 #endif
@@ -140,7 +138,6 @@ struct icmp
 #define	icmp_mask	icmp_dun.id_mask
 #define	icmp_data	icmp_dun.id_data
 };
-#endif
 #endif
 
 /* Host availability functions */
