@@ -159,11 +159,14 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
-		session.version = SNMP_VERSION_2c;
+		session.version       = SNMP_VERSION_2c;
+		session.securityModel = SNMP_SEC_MODEL_SNMPv2c;
 	}else if (snmp_version == 1) {
-		session.version = SNMP_VERSION_1;
+		session.version       = SNMP_VERSION_1;
+		session.securityModel = SNMP_SEC_MODEL_SNMPv1;
 	}else if (snmp_version == 3) {
-		session.version = SNMP_VERSION_3;
+		session.version       = SNMP_VERSION_3;
+		session.securityModel = USM_SEC_MODEL_NUMBER;
 	}else {
 		SPINE_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname));
 		return 0;
@@ -217,7 +220,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			/* set the security level to authenticate, but not encrypted */
 			session.securityLevel        = SNMP_SEC_LEVEL_AUTHNOPRIV;
-			session.securityModel        = SNMP_SEC_MODEL_ANY;
 		}else{
 			if (strcmp(snmp_priv_protocol, "DES") == 0) {
 				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, OIDSIZE(usmDESPrivProtocol));
@@ -226,7 +228,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				session.securityModel        = SNMP_SEC_MODEL_ANY;
 			}else{
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OIDSIZE(usmAES128PrivProtocol));
 				session.securityPrivProtoLen = OIDSIZE(usmAES128PrivProtocol);
@@ -234,7 +235,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				session.securityModel        = SNMP_SEC_MODEL_ANY;
 			}
 
 			/* set the privacy key to the hashed version. */
