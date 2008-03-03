@@ -273,10 +273,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_seq = seq++;
 	thread_mutex_unlock(LOCK_GHBN);
 	
-	if (gettimeofday((struct timeval*)(icmp+1), NULL) == -1) {
-		die("ERROR: Function gettimeofday failed.  Exiting spine");
-	}
-
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
