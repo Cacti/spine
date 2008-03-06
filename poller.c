@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2007 The Cacti Group                                 |
+ | Copyright (C) 2002-2008 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -344,7 +344,7 @@ void poll_host(int host_id) {
 				/* free the host result */
 				mysql_free_result(result);
 
-				if (((host->snmp_version >= 1) && (host->snmp_version <= 2) && 
+				if (((host->snmp_version >= 1) && (host->snmp_version <= 2) &&
 					(strlen(host->snmp_community) > 0)) ||
 					(host->snmp_version == 3)) {
 					host->snmp_session = snmp_host_init(host->id,
@@ -377,7 +377,7 @@ void poll_host(int host_id) {
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
 				 * function sets the ignore_host bit */
-				if ((host->availability_method == AVAIL_SNMP) && 
+				if ((host->availability_method == AVAIL_SNMP) &&
 					(strlen(host->snmp_community) == 0) &&
 					(host->snmp_version < 3)) {
 					host->ignore_host = FALSE;
@@ -808,7 +808,7 @@ void poll_host(int host_id) {
 
 						/* reset num_snmps */
 						num_oids = 0;
-		
+
 						/* initialize all the memory to insure we don't get issues */
 						memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 					}

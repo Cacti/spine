@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2007 The Cacti Group                                 |
+ | Copyright (C) 2002-2008 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -148,7 +148,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 
-	if (strlen(host->snmp_community) != 0) {
+	if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
 		/* by default, we look at sysUptime */
 		if ((oid = strdup(".1")) == NULL) {
 			die("ERROR: malloc(): strdup() oid ping.c failed");
@@ -272,7 +272,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	thread_mutex_lock(LOCK_GHBN);
 	icmp->icmp_seq = seq++;
 	thread_mutex_unlock(LOCK_GHBN);
-	
+
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
@@ -304,7 +304,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				if (total_time == 0) { 
+				if (total_time == 0) {
 					/* establish timeout value */
 					timeout.tv_sec  = 0;
 					timeout.tv_usec = host->ping_timeout * 1000;
@@ -590,7 +590,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 			while (1) {
 				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
 				if (return_code < 0) {
-					if (retry_count > host->ping_retries) { 
+					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
 						free(new_hostname);

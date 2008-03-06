@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2007 The Cacti Group                                 |
+ | Copyright (C) 2002-2008 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -87,6 +87,7 @@ void snmp_spine_init(void) {
 	#endif
 
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
@@ -97,18 +98,33 @@ void snmp_spine_init(void) {
 		SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
 		SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
 
-		if(!STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
+		if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
+			init_snmp("spine");
+		}else{
 			/* report the error and quit spine */
 			die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
 		}
 	#else
 		SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
+		init_snmp("spine");
 	#endif
 #else
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
 	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
+
+	init_snmp("spine");
 #endif
+}
+
+/*! \fn void snmp_spine_close()
+ *  \brief wrapper function for the snmp_shutdown function
+ *
+ *	Closes the snmp api for the given application ID
+ *
+ */
+void snmp_spine_close(void) {
+	snmp_shutdown("spine");
 }
 
 /*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
@@ -149,6 +165,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		#endif
 
 		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
 		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 	#else
@@ -525,7 +542,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 						#else
 						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 						#endif
-						
+
 						vars = vars->next_variable;
 					}
 				}

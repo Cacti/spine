@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2007 The Cacti Group                                 |
+ | Copyright (C) 2002-2008 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -573,8 +573,8 @@ int spine_log(const char *format, ...) {
 	strncat(flogmessage, logprefix,   sizeof(flogmessage)-1);
 	strncat(flogmessage, ulogmessage, sizeof(flogmessage)-1);
 
-	if ((IS_LOGGING_TO_FILE() && 
-		(set.log_level != POLLER_VERBOSITY_NONE) && 
+	if ((IS_LOGGING_TO_FILE() &&
+		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
 			if (!file_exists(set.path_logfile)) {
