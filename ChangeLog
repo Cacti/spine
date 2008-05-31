@@ -1,9 +1,10 @@
-The Cacti Group – spine
+The Cacti Group ï¿½ spine
 
 0.8.7c
 -bug#0001097: Spine: Patch to allow unknown values
 -bug#0001101: spine hangs and timed out
 -bug#0001147: spine doesn't trim white space from data template OIDs
+-bug#0001186: clarify INSTALL documentation.
 -bug: Correct a buffer overrun issue in poller.c
 
 0.8.7a
@@ -160,6 +161,6 @@ Not released.  Syncing with Cacti distribution again.
 -feature: added some compiler directives for better compatibility with cygwin
 
 0.8.6b
--bug: fixed issue that prevented multi ds item RRD’s from updating
+-bug: fixed issue that prevented multi ds item RRDï¿½s from updating
 -bug: fixed invalid string length calculation that was truncating output over 4 characters
 -bug: small log file reformatting
