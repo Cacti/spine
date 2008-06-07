@@ -786,7 +786,8 @@ void poll_host(int host_id) {
 								if (!validate_result(snmp_oids[j].result)) {
 									snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
 
-									if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
+									if ((!STRIMATCH(snmp_oids[j].result, "nan")) &&
+										(!STRIMATCH(snmp_oids[j].result, "U"))) {
 										SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
 									}
 

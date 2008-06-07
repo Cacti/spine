@@ -226,7 +226,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
-	char   *cacti_msg = "cacti-monitoring-system";
+	char   *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	int    fromlen;
 	int    return_code;
