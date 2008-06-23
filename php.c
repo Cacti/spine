@@ -77,8 +77,9 @@ char *php_cmd(const char *php_command, int php_process) {
 	/* if write status is <= 0 then the script server may be hung */
 	if (write_status <= 0) {
 		result_string = strdup("U");
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.\n", php_process));
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.  Restarting PHP Script Server\n", php_process));
 		php_close(php_process);
+		php_init(php_process);
 	}else{
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process);
