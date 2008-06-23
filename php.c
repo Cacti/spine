@@ -51,6 +51,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	char *result_string;
 	char command[BUFSIZE];
 	int write_status;
+	int retries = 0;
 
 	assert(php_command != 0);
 
@@ -72,6 +73,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	}
 
 	/* send command to the script server */
+	retry:
 	write_status = write(php_processes[php_process].php_write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
@@ -80,6 +82,11 @@ char *php_cmd(const char *php_command, int php_process) {
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.  Restarting PHP Script Server\n", php_process));
 		php_close(php_process);
 		php_init(php_process);
+		/* increment and retry a few times on the next item */
+		retries++;
+		if (retries < 3) {
+			goto retry;
+		}
 	}else{
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process);
