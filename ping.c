@@ -148,57 +148,63 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 
-	if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
-		/* by default, we look at sysUptime */
-		if ((oid = strdup(".1")) == NULL) {
-			die("ERROR: malloc(): strdup() oid ping.c failed");
-		}
+	if (host->snmp_session) {
+		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
+			/* by default, we look at sysUptime */
+			if ((oid = strdup(".1")) == NULL) {
+				die("ERROR: malloc(): strdup() oid ping.c failed");
+			}
 
-		/* record start time */
-		retry:
-		begin_time = get_time_as_double();
+			/* record start time */
+			retry:
+			begin_time = get_time_as_double();
 
-		poll_result = snmp_getnext(host, oid);
+			poll_result = snmp_getnext(host, oid);
 
-		/* record end time */
-		end_time = get_time_as_double();
+			/* record end time */
+			end_time = get_time_as_double();
 
-		free(oid);
+			free(oid);
 
-		total_time = (end_time - begin_time) * one_thousand;
+			total_time = (end_time - begin_time) * one_thousand;
 
-		if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
-			if (num_oids_checked > 1) {
-				if (num_oids_checked == 0) {
-					/* use sysUptime as a backup if the generic OID fails */
-					if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
-						die("ERROR: malloc(): strdup() oid ping.c failed");
+			if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
+				if (num_oids_checked > 1) {
+					if (num_oids_checked == 0) {
+						/* use sysUptime as a backup if the generic OID fails */
+						if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
+							die("ERROR: malloc(): strdup() oid ping.c failed");
+						}
+					}else{
+						/* use sysDescription as a backup if sysUptime fails */
+						if ((oid = strdup(".1.3.6.1.2.1.1.1.0")) == NULL) {
+							die("ERROR: malloc(): strdup() oid ping.c failed");
+						}
 					}
+
+					free(poll_result);
+					num_oids_checked++;
+					goto retry;
 				}else{
-					/* use sysDescription as a backup if sysUptime fails */
-					if ((oid = strdup(".1.3.6.1.2.1.1.1.0")) == NULL) {
-						die("ERROR: malloc(): strdup() oid ping.c failed");
-					}
+					snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host did not respond to SNMP");
+					free(poll_result);
+					return HOST_DOWN;
 				}
-
-				free(poll_result);
-				num_oids_checked++;
-				goto retry;
 			}else{
-				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host did not respond to SNMP");
+				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host responded to SNMP");
+				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 				free(poll_result);
-				return HOST_DOWN;
+				return HOST_UP;
 			}
 		}else{
-			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host responded to SNMP");
-			snprintf(ping->snmp_status, 50, "%.5f", total_time);
-			free(poll_result);
+			snprintf(ping->snmp_status, 50, "0.00");
+			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host does not require SNMP");
 			return HOST_UP;
 		}
 	}else{
 		snprintf(ping->snmp_status, 50, "0.00");
-		snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host does not require SNMP");
-		return HOST_UP;
+		snprintf(ping->snmp_response, SMALL_BUFSIZE, "Invalid SNMP Session");
+		return HOST_DOWN;
 	}
 }
 

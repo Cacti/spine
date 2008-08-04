@@ -7,6 +7,7 @@ The Cacti Group � spine
 -bug#0001186: clarify INSTALL documentation.
 -bug: Correct a buffer overrun issue in poller.c
 -bug: If the script server goes away due to a syntax problem, it will not restart 
+-bug: If the snmp session is not created spine times out
 
 0.8.7a
 -bug#0001054: Cactid/Spine installation instructions are missing dependencies
