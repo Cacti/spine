@@ -690,14 +690,16 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	/* retry 3 times to contact host */
 	i = 0;
 
-	thread_mutex_lock(LOCK_GHBN);
 	while (1) {
+		thread_mutex_lock(LOCK_GHBN);
+
 		hostinfo = gethostbyname(hostname);
+
 		if (hostinfo == NULL) {
 			SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
 
+			thread_mutex_unlock(LOCK_GHBN);
 			if (i > 3) {
-				thread_mutex_unlock(LOCK_GHBN);
 				return FALSE;
 			}
 			i++;
