@@ -371,6 +371,9 @@ int main(int argc, char *argv[]) {
 	/* calculate the external_tread_sleep value */
 	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 50;
 
+	/* connect to database */
+	db_connect(set.dbdb, &mysql);
+
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("Version %s starting\n", VERSION));
 	}else{
@@ -378,9 +381,6 @@ int main(int argc, char *argv[]) {
 			printf("SPINE: Version %s starting\n", VERSION);
 		}
 	}
-
-	/* connect to database */
-	db_connect(set.dbdb, &mysql);
 
 	/* see if mysql is thread safe */
 	if (mysql_thread_safe()) {
