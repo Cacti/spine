@@ -79,8 +79,26 @@ AC_ARG_ENABLE(warnings,
   AC_MSG_RESULT(no)
 )
 
+# On some systems, gethostbyname() is thread-safe
+AC_ARG_ENABLE(threadsafe_gethostbyname,
+  AC_HELP_STRING(
+    [--enable-threadsafe-gethostbyname],
+	  [Assume gethostbyname() is threadsafe]
+	)
+)
+
+# Check if the user told use gethostbyname() is thread-safe.
+AC_MSG_CHECKING([for threadsafe gethostbyname()])
+if test "x$enable_threadsafe_gethostbyname" = "xyes" ; then
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(HAVE_GETHOSTBYNAME_THREADSAFE, 1, 
+	[Define if gethostbyname is threadsafe])
+  HAVE_GETHOSTBYNAME_THREADSAFE=yes
+else
+  AC_MSG_RESULT(no)
+fi
+
 # Checks for libraries.
-AC_CHECK_LIB(nsl, gethostbyname)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
 AC_CHECK_LIB(pthread, pthread_exit)
@@ -95,7 +113,23 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
 AC_CHECK_HEADERS(assert.h ctype.h errno.h signal.h math.h malloc.h netdb.h)
 AC_CHECK_HEADERS(signal.h stdarg.h stdio.h syslog.h)
-AC_CHECK_HEADERS(netinet/in_systm.h netinet/in.h netinet/ip.h netinet/ip_icmp.h)
+AC_CHECK_HEADERS(
+  netinet/in_systm.h netinet/in.h netinet/ip.h netinet/ip_icmp.h,
+  [],
+  [],
+  [#ifdef HAVE_SYS_TYPES_H
+  #include <sys/types.h>
+  #endif
+  #ifdef HAVE_NETINET_IN_H
+  #include <netinet/in.h>
+  #endif
+  #ifdef HAVE_NETINET_IN_SYSTM_H
+  #include <netinet/in_systm.h
+  #endif
+  #ifdef HAVE_NETINET_IP_H
+  #include <netinet/ip.h>
+  #endif]
+)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_TYPES([unsigned long long, long long])
@@ -151,7 +185,7 @@ AC_CHECK_LIB(mysqlclient_r,mysql_init, LIBS="-lmysqlclient_r $LIBS",
 )
 
 AC_CHECK_LIB(mysqlclient_r,mysql_thread_init,[],
-  AC_DEFINE(OLD_MYSQL,1,[Old MySQL version])
+  AC_DEFINE(OLD_MYSQL, 1, [Old MySQL version])
 )
 
 # ****************** Net-SNMP/UCD-SNMP Checks ***********************
@@ -254,13 +288,73 @@ AC_ARG_ENABLE(nifty-popen,
     [ ENABLED_NIFTY=$enableval ],
     [ ENABLED_NIFTY=no ]
     )
-if test "$ENABLED_NIFTY" = "yes"
-then
+if test "$ENABLED_NIFTY" = "yes"; then
   AC_MSG_RESULT([yes])
-  AC_DEFINE([USING_NIFTY], [1],
-            [If nifty popen should be enabled by default])
+  AC_DEFINE(USING_NIFTY, 1, If nifty popen should be enabled by default)
 else
   AC_MSG_RESULT([no])
+fi
+
+# ****************** gethostbyname_r Check ***********************
+# Linux Variant
+AC_MSG_CHECKING([for glibc gethostbyname_r])
+AC_TRY_LINK([#include <netdb.h>],
+  [struct hostent result_buf;
+    char buf[1024];
+    struct hostent *result;
+    int h_erropp;
+    gethostbyname_r("localhost",
+      &result_buf,
+      buf,
+      sizeof(buf),
+      &result,
+      &h_erropp);
+  ],
+  [AC_MSG_RESULT([yes])
+   AC_DEFINE(HAVE_GETHOSTBYNAME_R_GLIBC, 1, [Using glibc versionf of gethostbyname_r()])
+   HAVE_GETHOSTBYNAME_R=yes
+  ],
+  [AC_MSG_RESULT([no])]
+)
+
+# Solaris or Irix Check
+AC_MSG_CHECKING([for Solaris/Irix gethostbyname_r])
+AC_TRY_LINK([#include <netdb.h>],
+  [struct hostent result;
+   char buf[1024];
+   int h_errnop;
+   gethostbyname_r("localhost",
+     &result,
+     buf,
+     sizeof(buf),
+     &h_errnop);
+  ],
+  [AC_MSG_RESULT([yes])
+   AC_DEFINE(HAVE_GETHOSTBYNAME_R_SOLARIS, 1, [Using Solaris gethostbyname_r()])
+   HAVE_GETHOSTBYNAME_R=yes
+  ],
+  [AC_MSG_RESULT([no])]
+)
+
+# HP-UX Check
+AC_MSG_CHECKING([for HP-UX gethostbyname_r])
+AC_TRY_LINK([#include <netdb.h>],
+  [struct hostent result;
+   char buf[1024];
+   gethostbyname_r("localhost",
+     &result,
+     buf);
+  ],
+  [AC_MSG_RESULT([yes])
+   AC_DEFINE(HAVE_GETHOSTBYNAME_R_HPUX, 1, [Using HPUX gethostbyname_r()])
+   HAVE_GETHOSTBYNAME_R=yes],
+  [AC_MSG_RESULT([no])]
+)
+
+# Not Found, Use Mutex Locking
+if test -z "$HAVE_GETHOSTBYNAME_R"; then
+	AC_DEFINE(HAVE_GETHOSTBYNAME_R_MUTEX_LOCK, 1, [Using traditional of gethostbyname_r()])
+	HAVE_GETHOSTBYNAME_R=yes
 fi
 
 AC_OUTPUT(Makefile)

@@ -250,7 +250,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		die(("ERROR: ping_icmp: cannot open an ICMP socket\n"));
+		die(("ERROR: ping_icmp: cannot open an ICMP socket"));
 	}
 
 	/* convert the host timeout to a double precision number in seconds */
@@ -687,32 +687,143 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	name->sin_family = AF_INET;
 	name->sin_port   = htons (port);
 
-	/* retry 3 times to contact host */
-	i = 0;
+	hostinfo = spine_gethostbyname(hostname);
 
-	while (1) {
-		thread_mutex_lock(LOCK_GHBN);
+	if (hostinfo == NULL) {
+		SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
+		return FALSE;
+	}else{
+		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+		thread_mutex_unlock(LOCK_GHBN);
+		return TRUE;
+	}
+}
 
-		hostinfo = gethostbyname(hostname);
+/*! \fn struct hostent *spine_gethostbyname(const char *hostname)
+ *  \brief implements gethostbyname in a thread safe mannor
+ *
+ *  \return hostent
+ *
+ */
+struct hostent *spine_gethostbyname(const char *hostname) {
+	extern int h_errno;
 
-		if (hostinfo == NULL) {
-			SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
+	#ifdef HAVE_THREADSAFE_GETHOSTBYNAME
+	struct hostent *he;
 
-			thread_mutex_unlock(LOCK_GHBN);
-			if (i > 3) {
-				return FALSE;
-			}
-			i++;
+	retry:
+	he = gethostbyname(hostname);
 
-			#ifndef SOLAR_THREAD
-			usleep(1000);
-			#endif
+	if (!he) {
+		if (h_errno == TRY_AGAIN) {
+			goto retry;
 		}else{
-			name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-			thread_mutex_unlock(LOCK_GHBN);
-			return TRUE;
+			return NULL;
 		}
 	}
+
+	return he;
+	#else
+	#ifdef HAVE_GETHOSTBYNAME_R_GLIBC
+	struct hostent result_buf, *result;
+	size_t len = 1024;
+	char   *buf;
+	int    herr;
+	int    rv;
+
+	buf = malloc(len*sizeof(char));
+	memcpy(buf, '\0', sizeof(buf));
+
+	while (1) {
+		rv = gethostbyname_r(hostname, &result_buf, buf, len,
+		&result, &herr);
+
+		if (!result) {
+			if (rv == ERANGE) {
+				len *= 2;
+				buf = realloc(buf, len*sizeof(char));
+
+				continue;
+			}else if (herr == TRY_AGAIN) {
+				continue;
+			}else{
+				free(buf);
+				return NULL;
+			}
+		}else{
+			break;
+		}
+	}
+
+	free(buf);
+
+	return result;
+	#else
+	#ifdef HAVE_GETHOSTBYNAME_R_SOLARIS
+	size_t  len = 8192;
+	char   *buf = NULL;
+	struct hostent result;
+	struct hostent *he;
+
+	buf = malloc(len*sizeof(char));
+	memcpy(buf, '\0', sizeof(buf));
+
+	while (1) {
+		he = gethostbyname_r(hostname, &result, len, buf, &h_errno);
+		if (!he) {
+			if (errno == ERANGE) {
+				len += 1024;
+				buf = realloc(buf, len*sizeof(char));
+				memcpy(buf, '\0', sizeof(buf));
+
+				continue;
+			}else if (h_errno == TRY_AGAIN) {
+				continue;
+			}else{
+				free(buf);
+				return NULL;
+			}
+		}else{
+			break;
+		}
+	} 
+
+	free(buf);
+
+	return result;
+	#else
+	#ifdef HAVE_GETHOSTBYNAME_R_HPUX
+	struct hostent result
+	struct hostent_data buf;
+	int rv;
+
+	rv = gethostbyname_r(hostname, &result, &buf);
+	if (!rv) {
+		return result;	
+	}else{
+		return NULL;
+	}
+
+	#else
+	struct hostent *he;
+
+	retry:
+	thread_mutex_lock(LOCK_GHBN);
+	he = gethostbyname(hostname);
+	thread_mutex_unlock(LOCK_GHBN);
+	if (!he) {
+		if (h_errno == TRY_AGAIN) {
+			goto retry;
+		}else{
+			return NULL;
+		}
+	}
+
+	return he;
+	#endif
+	#endif
+	#endif
+	#endif
 }
 
 /*! \fn char *remove_tcp_udp_from_hostname(char *hostname)

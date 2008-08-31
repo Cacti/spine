@@ -74,7 +74,7 @@ int db_insert(MYSQL *mysql, const char *query) {
 
 					continue;
 				}else{
-					SPINE_LOG(("ERROR: A database insert failed! Error:'%i', SQL Fragment:'%s'\n", error, query_frag));
+					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'\n", error, mysql_error(mysql), query_frag));
 					return FALSE;
 				}
 			}else{
@@ -121,12 +121,12 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				error_count++;
 
 				if (error_count > 30) {
-					SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
-
-					die("ERROR: Fatal MySQL Query Error, exiting!");
+					die("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag);
 				}
 
 				continue;
+			}else{
+				die("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql));
 			}
 		}else{
 			mysql_res = mysql_store_result(mysql);
@@ -186,20 +186,25 @@ void db_connect(const char *database, MYSQL *mysql) {
 
 	options_error = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
 	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set timeout value\n");
+		die("FATAL: MySQL options unable to set timeout value");
 	}
 
 	while (tries > 0) {
 		tries--;
 
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
-			printf("MYSQL: Connection Failed: %s\n", mysql_error(mysql));
+			if (mysql_errno(mysql) != 1049) {
+				printf("MYSQL: Connection Failed: Error:'%i', Message:'%s'\n", mysql_errno(mysql), mysql_error(mysql));
 
-			success = FALSE;
+				success = FALSE;
 
-			#ifndef SOLAR_THREAD
-			usleep(2000);
-			#endif
+				#ifndef SOLAR_THREAD
+				usleep(2000);
+				#endif
+			}else{
+				tries   = 0;
+				success = FALSE;
+			}
 		}else{
 			tries   = 0;
 			success = TRUE;
@@ -211,7 +216,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (!success){
-		die("FATAL: Connection Failed: %s", mysql_error(mysql));
+		die("FATAL: Connection Failed, Error:'%i', Message:'%s'", mysql_errno(mysql), mysql_error(mysql));
 	}
 }
 

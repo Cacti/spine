@@ -5,10 +5,13 @@ The Cacti Group � spine
 -bug#0001101: spine hangs and times out
 -bug#0001147: spine doesn't trim white space from data template OIDs
 -bug#0001186: clarify INSTALL documentation.
+-bug#0001231: Compiling Spine on Solaris 10
 -bug#0001260: Deadlock in ping.c when resolving bad hostnames 
 -bug: Correct a buffer overrun issue in poller.c
 -bug: If the script server goes away due to a syntax problem, it will not restart 
 -bug: If the snmp session is not created spine times out
+-feature: Use threadsafe gethostbyname_r
+-feature: Improve mysql logging
 
 0.8.7a
 -bug#0001054: Cactid/Spine installation instructions are missing dependencies
