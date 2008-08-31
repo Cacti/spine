@@ -124,7 +124,7 @@ AC_CHECK_HEADERS(
   #include <netinet/in.h>
   #endif
   #ifdef HAVE_NETINET_IN_SYSTM_H
-  #include <netinet/in_systm.h
+  #include <netinet/in_systm.h>
   #endif
   #ifdef HAVE_NETINET_IP_H
   #include <netinet/ip.h>
