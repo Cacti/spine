@@ -193,7 +193,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 		tries--;
 
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
-			if (mysql_errno(mysql) != 1049) {
+			if ((mysql_errno(mysql) != 1049) && (mysql_errno(mysql) != 2005) && (mysql_errno(mysql) != 1045)) {
 				printf("MYSQL: Connection Failed: Error:'%i', Message:'%s'\n", mysql_errno(mysql), mysql_error(mysql));
 
 				success = FALSE;
