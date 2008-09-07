@@ -96,7 +96,7 @@ int ping_host(host_t *host, ping_t *ping) {
 	}
 
 	switch (host->availability_method) {
-		case AVAIL_SNMP_OR_PING:
+		case AVAIL_SNMP_AND_PING:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
@@ -110,7 +110,7 @@ int ping_host(host_t *host, ping_t *ping) {
 			}else{
 				return HOST_DOWN;
 			}
-		case AVAIL_SNMP_AND_PING:
+		case AVAIL_SNMP_OR_PING:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
