@@ -310,7 +310,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	int    status;
 	char   *result_string;
 
-	if (!(result_string = (char *) malloc(BUFSIZE))) {
+	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
 	result_string[0] = '\0';
@@ -344,7 +344,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 					vars = response->variables;
 
 					#ifdef USE_NET_SNMP
-					snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+					snprint_value(result_string, RESULTS_BUFFER, anOID, anOID_len, vars);
 					#else
 					sprint_value(result_string, anOID, anOID_len, vars);
 					#endif
@@ -388,7 +388,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 	int    status;
 	char   *result_string;
 
-	if (!(result_string = (char *) malloc(BUFSIZE))) {
+	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
 	result_string[0] = '\0';
@@ -422,7 +422,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					vars = response->variables;
 
 					#ifdef USE_NET_SNMP
-					snprint_value(result_string, BUFSIZE, anOID, anOID_len, vars);
+					snprint_value(result_string, RESULTS_BUFFER, anOID, anOID_len, vars);
 					#else
 					sprint_value(result_string, anOID, anOID_len, vars);
 					#endif
@@ -538,7 +538,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 				for(i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						#ifdef USE_NET_SNMP
-						snmp_snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result), vars->name, vars->name_length, vars);
+						snmp_snprint_value(snmp_oids[i].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 						#else
 						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 						#endif

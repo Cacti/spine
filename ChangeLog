@@ -13,6 +13,9 @@ The Cacti Group � spine
 -bug: If your snmp context changes between poller items, the context would not always change
 -feature: Use threadsafe gethostbyname_r
 -feature: Improve mysql logging
+-feature: Allow overriding the default results buffer size
+-feature: Allow overriding the default max mysql buffer (insert) size
+-feature: Allow overriding the maximum simultaneous scripts setting
 
 0.8.7a
 -bug#0001054: Cactid/Spine installation instructions are missing dependencies

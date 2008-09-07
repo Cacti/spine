@@ -154,7 +154,7 @@ char *php_readpipe(int php_process) {
 	char *cp;
 	char *bptr;
 
-	if (!(result_string = (char *)malloc(BUFSIZE))) {
+	if (!(result_string = (char *)malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: php.c php_readpipe!");
 	}
 	result_string[0] = '\0';
@@ -228,7 +228,7 @@ char *php_readpipe(int php_process) {
 		bptr = result_string;
 
 		while (1) {
-			i = read(php_processes[php_process].php_read_fd,bptr,BUFSIZE-(bptr-result_string));
+			i = read(php_processes[php_process].php_read_fd,bptr,RESULTS_BUFFER-(bptr-result_string));
 
 			if (i <= 0) {
 				SET_UNDEFINED(result_string);

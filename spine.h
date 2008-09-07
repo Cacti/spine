@@ -132,8 +132,6 @@
 #define STAT_DESCRIP_ERROR 99
 #define SPINE_PARENT 1
 #define SPINE_FORK 0
-#define MAX_MYSQL_BUF_SIZE 35000
-#define MAX_SIMULTANEOUS_SCRIPTS 20
 
 /* locations to search for the config file */
 #define CONFIG_PATHS 3
@@ -342,7 +340,7 @@ typedef struct config_struct {
  */
 typedef struct target_struct {
 	int    target_id;
-	char   result[BUFSIZE];
+	char   result[RESULTS_BUFFER];
 	int    local_data_id;
 	int    action;
 	char   command[256];
@@ -378,7 +376,7 @@ typedef struct target_struct {
 typedef struct snmp_oids {
 	int    array_position;
 	char   oid[512];
-	char   result[BUFSIZE];
+	char   result[RESULTS_BUFFER];
 } snmp_oids_t;
 
 /*! PHP Script Server Structure

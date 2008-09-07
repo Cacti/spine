@@ -279,8 +279,37 @@ if test "$USE_NET_SNMP" = "no"; then
     AC_MSG_ERROR(Cannot find UCD-SNMP libraries(snmp)))
 fi
 
-# ****************** Nifty Popen Check ***********************
+# ****************** Spine Result Buffer Check ***********************
+# Check for the default spine output buffer size
+results_buffer=1024
+AC_ARG_WITH(results-buffer,
+  AC_HELP_STRING([--with-results-buffer=N], [The size of the spine results buffer (default=1024)]),
+  [results_buffer=$withval]
+)
+AC_DEFINE_UNQUOTED(RESULTS_BUFFER, $results_buffer, The size of the spine result buffer)
+AC_MSG_RESULT(checking for the spine results buffer size... $results_buffer bytes)
 
+# ****************** Maximum Simultaneous Scripts ***********************
+# Check for the most scripts that can be active at one time per spine process
+max_scripts=20
+AC_ARG_WITH(max-scripts,
+  AC_HELP_STRING([--with-max-scripts=N], [The maximum simultaneous spine scripts that can run (default=20)]),
+  [max_scripts=$withval]
+)
+AC_DEFINE_UNQUOTED(MAX_SIMULTANEOUS_SCRIPTS, $results_buffer, The maximum number of simultaneous running scripts)
+AC_MSG_RESULT(checking for the maximum simultaneous spine scripts... $max_scripts)
+
+# ****************** Maximum MySQL Buffer Size ***********************
+# Check for the most scripts that can be active at one time per spine process
+max_mysql_buffer=65536
+AC_ARG_WITH(max-mysql-buffer,
+  AC_HELP_STRING([--with-max-mysql-buffer=N], [The maximum SQL insert size allowed (default=65536)]),
+  [max_mysql_buffer=$withval]
+)
+AC_DEFINE_UNQUOTED(MAX_MYSQL_BUF_SIZE, $max_mysql_buffer, The maximum MySQL buffer size to insert)
+AC_MSG_RESULT(checking for the maximum MySQL buffer size... $max_mysql_buffer)
+
+# ****************** Nifty Popen Check ***********************
 # If we should use the system popen or nifty popen
 AC_MSG_CHECKING(whether we are using nifty popen)
 AC_ARG_ENABLE(nifty-popen,

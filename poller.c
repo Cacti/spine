@@ -824,7 +824,7 @@ void poll_host(int host_id) {
 					poll_result = exec_poll(host, poller_items[i].arg1);
 
 					/* remove double or single quotes from string */
-					snprintf(poller_items[i].result, 254, strip_alpha(trim(poll_result)));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
 
 					free(poll_result);
 
@@ -855,7 +855,7 @@ void poll_host(int host_id) {
 					poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 					/* remove double or single quotes from string */
-					snprintf(poller_items[i].result, 254, strip_alpha(trim(poll_result)));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
 
 					free(poll_result);
 
@@ -1077,7 +1077,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	char *proc_command;
 	char *result_string;
 
-	if (!(result_string = (char *) malloc(BUFSIZE))) {
+	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: poller.c exec_poll!");
 	}
 	result_string[0] = '\0';
@@ -1166,7 +1166,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, result_string, BUFSIZE);
+			bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER);
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
 			}else{
