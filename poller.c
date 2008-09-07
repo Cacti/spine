@@ -370,6 +370,7 @@ void poll_host(int host_id) {
 				STRNCOPY(last_snmp_community, host->snmp_community);
 				STRNCOPY(last_snmp_username, host->snmp_username);
 				STRNCOPY(last_snmp_password, host->snmp_password);
+				STRNCOPY(last_snmp_context, host->snmp_context);
 				STRNCOPY(last_snmp_auth_protocol, host->snmp_auth_protocol);
 				STRNCOPY(last_snmp_priv_passphrase, host->snmp_priv_passphrase);
 				STRNCOPY(last_snmp_priv_protocol, host->snmp_priv_protocol);
@@ -725,7 +726,7 @@ void poll_host(int host_id) {
 									SET_UNDEFINED(snmp_oids[j].result);
 								}else {
 									/* remove double or single quotes from string */
-									snprintf(snmp_oids[j].result, 254, strip_alpha(trim(snmp_oids[j].result)));
+									strip_alpha(trim(snmp_oids[j].result));
 
 									/* detect erroneous non-numeric result */
 									if (!validate_result(snmp_oids[j].result)) {
@@ -780,7 +781,7 @@ void poll_host(int host_id) {
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else {
 								/* remove double or single quotes from string */
-								snprintf(snmp_oids[j].result, 254, strip_alpha(trim(snmp_oids[j].result)));
+								strip_alpha(trim(snmp_oids[j].result));
 
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {

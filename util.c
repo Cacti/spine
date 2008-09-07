@@ -486,12 +486,12 @@ void die(const char *format, ...) {
 
 	if (set.logfile_processed) {
 		if (set.parent_fork == SPINE_PARENT) {
-			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)\n", logmessage);
 		}else{
-			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)\n", logmessage);
 		}
 	}else{
-		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
+		snprintf(flogmessage, BUFSIZE, "%s (Spine init)\n", logmessage);
 	}
 
 	SPINE_LOG((flogmessage));

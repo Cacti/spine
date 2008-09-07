@@ -219,6 +219,7 @@
 #define AVAIL_SNMP_AND_PING 1
 #define AVAIL_SNMP 2
 #define AVAIL_PING 3
+#define AVAIL_SNMP_OR_PING 4
 
 #define PING_ICMP 1
 #define PING_UDP 2

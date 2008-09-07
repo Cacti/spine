@@ -10,6 +10,7 @@ The Cacti Group � spine
 -bug: Correct a buffer overrun issue in poller.c
 -bug: If the script server goes away due to a syntax problem, it will not restart 
 -bug: If the snmp session is not created spine times out
+-bug: If your snmp context changes between poller items, the context would not always change
 -feature: Use threadsafe gethostbyname_r
 -feature: Improve mysql logging
 

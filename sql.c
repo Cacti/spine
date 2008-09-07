@@ -178,7 +178,6 @@ void db_connect(const char *database, MYSQL *mysql) {
 	success = FALSE;
 	timeout = 5;
 
-	thread_mutex_lock(LOCK_MYSQL);
 	mysql_init(mysql);
 	if (mysql == NULL) {
 		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
@@ -212,8 +211,6 @@ void db_connect(const char *database, MYSQL *mysql) {
 	}
 
 	free(hostname);
-
-	thread_mutex_unlock(LOCK_MYSQL);
 
 	if (!success){
 		die("FATAL: Connection Failed, Error:'%i', Message:'%s'", mysql_errno(mysql), mysql_error(mysql));

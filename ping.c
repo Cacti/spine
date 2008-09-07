@@ -53,7 +53,9 @@ int ping_host(host_t *host, ping_t *ping) {
 	snmp_result = 0;
 
 	/* icmp/tcp/udp ping test */
-	if ((host->availability_method == AVAIL_SNMP_AND_PING) || (host->availability_method == AVAIL_PING)) {
+	if ((host->availability_method == AVAIL_SNMP_AND_PING) || 
+		(host->availability_method == AVAIL_PING) || 
+		(host->availability_method == AVAIL_SNMP_OR_PING)) {
 		if (host->ping_method == PING_ICMP) {
 			/* set and then test for asroot */
 			#ifndef __CYGWIN__
@@ -88,13 +90,28 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	/* snmp test */
 	if ((host->availability_method == AVAIL_SNMP) ||
-		((host->availability_method == AVAIL_SNMP_AND_PING) && (ping_result != HOST_UP))) {
+		(host->availability_method == AVAIL_SNMP_AND_PING) ||
+		((host->availability_method == AVAIL_SNMP_OR_PING) && (ping_result != HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
 	}
 
 	switch (host->availability_method) {
+		case AVAIL_SNMP_OR_PING:
+			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+				if (ping_result == HOST_UP) {
+					return HOST_UP;
+				}else{
+					return HOST_DOWN;
+				}
+			}
+
+			if ((snmp_result == HOST_UP) && (ping_result == HOST_UP)) {
+				return HOST_UP;
+			}else{
+				return HOST_DOWN;
+			}
 		case AVAIL_SNMP_AND_PING:
-			if (strlen(host->snmp_community) == 0) {
+			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
 				}else{
@@ -732,7 +749,7 @@ struct hostent *spine_gethostbyname(const char *hostname) {
 	int    rv;
 
 	buf = malloc(len*sizeof(char));
-	memcpy(buf, '\0', sizeof(buf));
+	memset(buf, 0, sizeof(buf));
 
 	while (1) {
 		rv = gethostbyname_r(hostname, &result_buf, buf, len,
@@ -766,7 +783,7 @@ struct hostent *spine_gethostbyname(const char *hostname) {
 	struct hostent *he;
 
 	buf = malloc(len*sizeof(char));
-	memcpy(buf, '\0', sizeof(buf));
+	memset(buf, 0, sizeof(buf));
 
 	while (1) {
 		he = gethostbyname_r(hostname, &result, len, buf, &h_errno);
@@ -774,7 +791,7 @@ struct hostent *spine_gethostbyname(const char *hostname) {
 			if (errno == ERANGE) {
 				len += 1024;
 				buf = realloc(buf, len*sizeof(char));
-				memcpy(buf, '\0', sizeof(buf));
+				memset(buf, 0, sizeof(buf));
 
 				continue;
 			}else if (h_errno == TRY_AGAIN) {
