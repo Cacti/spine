@@ -700,18 +700,122 @@ int ping_tcp(host_t *host, ping_t *ping) {
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
 	int    i;
+	extern int h_errno;
 
 	name->sin_family = AF_INET;
 	name->sin_port   = htons (port);
 
-	hostinfo = spine_gethostbyname(hostname);
+	#ifdef HAVE_THREADSAFE_GETHOSTBYNAME
+	retry:
+	hostinfo = gethostbyname(hostname);
+
+	if (!hostinfo) {
+		if (h_errno == TRY_AGAIN) {
+			goto retry;
+		}else{
+			return NULL;
+		}
+	}
+
+	#else
+	#ifdef HAVE_GETHOSTBYNAME_R_GLIBC
+	struct hostent result_buf;
+	size_t len = 1024;
+	char   *buf;
+	int    herr;
+	int    rv;
+
+	buf = malloc(len*sizeof(char));
+	memset(buf, 0, sizeof(buf));
+
+	while (1) {
+		rv = gethostbyname_r(hostname, &result_buf, buf, len,
+		&hostinfo, &herr);
+
+		if (!hostinfo) {
+			if (rv == ERANGE) {
+				len *= 2;
+				buf = realloc(buf, len*sizeof(char));
+
+				continue;
+			}else if (herr == TRY_AGAIN) {
+				continue;
+			}else{
+				hostinfo = NULL;
+				break;
+			}
+		}else{
+			break;
+		}
+	}
+
+	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+
+	free(buf);
+	#else
+	#ifdef HAVE_GETHOSTBYNAME_R_SOLARIS
+	size_t  len = 8192;
+	char   *buf = NULL;
+	struct hostent result;
+
+	buf = malloc(len*sizeof(char));
+	memset(buf, 0, sizeof(buf));
+
+	while (1) {
+		hostinfo = gethostbyname_r(hostname, &result, len, buf, &h_errno);
+		if (!hostinfo) {
+			if (errno == ERANGE) {
+				len += 1024;
+				buf = realloc(buf, len*sizeof(char));
+				memset(buf, 0, sizeof(buf));
+
+				continue;
+			}else if (h_errno == TRY_AGAIN) {
+				continue;
+			}else{
+				free(buf);
+				return NULL;
+			}
+		}else{
+			break;
+		}
+	}
+
+	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+
+	free(buf);
+	#else
+	#ifdef HAVE_GETHOSTBYNAME_R_HPUX
+	struct hostent hostent;
+	struct hostent_data buf;
+	int rv;
+
+	rv = gethostbyname_r(hostname, &hostent, &buf);
+	if (!rv) {
+		name->sin_addr = *(struct in_addr *) hostent->h_addr;
+	}
+
+	#else
+	retry:
+	thread_mutex_lock(LOCK_GHBN);
+	hostinfo = gethostbyname(hostname);
+	thread_mutex_unlock(LOCK_GHBN);
+	if (!hostinfo) {
+		if (h_errno == TRY_AGAIN) {
+			goto retry;
+		}else{
+			hostinfo = NULL;
+		}
+	}
+	#endif
+	#endif
+	#endif
+	#endif
 
 	if (hostinfo == NULL) {
 		SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
 		return FALSE;
 	}else{
-		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-		thread_mutex_unlock(LOCK_GHBN);
 		return TRUE;
 	}
 }
