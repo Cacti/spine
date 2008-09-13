@@ -12,15 +12,36 @@ Below are some random notes about installing:
 
 - to minimize the impact of MIB files for net-snmp, utilize the
   --disable-mib-loading configure option in net-snmp (vers 5.1 and above).
-  
-- right now spine requires -lmysqlclient_r to compile (which may be
-  removed in the future). It seems that the default Redhat (at least
-  RH9) RPM's have trouble with this. The mysql.com RPMs work fine
-  though.
+ 
+- Spine requires -lmysqlclient_r to compile. Some early distributions
+  of MySQL did not include those libraries.  If that is the case, you
+  will be required to compile and build against MySQL with thread
+  safety enabled.  We suggest you simply use a modern distro of Linux.
   
 - Be sure you have a good development environment including autoconf,
-  automake and libtool.
+  automake and libtool to compile.
  
+- There are a number of configure options.  To view them, run ./configure --help
+  there are a few specific to Spine.  They are as follows:
+
+  --enable-nifty-popen              - Some implementations of popen() are not
+                                      threadsafe.  Use this option to use the Nifty
+                                      popen() implementation that is threadsafe.
+  --enable-threadsafe-gethostbyname - If your OS has a native threadsafe version of
+                                      gethostbyname, enable use this option.
+  --with-max-mysql-buffer=65536     - MySQL can handle very large insert buffers.
+                                      Changing this size can alter spine performance.
+                                      Make this value at least four times as large
+                                      as the results-buffer.
+  --with-results-buffer=1024        - Some scripts can have very large results that
+                                      need to be returned to cacti's poller_output
+                                      table.  You can control the size of this buffer
+                                      using this option.
+  --with-max-scripts=20             - Each spine process have launch several scripts.
+                                      If your scripts have large amounts of "wait" time
+                                      increasing this value may improve performance.  Keep
+                                      in mind that this will increase server load.
+
 - If ./configure fails with the error 'libtool.m4 and ltmain.sh have 
   a version mismatch!', run the following:
  
