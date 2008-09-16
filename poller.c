@@ -101,6 +101,7 @@ void poll_host(int host_id) {
 	char sysUptime[BUFSIZE];
 	char result_string[BUFSIZE];
 	int  result_length;
+	char temp_result[RESULTS_BUFFER];
 
 	int num_rows;
 	int assert_fail = 0;
@@ -726,7 +727,8 @@ void poll_host(int host_id) {
 									SET_UNDEFINED(snmp_oids[j].result);
 								}else {
 									/* remove double or single quotes from string */
-									strip_alpha(trim(snmp_oids[j].result));
+									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 									/* detect erroneous non-numeric result */
 									if (!validate_result(snmp_oids[j].result)) {
@@ -781,7 +783,8 @@ void poll_host(int host_id) {
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else {
 								/* remove double or single quotes from string */
-								strip_alpha(trim(snmp_oids[j].result));
+								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
@@ -901,7 +904,8 @@ void poll_host(int host_id) {
 					SET_UNDEFINED(snmp_oids[j].result);
 				}else{
 					/* remove double or single quotes from string */
-					snprintf(snmp_oids[j].result, 254, strip_alpha(trim(snmp_oids[j].result)));
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous non-numeric result */
 					if (!validate_result(snmp_oids[j].result)) {
