@@ -1,6 +1,7 @@
 The Cacti Group � spine
 
 0.8.7c
+-bug#0001022: strip_quotes incorrectly parsing script output
 -bug#0001097: Spine: Patch to allow unknown values including "Nan" and "U" without warnings
 -bug#0001101: spine hangs and times out
 -bug#0001147: spine doesn't trim white space from data template OIDs

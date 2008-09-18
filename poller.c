@@ -726,7 +726,11 @@ void poll_host(int host_id) {
 									SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 									SET_UNDEFINED(snmp_oids[j].result);
 								}else {
-									if (!is_hexadecimal(snmp_oids[j].result, TRUE)) {
+									if ((is_numeric(snmp_oids[j].result)) ||
+										(is_multipart_output(snmp_oids[j].result)) ||
+										(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+										/* continue */
+									}else {
 										/* remove double or single quotes from string */
 										snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
 										snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
@@ -784,7 +788,10 @@ void poll_host(int host_id) {
 								SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else {
-								if (!is_hexadecimal(snmp_oids[j].result, TRUE)) {
+								if ((is_numeric(snmp_oids[j].result)) ||
+									(is_multipart_output(snmp_oids[j].result)) ||
+									(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+								}else {
 									/* remove double or single quotes from string */
 									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
 									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
@@ -831,7 +838,9 @@ void poll_host(int host_id) {
 					poll_result = exec_poll(host, poller_items[i].arg1);
 
 					/* remove double or single quotes from string */
-					if (is_hexadecimal(poll_result, TRUE)) {
+					if ((is_numeric(poll_result)) ||
+						(is_multipart_output(poll_result)) ||
+						(is_hexadecimal(poll_result, TRUE))) {
 						snprintf(poller_items[i].result, RESULTS_BUFFER, trim(poll_result));
 					}else{
 						snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
@@ -866,7 +875,9 @@ void poll_host(int host_id) {
 					poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 					/* remove double or single quotes from string */
-					if (is_hexadecimal(poll_result, TRUE)) {
+					if ((is_numeric(poll_result)) ||
+						(is_multipart_output(poll_result)) ||
+						(is_hexadecimal(poll_result, TRUE))) {
 						snprintf(poller_items[i].result, RESULTS_BUFFER, trim(poll_result));
 					}else{
 						/* remove double or single quotes from string */
@@ -917,7 +928,10 @@ void poll_host(int host_id) {
 					SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
 				}else{
-					if (!is_hexadecimal(snmp_oids[j].result, TRUE)) {
+					if ((is_numeric(snmp_oids[j].result)) ||
+						(is_multipart_output(snmp_oids[j].result)) ||
+						(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+					}else {
 						/* remove double or single quotes from string */
 						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
 						snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
@@ -1026,6 +1040,51 @@ void poll_host(int host_id) {
 	SPINE_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function\n", host_id));
 }
 
+/*! \fn int is_multipart_output(char *result)
+ *  \brief validates the output syntax is a valid name value pair syntax
+ *  \param result the value to be checked for legality
+ *
+ *	This function will poll a specific host using the script pointed to by
+ *  the command variable.
+ *
+ *  \return TRUE if the result is valid, otherwise FALSE.
+ *
+ */
+int is_multipart_output(char *result) {
+	int space_cnt = 0;
+	int delim_cnt = 0;
+	int i;
+
+	/* check the easy cases first */
+	if (result) {
+		/* it must have delimiters */
+		if ((strstr(result, ":")) || (strstr(result, "!"))) {
+			if (!strstr(result, " ")) {
+				return TRUE;
+			}else{
+				const int len = strlen(result);
+
+				for(i=0; i<len; i++) {
+					if ((result[i] == ':') || (result[i] == '!')) {
+						delim_cnt = delim_cnt + 1;
+					}else if (result[i] == ' ') {
+						space_cnt = space_cnt + 1;
+					}
+				}
+
+				if (space_cnt+1 == delim_cnt) {
+					return TRUE;
+				}else{
+					return FALSE;
+				}
+			}
+		}
+	}
+
+	return FALSE;
+
+}
+
 /*! \fn int validate_result(char *result)
  *  \brief validates the output from the polling action is valid
  *  \param result the value to be checked for legality
@@ -1046,27 +1105,10 @@ int validate_result(char *result) {
 		if (is_numeric(result)) {
 			return TRUE;
 		}else{
-			/* it must have delimiters */
-			if ((strstr(result, ":")) || (strstr(result, "!"))) {
-				if (!strstr(result, " ")) {
-					return TRUE;
-				}else{
-					const int len = strlen(result);
-
-					for(i=0; i<len; i++) {
-						if ((result[i] == ':') || (result[i] == '!')) {
-							delim_cnt = delim_cnt + 1;
-						}else if (result[i] == ' ') {
-							space_cnt = space_cnt + 1;
-						}
-					}
-
-					if (space_cnt+1 == delim_cnt) {
-						return TRUE;
-					}else{
-						return FALSE;
-					}
-				}
+			if (is_multipart_output(result)) {
+				return TRUE;
+			}else{
+				return FALSE;
 			}
 		}
 	}
