@@ -757,6 +757,37 @@ int is_numeric(const char *string) {
  	}
 }
 
+/*! \fn int is_hexadecimal(const char *str, const short ignore_space)
+ *  \brief test whether a string represents a hex number.
+ *  \param str string to test
+ *  \param ignore_space nonzero to skip tabs and spaces
+ *
+ *  \return TRUE if the string is valid hex, FALSE otherwise
+ *
+ */
+int is_hexadecimal(const char * str, const short ignore_space) {
+	if (!str) return FALSE;
+
+	while (*str) {
+		switch (*str) {
+		case '0': case '1': case '2': case '3':
+		case '4': case '5': case '6': case '7':
+		case '8': case '9':
+		case 'a': case 'A': case 'b': case 'B':
+		case 'c': case 'C': case 'd': case 'D':
+		case 'e': case 'E': case 'f': case 'F':
+			break;
+		case ' ': case '\t':
+			if (ignore_space) break;
+		default:
+			return FALSE;
+		}
+		str++;
+	}
+
+	return TRUE;
+}
+
 /*! \fn char *strip_alpha(char *string)
  *  \brief remove trailing alpha characters from a string.
  *  \param string the string to string characters from

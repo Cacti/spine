@@ -51,6 +51,7 @@ extern void set_option(const char *setting, const char *value);
 extern int is_numeric(const char *string);
 extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
+extern int is_hexadecimal(const char * str, const short ignore_space);
 
 /* string and file functions */
 extern char *add_slashes(char *string, int arguments_2_strip);

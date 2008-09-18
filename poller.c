@@ -726,19 +726,21 @@ void poll_host(int host_id) {
 									SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 									SET_UNDEFINED(snmp_oids[j].result);
 								}else {
-									/* remove double or single quotes from string */
-									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+									if (!is_hexadecimal(snmp_oids[j].result, TRUE)) {
+										/* remove double or single quotes from string */
+										snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+										snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
-									/* detect erroneous non-numeric result */
-									if (!validate_result(snmp_oids[j].result)) {
-										snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
+										/* detect erroneous non-numeric result */
+										if (!validate_result(snmp_oids[j].result)) {
+											snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
 
-										if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
-											SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+											if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
+												SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+											}
+
+											SET_UNDEFINED(snmp_oids[j].result);
 										}
-
-										SET_UNDEFINED(snmp_oids[j].result);
 									}
 								}
 
@@ -782,20 +784,22 @@ void poll_host(int host_id) {
 								SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else {
-								/* remove double or single quotes from string */
-								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+								if (!is_hexadecimal(snmp_oids[j].result, TRUE)) {
+									/* remove double or single quotes from string */
+									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
-								/* detect erroneous non-numeric result */
-								if (!validate_result(snmp_oids[j].result)) {
-									snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
+									/* detect erroneous non-numeric result */
+									if (!validate_result(snmp_oids[j].result)) {
+										snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
 
-									if ((!STRIMATCH(snmp_oids[j].result, "nan")) &&
-										(!STRIMATCH(snmp_oids[j].result, "U"))) {
-										SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+										if ((!STRIMATCH(snmp_oids[j].result, "nan")) &&
+											(!STRIMATCH(snmp_oids[j].result, "U"))) {
+											SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+										}
+
+										SET_UNDEFINED(snmp_oids[j].result);
 									}
-
-									SET_UNDEFINED(snmp_oids[j].result);
 								}
 							}
 
@@ -827,20 +831,24 @@ void poll_host(int host_id) {
 					poll_result = exec_poll(host, poller_items[i].arg1);
 
 					/* remove double or single quotes from string */
-					snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
+					if (is_hexadecimal(poll_result, TRUE)) {
+						snprintf(poller_items[i].result, RESULTS_BUFFER, trim(poll_result));
+					}else{
+						snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
+
+						/* detect erroneous result. can be non-numeric */
+						if (!validate_result(poller_items[i].result)) {
+							snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
+
+							if (!STRIMATCH(poller_items[i].result, "Nan")) {
+								SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
+							}
+
+							SET_UNDEFINED(poller_items[i].result);
+						}
+					}
 
 					free(poll_result);
-
-					/* detect erroneous result. can be non-numeric */
-					if (!validate_result(poller_items[i].result)) {
-						snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-
-						if (!STRIMATCH(poller_items[i].result, "Nan")) {
-							SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
-						}
-
-						SET_UNDEFINED(poller_items[i].result);
-					}
 
 					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 
@@ -858,20 +866,26 @@ void poll_host(int host_id) {
 					poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 					/* remove double or single quotes from string */
-					snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
+					if (is_hexadecimal(poll_result, TRUE)) {
+						snprintf(poller_items[i].result, RESULTS_BUFFER, trim(poll_result));
+					}else{
+						/* remove double or single quotes from string */
+						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+						snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
+
+						/* detect erroneous result. can be non-numeric */
+						if (!validate_result(poller_items[i].result)) {
+							snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
+
+							if (!STRIMATCH(poller_items[i].result, "Nan")) {
+								SPINE_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
+							}
+
+							SET_UNDEFINED(poller_items[i].result);
+						}
+					}
 
 					free(poll_result);
-
-					/* detect erroneous result. can be non-numeric */
-					if (!validate_result(poller_items[i].result)) {
-						snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-
-						if (!STRIMATCH(poller_items[i].result, "Nan")) {
-							SPINE_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
-						}
-
-						SET_UNDEFINED(poller_items[i].result);
-					}
 
 					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 
@@ -903,19 +917,21 @@ void poll_host(int host_id) {
 					SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
 				}else{
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+					if (!is_hexadecimal(snmp_oids[j].result, TRUE)) {
+						/* remove double or single quotes from string */
+						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+						snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
-					/* detect erroneous non-numeric result */
-					if (!validate_result(snmp_oids[j].result)) {
-						snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
+						/* detect erroneous non-numeric result */
+						if (!validate_result(snmp_oids[j].result)) {
+							snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
 
-						if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
-							SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+							if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
+								SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
+							}
+
+							SET_UNDEFINED(snmp_oids[j].result);
 						}
-
-						SET_UNDEFINED(snmp_oids[j].result);
 					}
 				}
 

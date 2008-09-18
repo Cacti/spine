@@ -8,6 +8,7 @@ The Cacti Group � spine
 -bug#0001186: clarify INSTALL documentation.
 -bug#0001231: Compiling Spine on Solaris 10
 -bug#0001260: Deadlock in ping.c when resolving bad hostnames 
+-bug#0001271: hex string to decimal conversion
 -bug#0001277: Spine reporting partial result or 'U' for SNMP value
 -bug: Correct a buffer overrun issue in poller.c
 -bug: If the script server goes away due to a syntax problem, it will not restart 
