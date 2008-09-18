@@ -29,6 +29,8 @@ Below are some random notes about installing:
                                       popen() implementation that is threadsafe.
   --enable-threadsafe-gethostbyname - If your OS has a native threadsafe version of
                                       gethostbyname, enable use this option.
+  --enable-solaris-priv             - Enable support for the Solaris process privilege 
+                                      model (default: disabled)                                      
   --with-max-mysql-buffer=65536     - MySQL can handle very large insert buffers.
                                       Changing this size can alter spine performance.
                                       Make this value at least four times as large

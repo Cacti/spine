@@ -59,12 +59,57 @@ int ping_host(host_t *host, ping_t *ping) {
 		if (host->ping_method == PING_ICMP) {
 			/* set and then test for asroot */
 			#ifndef __CYGWIN__
+			#ifdef SOLAR_PRIV
+			priv_set_t *privset;
+			char *p;
+
+			/* Get the basic set */
+			privset = priv_str_to_set("basic", ",", NULL);
+			if (privset == NULL) {
+			    die("ERROR: Could not get basic privset from priv_str_to_set().");
+			} else {
+			    p = priv_set_to_str(privset, ',', 0);
+				SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.\n", p != NULL ? p : "Unknown"));
+			}
+
+			/* Remove exec from the basic set */
+			if (priv_delset(privset, PRIV_PROC_EXEC) < 0 ) {
+				SPINE_LOG_DEBUG(("Warning: Deletion of PRIV_PROC_EXEC from privset failed: '%s'.\n", strerror(errno)));
+			}
+
+			/* Add priviledge to send/receive ICMP packets */
+			if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0 ) {
+				SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.\n", strerror(errno)));
+			}
+
+			/* Compute the set of privileges that are never needed */
+			priv_inverse(privset);
+
+			/* Remove the set of unneeded privs from Permitted (and by
+			 * implication from Effective) */
+			if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
+				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.\n", strerror(errno)));
+			}
+
+			/* Remove unneeded priv set from Limit to be safe */
+			if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
+				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.\n", strerror(errno)));
+			}
+
+			boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);
+			SPINE_LOG_DEBUG(("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.\n", pe != 0 ? "Enabled" : "Disabled"));
+
+			/* Free the privset */
+			priv_freeset(privset);
+			free(p);
+			#else
 			seteuid(0);
 
 			if (geteuid() != 0) {
 				host->ping_method = PING_UDP;
 				SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve.\n"));
 			}
+			#endif
 			#endif
 		}
 
@@ -73,7 +118,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				ping_result = ping_icmp(host, ping);
 
 				/* give up root privileges */
-				#ifndef __CYGWIN__
+				#if !(defined(__CYGWIN__) || defined(SOLAR_PRIV))
 				seteuid(getuid());
 				#endif
 			}else if (host->ping_method == PING_UDP) {

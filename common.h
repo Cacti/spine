@@ -121,4 +121,8 @@
 #  include <pthread.h>
 #endif
 
+#if SOLAR_PRIV
+#  include <priv.h>
+#endif
+
 #endif /* SPINE_COMMON_H */
