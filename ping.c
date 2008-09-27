@@ -807,7 +807,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	memset(buf, 0, sizeof(buf));
 
 	while (1) {
-		hostinfo = gethostbyname_r(hostname, &result, len, buf, &h_errno);
+		hostinfo = gethostbyname_r(hostname, &result, buf, len, &h_errno);
 		if (!hostinfo) {
 			if (errno == ERANGE) {
 				len += 1024;
@@ -863,133 +863,6 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	}else{
 		return TRUE;
 	}
-}
-
-/*! \fn struct hostent *spine_gethostbyname(const char *hostname)
- *  \brief implements gethostbyname in a thread safe mannor
- *
- *  \return hostent
- *
- */
-struct hostent *spine_gethostbyname(const char *hostname) {
-	extern int h_errno;
-
-	#ifdef HAVE_THREADSAFE_GETHOSTBYNAME
-	struct hostent *he;
-
-	retry:
-	he = gethostbyname(hostname);
-
-	if (!he) {
-		if (h_errno == TRY_AGAIN) {
-			goto retry;
-		}else{
-			return NULL;
-		}
-	}
-
-	return he;
-	#else
-	#ifdef HAVE_GETHOSTBYNAME_R_GLIBC
-	struct hostent result_buf, *result;
-	size_t len = 1024;
-	char   *buf;
-	int    herr;
-	int    rv;
-
-	buf = malloc(len*sizeof(char));
-	memset(buf, 0, sizeof(buf));
-
-	while (1) {
-		rv = gethostbyname_r(hostname, &result_buf, buf, len,
-		&result, &herr);
-
-		if (!result) {
-			if (rv == ERANGE) {
-				len *= 2;
-				buf = realloc(buf, len*sizeof(char));
-
-				continue;
-			}else if (herr == TRY_AGAIN) {
-				continue;
-			}else{
-				free(buf);
-				return NULL;
-			}
-		}else{
-			break;
-		}
-	}
-
-	free(buf);
-
-	return result;
-	#else
-	#ifdef HAVE_GETHOSTBYNAME_R_SOLARIS
-	size_t  len = 8192;
-	char   *buf = NULL;
-	struct hostent result;
-	struct hostent *he;
-
-	buf = malloc(len*sizeof(char));
-	memset(buf, 0, sizeof(buf));
-
-	while (1) {
-		he = gethostbyname_r(hostname, &result, len, buf, &h_errno);
-		if (!he) {
-			if (errno == ERANGE) {
-				len += 1024;
-				buf = realloc(buf, len*sizeof(char));
-				memset(buf, 0, sizeof(buf));
-
-				continue;
-			}else if (h_errno == TRY_AGAIN) {
-				continue;
-			}else{
-				free(buf);
-				return NULL;
-			}
-		}else{
-			break;
-		}
-	} 
-
-	free(buf);
-
-	return result;
-	#else
-	#ifdef HAVE_GETHOSTBYNAME_R_HPUX
-	struct hostent result
-	struct hostent_data buf;
-	int rv;
-
-	rv = gethostbyname_r(hostname, &result, &buf);
-	if (!rv) {
-		return result;	
-	}else{
-		return NULL;
-	}
-
-	#else
-	struct hostent *he;
-
-	retry:
-	thread_mutex_lock(LOCK_GHBN);
-	he = gethostbyname(hostname);
-	thread_mutex_unlock(LOCK_GHBN);
-	if (!he) {
-		if (h_errno == TRY_AGAIN) {
-			goto retry;
-		}else{
-			return NULL;
-		}
-	}
-
-	return he;
-	#endif
-	#endif
-	#endif
-	#endif
 }
 
 /*! \fn char *remove_tcp_udp_from_hostname(char *hostname)

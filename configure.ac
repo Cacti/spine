@@ -99,6 +99,7 @@ else
 fi
 
 # Checks for libraries.
+AC_CHECK_LIB(nls, gethostbyname_r)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
 AC_CHECK_LIB(pthread, pthread_exit)
