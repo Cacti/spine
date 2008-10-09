@@ -16,6 +16,21 @@
 /* Define to 1 if you have the <errno.h> header file. */
 #define HAVE_ERRNO_H 1
 
+/* Using glibc versionf of gethostbyname_r() */
+#define HAVE_GETHOSTBYNAME_R_GLIBC 1
+
+/* Using HPUX gethostbyname_r() */
+/* #undef HAVE_GETHOSTBYNAME_R_HPUX */
+
+/* Using traditional of gethostbyname_r() */
+/* #undef HAVE_GETHOSTBYNAME_R_MUTEX_LOCK */
+
+/* Using Solaris gethostbyname_r() */
+/* #undef HAVE_GETHOSTBYNAME_R_SOLARIS */
+
+/* Define if gethostbyname is threadsafe */
+/* #undef HAVE_GETHOSTBYNAME_THREADSAFE */
+
 /* Define to 1 if you have the `gettimeofday' function. */
 #define HAVE_GETTIMEOFDAY 1
 
@@ -23,7 +38,7 @@
 #define HAVE_INTTYPES_H 1
 
 /* Define to 1 if you have the `crypto' library (-lcrypto). */
-#define HAVE_LIBCRYPTO 1
+/* #undef HAVE_LIBCRYPTO */
 
 /* Define to 1 if you have the `kstat' library (-lkstat). */
 /* #undef HAVE_LIBKSTAT */
@@ -34,8 +49,8 @@
 /* Define to 1 if you have the `mysqlclient_r' library (-lmysqlclient_r). */
 #define HAVE_LIBMYSQLCLIENT_R 1
 
-/* Define to 1 if you have the `nsl' library (-lnsl). */
-#define HAVE_LIBNSL 1
+/* Define to 1 if you have the `nls' library (-lnls). */
+/* #undef HAVE_LIBNLS */
 
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #define HAVE_LIBPTHREAD 1
@@ -66,6 +81,9 @@
 
 /* Define to 1 if you have the <netinet/in.h> header file. */
 #define HAVE_NETINET_IN_H 1
+
+/* Define to 1 if you have the <netinet/in_systm.h> header file. */
+#define HAVE_NETINET_IN_SYSTM_H 1
 
 /* Define to 1 if you have the <netinet/ip.h> header file. */
 #define HAVE_NETINET_IP_H 1
@@ -127,6 +145,12 @@
 /* Define to 1 if the system has the type `unsigned long long'. */
 #define HAVE_UNSIGNED_LONG_LONG 1
 
+/* The maximum MySQL buffer size to insert */
+#define MAX_MYSQL_BUF_SIZE 65536
+
+/* The maximum number of simultaneous running scripts */
+#define MAX_SIMULTANEOUS_SCRIPTS 1024
+
 /* Old MySQL version */
 /* #undef OLD_MYSQL */
 
@@ -140,18 +164,24 @@
 #define PACKAGE_NAME "Spine Poller"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Spine Poller 0.8.7"
+#define PACKAGE_STRING "Spine Poller 0.8.7c-beta2"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "spine-poller"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.8.7"
+#define PACKAGE_VERSION "0.8.7c-beta2"
+
+/* The size of the spine result buffer */
+#define RESULTS_BUFFER 1024
 
 /* Define as the return type of signal handlers (`int' or `void'). */
 #define RETSIGTYPE void
 
-/* Correct issue areund Solaris threading model */
+/* If upport for Solaris privileges should be enabled */
+/* #undef SOLAR_PRIV */
+
+/* Correct issue around Solaris threading model */
 /* #undef SOLAR_THREAD */
 
 /* Define to 1 if you have the ANSI C header files. */
@@ -170,7 +200,7 @@
 /* #undef USING_NIFTY */
 
 /* Version number of package */
-#define VERSION "0.8.7"
+#define VERSION "0.8.7c-beta2"
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */
