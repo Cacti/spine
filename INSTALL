@@ -44,6 +44,10 @@ Below are some random notes about installing:
                                       increasing this value may improve performance.  Keep
                                       in mind that this will increase server load.
 
+- A file "bootstrap" has been included to simplify the build process for Linux systems
+  with make and gcc.  It will install spine in /usr/bin.  If this is acceptable, try
+  to run the bootstrap process first.  Otherwise, follow the instructions below.
+
 - If ./configure fails with the error 'libtool.m4 and ltmain.sh have 
   a version mismatch!', run the following:
  
@@ -53,4 +57,5 @@ Below are some random notes about installing:
   autoheader
   automake  
 
-- Make sure to edit spine.conf
+- Make sure to rename /etc/spine.conf.dist to spine.conf and make changes to match
+  your database
