@@ -43,9 +43,11 @@ echo "NOTE: Setting some permissions"
 # ----------------------------------------------------------
 # Perform packaging
 # ----------------------------------------------------------
+rm -rf /tmp/cacti-spine-$VERSION /tmp/cacti-spine-$VERSION.*
 svn export . /tmp/cacti-spine-$VERSION
 cd /tmp
 tar -zcf  cacti-spine-$VERSION.tar.gz cacti-spine-$VERSION
+zip -lrq cacti-spine-$VERSION.zip cacti-spine-$VERSION/*
 rm -rf /tmp/cacti-spine-$VERSION
 cd -
 echo "--------------------------------------------------------------"
