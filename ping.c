@@ -66,9 +66,9 @@ int ping_host(host_t *host, ping_t *ping) {
 			/* Get the basic set */
 			privset = priv_str_to_set("basic", ",", NULL);
 			if (privset == NULL) {
-			    die("ERROR: Could not get basic privset from priv_str_to_set().");
+				die("ERROR: Could not get basic privset from priv_str_to_set().");
 			} else {
-			    p = priv_set_to_str(privset, ',', 0);
+				p = priv_set_to_str(privset, ',', 0);
 				SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.\n", p != NULL ? p : "Unknown"));
 			}
 
@@ -462,7 +462,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
 		free(packet);
-  		if (icmp_socket != -1) close(icmp_socket);
+		if (icmp_socket != -1) close(icmp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -744,7 +744,6 @@ int ping_tcp(host_t *host, ping_t *ping) {
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
-	int    i;
 	extern int h_errno;
 
 	name->sin_family = AF_INET;

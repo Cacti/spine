@@ -196,7 +196,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
-		session.community     = snmp_community;
+		session.community     = (unsigned char*) snmp_community;
 		session.community_len = strlen(snmp_community);
 	}else {
 	    /* set the SNMPv3 user name */
@@ -488,8 +488,6 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	struct variable_list *vars = NULL;
 	int status;
 	int i;
-	int max_repetitions = 1;
-	int non_repeaters   = 0;
 	int array_count;
 	int index_count;
 

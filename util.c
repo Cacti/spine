@@ -177,7 +177,7 @@ void read_config_options() {
 	/* determine logfile path */
 	if ((res = getsetting(&mysql, "path_cactilog")) != 0 ) {
 		if (strlen(res) != 0) {
-			snprintf(set.path_logfile, SMALL_BUFSIZE, res);
+			snprintf(set.path_logfile, SMALL_BUFSIZE, "%s", res);
 		}else{
 			if (strlen(web_root) != 0) {
 				snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
@@ -365,7 +365,7 @@ void read_config_options() {
 	sqlp += sprintf(sqlp, " LIMIT 1");
 
 	result = db_query(&mysql, sqlbuf);
-	num_rows = (int)mysql_num_rows(result);
+	num_rows = mysql_num_rows(result);
 
 	if (num_rows > 0) set.php_required = TRUE;
 
@@ -888,7 +888,7 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	assert(dst != 0);
 	assert(src != 0);
 
-	int len;
+	size_t len;
 
 	len = strlen(src);
 

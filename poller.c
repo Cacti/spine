@@ -103,16 +103,16 @@ void poll_host(int host_id) {
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
 
-	int num_rows;
-	int assert_fail = 0;
-	int spike_kill = 0;
-	int rows_processed = 0;
-	int i;
-	int j;
-	int num_oids = 0;
-	int snmp_poller_items = 0;
-	int out_buffer;
-	int php_process;
+	int    num_rows;
+	int    assert_fail = 0;
+	int    spike_kill = 0;
+	int    rows_processed = 0;
+	int    i;
+	int    j;
+	int    num_oids = 0;
+	int    snmp_poller_items = 0;
+	size_t out_buffer;
+	int    php_process;
 
 	char *poll_result = NULL;
 	char *host_time   = NULL;
@@ -248,8 +248,8 @@ void poll_host(int host_id) {
 	/* if the host is a real host.  Note host_id=0 is not host based data source */
 	if (host_id) {
 		/* get data about this host */
-		if ((result = db_query(&mysql, query2)) > 0) {
-			num_rows = (int)mysql_num_rows(result);
+		if ((result = db_query(&mysql, query2)) != 0) {
+			num_rows = mysql_num_rows(result);
 
 			if (num_rows != 1) {
 				SPINE_LOG(("Host[%i] ERROR: Multiple Hosts with Host ID", host_id));
@@ -434,8 +434,8 @@ void poll_host(int host_id) {
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		if ((result = db_query(&mysql, query4)) > 0) {
-			num_rows = (int)mysql_num_rows(result);
+		if ((result = db_query(&mysql, query4)) != 0) {
+			num_rows = mysql_num_rows(result);
 
 			if (num_rows > 0) {
 				SPINE_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname));
@@ -564,13 +564,13 @@ void poll_host(int host_id) {
 	num_rows = 0;
 	if (set.poller_interval == 0) {
 		/* get the number of agents */
-		if ((result = db_query(&mysql, query9)) > 0) {
-			num_snmp_agents = (int)mysql_num_rows(result);
+		if ((result = db_query(&mysql, query9)) != 0) {
+			num_snmp_agents = mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if ((result = db_query(&mysql, query1)) > 0) {
-				num_rows = (int)mysql_num_rows(result);
+			if ((result = db_query(&mysql, query1)) != 0) {
+				num_rows = mysql_num_rows(result);
 			}else{
 				SPINE_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
 			}
@@ -579,13 +579,13 @@ void poll_host(int host_id) {
 		}
 	}else{
 		/* get the number of agents */
-		if ((result = db_query(&mysql, query10)) > 0) {
+		if ((result = db_query(&mysql, query10)) != 0) {
 			num_snmp_agents = (int)mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if ((result = db_query(&mysql, query5)) > 0) {
-				num_rows = (int)mysql_num_rows(result);
+			if ((result = db_query(&mysql, query5)) != 0) {
+				num_rows = mysql_num_rows(result);
 
 				/* update poller_items table for next polling interval */
 				db_query(&mysql, query6);
@@ -841,9 +841,9 @@ void poll_host(int host_id) {
 					if ((is_numeric(poll_result)) ||
 						(is_multipart_output(poll_result)) ||
 						(is_hexadecimal(poll_result, TRUE))) {
-						snprintf(poller_items[i].result, RESULTS_BUFFER, trim(poll_result));
+						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", trim(poll_result));
 					}else{
-						snprintf(poller_items[i].result, RESULTS_BUFFER, strip_alpha(trim(poll_result)));
+						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
 
 						/* detect erroneous result. can be non-numeric */
 						if (!validate_result(poller_items[i].result)) {
@@ -878,7 +878,7 @@ void poll_host(int host_id) {
 					if ((is_numeric(poll_result)) ||
 						(is_multipart_output(poll_result)) ||
 						(is_hexadecimal(poll_result, TRUE))) {
-						snprintf(poller_items[i].result, RESULTS_BUFFER, trim(poll_result));
+						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", trim(poll_result));
 					}else{
 						/* remove double or single quotes from string */
 						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
@@ -1096,10 +1096,6 @@ int is_multipart_output(char *result) {
  *
  */
 int validate_result(char *result) {
-	int space_cnt = 0;
-	int delim_cnt = 0;
-	int i;
-
 	/* check the easy cases first */
 	if (result) {
 		if (is_numeric(result)) {

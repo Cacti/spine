@@ -121,7 +121,7 @@
 #  include <pthread.h>
 #endif
 
-#if SOLAR_PRIV
+#ifdef SOLAR_PRIV
 #  include <priv.h>
 #endif
 
