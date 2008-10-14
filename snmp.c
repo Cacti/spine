@@ -491,10 +491,6 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	int array_count;
 	int index_count;
 
-	/* get rid of some compiler warnings */
-	errstat  = 0;
-	errindex = 0;
-
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
 	    size_t          name_len;
