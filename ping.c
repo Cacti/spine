@@ -296,8 +296,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    retry_count;
 	char   *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
-	int    fromlen;
-	int    return_code;
+	socklen_t    fromlen;
+	ssize_t    return_code;
 	fd_set socket_fds;
 
 	static   unsigned int seq = 0;
