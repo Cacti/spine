@@ -46,7 +46,7 @@
 void *child(void *arg) {
 	int host_id = *(int *) arg;
 
-	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host\n"));
+	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
 	poll_host(host_id);
 
@@ -54,7 +54,7 @@ void *child(void *arg) {
 
 	active_threads--;
 
-	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n" ,active_threads));
+	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i" ,active_threads));
 
 	thread_mutex_unlock(LOCK_THREAD);
 
@@ -97,7 +97,6 @@ void poll_host(int host_id) {
 	char query8[BUFSIZE];
 	char query9[BUFSIZE];
 	char query10[BUFSIZE];
-	char errstr[BUFSIZE];
 	char sysUptime[BUFSIZE];
 	char result_string[BUFSIZE];
 	int  result_length;
@@ -385,7 +384,7 @@ void poll_host(int host_id) {
 					host->ignore_host = FALSE;
 					update_host_status(HOST_UP, host, ping, host->availability_method);
 
-					SPINE_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'\n", host->id, host->hostname));
+					SPINE_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'", host->id, host->hostname));
 				}else{
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;
@@ -438,7 +437,7 @@ void poll_host(int host_id) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows > 0) {
-				SPINE_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'\n", host->id, num_rows, host->hostname));
+				SPINE_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, num_rows, host->hostname));
 
 				while ((row = mysql_fetch_row(result))) {
 					assert_fail = FALSE;
@@ -495,7 +494,7 @@ void poll_host(int host_id) {
 
 							break;
 						default:
-							SPINE_LOG(("Host[%i] ERROR: Unknown Assert Action!\n", host->id));
+							SPINE_LOG(("Host[%i] ERROR: Unknown Assert Action!", host->id));
 							poll_result = strdup("U");
 						}
 
@@ -508,21 +507,21 @@ void poll_host(int host_id) {
 						if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 							assert_fail = FALSE;
 						}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
-							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 							db_insert(&mysql, query3);
 							assert_fail = TRUE;
 							previous_assert_failure = TRUE;
 						}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
-							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 							db_insert(&mysql, query3);
 							assert_fail = TRUE;
 							previous_assert_failure = TRUE;
 						}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i\n", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 							db_insert(&mysql, query3);
@@ -723,34 +722,29 @@ void poll_host(int host_id) {
 
 							for (j = 0; j < num_oids; j++) {
 								if (host->ignore_host) {
-									SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+									SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 									SET_UNDEFINED(snmp_oids[j].result);
-								}else {
-									if ((is_numeric(snmp_oids[j].result)) ||
-										(is_multipart_output(snmp_oids[j].result)) ||
-										(is_hexadecimal(snmp_oids[j].result, TRUE))) {
-										/* continue */
-									}else {
-										/* remove double or single quotes from string */
-										snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-										snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+								}else if ((is_numeric(snmp_oids[j].result)) ||
+									(is_multipart_output(snmp_oids[j].result)) ||
+									(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+									/* continue */
+								}else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
+									(STRIMATCH(snmp_oids[j].result, "Nan"))) {
+									/* is valid output, continue */
+								}else{
+									/* remove double or single quotes from string */
+									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
-										/* detect erroneous non-numeric result */
-										if (!validate_result(snmp_oids[j].result)) {
-											snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
-
-											if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
-												SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.100s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
-											}
-
-											SET_UNDEFINED(snmp_oids[j].result);
-										}
+									/* detect erroneous non-numeric result */
+									if (!validate_result(snmp_oids[j].result)) {
+										SET_UNDEFINED(snmp_oids[j].result);
 									}
 								}
 
-								snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
+								snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
-								SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
 
 							/* reset num_snmps */
@@ -785,34 +779,29 @@ void poll_host(int host_id) {
 
 						for (j = 0; j < num_oids; j++) {
 							if (host->ignore_host) {
-								SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+								SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
-							}else {
-								if ((is_numeric(snmp_oids[j].result)) ||
-									(is_multipart_output(snmp_oids[j].result)) ||
-									(is_hexadecimal(snmp_oids[j].result, TRUE))) {
-								}else {
-									/* remove double or single quotes from string */
-									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+							}else if ((is_numeric(snmp_oids[j].result)) ||
+								(is_multipart_output(snmp_oids[j].result)) ||
+								(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+								/* continue */
+							}else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
+								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
+								/* is valid output, continue */
+							}else{
+								/* remove double or single quotes from string */
+								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
-									/* detect erroneous non-numeric result */
-									if (!validate_result(snmp_oids[j].result)) {
-										snprintf(errstr, BUFSIZE, "%s", snmp_oids[j].result);
-
-										if ((!STRIMATCH(snmp_oids[j].result, "nan")) &&
-											(!STRIMATCH(snmp_oids[j].result, "U"))) {
-											SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
-										}
-
-										SET_UNDEFINED(snmp_oids[j].result);
-									}
+								/* detect erroneous non-numeric result */
+								if (!validate_result(snmp_oids[j].result)) {
+									SET_UNDEFINED(snmp_oids[j].result);
 								}
 							}
 
-							snprintf(poller_items[snmp_oids[j].array_position].result, BUFSIZE, "%s", snmp_oids[j].result);
+							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
-							SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
 							if (poller_items[snmp_oids[j].array_position].result != NULL) {
 								/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -841,25 +830,21 @@ void poll_host(int host_id) {
 					if ((is_numeric(poll_result)) ||
 						(is_multipart_output(poll_result)) ||
 						(is_hexadecimal(poll_result, TRUE))) {
-						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", trim(poll_result));
+						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 					}else{
-						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+						/* remove double or single quotes from string */
+						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+						snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 						/* detect erroneous result. can be non-numeric */
 						if (!validate_result(poller_items[i].result)) {
-							snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-
-							if (!STRIMATCH(poller_items[i].result, "Nan")) {
-								SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SCRIPT not valid. Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, errstr));
-							}
-
 							SET_UNDEFINED(poller_items[i].result);
 						}
 					}
 
 					free(poll_result);
 
-					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 
 					if (poller_items[i].result != NULL) {
 						/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -878,7 +863,7 @@ void poll_host(int host_id) {
 					if ((is_numeric(poll_result)) ||
 						(is_multipart_output(poll_result)) ||
 						(is_hexadecimal(poll_result, TRUE))) {
-						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", trim(poll_result));
+						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 					}else{
 						/* remove double or single quotes from string */
 						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
@@ -886,19 +871,13 @@ void poll_host(int host_id) {
 
 						/* detect erroneous result. can be non-numeric */
 						if (!validate_result(poller_items[i].result)) {
-							snprintf(errstr, sizeof(errstr), "%s", poller_items[i].result);
-
-							if (!STRIMATCH(poller_items[i].result, "Nan")) {
-								SPINE_LOG(("Host[%i] DS[%i] SS[%i] WARNING: Result from SERVER not valid.  Partial Result: %.20s...\n", host_id, poller_items[i].local_data_id, php_process, errstr));
-							}
-
 							SET_UNDEFINED(poller_items[i].result);
 						}
 					}
 
 					free(poll_result);
 
-					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s\n", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 
 					if (poller_items[i].result != NULL) {
 						/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -909,7 +888,7 @@ void poll_host(int host_id) {
 
 					break;
 				default: /* unknown action, generate error */
-					SPINE_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s\n", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
+					SPINE_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
 
 					break;
 				}
@@ -925,33 +904,29 @@ void poll_host(int host_id) {
 
 			for (j = 0; j < num_oids; j++) {
 				if (host->ignore_host) {
-					SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+					SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
+				}else if ((is_numeric(snmp_oids[j].result)) ||
+					(is_multipart_output(snmp_oids[j].result)) ||
+					(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+					/* continue */
+				}else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
+					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
+					/* is valid output, continue */
 				}else{
-					if ((is_numeric(snmp_oids[j].result)) ||
-						(is_multipart_output(snmp_oids[j].result)) ||
-						(is_hexadecimal(snmp_oids[j].result, TRUE))) {
-					}else {
-						/* remove double or single quotes from string */
-						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-						snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+					/* remove double or single quotes from string */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
-						/* detect erroneous non-numeric result */
-						if (!validate_result(snmp_oids[j].result)) {
-							snprintf(errstr, sizeof(errstr), "%s", snmp_oids[j].result);
-
-							if (!STRIMATCH(snmp_oids[j].result, "Nan")) {
-								SPINE_LOG(("Host[%i] DS[%i] WARNING: Result from SNMP not valid. Partial Result: %.20s...\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, errstr));
-							}
-
-							SET_UNDEFINED(snmp_oids[j].result);
-						}
+					/* detect erroneous non-numeric result */
+					if (!validate_result(snmp_oids[j].result)) {
+						SET_UNDEFINED(snmp_oids[j].result);
 					}
 				}
 
-				snprintf(poller_items[snmp_oids[j].array_position].result, 254, "%s", snmp_oids[j].result);
+				snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
-				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s\n", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
 				if (poller_items[snmp_oids[j].array_position].result != NULL) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -963,7 +938,7 @@ void poll_host(int host_id) {
 		}
 
 		/* insert the query results into the database */
-		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE+BUFSIZE))) {
+		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER))) {
 			die("ERROR: Fatal malloc error: poller.c query3 oids!");
 		}
 		query3[0] = '\0';
@@ -973,7 +948,7 @@ void poll_host(int host_id) {
 
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, BUFSIZE, " (%i,'%s','%s','%s')",
+			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s','%s','%s')",
 				poller_items[i].local_data_id,
 				poller_items[i].rrd_name,
 				host_time,
@@ -1037,7 +1012,7 @@ void poll_host(int host_id) {
 	mysql_thread_end();
 	#endif
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function\n", host_id));
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function", host_id));
 }
 
 /*! \fn int is_multipart_output(char *result)
@@ -1135,17 +1110,21 @@ char *exec_poll(host_t *current_host, char *command) {
 	char *proc_command;
 	char *result_string;
 
+	/* compensate for back slashes in arguments */
+	#if defined(__CYGWIN__)
+	proc_command = add_slashes(command, 2);
+	#else
+	proc_command = command;
+	#endif
+
 	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: poller.c exec_poll!");
 	}
-	result_string[0] = '\0';
+	memset(result_string, 0, RESULTS_BUFFER);
 
 	/* establish timeout of 25 seconds for pipe response */
 	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
-
-	/* compensate for back slashes in arguments */
-	proc_command = add_slashes(command, 2);
 
 	/* record start time */
 	begin_time = get_time_as_double();
@@ -1170,9 +1149,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	cmd_fd = fileno(fd);
 	#endif
 
-	free(proc_command);
-
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i\n", current_host->id, cmd_fd));
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 
 	if (cmd_fd > 0) {
 		/* Initialize File Descriptors to Review for Input/Output */
@@ -1185,7 +1162,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		case -1:
 			switch (errno) {
 			case EBADF:
-				SPINE_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.\n", current_host->id));
+				SPINE_LOG(("Host[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
 			case EAGAIN:
@@ -1205,30 +1182,30 @@ char *exec_poll(host_t *current_host, char *command) {
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
 				}else{
-					SPINE_LOG(("WARNING: A script timed out while processing EINTR's.\n"));
+					SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
 					SET_UNDEFINED(result_string);
 				}
 				break;
 			case EINVAL:
-				SPINE_LOG(("Host[%i] ERROR: Possible invalid timeout specified in select() statement.\n", current_host->id));
+				SPINE_LOG(("Host[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
 			default:
-				SPINE_LOG(("Host[%i] ERROR: The script/command select() failed\n", current_host->id));
+				SPINE_LOG(("Host[%i] ERROR: The script/command select() failed", current_host->id));
 				SET_UNDEFINED(result_string);
 				break;
 			}
 		case 0:
-			SPINE_LOG(("Host[%i] ERROR: The POPEN timed out\n", current_host->id));
+			SPINE_LOG(("Host[%i] ERROR: The POPEN timed out", current_host->id));
 			SET_UNDEFINED(result_string);
 			break;
 		default:
 			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER);
+			bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
 			}else{
-				SPINE_LOG(("Host[%i] ERROR: Empty result [%s]: '%s'\n", current_host->id, current_host->hostname, command));
+				SPINE_LOG(("Host[%i] ERROR: Empty result [%s]: '%s'", current_host->id, current_host->hostname, command));
 				SET_UNDEFINED(result_string);
 			}
 		}
@@ -1240,9 +1217,13 @@ char *exec_poll(host_t *current_host, char *command) {
 		pclose(fd);
 		#endif
 	}else{
-		SPINE_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'\n", current_host->id, current_host->hostname, command));
+		SPINE_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
 		SET_UNDEFINED(result_string);
 	}
+
+	#if defined(__CYGWIN__)
+	free(proc_command);
+	#endif
 
 	/* reduce the active script count */
 	thread_mutex_lock(LOCK_PIPE);
