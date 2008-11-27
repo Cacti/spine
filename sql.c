@@ -54,9 +54,7 @@ int db_insert(MYSQL *mysql, const char *query) {
 	snprintf(query_frag, BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	if (set.log_level == 5) {
-		SPINE_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
-	}
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
 
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
@@ -108,7 +106,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 	snprintf(query_frag, BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEBUG(("DEBUG: SQL:'%s'", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
 
 	while (1) {
 		if (mysql_query(mysql, query)) {
