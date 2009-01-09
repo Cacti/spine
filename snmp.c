@@ -272,7 +272,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		SPINE_LOG(("ERROR: Problem initializing SNMP session '%s'\n", hostname));
+		SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'\n", hostname));
 	}
 
 	return sessp;
