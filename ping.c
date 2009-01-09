@@ -390,7 +390,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* send packet to destination */
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
 
-	   			fromlen = sizeof(fromname);
+				fromlen = sizeof(fromname);
 
 				/* wait for a response on the socket */
 				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
@@ -785,8 +785,8 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 			}else if (herr == TRY_AGAIN) {
 				continue;
 			}else{
-				hostinfo = NULL;
-				break;
+				free(buf);
+				return NULL;
 			}
 		}else{
 			break;
