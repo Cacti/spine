@@ -98,7 +98,7 @@ void poll_host(int host_id) {
 	char query9[BUFSIZE];
 	char query10[BUFSIZE];
 	char sysUptime[BUFSIZE];
-	char result_string[BUFSIZE];
+	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
 
