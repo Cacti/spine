@@ -992,7 +992,7 @@ void poll_host(int host_id) {
 		}
 
 		/* cleanup memory and prepare for function exit */
-		if (host_id) {
+		if (host->snmp_session) {
 			snmp_host_cleanup(host->snmp_session);
 		}
 
