@@ -312,7 +312,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		die(("ERROR: ping_icmp: cannot open an ICMP socket"));
+		die("ERROR: ping_icmp: cannot open an ICMP socket");
 	}
 
 	/* convert the host timeout to a double precision number in seconds */
@@ -393,6 +393,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				fromlen = sizeof(fromname);
 
 				/* wait for a response on the socket */
+				keep_listening:
 				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
@@ -408,7 +409,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					if (return_code < 0) {
 						if (errno == EINTR) {
 							/* call was interrupted by some system event */
-							continue;
+							goto keep_listening;
 						}
 					}else{
 						ip  = (struct ip *) socket_reply;
@@ -433,12 +434,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							}
 						}else{
 							/* another host responded */
-							if (total_time > host_timeout) {
-								retry_count++;
-								total_time = 0;
-							}
-
-							continue;
+							goto keep_listening;
 						}
 					}
 				}

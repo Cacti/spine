@@ -1,6 +1,7 @@
 The Cacti Group � spine
 
 0.8.7d
+-bug#0001379: Ping.c might send more then retry_count icmp packages
 -bug: A host that for some reason can not initialize snmp can cause a segfault
 
 0.8.7c
