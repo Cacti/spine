@@ -417,6 +417,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
+								SPINE_LOG_DEBUG(("Host[%i] DEBUG: ICMP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(new_hostname);
@@ -490,12 +491,11 @@ int ping_udp(host_t *host, ping_t *ping) {
 	fd_set socket_fds;
 	char   *new_hostname;
 
+	/* set total time */
+	total_time = 0;
+
 	/* remove "udp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
-
-	/* establish timeout value */
-	timeout.tv_sec  = 0;
-	timeout.tv_usec = host->ping_timeout * 1000;
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -511,6 +511,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 		/* set the socket timeout */
 		setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+		setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
 		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
@@ -544,36 +545,58 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* record start time */
 				begin_time = get_time_as_double();
 
+				/* establish timeout value */
+				if (host->ping_timeout >= 1000) {
+					timeout.tv_sec  = rint(floor(host_timeout / 1000));
+					timeout.tv_usec = (timeout.tv_sec * 1000000) - (host->ping_timeout * 1000);
+				}else{
+					timeout.tv_sec  = 0;
+					timeout.tv_usec = (host->ping_timeout * 1000);
+				}
+
 				/* send packet to destination */
 				send(udp_socket, request, request_len, 0);
 
 				/* wait for a response on the socket */
-				select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				wait_more:
+				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
 
-				/* check to see which socket talked */
-				if (FD_ISSET(udp_socket, &socket_fds)) {
-					return_code = read(udp_socket, socket_reply, BUFSIZE);
-				}else{
-					return_code = -10;
-				}
-
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				SPINE_LOG_DEBUG(("DEBUG: UDP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
+				/* check to see which socket talked */
+				if (return_code > 0) {
+					if (FD_ISSET(udp_socket, &socket_fds)) {
+						return_code = read(udp_socket, socket_reply, BUFSIZE);
 
-				if ((return_code >= 0) || ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED)))) {
-					if (total_time <= host_timeout) {
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
+						if ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED))) {
+							SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
+							snprintf(ping->ping_status, 50, "%.5f", total_time);
+							free(new_hostname);
+							close(udp_socket);
+							return HOST_UP;
+						}
+					}
+				}else if (return_code == -1) {
+					if (errno == EINTR) {
+						/* interrupted, try again */
+						goto wait_more;
+					}else{
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Down");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
 						close(udp_socket);
-						return HOST_UP;
+						return HOST_DOWN;
 					}
+				}else{
+					/* timeout */
 				}
+
+				SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
 
 				retry_count++;
 				#ifndef SOLAR_THREAD
@@ -626,12 +649,17 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
-	/* establish timeout value */
-	timeout.tv_sec  = 0;
-	timeout.tv_usec = host->ping_timeout * 1000;
-
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
+
+	/* establish timeout value */
+	if (host->ping_timeout >= 1000) {
+		timeout.tv_sec  = rint(floor(host_timeout / 1000));
+		timeout.tv_usec = (timeout.tv_sec * 1000000) - (host->ping_timeout * 1000);
+	}else{
+		timeout.tv_sec  = 0;
+		timeout.tv_usec = (host->ping_timeout * 1000);
+	}
 
 	/* initilize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -652,7 +680,18 @@ int ping_tcp(host_t *host, ping_t *ping) {
 			retry_count = 0;
 
 			while (1) {
+				/* record start time */
+				begin_time  = get_time_as_double();
+
+				/* make the connection */
 				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
+
+				/* record end time */
+				end_time = get_time_as_double();
+
+				/* caculate total time */
+				total_time = (end_time - begin_time) * one_thousand;
+
 				if (return_code < 0) {
 					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
@@ -664,57 +703,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 						retry_count++;
 					}
 				}else{
-					break;
-				}
-			}
-
-			/* format packet */
-			snprintf(request, BUFSIZE, "cacti-monitoring-system"); /* the actual test data */
-			request_len = strlen(request);
-
-			retry_count = 0;
-
-			/* initialize file descriptor to review for input/output */
-			FD_ZERO(&socket_fds);
-			FD_SET(tcp_socket,&socket_fds);
-
-			while (1) {
-				if (retry_count > host->ping_retries) {
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Ping timed out");
-					snprintf(ping->ping_status, 50, "down");
+					SPINE_LOG_DEBUG(("Host[%i] DEBUG: TCP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
+					snprintf(ping->ping_status, 50, "%.5f", total_time);
 					free(new_hostname);
 					close(tcp_socket);
-					return HOST_DOWN;
+					return HOST_UP;
 				}
-
-				/* record start time */
-				begin_time = get_time_as_double();
-
-				/* send packet to destination */
-				return_code = send(tcp_socket, request, request_len, 0);
-
-				/* record end time */
-				end_time = get_time_as_double();
-
-				/* caculate total time */
-				total_time = (end_time - begin_time) * one_thousand;
-
-				SPINE_LOG_DEBUG(("DEBUG: TCP Ping return_code was %i, errno was %i, total_time was %.4f\n", return_code, errno, (total_time*1000)));
-
-				if (return_code >= 0) {
-					if (total_time <= host_timeout) {
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
-						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						free(new_hostname);
-						close(tcp_socket);
-						return HOST_UP;
-					}
-				}
-
-				retry_count++;
-				#ifndef SOLAR_THREAD
-				usleep(1000);
-				#endif
 			}
 		}else{
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
@@ -755,6 +750,8 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 		}else{
 			return NULL;
 		}
+	}else{
+		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 	}
 
 	#else
@@ -839,13 +836,16 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	retry:
 	thread_mutex_lock(LOCK_GHBN);
 	hostinfo = gethostbyname(hostname);
-	thread_mutex_unlock(LOCK_GHBN);
 	if (!hostinfo) {
+		thread_mutex_unlock(LOCK_GHBN);
 		if (h_errno == TRY_AGAIN) {
 			goto retry;
 		}else{
 			hostinfo = NULL;
 		}
+	}else{
+		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+		thread_mutex_unlock(LOCK_GHBN);
 	}
 	#endif
 	#endif

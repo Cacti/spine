@@ -1101,11 +1101,13 @@ int validate_result(char *result) {
 char *exec_poll(host_t *current_host, char *command) {
 	extern int active_scripts;
 	int cmd_fd;
+	int pid;
 	FILE *fd;
 	int bytes_read;
 	fd_set fds;
 	double begin_time = 0;
 	double end_time = 0;
+	double script_timeout;
 	struct timeval timeout;
 	char *proc_command;
 	char *result_string;
@@ -1121,6 +1123,9 @@ char *exec_poll(host_t *current_host, char *command) {
 		die("ERROR: Fatal malloc error: poller.c exec_poll!");
 	}
 	memset(result_string, 0, RESULTS_BUFFER);
+
+	/* set script timeout as double */
+	script_timeout = set.script_timeout;
 
 	/* establish timeout of 25 seconds for pipe response */
 	timeout.tv_sec = set.script_timeout;
@@ -1154,7 +1159,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	if (cmd_fd > 0) {
 		/* Initialize File Descriptors to Review for Input/Output */
 		FD_ZERO(&fds);
-		FD_SET(cmd_fd,&fds);
+		FD_SET(cmd_fd, &fds);
 
 		/* wait x seonds for pipe response */
 		retry:
@@ -1176,8 +1181,8 @@ char *exec_poll(host_t *current_host, char *command) {
 				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
-				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
-				timeout.tv_usec = rint((set.script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+				timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
+				timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
 
 				if ((end_time - begin_time) < set.script_timeout) {
 					goto retry;
@@ -1197,6 +1202,12 @@ char *exec_poll(host_t *current_host, char *command) {
 			}
 		case 0:
 			SPINE_LOG(("Host[%i] ERROR: The POPEN timed out", current_host->id));
+
+			#ifdef USING_NIFTY
+			pid = nft_pchild(cmd_fd);
+			kill(pid, SIGTERM);
+			#endif
+
 			SET_UNDEFINED(result_string);
 			break;
 		default:

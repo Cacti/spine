@@ -3,6 +3,8 @@ The Cacti Group � spine
 0.8.7d
 -bug#0001379: Ping.c might send more then retry_count icmp packages
 -bug: A host that for some reason can not initialize snmp can cause a segfault
+-bug: When using nifty popen, when the script times out, attempt to kill it
+-bug: Under some platforms tcp and udp ping unresponsive
 
 0.8.7c
 -bug#0001022: strip_quotes incorrectly parsing script output
