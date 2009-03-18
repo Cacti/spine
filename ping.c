@@ -954,15 +954,16 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 		/*determine the error message to display */
 		switch (availability_method) {
+		case AVAIL_SNMP_OR_PING:
 		case AVAIL_SNMP_AND_PING:
-			if (strlen(host->snmp_community) == 0) {
+			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
 			}else {
 				snprintf(host->status_last_error, SMALL_BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
-			if (strlen(host->snmp_community) == 0) {
+			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", "Device does not require SNMP");
 			}else {
 				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->snmp_response);
@@ -1092,8 +1093,11 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			if (availability_method == AVAIL_SNMP_AND_PING) {
 				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
 				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+			}else if (availability_method == AVAIL_SNMP_OR_PING) {
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
-				if (strlen(host->snmp_community) == 0) {
+				if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 					SPINE_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP\n", host->id));
 				}else{
 					SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));

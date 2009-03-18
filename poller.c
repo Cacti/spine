@@ -674,6 +674,9 @@ void poll_host(int host_id) {
 		/* initialize all the memory to insure we don't get issues */
 		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 
+		/* log an informative message */
+		SPINE_LOG_MEDIUM(("Host[%i] NOTE: There are '%i' Polling Items for this Host", host_id, num_rows));
+
 		i = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
 			if (!host->ignore_host) {
