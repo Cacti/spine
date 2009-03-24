@@ -208,6 +208,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
 
+		/* set the engineBoots and engineTime to null so that they are discovered */
+		session.engineBoots          = 0;
+		session.engineTime           = 0;
+
 		/* set the authentication protocol */
 		if (strcmp(snmp_auth_protocol, "MD5") == 0) {
 			/* set the authentication method to MD5 */
