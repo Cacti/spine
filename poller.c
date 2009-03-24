@@ -364,18 +364,6 @@ void poll_host(int host_id) {
 					host->snmp_session = NULL;
 				}
 
-				/* save snmp status data for future use */
-				last_snmp_port    = host->snmp_port;
-				last_snmp_version = host->snmp_version;
-
-				STRNCOPY(last_snmp_community, host->snmp_community);
-				STRNCOPY(last_snmp_username, host->snmp_username);
-				STRNCOPY(last_snmp_password, host->snmp_password);
-				STRNCOPY(last_snmp_context, host->snmp_context);
-				STRNCOPY(last_snmp_auth_protocol, host->snmp_auth_protocol);
-				STRNCOPY(last_snmp_priv_passphrase, host->snmp_priv_passphrase);
-				STRNCOPY(last_snmp_priv_protocol, host->snmp_priv_protocol);
-
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
 				 * function sets the ignore_host bit */
@@ -558,6 +546,12 @@ void poll_host(int host_id) {
 		}else{
 			SPINE_LOG(("Host[%i] ERROR: Recache Query Returned Null Result!", host->id));
 		}
+	}
+
+	/* close the host snmp session, we will create again momentarily */
+	if (host->snmp_session) {
+		snmp_host_cleanup(host->snmp_session);
+		host->snmp_session = NULL;
 	}
 
 	/* calculate the number of poller items to poll this cycle */
