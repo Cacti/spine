@@ -270,6 +270,7 @@ void poll_host(int host_id) {
 				/* initialize variables first */
 				host->id                      = 0;
 				host->hostname[0]             = '\0';
+				host->snmp_session            = NULL;
 				host->snmp_community[0]       = '\0';
 				host->snmp_version            = 1;
 				host->snmp_username[0]        = '\0';

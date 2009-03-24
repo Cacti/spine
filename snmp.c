@@ -147,7 +147,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   hostnameport[BUFSIZE];
 
 	/* initialize SNMP */
-  	snmp_sess_init(&session);
+	snmp_sess_init(&session);
 
 	#ifdef USE_NET_SNMP
 		/* Prevent update of the snmpapp.conf file */
@@ -199,9 +199,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.community     = (unsigned char*) snmp_community;
 		session.community_len = strlen(snmp_community);
 	}else {
-	    /* set the SNMPv3 user name */
-	    session.securityName         = snmp_username;
-	    session.securityNameLen      = strlen(session.securityName);
+		/* set the SNMPv3 user name */
+		session.securityName         = snmp_username;
+		session.securityNameLen      = strlen(session.securityName);
 
 		session.contextName          = snmp_context;
 		session.contextNameLen       = strlen(session.contextName);
