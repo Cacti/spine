@@ -469,12 +469,20 @@ void poll_host(int host_id) {
 									poll_result[0] = '\0';
 
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								}else{
+								}else if (host->snmp_session) {
 									poll_result = snmp_get(host, reindex->arg1);
 									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+								}else{
+									SPINE_LOG(("WARNING: Host[%i] DataQuery[%i] FAILED: No SNMP Session\n", host->id, reindex->data_query_id));
+									poll_result = strdup("U");
 								}
 							}else{
-								poll_result = snmp_get(host, reindex->arg1);
+								if (host->snmp_session) {
+									poll_result = snmp_get(host, reindex->arg1);
+								}else{
+									SPINE_LOG(("WARNING: Host[%i] DataQuery[%i] FAILED: No SNMP Session\n", host->id, reindex->data_query_id));
+									poll_result = strdup("U");
+								}
 							}
 
 							break;
