@@ -174,6 +174,18 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
 	#endif
 
+	session.securityEngineID = 0;
+	session.securityEngineIDLen = 0;
+
+	session.securityName = 0;
+	session.securityNameLen = 0;
+
+	session.contextEngineID = 0;
+	session.contextEngineIDLen = 0;
+
+	session.contextName = 0;
+	session.contextNameLen = 0;
+
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
 		session.version       = SNMP_VERSION_2c;
@@ -271,7 +283,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	/* open SNMP Session */
- 	thread_mutex_lock(LOCK_SNMP);
+	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
 	thread_mutex_unlock(LOCK_SNMP);
 
