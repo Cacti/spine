@@ -55,7 +55,7 @@ cd ..
 
 tar -zcf  cacti-spine-$VERSION.tar.gz cacti-spine-$VERSION
 zip -lrq cacti-spine-$VERSION.zip cacti-spine-$VERSION/*
-#rm -rf /tmp/cacti-spine-$VERSION
+/bin/rm -rf /tmp/cacti-spine-$VERSION
 cd -
 echo "--------------------------------------------------------------"
 echo "NOTE: Done!!!"
