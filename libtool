@@ -1,7 +1,7 @@
 #! /bin/sh
 
 # libtoolT - Provide generalized library-building support services.
-# Generated automatically by  (GNU spine 0.8.7c-beta2)
+# Generated automatically by  (GNU spine 0.8.7d-pre)
 # NOTE: Changes made to this file will be lost: look at ltmain.sh.
 #
 # Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001
@@ -44,7 +44,7 @@ available_tags=""
 
 # ### BEGIN LIBTOOL CONFIG
 
-# Libtool was configured on host localhost.localdomain:
+# Libtool was configured on host cacti:
 
 # Shell to use when invoking shell scripts.
 SHELL="/bin/sh"
@@ -65,13 +65,13 @@ allow_libtool_libs_with_static_runtimes=no
 fast_install=yes
 
 # The host system.
-host_alias=x86_64-redhat-linux-gnu
-host=x86_64-redhat-linux-gnu
+host_alias=i686-redhat-linux-gnu
+host=i686-redhat-linux-gnu
 host_os=linux-gnu
 
 # The build system.
 build_alias=
-build=x86_64-redhat-linux-gnu
+build=i686-redhat-linux-gnu
 build_os=linux-gnu
 
 # An echo program that does not interpret backslashes.
@@ -100,7 +100,7 @@ gcc_ver=`gcc -dumpversion`
 EGREP="grep -E"
 
 # The linker used to build libraries.
-LD="/usr/bin/ld -m elf_x86_64"
+LD="/usr/bin/ld"
 
 # Whether we need hard or soft links.
 LN_S="ln -s"
@@ -328,10 +328,10 @@ variables_saved_for_relink="PATH LD_LIBRARY_PATH LD_RUN_PATH GCC_EXEC_PREFIX COM
 link_all_deplibs=unknown
 
 # Compile-time system search path for libraries
-sys_lib_search_path_spec=`echo "/lib64 /usr/lib64 /usr/local/lib64" | $SED -e "s@${gcc_dir}@\${gcc_dir}@g;s@${gcc_ver}@\${gcc_ver}@g"`
+sys_lib_search_path_spec=`echo " /usr/lib/gcc/i386-redhat-linux/4.1.2/ /usr/lib/gcc/i386-redhat-linux/4.1.2/ /usr/lib/gcc/i386-redhat-linux/4.1.2/../../../../i386-redhat-linux/lib/i386-redhat-linux/4.1.2/ /usr/lib/gcc/i386-redhat-linux/4.1.2/../../../../i386-redhat-linux/lib/ /usr/lib/gcc/i386-redhat-linux/4.1.2/../../../i386-redhat-linux/4.1.2/ /usr/lib/gcc/i386-redhat-linux/4.1.2/../../../ /lib/i386-redhat-linux/4.1.2/ /lib/ /usr/lib/i386-redhat-linux/4.1.2/ /usr/lib/" | $SED -e "s@${gcc_dir}@\${gcc_dir}@g;s@${gcc_ver}@\${gcc_ver}@g"`
 
 # Run-time system search path for libraries
-sys_lib_dlsearch_path_spec="/lib64 /usr/lib64 /usr/lib/mysql /usr/lib64/mysql /usr/lib/qt-3.3/lib /usr/lib64/qt-3.3/lib "
+sys_lib_dlsearch_path_spec="/lib /usr/lib /usr/lib/mysql /usr/lib/qt-3.3/lib "
 
 # Fix the shell variable $srcfile for the compiler.
 fix_srcfile_path=""

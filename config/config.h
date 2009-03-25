@@ -38,7 +38,7 @@
 #define HAVE_INTTYPES_H 1
 
 /* Define to 1 if you have the `crypto' library (-lcrypto). */
-/* #undef HAVE_LIBCRYPTO */
+#define HAVE_LIBCRYPTO 1
 
 /* Define to 1 if you have the `kstat' library (-lkstat). */
 /* #undef HAVE_LIBKSTAT */
@@ -164,13 +164,13 @@
 #define PACKAGE_NAME "Spine Poller"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Spine Poller 0.8.7c-beta2"
+#define PACKAGE_STRING "Spine Poller 0.8.7d-pre"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "spine-poller"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.8.7c-beta2"
+#define PACKAGE_VERSION "0.8.7d-pre"
 
 /* The size of the spine result buffer */
 #define RESULTS_BUFFER 1024
@@ -200,7 +200,7 @@
 /* #undef USING_NIFTY */
 
 /* Version number of package */
-#define VERSION "0.8.7c-beta2"
+#define VERSION "0.8.7d-pre"
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */
