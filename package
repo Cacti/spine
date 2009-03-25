@@ -2,6 +2,13 @@
 
 VERSION=`cat configure.ac | grep AM_INIT_AUTOMAKE | awk -F, '{print $2}' | tr -d ')' | tr -d ' '` 
 clear
+# ----------------------------------------------------------
+# Perform packaging
+# ----------------------------------------------------------
+/bin/rm -rf /tmp/cacti-spine-$VERSION /tmp/cacti-spine-$VERSION.*
+svn export . /tmp/cacti-spine-$VERSION
+cd /tmp/cacti-spine-$VERSION
+
 echo "-----------------------------------------------------------"
 echo "Spine packager for spine version $VERION"
 echo "spine-$VERSION.tar.gz will be placed in /tmp"
@@ -9,7 +16,7 @@ echo "--------------------------------------------------------------"
 echo "Spine package process is beginnning"
 echo "--------------------------------------------------------------"
 echo "NOTE: Removing hardware specific directories"
-rm -rf autom4te.cache .deps
+/bin/rm -rf autom4te.cache .deps
 
 # ----------------------------------------------------------
 # Get rid of nasty Microsoftisms
@@ -38,17 +45,17 @@ fi
 # ----------------------------------------------------------
 echo "--------------------------------------------------------------"
 echo "NOTE: Setting some permissions"
-[ -f ./configure ] && chmod +x configure
+/bin/rm -f configure
+aclocal
+autoheader
+automake --add-missing
+libtoolize --force
+autoconf
+cd ..
 
-# ----------------------------------------------------------
-# Perform packaging
-# ----------------------------------------------------------
-rm -rf /tmp/cacti-spine-$VERSION /tmp/cacti-spine-$VERSION.*
-svn export . /tmp/cacti-spine-$VERSION
-cd /tmp
 tar -zcf  cacti-spine-$VERSION.tar.gz cacti-spine-$VERSION
 zip -lrq cacti-spine-$VERSION.zip cacti-spine-$VERSION/*
-rm -rf /tmp/cacti-spine-$VERSION
+#rm -rf /tmp/cacti-spine-$VERSION
 cd -
 echo "--------------------------------------------------------------"
 echo "NOTE: Done!!!"
