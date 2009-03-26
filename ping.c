@@ -692,7 +692,15 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				if (return_code < 0) {
+				if (((return_code == -1) && (errno == ECONNREFUSED)) ||
+					(return_code == 0)) {
+					SPINE_LOG_DEBUG(("Host[%i] DEBUG: TCP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
+					snprintf(ping->ping_status, 50, "%.5f", total_time);
+					free(new_hostname);
+					close(tcp_socket);
+					return HOST_UP;
+				}else{
 					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
@@ -702,13 +710,6 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					}else{
 						retry_count++;
 					}
-				}else{
-					SPINE_LOG_DEBUG(("Host[%i] DEBUG: TCP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
-					snprintf(ping->ping_status, 50, "%.5f", total_time);
-					free(new_hostname);
-					close(tcp_socket);
-					return HOST_UP;
 				}
 			}
 		}else{

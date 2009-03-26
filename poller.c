@@ -103,8 +103,9 @@ void poll_host(int host_id) {
 	char temp_result[RESULTS_BUFFER];
 
 	int    num_rows;
-	int    assert_fail = 0;
-	int    spike_kill = 0;
+	int    assert_fail = FALSE;
+	int    reindex_err = FALSE;
+	int    spike_kill = FALSE;
 	int    rows_processed = 0;
 	int    i;
 	int    j;
@@ -430,6 +431,7 @@ void poll_host(int host_id) {
 
 				while ((row = mysql_fetch_row(result))) {
 					assert_fail = FALSE;
+					reindex_err = FALSE;
 
 					/* initialize the reindex struction */
 					reindex->data_query_id   = 0;
@@ -460,29 +462,30 @@ void poll_host(int host_id) {
 					if (perform_assert) {
 						switch(reindex->action) {
 						case POLLER_ACTION_SNMP: /* snmp */
-							/* check to see if you are checking uptime */
-							if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
-								if (strlen(sysUptime) > 0) {
-									if (!(poll_result = (char *) malloc(BUFSIZE))) {
-										die("ERROR: Fatal malloc error: poller.c poll_result");
-									}
-									poll_result[0] = '\0';
+							/* if there is no snmp session, don't probe */
+							if (!host->snmp_session) {
+								reindex_err = TRUE;
+							}
 
-									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								}else if (host->snmp_session) {
-									poll_result = snmp_get(host, reindex->arg1);
-									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+							/* check to see if you are checking uptime */
+							if (!reindex_err) {
+								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+									if (strlen(sysUptime) > 0) {
+										if (!(poll_result = (char *) malloc(BUFSIZE))) {
+											die("ERROR: Fatal malloc error: poller.c poll_result");
+										}
+										poll_result[0] = '\0';
+
+										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
+									}else{
+										poll_result = snmp_get(host, reindex->arg1);
+										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+									}
 								}else{
-									SPINE_LOG(("WARNING: Host[%i] DataQuery[%i] FAILED: No SNMP Session\n", host->id, reindex->data_query_id));
-									poll_result = strdup("U");
+									poll_result = snmp_get(host, reindex->arg1);
 								}
 							}else{
-								if (host->snmp_session) {
-									poll_result = snmp_get(host, reindex->arg1);
-								}else{
-									SPINE_LOG(("WARNING: Host[%i] DataQuery[%i] FAILED: No SNMP Session\n", host->id, reindex->data_query_id));
-									poll_result = strdup("U");
-								}
+								SPINE_LOG(("WARNING: Host[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, reindex->data_query_id));
 							}
 
 							break;
@@ -492,57 +495,58 @@ void poll_host(int host_id) {
 							break;
 						default:
 							SPINE_LOG(("Host[%i] ERROR: Unknown Assert Action!", host->id));
-							poll_result = strdup("U");
 						}
 
-						if (!(query3 = (char *)malloc(BUFSIZE))) {
-							die("ERROR: Fatal malloc error: poller.c reindex insert!");
-						}
-						query3[0] = '\0';
-
-						/* assume ok if host is up and result wasn't obtained */
-						if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
-							assert_fail = FALSE;
-						}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
-							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
-
-							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-							db_insert(&mysql, query3);
-							assert_fail = TRUE;
-							previous_assert_failure = TRUE;
-						}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
-							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
-
-							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-							db_insert(&mysql, query3);
-							assert_fail = TRUE;
-							previous_assert_failure = TRUE;
-						}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-							SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
-
-							snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-							db_insert(&mysql, query3);
-							assert_fail = TRUE;
-							previous_assert_failure = TRUE;
-						}
-
-						/* update 'poller_reindex' with the correct information if:
-						 * 1) the assert fails
-						 * 2) the OP code is > or < meaning the current value could have changed without causing
-						 *     the assert to fail */
-						if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
-							snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
-							db_insert(&mysql, query3);
-
-							if ((assert_fail) &&
-								((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {
-								spike_kill = TRUE;
-								SPINE_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
+						if (!reindex_err) {
+							if (!(query3 = (char *)malloc(BUFSIZE))) {
+								die("ERROR: Fatal malloc error: poller.c reindex insert!");
 							}
-						}
+							query3[0] = '\0';
 
-						free(query3);
-						free(poll_result);
+							/* assume ok if host is up and result wasn't obtained */
+							if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+								assert_fail = FALSE;
+							}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
+								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+
+								snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+								db_insert(&mysql, query3);
+								assert_fail = TRUE;
+								previous_assert_failure = TRUE;
+							}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
+								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+
+								snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+								db_insert(&mysql, query3);
+								assert_fail = TRUE;
+								previous_assert_failure = TRUE;
+							}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
+								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+
+								snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+								db_insert(&mysql, query3);
+								assert_fail = TRUE;
+								previous_assert_failure = TRUE;
+							}
+
+							/* update 'poller_reindex' with the correct information if:
+							 * 1) the assert fails
+							 * 2) the OP code is > or < meaning the current value could have changed without causing
+							 *     the assert to fail */
+							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
+								snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
+								db_insert(&mysql, query3);
+
+								if ((assert_fail) &&
+									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {
+									spike_kill = TRUE;
+									SPINE_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
+								}
+							}
+
+							free(query3);
+							free(poll_result);
+						}
 					}
 				}
 			}else{
