@@ -213,7 +213,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	if (host->snmp_session) {
 		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
 			/* by default, we look at sysUptime */
-			if ((oid = strdup(".1")) == NULL) {
+			if ((oid = strdup(".1.3")) == NULL) {
 				die("ERROR: malloc(): strdup() oid ping.c failed");
 			}
 
