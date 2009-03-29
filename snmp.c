@@ -437,11 +437,16 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
 
-					#ifdef USE_NET_SNMP
-					snprint_value(result_string, RESULTS_BUFFER, anOID, anOID_len, vars);
-					#else
-					sprint_value(result_string, anOID, anOID_len, vars);
-					#endif
+					if (vars != NULL) {
+						#ifdef USE_NET_SNMP
+						snprint_value(result_string, RESULTS_BUFFER, anOID, anOID_len, vars);
+						#else
+						sprint_value(result_string, anOID, anOID_len, vars);
+						#endif
+					}else{
+						SET_UNDEFINED(result_string);
+						status = STAT_ERROR;
+					}
 				}
 			}
 		}

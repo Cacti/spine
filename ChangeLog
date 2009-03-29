@@ -8,6 +8,7 @@ The Cacti Group � spine
 -bug: Availability messaging incorrect for snmpv3 hosts
 -bug: TCP Pings that receive a connection refused are good pings
 -bug: Avoid segmentation faults when Reindex table issues are found
+-bug: When performing snmp_get's, dont assume no error means non-null response
 -feature: Add one additional debug message to the poller code to track data sources polled
 
 0.8.7c
