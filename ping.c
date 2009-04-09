@@ -1127,7 +1127,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if (host->status == HOST_DOWN) {
 			SPINE_LOG(("Host[%i] Hostname[%s] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->hostname, host->status_last_error));
 		}else{
-			SPINE_LOG(("Host[%i] Hostnanme[%s] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id, host->hostname));
+			SPINE_LOG(("Host[%i] Hostname[%s] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id, host->hostname));
 		}
 	}
 }
