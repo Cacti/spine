@@ -50,7 +50,7 @@
 char *php_cmd(const char *php_command, int php_process) {
 	char *result_string;
 	char command[BUFSIZE];
-	int write_status;
+	ssize_t bytes;
 	int retries = 0;
 
 	assert(php_command != 0);
@@ -74,10 +74,10 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* send command to the script server */
 	retry:
-	write_status = write(php_processes[php_process].php_write_fd, command, strlen(command));
+	bytes = write(php_processes[php_process].php_write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
-	if (write_status <= 0) {
+	if (bytes <= 0) {
 		result_string = strdup("U");
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.  Restarting PHP Script Server\n", php_process));
 		php_close(php_process);
@@ -450,6 +450,7 @@ int php_init(int php_process) {
 void php_close(int php_process) {
 	int i;
 	int num_processes;
+	ssize_t bytes;
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
@@ -479,7 +480,7 @@ void php_close(int php_process) {
 		if (phpp->php_write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
 
-			write(phpp->php_write_fd, quit, strlen(quit));
+			bytes = write(phpp->php_write_fd, quit, strlen(quit));
 
 			close(phpp->php_write_fd);
 			phpp->php_write_fd = -1;
