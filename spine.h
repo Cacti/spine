@@ -138,7 +138,7 @@
 #define CONFIG_PATHS 4
 #define CONFIG_PATH_1 ""
 #define CONFIG_PATH_2 "/etc/"
-#define CONFIG_PATH_3 "/etc/cacti"
+#define CONFIG_PATH_3 "/etc/cacti/"
 #define CONFIG_PATH_4 "../etc/"
 
 /* config file defaults */
