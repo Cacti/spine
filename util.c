@@ -407,6 +407,7 @@ void read_config_options() {
 int read_spine_config(char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
+	char *buffer;
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
 
@@ -423,7 +424,7 @@ int read_spine_config(char *file) {
 		}
 
 		while(!feof(fp)) {
-			fgets(buff, BUFSIZE, fp);
+			buffer = fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
@@ -494,7 +495,7 @@ void die(const char *format, ...) {
 		snprintf(flogmessage, BUFSIZE, "%s (Spine init)\n", logmessage);
 	}
 
-	SPINE_LOG((flogmessage));
+	SPINE_LOG(("%s", flogmessage));
 
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
