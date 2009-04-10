@@ -84,6 +84,9 @@ echo "NOTE: Running auto-tools to verify buildability"
 aclocal
 [ $? -ne 0 ] && echo "FATAL: aclocal has errors" && exit -1
 
+libtoolize --force
+[ $? -ne 0 ] && echo "FATAL: libtool has errors" && exit -1
+
 autoheader
 [ $? -ne 0 ] && echo "FATAL: autoheader has errors" && exit -1
 
@@ -93,16 +96,13 @@ automake --foreign --add-missing --copy
 autoconf
 [ $? -ne 0 ] && echo "FATAL: autoconf has errors" && exit -1
 
-libtoolize --force
-[ $? -ne 0 ] && echo "FATAL: libtool has errors" && exit -1
-
 # ----------------------------------------------------------
 # perform the build
 # ----------------------------------------------------------
 echo "--------------------------------------------------------------"
 echo "NOTE: Performing build of spine"
 echo "--------------------------------------------------------------"
-./configure --sysconfdir=/etc --bindir=/usr/bin
+./configure --sysconfdir=/etc/cacti --bindir=/usr/sbin
 make clean
 make install
 sleep 3
