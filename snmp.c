@@ -95,8 +95,8 @@ void snmp_spine_init(void) {
 		/* check that the headers we compiled with match the library we linked with -
 		   apparently not defined in UCD-SNMP...
 		*/
-		SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s\n", PACKAGE_VERSION));
-		SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s\n", netsnmp_get_version()));
+		SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION));
+		SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s", netsnmp_get_version()));
 
 		if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
 			init_snmp("spine");
@@ -105,7 +105,7 @@ void snmp_spine_init(void) {
 			die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
 		}
 	#else
-		SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.\n"));
+		SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP."));
 		init_snmp("spine");
 	#endif
 #else
@@ -197,7 +197,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.version       = SNMP_VERSION_3;
 		session.securityModel = USM_SEC_MODEL_NUMBER;
 	}else {
-		SPINE_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'\n", host_id, hostname));
+		SPINE_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'", host_id, hostname));
 		return 0;
 	}
 
@@ -294,7 +294,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'\n", hostname));
+		SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'", hostname));
 	}
 
 	return sessp;
@@ -344,7 +344,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("ERROR: Problems parsing SNMP OID\n"));
+			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -357,7 +357,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
+				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get"));
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -422,7 +422,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		pdu       = snmp_pdu_create(SNMP_MSG_GETNEXT);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("ERROR: Problems parsing SNMP OID\n"));
+			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -435,7 +435,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get\n"));
+				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get"));
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -530,7 +530,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
- 			SPINE_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s)\n", current_host->id, snmp_oids[i].oid));
+ 			SPINE_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, snmp_oids[i].oid));
 
  			/* Mark this OID as "bad" */
 			SET_UNDEFINED(snmp_oids[i].result);
@@ -550,7 +550,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
 		if (response == NULL) {
-			SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi\n"));
+			SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi"));
 			status = STAT_ERROR;
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {

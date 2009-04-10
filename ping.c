@@ -69,17 +69,17 @@ int ping_host(host_t *host, ping_t *ping) {
 				die("ERROR: Could not get basic privset from priv_str_to_set().");
 			} else {
 				p = priv_set_to_str(privset, ',', 0);
-				SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.\n", p != NULL ? p : "Unknown"));
+				SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown"));
 			}
 
 			/* Remove exec from the basic set */
 			if (priv_delset(privset, PRIV_PROC_EXEC) < 0 ) {
-				SPINE_LOG_DEBUG(("Warning: Deletion of PRIV_PROC_EXEC from privset failed: '%s'.\n", strerror(errno)));
+				SPINE_LOG_DEBUG(("Warning: Deletion of PRIV_PROC_EXEC from privset failed: '%s'.", strerror(errno)));
 			}
 
 			/* Add priviledge to send/receive ICMP packets */
 			if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0 ) {
-				SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.\n", strerror(errno)));
+				SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
 			}
 
 			/* Compute the set of privileges that are never needed */
@@ -88,16 +88,16 @@ int ping_host(host_t *host, ping_t *ping) {
 			/* Remove the set of unneeded privs from Permitted (and by
 			 * implication from Effective) */
 			if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
-				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.\n", strerror(errno)));
+				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
 			}
 
 			/* Remove unneeded priv set from Limit to be safe */
 			if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
-				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.\n", strerror(errno)));
+				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
 			}
 
 			boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);
-			SPINE_LOG_DEBUG(("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.\n", pe != 0 ? "Enabled" : "Disabled"));
+			SPINE_LOG_DEBUG(("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.", pe != 0 ? "Enabled" : "Disabled"));
 
 			/* Free the privset */
 			priv_freeset(privset);
@@ -107,7 +107,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 			if (geteuid() != 0) {
 				host->ping_method = PING_UDP;
-				SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve.\n"));
+				SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve."));
 			}
 			#endif
 			#endif
@@ -417,7 +417,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
-								SPINE_LOG_DEBUG(("Host[%i] DEBUG: ICMP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+								SPINE_LOG_DEBUG(("Host[%i] DEBUG: ICMP Host Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(new_hostname);
@@ -573,7 +573,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 						return_code = read(udp_socket, socket_reply, BUFSIZE);
 
 						if ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED))) {
-							SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+							SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Host Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
 							snprintf(ping->ping_status, 50, "%.5f", total_time);
 							free(new_hostname);
@@ -596,7 +596,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 					/* timeout */
 				}
 
-				SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+				SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 
 				retry_count++;
 				#ifndef SOLAR_THREAD
@@ -694,7 +694,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 				if (((return_code == -1) && (errno == ECONNREFUSED)) ||
 					(return_code == 0)) {
-					SPINE_LOG_DEBUG(("Host[%i] DEBUG: TCP Host Alive, Try Count:%i, Time:%.4f ms\n", host->id, retry_count+1, (total_time)));
+					SPINE_LOG_DEBUG(("Host[%i] DEBUG: TCP Host Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
 					snprintf(ping->ping_status, 50, "%.5f", total_time);
 					free(new_hostname);
@@ -854,7 +854,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	#endif
 
 	if (hostinfo == NULL) {
-		SPINE_LOG(("WARNING: Unknown host %s\n", hostname));
+		SPINE_LOG(("WARNING: Unknown host %s", hostname));
 		return FALSE;
 	}else{
 		return TRUE;
@@ -1092,32 +1092,32 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP_OR_PING) {
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
 				if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
-					SPINE_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP\n", host->id));
+					SPINE_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP", host->id));
 				}else{
-					SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+					SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
 				}
 			}else if (availability_method == AVAIL_NONE) {
-				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected\n", host->id));
+				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected", host->id));
 			}else{
-				SPINE_LOG_HIGH(("Host[%i] PING: Result %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] PING: Result %s", host->id, ping->ping_response));
 			}
 		}else{
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s\n", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_NONE) {
-				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected\n", host->id));
+				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected", host->id));
 			}else{
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s\n", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
 			}
 		}
 	}
@@ -1125,9 +1125,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			SPINE_LOG(("Host[%i] Hostname[%s] ERROR: HOST EVENT: Host is DOWN Message: %s\n", host->id, host->hostname, host->status_last_error));
+			SPINE_LOG(("Host[%i] Hostname[%s] ERROR: HOST EVENT: Host is DOWN Message: %s", host->id, host->hostname, host->status_last_error));
 		}else{
-			SPINE_LOG(("Host[%i] Hostname[%s] NOTICE: HOST EVENT: Host Returned from DOWN State\n", host->id, host->hostname));
+			SPINE_LOG(("Host[%i] Hostname[%s] NOTICE: HOST EVENT: Host Returned from DOWN State", host->id, host->hostname));
 		}
 	}
 }

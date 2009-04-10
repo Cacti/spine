@@ -66,13 +66,13 @@ int db_insert(MYSQL *mysql, const char *query) {
 					error_count++;
 
 					if (error_count > 30) {
-						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag));
+						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 						return FALSE;
 					}
 
 					continue;
 				}else{
-					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'\n", error, mysql_error(mysql), query_frag));
+					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
 					return FALSE;
 				}
 			}else{

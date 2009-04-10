@@ -190,10 +190,10 @@ void read_config_options() {
  	}
 
 	/* log the path_webroot variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s\n", set.path_php_server));
+	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
 
 	/* log the path_cactilog variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s\n", set.path_logfile));
+	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
 
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, "log_destination")) != 0 ) {
@@ -203,7 +203,7 @@ void read_config_options() {
 	}
 
 	/* log the log_destination variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)\n",
+	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)",
 			set.log_destination,
 			printable_logdest(set.log_destination)));
 	set.logfile_processed = TRUE;
@@ -214,7 +214,7 @@ void read_config_options() {
 	}
 
 	/* log the path_php variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_php variable is %s\n", set.path_php));
+	SPINE_LOG_DEBUG(("DEBUG: The path_php variable is %s", set.path_php));
 
 	/* set availability_method */
 	if ((res = getsetting(&mysql, "availability_method")) != 0 ) {
@@ -222,7 +222,7 @@ void read_config_options() {
 	}
 
 	/* log the availability_method variable */
-	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i\n", set.availability_method));
+	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i", set.availability_method));
 
 	/* set ping_recovery_count */
 	if ((res = getsetting(&mysql, "ping_recovery_count")) != 0 ) {
@@ -230,7 +230,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_recovery_count variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i\n", set.ping_recovery_count));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i", set.ping_recovery_count));
 
 	/* set ping_failure_count */
 	if ((res = getsetting(&mysql, "ping_failure_count")) != 0) {
@@ -238,7 +238,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_failure_count variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i\n", set.ping_failure_count));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i", set.ping_failure_count));
 
 	/* set ping_method */
 	if ((res = getsetting(&mysql, "ping_method")) != 0 ) {
@@ -246,7 +246,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_method variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i\n", set.ping_method));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i", set.ping_method));
 
 	/* set ping_retries */
 	if ((res = getsetting(&mysql, "ping_retries")) != 0 ) {
@@ -254,7 +254,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_retries variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i\n", set.ping_retries));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i", set.ping_retries));
 
 	/* set ping_timeout */
 	if ( (res = getsetting(&mysql, "ping_timeout")) != 0 ) {
@@ -262,25 +262,25 @@ void read_config_options() {
 	}
 
 	/* log the ping_timeout variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i\n", set.ping_timeout));
+	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
 
 	/* set logging option for errors */
 	set.log_perror = getboolsetting(&mysql, "log_perror", FALSE);
 
 	/* log the log_perror variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_perror variable is %i\n", set.log_perror));
+	SPINE_LOG_DEBUG(("DEBUG: The log_perror variable is %i", set.log_perror));
 
 	/* set logging option for errors */
 	set.log_pwarn = getboolsetting(&mysql, "log_pwarn", FALSE);
 
 	/* log the log_pwarn variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i\n", set.log_pwarn));
+	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i", set.log_pwarn));
 
 	/* set logging option for statistics */
 	set.log_pstats = getboolsetting(&mysql, "log_pstats", FALSE);
 
 	/* log the log_pstats variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i\n", set.log_pstats));
+	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i", set.log_pstats));
 
 	/* get Cacti defined max threads override spine.conf */
 	if ((res = getsetting(&mysql, "max_threads")) != 0 ) {
@@ -291,7 +291,7 @@ void read_config_options() {
 	}
 
 	/* log the threads variable */
-	SPINE_LOG_DEBUG(("DEBUG: The threads variable is %i\n", set.threads));
+	SPINE_LOG_DEBUG(("DEBUG: The threads variable is %i", set.threads));
 
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
 	if ((res = getsetting(&mysql, "poller_interval")) != 0 ) {
@@ -302,9 +302,9 @@ void read_config_options() {
 
 	/* log the poller_interval variable */
 	if (set.poller_interval == 0) {
-		SPINE_LOG_DEBUG(("DEBUG: The polling interval is the system default\n"));
+		SPINE_LOG_DEBUG(("DEBUG: The polling interval is the system default"));
 	}else{
-		SPINE_LOG_DEBUG(("DEBUG: The polling interval is %i seconds\n", set.poller_interval));
+		SPINE_LOG_DEBUG(("DEBUG: The polling interval is %i seconds", set.poller_interval));
 	}
 
 
@@ -316,7 +316,7 @@ void read_config_options() {
 	}
 
 	/* log the concurrent processes variable */
-	SPINE_LOG_DEBUG(("DEBUG: The number of concurrent processes is %i\n", set.num_parent_processes));
+	SPINE_LOG_DEBUG(("DEBUG: The number of concurrent processes is %i", set.num_parent_processes));
 
 	/* get the script timeout to establish timeouts */
 	if ((res = getsetting(&mysql, "script_timeout")) != 0 ) {
@@ -329,7 +329,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	SPINE_LOG_DEBUG(("DEBUG: The script timeout is %i\n", set.script_timeout));
+	SPINE_LOG_DEBUG(("DEBUG: The script timeout is %i", set.script_timeout));
 
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, "php_servers")) != 0 ) {
@@ -347,7 +347,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i\n", set.php_servers));
+	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i", set.php_servers));
 
 	/*----------------------------------------------------------------
 	 * determine if the php script server is required by searching for
@@ -370,12 +370,12 @@ void read_config_options() {
 	if (num_rows > 0) set.php_required = TRUE;
 
 	/* log the requirement for the script server */
-	SPINE_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'\n",
+	SPINE_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'",
 		set.start_host_id,
 		set.end_host_id,
 		num_rows));
 
-	SPINE_LOG_DEBUG(("DEBUG: The PHP Script Server is %sRequired\n",
+	SPINE_LOG_DEBUG(("DEBUG: The PHP Script Server is %sRequired",
 		set.php_required
 		? ""
 		: "Not "));
@@ -392,7 +392,7 @@ void read_config_options() {
 	}
 
 	/* log the snmp_max_get_size variable */
-	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i\n", set.snmp_max_get_size));
+	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
 	mysql_free_result(result);
 	db_disconnect(&mysql);
@@ -487,12 +487,12 @@ void die(const char *format, ...) {
 
 	if (set.logfile_processed) {
 		if (set.parent_fork == SPINE_PARENT) {
-			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)\n", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)", logmessage);
 		}else{
-			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)\n", logmessage);
+			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)", logmessage);
 		}
 	}else{
-		snprintf(flogmessage, BUFSIZE, "%s (Spine init)\n", logmessage);
+		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
 	SPINE_LOG(("%s", flogmessage));

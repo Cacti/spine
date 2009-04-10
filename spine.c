@@ -375,7 +375,7 @@ int main(int argc, char *argv[]) {
 	db_connect(set.dbdb, &mysql);
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		SPINE_LOG_DEBUG(("Version %s starting\n", VERSION));
+		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
 	}else{
 		if (!set.stdout_notty) {
 			printf("SPINE: Version %s starting\n", VERSION);
@@ -388,15 +388,15 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG(("DEBUG: MySQL is Thread Safe!"));
 		}
 	}else{
-		SPINE_LOG(("WARNING: MySQL is NOT Thread Safe!\n"));
+		SPINE_LOG(("WARNING: MySQL is NOT Thread Safe!"));
 	}
 
 	/* initialize SNMP */
-	SPINE_LOG_DEBUG(("SPINE: Initializing Net-SNMP API\n"));
+	SPINE_LOG_DEBUG(("SPINE: Initializing Net-SNMP API"));
 	snmp_spine_init();
 
 	/* initialize PHP if required */
-	SPINE_LOG_DEBUG(("SPINE: Initializing PHP Script Server(s)\n"));
+	SPINE_LOG_DEBUG(("SPINE: Initializing PHP Script Server(s)"));
 
 	/* tell spine that it is parent, and set the poller id */
 	set.parent_fork = SPINE_PARENT;
@@ -466,25 +466,25 @@ int main(int argc, char *argv[]) {
 
 				switch (thread_status) {
 					case 0:
-						SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created\n"));
+						SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
 
 						device_counter++;
 						active_threads++;
 
-						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i\n", active_threads));
+						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", active_threads));
 
 						break;
 					case EAGAIN:
-						SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread\n"));
+						SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread"));
 						break;
 					case EFAULT:
-						SPINE_LOG(("ERROR: The Thread or Attribute Was Invalid\n"));
+						SPINE_LOG(("ERROR: The Thread or Attribute Was Invalid"));
 						break;
 					case EINVAL:
-						SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized\n"));
+						SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 						break;
 					default:
-						SPINE_LOG(("ERROR: Unknown Thread Creation Error\n"));
+						SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
 						break;
 				}
 				usleep(internal_thread_sleep);
@@ -494,7 +494,7 @@ int main(int argc, char *argv[]) {
 					current_time = get_time_as_double();
 
 					if ((current_time - begin_time + .2) > poller_interval) {
-						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
+						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
 						canexit = 1;
 						break;
 					}
@@ -509,18 +509,18 @@ int main(int argc, char *argv[]) {
 
 			break;
 		case EDEADLK:
-			SPINE_LOG(("ERROR: Deadlock Occured\n"));
+			SPINE_LOG(("ERROR: Deadlock Occured"));
 			break;
 		case EBUSY:
 			break;
 		case EINVAL:
-			SPINE_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex\n"));
+			SPINE_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex"));
 			break;
 		case EFAULT:
-			SPINE_LOG(("ERROR: Attempt to Unlock an Invalid Mutex\n"));
+			SPINE_LOG(("ERROR: Attempt to Unlock an Invalid Mutex"));
 			break;
 		default:
-			SPINE_LOG(("ERROR: Unknown Mutex Lock Error Code Returned\n"));
+			SPINE_LOG(("ERROR: Unknown Mutex Lock Error Code Returned"));
 			break;
 		}
 
@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
 			current_time = get_time_as_double();
 
 			if ((current_time - begin_time + .2) > poller_interval) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
 				canexit = 1;
 				break;
 			}
@@ -563,7 +563,7 @@ int main(int argc, char *argv[]) {
 			current_time = get_time_as_double();
 
 			if ((current_time - begin_time + .2) > poller_interval) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal\n"));
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
 				canexit = 1;
 				break;
 			}
@@ -587,33 +587,33 @@ int main(int argc, char *argv[]) {
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
 
-	SPINE_LOG_DEBUG(("DEBUG: Thread Cleanup Complete\n"));
+	SPINE_LOG_DEBUG(("DEBUG: Thread Cleanup Complete"));
 
 	/* close the php script server */
 	if (set.php_required) {
 		php_close(PHP_INIT);
 	}
 
-	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed\n"));
+	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
 	/* free malloc'd variables */
 	free(threads);
 	free(ids);
 	free(conf_file);
 
-	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed\n"));
+	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
 	/* close mysql */
 	mysql_free_result(result);
 	mysql_close(&mysql);
 
-	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed\n"));
+	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
 
 	/* finally add some statistics to the log and exit */
 	end_time = TIMEVAL_TO_DOUBLE(now);
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
-		SPINE_LOG(("Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows));
+		SPINE_LOG(("Time: %.4f s, Threads: %i, Hosts: %i", (end_time - begin_time), set.threads, num_rows));
 	}else{
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
