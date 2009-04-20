@@ -264,6 +264,14 @@ void read_config_options() {
 	/* log the ping_timeout variable */
 	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
 
+	/* set snmp_retries */
+	if ( (res = getsetting(&mysql, "snmp_retries")) != 0 ) {
+		set.snmp_retries = atoi(res);
+	}
+
+	/* log the snmp_retries variable */
+	SPINE_LOG_DEBUG(("DEBUG: The snmp_retries variable is %i", set.snmp_retries));
+
 	/* set logging option for errors */
 	set.log_perror = getboolsetting(&mysql, "log_perror", FALSE);
 

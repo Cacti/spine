@@ -282,6 +282,7 @@ void poll_host(int host_id) {
 				host->snmp_context[0]         = '\0';
 				host->snmp_port               = 161;
 				host->snmp_timeout            = 500;
+				host->snmp_retries            = set.snmp_retries;
 				host->max_oids                = 10;
 				host->availability_method     = 0;
 				host->ping_method             = 0;

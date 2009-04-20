@@ -414,6 +414,7 @@ typedef struct host_struct {
 	char   snmp_context[65];
 	int    snmp_port;
 	int    snmp_timeout;
+	int    snmp_retries;
 	int    max_oids;
 	int    availability_method;
 	int    ping_method;

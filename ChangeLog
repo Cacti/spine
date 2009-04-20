@@ -11,6 +11,7 @@ The Cacti Group � spine
 -bug: When performing snmp_get's, dont assume no error means non-null response
 -bug: Some snmp agents don't getnext on '.1' and need another oid '.1.3'
 -bug: Net-snmp versioning breaks snmpV3
+-bug: Use system level snmp_retries variable instead of 3
 -feature: Add one additional debug message to the poller code to track data sources polled
 -feature: Add more config paths for packagers
 
