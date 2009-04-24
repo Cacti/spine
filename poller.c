@@ -151,14 +151,17 @@ void poll_host(int host_id) {
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
 		die("ERROR: Fatal malloc error: poller.c host struct!");
 	}
+	memset(host, 0, sizeof(host_t));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
 		die("ERROR: Fatal malloc error: poller.c ping struct!");
 	}
+	memset(ping, 0, sizeof(ping_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
 	}
+	memset(reindex, 0, sizeof(reindex_t));
 
 	sysUptime[0] = '\0';
 
@@ -418,8 +421,10 @@ void poll_host(int host_id) {
 			host->ignore_host = TRUE;
 		}
 	}else{
-		host->id = 0;
-		host->ignore_host = FALSE;
+		host->id           = 0;
+		host->max_oids     = 1;
+		host->snmp_session = NULL;
+		host->ignore_host  = FALSE;
 	}
 
 	/* do the reindex check for this host if not script based */
@@ -559,12 +564,12 @@ void poll_host(int host_id) {
 		}else{
 			SPINE_LOG(("Host[%i] ERROR: Recache Query Returned Null Result!", host->id));
 		}
-	}
 
-	/* close the host snmp session, we will create again momentarily */
-	if (host->snmp_session) {
-		snmp_host_cleanup(host->snmp_session);
-		host->snmp_session = NULL;
+		/* close the host snmp session, we will create again momentarily */
+		if (host->snmp_session) {
+			snmp_host_cleanup(host->snmp_session);
+			host->snmp_session = NULL;
+		}
 	}
 
 	/* calculate the number of poller items to poll this cycle */
