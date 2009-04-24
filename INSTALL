@@ -24,9 +24,9 @@ Below are some random notes about installing:
 - There are a number of configure options.  To view them, run ./configure --help
   there are a few specific to Spine.  They are as follows:
 
-  --enable-nifty-popen              - Some implementations of popen() are not
-                                      threadsafe.  Use this option to use the Nifty
-                                      popen() implementation that is threadsafe.
+  --enable-popen                    - By default, spine uses nitfy_popen.  The problem
+                                      with popen is that if a script times out, there is
+                                      not easy way to cleanup.
   --enable-threadsafe-gethostbyname - If your OS has a native threadsafe version of
                                       gethostbyname, enable use this option.
   --enable-solaris-priv             - Enable support for the Solaris process privilege 

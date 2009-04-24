@@ -1164,11 +1164,11 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 	}
 
-	#ifdef USING_NIFTY
-	cmd_fd = nft_popen((char *)proc_command, "r");
-	#else
+	#ifdef USING_TPOPEN
 	fd = popen((char *)proc_command, "r");
 	cmd_fd = fileno(fd);
+	#else
+	cmd_fd = nft_popen((char *)proc_command, "r");
 	#endif
 
 	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
@@ -1224,11 +1224,11 @@ char *exec_poll(host_t *current_host, char *command) {
 		case 0:
 			SPINE_LOG(("Host[%i] ERROR: The POPEN timed out", current_host->id));
 
-			#ifdef USING_NIFTY
+			#ifdef USING_TPOPEN
+			close_fd = FALSE;
+			#else
 			pid = nft_pchild(cmd_fd);
 			kill(pid, SIGTERM);
-			#else
-			close_fd = FALSE;
 			#endif
 
 			SET_UNDEFINED(result_string);
@@ -1245,13 +1245,13 @@ char *exec_poll(host_t *current_host, char *command) {
 		}
 
 		/* close pipe */
-		#ifdef USING_NIFTY
-		nft_pclose(cmd_fd);
-		#else
+		#ifdef USING_TPOPEN
 		/* we leave the old fd open if it timed out */
 		if (close_fd) {
 			pclose(fd);
 		}
+		#else
+		nft_pclose(cmd_fd);
 		#endif
 	}else{
 		SPINE_LOG(("Host[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));

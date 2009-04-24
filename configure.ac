@@ -336,17 +336,17 @@ AC_ARG_WITH(max-mysql-buffer,
 AC_DEFINE_UNQUOTED(MAX_MYSQL_BUF_SIZE, $max_mysql_buffer, The maximum MySQL buffer size to insert)
 AC_MSG_RESULT(checking for the maximum MySQL buffer size... $max_mysql_buffer)
 
-# ****************** Nifty Popen Check ***********************
+# ****************** Traditional Popen Check ***********************
 # If we should use the system popen or nifty popen
-AC_MSG_CHECKING(whether we are using nifty popen)
-AC_ARG_ENABLE(nifty-popen,
-    [  --enable-nifty-popen    Enable the nifty popen implementation of popen (default: disabled)],
-    [ ENABLED_NIFTY=$enableval ],
-    [ ENABLED_NIFTY=no ]
+AC_MSG_CHECKING(whether we are using traditional popen)
+AC_ARG_ENABLE(popen,
+    [  --enable-popen    Enable the traditional popen implementation of nifty popen (default: disabled)],
+    [ ENABLED_TPOPEN=$enableval ],
+    [ ENABLED_TPOPEN=no ]
     )
-if test "$ENABLED_NIFTY" = "yes"; then
+if test "$ENABLED_TPOPEN" = "yes"; then
   AC_MSG_RESULT([yes])
-  AC_DEFINE(USING_NIFTY, 1, If nifty popen should be enabled by default)
+  AC_DEFINE(USING_TPOPEN, 1, If traditional popen should be enabled by default)
 else
   AC_MSG_RESULT([no])
 fi
