@@ -1,6 +1,7 @@
 The Cacti Group � spine
 
 0.8.7d
+-bug#0001313: Spine takes an excessive amount of time timing out failed tcp pings
 -bug#0001358: (cacti + spine) svn. Using snmp v3 constantly get "value: U", whereas snmpget returns correct value 
 -bug#0001379: Ping.c might send more then retry_count icmp packages
 -bug#0001381: configure script distributed with cacti-spine-0.8.7c is broken 
