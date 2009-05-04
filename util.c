@@ -284,6 +284,12 @@ void read_config_options() {
 	/* log the log_pwarn variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i", set.log_pwarn));
 
+	/* set logging option for errors */
+	set.boost_redirect = getboolsetting(&mysql, "boost_redirect", FALSE);
+
+	/* log the log_pwarn variable */
+	SPINE_LOG_DEBUG(("DEBUG: The boost_redirect variable is %i", set.boost_redirect));
+
 	/* set logging option for statistics */
 	set.log_pstats = getboolsetting(&mysql, "log_pstats", FALSE);
 
@@ -314,7 +320,6 @@ void read_config_options() {
 	}else{
 		SPINE_LOG_DEBUG(("DEBUG: The polling interval is %i seconds", set.poller_interval));
 	}
-
 
 	/* get the concurrent_processes variable to determine thread sleep values */
 	if ((res = getsetting(&mysql, "concurrent_processes")) != 0 ) {
@@ -366,22 +371,45 @@ void read_config_options() {
 	 */
 	set.php_required = FALSE;		/* assume no */
 
-	sqlp = sqlbuf;
-	sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
-	sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-	sqlp += append_hostrange(sqlp, "host_id");
-	sqlp += sprintf(sqlp, " LIMIT 1");
-
-	result = db_query(&mysql, sqlbuf);
-	num_rows = mysql_num_rows(result);
-
-	if (num_rows > 0) set.php_required = TRUE;
-
 	/* log the requirement for the script server */
-	SPINE_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'",
-		set.start_host_id,
-		set.end_host_id,
-		num_rows));
+	if (!strlen(set.host_id_list)) {
+		sqlp = sqlbuf;
+		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += append_hostrange(sqlp, "host_id");
+		if (set.poller_id_exists) {
+			sqlp += sprintf(sqlp, " AND poller_id=%i", set.poller_id);
+		}
+		sqlp += sprintf(sqlp, " LIMIT 1");
+
+		result = db_query(&mysql, sqlbuf);
+		num_rows = mysql_num_rows(result);
+
+		if (num_rows > 0) set.php_required = TRUE;
+
+		SPINE_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'",
+			set.start_host_id,
+			set.end_host_id,
+			num_rows));
+	}else{
+		sqlp = sqlbuf;
+		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += sprintf(sqlp, " AND host_id IN(%s)", set.host_id_list);
+		if (set.poller_id_exists) {
+			sqlp += sprintf(sqlp, " AND poller_id=%i", set.poller_id);
+		}
+		sqlp += sprintf(sqlp, " LIMIT 1");
+
+		result = db_query(&mysql, sqlbuf);
+		num_rows = mysql_num_rows(result);
+
+		if (num_rows > 0) set.php_required = TRUE;
+
+		SPINE_LOG_DEBUG(("DEBUG: Host List to be polled='%s', TotalPHPScripts='%i'",
+			set.host_id_list,
+			num_rows));
+	}
 
 	SPINE_LOG_DEBUG(("DEBUG: The PHP Script Server is %sRequired",
 		set.php_required
@@ -441,6 +469,7 @@ int read_spine_config(char *file) {
 				else if (STRIMATCH(p1, "DB_User"))     STRNCOPY(set.dbuser, p2);
 				else if (STRIMATCH(p1, "DB_Pass"))     STRNCOPY(set.dbpass, p2);
 				else if (STRIMATCH(p1, "DB_Port"))     set.dbport = atoi(p2);
+				else if (STRIMATCH(p1, "Poller"))      set.poller_id = atoi(p2);
 				else if (!set.stderr_notty) {
 					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}

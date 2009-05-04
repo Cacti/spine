@@ -640,10 +640,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	int    tcp_socket;
 	struct sockaddr_in servername;
 	int    retry_count;
-	char   request[BUFSIZE];
-	int    request_len;
 	int    return_code;
-	fd_set socket_fds;
 	char   *new_hostname;
 
 	/* remove "tcp:" from hostname */

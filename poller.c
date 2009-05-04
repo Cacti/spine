@@ -89,7 +89,7 @@ void *child(void *arg) {
 void poll_host(int host_id) {
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
-	char *query3;
+	char *query3 = NULL;
 	char query4[BUFSIZE];
 	char query5[BUFSIZE];
 	char query6[BUFSIZE];
@@ -97,6 +97,8 @@ void poll_host(int host_id) {
 	char query8[BUFSIZE];
 	char query9[BUFSIZE];
 	char query10[BUFSIZE];
+	char query11[BUFSIZE];
+	char *query12 = NULL;
 	char sysUptime[BUFSIZE];
 	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
@@ -166,78 +168,160 @@ void poll_host(int host_id) {
 	sysUptime[0] = '\0';
 
 	/* single polling interval query for items */
-	snprintf(query1, BUFSIZE,
-		"SELECT action, hostname, snmp_community, "
-			"snmp_version, snmp_username, snmp_password, "
-			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-			"rrd_num, snmp_port, snmp_timeout, "
-			"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
-		" FROM poller_item"
-		" WHERE host_id=%i"
-		" ORDER BY snmp_port", host_id);
+	if (set.poller_id == 0) {
+		snprintf(query1, BUFSIZE,
+			"SELECT action, hostname, snmp_community, "
+				"snmp_version, snmp_username, snmp_password, "
+				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+				"rrd_num, snmp_port, snmp_timeout, "
+				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
+			" FROM poller_item"
+			" WHERE host_id=%i"
+			" ORDER BY snmp_port", host_id);
 
-	/* host structure for uptime checks */
-	snprintf(query2, BUFSIZE,
-		"SELECT id, hostname, snmp_community, snmp_version, "
-			"snmp_username, snmp_password, snmp_auth_protocol, "
-			"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_port, snmp_timeout, max_oids, "
-			"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
-			"status, status_event_count, status_fail_date, "
-			"status_rec_date, status_last_error, "
-			"min_time, max_time, cur_time, avg_time, "
-			"total_polls, failed_polls, availability "
-		" FROM host"
-		" WHERE id=%i", host_id);
+		/* host structure for uptime checks */
+		snprintf(query2, BUFSIZE,
+			"SELECT id, hostname, snmp_community, snmp_version, "
+				"snmp_username, snmp_password, snmp_auth_protocol, "
+				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_port, snmp_timeout, max_oids, "
+				"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
+				"status, status_event_count, status_fail_date, "
+				"status_rec_date, status_last_error, "
+				"min_time, max_time, cur_time, avg_time, "
+				"total_polls, failed_polls, availability "
+			" FROM host"
+			" WHERE id=%i", host_id);
 
-	/* data query structure for reindex detection */
-	snprintf(query4, BUFSIZE,
-		"SELECT data_query_id, action, op, assert_value, arg1"
-			" FROM poller_reindex"
-			" WHERE host_id=%i", host_id);
+		/* data query structure for reindex detection */
+		snprintf(query4, BUFSIZE,
+			"SELECT data_query_id, action, op, assert_value, arg1"
+				" FROM poller_reindex"
+				" WHERE host_id=%i", host_id);
 
-	/* multiple polling interval query for items */
-	snprintf(query5, BUFSIZE,
-		"SELECT action, hostname, snmp_community, "
-			"snmp_version, snmp_username, snmp_password, "
-			"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-			"rrd_num, snmp_port, snmp_timeout, "
-			"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
-		" FROM poller_item"
-		" WHERE host_id=%i and rrd_next_step <=0"
-		" ORDER by snmp_port", host_id);
+		/* multiple polling interval query for items */
+		snprintf(query5, BUFSIZE,
+			"SELECT action, hostname, snmp_community, "
+				"snmp_version, snmp_username, snmp_password, "
+				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+				"rrd_num, snmp_port, snmp_timeout, "
+				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
+			" FROM poller_item"
+			" WHERE host_id=%i and rrd_next_step <=0"
+			" ORDER by snmp_port", host_id);
 
-	/* query to setup the next polling interval in cacti */
-	snprintf(query6, BUFSIZE,
-		"UPDATE poller_item"
-		" SET rrd_next_step=rrd_next_step-%i"
-		" WHERE host_id=%i", set.poller_interval, host_id);
+		/* query to setup the next polling interval in cacti */
+		snprintf(query6, BUFSIZE,
+			"UPDATE poller_item"
+			" SET rrd_next_step=rrd_next_step-%i"
+			" WHERE host_id=%i", set.poller_interval, host_id);
 
-	/* query to setup the next polling interval in cacti */
-	snprintf(query7, BUFSIZE,
-		"UPDATE poller_item"
-		" SET rrd_next_step=rrd_step-%i"
-		" WHERE rrd_next_step < 0 and host_id=%i",
-			set.poller_interval, host_id);
+		/* query to setup the next polling interval in cacti */
+		snprintf(query7, BUFSIZE,
+			"UPDATE poller_item"
+			" SET rrd_next_step=rrd_step-%i"
+			" WHERE rrd_next_step < 0 and host_id=%i",
+				set.poller_interval, host_id);
+
+		/* query to add output records to the poller output table */
+		snprintf(query8, BUFSIZE,
+			"INSERT INTO poller_output"
+			" (local_data_id, rrd_name, time, output) VALUES");
+
+		/* number of agent's count for single polling interval */
+		snprintf(query9, BUFSIZE,
+			"SELECT snmp_port, count(snmp_port)"
+			" FROM poller_item"
+			" WHERE host_id=%i"
+			" GROUP BY snmp_port", host_id);
+
+		/* number of agent's count for multiple polling intervals */
+		snprintf(query10, BUFSIZE,
+			"SELECT snmp_port, count(snmp_port)"
+			" FROM poller_item"
+			" WHERE host_id=%i"
+			" AND rrd_next_step < 0"
+			" GROUP BY snmp_port", host_id);
+	}else{
+		snprintf(query1, BUFSIZE,
+			"SELECT action, hostname, snmp_community, "
+				"snmp_version, snmp_username, snmp_password, "
+				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+				"rrd_num, snmp_port, snmp_timeout, "
+				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
+			" FROM poller_item"
+			" WHERE host_id=%i AND poller_id=%i"
+			" ORDER BY snmp_port", host_id, set.poller_id);
+
+		/* host structure for uptime checks */
+		snprintf(query2, BUFSIZE,
+			"SELECT id, hostname, snmp_community, snmp_version, "
+				"snmp_username, snmp_password, snmp_auth_protocol, "
+				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_port, snmp_timeout, max_oids, "
+				"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
+				"status, status_event_count, status_fail_date, "
+				"status_rec_date, status_last_error, "
+				"min_time, max_time, cur_time, avg_time, "
+				"total_polls, failed_polls, availability "
+			" FROM host"
+			" WHERE id=%i", host_id);
+
+		/* data query structure for reindex detection */
+		snprintf(query4, BUFSIZE,
+			"SELECT data_query_id, action, op, assert_value, arg1"
+				" FROM poller_reindex"
+				" WHERE host_id=%i", host_id);
+
+		/* multiple polling interval query for items */
+		snprintf(query5, BUFSIZE,
+			"SELECT action, hostname, snmp_community, "
+				"snmp_version, snmp_username, snmp_password, "
+				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+				"rrd_num, snmp_port, snmp_timeout, "
+				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
+			" FROM poller_item"
+			" WHERE host_id=%i AND rrd_next_step <=0 AND poller_id=%i"
+			" ORDER by snmp_port", host_id, set.poller_id);
+
+		/* query to setup the next polling interval in cacti */
+		snprintf(query6, BUFSIZE,
+			"UPDATE poller_item"
+			" SET rrd_next_step=rrd_next_step-%i"
+			" WHERE host_id=%i AND poller_id=%i", set.poller_interval, host_id, set.poller_id);
+
+		/* query to setup the next polling interval in cacti */
+		snprintf(query7, BUFSIZE,
+			"UPDATE poller_item"
+			" SET rrd_next_step=rrd_step-%i"
+			" WHERE rrd_next_step < 0 and host_id=%i and poller_id=%i",
+				set.poller_interval, host_id, set.poller_id);
+
+		/* query to add output records to the poller output table */
+		snprintf(query8, BUFSIZE,
+			"INSERT INTO poller_output"
+			" (local_data_id, rrd_name, time, output) VALUES");
+
+		/* number of agent's count for single polling interval */
+		snprintf(query9, BUFSIZE,
+			"SELECT snmp_port, count(snmp_port)"
+			" FROM poller_item"
+			" WHERE host_id=%i"
+			" AND poller_id=%i"
+			" GROUP BY snmp_port", host_id, set.poller_id);
+
+		/* number of agent's count for multiple polling intervals */
+		snprintf(query10, BUFSIZE,
+			"SELECT snmp_port, count(snmp_port)"
+			" FROM poller_item"
+			" WHERE host_id=%i"
+			" AND rrd_next_step < 0"
+			" AND poller_id=%i"
+			" GROUP BY snmp_port", host_id, set.poller_id);
+	}
 
 	/* query to add output records to the poller output table */
-	snprintf(query8, BUFSIZE,
-		"INSERT INTO poller_output"
+	snprintf(query11, BUFSIZE,
+		"INSERT INTO poller_output_boost"
 		" (local_data_id, rrd_name, time, output) VALUES");
-
-	/* number of agent's count for single polling interval */
-	snprintf(query9, BUFSIZE,
-		"SELECT snmp_port, count(snmp_port)"
-		" FROM poller_item"
-		" WHERE host_id=%i"
-		" GROUP BY snmp_port", host_id);
-
-	/* number of agent's count for multiple polling intervals */
-	snprintf(query10, BUFSIZE,
-		"SELECT snmp_port, count(snmp_port)"
-		" FROM poller_item"
-		" WHERE host_id=%i"
-		" AND rrd_next_step < 0"
-		" GROUP BY snmp_port", host_id);
 
 	/* get the host polling time */
 	host_time = get_host_poll_time();
@@ -955,12 +1039,21 @@ void poll_host(int host_id) {
 
 		/* insert the query results into the database */
 		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER))) {
-			die("ERROR: Fatal malloc error: poller.c query3 oids!");
+			die("ERROR: Fatal malloc error: poller.c query3 output buffer!");
 		}
 		query3[0] = '\0';
-
 		strncat(query3, query8, strlen(query8));
+
 		out_buffer = strlen(query3);
+
+		if (set.boost_redirect) {
+			/* insert the query results into the database */
+			if (!(query12 = (char *)malloc(MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER))) {
+				die("ERROR: Fatal malloc error: poller.c query12 boost output buffer!");
+			}
+			query12[0] = '\0';
+			strncat(query12, query11, strlen(query11));
+		}
 
 		i = 0;
 		while (i < rows_processed) {
@@ -981,6 +1074,13 @@ void poll_host(int host_id) {
 				query3[0] = '\0';
 				strncat(query3, query8, strlen(query8));
 
+				/* insert the record for boost */
+				if (set.boost_redirect) {
+					db_insert(&mysql, query12);
+					query12[0] = '\0';
+					strncat(query12, query11, strlen(query11));
+				}
+
 				/* reset the output buffer length */
 				out_buffer = strlen(query3);
 
@@ -996,6 +1096,11 @@ void poll_host(int host_id) {
 			}
 
 			strncat(query3, result_string, strlen(result_string));
+
+			if (set.boost_redirect) {
+				strncat(query12, result_string, strlen(result_string));
+			}
+
 			out_buffer = out_buffer + strlen(result_string);
 			new_buffer = FALSE;
 			i++;
@@ -1005,6 +1110,11 @@ void poll_host(int host_id) {
 		if (out_buffer > strlen(query8)) {
 			/* insert records into database */
 			db_insert(&mysql, query3);
+
+			/* insert the record for boost */
+			if (set.boost_redirect) {
+				db_insert(&mysql, query12);
+			}
 		}
 
 		/* cleanup memory and prepare for function exit */
@@ -1013,6 +1123,9 @@ void poll_host(int host_id) {
 		}
 
 		free(query3);
+		if (set.boost_redirect) {
+			free(query12);
+		}
 		free(poller_items);
 		free(snmp_oids);
 	}
@@ -1119,7 +1232,11 @@ char *exec_poll(host_t *current_host, char *command) {
 	int cmd_fd;
 	int pid;
 	int close_fd = TRUE;
+
+	#ifdef USING_TPOPEN
 	FILE *fd;
+	#endif
+
 	int bytes_read;
 	fd_set fds;
 	double begin_time = 0;

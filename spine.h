@@ -288,18 +288,21 @@ typedef struct config_struct {
 	int    stderr_notty;
 	/* general configuration/runtime settings */
 	int    poller_id;
+	int    poller_id_exists;
 	int    poller_interval;
 	int    parent_fork;
 	int    num_parent_processes;
 	int    script_timeout;
 	int    threads;
-	int logfile_processed;
+	int    logfile_processed;
+	int    boost_redirect;
 	/* debugging options */
 	int    snmponly;
 	int    SQL_readonly;
 	/* host range to be poller with this spine process */
 	int    start_host_id;
 	int    end_host_id;
+	char   host_id_list[BIG_BUFSIZE];
 	/* database connection information */
 	char   dbhost[SMALL_BUFSIZE];
 	char   dbdb[SMALL_BUFSIZE];

@@ -51,6 +51,10 @@
  *
  *	Stop polling after device <ID> (else ends with the last one)
  *
+ * -H | --hostlist="hostid1,hostid2,hostid3,...,hostidn"
+ *
+ *	Override the expected first host, last host behavior with a list of hostids.
+ *
  * -O | --option=setting:value
  *
  *	Override a DB-provided value from the settings table in the DB.
@@ -126,13 +130,15 @@ int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, current_time;
 	int poller_interval;
-	int num_rows;
+	int num_rows = 0;
 	int device_counter = 0;
 	int poller_counter = 0;
 	int last_active_threads = 0;
 	int valid_conf_file = FALSE;
 	long int EXTERNAL_THREAD_SLEEP = 5000;
 	long int internal_thread_sleep;
+	char querybuf[BIG_BUFSIZE], *qp = querybuf;
+
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
@@ -209,8 +215,10 @@ int main(int argc, char *argv[]) {
 	 */
 
 	/* initialize some global variables */
+	set.poller_id         = 0;
 	set.start_host_id     = -1;
 	set.end_host_id       = -1;
+	set.host_id_list[0]   = '\0';
 	set.php_initialized   = FALSE;
 	set.logfile_processed = FALSE;
 	set.parent_fork       = SPINE_PARENT;
@@ -250,6 +258,11 @@ int main(int argc, char *argv[]) {
 		else if (STRMATCH(arg, "-p") ||
 				 STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
+		}
+
+		else if (STRMATCH(arg, "-H") ||
+				 STRIMATCH(arg, "--hostlist")) {
+			snprintf(set.host_id_list, BIG_BUFSIZE, getarg(opt, &argv));
 		}
 
 		else if (STRMATCH(arg, "-h") ||
@@ -320,8 +333,9 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* we require either both the first and last hosts, or niether host */
-	if (HOSTID_DEFINED(set.start_host_id) != HOSTID_DEFINED(set.end_host_id)) {
-		die("ERROR: must provide both -f/-l, or neither");
+	if ((HOSTID_DEFINED(set.start_host_id) != HOSTID_DEFINED(set.end_host_id)) &&
+		(!strlen(set.host_id_list))) {
+		die("ERROR: must provide both -f/-l, a hostlist (-H/--hostlist), or neither");
 	}
 
 	if (set.start_host_id > set.end_host_id) {
@@ -400,7 +414,6 @@ int main(int argc, char *argv[]) {
 
 	/* tell spine that it is parent, and set the poller id */
 	set.parent_fork = SPINE_PARENT;
-	set.poller_id = 0;
 
 	/* initialize the script server */
 	if (set.php_required) {
@@ -409,19 +422,46 @@ int main(int argc, char *argv[]) {
 		set.php_current_server = 0;
 	}
 
-	/* obtain the list of hosts to poll */
-	{
-	char querybuf[SMALL_BUFSIZE], *qp = querybuf;
+	/* determine if the poller_id field exists in the host table */
+	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'poller_id'");
+	if (mysql_num_rows(result)) {
+		set.poller_id_exists = TRUE;
+	}else{
+		set.poller_id_exists = FALSE;
 
-	qp += sprintf(qp, "SELECT id FROM host");
-	qp += sprintf(qp, " WHERE disabled=''");
-	qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
-	qp += sprintf(qp, " ORDER BY id");
-
-	result = db_query(&mysql, querybuf);
+		if (set.poller_id > 0) {
+			SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
+		}
 	}
 
-	num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
+	/* obtain the list of hosts to poll */
+	if (!strlen(set.host_id_list)) {
+		qp += sprintf(qp, "SELECT id FROM host");
+		qp += sprintf(qp, " WHERE disabled=''");
+		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
+		if (set.poller_id_exists) {
+			qp += sprintf(qp, " AND poller_id=%i", set.poller_id);
+		}
+		qp += sprintf(qp, " ORDER BY id");
+
+		result = db_query(&mysql, querybuf);
+	}else{
+		qp += sprintf(qp, "SELECT id FROM host");
+		qp += sprintf(qp, " WHERE disabled=''");
+		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
+		if (set.poller_id_exists) {
+			qp += sprintf(qp, " AND poller_id=%i", set.poller_id);
+		}
+		qp += sprintf(qp, " ORDER BY id");
+
+		result = db_query(&mysql, querybuf);
+	}
+
+	if (set.poller_id == 0) {
+		num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
+	}else{
+		num_rows = mysql_num_rows(result); /* pollerid 0 takes care of not host based data sources */
+	}
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
 		die("ERROR: Fatal malloc error: spine.c threads!");
@@ -453,12 +493,18 @@ int main(int argc, char *argv[]) {
 			}
 
 			while ((active_threads < set.threads) && (device_counter < num_rows)) {
-				if (device_counter > 0) {
+				if (set.poller_id == 0) {
+					if (device_counter > 0) {
+						mysql_row = mysql_fetch_row(result);
+						host_id = atoi(mysql_row[0]);
+						ids[device_counter] = host_id;
+					}else{
+						ids[device_counter] = 0;
+					}
+				}else{
 					mysql_row = mysql_fetch_row(result);
 					host_id = atoi(mysql_row[0]);
 					ids[device_counter] = host_id;
-				}else{
-					ids[device_counter] = 0;
 				}
 
 				/* create child process */
@@ -638,23 +684,23 @@ int main(int argc, char *argv[]) {
 static void display_help(void) {
 	static const char *const *p;
 	static const char * const helptext[] = {
-		"Usage: spine [options] [firstid lastid]",
+		"Usage: spine [options] [[firstid lastid] || [-H/--hostlist='hostid1, hostid2,...,hostidn']]",
 		"",
 		"Options:",
-		"",
 		"  -h/--help          Show this brief help listing",
-		"  -f/--first=X       Start polling with host X",
-		"  -l/--last=X        End polling with host X",
-		"  -p/--poller=X      Poller ID = X",
-		"  -C/--conf=F        Read Spine configuration from file F",
+		"  -f/--first=X       Start polling with host id X",
+		"  -l/--last=X        End polling with host id X",
+		"  -H/--hostlist=X    Poll the list of host ids, separated by comma's",
+		"  -p/--poller=X      Set the poller id to X",
+		"  -C/--conf=F        Read spine configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
-		"  -R/--readonly      This Spine run is readonly with respect to the database",
-		"  -S/--stdout        Logging is performed to the standard output",
+		"  -R/--readonly      Spine will not write output to the DB",
+		"  -S/--stdout        Logging is performed to standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
-		"  --snmponly         Only do SNMP polling: no script stuff",
+		"  --snmponly         Only do SNMP polling: no scripts",
 		"",
-		"Either both of --first/--last must be provided, or neither can be,",
-		"and in their absense, all hosts are processed.",
+		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
+        "In their absense, all hosts are processed.",
 		"",
 		"Without the --conf parameter, spine searches for its spine.conf",
 		"file in the usual places.",

@@ -15,6 +15,9 @@ The Cacti Group � spine
 -bug: Use system level snmp_retries variable instead of 3
 -feature: Add one additional debug message to the poller code to track data sources polled
 -feature: Add more config paths for packagers
+-feature: Allow specification of an optional hostlist instead of first and last hostid's
+-feature: Integrate more tightly with boost by allowing writing directly to the boost output table
+-feature: Complete implementation poller_id field for people using a poller_id for polling.
 
 0.8.7c
 -bug#0001022: strip_quotes incorrectly parsing script output
