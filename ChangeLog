@@ -4,6 +4,7 @@ The Cacti Group � spine
 -bug#0001358: (cacti + spine) svn. Using snmp v3 constantly get "value: U", whereas snmpget returns correct value 
 -bug#0001379: Ping.c might send more then retry_count icmp packages
 -bug#0001381: configure script distributed with cacti-spine-0.8.7c is broken 
+-bug#0001420: PCOMMAND: Poller[0] Host[80] WARNING: Recache Event Detected for Host 
 -bug: A host that for some reason can not initialize snmp can cause a segfault
 -bug: When using nifty popen, when the script times out, attempt to kill it
 -bug: Under some platforms tcp and udp ping unresponsive
