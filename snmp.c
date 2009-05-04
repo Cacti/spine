@@ -262,7 +262,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 			}else{
-				#if SNMP_DEFAULT_PRIV_PROTO == usmAESPrivProtocol
+				#if defined(usmAESPrivProtocol) && SNMP_DEFAULT_PRIV_PROTO == usmAESPrivProtocol
 				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, OIDSIZE(usmAESPrivProtocol));
 				session.securityPrivProtoLen = OIDSIZE(usmAESPrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
