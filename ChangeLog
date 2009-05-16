@@ -1,4 +1,8 @@
-The Cacti Group � spine
+The Cacti Group | spine
+
+SVN
+-bug: Not all configuration paths are searched for spine.conf
+-bug: If host has MAX OID's set to 0, timeouts occur
 
 0.8.7d
 -bug#0001310: Feature request for poller.php- single host polling 

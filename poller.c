@@ -431,6 +431,12 @@ void poll_host(int host_id) {
 				if (row[28] != NULL) host->failed_polls = atoi(row[28]);
 				if (row[29] != NULL) host->availability = atof(row[29]);
 
+				/* correct max_oid bounds issues */
+				if ((host->max_oids == 0) || (host->max_oids > 100)) {
+					SPINE_LOG(("Host[%i] WARNING: Max OIDS is out of range with value of '%i'.  Resetting to default of 5", host_id, host->max_oids));
+					host->max_oids = 5;
+				}
+
 				/* free the host result */
 				mysql_free_result(result);
 
