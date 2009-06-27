@@ -718,7 +718,7 @@ static void display_help(void) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2002-2008 by The Cacti Group\n\n", VERSION);
+	printf("SPINE %s  Copyright 2002-2009 by The Cacti Group\n\n", VERSION);
 
 	for (p = helptext; *p; p++) {
 		puts(*p);	/* automatically adds a newline */
