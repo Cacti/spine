@@ -296,6 +296,7 @@ typedef struct config_struct {
 	int    threads;
 	int    logfile_processed;
 	int    boost_redirect;
+	int    cygwinshloc;
 	/* debugging options */
 	int    snmponly;
 	int    SQL_readonly;

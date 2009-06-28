@@ -1290,11 +1290,12 @@ char *exec_poll(host_t *current_host, char *command) {
 	#ifdef USING_TPOPEN
 	fd = popen((char *)proc_command, "r");
 	cmd_fd = fileno(fd);
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	#else
 	cmd_fd = nft_popen((char *)proc_command, "r");
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	#endif
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 
 	if (cmd_fd > 0) {
 		/* Initialize File Descriptors to Review for Input/Output */

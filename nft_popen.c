@@ -216,7 +216,15 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 
 		/* Execute the command. */
+		#if defined(__CYGWIN__)
+		if (set.cygwinshloc == 0) {
+			execve("sh.exe", argv, environ);
+		}else{
+			execve("/bin/sh", argv, environ);
+		}
+		#else
 		execve("/bin/sh", argv, environ);
+		#endif
 		_exit(127);
 		/* NOTREACHED */
 	}

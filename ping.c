@@ -698,6 +698,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					close(tcp_socket);
 					return HOST_UP;
 				}else{
+               		#if defined(__CYGWIN__)
+					snprintf(ping->ping_status, 50, "down");
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
+					free(new_hostname);
+					close(tcp_socket);
+					return HOST_DOWN;
+					#else
 					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
@@ -707,6 +714,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					}else{
 						retry_count++;
 					}
+					#endif
 				}
 			}
 		}else{

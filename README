@@ -3,11 +3,35 @@ spine: a backend data gatherer for cacti
 ------------------------------------------
 
 This code represents high speed poller replacement for cmd.php.
-It has come quite a ways from it's initial development.  It is 100% compatible
-with the legacy cmd.php processor.
+It has come quite a ways from it's initial development.  It is almost
+100% compatible with the legacy cmd.php processor and provides much
+more flexibility than cmd.php.
 
 Make sure that you have a good development environment setup to compile spine.
 This includes compilers, header files and things such as libtool.  If you have
 questions, use the forums.
+
+KNOWN Issues:
+
+1) On Windows, Microsoft does not support a TCP Socket send timeout.  Therefore,
+   if you are using TCP ping on Windows, spine will not perform a second or subsequent
+   retries to connect and the host will be assumed down on the first failure.  
+
+   If this presents a problem for you, I suggest using another Availability/Reachability
+   method, or moving to Linux/UNIX.
+
+2) Spine takes quite a few MySQL connections.  The number of connections is calculated
+   as follows:
+
+   a) main poller take one connection
+   b) all threads take one connection each
+   c) all script servers take one connection each
+
+   Therefore, if you have 4 processes, with 10 threads each, and 5 script servers each
+   your spine will take approximately:
+
+   total connections = 4 * ( 1 + 10 + 5 ) = 64
+
+   This may be resolved in a future release of spine.
 
 -Larry Adams (aka TheWitness)

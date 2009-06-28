@@ -3,6 +3,8 @@ The Cacti Group | spine
 0.8.7e
 -bug: Not all configuration paths are searched for spine.conf
 -bug: If host has MAX OID's set to 0, timeouts occur
+-bug: Properly detect full Cygwin installs by finding sh.exe
+-bug: Don't perform TCP Ping retries in Windows. You cannot set socket send timeouts in Windows
 
 0.8.7d
 -bug#0001310: Feature request for poller.php- single host polling 
