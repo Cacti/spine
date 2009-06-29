@@ -19,8 +19,8 @@
 # Help function
 display_help () {
   echo "--------------------------------------------------------------"
-  echo "Spine bootstrap & build script"
-  echo "  Attempts to build spine based on a 'normal' system. If you"
+  echo "Spine bootstrap script"
+  echo "  Attempts to configure spine based on a 'normal' system. If you"
   echo "  install things in non-common locations you may have to use"
   echo "  the install instructions to build."
   echo "--------------------------------------------------------------"
@@ -67,23 +67,14 @@ automake --foreign --add-missing --copy
 autoconf
 [ $? -ne 0 ] && echo "ERROR: 'autoconf' exited with errors" && exit -1
 
-# Perform the build
-echo "INFO: Performing build of spine"
-make clean
-./configure 
-[ $? -ne 0 ] && echo "ERROR: './configure' exited with errors" && exit -1
-make 
-[ $? -ne 0 ] && echo "ERROR: 'make' exited with errors" && exit -1
-make install
-[ $? -ne 0 ] && echo "ERROR: 'make install' exited with errors" && exit -1
-
 # Provide some meaningful notes
-echo "INFO: Spine build process complete"
+echo "INFO: Spine bootstrap process completed"
 echo ""
-echo "INFO: Spine has been installed in /usr/local/spine/bin/"
-echo "INFO: A spine config file has been placed in /usr/local/spine/etc/"
-echo "INFO: This file must be renamed from spine.conf.dist to"
-echo "INFO: spine.conf and then updated to include the correct"
-echo "INFO: settings for you cacti install."
+echo "  To compile and install Spine do the following:"
+echo ""
+echo "  ./configure"
+echo "  make"
+echo "  make install"
+echo ""
 
 exit 0

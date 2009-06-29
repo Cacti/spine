@@ -1,14 +1,14 @@
 ------------------------------------------
 spine: a backend data gatherer for cacti
 ------------------------------------------
-Compile Requirements:
+REQUIREMENTS
  
-- net-snmp-devel
-- mysql
-- mysql-devel
-- openssl-devel
+- net-snmp development libraries
+- mysql development libraries
+- openssl development libraries
  
-Below are some random notes about installing:
+
+NOTES
 
 - to minimize the impact of MIB files for net-snmp, utilize the
   --disable-mib-loading configure option in net-snmp (vers 5.1 and above).
@@ -16,7 +16,7 @@ Below are some random notes about installing:
 - Spine requires -lmysqlclient_r to compile. Some early distributions
   of MySQL did not include those libraries.  If that is the case, you
   will be required to compile and build against MySQL with thread
-  safety enabled.  We suggest you simply use a modern distro of Linux.
+  safety enabled.  It is suggested you simply use a modern distro of Linux.
   
 - Be sure you have a good development environment including autoconf,
   automake and libtool to compile.
@@ -44,18 +44,18 @@ Below are some random notes about installing:
                                       increasing this value may improve performance.  Keep
                                       in mind that this will increase server load.
 
-- A file "bootstrap" has been included to simplify the build process for Linux systems
-  with make and gcc.  It will install spine in /usr/bin.  If this is acceptable, try
-  to run the bootstrap process first.  Otherwise, follow the instructions below.
-
 - If ./configure fails with the error 'libtool.m4 and ltmain.sh have 
   a version mismatch!', run the following:
  
-  aclocal
-  libtoolize --force
-  autoconf
-  autoheader
-  automake  
+  ./bootstrap 
 
 - Make sure to rename /etc/spine.conf.dist to spine.conf and make changes to match
   your database
+
+
+INSTALL
+
+  ./configure
+  make
+  make install
+
