@@ -1,4 +1,4 @@
-#!/bin/ksh
+#!/bin/sh
 #
 # ----------------------------------------------------------
 # Name: bootstrap
@@ -15,107 +15,75 @@
 #              but simply a supplement.
 #
 # ----------------------------------------------------------
-# Set debugging
-# ----------------------------------------------------------
-#set -x
 
-# ----------------------------------------------------------
 # Help function
-# ----------------------------------------------------------
 display_help () {
-  echo "Spine bootstrap build function"
-  echo "Attempts to build spine based on 'normal' system"
-  echo "If you install things in non-common locations"
-  echo "you may have to use the install instructions to"
-  echo "build."
+  echo "--------------------------------------------------------------"
+  echo "Spine bootstrap & build script"
+  echo "  Attempts to build spine based on a 'normal' system. If you"
+  echo "  install things in non-common locations you may have to use"
+  echo "  the install instructions to build."
+  echo "--------------------------------------------------------------"
+  echo 
 }
 
-# ----------------------------------------------------------
 # Check for parameters
-# ----------------------------------------------------------
-if [ "${1}x" == "--helpx" ]; then
+if [ "${1}x" == "--helpx" -o "${1}x" == "-hx" ]; then
   display_help
   exit 0
 fi
 
-# ----------------------------------------------------------
+# Check for dos2unix
+which dos2unix > /dev/null 2>&1
+[ $? -gt 0 ] && echo "FATAL: Unable to locate dos2unix utility" && exit -1
+
+echo "INFO: Starting Spine build process"
+
 # Remove software build specific directories
-# ----------------------------------------------------------
-echo "--------------------------------------------------------------"
-echo "Spine build process is beginnning"
-echo "--------------------------------------------------------------"
-echo "NOTE: Removing hardware specific directories"
+echo "INFO: Removing cache directories"
 rm -rf autom4te.cache .deps
 
-# ----------------------------------------------------------
-# Get rid of nasty Microsoftisms
-# ----------------------------------------------------------
-if [ `which dos2unix` != "" ]; then
-  echo "--------------------------------------------------------------"
-  echo "NOTE: Performing a dos2unix conversion of all files"
-  for FILE in `ls`; do
-    if [ ! -d $FILE ]; then
-      dos2unix $FILE > /dev/null 2>&1
-    fi
-  done
+# Make sure all files are unix formatted files 
+find . -type f -exec dos2unix \{\} \; > /dev/null 2>&1
 
-  for FILE in `ls config`; do
-    if [ -d $FILE ]; then
-      dos2unix $FILE > /dev/null 2>&1
-    fi
-  done
-else
-  echo "--------------------------------------------------------------"
-  echo "NOTE: dos2unix not found, not double checking file formats"
-fi
-
-# ----------------------------------------------------------
 # Make sure things are executable if they exist
-# ----------------------------------------------------------
-echo "--------------------------------------------------------------"
-echo "NOTE: Setting some permissions"
-[ -f ./configure ] && chmod +x configure
+echo "INFO: Setting permissions"
+[ -f ./configure ] && chmod +x configure > /dev/null 2>&1
 
-# ----------------------------------------------------------
 # Prepare a build state
-# ----------------------------------------------------------
-echo "--------------------------------------------------------------"
-echo "NOTE: Running auto-tools to verify buildability"
+echo "INFO: Running auto-tools to verify buildability"
 aclocal
-[ $? -ne 0 ] && echo "FATAL: aclocal has errors" && exit -1
+[ $? -ne 0 ] && echo "ERROR: 'aclocal' exited with errors" && exit -1
 
 libtoolize --force
-[ $? -ne 0 ] && echo "FATAL: libtool has errors" && exit -1
+[ $? -ne 0 ] && echo "ERROR: 'libtool' exited with errors" && exit -1
 
 autoheader
-[ $? -ne 0 ] && echo "FATAL: autoheader has errors" && exit -1
+[ $? -ne 0 ] && echo "ERROR: 'autoheader' exited with errors" && exit -1
 
 automake --foreign --add-missing --copy
-[ $? -ne 0 ] && echo "FATAL: automake has errors" && exit -1
+[ $? -ne 0 ] && echo "ERROR: 'automake' exited with errors" && exit -1
 
 autoconf
-[ $? -ne 0 ] && echo "FATAL: autoconf has errors" && exit -1
+[ $? -ne 0 ] && echo "ERROR: 'autoconf' exited with errors" && exit -1
 
-# ----------------------------------------------------------
-# perform the build
-# ----------------------------------------------------------
-echo "--------------------------------------------------------------"
-echo "NOTE: Performing build of spine"
-echo "--------------------------------------------------------------"
-./configure --sysconfdir=/etc/cacti --bindir=/usr/sbin
+# Perform the build
+echo "INFO: Performing build of spine"
 make clean
+./configure 
+[ $? -ne 0 ] && echo "ERROR: './configure' exited with errors" && exit -1
+make 
+[ $? -ne 0 ] && echo "ERROR: 'make' exited with errors" && exit -1
 make install
-sleep 3
-clear
+[ $? -ne 0 ] && echo "ERROR: 'make install' exited with errors" && exit -1
 
-# ----------------------------------------------------------
 # Provide some meaningful notes
-# ----------------------------------------------------------
-echo "--------------------------------------------------------------"
-echo "Spine build process complete!!!"
-echo "--------------------------------------------------------------"
-echo "NOTE: Spine has been installed in /usr/bin"
-echo "NOTE: A spine config file has been located in /etc"
-echo "NOTE: This file must be renamed from spine.conf.dist to"
-echo "NOTE: spine.conf and then updated to include the correct"
-echo "NOTE: settings for you cacti install."
+echo "INFO: Spine build process complete"
+echo ""
+echo "INFO: Spine has been installed in /usr/local/spine/bin/"
+echo "INFO: A spine config file has been placed in /usr/local/spine/etc/"
+echo "INFO: This file must be renamed from spine.conf.dist to"
+echo "INFO: spine.conf and then updated to include the correct"
+echo "INFO: settings for you cacti install."
+
+exit 0

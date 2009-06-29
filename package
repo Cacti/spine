@@ -1,63 +1,135 @@
-#!/bin/ksh
+#!/bin/sh
 
-VERSION=`cat configure.ac | grep AM_INIT_AUTOMAKE | awk -F, '{print $2}' | tr -d ')' | tr -d ' '` 
-clear
-# ----------------------------------------------------------
-# Perform packaging
-# ----------------------------------------------------------
-/bin/rm -rf /tmp/cacti-spine-$VERSION /tmp/cacti-spine-$VERSION.*
-svn export . /tmp/cacti-spine-$VERSION
-cd /tmp/cacti-spine-$VERSION
+# Variable Declaration
+TMP_DIR="/tmp"
 
-echo "-----------------------------------------------------------"
-echo "Spine packager for spine version $VERION"
-echo "spine-$VERSION.tar.gz will be placed in /tmp"
-echo "--------------------------------------------------------------"
-echo "Spine package process is beginnning"
-echo "--------------------------------------------------------------"
-echo "NOTE: Removing hardware specific directories"
-/bin/rm -rf autom4te.cache .deps
+# Help Display function
+display_help () {
+  echo "----------------------------------------------------------------------------"
+  echo " Spine Package Script"
+  echo "   Attempts to package spine from a SVN checkout directory of"
+  echo "   spine. If all goes well a tar.gz file will be created."
+  echo "----------------------------------------------------------------------------"
+  echo " Syntax:"
+  echo "  ./`basename $0` <Version> <SVN Revision>"
+  echo ""
+  echo "    <Version> - Designated version for build (required)"
+  echo "    <SVN Revision> - SVN revision number to create build from (optional)"
+  echo ""
+}
 
-# ----------------------------------------------------------
-# Get rid of nasty Microsoftisms
-# ----------------------------------------------------------
-if [ `which dos2unix` != "" ]; then
-  echo "--------------------------------------------------------------"
-  echo "NOTE: Performing a dos2unix conversion of all files"
-  for FILE in `ls`; do 
-    if [ ! -d $FILE ]; then
-      dos2unix $FILE > /dev/null 2>&1
-    fi
-  done
-  
-  for FILE in `ls config`; do
-    if [ -d $FILE ]; then
-      dos2unix $FILE > /dev/null 2>&1
-    fi
-  done
-else
-  echo "--------------------------------------------------------------"
-  echo "NOTE: dos2unix not found, not double checking file formats"
+# Sanity checks
+[ ! -e configure.ac ] && echo "ERROR: Your current working directory must be the SVN check out of Spine" && exit -1
+
+which unix2dos > /dev/null 2>&1;
+[ $? -gt 1 ] && echo "ERROR: Can not locate utility unix2dos" && exit -1
+
+if [ "${1}x" = "--helpx" -o "${1}x" = "-hx" ]; then
+  display_help
+  exit 0
 fi
 
-# ----------------------------------------------------------
-# Make sure things are executable if they exist
-# ----------------------------------------------------------
-echo "--------------------------------------------------------------"
-echo "NOTE: Setting some permissions"
-/bin/rm -f configure
+if [ -z "${1}" ]; then
+  echo ""
+  echo "ERROR: Invalid syntax, missing required argument"
+  echo ""
+  display_help
+  exit -1
+fi
+VERSION=${1}
+
+SVN_REV=""
+[ -n "${2}" ] && SVN_REV="-r ${2}"
+
+# Perform packaging
+echo ""
+echo "----------------------------------------------------------------------------"
+echo "Spine package builder"
+echo "  Version: ${VERSION}"
+echo "----------------------------------------------------------------------------"
+
+# Clean up previous builds
+if [ -e ${TMP_DIR}/cacti-spine-${VERSION} ]; then
+  echo "INFO: Removing previous build ${TMP_DIR}/cacti-spine-${VERSION}..."
+  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+  [ $? -gt 1 ] && echo "ERROR: Unable to remove directory: ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
+fi
+if [ -e ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz ]; then
+  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz > /dev/null 2>&1
+  [ $? -gt 1 ] && echo "ERROR: Unable to remove file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" && exit -1
+fi
+
+# Copy svn 
+svn export ${SVN_REV} . ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+[ $? -gt 0 ] && echo "ERROR: Unable to export SVN to ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
+
+# Change working directory 
+pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+
+# Build cleanup
+echo "INFO: Removing hardware specific directories..."
+rm -rf autom4te.cache .deps > /dev/null 2>&1
+
+# Get version from source files, warn if different than defined for build
+SRC_VERSION=`cat configure.ac | grep AM_INIT_AUTOMAKE | awk -F, '{print $2}' | tr -d ')' | tr -d ' '` 
+if [ "${SRC_VERSION}" != "${VERSION}" ]; then
+  echo "WARNING: Build version and source version are not the same";
+  echo "WARNING:    Build Version: ${VERSION}"
+  echo "WARNING:   Source Version: ${SRC_VERSION}"
+fi
+
+# Update config file location
+perl -pi -e 's/spine.conf.dist/spine.conf/' Makefile.am > /dev/null 2>&1
+mv spine.conf.dist spine.conf > /dev/null 2>&1
+
+# Convert files to unix format 
+echo "INFO: Converting files to unix format..."
+find . -type f -exec dos2unix \{\} \; > /dev/null 2>&1
+
+# Build it
+echo "INFO: Building..."
+/bin/rm -f configure > /dev/null 2>&1
+
 aclocal
+[ $? -gt 0 ] && echo "FATAL: aclocal has errors" && exit -1
+
 autoheader
+[ $? -gt 0 ] && echo "FATAL: autoheader has errors" && exit -1
+
 automake --add-missing
+[ $? -gt 0 ] && echo "FATAL: automake has errors" && exit -1
+
 libtoolize --force
+[ $? -gt 0 ] && echo "FATAL: libtoolize has errors" && exit -1
+
 autoconf
+[ $? -gt 0 ] && echo "FATAL: autoconf has errors" && exit -1
+
+# Fix permission
+echo "INFO: Fixing permissions..."
+chmod +x configure > /dev/null 2>&1
+find . -name "*.c" -exec chmod 644 \{\} \; > /dev/null 2>&1
+
+# Check working directory
 cd ..
 
-tar -zcf  cacti-spine-$VERSION.tar.gz cacti-spine-$VERSION
-zip -lrq cacti-spine-$VERSION.zip cacti-spine-$VERSION/*
-/bin/rm -rf /tmp/cacti-spine-$VERSION
-cd -
-echo "--------------------------------------------------------------"
-echo "NOTE: Done!!!"
-echo "--------------------------------------------------------------"
+# Package it
+echo "INFO: Packaging..."
+tar -zcf cacti-spine-${VERSION}.tar.gz cacti-spine-${VERSION} 
+[ $? -gt 1 ] && echo "ERROR: Unable to package" && exit -1
+
+# Change working directory
+popd > /dev/null 2>&1
+
+# Clean up
+echo "INFO: Cleaning up build directory..."
+#rm -rf ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+
+# Display file locations
+echo "INFO: Completed..."
+echo ""
+echo "Package file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz"
+echo ""
+
+exit 0
 
