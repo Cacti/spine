@@ -351,6 +351,21 @@ else
   AC_MSG_RESULT([no])
 fi
 
+# ****************** Force Net-SNMP Version Checks ***********************
+# If we should use the system popen or nifty popen
+AC_MSG_CHECKING(whether to verify net-snmp library vs header versions)
+AC_ARG_ENABLE(popen,
+    [  --enable-libcheck    Enable checking of Net-SNMP library vs header versions  (default: disabled)],
+    [ ENABLED_SNMP_VERSION=$enableval ],
+    [ ENABLED_SNMP_VERSION=no ]
+    )
+if test "$ENABLED_SNMP_VERSION" = "yes"; then
+  AC_MSG_RESULT([yes])
+  AC_DEFINE(VERIFY_PACKAGE_VERSION, 1, If we are going to force Net-SNMP library and header versons to be the same)
+else
+  AC_MSG_RESULT([no])
+fi
+
 # ****************** gethostbyname_r Check ***********************
 # Linux Variant
 AC_MSG_CHECKING([for glibc gethostbyname_r])
