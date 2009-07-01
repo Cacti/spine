@@ -340,7 +340,7 @@ AC_MSG_RESULT(checking for the maximum MySQL buffer size... $max_mysql_buffer)
 # If we should use the system popen or nifty popen
 AC_MSG_CHECKING(whether we are using traditional popen)
 AC_ARG_ENABLE(popen,
-    [  --enable-popen    Enable the traditional popen implementation of nifty popen (default: disabled)],
+    [  --enable-popen          Enable the traditional popen implementation of nifty popen (default: disabled)],
     [ ENABLED_TPOPEN=$enableval ],
     [ ENABLED_TPOPEN=no ]
     )
@@ -354,8 +354,8 @@ fi
 # ****************** Force Net-SNMP Version Checks ***********************
 # If we should use the system popen or nifty popen
 AC_MSG_CHECKING(whether to verify net-snmp library vs header versions)
-AC_ARG_ENABLE(popen,
-    [  --enable-libcheck    Enable checking of Net-SNMP library vs header versions  (default: disabled)],
+AC_ARG_ENABLE(strict-snmp,
+    [  --enable-strict-snmp    Enable checking of Net-SNMP library vs header versions  (default: disabled)],
     [ ENABLED_SNMP_VERSION=$enableval ],
     [ ENABLED_SNMP_VERSION=no ]
     )
