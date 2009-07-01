@@ -91,7 +91,7 @@ void snmp_spine_init(void) {
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
-	#ifdef PACKAGE_VERSION
+	#if defined(VERIFY_PACKAGE_VERSION) && defined(PACKAGE_VERSION)
 		/* check that the headers we compiled with match the library we linked with -
 		   apparently not defined in UCD-SNMP...
 		*/
@@ -215,24 +215,22 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.securityName         = snmp_username;
 		session.securityNameLen      = strlen(session.securityName);
 
-		session.contextName          = snmp_context;
-		session.contextNameLen       = strlen(session.contextName);
+		if (snmp_context && strlen(snmp_context)) {
+			session.contextName          = snmp_context;
+			session.contextNameLen       = strlen(session.contextName);
+		}
 
 		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
-
-		/* set the engineBoots and engineTime to null so that they are discovered */
-		session.engineBoots          = 0;
-		session.engineTime           = 0;
 
 		/* set the authentication protocol */
 		if (strcmp(snmp_auth_protocol, "MD5") == 0) {
 			/* set the authentication method to MD5 */
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, OIDSIZE(usmHMACMD5AuthProtocol));
-			session.securityAuthProtoLen = OIDSIZE(usmHMACMD5AuthProtocol);
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, USM_AUTH_PROTO_MD5_LEN);
+			session.securityAuthProtoLen = USM_AUTH_PROTO_MD5_LEN;
 		}else{
 			/* set the authentication method to SHA1 */
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, OIDSIZE(usmHMACSHA1AuthProtocol));
-			session.securityAuthProtoLen = OIDSIZE(usmHMACSHA1AuthProtocol);
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
+			session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
 		}
 
 		/* set the authentication key to the hashed version. The password must me at least 8 char */
@@ -255,16 +253,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityLevel        = SNMP_SEC_LEVEL_AUTHNOPRIV;
 		}else{
 			if (strcmp(snmp_priv_protocol, "DES") == 0) {
-				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, OIDSIZE(usmDESPrivProtocol));
-				session.securityPrivProtoLen = OIDSIZE(usmDESPrivProtocol);
+				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, USM_PRIV_PROTO_DES_LEN);
+				session.securityPrivProtoLen = USM_PRIV_PROTO_DES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 			}else{
-				#if defined(usmAESPrivProtocol) && SNMP_DEFAULT_PRIV_PROTO == usmAESPrivProtocol
-				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, OIDSIZE(usmAESPrivProtocol));
-				session.securityPrivProtoLen = OIDSIZE(usmAESPrivProtocol);
+				#if defined(USM_PRIV_PROTO_AES_LEN)
+				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
+				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 				#else
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OIDSIZE(usmAES128PrivProtocol));
