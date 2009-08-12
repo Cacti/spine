@@ -28,7 +28,7 @@ display_help () {
 }
 
 # Check for parameters
-if [ "${1}x" == "--helpx" -o "${1}x" == "-hx" ]; then
+if [ "${1}x" = "--helpx" -o "${1}x" = "-hx" ]; then
   display_help
   exit 0
 fi
