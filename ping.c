@@ -733,13 +733,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	}
 }
 
-/*! \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
+/*! \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, ushort_t int port)
  *  \brief converts a hostname to an internet address
  *
  *  \return TRUE if successful, FALSE otherwise.
  *
  */
-int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
+int init_sockaddr(struct sockaddr_in *name, const char *hostname, ushort_t port) {
 	struct hostent *hostinfo;
 	extern int h_errno;
 
@@ -890,7 +890,7 @@ char *remove_tcp_udp_from_hostname(char *hostname) {
 	return(cleaned_hostname);
 }
 
-/*! \fn unsigned short get_checksum(void* buf, int len)
+/*! \fn ushort_t get_checksum(void* buf, int len)
  *  \brief calculates a 16bit checksum of a packet buffer
  *  \param buf the input buffer to calculate the checksum of
  *  \param len the size of the input buffer
@@ -898,11 +898,12 @@ char *remove_tcp_udp_from_hostname(char *hostname) {
  *  \return 16bit checksum of an input buffer of size len.
  *
  */
-unsigned short get_checksum(void* buf, int len) {
+ushort_t get_checksum(void* buf, int len) {
 	int      nleft = len;
 	int32_t  sum   = 0;
-	unsigned short answer;
-	unsigned short* w = (unsigned short*)buf;
+	ushort_t answer;
+	ushort_t* w = (ushort_t*)buf;
+	ushort_t odd_byte = 0;
 
 	while (nleft > 1) {
 		sum += *w++;
@@ -910,7 +911,8 @@ unsigned short get_checksum(void* buf, int len) {
 	}
 
 	if (nleft == 1) {
-		sum += *(unsigned char*)w;
+   		*(uchar_t *)(&odd_byte) = *(uchar_t *)w;
+   		sum += odd_byte;
 	}
 
 	sum    = (sum >> 16) + (sum & 0xffff);

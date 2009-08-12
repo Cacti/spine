@@ -4,6 +4,7 @@ SVN
 
 -bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
 -bug: Add new option to enable Net-SNMP library vs. header versions
+-bug: ICMP fails on some platforms
 
 0.8.7e
 -bug: Not all configuration paths are searched for spine.conf
