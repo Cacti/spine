@@ -4,6 +4,7 @@ SVN
 
 -bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
 -bug#0001497: Prevent constant reindexes if snmp agent continually returns uptime of 0
+-bug#0001510: Speedup spine resorting hosts by estimated polling time
 -bug: Add new option to enable Net-SNMP library vs. header versions
 -bug: ICMP fails on some platforms
 -bug: MySQL client auto reconnect default in MySQL 5.0.71 causes spine to crash

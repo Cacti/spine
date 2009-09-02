@@ -446,27 +446,21 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* obtain the list of hosts to poll */
+	qp += sprintf(qp, "SELECT id FROM host");
+	qp += sprintf(qp, " LEFT JOIN poller_item ON poller_item.host_id=host.id");
+	qp += sprintf(qp, " WHERE disabled=''");
 	if (!strlen(set.host_id_list)) {
-		qp += sprintf(qp, "SELECT id FROM host");
-		qp += sprintf(qp, " WHERE disabled=''");
 		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
-		if (set.poller_id_exists) {
-			qp += sprintf(qp, " AND poller_id=%i", set.poller_id);
-		}
-		qp += sprintf(qp, " ORDER BY id");
-
-		result = db_query(&mysql, querybuf);
 	}else{
-		qp += sprintf(qp, "SELECT id FROM host");
-		qp += sprintf(qp, " WHERE disabled=''");
 		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
-		if (set.poller_id_exists) {
-			qp += sprintf(qp, " AND poller_id=%i", set.poller_id);
-		}
-		qp += sprintf(qp, " ORDER BY id");
-
-		result = db_query(&mysql, querybuf);
 	}
+	if (set.poller_id_exists) {
+		qp += sprintf(qp, " AND host.poller_id=%i", set.poller_id);
+	}
+	qp += sprintf(qp, " GROUP BY poller_item.host_id");
+	qp += sprintf(qp, " ORDER BY count(poller_item.host_id)*host.avg_time DESC, id ASC");
+
+	result = db_query(&mysql, querybuf);
 
 	if (set.poller_id == 0) {
 		num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
