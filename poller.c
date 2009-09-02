@@ -616,13 +616,16 @@ void poll_host(int host_id) {
 								db_insert(&mysql, query3);
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
-							}else if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+							/* if uptime is set to '0' don't fail out */
+							}else if (!strcmp(reindex->assert_value, "0")) {
+								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
+									SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-								snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-								db_insert(&mysql, query3);
-								assert_fail = TRUE;
-								previous_assert_failure = TRUE;
+									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									db_insert(&mysql, query3);
+									assert_fail = TRUE;
+									previous_assert_failure = TRUE;
+								}
 							}
 
 							/* update 'poller_reindex' with the correct information if:
