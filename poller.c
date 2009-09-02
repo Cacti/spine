@@ -617,7 +617,7 @@ void poll_host(int host_id) {
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							/* if uptime is set to '0' don't fail out */
-							}else if (!strcmp(reindex->assert_value, "0")) {
+							}else if (strcmp(reindex->assert_value, "0")) {
 								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
 									SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
