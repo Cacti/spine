@@ -493,9 +493,7 @@ int main(int argc, char *argv[]) {
 
 		switch (mutex_status) {
 		case 0:
-			if (last_active_threads != active_threads) {
-				last_active_threads = active_threads;
-			}
+			last_active_threads = active_threads;
 
 			while ((active_threads < set.threads) && (device_counter < num_rows)) {
 				if (set.poller_id == 0) {
@@ -596,9 +594,7 @@ int main(int argc, char *argv[]) {
 	/* wait for all threads to complete */
 	while (canexit == 0) {
 		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
-			if (last_active_threads != active_threads) {
-				last_active_threads = active_threads;
-			}
+			last_active_threads = active_threads;
 
 			if (active_threads == 0) {
 				canexit = 1;
