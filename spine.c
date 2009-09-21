@@ -129,7 +129,6 @@ int main(int argc, char *argv[]) {
 	struct timeval now;
 	char *conf_file = NULL;
 	double begin_time, end_time, current_time;
-	int poller_interval;
 	int num_rows = 0;
 	int device_counter = 0;
 	int poller_counter = 0;
@@ -388,9 +387,7 @@ int main(int argc, char *argv[]) {
 
 	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
-		poller_interval = 300;
-	}else {
-		poller_interval = set.poller_interval;
+		set.poller_interval = 300;
 	}
 
 	/* calculate the external_tread_sleep value */
@@ -542,7 +539,7 @@ int main(int argc, char *argv[]) {
 				if (poller_counter >= 20) {
 					current_time = get_time_as_double();
 
-					if ((current_time - begin_time + .2) > poller_interval) {
+					if ((current_time - begin_time + .2) > set.poller_interval) {
 						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
 						canexit = 1;
 						break;
@@ -579,7 +576,7 @@ int main(int argc, char *argv[]) {
 		if (poller_counter >= 20) {
 			current_time = get_time_as_double();
 
-			if ((current_time - begin_time + .2) > poller_interval) {
+			if ((current_time - begin_time + .2) > set.poller_interval) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
 				canexit = 1;
 				break;
@@ -609,7 +606,7 @@ int main(int argc, char *argv[]) {
 		if (poller_counter >= 20) {
 			current_time = get_time_as_double();
 
-			if ((current_time - begin_time + .2) > poller_interval) {
+			if ((current_time - begin_time + .2) > set.poller_interval) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
 				canexit = 1;
 				break;
