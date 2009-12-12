@@ -53,8 +53,8 @@ int ping_host(host_t *host, ping_t *ping) {
 	snmp_result = 0;
 
 	/* icmp/tcp/udp ping test */
-	if ((host->availability_method == AVAIL_SNMP_AND_PING) || 
-		(host->availability_method == AVAIL_PING) || 
+	if ((host->availability_method == AVAIL_SNMP_AND_PING) ||
+		(host->availability_method == AVAIL_PING) ||
 		(host->availability_method == AVAIL_SNMP_OR_PING)) {
 		if (host->ping_method == PING_ICMP) {
 			/* set and then test for asroot */
@@ -741,7 +741,9 @@ int ping_tcp(host_t *host, ping_t *ping) {
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
+	#if !defined(H_ERRNO_DECLARED) && !defined(_AIX)
 	extern int h_errno;
+	#endif
 
 	name->sin_family = AF_INET;
 	name->sin_port   = htons (port);
