@@ -186,11 +186,13 @@ void db_connect(const char *database, MYSQL *mysql) {
 		die("FATAL: MySQL options unable to set timeout value");
 	}
 
+	#ifdef MYSQL_OPT_RECONNECT
 	my_bool reconnect = 1;
 	options_error = mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
 	if (options_error < 0) {
 		die("FATAL: MySQL options unable to set reconnect option\n");
 	}
+	#endif
 
 	while (tries > 0) {
 		tries--;
