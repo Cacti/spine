@@ -785,105 +785,48 @@ void poll_host(int host_id) {
 
 		i = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
-			if (!host->ignore_host) {
-				switch(poller_items[i].action) {
-				case POLLER_ACTION_SNMP: /* raw SNMP poll */
-					/* initialize or reinitialize snmp as required */
-					if (!host->snmp_session) {
-						last_snmp_port = poller_items[i].snmp_port;
-						last_snmp_version = poller_items[i].snmp_version;
+			SPINE_LOG_DEBUG(("Host[%i] DEBUG: Processing item '%i'", i));
+			switch(poller_items[i].action) {
+			case POLLER_ACTION_SNMP: /* raw SNMP poll */
+				/* initialize or reinitialize snmp as required */
+				if (!host->snmp_session) {
+					last_snmp_port = poller_items[i].snmp_port;
+					last_snmp_version = poller_items[i].snmp_version;
 
-						STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
-						STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
-						STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
-						STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
-						STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
-						STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
-						STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
+					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
+					STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
+					STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
+					STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
+					STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
+					STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
+					STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
 
-						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
-							poller_items[i].snmp_version, poller_items[i].snmp_community,
-							poller_items[i].snmp_username, poller_items[i].snmp_password,
-							poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
-							poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
-							poller_items[i].snmp_port, poller_items[i].snmp_timeout);
-					}
+					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
+						poller_items[i].snmp_version, poller_items[i].snmp_community,
+						poller_items[i].snmp_username, poller_items[i].snmp_password,
+						poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
+						poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
+						poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+				}
 
-					/* catch snmp initialization issues */
-					if (!host->snmp_session) {
-						host->ignore_host = TRUE;
-						break;
-					}
+				/* catch snmp initialization issues */
+				if (!host->snmp_session) {
+					host->ignore_host = TRUE;
+					break;
+				}
 
-					/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
-					if ((last_snmp_port != poller_items[i].snmp_port) ||
-						(last_snmp_version != poller_items[i].snmp_version) ||
-						(strcmp(last_snmp_community,       poller_items[i].snmp_community)       != 0) ||
-						(strcmp(last_snmp_username,        poller_items[i].snmp_username)        != 0) ||
-						(strcmp(last_snmp_password,        poller_items[i].snmp_password)        != 0) ||
-						(strcmp(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol)   != 0) ||
-						(strcmp(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase) != 0) ||
-						(strcmp(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol)   != 0) ||
-						(strcmp(last_snmp_context,         poller_items[i].snmp_context)         != 0)) {
+				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
+				if ((last_snmp_port != poller_items[i].snmp_port) ||
+					(last_snmp_version != poller_items[i].snmp_version) ||
+					(strcmp(last_snmp_community,       poller_items[i].snmp_community)       != 0) ||
+					(strcmp(last_snmp_username,        poller_items[i].snmp_username)        != 0) ||
+					(strcmp(last_snmp_password,        poller_items[i].snmp_password)        != 0) ||
+					(strcmp(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol)   != 0) ||
+					(strcmp(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase) != 0) ||
+					(strcmp(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol)   != 0) ||
+					(strcmp(last_snmp_context,         poller_items[i].snmp_context)         != 0)) {
 
-						if (num_oids > 0) {
-							snmp_get_multi(host, snmp_oids, num_oids);
-
-							for (j = 0; j < num_oids; j++) {
-								if (host->ignore_host) {
-									SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
-									SET_UNDEFINED(snmp_oids[j].result);
-								}else if ((is_numeric(snmp_oids[j].result)) ||
-									(is_multipart_output(snmp_oids[j].result)) ||
-									(is_hexadecimal(snmp_oids[j].result, TRUE))) {
-									/* continue */
-								}else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
-									(STRIMATCH(snmp_oids[j].result, "Nan"))) {
-									/* is valid output, continue */
-								}else{
-									/* remove double or single quotes from string */
-									snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
-									snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
-
-									/* detect erroneous non-numeric result */
-									if (!validate_result(snmp_oids[j].result)) {
-										SET_UNDEFINED(snmp_oids[j].result);
-									}
-								}
-
-								snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
-
-								SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
-							}
-
-							/* reset num_snmps */
-							num_oids = 0;
-
-							/* initialize all the memory to insure we don't get issues */
-							memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
-						}
-
-						snmp_host_cleanup(host->snmp_session);
-						host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
-												poller_items[i].snmp_version, poller_items[i].snmp_community,
-												poller_items[i].snmp_username, poller_items[i].snmp_password,
-												poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
-												poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
-												poller_items[i].snmp_port, poller_items[i].snmp_timeout);
-
-						last_snmp_port    = poller_items[i].snmp_port;
-						last_snmp_version = poller_items[i].snmp_version;
-
-						STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
-						STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
-						STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
-						STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
-						STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
-						STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
-						STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
-					}
-
-					if (num_oids >= host->max_oids) {
+					if (num_oids > 0) {
 						snmp_get_multi(host, snmp_oids, num_oids);
 
 						for (j = 0; j < num_oids; j++) {
@@ -911,13 +854,6 @@ void poll_host(int host_id) {
 							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
 							SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
-
-							if (poller_items[snmp_oids[j].array_position].result != NULL) {
-								/* insert a NaN in place of the actual value if the snmp agent restarts */
-								if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
-									SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
-								}
-							}
 						}
 
 						/* reset num_snmps */
@@ -927,80 +863,143 @@ void poll_host(int host_id) {
 						memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 					}
 
-					snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid), "%s", poller_items[i].arg1);
-					snmp_oids[num_oids].array_position = i;
-					num_oids++;
+					snmp_host_cleanup(host->snmp_session);
+					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
+											poller_items[i].snmp_version, poller_items[i].snmp_community,
+											poller_items[i].snmp_username, poller_items[i].snmp_password,
+											poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
+											poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
+											poller_items[i].snmp_port, poller_items[i].snmp_timeout);
 
-					break;
-				case POLLER_ACTION_SCRIPT: /* execute script file */
-					poll_result = exec_poll(host, poller_items[i].arg1);
+					last_snmp_port    = poller_items[i].snmp_port;
+					last_snmp_version = poller_items[i].snmp_version;
 
-					/* remove double or single quotes from string */
-					if ((is_numeric(poll_result)) ||
-						(is_multipart_output(poll_result)) ||
-						(is_hexadecimal(poll_result, TRUE))) {
-						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-					}else{
-						/* remove double or single quotes from string */
-						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
-						snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
-
-						/* detect erroneous result. can be non-numeric */
-						if (!validate_result(poller_items[i].result)) {
-							SET_UNDEFINED(poller_items[i].result);
-						}
-					}
-
-					free(poll_result);
-
-					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
-
-					if (poller_items[i].result != NULL) {
-						/* insert a NaN in place of the actual value if the snmp agent restarts */
-						if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
-							SET_UNDEFINED(poller_items[i].result);
-						}
-					}
-
-					break;
-				case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
-					php_process = php_get_process();
-
-					poll_result = php_cmd(poller_items[i].arg1, php_process);
-
-					/* remove double or single quotes from string */
-					if ((is_numeric(poll_result)) ||
-						(is_multipart_output(poll_result)) ||
-						(is_hexadecimal(poll_result, TRUE))) {
-						snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-					}else{
-						/* remove double or single quotes from string */
-						snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
-						snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
-
-						/* detect erroneous result. can be non-numeric */
-						if (!validate_result(poller_items[i].result)) {
-							SET_UNDEFINED(poller_items[i].result);
-						}
-					}
-
-					free(poll_result);
-
-					SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
-
-					if (poller_items[i].result != NULL) {
-						/* insert a NaN in place of the actual value if the snmp agent restarts */
-						if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
-							SET_UNDEFINED(poller_items[i].result);
-						}
-					}
-
-					break;
-				default: /* unknown action, generate error */
-					SPINE_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
-
-					break;
+					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
+					STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
+					STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
+					STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
+					STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
+					STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
+					STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
 				}
+
+				if (num_oids >= host->max_oids) {
+					snmp_get_multi(host, snmp_oids, num_oids);
+
+					for (j = 0; j < num_oids; j++) {
+						if (host->ignore_host) {
+							SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+							SET_UNDEFINED(snmp_oids[j].result);
+						}else if ((is_numeric(snmp_oids[j].result)) ||
+							(is_multipart_output(snmp_oids[j].result)) ||
+							(is_hexadecimal(snmp_oids[j].result, TRUE))) {
+							/* continue */
+						}else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
+							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
+							/* is valid output, continue */
+						}else{
+							/* remove double or single quotes from string */
+							snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+							snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
+
+							/* detect erroneous non-numeric result */
+							if (!validate_result(snmp_oids[j].result)) {
+								SET_UNDEFINED(snmp_oids[j].result);
+							}
+						}
+
+						snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
+
+						SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+
+						if (poller_items[snmp_oids[j].array_position].result != NULL) {
+							/* insert a NaN in place of the actual value if the snmp agent restarts */
+							if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
+								SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
+							}
+						}
+					}
+
+					/* reset num_snmps */
+					num_oids = 0;
+
+					/* initialize all the memory to insure we don't get issues */
+					memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
+				}
+
+				snprintf(snmp_oids[num_oids].oid, sizeof(snmp_oids[num_oids].oid), "%s", poller_items[i].arg1);
+				snmp_oids[num_oids].array_position = i;
+				num_oids++;
+
+				break;
+			case POLLER_ACTION_SCRIPT: /* execute script file */
+				poll_result = exec_poll(host, poller_items[i].arg1);
+
+				/* remove double or single quotes from string */
+				if ((is_numeric(poll_result)) ||
+					(is_multipart_output(poll_result)) ||
+					(is_hexadecimal(poll_result, TRUE))) {
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
+				}else{
+					/* remove double or single quotes from string */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
+
+					/* detect erroneous result. can be non-numeric */
+					if (!validate_result(poller_items[i].result)) {
+						SET_UNDEFINED(poller_items[i].result);
+					}
+				}
+
+				free(poll_result);
+
+				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+
+				if (poller_items[i].result != NULL) {
+					/* insert a NaN in place of the actual value if the snmp agent restarts */
+					if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
+						SET_UNDEFINED(poller_items[i].result);
+					}
+				}
+
+				break;
+			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
+				php_process = php_get_process();
+
+				poll_result = php_cmd(poller_items[i].arg1, php_process);
+
+				/* remove double or single quotes from string */
+				if ((is_numeric(poll_result)) ||
+					(is_multipart_output(poll_result)) ||
+					(is_hexadecimal(poll_result, TRUE))) {
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
+				}else{
+					/* remove double or single quotes from string */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
+
+					/* detect erroneous result. can be non-numeric */
+					if (!validate_result(poller_items[i].result)) {
+						SET_UNDEFINED(poller_items[i].result);
+					}
+				}
+
+				free(poll_result);
+
+				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+
+				if (poller_items[i].result != NULL) {
+					/* insert a NaN in place of the actual value if the snmp agent restarts */
+					if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
+						SET_UNDEFINED(poller_items[i].result);
+					}
+				}
+
+				break;
+			default: /* unknown action, generate error */
+				SPINE_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
+
+				break;
 			}
 
 			i++;
