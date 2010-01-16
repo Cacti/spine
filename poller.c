@@ -116,6 +116,7 @@ void poll_host(poller_thread_t poller_instructions) {
 	size_t out_buffer;
 	int    php_process;
 	int    host_id;
+	int    thread_id;
 
 	char *poll_result = NULL;
 	char *host_time   = NULL;
@@ -169,6 +170,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 	sysUptime[0] = '\0';
 	host_id      = poller_instructions.host_id;
+	thread_id    = poller_instructions.host_thread;
 
 	/* determine the SQL limits using the poller instructions */
 	if (poller_instructions.host_data_ids > 0) {
@@ -350,7 +352,7 @@ void poll_host(poller_thread_t poller_instructions) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows != 1) {
-				SPINE_LOG(("Host[%i] ERROR: Multiple Hosts with Host ID", host_id));
+				SPINE_LOG(("Host[%i:%i] ERROR: Multiple Hosts with Host ID", host_id, thread_id));
 
 				mysql_free_result(result);
 				mysql_close(&mysql);
@@ -444,7 +446,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 				/* correct max_oid bounds issues */
 				if ((host->max_oids == 0) || (host->max_oids > 100)) {
-					SPINE_LOG(("Host[%i] WARNING: Max OIDS is out of range with value of '%i'.  Resetting to default of 5", host_id, host->max_oids));
+					SPINE_LOG(("Host[%i:%i] WARNING: Max OIDS is out of range with value of '%i'.  Resetting to default of 5", host_id, thread_id, host->max_oids));
 					host->max_oids = 5;
 				}
 
@@ -479,7 +481,7 @@ void poll_host(poller_thread_t poller_instructions) {
 					host->ignore_host = FALSE;
 					update_host_status(HOST_UP, host, ping, host->availability_method);
 
-					SPINE_LOG_MEDIUM(("Host[%i] No host availability check possible for '%s'", host->id, host->hostname));
+					SPINE_LOG_MEDIUM(("Host[%i:%i] No host availability check possible for '%s'", host->id, thread_id, host->hostname));
 				}else{
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;
@@ -519,7 +521,7 @@ void poll_host(poller_thread_t poller_instructions) {
 					db_insert(&mysql, update_sql);
 				}
 			}else{
-				SPINE_LOG(("Host[%i] ERROR: MySQL Returned a Null Host Result", host->id));
+				SPINE_LOG(("Host[%i:%i] ERROR: MySQL Returned a Null Host Result", host->id, thread_id));
 				num_rows = 0;
 				host->ignore_host = TRUE;
 			}
@@ -540,7 +542,7 @@ void poll_host(poller_thread_t poller_instructions) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows > 0) {
-				SPINE_LOG_DEBUG(("Host[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, num_rows, host->hostname));
+				SPINE_LOG_DEBUG(("Host[%i:%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, thread_id, num_rows, host->hostname));
 
 				while ((row = mysql_fetch_row(result))) {
 					assert_fail = FALSE;
@@ -598,7 +600,7 @@ void poll_host(poller_thread_t poller_instructions) {
 									poll_result = snmp_get(host, reindex->arg1);
 								}
 							}else{
-								SPINE_LOG(("WARNING: Host[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, reindex->data_query_id));
+								SPINE_LOG(("WARNING: Host[%i:%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, thread_id, reindex->data_query_id));
 							}
 
 							break;
@@ -607,7 +609,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 							break;
 						default:
-							SPINE_LOG(("Host[%i] ERROR: Unknown Assert Action!", host->id));
+							SPINE_LOG(("Host[%i:%i] ERROR: Unknown Assert Action!", host->id, thread_id));
 						}
 
 						if (!reindex_err) {
@@ -620,7 +622,7 @@ void poll_host(poller_thread_t poller_instructions) {
 							if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								assert_fail = FALSE;
 							}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
-								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+								SPINE_LOG_HIGH(("Host[%i:%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, thread_id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 								if (poller_instructions.host_thread == 1) {
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
@@ -629,7 +631,7 @@ void poll_host(poller_thread_t poller_instructions) {
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
-								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+								SPINE_LOG_HIGH(("Host[%i:%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, thread_id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 								if (poller_instructions.host_thread == 1) {
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
@@ -640,7 +642,7 @@ void poll_host(poller_thread_t poller_instructions) {
 							/* if uptime is set to '0' don't fail out */
 							}else if (strcmp(reindex->assert_value, "0")) {
 								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
-									SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG_HIGH(("Host[%i:%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, thread_id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 									if (poller_instructions.host_thread == 1) {
 										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
@@ -664,7 +666,7 @@ void poll_host(poller_thread_t poller_instructions) {
 								if ((assert_fail) &&
 									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {
 									spike_kill = TRUE;
-									SPINE_LOG_MEDIUM(("Host[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host->hostname));
+									SPINE_LOG_MEDIUM(("Host[%i:%i] NOTICE: Spike Kill in Effect for '%s'", host_id, thread_id, host->hostname));
 								}
 							}
 
@@ -674,13 +676,13 @@ void poll_host(poller_thread_t poller_instructions) {
 					}
 				}
 			}else{
-				SPINE_LOG_HIGH(("Host[%i] Host has no information for recache.", host->id));
+				SPINE_LOG_HIGH(("Host[%i:%i] Host has no information for recache.", host->id, thread_id));
 			}
 
 			/* free the host result */
 			mysql_free_result(result);
 		}else{
-			SPINE_LOG(("Host[%i] ERROR: Recache Query Returned Null Result!", host->id));
+			SPINE_LOG(("Host[%i:%i] ERROR: Recache Query Returned Null Result!", host->id, thread_id));
 		}
 
 		/* close the host snmp session, we will create again momentarily */
@@ -702,10 +704,10 @@ void poll_host(poller_thread_t poller_instructions) {
 			if ((result = db_query(&mysql, query1)) != 0) {
 				num_rows = mysql_num_rows(result);
 			}else{
-				SPINE_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
+				SPINE_LOG(("Host[%i:%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, thread_id));
 			}
 		}else{
-			SPINE_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
+			SPINE_LOG(("Host[%i:%i] ERROR: Agent Count Query Returned Null Result!", host->id, thread_id));
 		}
 	}else{
 		/* get the number of agents */
@@ -721,10 +723,10 @@ void poll_host(poller_thread_t poller_instructions) {
 				db_query(&mysql, query6);
 				db_query(&mysql, query7);
 			}else{
-				SPINE_LOG(("Host[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id));
+				SPINE_LOG(("Host[%i:%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, thread_id));
 			}
 		}else{
-			SPINE_LOG(("Host[%i] ERROR: Agent Count Query Returned Null Result!", host->id));
+			SPINE_LOG(("Host[%i:%i] ERROR: Agent Count Query Returned Null Result!", host->id, thread_id));
 		}
 	}
 
@@ -806,11 +808,10 @@ void poll_host(poller_thread_t poller_instructions) {
 		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 
 		/* log an informative message */
-		SPINE_LOG_MEDIUM(("Host[%i] NOTE: There are '%i' Polling Items for this Host", host_id, num_rows));
+		SPINE_LOG_MEDIUM(("Host[%i:%i] NOTE: There are '%i' Polling Items for this Host", host_id, thread_id, num_rows));
 
 		i = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
-			SPINE_LOG_DEBUG(("Host[%i] DEBUG: Processing item '%i'", i));
 			switch(poller_items[i].action) {
 			case POLLER_ACTION_SNMP: /* raw SNMP poll */
 				/* initialize or reinitialize snmp as required */
@@ -856,7 +857,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 						for (j = 0; j < num_oids; j++) {
 							if (host->ignore_host) {
-								SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+								SPINE_LOG(("Host[%i:%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, thread_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
 							}else if ((is_numeric(snmp_oids[j].result)) ||
 								(is_multipart_output(snmp_oids[j].result)) ||
@@ -878,7 +879,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
-							SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG_MEDIUM(("Host[%i:%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, thread_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						}
 
 						/* reset num_snmps */
@@ -913,7 +914,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 					for (j = 0; j < num_oids; j++) {
 						if (host->ignore_host) {
-							SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+							SPINE_LOG(("Host[%i:%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, thread_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 							SET_UNDEFINED(snmp_oids[j].result);
 						}else if ((is_numeric(snmp_oids[j].result)) ||
 							(is_multipart_output(snmp_oids[j].result)) ||
@@ -935,7 +936,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 						snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
-						SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+						SPINE_LOG_MEDIUM(("Host[%i:%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, thread_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
 						if (poller_items[snmp_oids[j].array_position].result != NULL) {
 							/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -978,7 +979,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 				free(poll_result);
 
-				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SCRIPT: %s, output: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+				SPINE_LOG_MEDIUM(("Host[%i:%i] DS[%i] SCRIPT: %s, output: %s", host_id, thread_id, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 
 				if (poller_items[i].result != NULL) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -1011,7 +1012,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 				free(poll_result);
 
-				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+				SPINE_LOG_MEDIUM(("Host[%i:%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, thread_id, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 
 				if (poller_items[i].result != NULL) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -1022,7 +1023,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 				break;
 			default: /* unknown action, generate error */
-				SPINE_LOG(("Host[%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, poller_items[i].local_data_id, poller_items[i].arg1));
+				SPINE_LOG(("Host[%i:%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, thread_id, poller_items[i].local_data_id, poller_items[i].arg1));
 
 				break;
 			}
@@ -1037,7 +1038,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 			for (j = 0; j < num_oids; j++) {
 				if (host->ignore_host) {
-					SPINE_LOG(("Host[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+					SPINE_LOG(("Host[%i:%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, thread_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
 				}else if ((is_numeric(snmp_oids[j].result)) ||
 					(is_multipart_output(snmp_oids[j].result)) ||
@@ -1059,7 +1060,7 @@ void poll_host(poller_thread_t poller_instructions) {
 
 				snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
-				SPINE_LOG_MEDIUM(("Host[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+				SPINE_LOG_MEDIUM(("Host[%i:%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, thread_id, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 
 				if (poller_items[snmp_oids[j].array_position].result != NULL) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
@@ -1174,7 +1175,7 @@ void poll_host(poller_thread_t poller_instructions) {
 	mysql_thread_end();
 	#endif
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function", host_id));
+	SPINE_LOG_DEBUG(("Host[%i:%i] DEBUG: HOST COMPLETE: About to Exit Host Polling Thread Function", host_id, thread_id));
 }
 
 /*! \fn int is_multipart_output(char *result)

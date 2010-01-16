@@ -567,7 +567,9 @@ int main(int argc, char *argv[]) {
 					case 0:
 						SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
 
-						device_counter++;
+						if (device_threads == 1 || thread > device_threads) {
+							device_counter++;
+						}
 						active_threads++;
 
 						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", active_threads));
