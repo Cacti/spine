@@ -191,13 +191,13 @@ int main(int argc, char *argv[]) {
 
 	/* we attempt to support scripts better in cygwin */
 	#if defined(__CYGWIN__)
-    if (file_exists("./sh.exe")) {
+	if (file_exists("./sh.exe")) {
 		set.cygwinshloc = 0;
 		printf("NOTE: The Shell Command Exists in the current directory\n");
-    }else{
-   		set.cygwinshloc = 1;
+	}else{
+		set.cygwinshloc = 1;
 		printf("NOTE: The Shell Command Exists in the /bin directory\n");
-    }
+	}
 	#endif
 
 	/* get static defaults for system */
@@ -520,7 +520,7 @@ int main(int argc, char *argv[]) {
 			last_active_threads = active_threads;
 
 			while ((active_threads < set.threads) && (device_counter < num_rows)) {
-				if (thread == device_threads) {
+				if (device_threads == 1 || thread > device_threads) {
 					if (set.poller_id == 0) {
 						if (device_counter > 0) {
 							mysql_row      = mysql_fetch_row(result);
@@ -536,7 +536,7 @@ int main(int argc, char *argv[]) {
 						device_threads = atoi(mysql_row[1]);
 					}
 
-					if (device_threads > 1 && thread == 1) {
+					if (device_threads > 1) {
 						snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
 						tresult   = db_query(&mysql, querybuf);
 						mysql_row = mysql_fetch_row(tresult);
