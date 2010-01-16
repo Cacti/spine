@@ -178,8 +178,12 @@ char *php_readpipe(int php_process) {
 		switch (errno) {
 			case EBADF:
 				SPINE_LOG(("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.", php_process));
+				SET_UNDEFINED(result_string);
+		
+				/* kill script server because it is misbehaving likely due to a server crash */
+				php_close(php_process);
+				php_init(php_process);
 				break;
-			case EAGAIN:
 			case EINTR:
 				#ifndef SOLAR_THREAD
 				/* take a moment */

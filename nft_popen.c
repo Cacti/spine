@@ -102,7 +102,7 @@ static void	close_cleanup(void *);
 int nft_popen(const char * command, const char * type) {
 	struct pid *cur;
 	struct pid *p;
-    int    pdes[2];
+	int    pdes[2];
 	int    fd, pid, twoway;
 	char   *argv[4];
 	int    cancel_state;
@@ -123,7 +123,7 @@ int nft_popen(const char * command, const char * type) {
 		}
 	}
 
-    if (pipe(pdes) < 0)
+	if (pipe(pdes) < 0)
 		return -1;
 
 	/* Disable thread cancellation from this point forward. */
@@ -146,7 +146,7 @@ int nft_popen(const char * command, const char * type) {
 	 */
 	pthread_mutex_lock(&ListMutex);
 
-    /* Fork. */
+	/* Fork. */
 	retry:
 	switch (pid = vfork()) {
 	case -1:		/* Error. */
@@ -192,7 +192,7 @@ int nft_popen(const char * command, const char * type) {
 			 * general, since the _exit() is no return, so
 			 * the compiler is free to corrupt all the local
 			 * variables.
-       		 */
+			 */
 			(void)close(pdes[0]);
 			if (pdes[1] != STDOUT_FILENO) {
 				(void)dup2(pdes[1], STDOUT_FILENO);
@@ -230,7 +230,7 @@ int nft_popen(const char * command, const char * type) {
 	}
 
 	/* Parent. */
-    if (*type == 'r') {
+	if (*type == 'r') {
 		fd = pdes[0];
 		(void)close(pdes[1]);
 	}else {
@@ -276,7 +276,7 @@ int nft_pchild(int fd) {
 			break;
 	}
 
-    pthread_mutex_unlock(&ListMutex);
+	pthread_mutex_unlock(&ListMutex);
 
 	if (cur == NULL) {
 		errno = EBADF;
@@ -356,23 +356,23 @@ close_cleanup(void * arg)
 		(void)close(cur->fd);
 	}
 
-    /* Remove the entry from the linked list. */
-    pthread_mutex_lock(&ListMutex);
+	/* Remove the entry from the linked list. */
+	pthread_mutex_lock(&ListMutex);
 
 	if (PidList == cur) {
 		PidList =  cur->next;
-    }else{
+	}else{
 		for (prev = PidList; prev; prev = prev->next)
-	    if (prev->next == cur) {
+		if (prev->next == cur) {
 			prev->next =  cur->next;
 			break;
-	    }
+		}
 
 		assert(prev != NULL);	/* Search should not fail */
-    }
+	}
 
-    pthread_mutex_unlock(&ListMutex);
+	pthread_mutex_unlock(&ListMutex);
 
-    free(cur);
+	free(cur);
 }
 

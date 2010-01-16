@@ -1323,7 +1323,6 @@ char *exec_poll(host_t *current_host, char *command) {
 	SPINE_LOG_DEBUG(("Host[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	#endif
 
-
 	if (cmd_fd > 0) {
 		/* Initialize File Descriptors to Review for Input/Output */
 		FD_ZERO(&fds);
@@ -1339,7 +1338,6 @@ char *exec_poll(host_t *current_host, char *command) {
 				SET_UNDEFINED(result_string);
 				close_fd = FALSE;
 				break;
-			case EAGAIN:
 			case EINTR:
 				#ifndef SOLAR_THREAD
 				/* take a moment */
