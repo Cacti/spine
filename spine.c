@@ -446,7 +446,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* determine if the poller_id field exists in the host table */
+	/* determine if the device_threads field exists in the host table */
 	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'device_threads'");
 	if (mysql_num_rows(result)) {
 		set.device_threads_exists = TRUE;
