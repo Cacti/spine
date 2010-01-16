@@ -137,14 +137,18 @@ int main(int argc, char *argv[]) {
 	long int EXTERNAL_THREAD_SLEEP = 5000;
 	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
-
+	int itemsPT;
+	int thread;
+	int device_threads;
+	poller_thread_t poller_details;
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
 
 	int* ids = NULL;
 	MYSQL mysql;
-	MYSQL_RES *result = NULL;
+	MYSQL_RES *result  = NULL;
+	MYSQL_RES *tresult = NULL;
 	MYSQL_ROW mysql_row;
 	int canexit = 0;
 	int host_id;
@@ -442,8 +446,27 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	/* determine if the poller_id field exists in the host table */
+	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'device_threads'");
+	if (mysql_num_rows(result)) {
+		set.device_threads_exists = TRUE;
+	}else{
+		set.device_threads_exists = FALSE;
+
+	}
+
+	if (set.device_threads_exists) {
+		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
+	}else{
+		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));  
+	}
+
 	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT id FROM host");
+	if (set.device_threads_exists) {
+		qp += sprintf(qp, "SELECT id, device_threads FROM host");
+	}else{
+		qp += sprintf(qp, "SELECT id, '1' as device_threads FROM host");
+	}
 	qp += sprintf(qp, " LEFT JOIN poller_item ON poller_item.host_id=host.id");
 	qp += sprintf(qp, " WHERE disabled=''");
 	if (!strlen(set.host_id_list)) {
@@ -484,6 +507,10 @@ int main(int argc, char *argv[]) {
 	/* tell fork processes that they are now active */
 	set.parent_fork = SPINE_FORK;
 
+	/* initialize the threading code */
+	thread = 1;
+	device_threads = 1;
+
 	/* loop through devices until done */
 	while ((device_counter < num_rows) && (canexit == 0)) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
@@ -493,22 +520,48 @@ int main(int argc, char *argv[]) {
 			last_active_threads = active_threads;
 
 			while ((active_threads < set.threads) && (device_counter < num_rows)) {
-				if (set.poller_id == 0) {
-					if (device_counter > 0) {
-						mysql_row = mysql_fetch_row(result);
-						host_id = atoi(mysql_row[0]);
-						ids[device_counter] = host_id;
+				if (thread == device_threads) {
+					if (set.poller_id == 0) {
+						if (device_counter > 0) {
+							mysql_row      = mysql_fetch_row(result);
+							host_id        = atoi(mysql_row[0]);
+							device_threads = atoi(mysql_row[1]);
+						}else{
+							host_id        = 0;
+							device_threads = 1;
+						}
 					}else{
-						ids[device_counter] = 0;
+						mysql_row      = mysql_fetch_row(result);
+						host_id        = atoi(mysql_row[0]);
+						device_threads = atoi(mysql_row[1]);
 					}
+
+					if (device_threads > 1 && thread == 1) {
+						snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+						tresult   = db_query(&mysql, querybuf);
+						mysql_row = mysql_fetch_row(tresult);
+						itemsPT   = atoi(mysql_row[0]);
+						thread    = 1;
+					}else{
+						itemsPT   = 0;
+						thread    = 1;
+					}
+				}
+
+				/* populate the thread structure */
+				if (itemsPT == 0) {
+					poller_details.host_id       = host_id;
+					poller_details.host_thread   = 1;
+					poller_details.host_data_ids = 0;
 				}else{
-					mysql_row = mysql_fetch_row(result);
-					host_id = atoi(mysql_row[0]);
-					ids[device_counter] = host_id;
+					poller_details.host_id       = host_id;
+					poller_details.host_data_ids = itemsPT;
+					poller_details.host_thread   = thread;
+					thread++;
 				}
 
 				/* create child process */
-				thread_status = pthread_create(&threads[device_counter], &attr, child, &ids[device_counter]);
+				thread_status = pthread_create(&threads[device_counter], &attr, child, &poller_details);
 
 				switch (thread_status) {
 					case 0:

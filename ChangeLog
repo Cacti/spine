@@ -1,10 +1,12 @@
 ﻿The Cacti Group | spine
 
-SVN
+0.8.7f
 
 -bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
 -bug#0001497: Prevent constant reindexes if snmp agent continually returns uptime of 0
 -bug#0001510: Speedup spine resorting hosts by estimated polling time
+-bug#0001519: spine enhancement for parallel collection of data at host level
+-bug#0001541: Spine snmp bulk get incorrect assumes that the server SNMP Agent returns variables in same order
 -bug#0001551: Spine compile problem on AIX 5
 -bug#0001563: Spine Compilation Problem on sql.c
 -bug: Add new option to enable Net-SNMP library vs. header versions
@@ -217,6 +219,6 @@ Not released.  Syncing with Cacti distribution again.
 -feature: added some compiler directives for better compatibility with cygwin
 
 0.8.6b
--bug: fixed issue that prevented multi ds item RRD�s from updating
+-bug: fixed issue that prevented multi ds item RRD?s from updating
 -bug: fixed invalid string length calculation that was truncating output over 4 characters
 -bug: small log file reformatting

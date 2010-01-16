@@ -44,11 +44,11 @@
  *
  */
 void *child(void *arg) {
-	int host_id = *(int *) arg;
+	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
-	poll_host(host_id);
+	poll_host(poller_details);
 
 	thread_mutex_lock(LOCK_THREAD);
 
@@ -64,7 +64,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int host_id)
+/*! \fn void poll_host(poller_thread_t poller_instructions)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -86,7 +86,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int host_id) {
+void poll_host(poller_thread_t poller_instructions) {
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
 	char *query3 = NULL;
@@ -115,10 +115,12 @@ void poll_host(int host_id) {
 	int    snmp_poller_items = 0;
 	size_t out_buffer;
 	int    php_process;
+	int    host_id;
 
 	char *poll_result = NULL;
 	char *host_time   = NULL;
 	char update_sql[BUFSIZE];
+	char limits[SMALL_BUFSIZE];
 
 	int  num_snmp_agents   = 0;
 	int  last_snmp_version = 0;
@@ -166,6 +168,15 @@ void poll_host(int host_id) {
 	memset(reindex, 0, sizeof(reindex_t));
 
 	sysUptime[0] = '\0';
+	host_id      = poller_instructions.host_id;
+
+	/* determine the SQL limits using the poller instructions */
+	if (poller_instructions.host_data_ids > 0) {
+		snprintf(limits, SMALL_BUFSIZE, "LIMIT %i, %i", poller_instructions.host_data_ids * (poller_instructions.host_thread - 1), poller_instructions.host_data_ids);
+	}else{
+		limits[0] = '\0';
+	}
+
 
 	/* single polling interval query for items */
 	if (set.poller_id == 0) {
@@ -177,7 +188,7 @@ void poll_host(int host_id) {
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
 			" FROM poller_item"
 			" WHERE host_id=%i"
-			" ORDER BY snmp_port", host_id);
+			" ORDER BY snmp_port %s", host_id, limits);
 
 		/* host structure for uptime checks */
 		snprintf(query2, BUFSIZE,
@@ -207,7 +218,7 @@ void poll_host(int host_id) {
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
 			" FROM poller_item"
 			" WHERE host_id=%i and rrd_next_step <=0"
-			" ORDER by snmp_port", host_id);
+			" ORDER by snmp_port %s", host_id, limits);
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
@@ -232,7 +243,7 @@ void poll_host(int host_id) {
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
 			" WHERE host_id=%i"
-			" GROUP BY snmp_port", host_id);
+			" GROUP BY snmp_port %s", host_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
 		snprintf(query10, BUFSIZE,
@@ -240,7 +251,7 @@ void poll_host(int host_id) {
 			" FROM poller_item"
 			" WHERE host_id=%i"
 			" AND rrd_next_step < 0"
-			" GROUP BY snmp_port", host_id);
+			" GROUP BY snmp_port %s", host_id, limits);
 	}else{
 		snprintf(query1, BUFSIZE,
 			"SELECT action, hostname, snmp_community, "
@@ -250,7 +261,7 @@ void poll_host(int host_id) {
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
 			" FROM poller_item"
 			" WHERE host_id=%i AND poller_id=%i"
-			" ORDER BY snmp_port", host_id, set.poller_id);
+			" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* host structure for uptime checks */
 		snprintf(query2, BUFSIZE,
@@ -280,7 +291,7 @@ void poll_host(int host_id) {
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context "
 			" FROM poller_item"
 			" WHERE host_id=%i AND rrd_next_step <=0 AND poller_id=%i"
-			" ORDER by snmp_port", host_id, set.poller_id);
+			" ORDER by snmp_port %s", host_id, set.poller_id, limits);
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
@@ -306,7 +317,7 @@ void poll_host(int host_id) {
 			" FROM poller_item"
 			" WHERE host_id=%i"
 			" AND poller_id=%i"
-			" GROUP BY snmp_port", host_id, set.poller_id);
+			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
 		snprintf(query10, BUFSIZE,
@@ -315,7 +326,7 @@ void poll_host(int host_id) {
 			" WHERE host_id=%i"
 			" AND rrd_next_step < 0"
 			" AND poller_id=%i"
-			" GROUP BY snmp_port", host_id, set.poller_id);
+			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 	}
 
 	/* query to add output records to the poller output table */
@@ -472,37 +483,43 @@ void poll_host(int host_id) {
 				}else{
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;
-						update_host_status(HOST_UP, host, ping, host->availability_method);
+						if (poller_instructions.host_thread == 1) {
+							update_host_status(HOST_UP, host, ping, host->availability_method);
+						}
 					}else{
 						host->ignore_host = TRUE;
-						update_host_status(HOST_DOWN, host, ping, host->availability_method);
+						if (poller_instructions.host_thread == 1) {
+							update_host_status(HOST_DOWN, host, ping, host->availability_method);
+						}
 					}
 				}
 
 				/* update host table */
-				snprintf(update_sql, BUFSIZE, "UPDATE host "
-					"SET status='%i', status_event_count='%i', status_fail_date='%s',"
-						" status_rec_date='%s', status_last_error='%s', min_time='%f',"
-						" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-						" failed_polls='%i', availability='%.4f' "
-					"WHERE id='%i'",
-					host->status,
-					host->status_event_count,
-					host->status_fail_date,
-					host->status_rec_date,
-					host->status_last_error,
-					host->min_time,
-					host->max_time,
-					host->cur_time,
-					host->avg_time,
-					host->total_polls,
-					host->failed_polls,
-					host->availability,
-					host->id);
-
-				db_insert(&mysql, update_sql);
+				if (poller_instructions.host_thread == 1) {
+					snprintf(update_sql, BUFSIZE, "UPDATE host "
+						"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+							" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+							" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+							" failed_polls='%i', availability='%.4f' "
+						"WHERE id='%i'",
+						host->status,
+						host->status_event_count,
+						host->status_fail_date,
+						host->status_rec_date,
+						host->status_last_error,
+						host->min_time,
+						host->max_time,
+						host->cur_time,
+						host->avg_time,
+						host->total_polls,
+						host->failed_polls,
+						host->availability,
+						host->id);
+	
+					db_insert(&mysql, update_sql);
+				}
 			}else{
-				SPINE_LOG(("Host[%i] ERROR: Could MySQL Returned a Null Host Result", host->id));
+				SPINE_LOG(("Host[%i] ERROR: MySQL Returned a Null Host Result", host->id));
 				num_rows = 0;
 				host->ignore_host = TRUE;
 			}
@@ -605,15 +622,19 @@ void poll_host(int host_id) {
 							}else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
 								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-								snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-								db_insert(&mysql, query3);
+								if (poller_instructions.host_thread == 1) {
+									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									db_insert(&mysql, query3);
+								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							}else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
 								SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-								snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-								db_insert(&mysql, query3);
+								if (poller_instructions.host_thread == 1) {
+									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									db_insert(&mysql, query3);
+								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							/* if uptime is set to '0' don't fail out */
@@ -621,8 +642,10 @@ void poll_host(int host_id) {
 								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
 									SPINE_LOG_HIGH(("Host[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
-									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-									db_insert(&mysql, query3);
+									if (poller_instructions.host_thread == 1) {
+										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+										db_insert(&mysql, query3);
+									}
 									assert_fail = TRUE;
 									previous_assert_failure = TRUE;
 								}
@@ -633,8 +656,10 @@ void poll_host(int host_id) {
 							 * 2) the OP code is > or < meaning the current value could have changed without causing
 							 *     the assert to fail */
 							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
-								snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
-								db_insert(&mysql, query3);
+								if (poller_instructions.host_thread == 1) {
+									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
+									db_insert(&mysql, query3);
+								}
 
 								if ((assert_fail) &&
 									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {

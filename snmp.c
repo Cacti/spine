@@ -553,17 +553,29 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
-
-				for(i = 0; i < num_oids && vars; i++) {
-					if (!IS_UNDEFINED(snmp_oids[i].result)) {
-						#ifdef USE_NET_SNMP
-						snmp_snprint_value(snmp_oids[i].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-						#else
-						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-						#endif
-
-						vars = vars->next_variable;
+				int offset = 0;
+				while (vars) {
+					char buf[RESULTS_BUFFER];
+					#ifdef USE_NET_SNMP
+					snmp_snprint_value(buf, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+					#else
+					snprint_value(buf, vars->name, vars->name_length, vars);
+					#endif
+					namep = name;
+					namep += offset;
+					for(i = offset; i < num_oids; i++){
+						if(namep->name_len == 0) // this snmp_oids[i] is used already
+							continue;
+						if (snmp_oidtree_compare(namep->name, namep->name_len, vars->name, vars->name_length) == 0){
+							strncpy(snmp_oids[i].result, buf, RESULTS_BUFFER);
+							namep->name_len = 0;
+							if(i == offset) // SNMP result is in normal order, shift namep in sync with vars
+								offset++;
+							break;
+						}
+						namep++;
 					}
+					vars = vars->next_variable;
 				}
 			}else{
 				if (response->errindex != 0) {
