@@ -411,11 +411,11 @@ int php_init(int php_process) {
 
 		if (strstr(result_string, "Started")) {
 			if (php_process == PHP_INIT) {
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running", i));
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", i, php2cacti_pdes[0], cacti2php_pdes[1]));
 
 				php_processes[i].php_state = PHP_READY;
 			}else{
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running", php_process));
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", php_process, php2cacti_pdes[0], cacti2php_pdes[1]));
 
 				php_processes[php_process].php_state = PHP_READY;
 			}
