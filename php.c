@@ -162,10 +162,6 @@ char *php_readpipe(int php_process) {
 	/* record start time */
 	begin_time = get_time_as_double();
 
-	/* initialize file descriptors to review for input/output */
-	FD_ZERO(&fds);
-	FD_SET(php_processes[php_process].php_read_fd,&fds);
-
 	/* establish timeout value for the PHP script server to respond */
 	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
@@ -173,6 +169,11 @@ char *php_readpipe(int php_process) {
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
 	retry:
+
+	/* initialize file descriptors to review for input/output */
+	FD_ZERO(&fds);
+	FD_SET(php_processes[php_process].php_read_fd,&fds);
+
 	switch (select(php_processes[php_process].php_read_fd+1, &fds, NULL, NULL, &timeout)) {
 	case -1:
 		switch (errno) {
@@ -224,33 +225,34 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	default:
-		bptr = result_string;
-
-		while (1) {
-			i = read(php_processes[php_process].php_read_fd,bptr,RESULTS_BUFFER-(bptr-result_string));
-
-			if (i <= 0) {
-				SET_UNDEFINED(result_string);
-				break;
-			}
-
-			bptr += i;
-			*bptr = '\0';	/* make what we've got into a string */
-
-			if ((cp = strstr(result_string,"\n")) != 0) {
-				*cp = '\0';
-
-				if ((cp = strstr(result_string,"\r")) != 0) {
-					*cp = '\0';
+		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
+			bptr = result_string;
+	
+			while (1) {
+				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
+	
+				if (i <= 0) {
+					SET_UNDEFINED(result_string);
+					break;
 				}
-
-				break;
+	
+				bptr += i;
+				*bptr = '\0';	/* make what we've got into a string */
+	
+				if ((cp = strstr(result_string,"\n")) != 0) {
+					result_string = trim(result_string);
+	
+					break;
+				}
+	
+				if (bptr >= result_string+BUFSIZE) {
+					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+					SET_UNDEFINED(result_string);
+				}
 			}
-
-			if (bptr >= result_string+BUFSIZE) {
-				SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-				SET_UNDEFINED(result_string);
-			}
+		}else{
+			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
+			SET_UNDEFINED(result_string);
 		}
 
 		php_processes[php_process].php_state = PHP_READY;

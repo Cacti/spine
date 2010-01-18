@@ -1325,13 +1325,14 @@ char *exec_poll(host_t *current_host, char *command) {
 	#endif
 
 	if (cmd_fd > 0) {
+		retry:
+
 		/* Initialize File Descriptors to Review for Input/Output */
 		FD_ZERO(&fds);
 		FD_SET(cmd_fd, &fds);
 
 		/* wait x seonds for pipe response */
-		retry:
-		switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+		switch (select(cmd_fd+1, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {
 			case EBADF:
@@ -1378,7 +1379,7 @@ char *exec_poll(host_t *current_host, char *command) {
 			close_fd = FALSE;
 			#else
 			pid = nft_pchild(cmd_fd);
-			kill(pid, SIGTERM);
+			kill(pid, SIGKILL);
 			#endif
 
 			SET_UNDEFINED(result_string);
