@@ -9,6 +9,7 @@
 -bug#0001541: Spine snmp bulk get incorrect assumes that the server SNMP Agent returns variables in same order
 -bug#0001551: Spine compile problem on AIX 5
 -bug#0001563: Spine Compilation Problem on sql.c
+-bug#0001604: HEX Counter values enclosed in quotes not recognized as HEX 
 -bug: Add new option to enable Net-SNMP library vs. header versions
 -bug: ICMP fails on some platforms
 -bug: MySQL client auto reconnect default in MySQL 5.0.71 causes spine to crash

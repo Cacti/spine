@@ -815,6 +815,7 @@ int is_hexadecimal(const char * str, const short ignore_space) {
 		case 'a': case 'A': case 'b': case 'B':
 		case 'c': case 'C': case 'd': case 'D':
 		case 'e': case 'E': case 'f': case 'F':
+		case '"':
 			break;
 		case ' ': case '\t':
 			if (ignore_space) break;
@@ -829,7 +830,7 @@ int is_hexadecimal(const char * str, const short ignore_space) {
 
 /*! \fn char *strip_alpha(char *string)
  *  \brief remove trailing alpha characters from a string.
- *  \param string the string to string characters from
+ *  \param string the string to strip characters from
  *
  *  \return a pointer to the modified string
  *
