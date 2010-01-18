@@ -14,6 +14,7 @@
 -bug: ICMP fails on some platforms
 -bug: MySQL client auto reconnect default in MySQL 5.0.71 causes spine to crash
 -bug: Inconsistent behavior when the poller interval has not been set
+-bug: Invalid use of FDSETSIZE can cause issue with Script Server
 
 0.8.7e
 -bug: Not all configuration paths are searched for spine.conf

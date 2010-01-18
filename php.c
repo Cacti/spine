@@ -173,7 +173,7 @@ char *php_readpipe(int php_process) {
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
 	retry:
-	switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+	switch (select(php_processes[php_process].php_read_fd+1, &fds, NULL, NULL, &timeout)) {
 	case -1:
 		switch (errno) {
 			case EBADF:
