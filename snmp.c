@@ -515,6 +515,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	int i;
 	int array_count;
 	int index_count;
+	char buf[RESULTS_BUFFER];
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
@@ -555,22 +556,26 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 				vars = response->variables;
 				int offset = 0;
 				while (vars) {
-					char buf[RESULTS_BUFFER];
-					#ifdef USE_NET_SNMP
-					snmp_snprint_value(buf, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-					#else
-					snprint_value(buf, vars->name, vars->name_length, vars);
-					#endif
 					namep = name;
 					namep += offset;
 					for(i = offset; i < num_oids; i++){
-						if(namep->name_len == 0) // this snmp_oids[i] is used already
-							continue;
-						if (snmp_oidtree_compare(namep->name, namep->name_len, vars->name, vars->name_length) == 0){
-							strncpy(snmp_oids[i].result, buf, RESULTS_BUFFER);
+						/* see if we have already found this OID */
+						if(namep->name_len == 0) continue;
+
+						/* check to see if the response and the calling OID's are identical */
+						if (snmp_oid_compare(namep->name, namep->name_len, vars->name, vars->name_length) == 0) {
+							#ifdef USE_NET_SNMP
+							snmp_snprint_value(snmp_oids[i].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+							#else
+							snprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+							#endif
+
+							/* set the name length to 0 to mark as complete */
 							namep->name_len = 0;
-							if(i == offset) // SNMP result is in normal order, shift namep in sync with vars
-								offset++;
+
+							/* SNMP result is in normal order, shift namep in sync with vars */
+							if(i == offset) offset++;
+
 							break;
 						}
 						namep++;
