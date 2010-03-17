@@ -311,8 +311,23 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
 	/* get ICMP socket */
-	if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-		die("ERROR: ping_icmp: cannot open an ICMP socket");
+	retry_count = 0;
+	while ( TRUE ) {
+		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
+			usleep(500000);
+			retry_count++;
+
+			if (retry_count > 4) {
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
+				snprintf(ping->ping_status, 50, "down");
+				free(new_hostname);
+				return HOST_DOWN;
+	
+				break;
+			}
+		}else{
+			break;
+		}
 	}
 
 	/* convert the host timeout to a double precision number in seconds */
