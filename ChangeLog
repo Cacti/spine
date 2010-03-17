@@ -1,6 +1,7 @@
 ﻿The Cacti Group | spine
 
 SVN
+-feature:0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address 
 -bug:0001653: Transient ICMP Socket create failures causing spine to die
 
 0.8.7f

@@ -150,6 +150,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	snmp_sess_init(&session);
 
 	#ifdef USE_NET_SNMP
+		/* Bind to snmp_clientaddr if specified */
+		if (NULL != set.snmp_clientaddr  && strlen(set.snmp_clientaddr) > 0) {
+			session.localname = strdup(set.snmp_clientaddr);
+		}
+
 		/* Prevent update of the snmpapp.conf file */
 		#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
 			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);

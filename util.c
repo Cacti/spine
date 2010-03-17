@@ -464,12 +464,13 @@ int read_spine_config(char *file) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.dbhost, p2);
-				else if (STRIMATCH(p1, "DB_Database")) STRNCOPY(set.dbdb, p2);
-				else if (STRIMATCH(p1, "DB_User"))     STRNCOPY(set.dbuser, p2);
-				else if (STRIMATCH(p1, "DB_Pass"))     STRNCOPY(set.dbpass, p2);
-				else if (STRIMATCH(p1, "DB_Port"))     set.dbport = atoi(p2);
-				else if (STRIMATCH(p1, "Poller"))      set.poller_id = atoi(p2);
+				if (STRIMATCH(p1, "DB_Host"))               STRNCOPY(set.dbhost, p2);
+				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.dbdb, p2);
+				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.dbuser, p2);
+				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.dbpass, p2);
+				else if (STRIMATCH(p1, "DB_Port"))          set.dbport = atoi(p2);
+				else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
+				else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
 				else if (!set.stderr_notty) {
 					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}

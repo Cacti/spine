@@ -331,6 +331,7 @@ typedef struct config_struct {
 	/* snmp options */
 	int    snmp_max_get_size;
 	int    snmp_retries;
+	char   snmp_clientaddr[SMALL_BUFSIZE];
 	/* PHP Script Server Options */
 	int    php_required;
 	int    php_initialized;
