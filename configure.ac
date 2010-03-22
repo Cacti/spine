@@ -293,12 +293,24 @@ AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   AC_MSG_RESULT(no)
 )
 
+AC_TRY_COMPILE([ #include <net-snmp-config.h> 
+  #include <net-snmp/utilities.h>
+  #include <net-snmp/net-snmp-includes.h>
+  #include <net-snmp/config_api.h>
+  #include <net-snmp/mib_api.h> ], 
+  [struct snmp_session session; snmp_sess_init(&session); session.localname = strdup("hello")],
+  havelocalname=1,
+  havelocalname=0
+)
+AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session structure member exists)
+
 AC_CHECK_LIB(netsnmp, snmp_timeout,
   [ LIBS="-lnetsnmp $LIBS"
     AC_DEFINE(USE_NET_SNMP, 1, New Net SNMP Version)
     USE_NET_SNMP=yes ],
-    [ AC_MSG_RESULT(Cannot find NET-SNMP libraries(snmp)... checking UCD-SNMP)
-    USE_NET_SNMP=no ])
+  [ AC_MSG_RESULT(Cannot find NET-SNMP libraries(snmp)... checking UCD-SNMP)
+    USE_NET_SNMP=no ]
+)
 
 if test "$USE_NET_SNMP" = "no"; then
   AC_CHECK_LIB(snmp, snmp_timeout,
@@ -323,7 +335,7 @@ AC_ARG_WITH(max-scripts,
   AC_HELP_STRING([--with-max-scripts=N], [The maximum simultaneous spine scripts that can run (default=20)]),
   [max_scripts=$withval]
 )
-AC_DEFINE_UNQUOTED(MAX_SIMULTANEOUS_SCRIPTS, $results_buffer, The maximum number of simultaneous running scripts)
+AC_DEFINE_UNQUOTED(MAX_SIMULTANEOUS_SCRIPTS, $max_scripts, The maximum number of simultaneous running scripts)
 AC_MSG_RESULT(checking for the maximum simultaneous spine scripts... $max_scripts)
 
 # ****************** Maximum MySQL Buffer Size ***********************
