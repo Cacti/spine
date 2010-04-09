@@ -63,6 +63,9 @@ extern char *rtrim(char *str);
 extern char *ltrim(char *str);
 extern char *reverse(char *str);
 
+/* custom hex2dec that returns a string instead of a number */
+unsigned long long hex2dec(char *str);
+
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))
 

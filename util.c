@@ -1064,3 +1064,74 @@ char *reverse(char* str) {
 
 	return str;
 }
+
+unsigned long long hex2dec(char *str) {
+	int i = 0;
+	unsigned long long number = 0;
+	
+	if (!str) return 0;
+
+	/* first revers the string */
+	reverse(str);
+	
+	while (*str) {
+		switch (*str) {
+		case '0': 
+			break;
+		case '1': 
+			number += (16 ^ i) * 1;
+			break;
+		case '2': 
+			number += (16 ^ i) * 2;
+			break;
+		case '3':
+			number += (16 ^ i) * 3;
+			break;
+		case '4': 
+			number += (16 ^ i) * 4;
+			break;
+		case '5': 
+			number += (16 ^ i) * 5;
+			break;
+		case '6': 
+			number += (16 ^ i) * 6;
+			break;
+		case '7':
+			number += (16 ^ i) * 7;
+			break;
+		case '8': 
+			number += (16 ^ i) * 8;
+			break;
+		case '9':
+			number += (16 ^ i) * 9;
+			break;
+		case 'a': case 'A': 
+			number += (16 ^ i) * 10;
+			break;
+		case 'b': case 'B':
+			number += (16 ^ i) * 11;
+			break;
+		case 'c': case 'C': 
+			number += (16 ^ i) * 12;
+			break;
+		case 'd': case 'D':
+			number += (16 ^ i) * 13;
+			break;
+		case 'e': case 'E': 
+			number += (16 ^ i) * 14;
+			break;
+		case 'f': case 'F':
+			number += (16 ^ i) * 15;
+			break;
+		case '"': case ' ': case '\t':
+			break;
+		default:
+			return 0;
+		}
+
+		str++;
+		i++;
+	}
+
+	return number;
+}
