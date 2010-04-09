@@ -1077,51 +1077,67 @@ unsigned long long hex2dec(char *str) {
 	while (*str) {
 		switch (*str) {
 		case '0': 
+			i++;
 			break;
 		case '1': 
 			number += (16 ^ i) * 1;
+			i++;
 			break;
 		case '2': 
 			number += (16 ^ i) * 2;
+			i++;
 			break;
 		case '3':
 			number += (16 ^ i) * 3;
+			i++;
 			break;
 		case '4': 
 			number += (16 ^ i) * 4;
+			i++;
 			break;
 		case '5': 
 			number += (16 ^ i) * 5;
+			i++;
 			break;
 		case '6': 
 			number += (16 ^ i) * 6;
+			i++;
 			break;
 		case '7':
 			number += (16 ^ i) * 7;
+			i++;
 			break;
 		case '8': 
 			number += (16 ^ i) * 8;
+			i++;
 			break;
 		case '9':
 			number += (16 ^ i) * 9;
+			i++;
 			break;
 		case 'a': case 'A': 
 			number += (16 ^ i) * 10;
+			i++;
 			break;
 		case 'b': case 'B':
 			number += (16 ^ i) * 11;
+			i++;
 			break;
 		case 'c': case 'C': 
 			number += (16 ^ i) * 12;
+			i++;
 			break;
 		case 'd': case 'D':
 			number += (16 ^ i) * 13;
+			i++;
 			break;
 		case 'e': case 'E': 
 			number += (16 ^ i) * 14;
+			i++;
 			break;
 		case 'f': case 'F':
 			number += (16 ^ i) * 15;
+			i++;
 			break;
 		case '"': case ' ': case '\t':
 			break;
@@ -1130,7 +1146,6 @@ unsigned long long hex2dec(char *str) {
 		}
 
 		str++;
-		i++;
 	}
 
 	return number;
