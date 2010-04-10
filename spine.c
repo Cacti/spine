@@ -477,7 +477,7 @@ int main(int argc, char *argv[]) {
 	if (set.poller_id_exists) {
 		qp += sprintf(qp, " AND host.poller_id=%i", set.poller_id);
 	}
-	qp += sprintf(qp, " GROUP BY poller_item.host_id");
+	qp += sprintf(qp, " GROUP BY host.id");
 	qp += sprintf(qp, " ORDER BY count(poller_item.host_id)*host.avg_time DESC, id ASC");
 
 	result = db_query(&mysql, querybuf);
