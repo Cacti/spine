@@ -513,13 +513,13 @@ int main(int argc, char *argv[]) {
 
 	/* loop through devices until done */
 	while ((device_counter < num_rows) && (canexit == 0)) {
-		mutex_status = thread_mutex_trylock(LOCK_THREAD);
-
-		switch (mutex_status) {
-		case 0:
-			last_active_threads = active_threads;
-
-			while ((active_threads < set.threads) && (device_counter < num_rows)) {
+		while ((active_threads < set.threads) && (device_counter < num_rows)) {
+			mutex_status = thread_mutex_trylock(LOCK_THREAD);
+	
+			switch (mutex_status) {
+			case 0:
+				last_active_threads = active_threads;
+	
 				if (device_threads == 1 || thread > device_threads) {
 					if (set.poller_id == 0) {
 						if (device_counter > 0) {
@@ -604,42 +604,42 @@ int main(int argc, char *argv[]) {
 				}else{
 					poller_counter++;
 				}
-			}
-
-			thread_mutex_unlock(LOCK_THREAD);
-
-			break;
-		case EDEADLK:
-			SPINE_LOG(("ERROR: Deadlock Occured"));
-			break;
-		case EBUSY:
-			break;
-		case EINVAL:
-			SPINE_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex"));
-			break;
-		case EFAULT:
-			SPINE_LOG(("ERROR: Attempt to Unlock an Invalid Mutex"));
-			break;
-		default:
-			SPINE_LOG(("ERROR: Unknown Mutex Lock Error Code Returned"));
-			break;
-		}
-
-		usleep(internal_thread_sleep);
-
-		/* get current time and exit program if time limit exceeded */
-		if (poller_counter >= 20) {
-			current_time = get_time_as_double();
-
-			if ((current_time - begin_time + .2) > set.poller_interval) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-				canexit = 1;
+	
+				thread_mutex_unlock(LOCK_THREAD);
+	
+				break;
+			case EDEADLK:
+				SPINE_LOG(("ERROR: Deadlock Occured"));
+				break;
+			case EBUSY:
+				break;
+			case EINVAL:
+				SPINE_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex"));
+				break;
+			case EFAULT:
+				SPINE_LOG(("ERROR: Attempt to Unlock an Invalid Mutex"));
+				break;
+			default:
+				SPINE_LOG(("ERROR: Unknown Mutex Lock Error Code Returned"));
 				break;
 			}
-
-			poller_counter = 0;
-		}else{
-			poller_counter++;
+	
+			usleep(internal_thread_sleep);
+	
+			/* get current time and exit program if time limit exceeded */
+			if (poller_counter >= 20) {
+				current_time = get_time_as_double();
+	
+				if ((current_time - begin_time + .2) > set.poller_interval) {
+					SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+					canexit = 1;
+					break;
+				}
+	
+				poller_counter = 0;
+			}else{
+				poller_counter++;
+			}
 		}
 	}
 
