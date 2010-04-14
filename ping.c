@@ -756,6 +756,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct hostent *hostinfo;
+	int retry_count;
 	#if !defined(H_ERRNO_DECLARED) && !defined(_AIX)
 	extern int h_errno;
 	#endif
@@ -763,12 +764,16 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	name->sin_family = AF_INET;
 	name->sin_port   = htons (port);
 
+	retry_count = 0;
+
 	#ifdef HAVE_THREADSAFE_GETHOSTBYNAME
 	retry:
 	hostinfo = gethostbyname(hostname);
 
 	if (!hostinfo) {
-		if (h_errno == TRY_AGAIN) {
+		if (h_errno == TRY_AGAIN && retry_count < 3) {
+			retry_count++;
+			usleep(50000);
 			goto retry;
 		}else{
 			return NULL;
@@ -798,7 +803,9 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				buf = realloc(buf, len*sizeof(char));
 
 				continue;
-			}else if (herr == TRY_AGAIN) {
+			}else if (herr == TRY_AGAIN && retry_count < 3) {
+				retry_count++;
+				usleep(50000);
 				continue;
 			}else{
 				free(buf);
@@ -830,7 +837,9 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				memset(buf, 0, sizeof(buf));
 
 				continue;
-			}else if (h_errno == TRY_AGAIN) {
+			}else if (h_errno == TRY_AGAIN && retry_count < 3) {
+				retry_count++;
+				usleep(50000);
 				continue;
 			}else{
 				free(buf);
@@ -861,7 +870,9 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	hostinfo = gethostbyname(hostname);
 	if (!hostinfo) {
 		thread_mutex_unlock(LOCK_GHBN);
-		if (h_errno == TRY_AGAIN) {
+		if (h_errno == TRY_AGAIN && retry_count < 3) {
+			retry_count++;
+			usleep(50000);
 			goto retry;
 		}else{
 			hostinfo = NULL;
