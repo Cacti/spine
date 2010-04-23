@@ -641,6 +641,8 @@ int main(int argc, char *argv[]) {
 				poller_counter++;
 			}
 		}
+
+		usleep(internal_thread_sleep);
 	}
 
 	/* wait for all threads to complete */
