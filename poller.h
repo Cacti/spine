@@ -32,7 +32,7 @@
 */
 
 extern void *child(void *arg);
-extern void poll_host(poller_thread_t poller_instructions);
+extern void poll_host(int host_id, int host_thread, int host_data_ids);
 extern char *exec_poll(host_t *current_host, char *command);
 extern int is_multipart_output(char *result);
 extern int validate_result(char *result);

@@ -138,11 +138,10 @@ int main(int argc, char *argv[]) {
 	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	int itemsPT;
-	int thread;
 	int device_threads;
-	poller_thread_t poller_details;
 
 	pthread_t* threads = NULL;
+	poller_thread_t* poller_details = NULL;
 	pthread_attr_t attr;
 
 	int* ids = NULL;
@@ -150,11 +149,13 @@ int main(int argc, char *argv[]) {
 	MYSQL_RES *result  = NULL;
 	MYSQL_RES *tresult = NULL;
 	MYSQL_ROW mysql_row;
-	int canexit = 0;
+	int canexit = FALSE;
 	int host_id;
 	int i;
-	int mutex_status = 0;
+	int mutex_status  = 0;
 	int thread_status = 0;
+	int change_host   = TRUE;
+	int current_thread;
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
@@ -508,11 +509,19 @@ int main(int argc, char *argv[]) {
 	set.parent_fork = SPINE_FORK;
 
 	/* initialize the threading code */
-	thread = 1;
-	device_threads = 1;
+	device_threads   = 1;
+	current_thread   = 0;
+
+	/* poller 0 always polls host 0 */
+	if (set.poller_id == 0) {
+		host_id     = 0;
+		change_host = FALSE;
+	}else{
+		change_host = TRUE;
+	}
 
 	/* loop through devices until done */
-	while ((device_counter < num_rows) && (canexit == 0)) {
+	while ((device_counter < num_rows) && (canexit == FALSE)) {
 		while ((active_threads < set.threads) && (device_counter < num_rows)) {
 			mutex_status = thread_mutex_trylock(LOCK_THREAD);
 	
@@ -520,54 +529,50 @@ int main(int argc, char *argv[]) {
 			case 0:
 				last_active_threads = active_threads;
 	
-				if (device_threads == 1 || thread > device_threads) {
-					if (set.poller_id == 0) {
-						if (device_counter > 0) {
-							mysql_row      = mysql_fetch_row(result);
-							host_id        = atoi(mysql_row[0]);
-							device_threads = atoi(mysql_row[1]);
-						}else{
-							host_id        = 0;
-							device_threads = 1;
-						}
-					}else{
-						mysql_row      = mysql_fetch_row(result);
-						host_id        = atoi(mysql_row[0]);
-						device_threads = atoi(mysql_row[1]);
-					}
+				if (change_host) {
+					mysql_row       = mysql_fetch_row(result);
+					host_id         = atoi(mysql_row[0]);
+					device_threads  = atoi(mysql_row[1]);
+					current_thread  = 1;
+				}else{
+					current_thread++;
+				}
 
-					if (device_threads > 1) {
+				if (current_thread >= device_threads) {
+					change_host = TRUE;
+				}else{
+					change_host = FALSE;
+				}
+
+				/* determine how many items will be polled per thread */
+				if (device_threads > 1) {
+					if (current_thread == 1) {
 						snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
 						tresult   = db_query(&mysql, querybuf);
 						mysql_row = mysql_fetch_row(tresult);
 						itemsPT   = atoi(mysql_row[0]);
-						thread    = 1;
-					}else{
-						itemsPT   = 0;
-						thread    = 1;
 					}
+				}else{
+					itemsPT   = 0;
 				}
 
 				/* populate the thread structure */
-				if (itemsPT == 0) {
-					poller_details.host_id       = host_id;
-					poller_details.host_thread   = 1;
-					poller_details.host_data_ids = 0;
-				}else{
-					poller_details.host_id       = host_id;
-					poller_details.host_data_ids = itemsPT;
-					poller_details.host_thread   = thread;
-					thread++;
+				if (!(poller_details = (poller_thread_t *)malloc(sizeof(poller_thread_t)))) {
+					die("ERROR: Fatal malloc error: spine.c poller_details!");
 				}
 
+				poller_details->host_id       = host_id;
+				poller_details->host_thread   = current_thread;
+				poller_details->host_data_ids = itemsPT;
+
 				/* create child process */
-				thread_status = pthread_create(&threads[device_counter], &attr, child, &poller_details);
+				thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 				switch (thread_status) {
 					case 0:
 						SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
 
-						if (device_threads == 1 || thread > device_threads) {
+						if (change_host) {
 							device_counter++;
 						}
 						active_threads++;
@@ -596,7 +601,7 @@ int main(int argc, char *argv[]) {
 
 					if ((current_time - begin_time + .2) > set.poller_interval) {
 						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-						canexit = 1;
+						canexit = TRUE;
 						break;
 					}
 
@@ -632,7 +637,7 @@ int main(int argc, char *argv[]) {
 	
 				if ((current_time - begin_time + .2) > set.poller_interval) {
 					SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-					canexit = 1;
+					canexit = TRUE;
 					break;
 				}
 	
@@ -646,12 +651,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* wait for all threads to complete */
-	while (canexit == 0) {
+	while (canexit == FALSE) {
 		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
 			last_active_threads = active_threads;
 
 			if (active_threads == 0) {
-				canexit = 1;
+				canexit = TRUE;
 			}
 
 			thread_mutex_unlock(LOCK_THREAD);
@@ -665,7 +670,7 @@ int main(int argc, char *argv[]) {
 
 			if ((current_time - begin_time + .2) > set.poller_interval) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-				canexit = 1;
+				canexit = TRUE;
 				break;
 			}
 

@@ -575,6 +575,11 @@ int spine_log(const char *format, ...) {
 	/* default for "console" messages to go to stdout */
 	fp = stdout;
 
+	if (IS_LOGGING_TO_STDOUT()) {
+		puts(trim(ulogmessage));
+		return TRUE;
+	}
+
 	/* append a line feed to the log message if needed */
 	if (!strstr(ulogmessage, "\n")) {
 		strncat(ulogmessage, "\n", 1);
@@ -582,11 +587,6 @@ int spine_log(const char *format, ...) {
 
 	/* log message prefix */
 	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] ", set.poller_id);
-
-	if (IS_LOGGING_TO_STDOUT()) {
-		puts(ulogmessage);
-		return TRUE;
-	}
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
