@@ -629,7 +629,7 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 								SPINE_LOG_HIGH(("Host[%i] TH[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 								if (host_thread == 1) {
-									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i', '%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 									db_insert(&mysql, query3);
 								}
 								assert_fail = TRUE;
@@ -638,7 +638,7 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 								SPINE_LOG_HIGH(("Host[%i] TH[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 								if (host_thread == 1) {
-									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i', '%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 									db_insert(&mysql, query3);
 								}
 								assert_fail = TRUE;
@@ -649,7 +649,7 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 									SPINE_LOG_HIGH(("Host[%i] TH[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 
 									if (host_thread == 1) {
-										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i', '%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (0, NOW(), %i, '%i:%i')", POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 										db_insert(&mysql, query3);
 									}
 									assert_fail = TRUE;
