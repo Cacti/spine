@@ -1080,35 +1080,35 @@ unsigned long long hex2dec(char *str) {
 			i++;
 			break;
 		case '1': 
-			number += (16 ^ i) * 1;
+			number += pow(16, i) * 1;
 			i++;
 			break;
 		case '2': 
-			number += (16 ^ i) * 2;
+			number += pow(16, i) * 2;
 			i++;
 			break;
 		case '3':
-			number += (16 ^ i) * 3;
+			number += pow(16, i) * 3;
 			i++;
 			break;
 		case '4': 
-			number += (16 ^ i) * 4;
+			number += pow(16, i) * 4;
 			i++;
 			break;
 		case '5': 
-			number += (16 ^ i) * 5;
+			number += pow(16, i) * 5;
 			i++;
 			break;
 		case '6': 
-			number += (16 ^ i) * 6;
+			number += pow(16, i) * 6;
 			i++;
 			break;
 		case '7':
-			number += (16 ^ i) * 7;
+			number += pow(16, i) * 7;
 			i++;
 			break;
 		case '8': 
-			number += (16 ^ i) * 8;
+			number += pow(16, i) * 8;
 			i++;
 			break;
 		case '9':
@@ -1116,27 +1116,27 @@ unsigned long long hex2dec(char *str) {
 			i++;
 			break;
 		case 'a': case 'A': 
-			number += (16 ^ i) * 10;
+			number += pow(16, i) * 10;
 			i++;
 			break;
 		case 'b': case 'B':
-			number += (16 ^ i) * 11;
+			number += pow(16, i) * 11;
 			i++;
 			break;
 		case 'c': case 'C': 
-			number += (16 ^ i) * 12;
+			number += pow(16, i) * 12;
 			i++;
 			break;
 		case 'd': case 'D':
-			number += (16 ^ i) * 13;
+			number += pow(16, i) * 13;
 			i++;
 			break;
 		case 'e': case 'E': 
-			number += (16 ^ i) * 14;
+			number += pow(16, i) * 14;
 			i++;
 			break;
 		case 'f': case 'F':
-			number += (16 ^ i) * 15;
+			number += pow(16, i) * 15;
 			i++;
 			break;
 		case '"': case ' ': case '\t':
