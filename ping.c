@@ -118,7 +118,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				ping_result = ping_icmp(host, ping);
 
 				/* give up root privileges */
-				#if !(defined(__CYGWIN__) || defined(SOLAR_PRIV))
+				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 				seteuid(getuid());
 				#endif
 			}else if (host->ping_method == PING_UDP) {
