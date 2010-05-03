@@ -1246,7 +1246,7 @@ void checkAsRoot() {
 	seteuid(0);
 
 	if (geteuid() != 0) {
-		SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required for ICMP ping.  Please run \"chmod +s;chown root:root spine\" to resolve."));
+		SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is require if using ICMP.  Please run \"chmod +s;chown root:root spine\" to resolve."));
 		set.icmp_avail = FALSE;
 	}else{
 		SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
@@ -1254,6 +1254,5 @@ void checkAsRoot() {
 		seteuid(getuid());
 	}
 	#endif
-	set.icmp_avail = TRUE;
 	#endif
 }

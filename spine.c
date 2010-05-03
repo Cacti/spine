@@ -168,6 +168,9 @@ int main(int argc, char *argv[]) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
 
+	/* initialize icmp_avail */
+	set.icmp_avail = TRUE;
+
 	/* detect and compensate for stdin/stderr ttys */
 	if (!isatty(fileno(stdout))) {
 		set.stdout_notty = TRUE;

@@ -57,8 +57,10 @@ int ping_host(host_t *host, ping_t *ping) {
 		(host->availability_method == AVAIL_PING) ||
 		(host->availability_method == AVAIL_SNMP_OR_PING)) {
 
-		if (host->ping_method == PING_ICMP && !set.icmp_avail) {
-			host->availability_method = PING_UDP;
+		if (host->ping_method == PING_ICMP) {
+			if (set.icmp_avail == FALSE) {
+				host->ping_method = PING_UDP;
+			}
 		}
 
 		if (!strstr(host->hostname, "localhost")) {
@@ -258,7 +260,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	while ( TRUE ) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 		thread_mutex_lock(LOCK_SETEUID);
-		seteuid(getuid());
+		seteuid(0);
 		#endif
 
 		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
