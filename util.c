@@ -73,8 +73,6 @@ void set_option(const char *option, const char *value) {
  *  NOTE: if the user has provided one of these options on the command line,
  *  it's intercepted here and returned, overriding the database setting.
  *
- *  ===TODO: use a prepared statement?
- *
  *  \return the database option setting
  *
  */
@@ -146,6 +144,45 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 	return dflt;
 }
 
+/*! \fn static const char *getglobalvariable(MYSQL *psql, const char *setting)
+ *  \brief Returns a character pointer to a MySQL global variable setting.
+ *
+ *  Given a pointer to a database and the name of a global variable, return the string
+ *  which represents that value from the settings table. Return NULL if we
+ *  can't find a variable for whatever reason.
+ *
+ *  \return the database global variable setting
+ *
+ */
+static const char *getglobalvariable(MYSQL *psql, const char *setting) {
+	char      qstring[256];
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int       i;
+
+	assert(psql    != 0);
+	assert(setting != 0);
+
+	/* see if it's in the option table */
+	for (i=0; i<nopts; i++) {
+		if (STRIMATCH(setting, opttable[i].opt)) {
+			/* FOUND IT! */
+			return opttable[i].val;
+		}
+	}
+
+	sprintf(qstring, "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
+
+	result = db_query(psql, qstring);
+
+	if ((mysql_num_rows(result) > 0) &&
+		(mysql_row = mysql_fetch_row(result)) != 0)	{
+		return mysql_row[1];
+	}else{
+		return 0;
+	}
+}
+
 /*! \fn void read_config_options(void)
  *  \brief Reads the default Spine runtime parameters from the database and set's the global array
  *
@@ -161,6 +198,12 @@ void read_config_options() {
 	const char *res;
 
 	db_connect(set.dbdb, &mysql);
+
+	/* get the mysql server version */
+	set.dbversion = 0;
+	if ((res = getglobalvariable(&mysql, "version")) != 0 ) {
+		set.dbversion = atoi(res);
+	}
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, "log_verbosity")) != 0 ) {
@@ -1149,4 +1192,68 @@ unsigned long long hex2dec(char *str) {
 	}
 
 	return number;
+}
+
+	
+void checkAsRoot() {
+	#ifndef __CYGWIN__
+	#ifdef SOLAR_PRIV
+	priv_set_t *privset;
+	char *p;
+
+	/* Get the basic set */
+	privset = priv_str_to_set("basic", ",", NULL);
+	if (privset == NULL) {
+		die("ERROR: Could not get basic privset from priv_str_to_set().");
+	} else {
+		p = priv_set_to_str(privset, ',', 0);
+		SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown"));
+	}
+
+	/* Remove exec from the basic set */
+	if (priv_delset(privset, PRIV_PROC_EXEC) < 0 ) {
+		SPINE_LOG_DEBUG(("Warning: Deletion of PRIV_PROC_EXEC from privset failed: '%s'.", strerror(errno)));
+	}
+
+	/* Add priviledge to send/receive ICMP packets */
+	if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0 ) {
+		SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
+	}
+
+	/* Compute the set of privileges that are never needed */
+	priv_inverse(privset);
+
+	/* Remove the set of unneeded privs from Permitted (and by
+	 * implication from Effective) */
+	if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
+		SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
+	}
+
+	/* Remove unneeded priv set from Limit to be safe */
+	if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
+		SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
+	}
+
+	boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);
+	SPINE_LOG_DEBUG(("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.", pe != 0 ? "Enabled" : "Disabled"));
+
+	set.icmp_avail = pe;
+
+	/* Free the privset */
+	priv_freeset(privset);
+	free(p);
+	#else
+	seteuid(0);
+
+	if (geteuid() != 0) {
+		SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve."));
+		set.icmp_avail = FALSE;
+	}else{
+		SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
+		set.icmp_avail = TRUE;
+		seteuid(getuid());
+	}
+	#endif
+	set.icmp_avail = TRUE;
+	#endif
 }

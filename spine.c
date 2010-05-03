@@ -418,6 +418,9 @@ int main(int argc, char *argv[]) {
 		SPINE_LOG(("WARNING: MySQL is NOT Thread Safe!"));
 	}
 
+	/* test for asroot permissions for ICMP */
+	checkAsRoot();
+
 	/* initialize SNMP */
 	SPINE_LOG_DEBUG(("SPINE: Initializing Net-SNMP API"));
 	snmp_spine_init();
@@ -453,7 +456,6 @@ int main(int argc, char *argv[]) {
 		set.device_threads_exists = TRUE;
 	}else{
 		set.device_threads_exists = FALSE;
-
 	}
 
 	if (set.device_threads_exists) {
@@ -479,7 +481,10 @@ int main(int argc, char *argv[]) {
 		qp += sprintf(qp, " AND host.poller_id=%i", set.poller_id);
 	}
 	qp += sprintf(qp, " GROUP BY host.id");
-	qp += sprintf(qp, " ORDER BY count(poller_item.host_id)*host.avg_time DESC, id ASC");
+
+	if (set.dbversion > 4) {
+		qp += sprintf(qp, " ORDER BY count(poller_item.host_id)*host.avg_time DESC, id ASC");
+	}
 
 	result = db_query(&mysql, querybuf);
 

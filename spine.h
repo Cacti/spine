@@ -155,7 +155,7 @@
 /* threads constants */
 #define LOCK_SNMP 0
 #define LOCK_THREAD 1
-#define LOCK_MYSQL 2
+#define LOCK_SETEUID 2
 #define LOCK_GHBN 3
 #define LOCK_PIPE 4
 #define LOCK_SYSLOG 5
@@ -173,7 +173,7 @@
 
 #define LOCK_SNMP_O 0
 #define LOCK_THREAD_O 1
-#define LOCK_MYSQL_O 2
+#define LOCK_SETEUID_O 2
 #define LOCK_GHBN_O 3
 #define LOCK_PIPE_O 4
 #define LOCK_SYSLOG_O 5
@@ -311,6 +311,7 @@ typedef struct config_struct {
 	char   dbuser[SMALL_BUFSIZE];
 	char   dbpass[SMALL_BUFSIZE];
 	unsigned int dbport;
+	int    dbversion;
 	/* path information */
 	char   path_logfile[SMALL_BUFSIZE];
 	char   path_php[SMALL_BUFSIZE];
@@ -322,6 +323,7 @@ typedef struct config_struct {
 	int    log_pwarn;
 	int    log_pstats;
 	/* ping settings */
+	int    icmp_avail;
 	int    availability_method;
 	int    ping_method;
 	int    ping_retries;

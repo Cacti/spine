@@ -56,71 +56,14 @@ int ping_host(host_t *host, ping_t *ping) {
 	if ((host->availability_method == AVAIL_SNMP_AND_PING) ||
 		(host->availability_method == AVAIL_PING) ||
 		(host->availability_method == AVAIL_SNMP_OR_PING)) {
-		if (host->ping_method == PING_ICMP) {
-			/* set and then test for asroot */
-			#ifndef __CYGWIN__
-			#ifdef SOLAR_PRIV
-			priv_set_t *privset;
-			char *p;
 
-			/* Get the basic set */
-			privset = priv_str_to_set("basic", ",", NULL);
-			if (privset == NULL) {
-				die("ERROR: Could not get basic privset from priv_str_to_set().");
-			} else {
-				p = priv_set_to_str(privset, ',', 0);
-				SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown"));
-			}
-
-			/* Remove exec from the basic set */
-			if (priv_delset(privset, PRIV_PROC_EXEC) < 0 ) {
-				SPINE_LOG_DEBUG(("Warning: Deletion of PRIV_PROC_EXEC from privset failed: '%s'.", strerror(errno)));
-			}
-
-			/* Add priviledge to send/receive ICMP packets */
-			if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0 ) {
-				SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
-			}
-
-			/* Compute the set of privileges that are never needed */
-			priv_inverse(privset);
-
-			/* Remove the set of unneeded privs from Permitted (and by
-			 * implication from Effective) */
-			if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
-				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
-			}
-
-			/* Remove unneeded priv set from Limit to be safe */
-			if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
-				SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
-			}
-
-			boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);
-			SPINE_LOG_DEBUG(("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.", pe != 0 ? "Enabled" : "Disabled"));
-
-			/* Free the privset */
-			priv_freeset(privset);
-			free(p);
-			#else
-			seteuid(0);
-
-			if (geteuid() != 0) {
-				host->ping_method = PING_UDP;
-				SPINE_LOG_DEBUG(("WARNING: Falling back to UDP Ping due to not running asroot.  Please use \"chmod xxx0 /usr/bin/spine\" to resolve."));
-			}
-			#endif
-			#endif
+		if (host->ping_method == PING_ICMP && !set.icmp_avail) {
+			host->availability_method = PING_UDP;
 		}
 
 		if (!strstr(host->hostname, "localhost")) {
 			if (host->ping_method == PING_ICMP) {
 				ping_result = ping_icmp(host, ping);
-
-				/* give up root privileges */
-				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				seteuid(getuid());
-				#endif
 			}else if (host->ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);
 			}else if (host->ping_method == PING_TCP) {
@@ -313,6 +256,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	/* get ICMP socket */
 	retry_count = 0;
 	while ( TRUE ) {
+		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+		thread_mutex_lock(LOCK_SETEUID);
+		seteuid(getuid());
+		#endif
+
 		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
 			usleep(500000);
 			retry_count++;
@@ -321,6 +269,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
 				snprintf(ping->ping_status, 50, "down");
 				free(new_hostname);
+				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+				seteuid(getuid());
+				thread_mutex_unlock(LOCK_SETEUID);
+				#endif
+
 				return HOST_DOWN;
 	
 				break;
@@ -329,6 +282,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			break;
 		}
 	}
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	seteuid(getuid());
+	thread_mutex_unlock(LOCK_SETEUID);
+	#endif
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;

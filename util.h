@@ -74,3 +74,6 @@ extern double get_time_as_double(void);
 
 /* get host polling time */
 extern char *get_host_poll_time(void);
+
+/* see if we can do things as root */
+extern void checkAsRoot();
