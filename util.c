@@ -1112,7 +1112,7 @@ unsigned long long hex2dec(char *str) {
 			i++;
 			break;
 		case '9':
-			number += (16 ^ i) * 9;
+			number += pow(16, i) * 9;
 			i++;
 			break;
 		case 'a': case 'A': 
