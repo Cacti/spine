@@ -396,7 +396,16 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(new_hostname);
 								free(packet);
+								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+								thread_mutex_lock(LOCK_SETEUID);
+								seteuid(0);
+								#endif
 								close(icmp_socket);
+								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+								seteuid(getuid());
+								thread_mutex_unlock(LOCK_SETEUID);
+								#endif
+
 								return HOST_UP;
 							}else{
 								/* received a response other than an echo reply */
@@ -425,7 +434,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
 			free(packet);
+			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+			thread_mutex_lock(LOCK_SETEUID);
+			seteuid(0);
+			#endif
 			close(icmp_socket);
+			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+			seteuid(getuid());
+			thread_mutex_unlock(LOCK_SETEUID);
+			#endif
 			return HOST_DOWN;
 		}
 	}else{
@@ -433,7 +450,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
 		free(packet);
-		if (icmp_socket != -1) close(icmp_socket);
+		if (icmp_socket != -1) {
+			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+			thread_mutex_lock(LOCK_SETEUID);
+			seteuid(0);
+			#endif
+			close(icmp_socket);
+			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+			seteuid(getuid());
+			thread_mutex_unlock(LOCK_SETEUID);
+			#endif
+		}
 		return HOST_DOWN;
 	}
 }
