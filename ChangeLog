@@ -1,12 +1,11 @@
 ﻿The Cacti Group | spine
 
-SVN
--bug#0001653: Transient ICMP Socket create failures causing spine to die
--bug#0001657: Spine output shows drop of latest bit from hex value 
--feature#0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address 
 
 0.8.7f
 
+-bug#0001653: Transient ICMP Socket create failures causing spine to die
+-bug#0001657: Spine output shows drop of latest bit from hex value 
+-feature#0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address
 -bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
 -bug#0001497: Prevent constant reindexes if snmp agent continually returns uptime of 0
 -bug#0001510: Speedup spine resorting hosts by estimated polling time
@@ -20,6 +19,7 @@ SVN
 -bug: MySQL client auto reconnect default in MySQL 5.0.71 causes spine to crash
 -bug: Inconsistent behavior when the poller interval has not been set
 -bug: Invalid use of FDSETSIZE can cause issue with Script Server
+-bug: When performing reindex checks, spine does not trim quotes from string values resulting in reindex faiures
 
 0.8.7e
 -bug: Not all configuration paths are searched for spine.conf
