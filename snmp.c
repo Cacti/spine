@@ -533,10 +533,10 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
 	    size_t          name_len;
-	} *name, *namep, *testP;
+	} *name, *namep, *tempP;
 
 	/* load up oids */
-	namep = name = testP = (struct nameStruct *) calloc(num_oids, sizeof(*name));
+	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	for (i = 0; i < num_oids; i++) {
 		namep->name_len = MAX_OID_LEN;
@@ -567,45 +567,17 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
-				index_count = 0;
 
-				while (vars) {
-					/* goto the top of the request list */
-					namep = name;
-
-					/* let's do the quick check first */
-					tempP = namep + index_count;
-					if (snmp_oid_compare(tempP->name, tempP->name_len, vars->name, vars->name_length) == 0) {
+				for(i = 0; i < num_oids && vars; i++) {
+					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						#ifdef USE_NET_SNMP
-						snmp_snprint_value(snmp_oids[index_counter].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snmp_snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result), vars->name, vars->name_length, vars);
 						#else
-						snprint_value(snmp_oids[index_counter].result, vars->name, vars->name_length, vars);
+						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
 						#endif
-						/* set the name length to 0 to mark as complete */
-						tempP->name_len = 0;
-					}else{
-						/* start at the top of the list, go through all entries till found */
-						for(i = 0; i < num_oids; i++) {
-							/* see if we have already found this OID or it's null */
-							if(namep->name_len == 0) continue;
-	
-							/* check to see if the response and the calling OID's are identical */
-							if (snmp_oid_compare(namep->name, namep->name_len, vars->name, vars->name_length) == 0) {
-								#ifdef USE_NET_SNMP
-								snmp_snprint_value(snmp_oids[i].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-								#else
-								snprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-								#endif
-								/* set the name length to 0 to mark as complete */
-								namep->name_len = 0;
-								break;
-							}
-							/* goto the next request value */
-							namep++;
-						}
+						
+						vars = vars->next_variable;
 					}
-					index_count++;
-					vars = vars->next_variable;
 				}
 			}else{
 				if (response->errindex != 0) {
