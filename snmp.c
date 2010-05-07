@@ -567,33 +567,17 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		}else{
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
-				int offset = 0;
-				while (vars) {
-					namep = name;
-					namep += offset;
-					for(i = offset; i < num_oids; i++){
-						/* see if we have already found this OID */
-						if(namep->name_len == 0) continue;
 
-						/* check to see if the response and the calling OID's are identical */
-						if (snmp_oid_compare(namep->name, namep->name_len, vars->name, vars->name_length) == 0) {
-							#ifdef USE_NET_SNMP
-							snmp_snprint_value(snmp_oids[i].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-							#else
-							snprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
-							#endif
-
-							/* set the name length to 0 to mark as complete */
-							namep->name_len = 0;
-
-							/* SNMP result is in normal order, shift namep in sync with vars */
-							if(i == offset) offset++;
-
-							break;
-						}
-						namep++;
+				for(i = 0; i < num_oids && vars; i++) {
+					if (!IS_UNDEFINED(snmp_oids[i].result)) {
+						#ifdef USE_NET_SNMP
+						snmp_snprint_value(snmp_oids[i].result, sizeof(snmp_oids[i].result), vars->name, vars->name_length, vars);
+						#else
+						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+						#endif
+						
+						vars = vars->next_variable;
 					}
-					vars = vars->next_variable;
 				}
 			}else{
 				if (response->errindex != 0) {
