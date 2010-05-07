@@ -629,7 +629,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 
 					}
 
-					/* remote the invalid OID from the PDU */
+					/* remove the invalid OID from the PDU */
 					pdu = snmp_fix_pdu(response, SNMP_MSG_GET);
 
 					/* free the previous response */
