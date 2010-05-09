@@ -528,12 +528,11 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	int i;
 	int array_count;
 	int index_count;
-	char buf[RESULTS_BUFFER];
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
 	    size_t          name_len;
-	} *name, *namep, *tempP;
+	} *name, *namep;
 
 	/* load up oids */
 	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));

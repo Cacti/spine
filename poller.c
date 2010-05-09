@@ -117,8 +117,8 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 	int    reindex_err = FALSE;
 	int    spike_kill = FALSE;
 	int    rows_processed = 0;
-	int    i;
-	int    j;
+	int    i = 0;
+	int    j = 0;
 	int    num_oids = 0;
 	int    snmp_poller_items = 0;
 	size_t out_buffer;

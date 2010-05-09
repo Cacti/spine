@@ -137,9 +137,8 @@ int main(int argc, char *argv[]) {
 	long int EXTERNAL_THREAD_SLEEP = 5000;
 	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
-	int itemsPT;
+	int itemsPT = 0;
 	int device_threads;
-	pid_t  pid;
 
 	pthread_t* threads = NULL;
 	poller_thread_t* poller_details = NULL;
@@ -151,7 +150,7 @@ int main(int argc, char *argv[]) {
 	MYSQL_RES *tresult = NULL;
 	MYSQL_ROW mysql_row;
 	int canexit = FALSE;
-	int host_id;
+	int host_id = 0;
 	int i;
 	int mutex_status  = 0;
 	int thread_status = 0;
@@ -507,7 +506,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* mark the spine process as started */
-	snprint(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES ($i, $i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
+	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
 	db_insert(&mysql, querybuf);
 
 	/* initialize threads and mutexes */
@@ -701,7 +700,7 @@ int main(int argc, char *argv[]) {
 
 	/* update the db for |data_time| on graphs */
 	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
-	snprint(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
 	db_insert(&mysql, querybuf);
 
 	/* cleanup and exit program */

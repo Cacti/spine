@@ -795,7 +795,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				continue;
 			}else{
 				free(buf);
-				return;
+				return FALSE;
 			}
 		}else{
 			break;
