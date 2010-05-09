@@ -139,6 +139,7 @@ int main(int argc, char *argv[]) {
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	int itemsPT;
 	int device_threads;
+	pid_t  pid;
 
 	pthread_t* threads = NULL;
 	poller_thread_t* poller_details = NULL;
@@ -505,6 +506,10 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
 
+	/* mark the spine process as started */
+	snprint(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES ($i, $i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
+	db_insert(&mysql, querybuf);
+
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -696,7 +701,8 @@ int main(int argc, char *argv[]) {
 
 	/* update the db for |data_time| on graphs */
 	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
-	db_insert(&mysql, "insert into poller_time (poller_id, start_time, end_time) values (0, NOW(), NOW())");
+	snprint(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+	db_insert(&mysql, querybuf);
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
