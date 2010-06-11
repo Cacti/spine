@@ -657,6 +657,8 @@ int main(int argc, char *argv[]) {
 			}else{
 				poller_counter++;
 			}
+
+			usleep(internal_thread_sleep);
 		}
 
 		usleep(internal_thread_sleep);
