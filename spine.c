@@ -473,7 +473,6 @@ int main(int argc, char *argv[]) {
 	}else{
 		qp += sprintf(qp, "SELECT id, '1' as device_threads FROM host");
 	}
-	qp += sprintf(qp, " LEFT JOIN poller_item ON poller_item.host_id=host.id");
 	qp += sprintf(qp, " WHERE disabled=''");
 	if (!strlen(set.host_id_list)) {
 		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
