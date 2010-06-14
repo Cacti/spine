@@ -483,7 +483,6 @@ int main(int argc, char *argv[]) {
 	if (set.poller_id_exists) {
 		qp += sprintf(qp, " AND host.poller_id=%i", set.poller_id);
 	}
-	qp += sprintf(qp, " GROUP BY host.id");
 
 	result = db_query(&mysql, querybuf);
 
@@ -529,7 +528,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* loop through devices until done */
-	while (active_threads < set.threads && device_counter < num_rows && canexit == FALSE) {
+	while (device_counter < num_rows && canexit == FALSE) {
 		mutex_status = thread_mutex_trylock(LOCK_THREAD);
 
 		switch (mutex_status) {
