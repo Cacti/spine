@@ -149,6 +149,7 @@
 #define DEFAULT_DB_USER "cactiuser"
 #define DEFAULT_DB_PASS "cactiuser"
 #define DEFAULT_DB_PORT 3306
+#define DEFAULT_DB_PREG 0
 #define DEFAULT_LOGFILE "/var/www/html/cacti/log/cacti.log"
 #define DEFAULT_TIMEOUT 294000000
 
@@ -311,6 +312,7 @@ typedef struct config_struct {
 	char   dbuser[SMALL_BUFSIZE];
 	char   dbpass[SMALL_BUFSIZE];
 	unsigned int dbport;
+	unsigned int pre087g;
 	int    dbversion;
 	/* path information */
 	char   path_logfile[SMALL_BUFSIZE];
@@ -398,7 +400,9 @@ typedef struct snmp_oids {
 typedef struct poller_thread {
 	int host_id;
 	int host_thread;
+	int last_host_thread;
 	int host_data_ids;
+	char *host_time;
 } poller_thread_t;
 
 /*! PHP Script Server Structure

@@ -46,17 +46,24 @@
 void *child(void *arg) {
 	int host_id;
 	int host_thread;
+	int last_host_thread;
 	int host_data_ids;
+	char host_time[SMALL_BUFSIZE];
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
-	host_id        = poller_details.host_id;
-	host_thread    = poller_details.host_thread;
-	host_data_ids  = poller_details.host_data_ids;
+	host_id          = poller_details.host_id;
+	host_thread      = poller_details.host_thread;
+	last_host_thread = poller_details.last_host_thread;
+	host_data_ids    = poller_details.host_data_ids;
+	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
+
+	thread_mutex_unlock(LOCK_THREAD);
+
 	free(arg);
 
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
-	poll_host(host_id, host_thread, host_data_ids);
+	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time);
 
 	thread_mutex_lock(LOCK_THREAD);
 
@@ -72,7 +79,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int host_id, int host_thread, int host_data_ids)
+/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -94,7 +101,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int host_id, int host_thread, int host_data_ids) {
+void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time) {
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
 	char *query3 = NULL;
@@ -125,7 +132,6 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 	int    php_process;
 
 	char *poll_result = NULL;
-	char *host_time   = NULL;
 	char update_sql[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
@@ -339,9 +345,6 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 	snprintf(query11, BUFSIZE,
 		"INSERT INTO poller_output_boost"
 		" (local_data_id, rrd_name, time, output) VALUES");
-
-	/* get the host polling time */
-	host_time = get_host_poll_time();
 
 	/* initialize the ping structure variables */
 	snprintf(ping->ping_status,   50,            "down");
@@ -722,10 +725,6 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 			/* get the poller items */
 			if ((result = db_query(&mysql, query5)) != 0) {
 				num_rows = mysql_num_rows(result);
-
-				/* update poller_items table for next polling interval */
-				db_query(&mysql, query6);
-				db_query(&mysql, query7);
 			}else{
 				SPINE_LOG(("Host[%i] TH[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 			}
@@ -1169,9 +1168,14 @@ void poll_host(int host_id, int host_thread, int host_data_ids) {
 	}
 
 	free(host);
-	free(host_time);
 	free(reindex);
 	free(ping);
+
+	/* update poller_items table for next polling interval */
+	if (host_thread == last_host_thread) {
+		db_query(&mysql, query6);
+		db_query(&mysql, query7);
+	}
 
 	mysql_close(&mysql);
 

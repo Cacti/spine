@@ -137,6 +137,7 @@ int main(int argc, char *argv[]) {
 	long int EXTERNAL_THREAD_SLEEP = 5000;
 	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
+	char *host_time = NULL;
 	int itemsPT = 0;
 	int device_threads;
 
@@ -501,8 +502,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* mark the spine process as started */
-	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
-	db_insert(&mysql, querybuf);
+	if (!set.pre087g) {
+		SPINE_LOG_MEDIUM(("NOTE: Spine is behaving in a 0.8.7g manner"));
+		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
+		db_insert(&mysql, querybuf);
+	}else{
+		SPINE_LOG_MEDIUM(("NOTE: Spine is behaving in a PRE 0.8.7g manner"));
+	}
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
@@ -558,9 +564,13 @@ int main(int argc, char *argv[]) {
 						tresult   = db_query(&mysql, querybuf);
 						mysql_row = mysql_fetch_row(tresult);
 						itemsPT   = atoi(mysql_row[0]);
+						if (host_time) free(host_time);
+						host_time = get_host_poll_time();
 					}
 				}else{
 					itemsPT   = 0;
+					if (host_time) free(host_time);
+					host_time = get_host_poll_time();
 				}
 
 				/* populate the thread structure */
@@ -568,9 +578,11 @@ int main(int argc, char *argv[]) {
 					die("ERROR: Fatal malloc error: spine.c poller_details!");
 				}
 
-				poller_details->host_id       = host_id;
-				poller_details->host_thread   = current_thread;
-				poller_details->host_data_ids = itemsPT;
+				poller_details->host_id          = host_id;
+				poller_details->host_thread      = current_thread;
+				poller_details->last_host_thread = device_threads;
+				poller_details->host_data_ids    = itemsPT;
+				poller_details->host_time        = host_time;
 
 				/* create child process */
 				thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
@@ -615,8 +627,6 @@ int main(int argc, char *argv[]) {
 				}else{
 					poller_counter++;
 				}
-	
-				thread_mutex_unlock(LOCK_THREAD);
 	
 				break;
 			case EDEADLK:
@@ -692,7 +702,13 @@ int main(int argc, char *argv[]) {
 
 	/* update the db for |data_time| on graphs */
 	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
-	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+
+	/* setup poller_time depending on Cacti version */
+	if (set.pre087g) {
+		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), NOW())", set.poller_id, getpid());
+	}else{
+		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+	}
 	db_insert(&mysql, querybuf);
 
 	/* cleanup and exit program */
