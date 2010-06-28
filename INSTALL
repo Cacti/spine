@@ -44,31 +44,28 @@ NOTES
                                       increasing this value may improve performance.  Keep
                                       in mind that this will increase server load.
 
-- If ./configure fails with the error 'libtool.m4 and ltmain.sh have 
-  a version mismatch!', run the following:
- 
-  ./bootstrap 
-
 - Make sure to rename /etc/spine.conf.dist to spine.conf and make changes to match
   your database
 
 
 INSTALL
 
+  In order to ensure you have a sane enviroment, run 'bootstrap' prior to attempting
+  to configure and make spine:
+
+  ./bootstrap
   ./configure
   make
   make install
 
-ALTERNATE INSTALL
-
-  If you have issues with symbolic links, configure not executing, etc, run the following:
+  If you have any issues with bootstrap, here are the commands that it is running.  Step
+  through each one to determine where you are having an issue.
 
   aclocal
   libtoolize --force --install
   autoconf
   autoheader
   automake
-  chmod +x ./configure
   ./configure
   make
   make install
