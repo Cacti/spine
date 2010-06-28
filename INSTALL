@@ -59,3 +59,16 @@ INSTALL
   make
   make install
 
+ALTERNATE INSTALL
+
+  If you have issues with symbolic links, configure not executing, etc, run the following:
+
+  aclocal
+  libtoolize --force --install
+  autoconf
+  autoheader
+  automake
+  chmod +x ./configure
+  ./configure
+  make
+  make install
