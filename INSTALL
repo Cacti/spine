@@ -50,16 +50,25 @@ NOTES
 
 INSTALL
 
-  In order to ensure you have a sane enviroment, run 'bootstrap' prior to attempting
-  to configure and make spine:
+  ./configure
+  make
+  make install
+
+  
+  If you have issues with installing, in order to ensure you have a sane enviroment, 
+  run 'bootstrap' prior to attempting to configure and make spine:
 
   ./bootstrap
   ./configure
   make
   make install
 
+  
   If you have any issues with bootstrap, here are the commands that it is running.  Step
   through each one to determine where you are having an issue.
+  
+  NOTE:  bootstrap actually runs 'autoreconf --force --install', which is similar to the
+  commands below
 
   aclocal
   libtoolize --force --install

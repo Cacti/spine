@@ -48,20 +48,8 @@ find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
 
 # Prepare a build state
 echo "INFO: Running auto-tools to verify buildability"
-aclocal
-[ $? -ne 0 ] && echo "ERROR: 'aclocal' exited with errors" && exit -1
-
-libtoolize --force --install
-[ $? -ne 0 ] && echo "ERROR: 'libtool' exited with errors" && exit -1
-
-autoheader
-[ $? -ne 0 ] && echo "ERROR: 'autoheader' exited with errors" && exit -1
-
-automake --foreign --add-missing --copy
-[ $? -ne 0 ] && echo "ERROR: 'automake' exited with errors" && exit -1
-
-autoconf
-[ $? -ne 0 ] && echo "ERROR: 'autoconf' exited with errors" && exit -1
+autoreconf --force --install
+[ $? -ne 0 ] && echo "ERROR: 'autoreconf' exited with errors" && exit -1
 
 # Provide some meaningful notes
 echo "INFO: Spine bootstrap process completed"

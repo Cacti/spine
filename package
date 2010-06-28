@@ -21,9 +21,6 @@ display_help () {
 # Sanity checks
 [ ! -e configure.ac ] && echo "ERROR: Your current working directory must be the SVN check out of Spine" && exit -1
 
-which unix2dos > /dev/null 2>&1;
-[ $? -gt 1 ] && echo "ERROR: Can not locate utility unix2dos" && exit -1
-
 if [ "${1}x" = "--helpx" -o "${1}x" = "-hx" ]; then
   display_help
   exit 0
@@ -66,10 +63,6 @@ svn export ${SVN_REV} . ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
 # Change working directory 
 pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
 
-# Build cleanup
-echo "INFO: Removing hardware specific directories..."
-rm -rf autom4te.cache .deps > /dev/null 2>&1
-
 # Get version from source files, warn if different than defined for build
 SRC_VERSION=`cat configure.ac | grep AM_INIT_AUTOMAKE | awk -F, '{print $2}' | tr -d ')' | tr -d ' '` 
 if [ "${SRC_VERSION}" != "${VERSION}" ]; then
@@ -82,33 +75,9 @@ fi
 perl -pi -e 's/spine.conf.dist/spine.conf/' Makefile.am > /dev/null 2>&1
 mv spine.conf.dist spine.conf > /dev/null 2>&1
 
-# Convert files to unix format 
-echo "INFO: Converting files to unix format..."
-find . -type f -exec dos2unix \{\} \; > /dev/null 2>&1
-
-# Build it
-echo "INFO: Building..."
-/bin/rm -f configure > /dev/null 2>&1
-
-aclocal
-[ $? -gt 0 ] && echo "FATAL: aclocal has errors" && exit -1
-
-autoheader
-[ $? -gt 0 ] && echo "FATAL: autoheader has errors" && exit -1
-
-automake --add-missing
-[ $? -gt 0 ] && echo "FATAL: automake has errors" && exit -1
-
-libtoolize --force
-[ $? -gt 0 ] && echo "FATAL: libtoolize has errors" && exit -1
-
-autoconf
-[ $? -gt 0 ] && echo "FATAL: autoconf has errors" && exit -1
-
-# Fix permission
-echo "INFO: Fixing permissions..."
-chmod +x configure > /dev/null 2>&1
-find . -name "*.c" -exec chmod 644 \{\} \; > /dev/null 2>&1
+# Call bootstrap
+echo "INFO: call bootstrap..."
+./bootstrap
 
 # Check working directory
 cd ..
