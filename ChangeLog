@@ -4,7 +4,6 @@
 -feature: Multi threaded host polling
 
 0.8.7f
-
 -bug#0001653: Transient ICMP Socket create failures causing spine to die
 -bug#0001657: Spine output shows drop of latest bit from hex value 
 -feature#0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address
