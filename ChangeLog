@@ -1,5 +1,8 @@
 ﻿The Cacti Group | spine
 
+SVN
+-bug: Host list not properly initialized
+
 0.8.7g
 -feature: Multi threaded host polling
 

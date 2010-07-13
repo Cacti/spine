@@ -281,7 +281,7 @@ int main(int argc, char *argv[]) {
 
 		else if (STRMATCH(arg, "-H") ||
 				 STRIMATCH(arg, "--hostlist")) {
-			snprintf(set.host_id_list, BIG_BUFSIZE, getarg(opt, &argv));
+			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
 		}
 
 		else if (STRMATCH(arg, "-h") ||
