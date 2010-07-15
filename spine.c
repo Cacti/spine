@@ -596,6 +596,8 @@ int main(int argc, char *argv[]) {
 						}
 						active_threads++;
 
+						thread_mutex_unlock(LOCK_THREAD);
+
 						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", active_threads));
 
 						break;
@@ -603,7 +605,7 @@ int main(int argc, char *argv[]) {
 						SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread"));
 						break;
 					case EFAULT:
-						SPINE_LOG(("ERROR: The Thread or Attribute Was Invalid"));
+						SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
 						break;
 					case EINVAL:
 						SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));

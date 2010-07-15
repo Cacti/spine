@@ -57,8 +57,6 @@ void *child(void *arg) {
 	host_data_ids    = poller_details.host_data_ids;
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
 
-	thread_mutex_unlock(LOCK_THREAD);
-
 	free(arg);
 
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
@@ -66,12 +64,10 @@ void *child(void *arg) {
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time);
 
 	thread_mutex_lock(LOCK_THREAD);
-
 	active_threads--;
+	thread_mutex_unlock(LOCK_THREAD);
 
 	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i" ,active_threads));
-
-	thread_mutex_unlock(LOCK_THREAD);
 
 	/* end the thread */
 	pthread_exit(0);

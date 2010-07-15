@@ -499,12 +499,8 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 	size_t out_len = 0;
 
 	if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
-		if (sprint_realloc_value(&buf, &buf_len, &out_len, 1,
-				objid, objidlen, variable)) {
-			snprintf(obuf, buf_len, "%s", buf);
-		}else{
-			snprintf(obuf, buf_len, "%s [TRUNCATED]", buf);
-		}
+		sprint_realloc_by_type(&buf, &buf_len, &out_len, 1, variable, NULL, NULL, NULL);
+		snprintf(obuf, buf_len, "%s", buf);
 	}else{
 		SET_UNDEFINED(obuf);
 	}

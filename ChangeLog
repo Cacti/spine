@@ -1,7 +1,9 @@
 ﻿The Cacti Group | spine
 
 SVN
+-bug: Net-snmp API issues cause spine crashes with some SNMP agents
 -bug: Host list not properly initialized
+-bug: Mutex locking issues cause deadlocks in Windows
 
 0.8.7g
 -feature: Multi threaded host polling
