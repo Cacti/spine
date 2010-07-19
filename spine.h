@@ -504,5 +504,6 @@ extern php_t  *php_processes;
 extern char   start_datetime[20];
 extern char   config_paths[CONFIG_PATHS][BUFSIZE];
 extern int    active_threads;
+extern int    thread_ready;
 
 #endif /* not _SPINE_H_ */

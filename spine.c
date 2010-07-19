@@ -94,6 +94,7 @@ int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
 int active_scripts = 0;
+int thread_ready   = FALSE;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -584,6 +585,11 @@ int main(int argc, char *argv[]) {
 				poller_details->host_data_ids    = itemsPT;
 				poller_details->host_time        = host_time;
 
+				/* this variable tells us that the child had loaded the poller
+				 * poller_details structure and we can move on to the next thread
+				 */
+				thread_ready = FALSE;
+
 				/* create child process */
 				thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
@@ -595,6 +601,11 @@ int main(int argc, char *argv[]) {
 							device_counter++;
 						}
 						active_threads++;
+
+						/* wait for the child to read and process the structure */
+						while (!thread_ready) { 
+							usleep(100000);
+						}
 
 						thread_mutex_unlock(LOCK_THREAD);
 

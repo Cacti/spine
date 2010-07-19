@@ -59,6 +59,8 @@ void *child(void *arg) {
 
 	free(arg);
 
+	thread_ready = TRUE;
+
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time);
