@@ -197,6 +197,7 @@ int main(int argc, char *argv[]) {
 
 	/* we attempt to support scripts better in cygwin */
 	#if defined(__CYGWIN__)
+	setenv("nodosfilewarning", "Y", 1);
 	if (file_exists("./sh.exe")) {
 		set.cygwinshloc = 0;
 		printf("NOTE: The Shell Command Exists in the current directory\n");

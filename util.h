@@ -54,7 +54,7 @@ extern int all_digits(const char *str);
 extern int is_hexadecimal(const char * str, const short ignore_space);
 
 /* string and file functions */
-extern char *add_slashes(char *string, int arguments_2_strip);
+extern char *add_slashes(char *string);
 extern int file_exists(const char *filename);
 extern char *strip_alpha(char *string);
 extern char *strncopy(char *dst, const char *src, size_t n);

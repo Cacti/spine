@@ -898,17 +898,15 @@ char *strip_alpha(char *string) {
 	return string;
 }
 
-/*! \fn char *add_slashes(char *string, int arguments_2_strip)
- *  \brief change all backslashes to forward slashes for the first n arguements.
+/*! \fn char *add_slashes(char *string)
+ *  \brief add escaping to back slashes on for Windows type commands.
  *  \param string the string to replace slashes
- *  \param arguments_2_strip the number of space delimited arguments to reverse
  *
  *  \return a pointer to the modified string. Variable must be freed by parent.
  *
  */
-char *add_slashes(char *string, int arguments_2_strip) {
+char *add_slashes(char *string) {
 	int length;
-	int space_count;
 	int position;
 	int new_position;
 	char *return_str;
@@ -918,10 +916,9 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	}
 	return_str[0] = '\0';
 
-	length = strlen(string);
-	space_count = 0;
-	position = 0;
-	new_position = position;
+	length       = strlen(string);
+	position     = 0;
+	new_position = 0;
 
 	/* simply return on blank string */
 	if (!length) {
@@ -931,17 +928,9 @@ char *add_slashes(char *string, int arguments_2_strip) {
 	while (position < length) {
 		/* backslash detected, change to forward slash */
 		if (string[position] == '\\') {
-			/* only add slashes for first x arguments */
-			if (space_count < arguments_2_strip) {
-				return_str[new_position] = '/';
-			}else{
-				return_str[new_position] = string[position];
-			}
-		/* end of argument detected */
-		}else if (string[position] == ' ') {
-			return_str[new_position] = ' ';
-			space_count++;
-		/* normal character detected */
+			return_str[new_position] = '\\';
+			new_position++;
+			return_str[new_position] = '\\';
 		}else{
 			return_str[new_position] = string[position];
 		}
