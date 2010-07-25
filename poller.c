@@ -65,9 +65,16 @@ void *child(void *arg) {
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time);
 
-	thread_mutex_lock(LOCK_THREAD);
+	while (TRUE) {
+		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
 	active_threads--;
 	thread_mutex_unlock(LOCK_THREAD);
+
+			break;
+		}
+		
+		usleep(100);
+	}
 
 	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i" ,active_threads));
 

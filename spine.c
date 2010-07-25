@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
 	int poller_counter = 0;
 	int last_active_threads = 0;
 	int valid_conf_file = FALSE;
-	long int EXTERNAL_THREAD_SLEEP = 5000;
+	long int EXTERNAL_THREAD_SLEEP = 50;
 	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
@@ -605,10 +605,8 @@ int main(int argc, char *argv[]) {
 
 						/* wait for the child to read and process the structure */
 						while (!thread_ready) { 
-							usleep(100000);
+							usleep(internal_thread_sleep);
 						}
-
-						thread_mutex_unlock(LOCK_THREAD);
 
 						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", active_threads));
 
@@ -626,6 +624,8 @@ int main(int argc, char *argv[]) {
 						SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
 						break;
 				}
+
+				thread_mutex_unlock(LOCK_THREAD);
 
 				/* get current time and exit program if time limit exceeded */
 				if (poller_counter >= 20) {
