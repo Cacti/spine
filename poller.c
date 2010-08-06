@@ -970,7 +970,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				poll_result = exec_poll(host, poller_items[i].arg1);
 
 				/* process the result */
-				if ((is_numeric(poll_result)) || (is_multipart_output(poll_result))) {
+				if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
@@ -1345,7 +1345,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		FD_SET(cmd_fd, &fds);
 
 		/* wait x seonds for pipe response */
-		switch (select(cmd_fd+1, &fds, NULL, NULL, &timeout)) {
+		switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {
 			case EBADF:
