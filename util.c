@@ -755,7 +755,7 @@ int all_digits(const char *string) {
 	/* empty string is not all digits */
 	if ( *string == '\0' ) return FALSE;
 
-	while ( isdigit(*string) )
+	while ( isdigit((int)*string) )
 		string++;
 
 	return *string == '\0';
@@ -773,7 +773,7 @@ int all_digits(const char *string) {
  */
 int is_ipaddress(const char *string) {
 	while (*string) {
-		if ((isdigit(*string)) ||
+		if ((isdigit((int)*string)) ||
 			(*string == '.') ||
 			(*string == ':')) {
 			string++;
@@ -887,7 +887,7 @@ char *strip_alpha(char *string) {
 	i = strlen(string);
 
 	while (i >= 0) {
-		if (isdigit(string[i])) {
+		if (isdigit((int)string[i])) {
 			break;
 		}else{
 			string[i] = '\0';
