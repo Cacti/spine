@@ -1003,7 +1003,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 				/* process the output */
-				if ((is_numeric(poll_result)) || (is_multipart_output(poll_result))) {
+				if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
@@ -1252,7 +1252,7 @@ int validate_result(char *result) {
 		if (is_numeric(result)) {
 			return TRUE;
 		}else{
-			if (is_multipart_output(result)) {
+			if (is_multipart_output(trim(result))) {
 				return TRUE;
 			}else{
 				return FALSE;
