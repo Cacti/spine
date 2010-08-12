@@ -67,8 +67,8 @@ void *child(void *arg) {
 
 	while (TRUE) {
 		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
-	active_threads--;
-	thread_mutex_unlock(LOCK_THREAD);
+			active_threads--;
+			thread_mutex_unlock(LOCK_THREAD);
 
 			break;
 		}
@@ -1386,11 +1386,13 @@ char *exec_poll(host_t *current_host, char *command) {
 				break;
 			}
 		case 0:
+			#ifdef USING_TPOPEN
 			SPINE_LOG(("Host[%i] ERROR: The POPEN timed out", current_host->id));
 
-			#ifdef USING_TPOPEN
 			close_fd = FALSE;
 			#else
+			SPINE_LOG(("Host[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
+
 			pid = nft_pchild(cmd_fd);
 			kill(pid, SIGKILL);
 			#endif
