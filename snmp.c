@@ -567,9 +567,9 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 				for(i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						#ifdef USE_NET_SNMP
-						snmp_snprint_value(temp_result, RESULTS_BUFFER, anOID, anOID_len, vars);
+						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 						#else
-						sprint_value(temp_result, anOID, anOID_len, vars);
+						sprint_value(temp_result, vars->name, vars->name_length, vars);
 						#endif
 
 						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
