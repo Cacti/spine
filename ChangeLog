@@ -2,6 +2,7 @@
 
 SVN
 -bug#0001669: Problems with getting data from script using SPINE on Windows Server 2003 x32 
+-bug#0001829: Wrong string numerical value got from Spine SNMP poller 
 -bug: Net-snmp API issues cause spine crashes with some SNMP agents
 -bug: Host list not properly initialized
 -bug: Mutex locking issues cause deadlocks in Windows

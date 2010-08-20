@@ -524,6 +524,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	int i;
 	int array_count;
 	int index_count;
+	char   temp_result[RESULTS_BUFFER];
 
 	struct nameStruct {
 	    oid             name[MAX_OID_LEN];
@@ -566,10 +567,12 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 				for(i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						#ifdef USE_NET_SNMP
-						snmp_snprint_value(snmp_oids[i].result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snmp_snprint_value(temp_result, RESULTS_BUFFER, anOID, anOID_len, vars);
 						#else
-						sprint_value(snmp_oids[i].result, vars->name, vars->name_length, vars);
+						sprint_value(temp_result, anOID, anOID_len, vars);
 						#endif
+
+						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
 						
 						vars = vars->next_variable;
 					}
