@@ -113,7 +113,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char query4[BUFSIZE];
 	char query5[BUFSIZE];
 	char query6[BUFSIZE];
-	char query7[BUFSIZE];
 	char query8[BUFSIZE];
 	char query9[BUFSIZE];
 	char query10[BUFSIZE];
@@ -240,15 +239,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step=rrd_next_step-%i"
-			" WHERE host_id=%i", set.poller_interval, host_id);
-
-		/* query to setup the next polling interval in cacti */
-		snprintf(query7, BUFSIZE,
-			"UPDATE poller_item"
-			" SET rrd_next_step=rrd_step-%i"
-			" WHERE rrd_next_step < 0 and host_id=%i",
-				set.poller_interval, host_id);
+			" SET rrd_next_step=IF((rrd_next_step-%i)>=0, (rrd_next_step-%i), (rrd_step-%i))"
+			" WHERE host_id=%i", set.poller_interval, set.poller_interval, set.poller_interval, host_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -313,15 +305,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step=rrd_next_step-%i"
-			" WHERE host_id=%i AND poller_id=%i", set.poller_interval, host_id, set.poller_id);
-
-		/* query to setup the next polling interval in cacti */
-		snprintf(query7, BUFSIZE,
-			"UPDATE poller_item"
-			" SET rrd_next_step=rrd_step-%i"
-			" WHERE rrd_next_step < 0 and host_id=%i and poller_id=%i",
-				set.poller_interval, host_id, set.poller_id);
+			" SET rrd_next_step=IF((rrd_next_step-%i)>=0, (rrd_next_step-%i), (rrd_step-%i))"
+			" WHERE host_id=%i AND poller_id=%i", set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -1179,7 +1164,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	/* update poller_items table for next polling interval */
 	if (host_thread == last_host_thread) {
 		db_query(&mysql, query6);
-		db_query(&mysql, query7);
 	}
 
 	mysql_close(&mysql);
