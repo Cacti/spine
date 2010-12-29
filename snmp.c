@@ -34,24 +34,6 @@
 #include "common.h"
 #include "spine.h"
 
-#ifdef USE_NET_SNMP
- #undef PACKAGE_NAME
- #undef PACKAGE_VERSION
- #undef PACKAGE_BUGREPORT
- #undef PACKAGE_STRING
- #undef PACKAGE_TARNAME
- #include <net-snmp/net-snmp-config.h>
- #include <net-snmp/utilities.h>
- #include <net-snmp/net-snmp-includes.h>
- #include <net-snmp/config_api.h>
- #include <net-snmp/mib_api.h>
-#else
- #include <ucd-snmp/ucd-snmp-config.h>
- #include <ucd-snmp/ucd-snmp-includes.h>
- #include <ucd-snmp/system.h>
- #include <mib.h>
-#endif
-
 /* resolve problems in debian */
 #ifndef NETSNMP_DS_LIB_DONT_PERSIST_STATE
  #define NETSNMP_DS_LIB_DONT_PERSIST_STATE 32
@@ -372,7 +354,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 					vars = response->variables;
 
 					#ifdef USE_NET_SNMP
-					snprint_value(temp_result, RESULTS_BUFFER, anOID, anOID_len, vars);
+					snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 					#else
 					sprint_value(temp_result, anOID, anOID_len, vars);
 					#endif
@@ -454,7 +436,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 
 					if (vars != NULL) {
 						#ifdef USE_NET_SNMP
-						snprint_value(temp_result, RESULTS_BUFFER, anOID, anOID_len, vars);
+						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 						#else
 						sprint_value(temp_result, anOID, anOID_len, vars);
 						#endif
@@ -498,14 +480,18 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 	u_char *buf    = NULL;
 	size_t out_len = 0;
 
-	if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
-		sprint_realloc_by_type(&buf, &buf_len, &out_len, 1, variable, NULL, NULL, NULL);
-		snprintf(obuf, buf_len, "%s", buf);
+	if (buf_len > 0) {
+		if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
+			sprint_realloc_by_type(&buf, &buf_len, &out_len, 1, variable, NULL, NULL, NULL);
+			snprintf(obuf, buf_len, "%s", buf);
+		}else{
+			SET_UNDEFINED(obuf);
+		}
+
+		free(buf);
 	}else{
 		SET_UNDEFINED(obuf);
 	}
-
-	free(buf);
 }
 
 /*! \fn char *snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids)
@@ -527,8 +513,8 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	char   temp_result[RESULTS_BUFFER];
 
 	struct nameStruct {
-	    oid             name[MAX_OID_LEN];
-	    size_t          name_len;
+		oid             name[MAX_OID_LEN];
+		size_t          name_len;
 	} *name, *namep;
 
 	/* load up oids */
@@ -538,9 +524,9 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
- 			SPINE_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, snmp_oids[i].oid));
+			SPINE_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, snmp_oids[i].oid));
 
- 			/* Mark this OID as "bad" */
+			/* Mark this OID as "bad" */
 			SET_UNDEFINED(snmp_oids[i].result);
 		}else{
 			snmp_add_null_var(pdu, namep->name, namep->name_len);

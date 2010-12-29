@@ -8,6 +8,7 @@ SVN
 -bug: Host list not properly initialized
 -bug: Mutex locking issues cause deadlocks in Windows
 -bug: Escape windows type back slashes in scripts
+-bug: Use safer Non Net-SNMP string parsing calls for snmpget and snmpgetnext
 
 0.8.7g
 -feature: Multi threaded host polling
