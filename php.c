@@ -338,7 +338,7 @@ int php_init(int php_process) {
 						#endif
 						goto retry;
 					}else{
-						SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Resources", i));
+						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Resources", i));
 					}
 				case ENOMEM:
 					if (retry_count < 3) {
@@ -349,10 +349,10 @@ int php_init(int php_process) {
 						#endif
 						goto retry;
 					}else{
-						SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Out of Memory", i));
+						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Memory", i));
 					}
 				default:
-					SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server Unknown Reason", i));
+					SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Unknown Reason", i));
 				}
 
 				close(php2cacti_pdes[0]);
@@ -360,7 +360,7 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				SPINE_LOG(("ERROR: SS[%i] Cound not fork PHP Script Server", i));
+				SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server", i));
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
