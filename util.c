@@ -1099,6 +1099,27 @@ char *reverse(char* str) {
 	return str;
 }
 
+/*! \fn char_count()
+ *  \brief counts occurrences of char in string.
+ *
+ *  \return number of occurrences.
+ */
+size_t char_count(const char *str, int chr)
+{
+	const unsigned char *my_str = (const unsigned char *) str;
+	const unsigned char my_chr = chr;
+	size_t count = 0;
+
+	if (!my_chr) return 1;
+
+	while (*my_str) {
+		if (*my_str++ == my_chr) {
+			count++;
+		}
+	}
+	return count;
+}
+
 unsigned long long hex2dec(char *str) {
 	int i = 0;
 	unsigned long long number = 0;

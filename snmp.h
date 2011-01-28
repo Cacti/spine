@@ -36,5 +36,6 @@ extern void *snmp_host_init(int host_id, char *hostname, int snmp_version, char 
 extern void snmp_host_cleanup(void *snmp_session);
 extern char *snmp_get(host_t *current_host, char *snmp_oid);
 extern char *snmp_getnext(host_t *current_host, char *snmp_oid);
+extern int snmp_count(host_t *current_host, char *snmp_oid);
 extern void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids);
 extern void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable);

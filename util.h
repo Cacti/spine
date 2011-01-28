@@ -62,6 +62,7 @@ extern char *trim(char *str);
 extern char *rtrim(char *str);
 extern char *ltrim(char *str);
 extern char *reverse(char *str);
+extern size_t char_count(const char *str, int chr);
 
 /* custom hex2dec that returns a string instead of a number */
 unsigned long long hex2dec(char *str);

@@ -589,12 +589,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poll_result[0] = '\0';
 
 										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
+										SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 									}else{
 										poll_result = snmp_get(host, reindex->arg1);
 										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+										SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 									}
 								}else{
 									poll_result = snmp_get(host, reindex->arg1);
+									SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 								}
 							}else{
 								SPINE_LOG(("WARNING: Host[%i] TH[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
@@ -602,7 +605,45 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
-							poll_result = exec_poll(host, reindex->arg1);
+							poll_result = trim(exec_poll(host, reindex->arg1));
+							SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+
+							break;
+						case POLLER_ACTION_PHP_SCRIPT_SERVER: /* script (php script server) */
+							php_process = php_get_process();
+							poll_result = trim(php_cmd(reindex->arg1, php_process));
+							SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+
+							break;
+						case POLLER_ACTION_SNMP_COUNT: /* snmp; count items */
+							if (!(poll_result = (char *) malloc(BUFSIZE))) {
+								die("ERROR: Fatal malloc error: poller.c poll_result");
+							}
+							poll_result[0] = '\0';
+
+							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
+							SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+
+							break;
+						case POLLER_ACTION_SCRIPT_COUNT: /* script (popen); count items by counting line feeds */
+							if (!(poll_result = (char *) malloc(BUFSIZE))) {
+								die("ERROR: Fatal malloc error: poller.c poll_result");
+							}
+							poll_result[0] = '\0';
+
+							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1), '\n'));
+							SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+
+							break;
+						case POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT: /* script (php script server); count number of lines */
+							//php_process = php_get_process(); // todo not yet provided by cmd.php!
+							//sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
+							//SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Recache DataQuery[%i] SERVER Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+							if (!(poll_result = (char *) malloc(BUFSIZE))) {
+								die("ERROR: Fatal malloc error: poller.c poll_result");
+							}
+							poll_result[0] = '\0';
+							SPINE_LOG(("Host[%i] TH[%i] Recache DataQuery[%i] *SKIPPING* Script Server Count: %s,  (arg_num_indexes required)", host->id, host_thread, reindex->data_query_id, reindex->arg1));
 
 							break;
 						default:
@@ -1328,7 +1369,7 @@ char *exec_poll(host_t *current_host, char *command) {
 		FD_ZERO(&fds);
 		FD_SET(cmd_fd, &fds);
 
-		/* wait x seonds for pipe response */
+		/* wait x seconds for pipe response */
 		switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
 		case -1:
 			switch (errno) {

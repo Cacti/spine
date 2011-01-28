@@ -92,6 +92,9 @@ static const struct keyword actions[] = {
 	{ "SNMP",       POLLER_ACTION_SNMP               },
 	{ "SCRIPT",     POLLER_ACTION_SCRIPT             },
 	{ "PHPSCRIPT",	POLLER_ACTION_PHP_SCRIPT_SERVER  },
+	{ "SNMP_CT",        POLLER_ACTION_SNMP_COUNT               },
+	{ "SCRIPT_CT",      POLLER_ACTION_SCRIPT_COUNT             },
+	{ "PHPSCRIPT_CT",	POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT  },
 
 	{ 0, 0 }	/* ENDMARKER */
 };

@@ -329,7 +329,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
-		pdu = snmp_pdu_create(SNMP_MSG_GET);
+		pdu       = snmp_pdu_create(SNMP_MSG_GET);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
 			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
@@ -406,7 +406,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 	}
 	result_string[0] = '\0';
 
-	status           = STAT_DESCRIP_ERROR;
+	status = STAT_DESCRIP_ERROR;
 
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
@@ -465,6 +465,110 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 	}
 
 	return result_string;
+}
+
+/*! \fn char *snmp_count(host_t *current_host, char *snmp_oid)
+ *  \brief counts entries of snmp table specified by a specific snmp OID
+ *
+ *	This function will poll a specific snmp OID for a host.  The host snmp
+ *  session must already be established.
+ *
+ *  \return returns count of table entries
+ *
+ */
+int snmp_count(host_t *current_host, char *snmp_oid) {
+	struct snmp_pdu *pdu       = NULL;
+	struct snmp_pdu *response  = NULL;
+	struct variable_list *vars = NULL;
+	size_t anOID_len           = MAX_OID_LEN;
+	size_t rootlen             = MAX_OID_LEN;
+	oid    anOID[MAX_OID_LEN];
+	oid    root[MAX_OID_LEN];
+	int    status;
+	int    ok = 1;
+	int    error_occurred = 0;
+	int    count = 0;
+	char   temp_result[RESULTS_BUFFER];
+
+	status = STAT_DESCRIP_ERROR;
+
+	SPINE_LOG_DEBUG(("NOTE: walk starts at OID %s", snmp_oid));
+
+	if (current_host->snmp_session != NULL) {
+		rootlen = MAX_OID_LEN;
+		/* parse input parm to an array for use with snmp functions */
+		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
+			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
+			return count;
+		}
+		memmove(anOID, root, rootlen * sizeof(oid));
+		anOID_len = rootlen;
+
+		while (ok && !error_occurred) {
+			/* create PDU for GETNEXT request */
+			pdu = snmp_pdu_create(SNMP_MSG_GETNEXT);
+			snmp_add_null_var(pdu, anOID, anOID_len);
+
+			/* do the request, use thread safe call */
+			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+
+			//SPINE_LOG_DEBUG(("TRACE: Status %i Response %i", status, response->errstat));
+
+			if (status == STAT_SUCCESS) {
+				if (response->errstat == SNMP_ERR_NOERROR) {
+					/* check resulting variables */
+					for (vars = response->variables; vars; vars	= vars->next_variable) {
+						if ((vars->name_length < rootlen) || (memcmp(root, vars->name, rootlen * sizeof(oid)) != 0)) {
+							/* next OID is not part of snmptable */
+							ok = 0;
+							continue;
+						}
+						count++;
+
+						/* END OF MIB or NO SUCH OBJECT or NO SUCH INSTANCE */
+						if ((vars->type != SNMP_ENDOFMIBVIEW) &&
+							(vars->type	!= SNMP_NOSUCHOBJECT) &&
+							(vars->type	!= SNMP_NOSUCHINSTANCE)) {
+							/* valid data, so perform a compare  */
+							if (snmp_oid_compare(anOID, anOID_len, vars->name, vars->name_length) >= 0) {
+								SPINE_LOG(("ERROR: OID not increasing"));
+								ok = 0;
+								error_occurred = 1;
+							}
+							/* prepare next turn */
+							memmove((char *) anOID, (char *) vars->name, vars->name_length * sizeof(oid));
+							anOID_len = vars->name_length;
+						} else {
+							/* abnormal end of loop */
+							ok = 0;
+						}
+					}
+				} else {
+					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+				}
+			} else if (status == STAT_TIMEOUT) {
+				SPINE_LOG(("ERROR: Timeout detected in Cacti snmp_count"));
+				ok = 0;
+				error_occurred = 1;
+			} else { /* status == STAT_ERROR */
+				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count (STAT_ERROR)"));
+				ok = 0;
+				error_occurred = 1;
+			}
+
+			if (response) {
+				snmp_free_pdu(response);
+			}
+		}
+	}else{
+		status = STAT_DESCRIP_ERROR;
+	}
+
+	if (status != STAT_SUCCESS) {
+		current_host->ignore_host = TRUE;
+	}
+
+	return count;
 }
 
 /*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
