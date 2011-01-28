@@ -90,6 +90,11 @@ char *php_cmd(const char *php_command, int php_process) {
 	}else{
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process);
+
+		/* check for a null */
+		if (!strlen(result_string)) {
+			SET_UNDEFINED(result_string);
+		}
 	}
 
 	/* unlock around php process */

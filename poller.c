@@ -893,6 +893,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							if (host->ignore_host) {
 								SPINE_LOG(("Host[%i] TH[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
+							}else if (IS_UNDEFINED(snmp_oids[j].result)) {
+								/* continue */
 							}else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
@@ -950,6 +952,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						if (host->ignore_host) {
 							SPINE_LOG(("Host[%i] TH[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 							SET_UNDEFINED(snmp_oids[j].result);
+						}else if (IS_UNDEFINED(snmp_oids[j].result)) {
+							/* continue */
 						}else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
@@ -996,7 +1000,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				poll_result = exec_poll(host, poller_items[i].arg1);
 
 				/* process the result */
-				if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
+				if (IS_UNDEFINED(poll_result)) {
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
+				}else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
@@ -1029,7 +1035,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 				/* process the output */
-				if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
+				if (IS_UNDEFINED(poll_result)) {
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
+				}else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
@@ -1074,6 +1082,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (host->ignore_host) {
 					SPINE_LOG(("Host[%i] TH[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
+				}else if (IS_UNDEFINED(snmp_oids[j].result)) {
+					/* continue */
 				}else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
