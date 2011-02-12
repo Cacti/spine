@@ -233,7 +233,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		}
 
 		/* set the privacy protocol to none */
-		if (strcmp(snmp_priv_protocol, "[None]") == 0) {
+		if (strcmp(snmp_priv_protocol, "[None]") == 0 || (strlen(snmp_priv_passphrase) == 0)) {
 			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OIDSIZE(usmNoPrivProtocol));
 			session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;

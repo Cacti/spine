@@ -10,6 +10,7 @@ SVN
 -bug: Mutex locking issues cause deadlocks in Windows
 -bug: Escape windows type back slashes in scripts
 -bug: Use safer Non Net-SNMP string parsing calls for snmpget and snmpgetnext
+-bug: be smart for SNMP V3 and use AuthNoPriv when privacy passphrase is empty
 
 0.8.7g
 -feature: Multi threaded host polling
