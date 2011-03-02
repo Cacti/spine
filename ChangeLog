@@ -1,6 +1,6 @@
 ﻿The Cacti Group | spine
 
-SVN
+0.8.7h
 -feature#0001852: Another 10% speedup in spine 
 -bug#0001669: Problems with getting data from script using SPINE on Windows Server 2003 x32 
 -bug#0001829: Wrong string numerical value got from Spine SNMP poller 
