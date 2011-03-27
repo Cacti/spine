@@ -332,7 +332,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		pdu       = snmp_pdu_create(SNMP_MSG_GET);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
+			SPINE_LOG(("Host[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -413,7 +413,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		pdu       = snmp_pdu_create(SNMP_MSG_GETNEXT);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
+			SPINE_LOG(("Host[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -498,7 +498,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 		rootlen = MAX_OID_LEN;
 		/* parse input parm to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
-			SPINE_LOG(("ERROR: Problems parsing SNMP OID"));
+			SPINE_LOG(("Host[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			return count;
 		}
 		memmove(anOID, root, rootlen * sizeof(oid));
