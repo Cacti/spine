@@ -7,14 +7,13 @@ TMP_DIR="/tmp"
 display_help () {
   echo "----------------------------------------------------------------------------"
   echo " Spine Package Script"
-  echo "   Attempts to package spine from a SVN checkout directory of"
+  echo "   Attempts to package spine from a repository checkout directory of"
   echo "   spine. If all goes well a tar.gz file will be created."
   echo "----------------------------------------------------------------------------"
   echo " Syntax:"
-  echo "  ./`basename $0` <Version> <SVN Revision>"
+  echo "  ./`basename $0` <Version>"
   echo ""
   echo "    <Version> - Designated version for build (required)"
-  echo "    <SVN Revision> - SVN revision number to create build from (optional)"
   echo ""
 }
 
@@ -35,9 +34,6 @@ if [ -z "${1}" ]; then
 fi
 VERSION=${1}
 
-SVN_REV=""
-[ -n "${2}" ] && SVN_REV="-r ${2}"
-
 # Perform packaging
 echo ""
 echo "----------------------------------------------------------------------------"
@@ -56,9 +52,10 @@ if [ -e ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz ]; then
   [ $? -gt 1 ] && echo "ERROR: Unable to remove file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" && exit -1
 fi
 
-# Copy svn 
-svn export ${SVN_REV} . ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
-[ $? -gt 0 ] && echo "ERROR: Unable to export SVN to ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
+# Copy repository
+mkdir -p ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+tar -cf - --exclude '.svn' * | (cd ${TMP_DIR}/cacti-spine-${VERSION}; tar -xf -)
+[ $? -gt 0 ] && echo "ERROR: Unable to repository to ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
 
 # Change working directory 
 pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
@@ -70,10 +67,6 @@ if [ "${SRC_VERSION}" != "${VERSION}" ]; then
   echo "WARNING:    Build Version: ${VERSION}"
   echo "WARNING:   Source Version: ${SRC_VERSION}"
 fi
-
-# Update config file location
-perl -pi -e 's/spine.conf.dist/spine.conf/' Makefile.am > /dev/null 2>&1
-mv spine.conf.dist spine.conf > /dev/null 2>&1
 
 # Call bootstrap
 echo "INFO: call bootstrap..."
