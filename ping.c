@@ -166,7 +166,12 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			retry:
 			begin_time = get_time_as_double();
 
-			poll_result = snmp_getnext(host, oid);
+			if (num_oids_checked == 0) {
+				poll_result = snmp_getnext(host, oid);
+			} else {
+				poll_result = snmp_get(host, oid);
+			}
+
 
 			/* record end time */
 			end_time = get_time_as_double();
@@ -176,7 +181,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			total_time = (end_time - begin_time) * one_thousand;
 
 			if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
-				if (num_oids_checked > 1) {
+				if (num_oids_checked <= 1) {
 					if (num_oids_checked == 0) {
 						/* use sysUptime as a backup if the generic OID fails */
 						if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {
