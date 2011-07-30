@@ -1222,11 +1222,6 @@ void checkAsRoot() {
 		SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown"));
 	}
 
-	/* Remove exec from the basic set */
-	if (priv_delset(privset, PRIV_PROC_EXEC) < 0 ) {
-		SPINE_LOG_DEBUG(("Warning: Deletion of PRIV_PROC_EXEC from privset failed: '%s'.", strerror(errno)));
-	}
-
 	/* Add priviledge to send/receive ICMP packets */
 	if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0 ) {
 		SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
