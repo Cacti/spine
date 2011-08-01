@@ -76,5 +76,9 @@ extern double get_time_as_double(void);
 /* get host polling time */
 extern char *get_host_poll_time(void);
 
+/* function to check to see if program has capability to use raw socket with
+   out uid = 0 */
+extern int hasCaps();
+
 /* see if we can do things as root */
 extern void checkAsRoot();

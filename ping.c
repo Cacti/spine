@@ -264,8 +264,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	retry_count = 0;
 	while ( TRUE ) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		thread_mutex_lock(LOCK_SETEUID);
-		seteuid(0);
+		if (!hasCaps()) {
+			thread_mutex_lock(LOCK_SETEUID);
+			seteuid(0);
+		}
 		#endif
 
 		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
@@ -277,8 +279,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				snprintf(ping->ping_status, 50, "down");
 				free(new_hostname);
 				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				seteuid(getuid());
-				thread_mutex_unlock(LOCK_SETEUID);
+				if (!hasCaps()) {
+					seteuid(getuid());
+					thread_mutex_unlock(LOCK_SETEUID);
+				}
 				#endif
 
 				return HOST_DOWN;
@@ -290,8 +294,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 	}
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	seteuid(getuid());
-	thread_mutex_unlock(LOCK_SETEUID);
+	if (!hasCaps()) {
+		seteuid(getuid());
+		thread_mutex_unlock(LOCK_SETEUID);
+	}
 	#endif
 
 	/* convert the host timeout to a double precision number in seconds */
@@ -402,13 +408,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								free(new_hostname);
 								free(packet);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								thread_mutex_lock(LOCK_SETEUID);
-								seteuid(0);
+								if (!hasCaps()) {
+									thread_mutex_lock(LOCK_SETEUID);
+									seteuid(0);
+								}
 								#endif
 								close(icmp_socket);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								seteuid(getuid());
-								thread_mutex_unlock(LOCK_SETEUID);
+								if (!hasCaps()) {
+									seteuid(getuid());
+									thread_mutex_unlock(LOCK_SETEUID);
+								}
 								#endif
 
 								return HOST_UP;
@@ -440,13 +450,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			free(new_hostname);
 			free(packet);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			thread_mutex_lock(LOCK_SETEUID);
-			seteuid(0);
+			if (!hasCaps()) {
+				thread_mutex_lock(LOCK_SETEUID);
+				seteuid(0);
+			}
 			#endif
 			close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			seteuid(getuid());
-			thread_mutex_unlock(LOCK_SETEUID);
+			if (!hasCaps()) {
+				seteuid(getuid());
+				thread_mutex_unlock(LOCK_SETEUID);
+			}
 			#endif
 			return HOST_DOWN;
 		}
@@ -457,13 +471,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		free(packet);
 		if (icmp_socket != -1) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			thread_mutex_lock(LOCK_SETEUID);
-			seteuid(0);
+			if (!hasCaps()) {
+				thread_mutex_lock(LOCK_SETEUID);
+				seteuid(0);
+			}
 			#endif
 			close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			seteuid(getuid());
-			thread_mutex_unlock(LOCK_SETEUID);
+			if (!hasCaps()) {
+				seteuid(getuid());
+				thread_mutex_unlock(LOCK_SETEUID);
+			}
 			#endif
 		}
 		return HOST_DOWN;
@@ -704,7 +722,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					close(tcp_socket);
 					return HOST_UP;
 				}else{
-               		#if defined(__CYGWIN__)
+					#if defined(__CYGWIN__)
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
 					free(new_hostname);
@@ -1157,4 +1175,3 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		}
 	}
 }
-

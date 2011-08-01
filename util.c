@@ -1206,6 +1206,29 @@ unsigned long long hex2dec(char *str) {
 	return number;
 }
 
+int hasCaps() {
+	#ifdef HAVE_LCAP
+	cap_t caps;
+	cap_value_t capval;
+	cap_flag_value_t capflag;
+
+	caps = cap_from_text("cap_net_raw=eip");
+	if (caps == NULL) {
+		SPINE_LOG_DEBUG(("WARNING: cap_from_text failed."));
+		return FALSE;
+	}
+
+	for (capval=0; ;capval++) {
+		if (cap_get_flag(caps, capval, CAP_EFFECTIVE, &capflag))
+			break;
+		if (capflag != CAP_SET)
+			return FALSE;
+	}
+	return TRUE;
+	#else /* HAVE_LCAP */	
+	return FALSE;
+	#endif /* HAVE_LCAP */
+}
 	
 void checkAsRoot() {
 	#ifndef __CYGWIN__
@@ -1250,15 +1273,20 @@ void checkAsRoot() {
 	priv_freeset(privset);
 	free(p);
 	#else
-	seteuid(0);
-
-	if (geteuid() != 0) {
-		SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chmod +s;chown root:root spine\" to resolve."));
-		set.icmp_avail = FALSE;
-	}else{
-		SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
+	if (!hasCaps) {
+		seteuid(0);
+	
+		if (geteuid() != 0) {
+			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chmod +s;chown root:root spine\" to resolve."));
+			set.icmp_avail = FALSE;
+		}else{
+			SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
+			set.icmp_avail = TRUE;
+			seteuid(getuid());
+		}
+	} else {
+		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));
 		set.icmp_avail = TRUE;
-		seteuid(getuid());
 	}
 	#endif
 	#endif

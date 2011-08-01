@@ -169,6 +169,34 @@ else
   AC_MSG_RESULT([no])
 fi
 
+# ****************** Linux Capabilities Check ***********************
+AC_CHECK_HEADER(sys/capability.h, [FOUND_SYS_CAPABILITY_H=yes], 
+	[FOUND_SYS_CAPABILITY_H=no])
+
+# If we should use the Linux Capabilities support
+AC_MSG_CHECKING(whether we are using Linux Capabilities)
+AC_ARG_ENABLE(lcap,
+  [  --enable-lcap   Enable support for the Linux Capabilities (default: disabled)],
+  [ ENABLED_LCAP=$enableval ],
+  [ ENABLED_LCAP=no ]
+  )
+if test x$ENABLED_LCAP != xno; then
+  if test x$FOUND_SYS_CAPABILITY_H != xno; then
+    AC_MSG_RESULT([yes])
+    AC_CHECK_LIB(cap, cap_init,
+      [ LIBS="-lcap $LIBS"
+        AC_DEFINE(HAVE_LCAP, 1, Linux Capabilities)
+        HAVE_LCAP=yes ],
+      [ AC_MSG_RESULT(Cannot find Linux Capabilities library(cap)...)
+        HAVE_LCAP=no ]
+    )
+  else
+    AC_MSG_RESULT([no])
+  fi
+else
+  AC_MSG_RESULT([no])
+fi
+
 # ****************** MySQL Checks ***********************
 
 AC_DEFUN([MYSQL_LIB_CHK],

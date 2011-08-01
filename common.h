@@ -143,4 +143,10 @@
  #include <mib.h>
 #endif
 
+#ifdef HAVE_LCAP
+#  include <sys/capability.h>
+#  include <sys/prctl.h>
+#  include <grp.h>
+#endif
+
 #endif /* SPINE_COMMON_H */

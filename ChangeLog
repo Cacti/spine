@@ -2,6 +2,7 @@
 
 0.8.7h
 -feature#0001852: Another 10% speedup in spine 
+-feature#0001878: Add Linux Capabilities to Spine 
 -bug#0001669: Problems with getting data from script using SPINE on Windows Server 2003 x32 
 -bug#0001829: Wrong string numerical value got from Spine SNMP poller 
 -bug#0001899: spine treats undef replies as 0
@@ -20,6 +21,7 @@
 -bug#0001653: Transient ICMP Socket create failures causing spine to die
 -bug#0001657: Spine output shows drop of latest bit from hex value 
 -feature#0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address
+-bug: When performing reindex checks, spine does not trim quotes from string values resulting in reindex faiures
 -bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
 -bug#0001497: Prevent constant reindexes if snmp agent continually returns uptime of 0
 -bug#0001510: Speedup spine resorting hosts by estimated polling time
