@@ -342,6 +342,9 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		/* poll host */
 		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 
+		/* add status to host structure */
+		current_host->snmp_status = status;
+
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
@@ -422,6 +425,9 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 
 		/* poll host */
 		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+
+		/* add status to host structure */
+		current_host->snmp_status = status;
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
@@ -511,6 +517,9 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 
 			/* do the request, use thread safe call */
 			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+
+			/* add status to host structure */
+			current_host->snmp_status = status;
 
 			//SPINE_LOG_DEBUG(("TRACE: Status %i Response %i", status, response->errstat));
 
@@ -644,6 +653,9 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	/* execute the multi-get request */
 	retry:
 	status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+
+	/* add status to host structure */
+	current_host->snmp_status = status;
 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {

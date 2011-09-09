@@ -258,3 +258,24 @@ int append_hostrange(char *obuf, const char *colname) {
 		return 0;
 	}
 }
+
+/*! \fn void db_escape(MYSQL *mysql, char *output, const char *input)
+ *  \brief Escapse a text string to make it safe for mysql insert/updates
+ *  \param mysql the connection object
+ *  \param output a pointer to the output string
+ *  \param a pointer to the input string
+ *
+ *	A simple implementation of the mysql_real_escape_string that one
+ *  day should be portable.
+ *
+ *  \return void
+ *
+ */
+void db_escape(MYSQL *mysql, char *output, const char *input) {
+	if (input == NULL) return;
+
+	output[0] = '\0';
+
+	mysql_real_escape_string(mysql, output, input, strlen(input));
+}
+

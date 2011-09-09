@@ -80,6 +80,8 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	/* snmp test */
 	if ((host->availability_method == AVAIL_SNMP) ||
+		(host->availability_method == AVAIL_SNMP_GET_UPTIME) ||
+		(host->availability_method == AVAIL_SNMP_GET_SYSDESC) ||
 		(host->availability_method == AVAIL_SNMP_AND_PING) ||
 		((host->availability_method == AVAIL_SNMP_OR_PING) && (ping_result != HOST_UP))) {
 		snmp_result = ping_snmp(host, ping);
@@ -158,20 +160,25 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	if (host->snmp_session) {
 		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
 			/* by default, we look at sysUptime */
-			if ((oid = strdup(".1.3")) == NULL) {
-				die("ERROR: malloc(): strdup() oid ping.c failed");
+			if (host->availability_method == AVAIL_SNMP_GET_UPTIME) {
+				oid = strdup(".1.3.6.1.2.1.1.3.0");
+			}else if (host->availability_method == AVAIL_SNMP_GET_SYSDESC) {
+				oid = strdup(".1.3.6.1.2.1.1.1.0");
+			}else {
+				oid = strdup(".1.3");
 			}
+
+			if (oid == NULL) die("ERROR: malloc(): strdup() oid ping.c failed");
 
 			/* record start time */
 			retry:
 			begin_time = get_time_as_double();
 
-			if (num_oids_checked == 0) {
+			if (num_oids_checked == 0 && host->availability_method < AVAIL_SNMP_GET_UPTIME) {
 				poll_result = snmp_getnext(host, oid);
 			} else {
 				poll_result = snmp_get(host, oid);
 			}
-
 
 			/* record end time */
 			end_time = get_time_as_double();
@@ -180,8 +187,15 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 			total_time = (end_time - begin_time) * one_thousand;
 
-			if ((strlen(poll_result) == 0) || IS_UNDEFINED(poll_result)) {
-				if (num_oids_checked <= 1) {
+			/* do positive test cases first */
+			if (host->snmp_status == SNMPERR_UNKNOWN_OBJID) {
+				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host responded to SNMP");
+				snprintf(ping->snmp_status, 50, "%.5f", total_time);
+				free(poll_result);
+				return HOST_UP;
+			}else if (host->snmp_status != SNMPERR_SUCCESS) {
+				SPINE_LOG_MEDIUM(("Host[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
+				if (num_oids_checked <= 1 && host->availability_method < AVAIL_SNMP_GET_UPTIME) {
 					if (num_oids_checked == 0) {
 						/* use sysUptime as a backup if the generic OID fails */
 						if ((oid = strdup(".1.3.6.1.2.1.1.3.0")) == NULL) {

@@ -245,8 +245,6 @@ char *php_readpipe(int php_process) {
 				*bptr = '\0';	/* make what we've got into a string */
 	
 				if ((cp = strstr(result_string,"\n")) != 0) {
-					result_string = trim(result_string);
-	
 					break;
 				}
 	

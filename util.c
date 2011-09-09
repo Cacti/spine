@@ -825,6 +825,7 @@ int is_numeric(const char *string) {
 		end_ptr_long = NULL;
 	}
 
+ 	/* check for a float */
 	errno = 0;
 	local_dval = strtod(string, &end_ptr_double);
 	if (errno != ERANGE) {
@@ -836,10 +837,14 @@ int is_numeric(const char *string) {
 	}
 
 	if (!errno) {
-		return TRUE;
+		if (STRIMATCH(string," ")) {
+			return FALSE;
+		}else{
+			return TRUE;
+		}
 	}else{
 		return FALSE;
- 	}
+	}
 }
 
 /*! \fn int is_hexadecimal(const char *str, const short ignore_space)
@@ -851,6 +856,8 @@ int is_numeric(const char *string) {
  *
  */
 int is_hexadecimal(const char * str, const short ignore_space) {
+	int i = 0;
+
 	if (!str) return FALSE;
 
 	while (*str) {
@@ -869,7 +876,10 @@ int is_hexadecimal(const char * str, const short ignore_space) {
 			return FALSE;
 		}
 		str++;
+		i++;
 	}
+
+	if (i < 3) return FALSE;
 
 	return TRUE;
 }
