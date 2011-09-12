@@ -195,7 +195,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		limits[0] = '\0';
 	}
 
-
 	/* single polling interval query for items */
 	if (set.poller_id == 0) {
 		snprintf(query1, BUFSIZE,
@@ -863,7 +862,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			switch(poller_items[i].action) {
 			case POLLER_ACTION_SNMP: /* raw SNMP poll */
 				/* initialize or reinitialize snmp as required */
-				if (!host->snmp_session) {
+				if (i == 0) {
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
 
@@ -874,7 +873,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
 					STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
 					STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
+				}
 
+				if (!host->snmp_session) {
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
 						poller_items[i].snmp_version, poller_items[i].snmp_community,
 						poller_items[i].snmp_username, poller_items[i].snmp_password,
