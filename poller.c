@@ -947,18 +947,18 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 											poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
 											poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
 											poller_items[i].snmp_port, poller_items[i].snmp_timeout);
-
-					last_snmp_port    = poller_items[i].snmp_port;
-					last_snmp_version = poller_items[i].snmp_version;
-
-					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
-					STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
-					STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
-					STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
-					STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
-					STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
-					STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
 				}
+
+				last_snmp_port    = poller_items[i].snmp_port;
+				last_snmp_version = poller_items[i].snmp_version;
+
+				STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
+				STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
+				STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
+				STRNCOPY(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol);
+				STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
+				STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
+				STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
 
 				if (num_oids >= host->max_oids) {
 					snmp_get_multi(host, snmp_oids, num_oids);
