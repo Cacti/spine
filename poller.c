@@ -893,15 +893,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 				if ((last_snmp_port != poller_items[i].snmp_port) ||
 					(last_snmp_version != poller_items[i].snmp_version) ||
-					(poller_items[i].snmp_version < 3) &&
+					((poller_items[i].snmp_version < 3) &&
 					(strcmp(last_snmp_community,       poller_items[i].snmp_community)       != 0)) ||
-					(poller_items[i].snmp_version == 3) &&
+					((poller_items[i].snmp_version == 3) &&
 					((strcmp(last_snmp_username,        poller_items[i].snmp_username)        != 0) ||
 					(strcmp(last_snmp_password,        poller_items[i].snmp_password)        != 0) ||
 					(strcmp(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol)   != 0) ||
 					(strcmp(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase) != 0) ||
 					(strcmp(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol)   != 0) ||
-					(strcmp(last_snmp_context,         poller_items[i].snmp_context)         != 0))) {
+					(strcmp(last_snmp_context,         poller_items[i].snmp_context)         != 0)))) {
 
 					if (num_oids > 0) {
 						snmp_get_multi(host, snmp_oids, num_oids);
