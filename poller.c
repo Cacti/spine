@@ -131,6 +131,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int    rows_processed = 0;
 	int    i = 0;
 	int    j = 0;
+	int    k = 0;
 	int    num_oids = 0;
 	int    snmp_poller_items = 0;
 	size_t out_buffer;
@@ -148,7 +149,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char last_snmp_password[50];
 	char last_snmp_auth_protocol[5];
 	char last_snmp_priv_passphrase[200];
-	char last_snmp_priv_protocol[6];
+	char last_snmp_priv_protocol[7];
 	char last_snmp_context[65];
 	double poll_time = get_time_as_double();
 
@@ -857,12 +858,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* log an informative message */
 		SPINE_LOG_MEDIUM(("Host[%i] TH[%i] NOTE: There are '%i' Polling Items for this Host", host_id, host_thread, num_rows));
 
-		i = 0;
+		i = 0; k = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
 			switch(poller_items[i].action) {
 			case POLLER_ACTION_SNMP: /* raw SNMP poll */
 				/* initialize or reinitialize snmp as required */
-				if (i == 0) {
+				if (k == 0) {
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
 
@@ -873,15 +874,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					STRNCOPY(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase);
 					STRNCOPY(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol);
 					STRNCOPY(last_snmp_context,         poller_items[i].snmp_context);
-				}
 
-				if (!host->snmp_session) {
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
 						poller_items[i].snmp_version, poller_items[i].snmp_community,
 						poller_items[i].snmp_username, poller_items[i].snmp_password,
 						poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
 						poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
 						poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+
+					k++;
 				}
 
 				/* catch snmp initialization issues */
@@ -893,15 +894,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 				if ((last_snmp_port != poller_items[i].snmp_port) ||
 					(last_snmp_version != poller_items[i].snmp_version) ||
-					((poller_items[i].snmp_version < 3) &&
-					(strcmp(last_snmp_community,       poller_items[i].snmp_community)       != 0)) ||
-					((poller_items[i].snmp_version == 3) &&
-					((strcmp(last_snmp_username,        poller_items[i].snmp_username)        != 0) ||
-					(strcmp(last_snmp_password,        poller_items[i].snmp_password)        != 0) ||
-					(strcmp(last_snmp_auth_protocol,   poller_items[i].snmp_auth_protocol)   != 0) ||
-					(strcmp(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase) != 0) ||
-					(strcmp(last_snmp_priv_protocol,   poller_items[i].snmp_priv_protocol)   != 0) ||
-					(strcmp(last_snmp_context,         poller_items[i].snmp_context)         != 0)))) {
+					((poller_items[i].snmp_version < 3) && 
+					(!STRMATCH(last_snmp_community, poller_items[i].snmp_community))) ||
+					((poller_items[i].snmp_version > 2) && 
+					(!STRMATCH(last_snmp_username, poller_items[i].snmp_username)) ||
+					(!STRMATCH(last_snmp_password, poller_items[i].snmp_password)) ||
+					(!STRMATCH(last_snmp_auth_protocol, poller_items[i].snmp_auth_protocol)) ||
+					(!STRMATCH(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase)) ||
+					(!STRMATCH(last_snmp_priv_protocol, poller_items[i].snmp_priv_protocol)) ||
+					(!STRMATCH(last_snmp_context, poller_items[i].snmp_context)))) {
 
 					if (num_oids > 0) {
 						snmp_get_multi(host, snmp_oids, num_oids);
@@ -944,11 +945,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 					snmp_host_cleanup(host->snmp_session);
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
-											poller_items[i].snmp_version, poller_items[i].snmp_community,
-											poller_items[i].snmp_username, poller_items[i].snmp_password,
-											poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
-											poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
-											poller_items[i].snmp_port, poller_items[i].snmp_timeout);
+							poller_items[i].snmp_version, poller_items[i].snmp_community,
+							poller_items[i].snmp_username, poller_items[i].snmp_password,
+							poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
+							poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
+							poller_items[i].snmp_port, poller_items[i].snmp_timeout);
 
 					last_snmp_port    = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
