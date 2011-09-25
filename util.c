@@ -1114,11 +1114,10 @@ char *reverse(char* str) {
  *
  *  \return number of occurrences.
  */
-size_t char_count(const char *str, int chr)
-{
+int char_count(const char *str, int chr) {
 	const unsigned char *my_str = (const unsigned char *) str;
 	const unsigned char my_chr = chr;
-	size_t count = 0;
+	int count = 0;
 
 	if (!my_chr) return 1;
 
