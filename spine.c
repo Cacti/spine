@@ -559,7 +559,7 @@ int main(int argc, char *argv[]) {
 
 	/* mark the spine process as started */
 	if (!set.pre087g) {
-		SPINE_LOG_MEDIUM(("NOTE: Spine is behaving in a 0.8.7g++ manner"));
+		SPINE_LOG_MEDIUM(("NOTE: Spine is behaving in a 0.8.7g+ manner"));
 		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
 		db_insert(&mysql, querybuf);
 	}else{
