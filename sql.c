@@ -77,6 +77,12 @@ int db_insert(MYSQL *mysql, const char *query) {
 					usleep(50000);
 					db_connect(set.dbdb, mysql);
 					error_count++;
+
+					if (error_count > 30) {
+						die("FATAL: Too many Reconnect Attempts!\n");
+                                        }
+
+					continue;
 				}else{
 					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
 					return FALSE;
@@ -135,6 +141,12 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				usleep(50000);
 				db_connect(set.dbdb, mysql);
 				error_count++;
+
+				if (error_count > 30) {
+					die("FATAL: Too many Reconnect Attempts!\n");
+				}
+
+				continue;
 			}else{
 				die("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql));
 			}
