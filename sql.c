@@ -71,6 +71,10 @@ int db_insert(MYSQL *mysql, const char *query) {
 					}
 
 					continue;
+				}else if (error == 2006) {
+					db_disconnect(mysql);
+					db_connect(set.dbdb, mysql);
+					error_count++;
 				}else{
 					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
 					return FALSE;
@@ -123,6 +127,10 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				}
 
 				continue;
+			}else if (error == 2006) {
+				db_disconnect(mysql);
+				db_connect(set.dbdb, mysql);
+				error_count++;
 			}else{
 				die("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql));
 			}
