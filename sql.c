@@ -72,7 +72,9 @@ int db_insert(MYSQL *mysql, const char *query) {
 
 					continue;
 				}else if (error == 2006) {
+					SPINE_LOG(("WARNING: SQL Failed! Error:'%i', Message:'%s', Attempting to Reconnect", error, mysql_error(mysql)));
 					db_disconnect(mysql);
+					usleep(50000);
 					db_connect(set.dbdb, mysql);
 					error_count++;
 				}else{
@@ -128,7 +130,9 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 
 				continue;
 			}else if (error == 2006) {
+				SPINE_LOG(("WARNING: SQL Failed! Error:'%i', Message:'%s', Attempting to Reconnect", error, mysql_error(mysql)));
 				db_disconnect(mysql);
+				usleep(50000);
 				db_connect(set.dbdb, mysql);
 				error_count++;
 			}else{

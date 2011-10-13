@@ -1,5 +1,8 @@
 ﻿The Cacti Group | spine
 
+SVN
+-feature: Add a reconnect capability when the server goes away
+
 0.8.7h
 -feature#0001852: Another 10% speedup in spine 
 -feature#0001878: Add Linux Capabilities to Spine
