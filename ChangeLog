@@ -2,6 +2,7 @@
 
 SVN
 -feature: Add a reconnect capability when the server goes away
+-bug: Rework the way ping works.  Due to bad impact of 0.8.7h
 
 0.8.7h
 -feature#0001852: Another 10% speedup in spine 
