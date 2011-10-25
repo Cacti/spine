@@ -164,9 +164,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	if (host->snmp_session) {
 		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
 			/* by default, we look at sysUptime */
-			if (host->availability_method == AVAIL_SNMP_GET_UPTIME) {
-				oid = strdup(".1.3.6.1.2.1.1.3.0");
-			}else if (host->availability_method == AVAIL_SNMP_GET_NEXT) {
+			if (host->availability_method == AVAIL_SNMP_GET_NEXT) {
 				oid = strdup(".1.3");
 			}else if (host->availability_method == AVAIL_SNMP_GET_SYSDESC) {
 				oid = strdup(".1.3.6.1.2.1.1.1.0");
