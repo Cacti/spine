@@ -80,7 +80,6 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	/* snmp test */
 	if ((host->availability_method == AVAIL_SNMP) ||
-		(host->availability_method == AVAIL_SNMP_GET_UPTIME) ||
 		(host->availability_method == AVAIL_SNMP_GET_SYSDESC) ||
 		(host->availability_method == AVAIL_SNMP_GET_NEXT) ||
 		(host->availability_method == AVAIL_SNMP_AND_PING) ||
@@ -123,7 +122,6 @@ int ping_host(host_t *host, ping_t *ping) {
 			}
 		case AVAIL_SNMP:
 		case AVAIL_SNMP_GET_NEXT:
-		case AVAIL_SNMP_GET_UPTIME:
 		case AVAIL_SNMP_GET_SYSDESC:
 			if (snmp_result == HOST_UP) {
 				return HOST_UP;
