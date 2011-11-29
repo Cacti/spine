@@ -1,6 +1,6 @@
 ﻿The Cacti Group | spine
 
-SVN
+0.8.7i
 -feature: Add a reconnect capability when the server goes away
 -bug: Rework the way ping works.  Due to bad impact of 0.8.7h
 
