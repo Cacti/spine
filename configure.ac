@@ -25,7 +25,7 @@ AC_ARG_WITH(static,
 AC_ARG_WITH(mysql,
   AC_HELP_STRING(
     [--with-mysql],
-    [MySQL include directory [[/usr/include/mysql]]]
+    [MySQL base directory [[/usr/local/mysql]]]
   ),
   [MYSQL_DIR=$withval]
 )
@@ -34,7 +34,7 @@ AC_ARG_WITH(mysql,
 AC_ARG_WITH(snmp,
   AC_HELP_STRING(
     [--with-snmp],
-    [SNMP include base directory [[/usr/(local/)include]]]
+    [SNMP base directory [[/usr/(local/)include]]]
   ),
   [SNMP_DIR=$withval]
 )
@@ -180,6 +180,7 @@ AC_ARG_ENABLE(lcap,
   [ ENABLED_LCAP=$enableval ],
   [ ENABLED_LCAP=no ]
   )
+
 if test x$ENABLED_LCAP != xno; then
   if test x$FOUND_SYS_CAPABILITY_H != xno; then
     AC_MSG_RESULT([yes])

@@ -1234,9 +1234,9 @@ int hasCaps() {
 			return FALSE;
 	}
 	return TRUE;
-	#else /* HAVE_LCAP */	
+	#else
 	return FALSE;
-	#endif /* HAVE_LCAP */
+	#endif
 }
 	
 void checkAsRoot() {
@@ -1282,7 +1282,7 @@ void checkAsRoot() {
 	priv_freeset(privset);
 	free(p);
 	#else
-	if (!hasCaps) {
+	if (hasCaps() != TRUE) {
 		seteuid(0);
 	
 		if (geteuid() != 0) {

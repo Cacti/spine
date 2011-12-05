@@ -59,6 +59,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 		if (host->ping_method == PING_ICMP) {
 			if (set.icmp_avail == FALSE) {
+				SPINE_LOG_DEBUG(("Host[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
 				host->ping_method = PING_UDP;
 			}
 		}
@@ -159,6 +160,8 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering SNMP Ping", host->id));
+
 	if (host->snmp_session) {
 		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
 			/* by default, we look at sysUptime */
@@ -254,6 +257,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	unsigned char  *packet;
 	char     *new_hostname;
 
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering ICMP Ping", host->id));
+
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
@@ -261,7 +266,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	retry_count = 0;
 	while ( TRUE ) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (!hasCaps()) {
+		if (hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
 			seteuid(0);
 		}
@@ -276,7 +281,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				snprintf(ping->ping_status, 50, "down");
 				free(new_hostname);
 				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				if (!hasCaps()) {
+				if (hasCaps() != TRUE) {
 					seteuid(getuid());
 					thread_mutex_unlock(LOCK_SETEUID);
 				}
@@ -291,7 +296,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 	}
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (!hasCaps()) {
+	if (hasCaps() != TRUE) {
 		seteuid(getuid());
 		thread_mutex_unlock(LOCK_SETEUID);
 	}
@@ -386,10 +391,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* check to see which socket talked */
 				if (total_time < host_timeout) {
+					#if !(defined(__CYGWIN__))
 					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+					#else
+					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
+					#endif
 
 					if (return_code < 0) {
 						if (errno == EINTR) {
+							SPINE_LOG_DEBUG(("Host[%i] DEBUG: Received EINTR", host->id));
 							/* call was interrupted by some system event */
 							goto keep_listening;
 						}
@@ -405,14 +415,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								free(new_hostname);
 								free(packet);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (!hasCaps()) {
+								if (hasCaps() != TRUE) {
 									thread_mutex_lock(LOCK_SETEUID);
 									seteuid(0);
 								}
 								#endif
 								close(icmp_socket);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (!hasCaps()) {
+								if (hasCaps() != TRUE) {
 									seteuid(getuid());
 									thread_mutex_unlock(LOCK_SETEUID);
 								}
@@ -433,6 +443,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					}
+				}else{
+					SPINE_LOG_DEBUG(("Host[%i] DEBUG: Exceeded Host Timeout, Retrying", host->id));
 				}
 
 				total_time = 0;
@@ -447,14 +459,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			free(new_hostname);
 			free(packet);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (!hasCaps()) {
+			if (hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
 				seteuid(0);
 			}
 			#endif
 			close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (!hasCaps()) {
+			if (hasCaps() != TRUE) {
 				seteuid(getuid());
 				thread_mutex_unlock(LOCK_SETEUID);
 			}
@@ -468,14 +480,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		free(packet);
 		if (icmp_socket != -1) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (!hasCaps()) {
+			if (hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
 				seteuid(0);
 			}
 			#endif
 			close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (!hasCaps()) {
+			if (hasCaps() != TRUE) {
 				seteuid(getuid());
 				thread_mutex_unlock(LOCK_SETEUID);
 			}
@@ -511,6 +523,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int    return_code;
 	fd_set socket_fds;
 	char   *new_hostname;
+
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering UDP Ping", host->id));
 
 	/* set total time */
 	total_time = 0;
@@ -663,6 +677,8 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	int    retry_count;
 	int    return_code;
 	char   *new_hostname;
+
+	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering TCP Ping", host->id));
 
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
