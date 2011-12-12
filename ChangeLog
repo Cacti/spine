@@ -1,16 +1,12 @@
 ﻿The Cacti Group | spine
 
 0.8.7i
--feature: Add a reconnect capability when the server goes away
--bug: Rework the way ping works.  Due to bad impact of 0.8.7h
+-bug: Rework the way ping works, due to bad impact of changes in 0.8.7h
 -bug: ICMP ping not working on windows due to cygwin change
--bug: Linux Capabilities reported as on regardless of state
+-bug: Linux capabilities reported as on regardless of state
+-feature: Add a reconnect capability when the mysql server goes away
 
 0.8.7h
--feature#0001852: Another 10% speedup in spine 
--feature#0001878: Add Linux Capabilities to Spine
--feature: Add additional ping methods to allow more precise snmp pings
--feature: Clean up directory, update bootstrap
 -bug#0001669: Problems with getting data from script using SPINE on Windows Server 2003 x32 
 -bug#0001829: Wrong string numerical value got from Spine SNMP poller 
 -bug#0001899: spine treats undef replies as 0
@@ -25,15 +21,15 @@
 -bug: be smart for SNMP V3 and use AuthNoPriv when privacy passphrase is empty
 -bug: Do not fail on insert for a duplicate record
 -bug: Script server results with special characters can cause segfaults
+-feature#0001852: Another 10% speedup in spine 
+-feature#0001878: Add Linux Capabilities to Spine
+-feature: Add additional ping methods to allow more precise snmp pings
+-feature: Clean up directory, update bootstrap
 
 0.8.7g
 -feature: Multi threaded host polling
 
 0.8.7f
--bug#0001653: Transient ICMP Socket create failures causing spine to die
--bug#0001657: Spine output shows drop of latest bit from hex value 
--feature#0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address
--bug: When performing reindex checks, spine does not trim quotes from string values resulting in reindex faiures
 -bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
 -bug#0001497: Prevent constant reindexes if snmp agent continually returns uptime of 0
 -bug#0001510: Speedup spine resorting hosts by estimated polling time
@@ -42,12 +38,16 @@
 -bug#0001551: Spine compile problem on AIX 5
 -bug#0001563: Spine Compilation Problem on sql.c
 -bug#0001604: HEX Counter values enclosed in quotes not recognized as HEX
+-bug#0001657: Spine output shows drop of latest bit from hex value 
+-bug#0001653: Transient ICMP Socket create failures causing spine to die
+-bug: When performing reindex checks, spine does not trim quotes from string values resulting in reindex faiures
 -bug: Add new option to enable Net-SNMP library vs. header versions
 -bug: ICMP fails on some platforms
 -bug: MySQL client auto reconnect default in MySQL 5.0.71 causes spine to crash
 -bug: Inconsistent behavior when the poller interval has not been set
 -bug: Invalid use of FDSETSIZE can cause issue with Script Server
 -bug: When performing reindex checks, spine does not trim quotes from string values resulting in reindex faiures
+-feature#0001629: Implement the snmp clientaddr option to bind spine to a specific local ip address
 
 0.8.7e
 -bug: Not all configuration paths are searched for spine.conf
