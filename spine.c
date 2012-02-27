@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2002-2011 The Cacti Group                                 |
+ | Copyright (C) 2002-2012 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -871,7 +871,7 @@ static void display_help(void) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2002-2011 by The Cacti Group\n\n", VERSION);
+	printf("SPINE %s  Copyright 2002-2012 by The Cacti Group\n\n", VERSION);
 
 	for (p = helptext; *p; p++) {
 		puts(*p);	/* automatically adds a newline */
