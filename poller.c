@@ -1237,6 +1237,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		}
 		free(poller_items);
 		free(snmp_oids);
+	} else {
+		/* free the mysql result */
+		mysql_free_result(result);
 	}
 
 	free(host);
