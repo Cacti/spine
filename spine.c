@@ -766,8 +766,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	free(poller_details);
-
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
 
