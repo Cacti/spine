@@ -3,6 +3,7 @@
 0.8.8a
 -bug#0002204: spine corrupted double-linked list error
 -bug#0002206: On multi-architecture Debian platforms spine fails to build
+-bug#0002205: Typo, twice, in spine.c: absense -> absence
 
 0.8.8
 -bug#0002185: Multiple memory leaks found in spine

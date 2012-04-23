@@ -40,7 +40,7 @@
  * -C | --conf=F
  *
  *	Provide the name of the Spine configuration file, which contains
- *	the parameters for connecting to the database. In the absense of
+ *	the parameters for connecting to the database. In the absence of
  *	this, it looks [WHERE?]
  *
  * -f | --first=ID
@@ -858,7 +858,7 @@ static void display_help(void) {
 		"  --snmponly         Only do SNMP polling: no scripts",
 		"",
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
-        "In their absense, all hosts are processed.",
+        "In their absence, all hosts are processed.",
 		"",
 		"Without the --conf parameter, spine searches for its spine.conf",
 		"file in the usual places.",
