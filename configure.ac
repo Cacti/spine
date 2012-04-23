@@ -233,7 +233,9 @@ for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; d
   MYSQL_LIB_CHK($i/lib/mysql)
 done
 
-LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
+if test -n "$MYSQL_LIB_DIR" ; then
+  LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
+fi
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 AC_CHECK_LIB(mysqlclient_r,mysql_init, LIBS="-lmysqlclient_r $LIBS",
