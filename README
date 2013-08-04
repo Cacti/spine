@@ -1,15 +1,15 @@
 ------------------------------------------
-spine: a backend data gatherer for cacti
+spine: a backend poller for Cacti
 ------------------------------------------
 
 This code represents high speed poller replacement for cmd.php.
 It has come quite a ways from it's initial development.  It is almost
 100% compatible with the legacy cmd.php processor and provides much
-more flexibility than cmd.php.
+more flexibility, speed and concurrency than cmd.php.
 
 Make sure that you have a good development environment setup to compile spine.
 This includes compilers, header files and things such as libtool.  If you have
-questions, use the forums.
+questions please consult the forums or online documentation.
 
 KNOWN Issues:
 
@@ -33,5 +33,3 @@ KNOWN Issues:
    total connections = 4 * ( 1 + 10 + 5 ) = 64
 
    This may be resolved in a future release of spine.
-
--Larry Adams (aka TheWitness)
