@@ -173,6 +173,8 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 void db_connect(const char *database, MYSQL *mysql) {
 	int    tries;
 	int    timeout;
+	int    rtimeout;
+	int    wtimeout;
 	int    options_error;
 	int    success;
 	char   *hostname;
@@ -199,10 +201,22 @@ void db_connect(const char *database, MYSQL *mysql) {
 	tries   = 5;
 	success = FALSE;
 	timeout = 5;
+	rtimeout = 10;
+	wtimeout = 20;
 
 	mysql_init(mysql);
 	if (mysql == NULL) {
 		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
+	}
+
+	options_error = mysql_options(mysql, MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout);
+	if (options_error < 0) {
+		die("FATAL: MySQL options unable to set read timeout value");
+	}
+
+	options_error = mysql_options(mysql, MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout);
+	if (options_error < 0) {
+		die("FATAL: MySQL options unable to set read timeout value");
 	}
 
 	options_error = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
