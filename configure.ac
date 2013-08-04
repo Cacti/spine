@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(spine, 0.8.8a)
+AM_INIT_AUTOMAKE(spine, 0.8.8b)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
