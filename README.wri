@@ -1,0 +1,47 @@
+Spine Installation Instructions for Windows
+
+Prerequisites:
+
+CYGWIN
+
+ 1. Download Cygwin for Window from http://www.cygwin.com/
+ 2. Install Cygwin by executing the downloaded setup program
+ 3. Basically, select install from Internet
+ 4. Select the installation location
+ 5. Select a mirror which is close to your location
+ 6. Once on the package selection section make sure to select the following:
+	autoconf
+	automake
+	gcc-core
+	gzip
+	libtool
+	make
+	net-snmp-devel
+	m4
+	libmysqlclient-devel
+	libmysqlclient
+	openssl-devel
+	dos2unix
+	wget
+ 7. Wait for installation to complete, coffee time!
+
+
+Compiling Spine:
+
+ 1. Open Cygwin shell prompt and brace yourself to use unix commands on windows.
+ 2. Download the Spine source to the current directory:
+	wget http://www.cacti.net/downloads/spine/cacti-spine-0.8.8c.tar.gz
+ 3. Untar Spine:
+	tar xzvf cacti-spine-0.8.8c.tar.gz
+ 3. Change into the Spine directory:
+	cd cacti-spine-0.8.8c
+ 4. Run bootstrap to prepare Spine for compilation:
+	./bootstrap
+ 5. Follow the instruction which bootstrap will output if all is good to go.
+ 6. Update the spine.conf file for your installation of Cacti. You can optionally 
+    move it to a better location if you choose to do so, make sure to copy the
+    spine.conf as well.
+ 7. In the Cacti Settings -> Poller update the path to Spine and switch the
+    Poller Type to Spine.
+ 8. If all is good Spine will be run from the poller in place of cmd.php.
+
