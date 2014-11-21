@@ -41,7 +41,11 @@ Compiling Spine:
  6. Update the spine.conf file for your installation of Cacti. You can optionally 
     move it to a better location if you choose to do so, make sure to copy the
     spine.conf as well.
- 7. In the Cacti Settings -> Poller update the path to Spine and switch the
+ 7. Ensure that spine runs well by running with `/usr/local/spine/spine -R -S -V 3`
+ 8. Update your Paths to point to the spine binary and update your poller type to spine.
+    For the spine binary on Windows x64, and using default locations, that would be 
+	'C:\cygwin64\usr\local\spine\bin\spine.exe'
+ 9. In the Cacti Settings -> Poller update the path to Spine and switch the
     Poller Type to Spine.
- 8. If all is good Spine will be run from the poller in place of cmd.php.
+10. If all is good Spine will be run from the poller in place of cmd.php.
 
