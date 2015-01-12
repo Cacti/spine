@@ -317,7 +317,6 @@ typedef struct config_struct {
 	char   dbuser[SMALL_BUFSIZE];
 	char   dbpass[SMALL_BUFSIZE];
 	unsigned int dbport;
-	unsigned int pre087g;
 	int    dbversion;
 	/* path information */
 	char   path_logfile[SMALL_BUFSIZE];
@@ -341,6 +340,7 @@ typedef struct config_struct {
 	int    snmp_max_get_size;
 	int    snmp_retries;
 	char   snmp_clientaddr[SMALL_BUFSIZE];
+	int    mibs;
 	/* PHP Script Server Options */
 	int    php_required;
 	int    php_initialized;
@@ -443,6 +443,12 @@ typedef struct host_struct {
 	int    snmp_port;
 	int    snmp_timeout;
 	int    snmp_retries;
+	char   snmp_sysDescr[300];
+	char   snmp_sysObjectID[64];
+	u_int  snmp_sysUpTimeInstance;
+	char   snmp_sysContact[300];
+	char   snmp_sysName[300];
+	char   snmp_sysLocation[300];
 	int    max_oids;
 	int    availability_method;
 	int    ping_method;

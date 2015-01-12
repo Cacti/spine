@@ -513,7 +513,11 @@ int read_spine_config(char *file) {
 				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.dbpass, p2);
 				else if (STRIMATCH(p1, "DB_Port"))          set.dbport    = atoi(p2);
 				else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
-				else if (STRIMATCH(p1, "DB_PreG"))          set.pre087g   = atoi(p2);
+				else if (STRIMATCH(p1, "DB_PreG")) {
+					if (!set.stderr_notty) {
+						fprintf(stderr,"WARNING: DB_PreG is no longer supported\n");
+					}
+				}
 				else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
 				else if (!set.stderr_notty) {
 					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
@@ -538,7 +542,6 @@ int read_spine_config(char *file) {
 void config_defaults() {
 	set.threads = DEFAULT_THREADS;
 	set.dbport  = DEFAULT_DB_PORT;
-	set.pre087g = DEFAULT_DB_PREG;
 
 	STRNCOPY(set.dbhost, DEFAULT_DB_HOST);
 	STRNCOPY(set.dbdb,   DEFAULT_DB_DB  );

@@ -48,53 +48,46 @@
  *
  */
 void snmp_spine_init(void) {
-#ifdef USE_NET_SNMP
-	/* Only do numeric output */
-	#ifdef NETSNMP_DS_LIB_PRINT_NUMERIC_ENUM
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_NUMERIC_ENUM, 1);
-	#endif
 
-	/* Prevent update of the snmpapp.conf file */
-	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
-	#endif
+/* Only do numeric output */
+#ifdef NETSNMP_DS_LIB_PRINT_NUMERIC_ENUM
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_NUMERIC_ENUM, 1);
+#endif
 
-	/* Prevent update of the snmpapp.conf file */
-	#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
-	#endif
+/* Prevent update of the snmpapp.conf file */
+#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+#endif
 
-	#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
-	#endif
+/* Prevent update of the snmpapp.conf file */
+#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
+#endif
 
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
+#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
+#endif
 
-	#if defined(VERIFY_PACKAGE_VERSION) && defined(PACKAGE_VERSION)
-		/* check that the headers we compiled with match the library we linked with -
-		   apparently not defined in UCD-SNMP...
-		*/
-		SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION));
-		SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s", netsnmp_get_version()));
+netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
+netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
-		if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
-			init_snmp("spine");
-		}else{
-			/* report the error and quit spine */
-			die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
-		}
-	#else
-		SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP."));
+#if defined(VERIFY_PACKAGE_VERSION) && defined(PACKAGE_VERSION)
+	/* check that the headers we compiled with match the library we linked with -
+	   apparently not defined in UCD-SNMP...
+	*/
+	SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION));
+	SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s", netsnmp_get_version()));
+
+	if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
 		init_snmp("spine");
-	#endif
+	}else{
+		/* report the error and quit spine */
+		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
+	}
 #else
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
-	ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
-
+	SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP."));
 	init_snmp("spine");
 #endif
 }
@@ -131,37 +124,31 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	/* initialize SNMP */
 	snmp_sess_init(&session);
 
-	#ifdef USE_NET_SNMP
-		/* Bind to snmp_clientaddr if specified */
-		if (NULL != set.snmp_clientaddr  && strlen(set.snmp_clientaddr) > 0) {
-			#if SNMP_LOCALNAME == 1
-			session.localname = strdup(set.snmp_clientaddr);
-			#endif
-		}
-
-		/* Prevent update of the snmpapp.conf file */
-		#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
-			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+	/* Bind to snmp_clientaddr if specified */
+	if (NULL != set.snmp_clientaddr  && strlen(set.snmp_clientaddr) > 0) {
+		#if SNMP_LOCALNAME == 1
+		session.localname = strdup(set.snmp_clientaddr);
 		#endif
+	}
 
-		/* Prevent update of the snmpapp.conf file */
-		#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
-			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
-		#endif
-
-		#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
-			netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
-		#endif
-
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
-		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
-	#else
-		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_QUICK_PRINT, 1);
-		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_PRINT_BARE_VALUE, 1);
-		ds_set_boolean(DS_LIBRARY_ID, DS_LIB_NUMERIC_TIMETICKS, 1);
+	/* Prevent update of the snmpapp.conf file */
+	#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
 	#endif
+
+	/* Prevent update of the snmpapp.conf file */
+	#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
+	#endif
+
+	#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
+		netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
+	#endif
+
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
 	session.securityEngineID = 0;
 	session.securityEngineIDLen = 0;
@@ -356,11 +343,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
 
-					#ifdef USE_NET_SNMP
 					snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-					#else
-					sprint_value(temp_result, anOID, anOID_len, vars);
-					#endif
 
 					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				}
@@ -441,11 +424,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					vars = response->variables;
 
 					if (vars != NULL) {
-						#ifdef USE_NET_SNMP
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-						#else
-						sprint_value(temp_result, anOID, anOID_len, vars);
-						#endif
 
 						snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 					}else{
@@ -668,11 +647,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 
 				for(i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
-						#ifdef USE_NET_SNMP
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-						#else
-						sprint_value(temp_result, vars->name, vars->name_length, vars);
-						#endif
 
 						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
 						

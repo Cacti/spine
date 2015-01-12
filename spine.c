@@ -51,6 +51,10 @@
  *
  *	Stop polling after device <ID> (else ends with the last one)
  *
+ * -m | --mibs
+ *
+ *	Collect all system mibs this pass
+ *
  * -H | --hostlist="hostid1,hostid2,hostid3,...,hostidn"
  *
  *	Override the expected first host, last host behavior with a list of hostids.
@@ -328,6 +332,11 @@ int main(int argc, char *argv[]) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
 		}
 
+		else if (STRMATCH(arg, "-m") ||
+				 STRMATCH(arg, "--mibs")) {
+			set.mibs = 1;
+		}
+
 		else if (STRMATCH(arg, "-h") ||
 				 STRMATCH(arg, "-v") ||
 				 STRMATCH(arg, "--help") ||
@@ -562,13 +571,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* mark the spine process as started */
-	if (!set.pre087g) {
-		SPINE_LOG_MEDIUM(("NOTE: Spine is behaving in a 0.8.7g+ manner"));
-		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
-		db_insert(&mysql, querybuf);
-	}else{
-		SPINE_LOG_MEDIUM(("NOTE: Spine is behaving in a PRE 0.8.7g manner"));
-	}
+	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
+	db_insert(&mysql, querybuf);
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
@@ -775,12 +779,7 @@ int main(int argc, char *argv[]) {
 	/* update the db for |data_time| on graphs */
 	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
 
-	/* setup poller_time depending on Cacti version */
-	if (set.pre087g) {
-		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), NOW())", set.poller_id, getpid());
-	}else{
-		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-	}
+	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
 	db_insert(&mysql, querybuf);
 
 	/* cleanup and exit program */

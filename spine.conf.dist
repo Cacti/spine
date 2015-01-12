@@ -29,12 +29,9 @@
 # | DB_Pass         The password for the Cacti user                         |
 # | SNMP_Clientaddr Bind SNMP to a specific address for sites that use      |
 # |                 higher security levels                                  |
-# | DB_PreG         Set to 1 if you wish to work with older versions of     |
-# |                 cacti 0.8.7.                                            |
 # +-------------------------------------------------------------------------+
 DB_Host         localhost
 DB_Database     cacti
 DB_User         cactiuser
 DB_Pass         cactiuser
 DB_Port         3306
-DB_PreG         0
