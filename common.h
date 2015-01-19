@@ -125,23 +125,16 @@
 #  include <priv.h>
 #endif
 
-#ifdef USE_NET_SNMP
- #undef PACKAGE_NAME
- #undef PACKAGE_VERSION
- #undef PACKAGE_BUGREPORT
- #undef PACKAGE_STRING
- #undef PACKAGE_TARNAME
- #include <net-snmp/net-snmp-config.h>
- #include <net-snmp/utilities.h>
- #include <net-snmp/net-snmp-includes.h>
- #include <net-snmp/config_api.h>
- #include <net-snmp/mib_api.h>
-#else
- #include <ucd-snmp/ucd-snmp-config.h>
- #include <ucd-snmp/ucd-snmp-includes.h>
- #include <ucd-snmp/system.h>
- #include <mib.h>
-#endif
+#undef PACKAGE_NAME
+#undef PACKAGE_VERSION
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#include <net-snmp/net-snmp-config.h>
+#include <net-snmp/utilities.h>
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/config_api.h>
+#include <net-snmp/mib_api.h>
 
 #ifdef HAVE_LCAP
 #  include <sys/capability.h>
