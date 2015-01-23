@@ -707,4 +707,6 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 	if (response != NULL) {
 		snmp_free_pdu(response);
 	}
+
+	free(name);
 }

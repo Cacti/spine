@@ -76,8 +76,9 @@ void set_option(const char *option, const char *value) {
  *  \return the database option setting
  *
  */
-static const char *getsetting(MYSQL *psql, const char *setting) {
+const char *getsetting(MYSQL *psql, const char *setting) {
 	char      qstring[256];
+	char      *output;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
 	int       i;
@@ -96,9 +97,7 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 	sprintf(qstring, "SELECT value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, qstring);
-
-	if ((mysql_num_rows(result) > 0) &&
-		(mysql_row = mysql_fetch_row(result)) != 0)	{
+	if ((mysql_num_rows(result) > 0) && (mysql_row = mysql_fetch_row(result)) != 0)	{
 		return mysql_row[0];
 	}else{
 		return 0;

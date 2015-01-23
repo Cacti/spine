@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-m") ||
+		else if (STRMATCH(arg, "-M") ||
 				 STRMATCH(arg, "--mibs")) {
 			set.mibs = 1;
 		}
@@ -522,6 +522,7 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
 		}
 	}
+	db_free_result(result);
 
 	/* determine if the device_threads field exists in the host table */
 	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'device_threads'");
@@ -530,6 +531,7 @@ int main(int argc, char *argv[]) {
 	}else{
 		set.device_threads_exists = FALSE;
 	}
+	db_free_result(result);
 
 	if (set.device_threads_exists) {
 		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
@@ -627,6 +629,7 @@ int main(int argc, char *argv[]) {
 						snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
 						tresult   = db_query(&mysql, querybuf);
 						mysql_row = mysql_fetch_row(tresult);
+						db_free_result(tresult);
 						itemsPT   = atoi(mysql_row[0]);
 						if (host_time) free(host_time);
 						host_time = get_host_poll_time();
@@ -739,6 +742,7 @@ int main(int argc, char *argv[]) {
 
 		usleep(internal_thread_sleep);
 	}
+	db_free_result(result);
 
 	/* wait for all threads to complete */
 	while (canexit == FALSE) {
@@ -802,7 +806,6 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
 	/* close mysql */
-	mysql_free_result(result);
 	mysql_close(&mysql);
 
 	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
@@ -851,6 +854,7 @@ static void display_help(void) {
 		"  -p/--poller=X      Set the poller id to X",
 		"  -C/--conf=F        Read spine configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
+		"  -M/--mibs          Refresh the devie System Mib data",
 		"  -R/--readonly      Spine will not write output to the DB",
 		"  -S/--stdout        Logging is performed to standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",

@@ -317,3 +317,6 @@ void db_escape(MYSQL *mysql, char *output, const char *input) {
 	mysql_real_escape_string(mysql, output, input, strlen(input));
 }
 
+void db_free_result(MYSQL_RES *result) {
+	mysql_free_result(result);
+}
