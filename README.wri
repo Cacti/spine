@@ -32,9 +32,9 @@ Compiling Spine:
  2. Download the Spine source to the current directory:
 	wget http://www.cacti.net/downloads/spine/cacti-spine-0.8.8c.tar.gz
  3. Untar Spine:
-	tar xzvf cacti-spine-0.8.8c.tar.gz
+	tar xzvf cacti-spine-0.8.8d.tar.gz
  3. Change into the Spine directory:
-	cd cacti-spine-0.8.8c
+	cd cacti-spine-0.8.8d
  4. Run bootstrap to prepare Spine for compilation:
 	./bootstrap
  5. Follow the instruction which bootstrap will output if all is good to go.
