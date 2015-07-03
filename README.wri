@@ -30,11 +30,11 @@ Compiling Spine:
 
  1. Open Cygwin shell prompt and brace yourself to use unix commands on windows.
  2. Download the Spine source to the current directory:
-	wget http://www.cacti.net/downloads/spine/cacti-spine-0.8.8c.tar.gz
+	wget http://www.cacti.net/downloads/spine/cacti-spine-0.8.8e.tar.gz
  3. Untar Spine:
-	tar xzvf cacti-spine-0.8.8d.tar.gz
+	tar xzvf cacti-spine-0.8.8e.tar.gz
  3. Change into the Spine directory:
-	cd cacti-spine-0.8.8d
+	cd cacti-spine-0.8.8e
  4. Run bootstrap to prepare Spine for compilation:
 	./bootstrap
  5. Follow the instruction which bootstrap will output if all is good to go.
