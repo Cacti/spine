@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 0.8.8e, http://www.cacti.net/bugs.php)
+AC_INIT(Spine Poller, 1.0.0, http://www.cacti.net/bugs.php)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -9,7 +9,7 @@ AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE(spine, 0.8.8e)
+AM_INIT_AUTOMAKE(spine, 1.0.0)
 AM_CONFIG_HEADER(config/config.h)
 
 # static libraries
@@ -60,6 +60,8 @@ case $host_alias in
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
   ShLib="dylib";;
+*)
+  LDFLAGS="-lpthread -lm";;
 esac
 
 # Checks for programs.
@@ -243,16 +245,7 @@ AC_CHECK_LIB(mysqlclient_r,mysql_init, LIBS="-lmysqlclient_r",
   AC_MSG_ERROR([MySQL libraries not found])
 )
 
-# Net/UCD-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
-AC_MSG_CHECKING([if UCD-SNMP needs crypto support])
-SNMP_SSL=no
-AC_TRY_COMPILE([#include <ucd-snmp-config.h>], [exit(USE_OPENSSL != 1);],
-  [  AC_MSG_RESULT(yes)
-     SNMP_SSL=yes
-  ],
-  AC_MSG_RESULT(no)
-)
-
+# Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
 AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(USE_OPENSSL != 1);],
   [  AC_MSG_RESULT(yes)

@@ -512,9 +512,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							update_host_status(HOST_UP, host, ping, host->availability_method);
 
 							if (host->availability_method == AVAIL_SNMP) {
-								//get_system_information(host, &mysql);
-
-								
+								get_system_information(host, &mysql);
 							}
 						}
 					}else{

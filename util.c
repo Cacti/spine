@@ -78,7 +78,6 @@ void set_option(const char *option, const char *value) {
  */
 const char *getsetting(MYSQL *psql, const char *setting) {
 	char      qstring[256];
-	char      *output;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
 	int       i;
@@ -97,8 +96,21 @@ const char *getsetting(MYSQL *psql, const char *setting) {
 	sprintf(qstring, "SELECT value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, qstring);
-	if ((mysql_num_rows(result) > 0) && (mysql_row = mysql_fetch_row(result)) != 0)	{
-		return mysql_row[0];
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+			mysql_free_result(result);
+		
+			if (mysql_row != NULL) {
+				return mysql_row[0];
+			}else{
+				return 0;
+			}
+		}else{
+			mysql_free_result(result);
+			return 0;
+		}
 	}else{
 		return 0;
 	}
@@ -174,9 +186,20 @@ static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 
 	result = db_query(psql, qstring);
 
-	if ((mysql_num_rows(result) > 0) &&
-		(mysql_row = mysql_fetch_row(result)) != 0)	{
-		return mysql_row[1];
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+			mysql_free_result(result);
+		
+			if (mysql_row != NULL) {
+				return mysql_row[1];
+			}else{
+				return 0;
+			}
+		}else{
+			mysql_free_result(result);
+			return 0;
+		}
 	}else{
 		return 0;
 	}
@@ -426,6 +449,7 @@ void read_config_options() {
 
 		result = db_query(&mysql, sqlbuf);
 		num_rows = mysql_num_rows(result);
+		db_free_result(result);
 
 		if (num_rows > 0) set.php_required = TRUE;
 
@@ -445,6 +469,7 @@ void read_config_options() {
 
 		result = db_query(&mysql, sqlbuf);
 		num_rows = mysql_num_rows(result);
+		db_free_result(result);
 
 		if (num_rows > 0) set.php_required = TRUE;
 
@@ -472,7 +497,6 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
-	mysql_free_result(result);
 	db_disconnect(&mysql);
 }
 
@@ -616,7 +640,7 @@ int spine_log(const char *format, ...) {
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
 
 	va_start(args, format);
-	vsprintf(ulogmessage, format, args);
+	vsnprintf(ulogmessage, LOGSIZE - 1, format, args);
 	va_end(args);
 
 	/* default for "console" messages to go to stdout */
@@ -657,8 +681,8 @@ int spine_log(const char *format, ...) {
 		}
 	}
 
-	strncat(flogmessage, logprefix,   sizeof(flogmessage)-1);
-	strncat(flogmessage, ulogmessage, sizeof(flogmessage)-1);
+	strncat(flogmessage, logprefix,   sizeof(flogmessage) - 1);
+	strncat(flogmessage, ulogmessage, sizeof(flogmessage) - 50);
 
 	if ((IS_LOGGING_TO_FILE() &&
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
@@ -838,15 +862,7 @@ int is_numeric(const char *string) {
 		end_ptr_double = NULL;
 	}
 
-	if (!errno) {
-		if (STRIMATCH(string," ")) {
-			return FALSE;
-		}else{
-			return TRUE;
-		}
-	}else{
-		return FALSE;
-	}
+	return FALSE;
 }
 
 /*! \fn int is_hexadecimal(const char *str, const short ignore_space)
