@@ -511,8 +511,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						if (host_thread == 1) {
 							update_host_status(HOST_UP, host, ping, host->availability_method);
 
-							if (host->availability_method == AVAIL_SNMP) {
-								get_system_information(host, &mysql);
+							if (host->availability_method != AVAIL_PING) {
+								get_system_information(host, &mysql, 1);
 							}
 						}
 					}else{
@@ -1341,10 +1341,10 @@ int is_multipart_output(char *result) {
 
 }
 
-void get_system_information(host_t *host, MYSQL *mysql)  {
+void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 	snmp_oids_t *snmp_oids;
 
-	if (set.mibs) {
+	if (set.mibs || system) {
 		int num_oids = 6;
 
 		/* create an array for snmp oids */
