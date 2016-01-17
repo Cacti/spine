@@ -5,8 +5,10 @@
 -feature: Collect System Mib Information
 -feature: Place collection timing into host table
 
+
 0.8.8e
 
+-bug#0002185: Multiple memory leaks found in spine 
 -bug#0002398: Buffer overflow
 -bug#0002447: Building spine on Debian Jessie (testing) fails 
 -bug#0002536: Spine segfaults when 18k+ hosts are to be pulled

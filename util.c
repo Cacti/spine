@@ -76,8 +76,9 @@ void set_option(const char *option, const char *value) {
  *  \return the database option setting
  *
  */
-const char *getsetting(MYSQL *psql, const char *setting) {
+static const char *getsetting(MYSQL *psql, const char *setting) {
 	char      qstring[256];
+	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
 	int       i;
@@ -89,7 +90,8 @@ const char *getsetting(MYSQL *psql, const char *setting) {
 	for (i=0; i<nopts; i++) {
 		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
-			return opttable[i].val;
+			retval = strdup(opttable[i].val);
+			return retval;
 		}
 	}
 
@@ -100,15 +102,16 @@ const char *getsetting(MYSQL *psql, const char *setting) {
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
-			mysql_free_result(result);
 		
 			if (mysql_row != NULL) {
-				return mysql_row[0];
+				retval = strdup(mysql_row[0]);
+				db_free_result(result);
+				return retval;
 			}else{
 				return 0;
 			}
 		}else{
-			mysql_free_result(result);
+			db_free_result(result);
 			return 0;
 		}
 	}else{
@@ -140,6 +143,7 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 		STRIMATCH(rc, "yes" ) ||
 		STRIMATCH(rc, "true") ||
 		STRIMATCH(rc, "1"   ) ) {
+		free((char *)rc);
 		return TRUE;
 	}
 
@@ -147,10 +151,12 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
 		STRIMATCH(rc, "no"   ) ||
 		STRIMATCH(rc, "false") ||
 		STRIMATCH(rc, "0"    ) ) {
+		free((char *)rc);
 		return FALSE;
 	}
 
 	/* doesn't really match one of our keywords: what to do? */
+	free((char *)rc);
 
 	return dflt;
 }
@@ -167,6 +173,7 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
  */
 static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 	char      qstring[256];
+	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
 	int       i;
@@ -189,15 +196,16 @@ static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
-			mysql_free_result(result);
 		
 			if (mysql_row != NULL) {
-				return mysql_row[1];
+				retval = strdup(mysql_row[1]);
+				db_free_result(result);
+				return retval;
 			}else{
 				return 0;
 			}
 		}else{
-			mysql_free_result(result);
+			db_free_result(result);
 			return 0;
 		}
 	}else{
@@ -225,11 +233,13 @@ void read_config_options() {
 	set.dbversion = 0;
 	if ((res = getglobalvariable(&mysql, "version")) != 0 ) {
 		set.dbversion = atoi(res);
+		free((char *)res);
 	}
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, "log_verbosity")) != 0 ) {
 		const int n = atoi(res);
+		free((char *)res);
 		if (n != 0) set.log_level = n;
 	}
 
@@ -237,6 +247,7 @@ void read_config_options() {
 	if ((res = getsetting(&mysql, "path_webroot")) != 0 ) {
 		snprintf(set.path_php_server, SMALL_BUFSIZE, "%s/script_server.php", res);
 		snprintf(web_root, BUFSIZE, "%s", res);
+		free((char *)res);
 	}
 
 	/* determine logfile path */
@@ -250,6 +261,7 @@ void read_config_options() {
 				set.path_logfile[0] ='\0';
 			}
 		}
+		free((char *)res);
 	}else{
 		snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
@@ -263,6 +275,7 @@ void read_config_options() {
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, "log_destination")) != 0 ) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
+		free((char *)res);
 	}else{
 		set.log_destination = LOGDEST_FILE;
 	}
@@ -276,6 +289,7 @@ void read_config_options() {
 	/* get PHP Path Information for Scripting */
 	if ((res = getsetting(&mysql, "path_php_binary")) != 0 ) {
 		STRNCOPY(set.path_php, res);
+		free((char *)res);
 	}
 
 	/* log the path_php variable */
@@ -284,6 +298,7 @@ void read_config_options() {
 	/* set availability_method */
 	if ((res = getsetting(&mysql, "availability_method")) != 0 ) {
 		set.availability_method = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the availability_method variable */
@@ -292,6 +307,7 @@ void read_config_options() {
 	/* set ping_recovery_count */
 	if ((res = getsetting(&mysql, "ping_recovery_count")) != 0 ) {
 		set.ping_recovery_count = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the ping_recovery_count variable */
@@ -300,6 +316,7 @@ void read_config_options() {
 	/* set ping_failure_count */
 	if ((res = getsetting(&mysql, "ping_failure_count")) != 0) {
 		set.ping_failure_count = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the ping_failure_count variable */
@@ -308,6 +325,7 @@ void read_config_options() {
 	/* set ping_method */
 	if ((res = getsetting(&mysql, "ping_method")) != 0 ) {
 		set.ping_method = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the ping_method variable */
@@ -316,6 +334,7 @@ void read_config_options() {
 	/* set ping_retries */
 	if ((res = getsetting(&mysql, "ping_retries")) != 0 ) {
 		set.ping_retries = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the ping_retries variable */
@@ -324,6 +343,7 @@ void read_config_options() {
 	/* set ping_timeout */
 	if ( (res = getsetting(&mysql, "ping_timeout")) != 0 ) {
 		set.ping_timeout = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the ping_timeout variable */
@@ -332,6 +352,7 @@ void read_config_options() {
 	/* set snmp_retries */
 	if ( (res = getsetting(&mysql, "snmp_retries")) != 0 ) {
 		set.snmp_retries = atoi(res);
+		free((char *)res);
 	}
 
 	/* log the snmp_retries variable */
@@ -364,6 +385,7 @@ void read_config_options() {
 	/* get Cacti defined max threads override spine.conf */
 	if ((res = getsetting(&mysql, "max_threads")) != 0 ) {
 		set.threads = atoi(res);
+		free((char *)res);
 		if (set.threads > MAX_THREADS) {
 			set.threads = MAX_THREADS;
 		}
@@ -375,6 +397,7 @@ void read_config_options() {
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
 	if ((res = getsetting(&mysql, "poller_interval")) != 0 ) {
 		set.poller_interval = atoi(res);
+		free((char *)res);
 	}else{
 		set.poller_interval = 0;
 	}
@@ -389,6 +412,7 @@ void read_config_options() {
 	/* get the concurrent_processes variable to determine thread sleep values */
 	if ((res = getsetting(&mysql, "concurrent_processes")) != 0 ) {
 		set.num_parent_processes = atoi(res);
+		free((char *)res);
 	}else{
 		set.num_parent_processes = 1;
 	}
@@ -399,6 +423,7 @@ void read_config_options() {
 	/* get the script timeout to establish timeouts */
 	if ((res = getsetting(&mysql, "script_timeout")) != 0 ) {
 		set.script_timeout = atoi(res);
+		free((char *)res);
 		if (set.script_timeout < 5) {
 			set.script_timeout = 5;
 		}
@@ -412,6 +437,7 @@ void read_config_options() {
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, "php_servers")) != 0 ) {
 		set.php_servers = atoi(res);
+		free((char *)res);
 
 		if (set.php_servers > MAX_PHP_SERVERS) {
 			set.php_servers = MAX_PHP_SERVERS;
@@ -486,6 +512,7 @@ void read_config_options() {
 	/* determine the maximum oid's to obtain in a single get request */
 	if ((res = getsetting(&mysql, "max_get_size")) != 0 ) {
 		set.snmp_max_get_size = atoi(res);
+		free((char *)res);
 
 		if (set.snmp_max_get_size > 128) {
 			set.snmp_max_get_size = 128;
@@ -1239,24 +1266,34 @@ int hasCaps() {
 	cap_value_t capval;
 	cap_flag_value_t capflag;
 
-	caps = cap_from_text("cap_net_raw=eip");
+	/* Recommended caps: cap_net_raw=eip */
+	caps = cap_get_proc();
 	if (caps == NULL) {
-		SPINE_LOG_DEBUG(("WARNING: cap_from_text failed."));
+		SPINE_LOG(("ERROR: cap_get_proc failed."));
 		return FALSE;
 	}
 
-	for (capval=0; ;capval++) {
-		if (cap_get_flag(caps, capval, CAP_EFFECTIVE, &capflag))
-			break;
-		if (capflag != CAP_SET)
-			return FALSE;
+    /* check if cap_net_raw is in effective set */
+	if (cap_get_flag(caps, CAP_NET_RAW, CAP_EFFECTIVE, &capflag)) {
+		SPINE_LOG(("ERROR: cap_get_flag for CAP_NET_RAW failed. ICMP ping will not work as non-root user."));
+		return FALSE;
 	}
+
+	if (capflag != CAP_SET) {
+		SPINE_LOG(("ERROR: Capability CAP_NET_RAW is not set. ICMP ping will not work as non-root user."));
+		return FALSE;
+	}
+
+	SPINE_LOG_DEBUG(("DEBUG: Capability CAP_NET_RAW is set."));
+	cap_free(caps);
+
 	return TRUE;
 	#else
+	SPINE_LOG(("ERROR: Spine is not compiled with capability support. ICMP ping will not work as non-root user."));
 	return FALSE;
 	#endif
 }
-	
+
 void checkAsRoot() {
 	#ifndef __CYGWIN__
 	#ifdef SOLAR_PRIV

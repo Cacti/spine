@@ -535,6 +535,15 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
 
+	/* establish timeout value */
+	if (host->ping_timeout >= 1000) {
+		timeout.tv_sec  = rint(floor(host_timeout / 1000));
+		timeout.tv_usec = (timeout.tv_sec * 1000000) - (host->ping_timeout * 1000);
+	}else{
+		timeout.tv_sec  = 0;
+		timeout.tv_usec = (host->ping_timeout * 1000);
+	}
+
 	/* initilize the socket */
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 

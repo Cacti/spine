@@ -177,7 +177,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
 	session.peername    = hostnameport;
-	session.retries     = 3;
+	session.retries     = set.snmp_retries;
 	session.remote_port = snmp_port;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
