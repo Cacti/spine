@@ -5,6 +5,16 @@
 -feature: Collect System Mib Information
 -feature: Place collection timing into host table
 
+0.8.8g
+-bug:0002610: Spine is trying to use mysql results after data being freed
+-bug:0002639: Spine does not respect snmp_retries from the database
+-bug:0002640: Spine crashes randomly while polling using multiple threads on one device
+-bug:0002549: Spine: hasCaps() always returns FALSE
+-bug:0002638: Spine: ping_udp() uses uninitialised socket timeout 
+-bug:0002654: On RHEL 6.5, spine ./configure builds Makefile without crypto support
+
+0.8.8f
+-bug:0002604: cacti-spine, configure script ignores LDFLAGS in certain situations
 
 0.8.8e
 
