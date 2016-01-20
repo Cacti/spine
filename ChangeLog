@@ -6,6 +6,7 @@
 -feature: Place collection timing into host table
 
 0.8.8g
+-bug:0002380: please build man page for spine
 -bug:0002610: Spine is trying to use mysql results after data being freed
 -bug:0002639: Spine does not respect snmp_retries from the database
 -bug:0002640: Spine crashes randomly while polling using multiple threads on one device

@@ -83,6 +83,10 @@ AC_ARG_ENABLE(warnings,
   AC_MSG_RESULT(no)
 )
 
+AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
+AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
+AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])
+
 # On some systems, gethostbyname() is thread-safe
 AC_ARG_ENABLE(threadsafe_gethostbyname,
   AC_HELP_STRING(
