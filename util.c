@@ -1289,7 +1289,6 @@ int hasCaps() {
 
 	return TRUE;
 	#else
-	SPINE_LOG(("ERROR: Spine is not compiled with capability support. ICMP ping will not work as non-root user."));
 	return FALSE;
 	#endif
 }

@@ -107,6 +107,7 @@ void *child(void *arg) {
  *
  */
 void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time) {
+	char query0[BUFSIZE];
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
 	char *query3 = NULL;
@@ -512,7 +513,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							update_host_status(HOST_UP, host, ping, host->availability_method);
 
 							if (host->availability_method != AVAIL_PING) {
-								get_system_information(host, &mysql, 1);
+								if (host->snmp_session != NULL) {
+									get_system_information(host, &mysql, 1);
+								}
 							}
 						}
 					}else{
@@ -1283,8 +1286,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	poll_time = get_time_as_double() - poll_time;
 	SPINE_LOG_MEDIUM(("Host[%i] TH[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
 
+	/* record the total time for the host */
+	poll_time = get_time_as_double();
 	query1[0] = '\0';
-	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time='%g' WHERE id=%i", poll_time, host_id);
+	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time='%s-%g' WHERE id=%i", host_time, poll_time, host_id);
 	db_query(&mysql, query1);
 
 	mysql_close(&mysql);
@@ -1342,48 +1347,48 @@ int is_multipart_output(char *result) {
 }
 
 void get_system_information(host_t *host, MYSQL *mysql, int system)  {
-	snmp_oids_t *snmp_oids;
+	char *poll_result;
 
-	if (set.mibs || system) {
-		int num_oids = 6;
-
-		/* create an array for snmp oids */
-		snmp_oids = (snmp_oids_t *) calloc(num_oids, sizeof(snmp_oids_t));
-
-		/* initialize all the memory to insure we don't get issues */
-		memset(snmp_oids, 0, sizeof(snmp_oids_t)*num_oids);
-
-		STRNCOPY(snmp_oids[0].oid, ".1.3.6.1.2.1.1.1.0");
-		STRNCOPY(snmp_oids[1].oid, ".1.3.6.1.2.1.1.2.0");
-		STRNCOPY(snmp_oids[2].oid, ".1.3.6.1.2.1.1.3.0");
-		STRNCOPY(snmp_oids[3].oid, ".1.3.6.1.2.1.1.4.0");
-		STRNCOPY(snmp_oids[4].oid, ".1.3.6.1.2.1.1.5.0");
-		STRNCOPY(snmp_oids[5].oid, ".1.3.6.1.2.1.1.6.0");
-
-		snmp_get_multi(host, snmp_oids, num_oids);
-
-		mysql_real_escape_string(mysql, host->snmp_sysDescr, snmp_oids[0].result, strlen(snmp_oids[0].result));
-		mysql_real_escape_string(mysql, host->snmp_sysObjectID, snmp_oids[1].result, strlen(snmp_oids[1].result));
-		host->snmp_sysUpTimeInstance = atoi(snmp_oids[2].result);
-		mysql_real_escape_string(mysql, host->snmp_sysContact, snmp_oids[3].result, strlen(snmp_oids[3].result));
-		mysql_real_escape_string(mysql, host->snmp_sysName, snmp_oids[4].result, strlen(snmp_oids[4].result));
-		mysql_real_escape_string(mysql, host->snmp_sysLocation, snmp_oids[5].result, strlen(snmp_oids[5].result));
-	}else{
-		int num_oids = 1;
-
-		/* create an array for snmp oids */
-		snmp_oids = (snmp_oids_t *) calloc(num_oids, sizeof(snmp_oids_t));
-
-		/* initialize all the memory to insure we don't get issues */
-		memset(snmp_oids, 0, sizeof(snmp_oids_t)*num_oids);
-
-		STRNCOPY(snmp_oids[0].oid, ".1.3.6.1.2.1.1.3.0");
-		snmp_get_multi(host, snmp_oids, num_oids);
-
-		host->snmp_sysUpTimeInstance = atoi(snmp_oids[2].result);
+	if (!(poll_result = (char *) malloc(BUFSIZE))) {
+		die("ERROR: Fatal malloc error: poller.c poll_result");
 	}
 
-	free(snmp_oids);
+	if (set.mibs || system) {
+		SPINE_LOG_MEDIUM(("Updating Full System Information Table"));
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
+		if (poll_result) {
+			mysql_real_escape_string(mysql, host->snmp_sysDescr, poll_result, strlen(poll_result));
+		}
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
+		if (poll_result) {
+			mysql_real_escape_string(mysql, host->snmp_sysObjectID, poll_result, strlen(poll_result));
+		}
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+		if (poll_result) {
+			host->snmp_sysUpTimeInstance = atoi(poll_result);
+		}
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
+		if (poll_result) {
+			mysql_real_escape_string(mysql, host->snmp_sysContact, poll_result, strlen(poll_result));
+		}
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
+		if (poll_result) {
+			mysql_real_escape_string(mysql, host->snmp_sysName, poll_result, strlen(poll_result));
+		}
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
+		if (poll_result) {
+			mysql_real_escape_string(mysql, host->snmp_sysLocation, poll_result, strlen(poll_result));
+		}
+	}else{
+		SPINE_LOG_MEDIUM(("Updating Short System Information Table"));
+
+		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+		if (poll_result) {
+			host->snmp_sysUpTimeInstance = atoi(poll_result);
+		}
+	}
+
+	free(poll_result);
 }
 
 /*! \fn int validate_result(char *result)
