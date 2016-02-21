@@ -32,7 +32,7 @@
 */
 
 extern void *child(void *arg);
-extern void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char* host_time);
+extern void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char* host_time, double host_time_double);
 extern char *exec_poll(host_t *current_host, char *command);
 extern void get_system_information(host_t *host, MYSQL *mysql, int system);
 extern int is_multipart_output(char *result);

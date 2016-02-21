@@ -48,6 +48,7 @@ void *child(void *arg) {
 	int host_thread;
 	int last_host_thread;
 	int host_data_ids;
+	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
@@ -55,6 +56,7 @@ void *child(void *arg) {
 	host_thread      = poller_details.host_thread;
 	last_host_thread = poller_details.last_host_thread;
 	host_data_ids    = poller_details.host_data_ids;
+	host_time_double = poller_details.host_time_double;
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
 
 	free(arg);
@@ -63,7 +65,7 @@ void *child(void *arg) {
 
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
-	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time);
+	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, host_time_double);
 
 	while (TRUE) {
 		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
@@ -84,7 +86,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time)
+/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, double *host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -106,7 +108,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time) {
+void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, double host_time_double) {
 	char query0[BUFSIZE];
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
@@ -1289,7 +1291,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	/* record the total time for the host */
 	poll_time = get_time_as_double();
 	query1[0] = '\0';
-	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time='%s-%g' WHERE id=%i", host_time, poll_time, host_id);
+	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
 	db_query(&mysql, query1);
 
 	mysql_close(&mysql);

@@ -408,6 +408,7 @@ typedef struct poller_thread {
 	int last_host_thread;
 	int host_data_ids;
 	char *host_time;
+	double host_time_double;
 } poller_thread_t;
 
 /*! PHP Script Server Structure

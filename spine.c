@@ -105,7 +105,7 @@ php_t	*php_processes = 0;
 char	 config_paths[CONFIG_PATHS][BUFSIZE];
 
 static char *getarg(char *opt, char ***pargv);
-static void display_help(void);
+static void display_help(int * only_version);
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -192,6 +192,7 @@ int main(int argc, char *argv[]) {
 	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
+	double host_time_double = 0;
 	int itemsPT = 0;
 	int device_threads;
 
@@ -337,11 +338,14 @@ int main(int argc, char *argv[]) {
 			set.mibs = 1;
 		}
 
-		else if (STRMATCH(arg, "-h") ||
-				 STRMATCH(arg, "-v") ||
-				 STRMATCH(arg, "--help") ||
-				 STRMATCH(arg, "--version")) {
-			display_help();
+		else if (STRMATCH(arg, "-h") || STRMATCH(arg, "--help")) {
+			display_help(FALSE);
+
+			exit(EXIT_SUCCESS);
+		}
+
+		else if (STRMATCH(arg, "-v") || STRMATCH(arg, "--version")) {
+			display_help(TRUE);
 
 			exit(EXIT_SUCCESS);
 		}
@@ -634,11 +638,13 @@ int main(int argc, char *argv[]) {
 
 						if (host_time) free(host_time);
 						host_time = get_host_poll_time();
+						host_time_double = get_time_as_double();
 					}
 				}else{
 					itemsPT   = 0;
 					if (host_time) free(host_time);
 					host_time = get_host_poll_time();
+					host_time_double = get_time_as_double();
 				}
 
 				/* populate the thread structure */
@@ -651,6 +657,7 @@ int main(int argc, char *argv[]) {
 				poller_details->last_host_thread = device_threads;
 				poller_details->host_data_ids    = itemsPT;
 				poller_details->host_time        = host_time;
+				poller_details->host_time_double = host_time_double;
 
 				/* this variable tells us that the child had loaded the poller
 				 * poller_details structure and we can move on to the next thread
@@ -842,7 +849,7 @@ int main(int argc, char *argv[]) {
  *	is dumped literally.
  *
  */
-static void display_help(void) {
+static void display_help(int *only_version) {
 	static const char *const *p;
 	static const char * const helptext[] = {
 		"Usage: spine [options] [[firstid lastid] || [-H/--hostlist='hostid1,hostid2,...,hostidn']]",
@@ -880,10 +887,13 @@ static void display_help(void) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2002-2015 by The Cacti Group\n\n", VERSION);
+	printf("SPINE %s  Copyright 2002-2015 by The Cacti Group\n", VERSION);
 
-	for (p = helptext; *p; p++) {
-		puts(*p);	/* automatically adds a newline */
+	if (only_version == FALSE) {
+		printf("\n");
+		for (p = helptext; *p; p++) {
+			puts(*p);	/* automatically adds a newline */
+		}
 	}
 }
 
