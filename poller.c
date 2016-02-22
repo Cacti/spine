@@ -109,7 +109,6 @@ void *child(void *arg) {
  *
  */
 void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, double host_time_double) {
-	char query0[BUFSIZE];
 	char query1[BUFSIZE];
 	char query2[BUFSIZE];
 	char *query3 = NULL;
@@ -171,7 +170,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	MYSQL     mysql;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
-	MYSQL_FIELD *field;
 
 	db_connect(set.dbdb, &mysql);
 

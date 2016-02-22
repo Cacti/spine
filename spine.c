@@ -105,7 +105,7 @@ php_t	*php_processes = 0;
 char	 config_paths[CONFIG_PATHS][BUFSIZE];
 
 static char *getarg(char *opt, char ***pargv);
-static void display_help(int * only_version);
+static void display_help(int only_version);
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -849,7 +849,7 @@ int main(int argc, char *argv[]) {
  *	is dumped literally.
  *
  */
-static void display_help(int *only_version) {
+static void display_help(int only_version) {
 	static const char *const *p;
 	static const char * const helptext[] = {
 		"Usage: spine [options] [[firstid lastid] || [-H/--hostlist='hostid1,hostid2,...,hostidn']]",
