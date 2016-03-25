@@ -1431,7 +1431,7 @@ int validate_result(char *result) {
  *
  */
 char *exec_poll(host_t *current_host, char *command) {
-	extern int active_scripts;
+	extern sem_t active_scripts;
 	int cmd_fd;
 	int pid;
 	int close_fd = TRUE;
@@ -1472,17 +1472,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	begin_time = get_time_as_double();
 
 	/* don't run too many scripts, operating systems do not like that. */
-	while (1) {
-		thread_mutex_lock(LOCK_PIPE);
-		if (active_scripts > MAX_SIMULTANEOUS_SCRIPTS) {
-			thread_mutex_unlock(LOCK_PIPE);
-			usleep(50000);
-		}else{
-			active_scripts++;
-			thread_mutex_unlock(LOCK_PIPE);
-			break;
-		}
-	}
+	sem_wait(&active_scripts);
 
 	#ifdef USING_TPOPEN
 	fd = popen((char *)proc_command, "r");
@@ -1585,9 +1575,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	#endif
 
 	/* reduce the active script count */
-	thread_mutex_lock(LOCK_PIPE);
-	active_scripts--;
-	thread_mutex_unlock(LOCK_PIPE);
+	sem_post(&active_scripts);
 
 	return result_string;
 }

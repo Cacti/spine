@@ -52,7 +52,6 @@ DEFINE_SPINE_LOCK(snmp)
 DEFINE_SPINE_LOCK(thread)
 DEFINE_SPINE_LOCK(seteuid)
 DEFINE_SPINE_LOCK(ghbn)
-DEFINE_SPINE_LOCK(pipe)
 DEFINE_SPINE_LOCK(syslog)
 DEFINE_SPINE_LOCK(php)
 DEFINE_SPINE_LOCK(php_proc_0)
@@ -71,7 +70,6 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_THREAD_O),     init_thread_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_SETEUID_O),    init_seteuid_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),       init_ghbn_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PIPE_O),       init_pipe_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O),     init_syslog_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O),        init_php_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_0_O), init_php_proc_0_lock);
@@ -94,7 +92,6 @@ pthread_mutex_t* get_lock(int lock) {
 	case LOCK_THREAD:     ret_val = &thread_lock;     break;
 	case LOCK_SETEUID:    ret_val = &seteuid_lock;    break;
 	case LOCK_GHBN:       ret_val = &ghbn_lock;       break;
-	case LOCK_PIPE:       ret_val = &pipe_lock;       break;
 	case LOCK_SYSLOG:     ret_val = &syslog_lock;     break;
 	case LOCK_PHP:        ret_val = &php_lock;        break;
 	case LOCK_PHP_PROC_0: ret_val = &php_proc_0_lock; break;
@@ -120,7 +117,6 @@ pthread_once_t* get_attr(int locko) {
 	case LOCK_THREAD_O:     ret_val = &thread_lock_o;     break;
 	case LOCK_SETEUID_O:    ret_val = &seteuid_lock_o;    break;
 	case LOCK_GHBN_O:       ret_val = &ghbn_lock_o;       break;
-	case LOCK_PIPE_O:       ret_val = &pipe_lock_o;       break;
 	case LOCK_SYSLOG_O:     ret_val = &syslog_lock_o;     break;
 	case LOCK_PHP_O:        ret_val = &php_lock_o;        break;
 	case LOCK_PHP_PROC_0_O: ret_val = &php_proc_0_lock_o; break;

@@ -158,7 +158,6 @@
 #define LOCK_THREAD 1
 #define LOCK_SETEUID 2
 #define LOCK_GHBN 3
-#define LOCK_PIPE 4
 #define LOCK_SYSLOG 5
 #define LOCK_PHP 6
 #define LOCK_PHP_PROC_0 7
@@ -176,7 +175,6 @@
 #define LOCK_THREAD_O 1
 #define LOCK_SETEUID_O 2
 #define LOCK_GHBN_O 3
-#define LOCK_PIPE_O 4
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
 #define LOCK_PHP_PROC_0_O 7

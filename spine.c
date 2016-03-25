@@ -97,7 +97,7 @@
 int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
-int active_scripts = 0;
+sem_t active_scripts;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -601,6 +601,9 @@ int main(int argc, char *argv[]) {
 	}else{
 		change_host = TRUE;
 	}
+
+	/* initialize active_scripts semaphore */
+	sem_init(&active_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
 
 	/* initialize thread initialization semaphore */
 	sem_init(&thread_init_sem, 0, 1);
