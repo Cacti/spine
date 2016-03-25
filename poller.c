@@ -50,6 +50,7 @@ void *child(void *arg) {
 	int host_data_ids;
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
+	int a_threads_value;
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 	host_id          = poller_details.host_id;
@@ -68,18 +69,10 @@ void *child(void *arg) {
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, host_time_double);
 
-	while (TRUE) {
-		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
-			active_threads--;
-			thread_mutex_unlock(LOCK_THREAD);
+	sem_post(&active_threads);
 
-			break;
-		}
-		
-		usleep(100);
-	}
-
-	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i" ,active_threads));
+	sem_getvalue(&active_threads, &a_threads_value);
+	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", set.threads - a_threads_value));
 
 	/* end the thread */
 	pthread_exit(0);
