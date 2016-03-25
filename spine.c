@@ -98,7 +98,6 @@ int entries = 0;
 int num_hosts = 0;
 int active_threads = 0;
 int active_scripts = 0;
-int thread_ready   = FALSE;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -195,6 +194,7 @@ int main(int argc, char *argv[]) {
 	double host_time_double = 0;
 	int itemsPT = 0;
 	int device_threads;
+	sem_t thread_init_sem;
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0)
@@ -602,6 +602,9 @@ int main(int argc, char *argv[]) {
 		change_host = TRUE;
 	}
 
+	/* initialize thread initialization semaphore */
+	sem_init(&thread_init_sem, 0, 1);
+
 	/* loop through devices until done */
 	while ((device_counter < num_rows) && (canexit == FALSE)) {
 		while ((active_threads < set.threads) && (device_counter < num_rows) && (canexit == FALSE)) {
@@ -658,13 +661,10 @@ int main(int argc, char *argv[]) {
 				poller_details->host_data_ids    = itemsPT;
 				poller_details->host_time        = host_time;
 				poller_details->host_time_double = host_time_double;
-
-				/* this variable tells us that the child had loaded the poller
-				 * poller_details structure and we can move on to the next thread
-				 */
-				thread_ready = FALSE;
+				poller_details->thread_init_sem  = &thread_init_sem;
 
 				/* create child process */
+				sem_wait(&thread_init_sem);
 				thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 				switch (thread_status) {
@@ -677,9 +677,8 @@ int main(int argc, char *argv[]) {
 						active_threads++;
 
 						/* wait for the child to read and process the structure */
-						while (!thread_ready) { 
-							usleep(internal_thread_sleep);
-						}
+						sem_wait(&thread_init_sem);
+						sem_post(&thread_init_sem);
 
 						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", active_threads));
 
@@ -697,6 +696,9 @@ int main(int argc, char *argv[]) {
 						SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
 						break;
 				}
+				/* Restore thread initialization semaphore if thread creation failed */
+				if (thread_status)
+				    sem_post(&thread_init_sem);
 
 				thread_mutex_unlock(LOCK_THREAD);
 

@@ -59,9 +59,10 @@ void *child(void *arg) {
 	host_time_double = poller_details.host_time_double;
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
 
-	free(arg);
+	/* Allows main thread to proceed with creation of other threads */
+	sem_post(poller_details.thread_init_sem);
 
-	thread_ready = TRUE;
+	free(arg);
 
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
