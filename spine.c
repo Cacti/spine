@@ -580,6 +580,19 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
+	/* initialize active_threads semaphore */
+	sem_init(&active_threads, 0, set.threads);
+
+	/* initialize active_scripts semaphore */
+	sem_init(&active_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
+
+	/* initialize thread initialization semaphore */
+	sem_init(&thread_init_sem, 0, 1);
+
+	/* specify the point of timeout for timedwait semaphores */
+	until.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
+	until.tv_nsec = 0;
+
 	sem_getvalue(&active_threads, &a_threads_value);
 	SPINE_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
 
@@ -597,19 +610,6 @@ int main(int argc, char *argv[]) {
 	}else{
 		change_host = TRUE;
 	}
-
-	/* initialize active_threads semaphore */
-	sem_init(&active_threads, 0, set.threads);
-
-	/* initialize active_scripts semaphore */
-	sem_init(&active_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
-
-	/* initialize thread initialization semaphore */
-	sem_init(&thread_init_sem, 0, 1);
-
-	/* specify the point of timeout for timedwait semaphores */
-	until.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
-	until.tv_nsec = 0;
 
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
