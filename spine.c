@@ -185,7 +185,6 @@ int main(int argc, char *argv[]) {
 	int num_rows = 0;
 	int device_counter = 0;
 	int poller_counter = 0;
-	int last_active_threads = 0;
 	int valid_conf_file = FALSE;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
@@ -615,9 +614,6 @@ int main(int argc, char *argv[]) {
 
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
-		sem_getvalue(&active_threads, &last_active_threads);
-		last_active_threads = set.threads - last_active_threads;
-
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
 			host_id         = atoi(mysql_row[0]);
