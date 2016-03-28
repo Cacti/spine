@@ -181,7 +181,7 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
 int main(int argc, char *argv[]) {
 	struct timeval now;
 	char *conf_file = NULL;
-	double begin_time, end_time, current_time;
+	double begin_time, end_time;
 	int num_rows = 0;
 	int device_counter = 0;
 	int poller_counter = 0;
