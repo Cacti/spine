@@ -212,7 +212,6 @@ int main(int argc, char *argv[]) {
 	int canexit = FALSE;
 	int host_id = 0;
 	int i;
-	int mutex_status  = 0;
 	int thread_status = 0;
 	int change_host   = TRUE;
 	int current_thread;
