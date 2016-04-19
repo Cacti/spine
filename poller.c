@@ -50,6 +50,7 @@ void *child(void *arg) {
 	int host_data_ids;
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
+	int a_threads_value;
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 	host_id          = poller_details.host_id;
@@ -59,26 +60,19 @@ void *child(void *arg) {
 	host_time_double = poller_details.host_time_double;
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
 
-	free(arg);
+	/* Allows main thread to proceed with creation of other threads */
+	sem_post(poller_details.thread_init_sem);
 
-	thread_ready = TRUE;
+	free(arg);
 
 	SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Host"));
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, host_time_double);
 
-	while (TRUE) {
-		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
-			active_threads--;
-			thread_mutex_unlock(LOCK_THREAD);
+	sem_post(&active_threads);
 
-			break;
-		}
-		
-		usleep(100);
-	}
-
-	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i" ,active_threads));
+	sem_getvalue(&active_threads, &a_threads_value);
+	SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", set.threads - a_threads_value));
 
 	/* end the thread */
 	pthread_exit(0);
@@ -1430,7 +1424,7 @@ int validate_result(char *result) {
  *
  */
 char *exec_poll(host_t *current_host, char *command) {
-	extern int active_scripts;
+	extern sem_t active_scripts;
 	int cmd_fd;
 	int pid;
 	int close_fd = TRUE;
@@ -1471,17 +1465,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	begin_time = get_time_as_double();
 
 	/* don't run too many scripts, operating systems do not like that. */
-	while (1) {
-		thread_mutex_lock(LOCK_PIPE);
-		if (active_scripts > MAX_SIMULTANEOUS_SCRIPTS) {
-			thread_mutex_unlock(LOCK_PIPE);
-			usleep(50000);
-		}else{
-			active_scripts++;
-			thread_mutex_unlock(LOCK_PIPE);
-			break;
-		}
-	}
+	sem_wait(&active_scripts);
 
 	#ifdef USING_TPOPEN
 	fd = popen((char *)proc_command, "r");
@@ -1584,9 +1568,7 @@ char *exec_poll(host_t *current_host, char *command) {
 	#endif
 
 	/* reduce the active script count */
-	thread_mutex_lock(LOCK_PIPE);
-	active_scripts--;
-	thread_mutex_unlock(LOCK_PIPE);
+	sem_post(&active_scripts);
 
 	return result_string;
 }

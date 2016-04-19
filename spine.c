@@ -96,9 +96,8 @@
 /* Global Variables */
 int entries = 0;
 int num_hosts = 0;
-int active_threads = 0;
-int active_scripts = 0;
-int thread_ready   = FALSE;
+sem_t active_threads;
+sem_t active_scripts;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -182,19 +181,19 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
 int main(int argc, char *argv[]) {
 	struct timeval now;
 	char *conf_file = NULL;
-	double begin_time, end_time, current_time;
+	double begin_time, end_time;
 	int num_rows = 0;
 	int device_counter = 0;
 	int poller_counter = 0;
-	int last_active_threads = 0;
 	int valid_conf_file = FALSE;
-	long int EXTERNAL_THREAD_SLEEP = 50;
-	long int internal_thread_sleep;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
 	double host_time_double = 0;
 	int itemsPT = 0;
 	int device_threads;
+	sem_t thread_init_sem;
+	int a_threads_value;
+	struct timespec until;
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0)
@@ -213,7 +212,6 @@ int main(int argc, char *argv[]) {
 	int canexit = FALSE;
 	int host_id = 0;
 	int i;
-	int mutex_status  = 0;
 	int thread_status = 0;
 	int change_host   = TRUE;
 	int current_thread;
@@ -472,9 +470,6 @@ int main(int argc, char *argv[]) {
 		set.poller_interval = 300;
 	}
 
-	/* calculate the external_tread_sleep value */
-	internal_thread_sleep = EXTERNAL_THREAD_SLEEP * set.num_parent_processes / 50;
-
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
@@ -585,7 +580,21 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	SPINE_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", active_threads));
+	/* initialize active_threads semaphore */
+	sem_init(&active_threads, 0, set.threads);
+
+	/* initialize active_scripts semaphore */
+	sem_init(&active_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
+
+	/* initialize thread initialization semaphore */
+	sem_init(&thread_init_sem, 0, 1);
+
+	/* specify the point of timeout for timedwait semaphores */
+	until.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
+	until.tv_nsec = 0;
+
+	sem_getvalue(&active_threads, &a_threads_value);
+	SPINE_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = SPINE_FORK;
@@ -603,181 +612,101 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* loop through devices until done */
-	while ((device_counter < num_rows) && (canexit == FALSE)) {
-		while ((active_threads < set.threads) && (device_counter < num_rows) && (canexit == FALSE)) {
-			mutex_status = thread_mutex_trylock(LOCK_THREAD);
-	
-			switch (mutex_status) {
-			case 0:
-				last_active_threads = active_threads;
-	
-				if (change_host) {
-					mysql_row       = mysql_fetch_row(result);
-					host_id         = atoi(mysql_row[0]);
-					device_threads  = atoi(mysql_row[1]);
-					current_thread  = 1;
-				}else{
-					current_thread++;
-				}
-
-				if (current_thread >= device_threads) {
-					change_host = TRUE;
-				}else{
-					change_host = FALSE;
-				}
-
-				/* determine how many items will be polled per thread */
-				if (device_threads > 1) {
-					if (current_thread == 1) {
-						snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
-						tresult   = db_query(&mysql, querybuf);
-						mysql_row = mysql_fetch_row(tresult);
-
-						itemsPT   = atoi(mysql_row[0]);
-						db_free_result(tresult);
-
-						if (host_time) free(host_time);
-						host_time = get_host_poll_time();
-						host_time_double = get_time_as_double();
-					}
-				}else{
-					itemsPT   = 0;
-					if (host_time) free(host_time);
-					host_time = get_host_poll_time();
-					host_time_double = get_time_as_double();
-				}
-
-				/* populate the thread structure */
-				if (!(poller_details = (poller_thread_t *)malloc(sizeof(poller_thread_t)))) {
-					die("ERROR: Fatal malloc error: spine.c poller_details!");
-				}
-
-				poller_details->host_id          = host_id;
-				poller_details->host_thread      = current_thread;
-				poller_details->last_host_thread = device_threads;
-				poller_details->host_data_ids    = itemsPT;
-				poller_details->host_time        = host_time;
-				poller_details->host_time_double = host_time_double;
-
-				/* this variable tells us that the child had loaded the poller
-				 * poller_details structure and we can move on to the next thread
-				 */
-				thread_ready = FALSE;
-
-				/* create child process */
-				thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
-
-				switch (thread_status) {
-					case 0:
-						SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
-
-						if (change_host) {
-							device_counter++;
-						}
-						active_threads++;
-
-						/* wait for the child to read and process the structure */
-						while (!thread_ready) { 
-							usleep(internal_thread_sleep);
-						}
-
-						SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", active_threads));
-
-						break;
-					case EAGAIN:
-						SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread"));
-						break;
-					case EFAULT:
-						SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
-						break;
-					case EINVAL:
-						SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
-						break;
-					default:
-						SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
-						break;
-				}
-
-				thread_mutex_unlock(LOCK_THREAD);
-
-				/* get current time and exit program if time limit exceeded */
-				if (poller_counter >= 20) {
-					current_time = get_time_as_double();
-
-					if ((current_time - begin_time + .2) > set.poller_interval) {
-						SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-						canexit = TRUE;
-						break;
-					}
-
-					poller_counter = 0;
-				}else{
-					poller_counter++;
-				}
-	
-				break;
-			case EDEADLK:
-				SPINE_LOG(("ERROR: Deadlock Occured"));
-				break;
-			case EBUSY:
-				break;
-			case EINVAL:
-				SPINE_LOG(("ERROR: Attempt to Unlock an Uninitialized Mutex"));
-				break;
-			case EFAULT:
-				SPINE_LOG(("ERROR: Attempt to Unlock an Invalid Mutex"));
-				break;
-			default:
-				SPINE_LOG(("ERROR: Unknown Mutex Lock Error Code Returned"));
-				break;
-			}
-	
-			/* get current time and exit program if time limit exceeded */
-			if (poller_counter >= 20) {
-				current_time = get_time_as_double();
-	
-				if ((current_time - begin_time + .2) > set.poller_interval) {
-					SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-					canexit = TRUE;
-					break;
-				}
-	
-				poller_counter = 0;
-			}else{
-				poller_counter++;
-			}
+	while (canexit == FALSE && device_counter < num_rows) {
+		if (change_host) {
+			mysql_row       = mysql_fetch_row(result);
+			host_id         = atoi(mysql_row[0]);
+			device_threads  = atoi(mysql_row[1]);
+			current_thread  = 1;
+		}else{
+			current_thread++;
 		}
 
-		usleep(internal_thread_sleep);
+		change_host = (current_thread >= device_threads) ? TRUE : FALSE;
+
+		/* determine how many items will be polled per thread */
+		if (device_threads > 1) {
+			if (current_thread == 1) {
+				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+				tresult   = db_query(&mysql, querybuf);
+				mysql_row = mysql_fetch_row(tresult);
+
+				itemsPT   = atoi(mysql_row[0]);
+				db_free_result(tresult);
+
+				if (host_time) free(host_time);
+				host_time = get_host_poll_time();
+				host_time_double = get_time_as_double();
+			}
+		}else{
+			itemsPT   = 0;
+			if (host_time) free(host_time);
+			host_time = get_host_poll_time();
+			host_time_double = get_time_as_double();
+		}
+
+		/* populate the thread structure */
+		if (!(poller_details = (poller_thread_t *)malloc(sizeof(poller_thread_t)))) {
+			die("ERROR: Fatal malloc error: spine.c poller_details!");
+		}
+
+		poller_details->host_id          = host_id;
+		poller_details->host_thread      = current_thread;
+		poller_details->last_host_thread = device_threads;
+		poller_details->host_data_ids    = itemsPT;
+		poller_details->host_time        = host_time;
+		poller_details->host_time_double = host_time_double;
+		poller_details->thread_init_sem  = &thread_init_sem;
+
+		if (sem_timedwait(&active_threads, &until)) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+			canexit = TRUE;
+			break;
+		}
+
+		/* create child process */
+		sem_wait(&thread_init_sem);
+		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
+
+		switch (thread_status) {
+			case 0:
+				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
+
+				if (change_host) {
+					device_counter++;
+				}
+
+				/* wait for the child to read and process the structure */
+				sem_wait(&thread_init_sem);
+				sem_post(&thread_init_sem);
+
+				sem_getvalue(&active_threads, &a_threads_value);
+				SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", set.threads - a_threads_value));
+
+				break;
+			case EAGAIN:
+				SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread"));
+				break;
+			case EFAULT:
+				SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
+				break;
+			case EINVAL:
+				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
+				break;
+			default:
+				SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
+				break;
+		}
+		/* Restore thread initialization semaphore if thread creation failed */
+		if (thread_status)
+			sem_post(&thread_init_sem);
 	}
 
 	/* wait for all threads to complete */
-	while (canexit == FALSE) {
-		if (thread_mutex_trylock(LOCK_THREAD) == 0) {
-			last_active_threads = active_threads;
-
-			if (active_threads == 0) {
-				canexit = TRUE;
-			}
-
-			thread_mutex_unlock(LOCK_THREAD);
-		}
-
-		usleep(EXTERNAL_THREAD_SLEEP);
-
-		/* get current time and exit program if time limit exceeded */
-		if (poller_counter >= 20) {
-			current_time = get_time_as_double();
-
-			if ((current_time - begin_time + .2) > set.poller_interval) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-				canexit = TRUE;
-				break;
-			}
-
-			poller_counter = 0;
-		}else{
-			poller_counter++;
+	for (i = 0; i < set.threads; i++) {
+		if (sem_timedwait(&active_threads, &until)) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+			canexit = TRUE;
 		}
 	}
 

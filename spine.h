@@ -155,10 +155,8 @@
 
 /* threads constants */
 #define LOCK_SNMP 0
-#define LOCK_THREAD 1
 #define LOCK_SETEUID 2
 #define LOCK_GHBN 3
-#define LOCK_PIPE 4
 #define LOCK_SYSLOG 5
 #define LOCK_PHP 6
 #define LOCK_PHP_PROC_0 7
@@ -173,10 +171,8 @@
 #define LOCK_PHP_PROC_9 16
 
 #define LOCK_SNMP_O 0
-#define LOCK_THREAD_O 1
 #define LOCK_SETEUID_O 2
 #define LOCK_GHBN_O 3
-#define LOCK_PIPE_O 4
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
 #define LOCK_PHP_PROC_0_O 7
@@ -409,6 +405,7 @@ typedef struct poller_thread {
 	int host_data_ids;
 	char *host_time;
 	double host_time_double;
+	sem_t *thread_init_sem;
 } poller_thread_t;
 
 /*! PHP Script Server Structure
@@ -516,7 +513,6 @@ extern config_t set;
 extern php_t  *php_processes;
 extern char   start_datetime[20];
 extern char   config_paths[CONFIG_PATHS][BUFSIZE];
-extern int    active_threads;
-extern int    thread_ready;
+extern sem_t  active_threads;
 
 #endif /* not _SPINE_H_ */
