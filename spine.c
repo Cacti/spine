@@ -658,9 +658,13 @@ int main(int argc, char *argv[]) {
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 
-		if (sem_timedwait(&active_threads, &until)) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+		if (sem_timedwait(&active_threads, &until) == -1) {
+			if (errno == ETIMEDOUT) {
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+			}
+
 			canexit = TRUE;
+
 			break;
 		}
 
@@ -704,8 +708,11 @@ int main(int argc, char *argv[]) {
 
 	/* wait for all threads to complete */
 	for (i = 0; i < set.threads; i++) {
-		if (sem_timedwait(&active_threads, &until)) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+		if (sem_timedwait(&active_threads, &until) == -1) {
+			if (errno == ETIMEDOUT) {
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+			}
+
 			canexit = TRUE;
 		}
 	}
