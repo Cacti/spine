@@ -80,6 +80,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	if (bytes <= 0) {
 		result_string = strdup("U");
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.  Restarting PHP Script Server", php_process));
+
 		php_close(php_process);
 		php_init(php_process);
 		/* increment and retry a few times on the next item */

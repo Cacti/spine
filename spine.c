@@ -658,10 +658,17 @@ int main(int argc, char *argv[]) {
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 
-		if (sem_timedwait(&active_threads, &until)) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-			canexit = TRUE;
-			break;
+		retry1:
+
+		if (sem_timedwait(&active_threads, &until) == -1) {
+			if (errno == ETIMEDOUT) {
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+				canexit = TRUE;
+				break;
+			}else if (errno == EINTR) {
+				usleep(100000);
+				goto retry1;
+			}
 		}
 
 		/* create child process */
@@ -697,6 +704,7 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
 				break;
 		}
+
 		/* Restore thread initialization semaphore if thread creation failed */
 		if (thread_status)
 			sem_post(&thread_init_sem);
@@ -704,9 +712,16 @@ int main(int argc, char *argv[]) {
 
 	/* wait for all threads to complete */
 	for (i = 0; i < set.threads; i++) {
-		if (sem_timedwait(&active_threads, &until)) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
-			canexit = TRUE;
+		retry2:
+
+		if (sem_timedwait(&active_threads, &until) == -1) {
+			if (errno == ETIMEDOUT) {
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+				canexit = TRUE;
+			}else if (errno == EINTR) {
+				usleep(100000);
+				goto retry2;
+			}
 		}
 	}
 
