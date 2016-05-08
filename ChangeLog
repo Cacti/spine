@@ -5,6 +5,10 @@ The Cacti Group | spine
 -feature: Collect System Mib Information
 -feature: Place collection timing into host table
 
+0.8.8h
+-bug:0002659: wrong information about spine setup for icmps
+-bug: Removed requirement for building man page, deferred to 1.0
+
 0.8.8g
 -bug:0002380: please build man page for spine
 -bug:0002610: Spine is trying to use mysql results after data being freed
@@ -18,7 +22,6 @@ The Cacti Group | spine
 -bug:0002604: cacti-spine, configure script ignores LDFLAGS in certain situations
 
 0.8.8e
-
 -bug#0002185: Multiple memory leaks found in spine 
 -bug#0002398: Buffer overflow
 -bug#0002447: Building spine on Debian Jessie (testing) fails 
@@ -29,7 +32,6 @@ The Cacti Group | spine
 -bug#0002588: Spine "is_numeric" incorrectly returns TRUE for some hexadecimal values 
 
 0.8.8d
-
 -feature: add snmp system information gathering
 
 0.8.8c
