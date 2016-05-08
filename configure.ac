@@ -57,6 +57,7 @@ case $host_alias in
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
 *freebsd*)
   LIBS="$LIBS -pthread"
+  CFLAGS="-I /usr/local/include"
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
   ShLib="dylib";;
