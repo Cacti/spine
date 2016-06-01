@@ -167,6 +167,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	db_connect(set.dbdb, &mysql);
 
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
+	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
 		die("ERROR: Fatal malloc error: poller.c host struct!");

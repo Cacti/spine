@@ -473,6 +473,9 @@ int main(int argc, char *argv[]) {
 	/* connect to database */
 	db_connect(set.dbdb, &mysql);
 
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
+	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
 	}else{
