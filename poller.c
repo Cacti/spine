@@ -1051,7 +1051,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					SET_UNDEFINED(poller_items[i].result);
 				}else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
+				}else if (is_hexadecimal(poll_result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
 				}else{
 					/* remove double or single quotes from string */
@@ -1086,7 +1086,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					SET_UNDEFINED(poller_items[i].result);
 				}else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-				}else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
+				}else if (is_hexadecimal(poll_result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
 				}else{
 					/* remove double or single quotes from string */
