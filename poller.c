@@ -361,8 +361,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows != 1) {
-				SPINE_LOG(("Host[%i] TH[%i] ERROR: Multiple Hosts with Host ID", host_id, host_thread));
-
 				mysql_free_result(result);
 				mysql_close(&mysql);
 
