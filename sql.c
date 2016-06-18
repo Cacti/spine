@@ -61,6 +61,16 @@ int db_insert(MYSQL *mysql, const char *query) {
 			if (mysql_query(mysql, query)) {
 				error = mysql_errno(mysql);
 
+				if (error == 2013) {
+					if (strstr(mysql_error(mysql), "Interrupted system call") != NULL ||
+						strstr(mysql_error(mysql), "Lost connection to MySQL server during query") != NULL ||
+						strstr(mysql_error(mysql), "system error: 4") != NULL ||
+						strstr(mysql_error(mysql), "initial communication packet") != NULL) {
+						usleep(50000);
+						continue;
+					}
+				}
+
 				if ((error == 1213) || (error == 1205)) {
 					usleep(50000);
 					error_count++;
