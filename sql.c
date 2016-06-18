@@ -72,15 +72,10 @@ int db_insert(MYSQL *mysql, const char *query) {
 
 					continue;
 				}else if (error == 2006) {
-					SPINE_LOG(("WARNING: SQL Failed! Error:'%i', Message:'%s', Attempting to Reconnect", error, mysql_error(mysql)));
 					db_disconnect(mysql);
 					usleep(50000);
 					db_connect(set.dbdb, mysql);
 					error_count++;
-
-					if (error_count > 30) {
-						die("FATAL: Too many Reconnect Attempts!\n");
-                                        }
 
 					continue;
 				}else{
@@ -124,6 +119,16 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 		if (mysql_query(mysql, query)) {
 			error = mysql_errno(mysql);
 
+			if (error == 2013) {
+				if (strstr(mysql_error(mysql), "Interrupted system call") != NULL ||
+					strstr(mysql_error(mysql), "Lost connection to MySQL server during query") != NULL ||
+					strstr(mysql_error(mysql), "system error: 4") != NULL ||
+					strstr(mysql_error(mysql), "initial communication packet") != NULL) {
+					usleep(50000);
+					continue;
+				}
+			}
+
 			if ((error == 1213) || (error == 1205)) {
 				#ifndef SOLAR_THREAD
 				usleep(50000);
@@ -136,7 +141,6 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 
 				continue;
 			}else if (error == 2006) {
-				SPINE_LOG(("WARNING: SQL Failed! Error:'%i', Message:'%s', Attempting to Reconnect", error, mysql_error(mysql)));
 				db_disconnect(mysql);
 				usleep(50000);
 				db_connect(set.dbdb, mysql);
@@ -177,6 +181,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	int    wtimeout;
 	int    options_error;
 	int    success;
+	int    error;
 	char   *hostname;
 	char   *socket = NULL;
 	struct stat socket_stat;
@@ -236,7 +241,22 @@ void db_connect(const char *database, MYSQL *mysql) {
 		tries--;
 
 		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
-			if ((mysql_errno(mysql) != 1049) && (mysql_errno(mysql) != 2005) && (mysql_errno(mysql) != 1045)) {
+			error = mysql_errno(mysql);
+			db_disconnect(mysql);
+
+			if (error == 2013) {
+				if (strstr(mysql_error(mysql), "Interrupted system call") != NULL ||
+					strstr(mysql_error(mysql), "Lost connection to MySQL server during query") != NULL ||
+					strstr(mysql_error(mysql), "system error: 4") != NULL ||
+					strstr(mysql_error(mysql), "initial communication packet") != NULL) {
+					usleep(50000);
+					tries++;
+					success = FALSE;
+					continue;
+				}
+			}
+
+			if (error != 1049 && error != 2005 && error != 1045) {
 				printf("MYSQL: Connection Failed: Error:'%u', Message:'%s'\n", mysql_errno(mysql), mysql_error(mysql));
 
 				success = FALSE;
