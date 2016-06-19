@@ -75,6 +75,7 @@ static void spine_signal_handler(int spine_signal) {
 
 static int spine_fatal_signals[] = {
 	SIGINT,
+	SIGPIPE,
 	SIGSEGV,
 	SIGBUS,
 	SIGFPE,
@@ -95,23 +96,18 @@ void install_spine_signal_handler(void) {
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
-		sa.sa_flags = SA_RESTART;
 		if (sa.sa_handler == SIG_DFL) {
 			sa.sa_handler = spine_signal_handler;
 			sigemptyset(&sa.sa_mask);
-			if (spine_fatal_signals[i] == SIGINT) {
-				sa.sa_flags = SA_RESTART;
-			}
+			sa.sa_flags = SA_RESTART;
 			sigaction(spine_fatal_signals[i], &sa, NULL);
 		}
 	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
-		if (spine_fatal_signals[i] != SIGPIPE) {
-			ohandler = signal(spine_fatal_signals[i], spine_signal_handler);
-			if (ohandler != SIG_DFL) {
-				signal(spine_fatal_signals[i], ohandler);
-			}
+		ohandler = signal(spine_fatal_signals[i], spine_signal_handler);
+		if (ohandler != SIG_DFL) {
+			signal(spine_fatal_signals[i], ohandler);
 		}
 	}
 

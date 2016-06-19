@@ -61,14 +61,9 @@ int db_insert(MYSQL *mysql, const char *query) {
 			if (mysql_query(mysql, query)) {
 				error = mysql_errno(mysql);
 
-				if (error == 2013) {
-					if (strstr(mysql_error(mysql), "Interrupted system call") != NULL ||
-						strstr(mysql_error(mysql), "Lost connection to MySQL server during query") != NULL ||
-						strstr(mysql_error(mysql), "system error: 4") != NULL ||
-						strstr(mysql_error(mysql), "initial communication packet") != NULL) {
-						usleep(50000);
-						continue;
-					}
+				if (error == 2013 && errno == EINTR) {
+					usleep(50000);
+					continue;
 				}
 
 				if ((error == 1213) || (error == 1205)) {
@@ -81,11 +76,15 @@ int db_insert(MYSQL *mysql, const char *query) {
 					}
 
 					continue;
-				}else if (error == 2006) {
+				}else if (error == 2006 && errno == EINTR) {
 					db_disconnect(mysql);
 					usleep(50000);
 					db_connect(set.dbdb, mysql);
 					error_count++;
+
+					if (error_count > 30) {
+						die("FATAL: Too many Reconnect Attempts!\n");
+					}
 
 					continue;
 				}else{
@@ -129,14 +128,9 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 		if (mysql_query(mysql, query)) {
 			error = mysql_errno(mysql);
 
-			if (error == 2013) {
-				if (strstr(mysql_error(mysql), "Interrupted system call") != NULL ||
-					strstr(mysql_error(mysql), "Lost connection to MySQL server during query") != NULL ||
-					strstr(mysql_error(mysql), "system error: 4") != NULL ||
-					strstr(mysql_error(mysql), "initial communication packet") != NULL) {
-					usleep(50000);
-					continue;
-				}
+			if (error == 2013 && errno == EINTR) {
+				usleep(50000);
+				continue;
 			}
 
 			if ((error == 1213) || (error == 1205)) {
@@ -150,7 +144,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				}
 
 				continue;
-			}else if (error == 2006) {
+			}else if (error == 2006 && errno == EINTR) {
 				db_disconnect(mysql);
 				usleep(50000);
 				db_connect(set.dbdb, mysql);
@@ -254,16 +248,11 @@ void db_connect(const char *database, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 			db_disconnect(mysql);
 
-			if (error == 2013) {
-				if (strstr(mysql_error(mysql), "Interrupted system call") != NULL ||
-					strstr(mysql_error(mysql), "Lost connection to MySQL server during query") != NULL ||
-					strstr(mysql_error(mysql), "system error: 4") != NULL ||
-					strstr(mysql_error(mysql), "initial communication packet") != NULL) {
-					usleep(50000);
-					tries++;
-					success = FALSE;
-					continue;
-				}
+			if (error == 2013 && errno == EINTR) {
+				usleep(50000);
+				tries++;
+				success = FALSE;
+				continue;
 			}
 
 			if (error != 1049 && error != 2005 && error != 1045) {
