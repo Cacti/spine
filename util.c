@@ -692,7 +692,7 @@ int spine_log(const char *format, ...) {
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
-	if (strftime(flogmessage, 50, "%m/%d/%Y %I:%M:%S %p - ", now_ptr) == (size_t) 0) {
+	if (strftime(flogmessage, 50, "%Y-%m-%d %H:%M:%S - ", now_ptr) == (size_t) 0) {
 		#ifdef DISABLE_STDERR
 		fp = stdout;
 		#else
