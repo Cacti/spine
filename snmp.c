@@ -103,7 +103,7 @@ void snmp_spine_close(void) {
 /*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
  * char *snmp_community, char *snmp_username, char *snmp_password,
  * char *snmp_auth_protocol, char *snmp_priv_passphrase, char *snmp_priv_protocol,
- * char *snmp_context, int snmp_port, int snmp_timeout)
+ * char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout)
  *  \brief initializes an snmp_session object for a Spine host
  *
  *	This function will initialize NET-SNMP for the Spine host
@@ -113,7 +113,7 @@ void snmp_spine_close(void) {
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
 					char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 					char *snmp_priv_passphrase, char *snmp_priv_protocol,
-					char *snmp_context, int snmp_port, int snmp_timeout) {
+					char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout) {
 
 	void   *sessp = NULL;
 	struct snmp_session session;
@@ -160,6 +160,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.contextName = 0;
 	session.contextNameLen = 0;
 
+	session.contextEngineID = 0;
+	session.contextEngineIDLen = 0;
+
 	/* verify snmp version is accurate */
 	if (snmp_version == 2) {
 		session.version       = SNMP_VERSION_2c;
@@ -192,6 +195,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		if (snmp_context && strlen(snmp_context)) {
 			session.contextName          = snmp_context;
 			session.contextNameLen       = strlen(session.contextName);
+		}
+
+		if (snmp_engine_id && strlen(snmp_engine_id)) {
+			session.contextEngineID      = snmp_engine_id;
+			session.contextEngineIDLen   = strlen(session.contextEngineID);
 		}
 
 		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
