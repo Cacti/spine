@@ -617,10 +617,17 @@ void die(const char *format, ...) {
 	va_list	args;
 	char logmessage[BUFSIZE];
 	char flogmessage[BUFSIZE];
+	int old_errno = errno;
 
 	va_start(args, format);
 	vsprintf(logmessage, format, args);
 	va_end(args);
+
+	if (set.log_perror) {
+		char perr[BUFSIZE];
+		snprintf(perr, BUFSIZE, " [%d, %s]", old_errno, strerror(old_errno));
+		strcat(logmessage,perr);
+	}
 
 	if (set.logfile_processed) {
 		if (set.parent_fork == SPINE_PARENT) {
