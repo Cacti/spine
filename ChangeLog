@@ -5,6 +5,7 @@ The Cacti Group | spine
 -feature: Collect System Mib Information
 -feature: Place collection timing into host table
 -feature: Support snmpContextEngineID
+-feature: Change all references of Host to Device
 -bug:0001415: spine does not handle log_perror
 
 0.8.8g

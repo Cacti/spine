@@ -59,7 +59,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 		if (host->ping_method == PING_ICMP) {
 			if (set.icmp_avail == FALSE) {
-				SPINE_LOG_DEBUG(("Host[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
+				SPINE_LOG_DEBUG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
 				host->ping_method = PING_UDP;
 			}
 		}
@@ -74,7 +74,7 @@ int ping_host(host_t *host, ping_t *ping) {
 			}
 		}else{
 			snprintf(ping->ping_status, 50, "0.000");
-			snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Host does not require ping");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device does not require ping");
 			ping_result = HOST_UP;
 		}
 	}
@@ -160,7 +160,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering SNMP Ping", host->id));
+	SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering SNMP Ping", host->id));
 
 	if (host->snmp_session) {
 		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
@@ -193,24 +193,24 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 			/* do positive test cases first */
 			if (host->snmp_status == SNMPERR_UNKNOWN_OBJID) {
-				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host responded to SNMP");
+				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 				free(poll_result);
 				return HOST_UP;
 			}else if (host->snmp_status != SNMPERR_SUCCESS) {
-				SPINE_LOG_MEDIUM(("Host[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
-				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host did not respond to SNMP");
+				SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
+				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
 				free(poll_result);
 				return HOST_DOWN;
 			}else{
-				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host responded to SNMP");
+				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 				free(poll_result);
 				return HOST_UP;
 			}
 		}else{
 			snprintf(ping->snmp_status, 50, "0.00");
-			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Host does not require SNMP");
+			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device does not require SNMP");
 			return HOST_UP;
 		}
 	}else{
@@ -257,7 +257,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	unsigned char  *packet;
 	char     *new_hostname;
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering ICMP Ping", host->id));
+	SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
@@ -399,7 +399,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 					if (return_code < 0) {
 						if (errno == EINTR) {
-							SPINE_LOG_DEBUG(("Host[%i] DEBUG: Received EINTR", host->id));
+							SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
 							/* call was interrupted by some system event */
 							goto keep_listening;
 						}
@@ -409,8 +409,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
-								SPINE_LOG_DEBUG(("Host[%i] DEBUG: ICMP Host Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Host is Alive");
+								SPINE_LOG_DEBUG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(new_hostname);
 								free(packet);
@@ -444,7 +444,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						}
 					}
 				}else{
-					SPINE_LOG_DEBUG(("Host[%i] DEBUG: Exceeded Host Timeout, Retrying", host->id));
+					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
 				}
 
 				total_time = 0;
@@ -524,7 +524,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	fd_set socket_fds;
 	char   *new_hostname;
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering UDP Ping", host->id));
+	SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
 
 	/* set total time */
 	total_time = 0;
@@ -617,8 +617,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 						return_code = read(udp_socket, socket_reply, BUFSIZE);
 
 						if ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED))) {
-							SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Host Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Alive");
+							SPINE_LOG_DEBUG(("Device[%i] DEBUG: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
 							snprintf(ping->ping_status, 50, "%.5f", total_time);
 							free(new_hostname);
 							close(udp_socket);
@@ -630,7 +630,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 						/* interrupted, try again */
 						goto wait_more;
 					}else{
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Host is Down");
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
 						close(udp_socket);
@@ -640,7 +640,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 					/* timeout */
 				}
 
-				SPINE_LOG_DEBUG(("Host[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+				SPINE_LOG_DEBUG(("Device[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 
 				retry_count++;
 				#ifndef SOLAR_THREAD
@@ -687,7 +687,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	int    return_code;
 	char   *new_hostname;
 
-	SPINE_LOG_DEBUG(("Host[%i] DEBUG: Entering TCP Ping", host->id));
+	SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
 
 	/* remove "tcp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
@@ -737,8 +737,8 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 				if (((return_code == -1) && (errno == ECONNREFUSED)) ||
 					(return_code == 0)) {
-					SPINE_LOG_DEBUG(("Host[%i] DEBUG: TCP Host Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Host is Alive");
+					SPINE_LOG_DEBUG(("Device[%i] DEBUG: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
 					snprintf(ping->ping_status, 50, "%.5f", total_time);
 					free(new_hostname);
 					close(tcp_socket);
@@ -1158,32 +1158,32 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
 			/* log ping result if we are to use a ping for reachability testing */
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP_OR_PING) {
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
 				if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
-					SPINE_LOG_HIGH(("Host[%i] SNMP Result: Device does not require SNMP", host->id));
+					SPINE_LOG_HIGH(("Device[%i] SNMP Result: Device does not require SNMP", host->id));
 				}else{
-					SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
+					SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 				}
 			}else if (availability_method == AVAIL_NONE) {
-				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected", host->id));
+				SPINE_LOG_HIGH(("Device[%i] No Device Availability Method Selected", host->id));
 			}else{
-				SPINE_LOG_HIGH(("Host[%i] PING: Result %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Device[%i] PING: Result %s", host->id, ping->ping_response));
 			}
 		}else{
 			if (availability_method == AVAIL_SNMP_AND_PING) {
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_SNMP) {
-				SPINE_LOG_HIGH(("Host[%i] SNMP Result: %s", host->id, ping->snmp_response));
+				SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 			}else if (availability_method == AVAIL_NONE) {
-				SPINE_LOG_HIGH(("Host[%i] No Host Availability Method Selected", host->id));
+				SPINE_LOG_HIGH(("Device[%i] No Device Availability Method Selected", host->id));
 			}else{
-				SPINE_LOG_HIGH(("Host[%i] PING Result: %s", host->id, ping->ping_response));
+				SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 			}
 		}
 	}
@@ -1191,9 +1191,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	/* if there is supposed to be an event generated, do it */
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
-			SPINE_LOG(("Host[%i] Hostname[%s] ERROR: HOST EVENT: Host is DOWN Message: %s", host->id, host->hostname, host->status_last_error));
+			SPINE_LOG(("Device[%i] Hostname[%s] ERROR: HOST EVENT: Device is DOWN Message: %s", host->id, host->hostname, host->status_last_error));
 		}else{
-			SPINE_LOG(("Host[%i] Hostname[%s] NOTICE: HOST EVENT: Host Returned from DOWN State", host->id, host->hostname));
+			SPINE_LOG(("Device[%i] Hostname[%s] NOTICE: HOST EVENT: Device Returned from DOWN State", host->id, host->hostname));
 		}
 	}
 }

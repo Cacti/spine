@@ -281,7 +281,7 @@ int main(int argc, char *argv[]) {
 	 */
 
 	/* initialize some global variables */
-	set.poller_id         = 0;
+	set.poller_id         = 1;
 	set.start_host_id     = -1;
 	set.end_host_id       = -1;
 	set.host_id_list[0]   = '\0';
@@ -666,7 +666,7 @@ int main(int argc, char *argv[]) {
 
 		if (sem_timedwait(&active_threads, &until) == -1) {
 			if (errno == ETIMEDOUT) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
 				canexit = TRUE;
 				break;
 			}else if (errno == EINTR) {
@@ -720,7 +720,7 @@ int main(int argc, char *argv[]) {
 
 		if (sem_timedwait(&active_threads, &until) == -1) {
 			if (errno == ETIMEDOUT) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Hosts Internal"));
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
 				canexit = TRUE;
 			}else if (errno == EINTR) {
 				usleep(100000);
@@ -775,11 +775,11 @@ int main(int argc, char *argv[]) {
 	end_time = TIMEVAL_TO_DOUBLE(now);
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
-		SPINE_LOG(("Time: %.4f s, Threads: %i, Hosts: %i", (end_time - begin_time), set.threads, num_rows));
+		SPINE_LOG(("Time: %.4f s, Threads: %i, Devices: %i", (end_time - begin_time), set.threads, num_rows));
 	}else{
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
-			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Hosts: %i\n", (end_time - begin_time), set.threads, num_rows);
+			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
 	}
 

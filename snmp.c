@@ -174,7 +174,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.version       = SNMP_VERSION_3;
 		session.securityModel = USM_SEC_MODEL_NUMBER;
 	}else {
-		SPINE_LOG(("Host[%i] ERROR: SNMP Version Error for Host '%s'", host_id, hostname));
+		SPINE_LOG(("Device[%i] ERROR: SNMP Version Error for Device '%s'", host_id, hostname));
 		return 0;
 	}
 
@@ -325,7 +325,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		pdu       = snmp_pdu_create(SNMP_MSG_GET);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("Host[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -405,7 +405,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		pdu       = snmp_pdu_create(SNMP_MSG_GETNEXT);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("Host[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+			SPINE_LOG(("Device[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		}else{
@@ -489,7 +489,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 		rootlen = MAX_OID_LEN;
 		/* parse input parm to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
-			SPINE_LOG(("Host[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+			SPINE_LOG(("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			return count;
 		}
 		memmove(anOID, root, rootlen * sizeof(oid));
@@ -622,7 +622,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
-			SPINE_LOG(("Host[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, snmp_oids[i].oid));
+			SPINE_LOG(("Device[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, snmp_oids[i].oid));
 
 			/* Mark this OID as "bad" */
 			SET_UNDEFINED(snmp_oids[i].result);

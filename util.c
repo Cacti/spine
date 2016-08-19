@@ -479,7 +479,7 @@ void read_config_options() {
 
 		if (num_rows > 0) set.php_required = TRUE;
 
-		SPINE_LOG_DEBUG(("DEBUG: StartHost='%i', EndHost='%i', TotalPHPScripts='%i'",
+		SPINE_LOG_DEBUG(("DEBUG: StartDevice='%i', EndDevice='%i', TotalPHPScripts='%i'",
 			set.start_host_id,
 			set.end_host_id,
 			num_rows));
@@ -499,7 +499,7 @@ void read_config_options() {
 
 		if (num_rows > 0) set.php_required = TRUE;
 
-		SPINE_LOG_DEBUG(("DEBUG: Host List to be polled='%s', TotalPHPScripts='%i'",
+		SPINE_LOG_DEBUG(("DEBUG: Device List to be polled='%s', TotalPHPScripts='%i'",
 			set.host_id_list,
 			num_rows));
 	}
