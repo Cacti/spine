@@ -424,11 +424,14 @@ int php_init(int php_process) {
 				php_processes[php_process].php_state = PHP_READY;
 			}
 		}else{
-			SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", php_process, result_string));
 
 			if (php_process == PHP_INIT) {
+				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", i, result_string));
+
 				php_processes[i].php_state = PHP_BUSY;
 			}else{
+				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", php_process, result_string));
+
 				php_processes[php_process].php_state = PHP_BUSY;
 			}
 		}
