@@ -351,7 +351,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 					snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-					snprintf(result_string, RESULTS_BUFFER, "%s", strip_alpha(temp_result));
+					snprintf(result_string, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
 				}
 			}
 		}
@@ -432,7 +432,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					if (vars != NULL) {
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprintf(result_string, RESULTS_BUFFER, "%s", strip_alpha(temp_result));
+						snprintf(result_string, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
 					}else{
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
@@ -655,7 +655,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", strip_alpha(temp_result));
+						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
 						
 						vars = vars->next_variable;
 					}
