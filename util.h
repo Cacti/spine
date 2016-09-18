@@ -53,6 +53,9 @@ extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
 extern int is_hexadecimal(const char * str, const short ignore_space);
 
+/* determine if a device is a debug device */
+extern int is_debug_device(int device_id);
+
 /* string and file functions */
 extern char *add_slashes(char *string);
 extern int file_exists(const char *filename);

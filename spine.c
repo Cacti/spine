@@ -101,7 +101,8 @@ sem_t active_scripts;
 
 config_t set;
 php_t	*php_processes = 0;
-char	 config_paths[CONFIG_PATHS][BUFSIZE];
+char	config_paths[CONFIG_PATHS][BUFSIZE];
+int     *debug_devices;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
@@ -226,6 +227,9 @@ int main(int argc, char *argv[]) {
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
+
+	/* create the array of debug devices */
+	debug_devices = calloc(100, sizeof(int));
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -468,6 +472,21 @@ int main(int argc, char *argv[]) {
 	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
 		set.poller_interval = 300;
+	}
+
+	/* tokenize the debug devices */
+	if (strlen(set.selective_device_debug)) {
+		SPINE_LOG_DEBUG(("Selective Debug Devices %s", set.selective_device_debug));
+		int i = 0;
+		char *token = strtok(set.selective_device_debug, ",");
+		while(token) {
+			debug_devices[i]   = atoi(token);
+			debug_devices[i+1] = NULL;
+			token = strtok(NULL, ",");
+			i++;
+		}
+	}else{
+		debug_devices[0] == NULL;
 	}
 
 	/* connect to database */
@@ -757,6 +776,7 @@ int main(int argc, char *argv[]) {
 	free(threads);
 	free(ids);
 	free(conf_file);
+	free(debug_devices);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 

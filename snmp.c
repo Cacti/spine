@@ -274,7 +274,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
-		SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'", hostname));
+		if (is_debug_device(host_id)) {
+			SPINE_LOG(("ERROR: Problem initializing SNMP session '%s'", hostname));
+		}else{
+			SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'", hostname));
+		}
 	}
 
 	return sessp;
@@ -483,7 +487,11 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 
 	status = STAT_DESCRIP_ERROR;
 
-	SPINE_LOG_DEBUG(("NOTE: walk starts at OID %s", snmp_oid));
+	if (is_debug_device(current_host->id)) {
+		SPINE_LOG(("NOTE: walk starts at OID %s", snmp_oid));
+	}else{
+		SPINE_LOG_DEBUG(("NOTE: walk starts at OID %s", snmp_oid));
+	}
 
 	if (current_host->snmp_session != NULL) {
 		rootlen = MAX_OID_LEN;
