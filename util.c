@@ -458,8 +458,17 @@ void read_config_options() {
 		free((char *)res);
 	}
 
-	/* log the path_php variable */
+	/* log the selective_device_debug variable */
 	SPINE_LOG_DEBUG(("DEBUG: The selective_device_debug variable is %s", set.selective_device_debug));
+
+	/* get spine_log_level */
+	if ((res = getsetting(&mysql, "spine_log_level")) != 0) {
+		set.spine_log_level = atoi(res);
+		free((char *)res);
+	}
+
+	/* log the spine_log_level variable */
+	SPINE_LOG_DEBUG(("DEBUG: The spine_log_level variable is %i", set.spine_log_level));
 
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, "php_servers")) != 0) {

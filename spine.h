@@ -325,6 +325,7 @@ typedef struct config_struct {
 	int    log_pwarn;
 	int    log_pstats;
 	char   selective_device_debug[SMALL_BUFSIZE];
+	int    spine_log_level;
 	/* ping settings */
 	int    icmp_avail;
 	int    availability_method;
