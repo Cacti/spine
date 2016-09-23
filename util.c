@@ -897,7 +897,7 @@ int is_numeric(const char *string) {
 	int conv_base=10;
 	int length;
 
-	length = strlen(string);
+	length = strlen(trim(string));
 
 	if (!length) {
 		return FALSE;
@@ -906,6 +906,7 @@ int is_numeric(const char *string) {
  	/* check for an integer */
 	errno = 0;
 	local_lval = strtol(string, &end_ptr_long, conv_base);
+
 	if (errno != ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
 			return TRUE;
