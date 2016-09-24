@@ -33,3 +33,7 @@ KNOWN Issues:
    total connections = 4 * ( 1 + 10 + 5 ) = 64
 
    This may be resolved in a future release of spine.
+
+3) On older MySQL versions, different libraries had to be used to make MySQL thread
+   safe.  MySQL versions 5.0 and 5.1 require this flag.  If you are using these version
+   of MySQL, you must use the --with-reentrant configure flag.
