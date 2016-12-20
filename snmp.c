@@ -483,7 +483,6 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 	int    ok = 1;
 	int    error_occurred = 0;
 	int    count = 0;
-	char   temp_result[RESULTS_BUFFER];
 
 	status = STAT_DESCRIP_ERROR;
 

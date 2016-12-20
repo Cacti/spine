@@ -207,7 +207,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	}
 
 	/* initialalize variables */
-	tries   = 5;
+	tries   = 10;
 	success = FALSE;
 	timeout = 5;
 	rtimeout = 10;
@@ -238,6 +238,13 @@ void db_connect(const char *database, MYSQL *mysql) {
 	options_error = mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
 	if (options_error < 0) {
 		die("FATAL: MySQL options unable to set reconnect option\n");
+	}
+	#endif
+
+	#ifdef MYSQL_OPT_RETRY_COUNT
+	options_error = mysql_options(mysql, MYSQL_OPT_RETRY_COUNT, &tries);
+	if (options_error < 0) {
+		die("FATAL: MySQL options unable to set retry count option\n");
 	}
 	#endif
 

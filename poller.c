@@ -74,14 +74,14 @@ void *child(void *arg) {
 		SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Device for Device ID %i", host_id));
 	}
 
-	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, host_errors, host_time_double);
+	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
 
 	sem_post(&active_threads);
 
 	sem_getvalue(&active_threads, &a_threads_value);
 
 	if (set.spine_log_level == 1 && host_errors > 0) {
-		SPINE_LOG(("WARNING: Invalid Responses, Device[%i] Thread[%i], Errors:%i", host_id, host_thread, host_errors));
+		//SPINE_LOG(("WARNING: Invalid Responses, Device[%i] Thread[%i], Errors:%i", host_id, host_thread, host_errors));
 	}
 
 	if (is_debug_device(host_id)) {
@@ -135,6 +135,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
+	int  errors = 0;
+	char *error_string;
+	int  error_len = 0;
 
 	int    num_rows;
 	int    assert_fail = FALSE;
@@ -177,6 +180,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	ping_t      *ping;
 	target_t    *poller_items;
 	snmp_oids_t *snmp_oids;
+
+	error_string = malloc(DBL_BUFSIZE);
 
 	MYSQL     mysql;
 	MYSQL_RES *result;
@@ -764,7 +769,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 								}else{
 									if (set.spine_log_level == 1) {
-										host_errors++;
+										errors++;
 									}
 
 									SPINE_LOG_HIGH(("Device[%i] TH[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
@@ -781,7 +786,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 								}else{
 									if (set.spine_log_level == 1) {
-										host_errors++;
+										errors++;
 									}
 
 									SPINE_LOG_HIGH(("Device[%i] TH[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
@@ -800,7 +805,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
 									}else{
 										if (set.spine_log_level == 1) {
-											host_errors++;
+											errors++;
 										}
 
 										SPINE_LOG_HIGH(("Device[%i] TH[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
@@ -832,7 +837,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										SPINE_LOG(("Device[%i] TH[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
 									}else{
 										if (set.spine_log_level == 1) {
-											host_errors++;
+											errors++;
 										}
 
 										SPINE_LOG_MEDIUM(("Device[%i] TH[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
@@ -1050,7 +1055,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								}else if (set.spine_log_level == 1) {
-									host_errors++;
+									errors++;
+									if (error_len == 0) {
+										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+									}else{
+										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+									}
 								}
 
 								/* continue */
@@ -1066,7 +1076,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								}else if (set.spine_log_level == 1) {
-									host_errors++;
+									errors++;
+									if (error_len == 0) {
+										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+									}else{
+										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+									}
 								}
 
 								/* is valid output, continue */
@@ -1083,7 +1098,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 											host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 											poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 									}else if (set.spine_log_level == 1) {
-										host_errors++;
+										errors++;
+										if (error_len == 0) {
+											error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+										}else{
+											error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+										}
 									}
 
 									SET_UNDEFINED(snmp_oids[j].result);
@@ -1142,7 +1162,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							}else if (set.spine_log_level == 1) {
-								host_errors++;
+								errors++;
+								if (error_len == 0) {
+									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+								}else{
+									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+								}
 							}
 
 							/* continue */
@@ -1158,7 +1183,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							}else if (set.spine_log_level == 1) {
-								host_errors++;
+								errors++;
+								if (error_len == 0) {
+									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+								}else{
+									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+								}
 							}
 
 							/* is valid output, continue */
@@ -1175,7 +1205,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								}else if (set.spine_log_level == 1) {
-									host_errors++;
+									errors++;
+									if (error_len == 0) {
+										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+									}else{
+										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+									}
 								}
 
 								SET_UNDEFINED(snmp_oids[j].result);
@@ -1221,7 +1256,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							host_id, host_thread, poller_items[i].local_data_id, 
 							poller_items[i].arg1, poller_items[i].result));
 					}else if (set.spine_log_level == 1) {
-						host_errors++;
+						errors++;
+						if (error_len == 0) {
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
+						}else{
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
+						}
 					}
 				}else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1239,7 +1279,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								host_id, host_thread, poller_items[i].local_data_id, 
 								poller_items[i].arg1, poller_items[i].result));
 						}else if (set.spine_log_level == 1) {
-							host_errors++;
+							errors++;
+							if (error_len == 0) {
+								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
+							}else{
+								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
+							}
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1275,7 +1320,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							host_id, host_thread, poller_items[i].local_data_id, 
 							poller_items[i].arg1, poller_items[i].result));
 					}else if (set.spine_log_level == 1) {
-						host_errors++;
+						errors++;
+						if (error_len == 0) {
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
+						}else{
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
+						}
 					}
 				}else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1293,7 +1343,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								host_id, host_thread, poller_items[i].local_data_id, 
 								poller_items[i].arg1, poller_items[i].result));
 						}else if (set.spine_log_level == 1) {
-							host_errors++;
+							errors++;
+							if (error_len == 0) {
+								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
+							}else{
+								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
+							}
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1341,7 +1396,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					}else if (set.spine_log_level == 1) {
-						host_errors++;
+						errors++;
+						if (error_len == 0) {
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+						}else{
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+						}
 					}
 
 					/* continue */
@@ -1357,7 +1417,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					}else if (set.spine_log_level == 1) {
-						host_errors++;
+						errors++;
+						if (error_len == 0) {
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+						}else{
+							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+						}
 					}
 
 					/* is valid output, continue */
@@ -1374,7 +1439,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, 
 								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 						}else if (set.spine_log_level == 1) {
-							host_errors++;
+							errors++;
+							if (error_len == 0) {
+								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
+							}else{
+								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
+							}
 						}
 
 						SET_UNDEFINED(snmp_oids[j].result);
@@ -1541,6 +1611,14 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	}else{
 		SPINE_LOG_DEBUG(("Device[%i] TH[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
+
+	if (error_len > 0) {
+		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DataSources[%s]", errors, host_id, host_thread, error_string));
+	}
+
+	free(error_string);
+
+	*host_errors = errors;
 }
 
 /*! \fn int is_multipart_output(char *result)

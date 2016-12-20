@@ -185,7 +185,6 @@ int main(int argc, char *argv[]) {
 	double begin_time, end_time;
 	int num_rows = 0;
 	int device_counter = 0;
-	int poller_counter = 0;
 	int valid_conf_file = FALSE;
 	char querybuf[BIG_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
@@ -481,12 +480,12 @@ int main(int argc, char *argv[]) {
 		char *token = strtok(set.selective_device_debug, ",");
 		while(token) {
 			debug_devices[i]   = atoi(token);
-			debug_devices[i+1] = NULL;
+			debug_devices[i+1] = '\0';
 			token = strtok(NULL, ",");
 			i++;
 		}
 	}else{
-		debug_devices[0] == NULL;
+		debug_devices[0] = '\0';
 	}
 
 	/* connect to database */

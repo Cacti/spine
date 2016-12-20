@@ -222,7 +222,7 @@ int is_debug_device(int device_id) {
 	int i = 0;
 
 	while(i < 100) {
-		if (debug_devices[i] == NULL) break;
+		if (debug_devices[i] == '\0') break;
 		if (debug_devices[i] == device_id) {
 			return TRUE;
 		}
@@ -890,7 +890,7 @@ int is_ipaddress(const char *string) {
  *  \return TRUE if long or double, FALSE if not
  *
  */
-int is_numeric(const char *string) {
+int is_numeric(char *string) {
 	long local_lval;
 	double local_dval;
 	char *end_ptr_long, *end_ptr_double;
