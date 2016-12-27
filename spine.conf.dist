@@ -30,8 +30,23 @@
 # | SNMP_Clientaddr Bind SNMP to a specific address for sites that use      |
 # |                 higher security levels                                  |
 # +-------------------------------------------------------------------------+
-DB_Host         localhost
-DB_Database     cacti
-DB_User         cactiuser
-DB_Pass         cactiuser
-DB_Port         3306
+# | Settings for Remote Polling                                             |
+# +-------------------------------------------------------------------------+
+# | RDB_Host        The remote database hostname.                           |
+# | RDB_Database    The remote database name, typically 'cacti'             |
+# | RDB_Port        The remote database port to use                         |
+# | RDB_User        The remote database user, typically 'cactiuser'         |
+# | RDB_Pass        The remote database password.                           |
+# +-------------------------------------------------------------------------+
+
+DB_Host			localhost
+DB_Database		cacti
+DB_User			cactiuser
+DB_Pass			cactiuser
+DB_Port			3306
+
+RDB_Host		localhost
+RDB_Database	cacti
+RDB_User		cactiuser
+RDB_Pass		cactiuser
+RDB_Port		3306

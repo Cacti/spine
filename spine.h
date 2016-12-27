@@ -259,6 +259,11 @@
 #define SNMP_3 3
 #define SNMP_NONE 4
 
+/* Constants for remote polling */
+#define REMOTE_ONLINE 0
+#define REMOTE_OFFLINE 1
+#define REMOTE_RECOVERY 2
+
 /* These are used to perform string matches, returning TRUE/VALUE values.
  * For strcmp() this is not really that useful, but the case-insensitive
  * one has slight portability issues. Better to abstract them here.
@@ -346,6 +351,15 @@ typedef struct config_struct {
 	int    php_current_server;
 	/* Exit code if we need it */
 	int    exit_code;
+	/* Remote polling mode */
+	int    mode;
+	/* remote database connection information */
+	char   rdbhost[SMALL_BUFSIZE];
+	char   rdbdb[SMALL_BUFSIZE];
+	char   rdbuser[SMALL_BUFSIZE];
+	char   rdbpass[SMALL_BUFSIZE];
+	unsigned int rdbport;
+	int    rdbversion;
 } config_t;
 
 /*! Target Structure

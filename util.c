@@ -593,7 +593,12 @@ int read_spine_config(char *file) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (STRIMATCH(p1, "DB_Host"))               STRNCOPY(set.dbhost, p2);
+				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdbhost, p2);
+				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdbdb, p2);
+				else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdbuser, p2);
+				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdbpass, p2);
+				else if (STRIMATCH(p1, "RDB_Port"))         set.rdbport    = atoi(p2);
+				else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.dbhost, p2);
 				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.dbdb, p2);
 				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.dbuser, p2);
 				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.dbpass, p2);
@@ -627,12 +632,22 @@ int read_spine_config(char *file) {
  */
 void config_defaults() {
 	set.threads = DEFAULT_THREADS;
+
+	/* default server */
 	set.dbport  = DEFAULT_DB_PORT;
 
 	STRNCOPY(set.dbhost, DEFAULT_DB_HOST);
 	STRNCOPY(set.dbdb,   DEFAULT_DB_DB  );
 	STRNCOPY(set.dbuser, DEFAULT_DB_USER);
 	STRNCOPY(set.dbpass, DEFAULT_DB_PASS);
+
+	/* remote default server */
+	set.rdbport  = DEFAULT_DB_PORT;
+
+	STRNCOPY(set.rdbhost, DEFAULT_DB_HOST);
+	STRNCOPY(set.rdbdb,   DEFAULT_DB_DB  );
+	STRNCOPY(set.rdbuser, DEFAULT_DB_USER);
+	STRNCOPY(set.rdbpass, DEFAULT_DB_PASS);
 
 	STRNCOPY(config_paths[0], CONFIG_PATH_1);
 	STRNCOPY(config_paths[1], CONFIG_PATH_2);

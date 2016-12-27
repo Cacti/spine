@@ -55,6 +55,10 @@
  *
  *	Collect all system mibs this pass
  *
+ * -N | --mode=online|offline|recovery
+ *
+ *	For remote pollers, the polling mode.  The default is 'online'
+ *
  * -H | --hostlist="hostid1,hostid2,hostid3,...,hostidn"
  *
  *	Override the expected first host, last host behavior with a list of hostids.
@@ -291,6 +295,7 @@ int main(int argc, char *argv[]) {
 	set.php_initialized   = FALSE;
 	set.logfile_processed = FALSE;
 	set.parent_fork       = SPINE_PARENT;
+	set.mode              = REMOTE_ONLINE;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -327,6 +332,22 @@ int main(int argc, char *argv[]) {
 		else if (STRMATCH(arg, "-p") ||
 				 STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
+		}
+
+		else if (STRMATCH(arg, "-N") ||
+				 STRIMATCH(arg, "--mode")) {
+
+			if (STRIMATCH(getarg(opt, &argv), "online")) {
+				set.mode = REMOTE_ONLINE;
+			} 
+
+			else if (STRIMATCH(getarg(opt, &argv), "offline")) {
+				set.mode = REMOTE_OFFLINE;
+			} 
+
+			else {
+				set.mode = REMOTE_RECOVERY;
+			}
 		}
 
 		else if (STRMATCH(arg, "-H") ||
@@ -830,6 +851,9 @@ static void display_help(int only_version) {
 		"  -C/--conf=F        Read spine configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
 		"  -M/--mibs          Refresh the device System Mib data",
+		"  -N/--mode=online   For remote pollers, the operating mode.",
+		"                     Options include: online, offline, recovery.",
+		"                     The default is 'online'.",
 		"  -R/--readonly      Spine will not write output to the DB",
 		"  -S/--stdout        Logging is performed to standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
@@ -854,7 +878,7 @@ static void display_help(int only_version) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2002-2015 by The Cacti Group\n", VERSION);
+	printf("SPINE %s  Copyright 2002-2016 by The Cacti Group\n", VERSION);
 
 	if (only_version == FALSE) {
 		printf("\n");

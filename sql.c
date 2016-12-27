@@ -186,24 +186,46 @@ void db_connect(const char *database, MYSQL *mysql) {
 	int    options_error;
 	int    success;
 	int    error;
+	MYSQL  *connect_error;
 	char   *hostname;
 	char   *socket = NULL;
 	struct stat socket_stat;
 
-	if ((hostname = strdup(set.dbhost)) == NULL) {
-		die("FATAL: malloc(): strdup() failed");
-	}
-
 	/* see if the hostname variable is a file reference.  If so,
 	 * and if it is a socket file, setup mysql to use it.
 	 */
-	if (stat(hostname, &socket_stat) == 0) {
-		if (socket_stat.st_mode & S_IFSOCK) {
-			socket = strdup (set.dbhost);
-			hostname = NULL;
+	if (set.poller_id > 1) {
+		if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
+			if ((hostname = strdup(set.dbhost)) == NULL) {
+				die("FATAL: malloc(): strdup() failed");
+			}
+
+			if (stat(hostname, &socket_stat) == 0) {
+				if (socket_stat.st_mode & S_IFSOCK) {
+					socket = strdup (set.dbhost);
+					hostname = NULL;
+				}
+			}else if ((socket = strstr(hostname,":"))) {
+				*socket++ = 0x0;
+			}
+		}else{
+			if ((hostname = strdup(set.rdbhost)) == NULL) {
+				die("FATAL: malloc(): strdup() failed");
+			}
 		}
-	}else if ((socket = strstr(hostname,":"))) {
-		*socket++ = 0x0;
+	}else{
+		if ((hostname = strdup(set.dbhost)) == NULL) {
+			die("FATAL: malloc(): strdup() failed");
+		}
+
+		if (stat(hostname, &socket_stat) == 0) {
+			if (socket_stat.st_mode & S_IFSOCK) {
+				socket = strdup (set.dbhost);
+				hostname = NULL;
+			}
+		}else if ((socket = strstr(hostname,":"))) {
+			*socket++ = 0x0;
+		}
 	}
 
 	/* initialalize variables */
@@ -251,7 +273,17 @@ void db_connect(const char *database, MYSQL *mysql) {
 	while (tries > 0) {
 		tries--;
 
-		if (!mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0)) {
+		if (set.poller_id > 1) {
+			if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
+				connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
+			}else{
+				connect_error = mysql_real_connect(mysql, hostname, set.rdbuser, set.rdbpass, database, set.rdbport, socket, 0);
+			}
+		}else{
+			connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
+		}
+
+		if (!connect_error) {
 			error = mysql_errno(mysql);
 			db_disconnect(mysql);
 
