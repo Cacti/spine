@@ -420,6 +420,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
 							}
 							/* call was interrupted by some system event */
+							usleep(10000);
 							goto keep_listening;
 						}
 					}else{
@@ -567,12 +568,12 @@ int ping_udp(host_t *host, ping_t *ping) {
 	host_timeout = host->ping_timeout;
 
 	/* establish timeout value */
-	if (host->ping_timeout >= 1000) {
+	if (host_timeout >= 1000) {
 		timeout.tv_sec  = rint(floor(host_timeout / 1000));
-		timeout.tv_usec = (timeout.tv_sec * 1000000) - (host->ping_timeout * 1000);
+		timeout.tv_usec = (timeout.tv_sec * 1000000) - (host_timeout * 1000);
 	}else{
 		timeout.tv_sec  = 0;
-		timeout.tv_usec = (host->ping_timeout * 1000);
+		timeout.tv_usec = (host_timeout * 1000);
 	}
 
 	/* initilize the socket */
@@ -663,6 +664,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}else if (return_code == -1) {
 					if (errno == EINTR) {
 						/* interrupted, try again */
+						usleep(10000);
 						goto wait_more;
 					}else{
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
