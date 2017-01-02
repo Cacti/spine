@@ -7,6 +7,14 @@ The Cacti Group | spine
 -feature: Support snmpContextEngineID
 -feature: Change all references of Host to Device
 -bug:0001415: spine does not handle log_perror
+-bug#0002220: spine/cacti patch to allow SNMP_polling decices' hostnames like user@host:port
+-bug#0002234: Wrong alphanumeric value got from Spine SNMP poller
+-bug#0002651: False Positive Down status with snmpv3
+-bug#0002674: Segmentation fault in Spine during polling host
+
+0.8.8h
+-bug:0002659: wrong information about spine setup for icmps
+-bug: Removed requirement for building man page, deferred to 1.0
 
 0.8.8g
 -bug:0002380: please build man page for spine
@@ -21,7 +29,6 @@ The Cacti Group | spine
 -bug:0002604: cacti-spine, configure script ignores LDFLAGS in certain situations
 
 0.8.8e
-
 -bug#0002185: Multiple memory leaks found in spine 
 -bug#0002398: Buffer overflow
 -bug#0002447: Building spine on Debian Jessie (testing) fails 
@@ -32,7 +39,6 @@ The Cacti Group | spine
 -bug#0002588: Spine "is_numeric" incorrectly returns TRUE for some hexadecimal values 
 
 0.8.8d
-
 -feature: add snmp system information gathering
 
 0.8.8c
