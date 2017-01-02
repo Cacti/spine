@@ -46,7 +46,7 @@ DB_Pass			cactiuser
 DB_Port			3306
 
 RDB_Host		localhost
-RDB_Database	cacti
+RDB_Database		cacti
 RDB_User		cactiuser
 RDB_Pass		cactiuser
 RDB_Port		3306
