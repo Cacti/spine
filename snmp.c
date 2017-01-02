@@ -355,7 +355,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 					snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-					snprintf(result_string, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
+					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				}
 			}
 		}
