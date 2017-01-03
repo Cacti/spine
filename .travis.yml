@@ -12,6 +12,10 @@ before_install:
 install:
   - "./bootstrap"
 
+script:
+  - ./configure
+  - make
+
 notifications:
   email:
     on_success: change
