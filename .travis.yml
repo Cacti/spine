@@ -5,7 +5,7 @@ compiler:
 
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y tofrodos
+  - sudo apt-get install -y tofrodos libmysqlclient-dev snmp help2man
   - sudo ln -s /usr/bin/fromdos /usr/bin/dos2unix
   - sudo ln -s /usr/bin/todos /usr/bin/unix2dos
 
