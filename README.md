@@ -1,17 +1,17 @@
 # Spine: a poller for Cacti
 ---------------------------
-Spine is a high speed poller replacement for cmd.php. It is almost 100%
+Spine is a high speed poller replacement for `cmd.php`. It is almost 100%
 compatible with the legacy cmd.php processor and provides much more
-flexibility, speed and concurrency than cmd.php.
+flexibility, speed and concurrency than `cmd.php`.
 
 Make sure that you have the proper development environment to compile Spine.
-This includes compilers, header files and things such as libtool.  If you
+This includes compilers, header files and things such as libtool. If you
 have questions please consult the forums and/or online documentation.
 
 ## Unix Installation
 
 These instructions assume the default install location for spine
-of `/usr/local/spine`.  If you choose to use another prefix, make
+of `/usr/local/spine`. If you choose to use another prefix, make
 sure you update the commands as required for that new path.
 
 To compile and install Spine using MySQL versions 5.5 or higher
@@ -85,14 +85,14 @@ chmod +s /usr/local/spine/bin/spine
 
 ## Known Issues
 
-1. On Windows, Microsoft does not support a TCP Socket send timeout.  Therefore,
+1. On Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
    if you are using TCP ping on Windows, spine will not perform a second or subsequent
    retries to connect and the host will be assumed down on the first failure.  
 
-   If this presents a problem for you, I suggest using another Availability/Reachability
+   If this is a problem it is suggested to use another Availability/Reachability
    method, or moving to Linux/UNIX.
 
-2. Spine takes quite a few MySQL connections.  The number of connections is calculated
+2. Spine takes quite a few MySQL connections. The number of connections is calculated
    as follows:
 
    * main poller take one connection
@@ -105,5 +105,5 @@ chmod +s /usr/local/spine/bin/spine
    `total connections = 4 * ( 1 + 10 + 5 ) = 64`
 
 3. On older MySQL versions, different libraries had to be used to make MySQL thread
-   safe.  MySQL versions 5.0 and 5.1 require this flag.  If you are using these version
+   safe. MySQL versions 5.0 and 5.1 require this flag. If you are using these version
    of MySQL, you must use the --with-reentrant configure flag.
