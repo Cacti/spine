@@ -10,7 +10,7 @@ before_install:
   - sudo ln -s /usr/bin/todos /usr/bin/unix2dos
 
 install:
-  - ./bootstrap
+  - "./bootstrap"
 
 notifications:
   email:
@@ -22,5 +22,4 @@ notifications:
     on_success: always
     on_failure: always
     rooms:
-      - secure: VjWdzdjUSMGwKCObjuyCOwyzCUV+LDwPsUxdmgPojTLGgZS12QOQxD0QNRUkvvtaus2SgbFP/B49NYsqOGrRCFy21aa2goNcqCXUlty8Pcs4L1NIT3L4rmC5DjwKtlL6sO9/HwbS1woFE7fhZ1KA2nIoTHYeGCZFpW1gGpm9VUEbab9m9gP3HagtULInzx02M7vVHA6WwgumWpYqX62St6Tb11YK0SjkUYRKuZN8Ezf8euChEN6OwFwmJnDbKc37kYPHy7SLCKJ3Vy9wbw8O+tYLf8sNauHu0XJGaTg1cvDMbNwLdVBcV6CeaVZTkLyPY46UJ0wprIieKu+HxCQT6CNX4UT3qd27OFtlNDnsJ1o/9f6OKjnRTqPcF6ynLZuzWVIvnPo45bsafvDl/AcfYnm0c4UG+gCZnyMfr432WJ+RJxYZvPgqCEwiweQQMvBSSD3GP2/lbYNRCgI/NU9JDEEWWrYMj/cJxDn1qvKJmdNj4W9nFnF1BqAldzVAQQgLO04K215t1skENChyvEi4+ocZ2A2EwGx582d2PrIK0CpQHcQKxAZl5TwKiuIFQlIOCqh8vt45KG1mY/t9FmVbyhxtrlMdjAAd/6Rxh7aICJQ0PQc0Lw9LX1f2a9/JBNrQ4QxRo/xco4ZI9AfonG5PbMxHEusnfeTC3ZnFU6y+P3I=
-
+      secure: XsyAxzfbf5GjQjNCxsDzLD8L33g1idUglYbcZy/y917Z1zeKTR6qYqJRf90vHB0o8H37aM4iSqsg4V1B4ZlNuHTQ2Ju+BYWugWno6apJ/NIDA8jK3+JIN7/h43eHmI1jgedGMqsEZwE0U6pjZDeFNh2JtznH72RFK5dyrU15bWEcCBQhsWrWTCKtQbrxhGXcflTuV0+4nqKPJDR0+77XhkkXbZsbTEC0MJQFghWVIJZXEtTpYxONEe4t6hEXhIZAgRoHyvGitjIDuEFIzGwtjbSF4KcxdAZWtBDpY+NZ4FMng+B+APs9Z7m8+1CgetXLWcGfc5LY73gNWs8041yHenP2S8Rko21bXrtYUlw9x0bnQOkNKHpTQmM09lPbmjOnPwGhVzdajPKVun7msFrwFDqzw5+tDUYaU+lP/E32MvJ4xEbGNr7Q1XmEg+4bHRTDbmaAEKis27Qo44UyOH+orZ/lhS3aleZ267uhwQKtpNG7ylCTCZMpQ+C5rtlNOs06leNcgLN5DC/0+5LWrMPlA0+xLyfvHoL+EGlv4qBD/hX6RD5Bd/JrKmM0txUA6HBXLUqBqOqNO8AQl74rQwLs2S8dgdEnfSA84FnbrUjPZMN15rqOxXFIRYacJBBm1N8iMqAEHFavA136/zeBhacsd2Ko3fWApM4RqvaGLg0Pbsw=
