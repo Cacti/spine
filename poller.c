@@ -558,7 +558,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							" status_rec_date='%s', status_last_error='%s', min_time='%f',"
 							" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
 							" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
-							" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%i', "
+							" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%lu', "
 							" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
 						"WHERE id='%i'",
 						host->status,
