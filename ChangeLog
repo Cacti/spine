@@ -1,7 +1,7 @@
 The Cacti Group | spine
 
 1.0.3
-feature: release to match Cacti release
+-issue#6: Spine accepts arbitrary polling modes
 
 1.0.2
 feature: release to match Cacti release

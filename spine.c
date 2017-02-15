@@ -345,8 +345,12 @@ int main(int argc, char *argv[]) {
 				set.mode = REMOTE_OFFLINE;
 			} 
 
-			else {
+			else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
 				set.mode = REMOTE_RECOVERY;
+			}
+
+			else {
+				die("ERROR: invalid polling mode '%s' specified", opt);
 			}
 		}
 
