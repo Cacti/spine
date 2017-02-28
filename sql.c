@@ -277,7 +277,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 			if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
 				connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
 			}else{
-				connect_error = mysql_real_connect(mysql, hostname, set.rdbuser, set.rdbpass, database, set.rdbport, socket, 0);
+				connect_error = mysql_real_connect(mysql, hostname, set.rdbuser, set.rdbpass, set.rdbdb, set.rdbport, socket, 0);
 			}
 		}else{
 			connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
