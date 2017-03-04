@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.0.5
+-issue#7: remove database name not respected
+
 1.0.4
 feature: release to match Cacti release
 
