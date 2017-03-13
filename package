@@ -61,7 +61,7 @@ tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' * | (cd $
 pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
 
 # Get version from source files, warn if different than defined for build
-SRC_VERSION=`cat configure.ac | grep AM_INIT_AUTOMAKE | awk -F, '{print $2}' | tr -d ')' | tr -d ' '` 
+SRC_VERSION=`cat configure.ac | grep AC_INIT | awk -F, '{print $2}' | sed 's/ //g'`
 if [ "${SRC_VERSION}" != "${VERSION}" ]; then
   echo "WARNING: Build version and source version are not the same";
   echo "WARNING:    Build Version: ${VERSION}"
