@@ -1,16 +1,19 @@
 The Cacti Group | spine
 
+1.0.6
+ -feature: release to match Cacti release
+
 1.0.5
 -issue#7: remove database name not respected
 
 1.0.4
-feature: release to match Cacti release
+-feature: release to match Cacti release
 
 1.0.3
 -issue#6: Spine accepts arbitrary polling modes
 
 1.0.2
-feature: release to match Cacti release
+-feature: release to match Cacti release
 
 1.0.1
 -bug:With enough make jobs, help2man will fail if help2man is run before spine has been built
