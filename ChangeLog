@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.1.2
 -issue#13: Spine does not compile with --enable-lcap
+-issue#16: Spine not handling debug devices correctly
 
 1.1.1
 -feature: release to match Cacti release

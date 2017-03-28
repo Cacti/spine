@@ -226,6 +226,7 @@ int is_debug_device(int device_id) {
 		if (debug_devices[i] == device_id) {
 			return TRUE;
 		}
+		$i++;
 	}
 
 	return FALSE;
