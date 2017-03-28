@@ -187,7 +187,12 @@ else
 fi
 
 # ****************** Linux Capabilities Check ***********************
-AC_CHECK_HEADER(sys/capability.h, [FOUND_SYS_CAPABILITY_H=yes], 
+CAPLOC="sys/capability.h"
+for file in sys/capability.h;do
+    test -f /usr/include/$file && CAPLOC=$file && break
+done
+
+AC_CHECK_HEADER($CAPLOC, [FOUND_SYS_CAPABILITY_H=yes], 
 	[FOUND_SYS_CAPABILITY_H=no])
 
 # If we should use the Linux Capabilities support
@@ -255,9 +260,9 @@ fi
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 if test $MYSQL_REENTRANT = 0 ; then
-  LIBS="-lmysqlclient"
+  LIBS="-lmysqlclient $LIBS"
 else
-  LIBS="-lmysqlclient_r"
+  LIBS="-lmysqlclient_r $LIBS"
 fi
 
 # Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl

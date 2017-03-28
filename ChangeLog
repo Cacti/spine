@@ -1,13 +1,16 @@
 The Cacti Group | spine
 
+1.1.2
+-issue#13: Spine does not compile with --enable-lcap
+
 1.1.1
- -feature: release to match Cacti release
+-feature: release to match Cacti release
 
 1.1.0
- -feature: release to match Cacti release
+-feature: release to match Cacti release
 
 1.0.6
- -feature: release to match Cacti release
+-feature: release to match Cacti release
 
 1.0.5
 -issue#7: remove database name not respected
