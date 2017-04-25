@@ -35,6 +35,43 @@ make install
 chown root:root /usr/local/spine/bin/spine
 chmod +s /usr/local/spine/bin/spine
 ```
+## FreeBSD Installation
+Small instruction for installing spine on FreeBSD from ports:
+```
+1. portsnap fetch extract update
+2. cd /usr/ports/net-mgmt/cacti-spine/
+3. make config-recursive install clean
+4. Wait for installation to complete.
+```
+Install and compilation from source:
+1. Install depended packets:
+```
+pkg instal gcc
+pkg instal help2man
+pkg instal net-snmp
+pkg instal unix2dos
+pkg instal autoconf
+pkg instal automake
+pkg instal libtool
+pkg instal mysql56-client
+pkg instal m4
+```
+2. Download the Spine source to the current directory:
+	[http://www.cacti.net/spine_download.php](http://www.cacti.net/spine_download.php)
+3. Extract Spine:
+	`tar xzvf cacti-spine-*.tar.gz`
+4. Change into the Spine directory:
+	`cd cacti-spine-*`
+5. Run bootstrap to prepare Spine for compilation:
+	`./bootstrap`
+6.  
+```
+./configure 'CC=gcc49' '--prefix=/usr/local/' '--exec-prefix=/usr/local/'
+  make
+  make install
+  chown root:wheel /usr/local/bin/spine
+  chmod +s /usr/local/bin/spine
+```
 
 ## Windows Installation
 
