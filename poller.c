@@ -78,9 +78,9 @@ void *child(void *arg) {
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
 
-	sem_getvalue(&active_threads, &a_threads_value);
-
 	sem_post(&active_threads);
+
+	sem_getvalue(&active_threads, &a_threads_value);
 
 	if (set.spine_log_level == 1 && host_errors > 0) {
 		//SPINE_LOG(("WARNING: Invalid Responses, Device[%i] Thread[%i], Errors:%i", host_id, host_thread, host_errors));

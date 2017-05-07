@@ -732,6 +732,7 @@ int main(int argc, char *argv[]) {
 					device_counter++;
 				}
 
+				sem_wait(&thread_init_sem);
 				thread_mutex_lock(LOCK_PEND);
 				pending_threads++;
 
@@ -739,6 +740,7 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG_MEDIUM(("SPINE: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
 
 				thread_mutex_unlock(LOCK_PEND);
+				sem_post(&thread_init_sem);
 
 				break;
 			case EAGAIN:
