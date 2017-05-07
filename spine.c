@@ -100,7 +100,6 @@
 /* Global Variables */
 int entries = 0;
 int num_hosts = 0;
-int pending_threads = 0;
 sem_t active_threads;
 sem_t active_scripts;
 
@@ -187,7 +186,7 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
 int main(int argc, char *argv[]) {
 	struct timeval now;
 	char *conf_file = NULL;
-	double begin_time, end_time, cur_time;
+	double begin_time, end_time;
 	int num_rows = 0;
 	int device_counter = 0;
 	int valid_conf_file = FALSE;
@@ -642,7 +641,7 @@ int main(int argc, char *argv[]) {
 	until.tv_nsec = 0;
 
 	sem_getvalue(&active_threads, &a_threads_value);
-	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
+	SPINE_LOG_DEBUG(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = SPINE_FORK;
@@ -714,14 +713,13 @@ int main(int argc, char *argv[]) {
 				canexit = TRUE;
 				break;
 			}else if (errno == EINTR) {
-				usleep(10000);
+				usleep(100000);
 				goto retry1;
 			}
 		}
 
 		/* create child process */
 		sem_wait(&thread_init_sem);
-
 		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 		switch (thread_status) {
@@ -732,13 +730,12 @@ int main(int argc, char *argv[]) {
 					device_counter++;
 				}
 
-				thread_mutex_lock(LOCK_PEND);
-				pending_threads++;
+				/* wait for the child to read and process the structure */
+				sem_wait(&thread_init_sem);
+				sem_post(&thread_init_sem);
 
 				sem_getvalue(&active_threads, &a_threads_value);
-				SPINE_LOG_MEDIUM(("SPINE: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
-
-				thread_mutex_unlock(LOCK_PEND);
+				SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i", set.threads - a_threads_value));
 
 				break;
 			case EAGAIN:
@@ -747,7 +744,8 @@ int main(int argc, char *argv[]) {
 			case EFAULT:
 				SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
 				break;
-			case EINVAL: SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
+			case EINVAL:
+				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 				break;
 			default:
 				SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
@@ -759,28 +757,20 @@ int main(int argc, char *argv[]) {
 			sem_post(&thread_init_sem);
 	}
 
-	/* wait for all threads to 'complete'
- 	 * using the mutex here as the semaphore will
-     * show zero before the children are done */
-	while (TRUE) {
-		thread_mutex_lock(LOCK_PEND);
+	/* wait for all threads to complete */
+	for (i = 0; i < set.threads; i++) {
+		retry2:
 
-		cur_time = get_time_as_double();
-
-		if (pending_threads == 0) {
-			break;
-		} else if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for Threads to End"));
-			break;
+		if (sem_timedwait(&active_threads, &until) == -1) {
+			if (errno == ETIMEDOUT) {
+				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
+				canexit = TRUE;
+			}else if (errno == EINTR) {
+				usleep(100000);
+				goto retry2;
+			}
 		}
-
-		thread_mutex_unlock(LOCK_PEND);
-
-		sleep(1);
 	}
-
-	sem_getvalue(&active_threads, &a_threads_value);
-	SPINE_LOG_MEDIUM(("SPINE: The Final Value of Threads is %i", set.threads - a_threads_value));
 
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
@@ -789,9 +779,7 @@ int main(int argc, char *argv[]) {
 	gettimeofday(&now, NULL);
 
 	/* update the db for |data_time| on graphs */
-	if (set.poller_id == 1) {
-		db_insert(&mysql, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
-	}
+	db_insert(&mysql, "replace into settings (name,value) values ('date',NOW())");
 
 	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
 	db_insert(&mysql, querybuf);

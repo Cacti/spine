@@ -169,7 +169,6 @@
 #define LOCK_PHP_PROC_7 14
 #define LOCK_PHP_PROC_8 15
 #define LOCK_PHP_PROC_9 16
-#define LOCK_PEND 17
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -186,7 +185,6 @@
 #define LOCK_PHP_PROC_7_O 14
 #define LOCK_PHP_PROC_8_O 15
 #define LOCK_PHP_PROC_9_O 16
-#define LOCK_PEND_O 17
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
