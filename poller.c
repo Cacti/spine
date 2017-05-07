@@ -34,6 +34,8 @@
 #include "common.h"
 #include "spine.h"
 
+extern int pending_threads;
+
 /*! \fn void *child(void *arg)
  *  \brief function is called via the fork command and initiates a poll of a host
  *  \param arg a pointer to an integer point to the host_id to be polled
@@ -76,9 +78,9 @@ void *child(void *arg) {
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
 
-	sem_post(&active_threads);
-
 	sem_getvalue(&active_threads, &a_threads_value);
+
+	sem_post(&active_threads);
 
 	if (set.spine_log_level == 1 && host_errors > 0) {
 		//SPINE_LOG(("WARNING: Invalid Responses, Device[%i] Thread[%i], Errors:%i", host_id, host_thread, host_errors));
@@ -89,6 +91,12 @@ void *child(void *arg) {
 	}else{
 		SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i for Device ID %i", set.threads - a_threads_value, host_id));
 	}
+
+	thread_mutex_lock(LOCK_PEND);
+	pending_threads--;
+
+	SPINE_LOG_MEDIUM(("POLLR: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
+	thread_mutex_unlock(LOCK_PEND);
 
 	/* end the thread */
 	pthread_exit(0);
