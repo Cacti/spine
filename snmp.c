@@ -658,7 +658,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
 
-				for(i = 0; i < num_oids && vars; i++) {
+				for (i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
@@ -703,14 +703,12 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 						/* all OID's errored out so exit cleanly */
 						status = STAT_SUCCESS;
 					}
-				}else{
-					status = STAT_DESCRIP_ERROR;
 				}
 			}
 		}
 	}
 
-	if (status != STAT_SUCCESS) {
+	if (status == STAT_TIMEOUT) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
 			SET_UNDEFINED(snmp_oids[i].result);

@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.1.6
 -issue#15: Spine can cause high CPU utilization due to semaphore implementation
+-issue#11: Spine reports SNMP timeouts in some cases when gathering multiple OID in one request
 
 1.1.4
 -feature: release to match Cacti release
