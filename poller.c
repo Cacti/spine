@@ -266,7 +266,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"rrd_num, snmp_port, snmp_timeout, "
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 			" FROM poller_item"
-			" WHERE host_id=%i and rrd_next_step <=0"
+			" WHERE host_id=%i AND rrd_next_step <=0"
 			" ORDER by snmp_port %s", host_id, limits);
 
 		/* query to setup the next polling interval in cacti */
@@ -296,7 +296,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
 			" WHERE host_id=%i"
-			" AND rrd_next_step < 0"
+			" AND rrd_next_step <=0"
 			" GROUP BY snmp_port %s", host_id, limits);
 	}else{
 		snprintf(query1, BUFSIZE,
@@ -368,7 +368,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
 			" WHERE host_id=%i"
-			" AND rrd_next_step < 0"
+			" AND rrd_next_step <=0"
 			" AND poller_id=%i"
 			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 	}
@@ -834,7 +834,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							 *     the assert to fail */
 							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
-									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' and arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
+									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
 									db_insert(&mysql, query3);
 								}
 
@@ -1690,11 +1690,11 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
 		if (poll_result) {
-			mysql_real_escape_string(mysql, host->snmp_sysDescr, poll_result, strlen(poll_result));
+			db_escape(mysql, host->snmp_sysDescr, poll_result);
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
 		if (poll_result) {
-			mysql_real_escape_string(mysql, host->snmp_sysObjectID, poll_result, strlen(poll_result));
+			db_escape(mysql, host->snmp_sysObjectID, poll_result);
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		if (poll_result) {
@@ -1702,15 +1702,15 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
 		if (poll_result) {
-			mysql_real_escape_string(mysql, host->snmp_sysContact, poll_result, strlen(poll_result));
+			db_escape(mysql, host->snmp_sysContact, poll_result);
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
 		if (poll_result) {
-			mysql_real_escape_string(mysql, host->snmp_sysName, poll_result, strlen(poll_result));
+			db_escape(mysql, host->snmp_sysName, poll_result);
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
 		if (poll_result) {
-			mysql_real_escape_string(mysql, host->snmp_sysLocation, poll_result, strlen(poll_result));
+			db_escape(mysql, host->snmp_sysLocation, poll_result);
 		}
 	}else{
 		if (is_debug_device(host->id)) {
