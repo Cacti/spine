@@ -34,6 +34,8 @@
 #include "common.h"
 #include "spine.h"
 
+extern int pending_threads;
+
 /*! \fn void *child(void *arg)
  *  \brief function is called via the fork command and initiates a poll of a host
  *  \param arg a pointer to an integer point to the host_id to be polled
@@ -76,9 +78,9 @@ void *child(void *arg) {
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
 
-	sem_getvalue(&active_threads, &a_threads_value);
-
 	sem_post(&active_threads);
+
+	sem_getvalue(&active_threads, &a_threads_value);
 
 	if (set.spine_log_level == 1 && host_errors > 0) {
 		//SPINE_LOG(("WARNING: Invalid Responses, Device[%i] Thread[%i], Errors:%i", host_id, host_thread, host_errors));
@@ -89,7 +91,12 @@ void *child(void *arg) {
 	}else{
 		SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i for Device ID %i", set.threads - a_threads_value, host_id));
 	}
-	SPINE_LOG_MEDIUM(("NOTE ->: The Value of Active Threads is %i for Device ID %i", set.threads - a_threads_value, host_id));
+
+	thread_mutex_lock(LOCK_PEND);
+	pending_threads--;
+
+	SPINE_LOG_MEDIUM(("POLLR: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
+	thread_mutex_unlock(LOCK_PEND);
 
 	/* end the thread */
 	pthread_exit(0);
@@ -581,7 +588,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						host->snmp_sysName,
 						host->snmp_sysLocation,
 						host->id);
-
+	
 					db_insert(&mysql, update_sql);
 				}
 			}else{
@@ -1683,11 +1690,11 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysDescr, poll_result);
+			mysql_real_escape_string(mysql, host->snmp_sysDescr, poll_result, strlen(poll_result));
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysObjectID, poll_result);
+			mysql_real_escape_string(mysql, host->snmp_sysObjectID, poll_result, strlen(poll_result));
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		if (poll_result) {
@@ -1695,15 +1702,15 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysContact, poll_result);
+			mysql_real_escape_string(mysql, host->snmp_sysContact, poll_result, strlen(poll_result));
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysName, poll_result);
+			mysql_real_escape_string(mysql, host->snmp_sysName, poll_result, strlen(poll_result));
 		}
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysLocation, poll_result);
+			mysql_real_escape_string(mysql, host->snmp_sysLocation, poll_result, strlen(poll_result));
 		}
 	}else{
 		if (is_debug_device(host->id)) {
