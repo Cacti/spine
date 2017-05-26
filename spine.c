@@ -675,7 +675,7 @@ int main(int argc, char *argv[]) {
 		/* determine how many items will be polled per thread */
 		if (device_threads > 1) {
 			if (current_thread == 1) {
-				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
 				tresult   = db_query(&mysql, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
