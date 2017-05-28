@@ -3,6 +3,9 @@ The Cacti Group | spine
 1.1.8
 -issue#21: Errors when snmp_sysLocation contains a single quote
 
+1.1.7
+-feature: release to match Cacti release
+
 1.1.6
 -issue#15: Spine can cause high CPU utilization due to semaphore implementation
 -issue#11: Spine reports SNMP timeouts in some cases when gathering multiple OID in one request
