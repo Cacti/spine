@@ -42,35 +42,35 @@ chmod +s /usr/local/spine/bin/spine
 
 1. Download Cygwin for Window from [https://www.cygwin.com/](https://www.cygwin.com/)
 2. Install Cygwin by executing the downloaded setup program
-3. Basically, select install from Internet
-4. Select the installation location
+3. Select _Install from Internet_
+4. Select Root Directory:  _C:\cygwin_
 5. Select a mirror which is close to your location
-6. Once on the package selection section make sure to select the following:
-	* autoconf
-	* automake
-	* gcc-core
-	* gzip
-	* help2man
-	* libtool
-	* make
-	* net-snmp-devel
-	* m4
-	* libmysqlclient-devel
-	* libmysqlclient
-	* openssl-devel
-	* dos2unix
-	* wget
+6. Once on the package selection section make sure to select the following (TIP: use the search!):
+      * autoconf
+      * automake
+      * dos2unix
+      * gcc-core
+      * gzip
+      * libmysqlclient
+      * libmysqlclient-devel
+      * libtool
+      * m4
+      * make
+      * net-snmp-devel
+      * openssl-devel
+      * wget
 7. Wait for installation to complete, coffee time!
+8. Move the cygwin setup to the C:\cygwin\ folder for future usage. 
 
 ### Compile Spine
 
-1. Open Cygwin shell prompt and brace yourself to use unix commands on Windows.
+1. Open Cygwin shell prompt (C:\Cygwin\cygwin.bat) and brace yourself to use unix commands on Windows.
 2. Download the Spine source to the current directory:
 	[http://www.cacti.net/spine_download.php](http://www.cacti.net/spine_download.php)
-3. Extract Spine:
+3. Extract Spine into C:\Cygwin\usr\src\<spineversion>:
 	`tar xzvf cacti-spine-*.tar.gz`
 4. Change into the Spine directory:
-	`cd cacti-spine-*`
+	`cd /usr/src/cacti-spine-*`
 5. Run bootstrap to prepare Spine for compilation:
 	`./bootstrap`
 6. Follow the instruction which bootstrap outputs.
