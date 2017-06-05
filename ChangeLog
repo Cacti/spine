@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.9
+-feature: release to match Cacti release
+
 1.1.8
 -issue#21: Errors when snmp_sysLocation contains a single quote
 
