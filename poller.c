@@ -1804,11 +1804,11 @@ char *exec_poll(host_t *current_host, char *command) {
 	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
 
-	/* record start time */
-	begin_time = get_time_as_double();
-
 	/* don't run too many scripts, operating systems do not like that. */
 	sem_wait(&active_scripts);
+
+	/* record start time */
+	begin_time = get_time_as_double();
 
 	#ifdef USING_TPOPEN
 	fd = popen((char *)proc_command, "r");

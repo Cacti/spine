@@ -1,5 +1,9 @@
 The Cacti Group | spine
 
+1.2
+-issue: Script timeout should start after semaphore releases
+-issue: Don't include line breaks in Syslog
+
 1.1.12
 -feature: release to match Cacti release
 

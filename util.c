@@ -738,11 +738,6 @@ int spine_log(const char *format, ...) {
 		return TRUE;
 	}
 
-	/* append a line feed to the log message if needed */
-	if (!strstr(ulogmessage, "\n")) {
-		strncat(ulogmessage, "\n", 1);
-	}
-
 	/* log message prefix */
 	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] ", set.poller_id);
 
@@ -771,6 +766,31 @@ int spine_log(const char *format, ...) {
 	strncat(flogmessage, logprefix,   sizeof(flogmessage) - 1);
 	strncat(flogmessage, ulogmessage, sizeof(flogmessage) - 50);
 
+	/* output to syslog/eventlog */
+	if (IS_LOGGING_TO_SYSLOG()) {
+		thread_mutex_lock(LOCK_SYSLOG);
+		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
+		if ((strstr(flogmessage,"ERROR") || (strstr(flogmessage, "FATAL"))) && (set.log_perror)) {
+			syslog(LOG_CRIT,"%s\n", flogmessage);
+		}
+
+		if ((strstr(flogmessage,"WARNING")) && (set.log_pwarn)){
+			syslog(LOG_WARNING,"%s\n", flogmessage);
+		}
+
+		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
+			syslog(LOG_NOTICE,"%s\n", flogmessage);
+		}
+
+		closelog();
+		thread_mutex_unlock(LOCK_SYSLOG);
+	}
+
+	/* append a line feed to the log message if needed */
+	if (!strstr(flogmessage, "\n")) {
+		strncat(flogmessage, "\n", 1);
+	}
+
 	if ((IS_LOGGING_TO_FILE() &&
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
@@ -791,26 +811,6 @@ int spine_log(const char *format, ...) {
 				}
 			}
 		}
-	}
-
-	/* output to syslog/eventlog */
-	if (IS_LOGGING_TO_SYSLOG()) {
-		thread_mutex_lock(LOCK_SYSLOG);
-		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
-		if ((strstr(flogmessage,"ERROR") || (strstr(flogmessage, "FATAL"))) && (set.log_perror)) {
-			syslog(LOG_CRIT,"%s\n", flogmessage);
-		}
-
-		if ((strstr(flogmessage,"WARNING")) && (set.log_pwarn)){
-			syslog(LOG_WARNING,"%s\n", flogmessage);
-		}
-
-		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
-			syslog(LOG_NOTICE,"%s\n", flogmessage);
-		}
-
-		closelog();
-		thread_mutex_unlock(LOCK_SYSLOG);
 	}
 
 	if (set.log_level >= POLLER_VERBOSITY_NONE) {
