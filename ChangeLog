@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.17
+-issue: Increase logging level for POPEN timeouts
+
 1.1.16
 -feature: release to match Cacti release
 

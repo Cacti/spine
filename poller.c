@@ -1877,11 +1877,11 @@ char *exec_poll(host_t *current_host, char *command) {
 			}
 		case 0:
 			#ifdef USING_TPOPEN
-			SPINE_LOG(("Device[%i] ERROR: The POPEN timed out", current_host->id));
+			SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));
 
 			close_fd = FALSE;
 			#else
-			SPINE_LOG(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
+			SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
 
 			pid = nft_pchild(cmd_fd);
 			kill(pid, SIGKILL);
