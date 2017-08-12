@@ -1621,7 +1621,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	}
 
 	if (error_len > 0) {
-		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DataSources[%s]", errors, host_id, host_thread, error_string));
+		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, host_id, host_thread, error_string));
 	}
 
 	free(error_string);
