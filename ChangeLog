@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.18 
+-issue: Sort devices by polling time to allow long running devices to go first
+
 1.1.17
 -issue: Increase logging level for POPEN timeouts
 
