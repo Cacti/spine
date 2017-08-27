@@ -61,7 +61,7 @@ int ping_host(host_t *host, ping_t *ping) {
 			if (set.icmp_avail == FALSE) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
-				}else{
+				} else {
 					SPINE_LOG_DEBUG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
 				}
 				host->ping_method = PING_UDP;
@@ -71,12 +71,12 @@ int ping_host(host_t *host, ping_t *ping) {
 		if (!strstr(host->hostname, "localhost")) {
 			if (host->ping_method == PING_ICMP) {
 				ping_result = ping_icmp(host, ping);
-			}else if (host->ping_method == PING_UDP) {
+			} else if (host->ping_method == PING_UDP) {
 				ping_result = ping_udp(host, ping);
-			}else if (host->ping_method == PING_TCP) {
+			} else if (host->ping_method == PING_TCP) {
 				ping_result = ping_tcp(host, ping);
 			}
-		}else{
+		} else {
 			snprintf(ping->ping_status, 50, "0.000");
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device does not require ping");
 			ping_result = HOST_UP;
@@ -97,21 +97,21 @@ int ping_host(host_t *host, ping_t *ping) {
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
-				}else{
+				} else {
 					return HOST_DOWN;
 				}
 			}
 
 			if ((snmp_result == HOST_UP) && (ping_result == HOST_UP)) {
 				return HOST_UP;
-			}else{
+			} else {
 				return HOST_DOWN;
 			}
 		case AVAIL_SNMP_OR_PING:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
-				}else{
+				} else {
 					return HOST_DOWN;
 				}
 			}
@@ -122,7 +122,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 			if (ping_result == HOST_UP) {
 				return HOST_UP;
-			}else{
+			} else {
 				return HOST_DOWN;
 			}
 		case AVAIL_SNMP:
@@ -130,13 +130,13 @@ int ping_host(host_t *host, ping_t *ping) {
 		case AVAIL_SNMP_GET_SYSDESC:
 			if (snmp_result == HOST_UP) {
 				return HOST_UP;
-			}else{
+			} else {
 				return HOST_DOWN;
 			}
 		case AVAIL_PING:
 			if (ping_result == HOST_UP) {
 				return HOST_UP;
-			}else{
+			} else {
 				return HOST_DOWN;
 			}
 		case AVAIL_NONE:
@@ -165,7 +165,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering SNMP Ping", host->id));
-	}else{
+	} else {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering SNMP Ping", host->id));
 	}
 
@@ -174,9 +174,9 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			/* by default, we look at sysUptime */
 			if (host->availability_method == AVAIL_SNMP_GET_NEXT) {
 				oid = strdup(".1.3");
-			}else if (host->availability_method == AVAIL_SNMP_GET_SYSDESC) {
+			} else if (host->availability_method == AVAIL_SNMP_GET_SYSDESC) {
 				oid = strdup(".1.3.6.1.2.1.1.1.0");
-			}else {
+			} else {
 				oid = strdup(".1.3.6.1.2.1.1.3.0");
 			}
 
@@ -204,27 +204,27 @@ int ping_snmp(host_t *host, ping_t *ping) {
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 				free(poll_result);
 				return HOST_UP;
-			}else if (host->snmp_status != SNMPERR_SUCCESS) {
+			} else if (host->snmp_status != SNMPERR_SUCCESS) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
-				}else{
+				} else {
 					SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
 				}
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
 				free(poll_result);
 				return HOST_DOWN;
-			}else{
+			} else {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 				free(poll_result);
 				return HOST_UP;
 			}
-		}else{
+		} else {
 			snprintf(ping->snmp_status, 50, "0.00");
 			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device does not require SNMP");
 			return HOST_UP;
 		}
-	}else{
+	} else {
 		snprintf(ping->snmp_status, 50, "0.00");
 		snprintf(ping->snmp_response, SMALL_BUFSIZE, "Invalid SNMP Session");
 		return HOST_DOWN;
@@ -270,7 +270,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
-	}else{
+	} else {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	}
 
@@ -279,7 +279,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	retry_count = 0;
-	while ( TRUE ) {
+	while (TRUE) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 		if (hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
@@ -306,7 +306,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	
 				break;
 			}
-		}else{
+		} else {
 			break;
 		}
 	}
@@ -357,7 +357,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		if (init_sockaddr(&fromname, new_hostname, 7)) {
 			retry_count = 0;
 			total_time  = 0;
-			begin_time  = 0;
+			begin_time  = get_time_as_double();
 
 			/* initialize file descriptor to review for input/output */
 			FD_ZERO(&socket_fds);
@@ -376,17 +376,22 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* record start time */
 				if (total_time == 0) {
 					/* establish timeout value */
-					timeout.tv_sec  = 0;
-					timeout.tv_usec = host->ping_timeout * 1000;
+					timeout.tv_sec  = rint(host_timeout / 1000);
+					timeout.tv_usec = rint((int) host_timeout % 1000) * 1000;
 
 					/* set the socket send and receive timeout */
 					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 					begin_time = get_time_as_double();
-				}else{
+				} else {
 					/* decrement the timeout value by the total time */
-					timeout.tv_usec = (host->ping_timeout - total_time) * 1000;
+					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
+
+					/* set the socket send and receive timeout */
+					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 				}
 
 				/* send packet to destination */
@@ -404,7 +409,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				/* check to see which socket talked */
 				if (total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
 					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
@@ -416,22 +420,22 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						if (errno == EINTR) {
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
-							}else{
+							} else {
 								SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
 							}
 							/* call was interrupted by some system event */
-							usleep(10000);
+				//			usleep(10000);
 							goto keep_listening;
 						}
-					}else{
+					} else {
 						ip  = (struct ip *) socket_reply;
-						pkt = (struct icmp *)  (socket_reply + (ip->ip_hl << 2));
+						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
 								if (is_debug_device(host->id)) {
 									SPINE_LOG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-								}else{
+								} else {
 									SPINE_LOG_DEBUG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								}
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
@@ -453,7 +457,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								#endif
 
 								return HOST_UP;
-							}else{
+							} else {
 								/* received a response other than an echo reply */
 								if (total_time > host_timeout) {
 									retry_count++;
@@ -462,15 +466,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 								continue;
 							}
-						}else{
+						} else {
 							/* another host responded */
 							goto keep_listening;
 						}
 					}
-				}else{
+				} else {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
-					}else{
+					} else {
 						SPINE_LOG_DEBUG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
 					}
 				}
@@ -481,7 +485,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				usleep(1000);
 				#endif
 			}
-		}else{
+		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
@@ -501,7 +505,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			#endif
 			return HOST_DOWN;
 		}
-	}else{
+	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
@@ -554,7 +558,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
-	}else{
+	} else {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
 	}
 
@@ -567,15 +571,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
 
-	/* establish timeout value */
-	if (host_timeout >= 1000) {
-		timeout.tv_sec  = rint(floor(host_timeout / 1000));
-		timeout.tv_usec = (timeout.tv_sec * 1000000) - (host_timeout * 1000);
-	}else{
-		timeout.tv_sec  = 0;
-		timeout.tv_usec = (host_timeout * 1000);
-	}
-
 	/* initilize the socket */
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
@@ -584,10 +579,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
-
-		/* set the socket timeout */
-		setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-		setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 		/* get address of hostname */
 		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
@@ -619,15 +610,24 @@ int ping_udp(host_t *host, ping_t *ping) {
 				}
 
 				/* record start time */
-				begin_time = get_time_as_double();
+				if (total_time == 0) {
+					/* establish timeout value */
+					timeout.tv_sec  = rint(host_timeout / 1000);
+					timeout.tv_usec = rint((int) host_timeout % 1000) * 1000;
 
-				/* establish timeout value */
-				if (host->ping_timeout >= 1000) {
-					timeout.tv_sec  = rint(floor(host_timeout / 1000));
-					timeout.tv_usec = (timeout.tv_sec * 1000000) - (host->ping_timeout * 1000);
-				}else{
-					timeout.tv_sec  = 0;
-					timeout.tv_usec = (host->ping_timeout * 1000);
+					/* set the socket send and receive timeout */
+					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+
+					begin_time = get_time_as_double();
+				} else {
+					/* decrement the timeout value by the total time */
+					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
+
+					/* set the socket send and receive timeout */
+					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 				}
 
 				/* send packet to destination */
@@ -648,10 +648,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 					if (FD_ISSET(udp_socket, &socket_fds)) {
 						return_code = read(udp_socket, socket_reply, BUFSIZE);
 
-						if ((return_code == -1) && ((errno == ECONNRESET) || (errno == ECONNREFUSED))) {
+						if (return_code == -1 && (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED)) {
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] DEBUG: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-							}else{
+							} else {
 								SPINE_LOG_DEBUG(("Device[%i] DEBUG: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 							}
 							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
@@ -661,25 +661,25 @@ int ping_udp(host_t *host, ping_t *ping) {
 							return HOST_UP;
 						}
 					}
-				}else if (return_code == -1) {
+				} else if (return_code == -1) {
 					if (errno == EINTR) {
 						/* interrupted, try again */
 						usleep(10000);
 						goto wait_more;
-					}else{
+					} else {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(new_hostname);
 						close(udp_socket);
 						return HOST_DOWN;
 					}
-				}else{
+				} else {
 					/* timeout */
 				}
 
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-				}else{
+				} else {
 					SPINE_LOG_DEBUG(("Device[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 				}
 
@@ -688,14 +688,14 @@ int ping_udp(host_t *host, ping_t *ping) {
 				usleep(1000);
 				#endif
 			}
-		}else{
+		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
 			close(udp_socket);
 			return HOST_DOWN;
 		}
-	}else{
+	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
@@ -730,7 +730,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
-	}else{
+	} else {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
 	}
 
@@ -739,15 +739,6 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
-
-	/* establish timeout value */
-	if (host->ping_timeout >= 1000) {
-		timeout.tv_sec  = rint(floor(host_timeout / 1000));
-		timeout.tv_usec = (timeout.tv_sec * 1000000) - (host->ping_timeout * 1000);
-	}else{
-		timeout.tv_sec  = 0;
-		timeout.tv_usec = (host->ping_timeout * 1000);
-	}
 
 	/* initilize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -758,10 +749,6 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
-		/* set the socket timeout */
-		setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-		setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
 		/* get address of hostname */
 		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
 			/* first attempt a connect */
@@ -769,7 +756,25 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 			while (1) {
 				/* record start time */
-				begin_time  = get_time_as_double();
+				if (total_time == 0) {
+					/* establish timeout value */
+					timeout.tv_sec  = rint(host_timeout / 1000);
+					timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
+
+					/* set the socket send and receive timeout */
+					setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+					setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+
+					begin_time = get_time_as_double();
+				} else {
+					/* decrement the timeout value by the total time */
+					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
+
+					/* set the socket send and receive timeout */
+					setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+					setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+				}
 
 				/* make the connection */
 				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
@@ -780,11 +785,10 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				if (((return_code == -1) && (errno == ECONNREFUSED)) ||
-					(return_code == 0)) {
+				if ((return_code == -1 && errno == ECONNREFUSED) || return_code == 0) {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] DEBUG: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-					}else{
+					} else {
 						SPINE_LOG_DEBUG(("Device[%i] DEBUG: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 					}
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
@@ -792,7 +796,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					free(new_hostname);
 					close(tcp_socket);
 					return HOST_UP;
-				}else{
+				} else {
 					#if defined(__CYGWIN__)
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
@@ -806,20 +810,20 @@ int ping_tcp(host_t *host, ping_t *ping) {
 						free(new_hostname);
 						close(tcp_socket);
 						return HOST_DOWN;
-					}else{
+					} else {
 						retry_count++;
 					}
 					#endif
 				}
 			}
-		}else{
+		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
 			free(new_hostname);
 			close(tcp_socket);
 			return HOST_DOWN;
 		}
-	}else{
+	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
 		free(new_hostname);
@@ -855,10 +859,10 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 			retry_count++;
 			usleep(50000);
 			goto retry;
-		}else{
+		} else {
 			return NULL;
 		}
-	}else{
+	} else {
 		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 	}
 
@@ -883,15 +887,15 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				buf = realloc(buf, len*sizeof(char));
 
 				continue;
-			}else if (herr == TRY_AGAIN && retry_count < 3) {
+			} else if (herr == TRY_AGAIN && retry_count < 3) {
 				retry_count++;
 				usleep(50000);
 				continue;
-			}else{
+			} else {
 				free(buf);
 				return FALSE;
 			}
-		}else{
+		} else {
 			break;
 		}
 	}
@@ -917,15 +921,15 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				memset(buf, 0, sizeof(buf));
 
 				continue;
-			}else if (h_errno == TRY_AGAIN && retry_count < 3) {
+			} else if (h_errno == TRY_AGAIN && retry_count < 3) {
 				retry_count++;
 				usleep(50000);
 				continue;
-			}else{
+			} else {
 				free(buf);
 				return NULL;
 			}
-		}else{
+		} else {
 			break;
 		}
 	}
@@ -954,10 +958,10 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 			retry_count++;
 			usleep(50000);
 			goto retry;
-		}else{
+		} else {
 			hostinfo = NULL;
 		}
-	}else{
+	} else {
 		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 		thread_mutex_unlock(LOCK_GHBN);
 	}
@@ -969,13 +973,13 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	if (hostinfo == NULL) {
 		SPINE_LOG(("WARNING: Unknown host %s", hostname));
 		return FALSE;
-	}else{
+	} else {
 		return TRUE;
 	}
 }
 
 /*! \fn char *remove_tcp_udp_from_hostname(char *hostname)
- *  \brief removes 'TCP:' or 'UDP:' from a hostname required to ping
+ *  \brief removes 'TCP[6]:' or 'UDP[6]:' from a hostname required to ping
  *
  *  \return char hostname a trimmed hostname
  *
@@ -991,7 +995,11 @@ char *remove_tcp_udp_from_hostname(char *hostname) {
 		!strncasecmp(hostname, "UDP:", 4)) {
 		memcpy(cleaned_hostname, hostname+4, strlen(hostname)-4);
 		cleaned_hostname[strlen(hostname)-4] = '\0';
-	}else{
+	} else if (!strncasecmp(hostname, "TCP6:", 5) ||
+        !strncasecmp(hostname, "UDP6:", 5)) {
+        memcpy(cleaned_hostname, hostname+5, strlen(hostname)-5);
+        cleaned_hostname[strlen(hostname)-5] = '\0';
+	} else {
 		strcpy(cleaned_hostname, hostname);
 	}
 
@@ -1074,14 +1082,14 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		case AVAIL_SNMP_AND_PING:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
-			}else {
+			} else {
 				snprintf(host->status_last_error, SMALL_BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", "Device does not require SNMP");
-			}else {
+			} else {
 				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->snmp_response);
 			}
 			break;
@@ -1106,26 +1114,26 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			/* host is down, but not ready to issue log message */
-			}else{
+			} else {
 				/* host down for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			}
 		/* host is recovering, put back in failed state */
-		}else if (host->status == HOST_RECOVERING) {
+		} else if (host->status == HOST_RECOVERING) {
 			host->status_event_count = 1;
 			host->status = HOST_DOWN;
 
 		/* host was unknown and now is down */
-		}else if (host->status == HOST_UNKNOWN) {
+		} else if (host->status == HOST_UNKNOWN) {
 			host->status = HOST_DOWN;
 			host->status_event_count = 0;
-		}else{
+		} else {
 			host->status_event_count++;
 		}
 	/* host is up!! */
-	}else{
+	} else {
 		/* update total polls and availability */
 		host->total_polls = host->total_polls + 1;
 		host->availability = hundred_percent * (host->total_polls - host->failed_polls) / host->total_polls;
@@ -1134,19 +1142,19 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		if (availability_method == AVAIL_SNMP_AND_PING) {
 			if (strlen(host->snmp_community) == 0) {
 				ping_time = atof(ping->ping_status);
-			}else {
+			} else {
 				/* calculate the average of the two times */
 				ping_time = (atof(ping->snmp_status) + atof(ping->ping_status)) / 2;
 			}
-		}else if (availability_method == AVAIL_SNMP) {
+		} else if (availability_method == AVAIL_SNMP) {
 			if (strlen(host->snmp_community) == 0) {
 				ping_time = 0.000;
-			}else {
+			} else {
 				ping_time = atof(ping->snmp_status);
 			}
-		}else if (availability_method == AVAIL_NONE) {
+		} else if (availability_method == AVAIL_NONE) {
 			ping_time = 0.000;
-		}else {
+		} else {
 			ping_time = atof(ping->ping_status);
 		}
 
@@ -1171,7 +1179,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			if (host->status == HOST_DOWN) {
 				host->status = HOST_RECOVERING;
 				host->status_event_count = 1;
-			}else{
+			} else {
 				host->status_event_count++;
 			}
 
@@ -1190,13 +1198,13 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				/* reset the event counter */
 				host->status_event_count = 0;
 			/* host is recovering, but not ready to issue log message */
-			}else{
+			} else {
 				/* host recovering for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_rec_date, 40, "%s", current_date);
 				}
 			}
-		}else{
+		} else {
 		/* host was unknown and now is up */
 			host->status = HOST_UP;
 			host->status_event_count = 0;
@@ -1210,70 +1218,70 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 					SPINE_LOG(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 					SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 				}
-			}else if (availability_method == AVAIL_SNMP_OR_PING) {
+			} else if (availability_method == AVAIL_SNMP_OR_PING) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 					SPINE_LOG(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 					SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 				}
-			}else if (availability_method == AVAIL_SNMP) {
+			} else if (availability_method == AVAIL_SNMP) {
 				if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] SNMP Result: Device does not require SNMP", host->id));
-					}else{
+					} else {
 						SPINE_LOG_HIGH(("Device[%i] SNMP Result: Device does not require SNMP", host->id));
 					}
-				}else{
+				} else {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
-					}else{
+					} else {
 						SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 					}
 				}
-			}else if (availability_method == AVAIL_NONE) {
+			} else if (availability_method == AVAIL_NONE) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] No Device Availability Method Selected", host->id));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] No Device Availability Method Selected", host->id));
 				}
-			}else{
+			} else {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] PING: Result %s", host->id, ping->ping_response));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] PING: Result %s", host->id, ping->ping_response));
 				}
 			}
-		}else{
+		} else {
 			if (availability_method == AVAIL_SNMP_AND_PING) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 					SPINE_LOG(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 					SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 				}
-			}else if (availability_method == AVAIL_SNMP) {
+			} else if (availability_method == AVAIL_SNMP) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] SNMP Result: %s", host->id, ping->snmp_response));
 				}
-			}else if (availability_method == AVAIL_NONE) {
+			} else if (availability_method == AVAIL_NONE) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] No Device Availability Method Selected", host->id));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] No Device Availability Method Selected", host->id));
 				}
-			}else{
+			} else {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] PING Result: %s", host->id, ping->ping_response));
-				}else{
+				} else {
 					SPINE_LOG_HIGH(("Device[%i] PING Result: %s", host->id, ping->ping_response));
 				}
 			}
@@ -1284,7 +1292,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 	if (issue_log_message) {
 		if (host->status == HOST_DOWN) {
 			SPINE_LOG(("Device[%i] Hostname[%s] ERROR: HOST EVENT: Device is DOWN Message: %s", host->id, host->hostname, host->status_last_error));
-		}else{
+		} else {
 			SPINE_LOG(("Device[%i] Hostname[%s] NOTICE: HOST EVENT: Device Returned from DOWN State", host->id, host->hostname));
 		}
 	}

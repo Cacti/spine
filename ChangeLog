@@ -1,5 +1,11 @@
 The Cacti Group | spine
 
+1.1.20
+-issue#28: UDP and TCP ping issues
+
+1.1.19
+-feature: release to match Cacti release
+
 1.1.18 
 -issue: Sort devices by polling time to allow long running devices to go first
 
