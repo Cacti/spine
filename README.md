@@ -51,6 +51,7 @@ chmod +s /usr/local/spine/bin/spine
       * dos2unix
       * gcc-core
       * gzip
+      * help2man
       * libmysqlclient
       * libmysqlclient-devel
       * libtool
