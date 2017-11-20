@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.0
+-feature: Allow threads to be set a Data Collector level
+
 1.1.28
 -feature: release to match Cacti release
 

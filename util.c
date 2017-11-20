@@ -102,7 +102,63 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
-		
+
+			if (mysql_row != NULL) {
+				retval = strdup(mysql_row[0]);
+				db_free_result(result);
+				return retval;
+			}else{
+				return 0;
+			}
+		}else{
+			db_free_result(result);
+			return 0;
+		}
+	}else{
+		return 0;
+	}
+}
+
+/*! \fn static const char *getpsetting(MYSQL *psql, const char *setting)
+ *  \brief Returns a character pointer to a Cacti poller setting.
+ *
+ *  Given a pointer to a database and the name of a setting,
+ *  return the string which represents the value from the poller table.
+ *  Return NULL if we can't find a setting for whatever reason.
+ *
+ *  NOTE: if the user has provided one of these options on the command line,
+ *  it's intercepted here and returned, overriding the database setting.
+ *
+ *  \return the database option setting
+ *
+ */
+static const char *getpsetting(MYSQL *psql, const char *setting) {
+	char      qstring[256];
+	char      *retval;
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int       i;
+
+	assert(psql    != 0);
+	assert(setting != 0);
+
+	/* see if it's in the option table */
+	for (i=0; i<nopts; i++) {
+		if (STRIMATCH(setting, opttable[i].opt)) {
+			/* FOUND IT! */
+			retval = strdup(opttable[i].val);
+			return retval;
+		}
+	}
+
+	sprintf(qstring, "SELECT %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+
+	result = db_query(psql, qstring);
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
 			if (mysql_row != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
@@ -196,7 +252,7 @@ static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
-		
+
 			if (mysql_row != NULL) {
 				retval = strdup(mysql_row[1]);
 				db_free_result(result);
@@ -403,7 +459,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i", set.log_pstats));
 
 	/* get Cacti defined max threads override spine.conf */
-	if ((res = getsetting(&mysql, "max_threads")) != 0) {
+	if ((res = getpsetting(&mysql, "threads")) != 0) {
 		set.threads = atoi(res);
 		free((char *)res);
 		if (set.threads > MAX_THREADS) {
@@ -1238,22 +1294,22 @@ int char_count(const char *str, int chr) {
 unsigned long long hex2dec(char *str) {
 	int i = 0;
 	unsigned long long number = 0;
-	
+
 	if (!str) return 0;
 
 	/* first revers the string */
 	reverse(str);
-	
+
 	while (*str) {
 		switch (*str) {
-		case '0': 
+		case '0':
 			i++;
 			break;
-		case '1': 
+		case '1':
 			number += pow(16, i) * 1;
 			i++;
 			break;
-		case '2': 
+		case '2':
 			number += pow(16, i) * 2;
 			i++;
 			break;
@@ -1261,15 +1317,15 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 3;
 			i++;
 			break;
-		case '4': 
+		case '4':
 			number += pow(16, i) * 4;
 			i++;
 			break;
-		case '5': 
+		case '5':
 			number += pow(16, i) * 5;
 			i++;
 			break;
-		case '6': 
+		case '6':
 			number += pow(16, i) * 6;
 			i++;
 			break;
@@ -1277,7 +1333,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 7;
 			i++;
 			break;
-		case '8': 
+		case '8':
 			number += pow(16, i) * 8;
 			i++;
 			break;
@@ -1285,7 +1341,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 9;
 			i++;
 			break;
-		case 'a': case 'A': 
+		case 'a': case 'A':
 			number += pow(16, i) * 10;
 			i++;
 			break;
@@ -1293,7 +1349,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 11;
 			i++;
 			break;
-		case 'c': case 'C': 
+		case 'c': case 'C':
 			number += pow(16, i) * 12;
 			i++;
 			break;
@@ -1301,7 +1357,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 13;
 			i++;
 			break;
-		case 'e': case 'E': 
+		case 'e': case 'E':
 			number += pow(16, i) * 14;
 			i++;
 			break;
@@ -1399,7 +1455,7 @@ void checkAsRoot() {
 	#else
 	if (hasCaps() != TRUE) {
 		seteuid(0);
-	
+
 		if (geteuid() != 0) {
 			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
 			set.icmp_avail = FALSE;
