@@ -85,3 +85,6 @@ extern int hasCaps();
 
 /* see if we can do things as root */
 extern void checkAsRoot();
+
+/* log format */
+extern char *get_date_format();
