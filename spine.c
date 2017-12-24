@@ -257,6 +257,12 @@ int main(int argc, char *argv[]) {
 	/* set default verbosity */
 	set.log_level = POLLER_VERBOSITY_LOW;
 
+	/* set default log separator */
+	set.log_datetime_separator = GDC_DEFAULT;
+
+	/* set default log format */
+	set.log_datetime_format = GD_DEFAULT;
+
 	/* set the default exit code */
 	set.exit_code = 0;
 
@@ -340,11 +346,11 @@ int main(int argc, char *argv[]) {
 
 			if (STRIMATCH(getarg(opt, &argv), "online")) {
 				set.mode = REMOTE_ONLINE;
-			} 
+			}
 
 			else if (STRIMATCH(getarg(opt, &argv), "offline")) {
 				set.mode = REMOTE_OFFLINE;
-			} 
+			}
 
 			else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
 				set.mode = REMOTE_RECOVERY;
@@ -583,7 +589,7 @@ int main(int argc, char *argv[]) {
 	if (set.device_threads_exists) {
 		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
 	}else{
-		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));  
+		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));
 	}
 
 	/* obtain the list of hosts to poll */
@@ -935,4 +941,3 @@ static char *getarg(char *opt, char ***pargv) {
 
 	die("ERROR: option %s requires a parameter", optname);
 }
-

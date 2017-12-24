@@ -102,7 +102,7 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
-		
+
 			if (mysql_row != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
@@ -196,7 +196,7 @@ static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
-		
+
 			if (mysql_row != NULL) {
 				retval = strdup(mysql_row[1]);
 				db_free_result(result);
@@ -285,6 +285,26 @@ void read_config_options() {
 	}else{
 		snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
+
+	/* get log separator */
+	if ((res = getsetting(&mysql, "default_datechar")) != 0) {
+		set.log_datetime_separator = atoi(res);
+		free((char *)res);
+
+		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
+			set.log_datetime_separator = GDC_DEFAULT;
+		}
+	}
+
+	/* get log separator */
+	if ((res = getsetting(&mysql, "default_datechar")) != 0) {
+		set.log_datetime_separator = atoi(res);
+		free((char *)res);
+
+		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
+			set.log_datetime_separator = GDC_DEFAULT;
+		}
+	}
 
 	/* log the path_webroot variable */
 	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
@@ -703,6 +723,56 @@ void die(const char *format, ...) {
 	exit(set.exit_code);
 }
 
+char * get_date_format()
+{
+	char *log_fmt;
+	if (!(log_fmt = (char *) malloc(GD_FMT_SIZE))) {
+                die("ERROR: Fatal malloc error: util.c get_date_format!");
+        }
+
+	char log_sep = '/';
+	if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
+		set.log_datetime_separator = GDC_DEFAULT;
+	}
+
+	if (set.log_datetime_format < GD_MIN || set.log_datetime_format > GD_MAX) {
+		set.log_datetime_format = GD_DEFAULT;
+	}
+
+	switch (set.log_datetime_separator)
+	{
+		case GDC_DOT:
+			log_sep = '.';
+			break;
+		case GDC_HYPHEN:
+			log_sep = '-';
+			break;
+		default:
+			log_sep = '/';
+			break;
+	}
+
+	switch (set.log_datetime_format)
+	{
+		case GD_MO_D_Y:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%m%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+		case GD_MN_D_Y:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%b%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+		case GD_D_MO_Y:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%m%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+		case GD_D_MN_Y:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%b%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+		case GD_Y_MO_D:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+		case GD_Y_MN_D:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%b%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+		default:
+			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+	}
+
+	return (log_fmt);
+}
+
 /*! \fn void spine_log(const char *format, ...)
  *  \brief output's log information to the desired cacti logfile.
  *  \param *logmessage a pointer to the pre-formated log message.
@@ -747,7 +817,24 @@ int spine_log(const char *format, ...) {
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
 
-	if (strftime(flogmessage, 50, "%Y-%m-%d %H:%M:%S - ", now_ptr) == (size_t) 0) {
+	char * log_fmt = get_date_format();
+	if (strlen(log_fmt) == 0) {
+		#ifdef DISABLE_STDERR
+		fp = stdout;
+		#else
+		fp = stderr;
+		#endif
+
+		if ((set.stderr_notty) && (fp == stderr)) {
+			/* do nothing stderr does not exist */
+		}else if ((set.stdout_notty) && (fp == stdout)) {
+			/* do nothing stdout does not exist */
+		}else{
+			fprintf(fp, "ERROR: Could not get format from get_date_format()\n");
+		}
+	}
+
+	if (strftime(flogmessage, 50, log_fmt, now_ptr) == (size_t) 0) {
 		#ifdef DISABLE_STDERR
 		fp = stdout;
 		#else
@@ -832,6 +919,8 @@ int spine_log(const char *format, ...) {
 			fprintf(fp, "%s", flogmessage);
 		}
 	}
+
+	free(log_fmt);	
 
 	return TRUE;
 }
@@ -1238,22 +1327,22 @@ int char_count(const char *str, int chr) {
 unsigned long long hex2dec(char *str) {
 	int i = 0;
 	unsigned long long number = 0;
-	
+
 	if (!str) return 0;
 
 	/* first revers the string */
 	reverse(str);
-	
+
 	while (*str) {
 		switch (*str) {
-		case '0': 
+		case '0':
 			i++;
 			break;
-		case '1': 
+		case '1':
 			number += pow(16, i) * 1;
 			i++;
 			break;
-		case '2': 
+		case '2':
 			number += pow(16, i) * 2;
 			i++;
 			break;
@@ -1261,15 +1350,15 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 3;
 			i++;
 			break;
-		case '4': 
+		case '4':
 			number += pow(16, i) * 4;
 			i++;
 			break;
-		case '5': 
+		case '5':
 			number += pow(16, i) * 5;
 			i++;
 			break;
-		case '6': 
+		case '6':
 			number += pow(16, i) * 6;
 			i++;
 			break;
@@ -1277,7 +1366,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 7;
 			i++;
 			break;
-		case '8': 
+		case '8':
 			number += pow(16, i) * 8;
 			i++;
 			break;
@@ -1285,7 +1374,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 9;
 			i++;
 			break;
-		case 'a': case 'A': 
+		case 'a': case 'A':
 			number += pow(16, i) * 10;
 			i++;
 			break;
@@ -1293,7 +1382,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 11;
 			i++;
 			break;
-		case 'c': case 'C': 
+		case 'c': case 'C':
 			number += pow(16, i) * 12;
 			i++;
 			break;
@@ -1301,7 +1390,7 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 13;
 			i++;
 			break;
-		case 'e': case 'E': 
+		case 'e': case 'E':
 			number += pow(16, i) * 14;
 			i++;
 			break;
@@ -1399,7 +1488,7 @@ void checkAsRoot() {
 	#else
 	if (hasCaps() != TRUE) {
 		seteuid(0);
-	
+
 		if (geteuid() != 0) {
 			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
 			set.icmp_avail = FALSE;
