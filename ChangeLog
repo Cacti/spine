@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.30
+-feature: release to match Cacti release
+
 1.1.29
 -issue#39: Have spine match cacti_log function
 
