@@ -206,9 +206,17 @@ int ping_snmp(host_t *host, ping_t *ping) {
 				return HOST_UP;
 			} else if (host->snmp_status != SNMPERR_SUCCESS) {
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
+					if (host->snmp_status == STAT_TIMEOUT) {
+						SPINE_LOG(("Device[%i] SNMP Ping Timeout", host->id));
+					} else {
+						SPINE_LOG(("Device[%i] SNMP Ping Unknown Error", host->id));
+					}
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Error: %s", host->id, snmp_api_errstring(host->snmp_status)));
+					if (host->snmp_status == STAT_TIMEOUT) {
+						SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Timeout", host->id));
+					} else {
+						SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Unknown Error", host->id));
+					}
 				}
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
 				free(poll_result);
@@ -283,7 +291,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 		if (hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
-			seteuid(0);
+			if (seteuid(0) == -1) {
+				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+			}
 		}
 		#endif
 
@@ -297,13 +307,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				free(new_hostname);
 				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 				if (hasCaps() != TRUE) {
-					seteuid(getuid());
+					if (seteuid(getuid()) == -1) {
+						SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+					}
 					thread_mutex_unlock(LOCK_SETEUID);
 				}
 				#endif
 
 				return HOST_DOWN;
-	
+
 				break;
 			}
 		} else {
@@ -312,7 +324,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	}
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 	if (hasCaps() != TRUE) {
-		seteuid(getuid());
+		if (seteuid(getuid()) == -1) {
+			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+		}
 		thread_mutex_unlock(LOCK_SETEUID);
 	}
 	#endif
@@ -445,13 +459,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 								if (hasCaps() != TRUE) {
 									thread_mutex_lock(LOCK_SETEUID);
-									seteuid(0);
+									if (seteuid(0) == -1) {
+										SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+									}
 								}
 								#endif
 								close(icmp_socket);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 								if (hasCaps() != TRUE) {
-									seteuid(getuid());
+									if (seteuid(getuid()) == -1) {
+										SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+									}
 									thread_mutex_unlock(LOCK_SETEUID);
 								}
 								#endif
@@ -493,13 +511,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
-				seteuid(0);
+				if (seteuid(0) == -1) {
+					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+				}
 			}
 			#endif
 			close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
-				seteuid(getuid());
+				if (seteuid(getuid()) == -1) {
+					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+				}
 				thread_mutex_unlock(LOCK_SETEUID);
 			}
 			#endif
@@ -514,13 +536,17 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
-				seteuid(0);
+				if (seteuid(0) == -1) {
+					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+				}
 			}
 			#endif
 			close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
-				seteuid(getuid());
+				if (seteuid(getuid()) == -1) {
+					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+				}
 				thread_mutex_unlock(LOCK_SETEUID);
 			}
 			#endif

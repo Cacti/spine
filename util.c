@@ -1490,15 +1490,16 @@ void checkAsRoot() {
 	free(p);
 	#else
 	if (hasCaps() != TRUE) {
-		seteuid(0);
-
-		if (geteuid() != 0) {
+		if (seteuid(0) == -1) {
 			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
 			set.icmp_avail = FALSE;
 		} else {
 			SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
 			set.icmp_avail = TRUE;
-			seteuid(getuid());
+
+			if (seteuid(getuid()) == -1) {
+				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+			}
 		}
 	} else {
 		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));

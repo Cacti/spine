@@ -3,6 +3,7 @@ The Cacti Group | spine
 1.1.31
 -issue#34: Re-introduce check for relocatable Net-SNMP and development files
 -issue#35: SNMP OID range checks cause some snmpget's to fail
+-issue#38: SNMP Ping timeouts not reported properly
 -issue#39: Spine should use same logging format as Cacti
 -issue#42: Boost table keeps populating with boost disabled
 
