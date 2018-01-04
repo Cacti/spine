@@ -107,14 +107,14 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
-			}else{
+			} else {
 				return 0;
 			}
-		}else{
+		} else {
 			db_free_result(result);
 			return 0;
 		}
-	}else{
+	} else {
 		return 0;
 	}
 }
@@ -201,14 +201,14 @@ static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 				retval = strdup(mysql_row[1]);
 				db_free_result(result);
 				return retval;
-			}else{
+			} else {
 				return 0;
 			}
-		}else{
+		} else {
 			db_free_result(result);
 			return 0;
 		}
-	}else{
+	} else {
 		return 0;
 	}
 }
@@ -221,7 +221,7 @@ int is_debug_device(int device_id) {
 	extern int *debug_devices;
 	int i = 0;
 
-	while(i < 100) {
+	while (i < 100) {
 		if (debug_devices[i] == '\0') break;
 		if (debug_devices[i] == device_id) {
 			return TRUE;
@@ -274,15 +274,15 @@ void read_config_options() {
 	if ((res = getsetting(&mysql, "path_cactilog")) != 0) {
 		if (strlen(res) != 0) {
 			snprintf(set.path_logfile, SMALL_BUFSIZE, "%s", res);
-		}else{
+		} else {
 			if (strlen(web_root) != 0) {
 				snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
-			}else{
+			} else {
 				set.path_logfile[0] ='\0';
 			}
 		}
 		free((char *)res);
-	}else{
+	} else {
 		snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
 
@@ -316,7 +316,7 @@ void read_config_options() {
 	if ((res = getsetting(&mysql, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
 		free((char *)res);
-	}else{
+	} else {
 		set.log_destination = LOGDEST_FILE;
 	}
 
@@ -410,11 +410,17 @@ void read_config_options() {
 	/* log the log_pwarn variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i", set.log_pwarn));
 
-	/* set logging option for errors */
+	/* set option to increase insert performance */
 	set.boost_redirect = getboolsetting(&mysql, "boost_redirect", FALSE);
 
-	/* log the log_pwarn variable */
+	/* log the boost_redirect variable */
 	SPINE_LOG_DEBUG(("DEBUG: The boost_redirect variable is %i", set.boost_redirect));
+
+	/* set option for determining if boost is enabled */
+	set.boost_enabled = getboolsetting(&mysql, "boost_rrd_update_enable", FALSE);
+
+	/* log the boost_rrd_update_enable variable */
+	SPINE_LOG_DEBUG(("DEBUG: The boost_rrd_update_enable variable is %i", set.boost_enabled));
 
 	/* set logging option for statistics */
 	set.log_pstats = getboolsetting(&mysql, "log_pstats", FALSE);
@@ -438,14 +444,14 @@ void read_config_options() {
 	if ((res = getsetting(&mysql, "poller_interval")) != 0) {
 		set.poller_interval = atoi(res);
 		free((char *)res);
-	}else{
+	} else {
 		set.poller_interval = 0;
 	}
 
 	/* log the poller_interval variable */
 	if (set.poller_interval == 0) {
 		SPINE_LOG_DEBUG(("DEBUG: The polling interval is the system default"));
-	}else{
+	} else {
 		SPINE_LOG_DEBUG(("DEBUG: The polling interval is %i seconds", set.poller_interval));
 	}
 
@@ -453,7 +459,7 @@ void read_config_options() {
 	if ((res = getsetting(&mysql, "concurrent_processes")) != 0) {
 		set.num_parent_processes = atoi(res);
 		free((char *)res);
-	}else{
+	} else {
 		set.num_parent_processes = 1;
 	}
 
@@ -467,7 +473,7 @@ void read_config_options() {
 		if (set.script_timeout < 5) {
 			set.script_timeout = 5;
 		}
-	}else{
+	} else {
 		set.script_timeout = 25;
 	}
 
@@ -504,7 +510,7 @@ void read_config_options() {
 		if (set.php_servers <= 0) {
 			set.php_servers = 1;
 		}
-	}else{
+	} else {
 		set.php_servers = 2;
 	}
 
@@ -541,7 +547,7 @@ void read_config_options() {
 			set.start_host_id,
 			set.end_host_id,
 			num_rows));
-	}else{
+	} else {
 		sqlp = sqlbuf;
 		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
 		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
@@ -575,7 +581,7 @@ void read_config_options() {
 		if (set.snmp_max_get_size > 128) {
 			set.snmp_max_get_size = 128;
 		}
-	}else{
+	} else {
 		set.snmp_max_get_size = 25;
 	}
 
@@ -605,12 +611,12 @@ int read_spine_config(char *file) {
 			}
 		}
 		return -1;
-	}else{
+	} else {
 		if (!set.stdout_notty) {
 			fprintf(stdout, "SPINE: Using spine config file [%s]\n", file);
 		}
 
-		while(!feof(fp)) {
+		while (!feof(fp)) {
 			buffer = fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
@@ -705,10 +711,10 @@ void die(const char *format, ...) {
 	if (set.logfile_processed) {
 		if (set.parent_fork == SPINE_PARENT) {
 			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)", logmessage);
-		}else{
+		} else {
 			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)", logmessage);
 		}
-	}else{
+	} else {
 		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
@@ -723,12 +729,11 @@ void die(const char *format, ...) {
 	exit(set.exit_code);
 }
 
-char * get_date_format()
-{
+char * get_date_format() {
 	char *log_fmt;
 	if (!(log_fmt = (char *) malloc(GD_FMT_SIZE))) {
-                die("ERROR: Fatal malloc error: util.c get_date_format!");
-        }
+		die("ERROR: Fatal malloc error: util.c get_date_format!");
+	}
 
 	char log_sep = '/';
 	if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
@@ -739,8 +744,7 @@ char * get_date_format()
 		set.log_datetime_format = GD_DEFAULT;
 	}
 
-	switch (set.log_datetime_separator)
-	{
+	switch (set.log_datetime_separator) {
 		case GDC_DOT:
 			log_sep = '.';
 			break;
@@ -752,8 +756,7 @@ char * get_date_format()
 			break;
 	}
 
-	switch (set.log_datetime_format)
-	{
+	switch (set.log_datetime_format) {
 		case GD_MO_D_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%m%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
 		case GD_MN_D_Y:
@@ -827,9 +830,9 @@ int spine_log(const char *format, ...) {
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */
-		}else if ((set.stdout_notty) && (fp == stdout)) {
+		} else if ((set.stdout_notty) && (fp == stdout)) {
 			/* do nothing stdout does not exist */
-		}else{
+		} else {
 			fprintf(fp, "ERROR: Could not get format from get_date_format()\n");
 		}
 	}
@@ -843,9 +846,9 @@ int spine_log(const char *format, ...) {
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */
-		}else if ((set.stdout_notty) && (fp == stdout)) {
+		} else if ((set.stdout_notty) && (fp == stdout)) {
 			/* do nothing stdout does not exist */
-		}else{
+		} else {
 			fprintf(fp, "ERROR: Could not get string from strftime()\n");
 		}
 	}
@@ -884,14 +887,14 @@ int spine_log(const char *format, ...) {
 		if (set.logfile_processed) {
 			if (!file_exists(set.path_logfile)) {
 				log_file = fopen(set.path_logfile, "w");
-			}else {
+			} else {
 				log_file = fopen(set.path_logfile, "a");
 			}
 
 			if (log_file) {
 				fputs(flogmessage, log_file);
 				fclose(log_file);
-			}else{
+			} else {
 				if (!log_error) {
 					printf("ERROR: Spine Log File Could Not Be Opened/Created\n");
 					log_error = TRUE;
@@ -913,14 +916,14 @@ int spine_log(const char *format, ...) {
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */
-		}else if ((set.stdout_notty) && (fp == stdout)) {
+		} else if ((set.stdout_notty) && (fp == stdout)) {
 			/* do nothing stdout does not exist */
-		}else{
+		} else {
 			fprintf(fp, "%s", flogmessage);
 		}
 	}
 
-	free(log_fmt);	
+	free(log_fmt);
 
 	return TRUE;
 }
@@ -937,7 +940,7 @@ int file_exists(const char *filename) {
 
 	if (stat(filename, &file_stat)) {
 		return FALSE;
-	}else{
+	} else {
 		return TRUE;
 	}
 }
@@ -1016,7 +1019,7 @@ int is_numeric(char *string) {
 	if (errno != ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
 			return TRUE;
-		}else if (end_ptr_long == string) {
+		} else if (end_ptr_long == string) {
 			if (*end_ptr_long != '\0' &&
 				*end_ptr_long != '.' &&
 				*end_ptr_long != '-' &&
@@ -1024,7 +1027,7 @@ int is_numeric(char *string) {
 				return FALSE;
 			}
 		}
-	}else{
+	} else {
 		end_ptr_long = NULL;
 	}
 
@@ -1035,7 +1038,7 @@ int is_numeric(char *string) {
 		if (end_ptr_double == string + length) { /* floating point string */
 			return TRUE;
 		}
-	}else{
+	} else {
 		end_ptr_double = NULL;
 	}
 
@@ -1094,7 +1097,7 @@ char *strip_alpha(char *string) {
 	while (i >= 0) {
 		if (isdigit((int)string[i])) {
 			break;
-		}else{
+		} else {
 			string[i] = '\0';
 		}
 		i--;
@@ -1136,7 +1139,7 @@ char *add_slashes(char *string) {
 			return_str[new_position] = '\\';
 			new_position++;
 			return_str[new_position] = '\\';
-		}else{
+		} else {
 			return_str[new_position] = string[position];
 		}
 		new_position++;
@@ -1174,10 +1177,10 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 
 	if (!len) {
 		dst[0] = '\0';
-	}else if (len < obuf) {
+	} else if (len < obuf) {
 		strncpy(dst, src, len);
 		dst[len] = '\0';
-	}else{
+	} else {
 		strncpy(dst, src, --obuf);
 		dst[obuf] = '\0';
 	}
@@ -1492,7 +1495,7 @@ void checkAsRoot() {
 		if (geteuid() != 0) {
 			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
 			set.icmp_avail = FALSE;
-		}else{
+		} else {
 			SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
 			set.icmp_avail = TRUE;
 			seteuid(getuid());

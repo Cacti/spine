@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.31
+-issue#42: Boost table keeps populating with boost disabled
+
 1.1.30
 -feature: release to match Cacti release
 
