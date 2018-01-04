@@ -124,14 +124,13 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
 		exit(1);
 	}
 
-	if ( setgroups(0, NULL) == -1 ) {
+	if (setgroups(0, NULL) == -1) {
 		SPINE_LOG_HIGH(("setgroups failed."));
 		exit(1);
 	}
 
-	if ( setegid(server_gid) == -1 || seteuid(server_uid) == -1 ) {
-		SPINE_LOG_HIGH(("setegid/seteuid to uid=%d/gid=%d failed.", server_uid,
-			server_gid));
+	if (setegid(server_gid) == -1 || seteuid(server_uid) == -1) {
+		SPINE_LOG_HIGH(("setegid/seteuid to uid=%d/gid=%d failed.", server_uid, server_gid));
 		exit(1);
 	}
 
@@ -201,8 +200,9 @@ int main(int argc, char *argv[]) {
 	struct timespec until;
 
 	#ifdef HAVE_LCAP
-	if (geteuid() == 0)
+	if (geteuid() == 0) {
 		drop_root(getuid(), getgid());
+	}
 	#endif /* HAVE_LCAP */
 
 	pthread_t* threads = NULL;
