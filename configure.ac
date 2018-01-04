@@ -265,6 +265,54 @@ else
   LIBS="-lmysqlclient_r $LIBS"
 fi
 
+# ****************** Net-SNMP Checks ***********************
+if test "x$SNMP_DIR" != "x"; then
+  for i in / /net-snmp /include/net-snmp; do
+    test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i && break
+  done
+
+  # Accomodate 64-Bit Libraries
+  test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib64
+
+  if test -z "$SNMP_LIBDIR"; then
+    # Accomodate 32-Bit Libraries
+    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib
+  fi
+else
+  for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/net-snmp /opt/snmp; do
+    test -f $i/snmp.h                                  && SNMP_INCDIR=$i                       && break
+    test -f $i/include/net-snmp/net-snmp-config.h      && SNMP_INCDIR=$i/include/net-snmp      && break
+    test -f $i/net-snmp/net-snmp-config.h              && SNMP_INCDIR=$i/net-snmp              && break
+    test -f $i/net-snmp/include/net-snmp-config.h      && SNMP_INCDIR=$i/net-snmp/include      && break
+    test -f $i/snmp/snmp.h                             && SNMP_INCDIR=$i/snmp                  && break
+    test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp && break
+  done
+
+  # Accomodate 64-Bit Libraries
+  for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/snmp /usr/local/snmp; do
+    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib64 && break
+  done
+
+  # Only check for 32 Bit libraries if the 64 bit are not found
+  if test -z "$SNMP_LIBDIR"; then
+    # Accomodate 32-Bit Libraries
+    for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/snmp /usr/local/snmp; do
+      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib && break
+    done
+  fi
+fi
+
+if test -z "$SNMP_INCDIR"; then
+  if test "x$SNMP_DIR" != "x";then
+    AC_MSG_ERROR(Cannot find SNMP header files under $SNMP_DIR)
+  else
+    AC_MSG_ERROR(Cannot find SNMP headers.  Use --with-snmp= to specify non-default path.)
+  fi
+fi
+
+LDFLAGS="-L$SNMP_LIBDIR $LDFLAGS"
+CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR/.. $CFLAGS"
+
 # Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
 AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(NETSNMP_USE_OPENSSL != 1);],
