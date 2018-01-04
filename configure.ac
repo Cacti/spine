@@ -259,10 +259,18 @@ if test -n "$MYSQL_LIB_DIR" ; then
 fi
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-if test $MYSQL_REENTRANT = 0 ; then
-  LIBS="-lmysqlclient $LIBS"
-else
+if test $MYSQL_REENTRANT = 1 ; then
   LIBS="-lmysqlclient_r $LIBS"
+else 
+  if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
+    LIBS="-lmysqlclient_r $LIBS"
+  else 
+    if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
+      LIBS="-lmysqlclient_r $LIBS"
+    else
+      LIBS="-lmysqlclient $LIBS"
+    fi
+  fi
 fi
 
 # ****************** Net-SNMP Checks ***********************
