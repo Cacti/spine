@@ -82,10 +82,6 @@ void *child(void *arg) {
 
 	sem_getvalue(&active_threads, &a_threads_value);
 
-	if (set.spine_log_level == 1 && host_errors > 0) {
-		//SPINE_LOG(("WARNING: Invalid Responses, Device[%i] Thread[%i], Errors:%i", host_id, host_thread, host_errors));
-	}
-
 	if (is_debug_device(host_id)) {
 		SPINE_LOG(("DEBUG: The Value of Active Threads is %i for Device ID %i", set.threads - a_threads_value, host_id));
 	} else {
