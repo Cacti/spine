@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 1.1.28, http://www.cacti.net/issues.php)
+AC_INIT(Spine Poller, 1.1.30, http://www.cacti.net/issues.php)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -259,10 +259,71 @@ if test -n "$MYSQL_LIB_DIR" ; then
 fi
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-if test $MYSQL_REENTRANT = 0 ; then
-  LIBS="-lmysqlclient $LIBS"
-else
+if test $MYSQL_REENTRANT = 1 ; then
   LIBS="-lmysqlclient_r $LIBS"
+else 
+  if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
+    LIBS="-lmysqlclient_r $LIBS"
+  else 
+    if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
+      LIBS="-lmysqlclient_r $LIBS"
+    else
+      LIBS="-lmysqlclient $LIBS"
+    fi
+  fi
+fi
+
+# ****************** Net-SNMP Checks ***********************
+if test "x$SNMP_DIR" != "x"; then
+  for i in / /net-snmp /include/net-snmp; do
+    test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i && break
+  done
+
+  # Accomodate 64-Bit Libraries
+  test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib64
+
+  if test -z "$SNMP_LIBDIR"; then
+    # Accomodate 32-Bit Libraries
+    test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib
+  fi
+else
+  for i in /usr /usr/local /usr/include /usr/pkg/include /usr/local/include /opt /opt/net-snmp /opt/snmp; do
+    test -f $i/snmp.h                                  && SNMP_INCDIR=$i                       && break
+    test -f $i/include/net-snmp/net-snmp-config.h      && SNMP_INCDIR=$i/include/net-snmp      && break
+    test -f $i/net-snmp/net-snmp-config.h              && SNMP_INCDIR=$i/net-snmp              && break
+    test -f $i/net-snmp/include/net-snmp-config.h      && SNMP_INCDIR=$i/net-snmp/include      && break
+    test -f $i/snmp/snmp.h                             && SNMP_INCDIR=$i/snmp                  && break
+    test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp && break
+  done
+
+  # Accomodate 64-Bit Libraries
+  for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/snmp /usr/local/snmp; do
+    test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib64 && break
+  done
+
+  # Only check for 32 Bit libraries if the 64 bit are not found
+  if test -z "$SNMP_LIBDIR"; then
+    # Accomodate 32-Bit Libraries
+    for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/snmp /usr/local/snmp; do
+      test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib && break
+    done
+  fi
+fi
+
+if test -z "$SNMP_INCDIR"; then
+  if test "x$SNMP_DIR" != "x";then
+    AC_MSG_ERROR(Cannot find SNMP header files under $SNMP_DIR)
+  else
+    AC_MSG_ERROR(Cannot find SNMP headers.  Use --with-snmp= to specify non-default path.)
+  fi
+fi
+
+if test -n "$SNMP_LIBDIR" ; then
+  LDFLAGS="-L$SNMP_LIBDIR $LDFLAGS"
+fi
+
+if test -n "$SNMP_INCDIR" ; then
+  CFLAGS="-I$SNMP_INCDIR -I$SNMP_INCDIR/.. $CFLAGS"
 fi
 
 # Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl

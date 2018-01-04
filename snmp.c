@@ -73,6 +73,9 @@ netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
 netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
+/* don't check the range of the OID */
+netsnmp_ds_toggle_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_CHECK_RANGE);
+
 #if defined(VERIFY_PACKAGE_VERSION) && defined(PACKAGE_VERSION)
 	/* check that the headers we compiled with match the library we linked with */
 	SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION));
@@ -364,8 +367,6 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 			snmp_free_pdu(response);
 			response = NULL;
 		}
-	}else{
-		status = STAT_DESCRIP_ERROR;
 	}
 
 	if (status != STAT_SUCCESS) {
@@ -663,7 +664,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
-						
+
 						vars = vars->next_variable;
 					}
 				}

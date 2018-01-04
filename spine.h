@@ -217,6 +217,26 @@
 #define POLLER_VERBOSITY_DEBUG 5
 #define POLLER_VERBOSITY_DEVDBG 6
 
+/* logging separator constants */
+#define GDC_MIN 0
+#define GDC_HYPHEN 0
+#define GDC_SLASH 1
+#define GDC_DOT 2
+#define GDC_MAX 2
+#define GDC_DEFAULT 1
+
+/* logging format constants */
+#define GD_FMT_SIZE 21
+#define GD_MIN 0
+#define GD_MO_D_Y 0
+#define GD_MN_D_Y 1
+#define GD_D_MO_Y 2
+#define GD_D_MN_Y 3
+#define GD_Y_MO_D 4
+#define GD_Y_MN_D 5
+#define GD_MAX 5
+#define GD_DEFAULT 5
+
 /* host availability statics */
 #define AVAIL_NONE 0
 #define AVAIL_SNMP_AND_PING 1
@@ -305,6 +325,7 @@ typedef struct config_struct {
 	int    script_timeout;
 	int    threads;
 	int    logfile_processed;
+	int    boost_enabled;
 	int    boost_redirect;
 	int    cygwinshloc;
 	/* debugging options */
@@ -333,6 +354,8 @@ typedef struct config_struct {
 	int    log_pstats;
 	char   selective_device_debug[SMALL_BUFSIZE];
 	int    spine_log_level;
+	int    log_datetime_separator;
+	int    log_datetime_format;
 	/* ping settings */
 	int    icmp_avail;
 	int    availability_method;
