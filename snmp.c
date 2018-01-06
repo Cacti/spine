@@ -83,7 +83,7 @@ netsnmp_ds_toggle_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_CHECK_RANGE
 
 	if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
 		init_snmp("spine");
-	}else{
+	} else {
 		/* report the error and quit spine */
 		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
 	}
@@ -170,13 +170,13 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	if (snmp_version == 2) {
 		session.version       = SNMP_VERSION_2c;
 		session.securityModel = SNMP_SEC_MODEL_SNMPv2c;
-	}else if (snmp_version == 1) {
+	} else if (snmp_version == 1) {
 		session.version       = SNMP_VERSION_1;
 		session.securityModel = SNMP_SEC_MODEL_SNMPv1;
-	}else if (snmp_version == 3) {
+	} else if (snmp_version == 3) {
 		session.version       = SNMP_VERSION_3;
 		session.securityModel = USM_SEC_MODEL_NUMBER;
-	}else {
+	} else {
 		SPINE_LOG(("Device[%i] ERROR: SNMP Version Error for Device '%s'", host_id, hostname));
 		return 0;
 	}
@@ -190,7 +190,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	if ((snmp_version == 2) || (snmp_version == 1)) {
 		session.community     = (unsigned char*) snmp_community;
 		session.community_len = strlen(snmp_community);
-	}else {
+	} else {
 		/* set the SNMPv3 user name */
 		session.securityName         = snmp_username;
 		session.securityNameLen      = strlen(session.securityName);
@@ -212,20 +212,22 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			/* set the authentication method to MD5 */
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, USM_AUTH_PROTO_MD5_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_MD5_LEN;
-		}else{
+		} else if (strcmp(snmp_auth_protocol, "SHA") == 0) {
 			/* set the authentication method to SHA1 */
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
 		}
 
-		/* set the authentication key to the hashed version. The password must me at least 8 char */
-		if (generate_Ku(session.securityAuthProto,
-			session.securityAuthProtoLen,
-			(u_char *) snmp_password,
-			strlen(snmp_password),
-			session.securityAuthKey,
-			&(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
-			SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+		if (strlen(snmp_password)) {
+			/* set the authentication key to the hashed version. The password must me at least 8 char */
+			if (generate_Ku(session.securityAuthProto,
+				session.securityAuthProtoLen,
+				(u_char *) snmp_password,
+				strlen(snmp_password),
+				session.securityAuthKey,
+				&(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
+				SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+			}
 		}
 
 		/* set the privacy protocol to none */
@@ -235,8 +237,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
 			/* set the security level to authenticate, but not encrypted */
-			session.securityLevel        = SNMP_SEC_LEVEL_AUTHNOPRIV;
-		}else{
+			if (strlen(snmp_password)) {
+				session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
+			} else {
+				session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
+			}
+		} else {
 			if (strcmp(snmp_priv_protocol, "DES") == 0) {
 				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, USM_PRIV_PROTO_DES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_DES_LEN;
@@ -244,7 +250,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-			}else{
+			} else {
 				#if defined(USM_PRIV_PROTO_AES_LEN)
 				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
@@ -279,7 +285,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	if (!sessp) {
 		if (is_debug_device(host_id)) {
 			SPINE_LOG(("ERROR: Problem initializing SNMP session '%s'", hostname));
-		}else{
+		} else {
 			SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'", hostname));
 		}
 	}
@@ -335,7 +341,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
-		}else{
+		} else {
 			snmp_add_null_var(pdu, anOID, anOID_len);
 		}
 
@@ -352,7 +358,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-			}else{
+			} else {
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
 
@@ -413,7 +419,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
-		}else{
+		} else {
 			snmp_add_null_var(pdu, anOID, anOID_len);
 		}
 
@@ -430,7 +436,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-			}else{
+			} else {
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
 
@@ -438,7 +444,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 						snprintf(result_string, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
-					}else{
+					} else {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
 					}
@@ -450,7 +456,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 			snmp_free_pdu(response);
 			response = NULL;
 		}
-	}else{
+	} else {
 		status = STAT_DESCRIP_ERROR;
 	}
 
@@ -489,7 +495,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 
 	if (is_debug_device(current_host->id)) {
 		SPINE_LOG(("NOTE: walk starts at OID %s", snmp_oid));
-	}else{
+	} else {
 		SPINE_LOG_DEBUG(("NOTE: walk starts at OID %s", snmp_oid));
 	}
 
@@ -562,7 +568,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 				snmp_free_pdu(response);
 			}
 		}
-	}else{
+	} else {
 		status = STAT_DESCRIP_ERROR;
 	}
 
@@ -590,12 +596,12 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 		if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
 			sprint_realloc_by_type(&buf, &buf_len, &out_len, 0, variable, NULL, NULL, NULL);
 			snprintf(obuf, buf_len, "%s", buf);
-		}else{
+		} else {
 			SET_UNDEFINED(obuf);
 		}
 
 		free(buf);
-	}else{
+	} else {
 		SET_UNDEFINED(obuf);
 	}
 }
@@ -634,7 +640,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 
 			/* Mark this OID as "bad" */
 			SET_UNDEFINED(snmp_oids[i].result);
-		}else{
+		} else {
 			snmp_add_null_var(pdu, namep->name, namep->name_len);
 		}
 
@@ -655,7 +661,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 		if (response == NULL) {
 			SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi"));
 			status = STAT_ERROR;
-		}else{
+		} else {
 			if (response->errstat == SNMP_ERR_NOERROR) {
 				vars = response->variables;
 
@@ -668,7 +674,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 						vars = vars->next_variable;
 					}
 				}
-			}else{
+			} else {
 				if (response->errindex != 0) {
 					index_count = 1;
 					array_count = 0;
@@ -677,7 +683,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 					while (array_count < num_oids) {
 						if (IS_UNDEFINED(snmp_oids[array_count].result) ) {
 							array_count++;
-						}else{
+						} else {
 							/* if we have found our error, exit */
 							if (index_count == response->errindex) {
 								SET_UNDEFINED(snmp_oids[array_count].result);
@@ -700,7 +706,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 					if (pdu != NULL) {
 						/* retry the request */
 						goto retry;
-					}else{
+					} else {
 						/* all OID's errored out so exit cleanly */
 						status = STAT_SUCCESS;
 					}
