@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.32
+-feature: release to match Cacti release
+
 1.1.31
 -issue#15: Spine cause CPU usage up to 100%
 -issue#32: Support noAuthNoPriv in Spine
