@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2018 The Cacti Group                                 |
+ | Copyright (C) 2004-2017 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -541,7 +541,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						if (host_thread == 1) {
 							update_host_status(HOST_UP, host, ping, host->availability_method);
 
-							if (host->availability_method != AVAIL_PING) {
+							if ((host->availability_method != AVAIL_PING) && (host->availability_method != AVAIL_NONE)) {
 								if (host->snmp_session != NULL) {
 									get_system_information(host, &mysql, 1);
 								}
