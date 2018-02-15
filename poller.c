@@ -158,6 +158,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	char *poll_result = NULL;
 	char update_sql[BUFSIZE];
+	char temp_poll_result[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
 	int  num_snmp_agents   = 0;
@@ -830,7 +831,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							 *     the assert to fail */
 							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
-									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", poll_result, host_id, reindex->data_query_id, reindex->arg1);
+									db_escape(&mysql, temp_poll_result, poll_result);
+									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, reindex->arg1);
 									db_insert(&mysql, query3);
 								}
 

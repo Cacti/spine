@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.36
+-issue#49: Re-Index update query failed due to lack of escaping
+
 1.1.35
 -issue#48: Availability check none triggers snmp system check that causes device to be ignored
 
