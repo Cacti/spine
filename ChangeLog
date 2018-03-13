@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.37
+-feature: release to match Cacti release
+
 1.1.36
 -issue#49: Re-Index update query failed due to lack of escaping
 
