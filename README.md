@@ -1,5 +1,4 @@
 # Spine: a poller for Cacti
----------------------------
 
 Spine is a high speed poller replacement for `cmd.php`. It is almost 100%
 compatible with the legacy cmd.php processor and provides much more
