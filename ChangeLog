@@ -3,6 +3,9 @@ The Cacti Group | spine
 1.2.0
 -feature: Allow threads to be set a Data Collector level
 
+1.1.37
+-issue: Extra long snmp_sysObjectID's generate SQL errors
+
 1.1.36
 -issue#49: Re-Index update query failed due to lack of escaping
 

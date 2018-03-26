@@ -485,7 +485,7 @@ typedef struct host_struct {
 	int    snmp_timeout;
 	int    snmp_retries;
 	char   snmp_sysDescr[300];
-	char   snmp_sysObjectID[64];
+	char   snmp_sysObjectID[160];
 	u_int  snmp_sysUpTimeInstance;
 	char   snmp_sysContact[300];
 	char   snmp_sysName[300];
