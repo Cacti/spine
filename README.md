@@ -1,13 +1,3 @@
-# 1.2.0 Development
----------------------------
-==PLEASE READ==
-
-Feature branch for `1.2.x` has been merged into the `develop` branch. This means
-things may and will break, but they will eventually be fixed.
-
-==UNSTABLE DEVELOPMENT BRANCH==
----------------------------
-
 # Spine: a poller for Cacti
 ---------------------------
 Spine is a high speed poller replacement for `cmd.php`. It is almost 100%
@@ -17,6 +7,13 @@ flexibility, speed and concurrency than `cmd.php`.
 Make sure that you have the proper development environment to compile Spine.
 This includes compilers, header files and things such as libtool. If you
 have questions please consult the forums and/or online documentation.
+
+## 1.2.0 Development
+---------------------------
+**PLEASE READ**
+
+Feature branch for `1.2.x` has been merged into the `develop` branch. This means
+things may and will break, but they will eventually be fixed.
 
 ## Unix Installation
 
