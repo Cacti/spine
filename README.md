@@ -9,7 +9,7 @@ This includes compilers, header files and things such as libtool. If you
 have questions please consult the forums and/or online documentation.
 
 ## 1.2.0 Development
----------------------------
+
 **PLEASE READ**
 
 Feature branch for `1.2.x` has been merged into the `develop` branch. This means
