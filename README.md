@@ -15,7 +15,9 @@ have questions please consult the forums and/or online documentation.
 **PLEASE READ**
 
 Feature branch for `1.2.x` has been merged into the `develop` branch. This means
-things may and will break, but they will eventually be fixed
+things may and will break, but they will eventually be fixed.
+
+> DEVELOP branch is currently considered UNSTABLE, use with caution!
 
 -----------------------------------------------------------------------------
 
