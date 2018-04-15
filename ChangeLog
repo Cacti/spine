@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.1.38
+-feature: release to match Cacti release
+
 1.1.37
 -issue: Extra long snmp_sysObjectID's generate SQL errors
 
