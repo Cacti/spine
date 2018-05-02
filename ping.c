@@ -59,11 +59,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 		if (host->ping_method == PING_ICMP) {
 			if (set.icmp_avail == FALSE) {
-				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
-				} else {
-					SPINE_LOG_DEBUG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
-				}
+				SPINE_LOG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
 				host->ping_method = PING_UDP;
 			}
 		}
