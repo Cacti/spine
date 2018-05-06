@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.2.0
 -feature: Allow threads to be set a Data Collector level
+-issue#53: Variables are not being escaped properly when updating database
 -issue#54: Spine should always report if ICMP fails
 
 1.1.38
