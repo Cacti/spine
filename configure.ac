@@ -127,6 +127,9 @@ AC_CHECK_LIB(z, deflate)
 AC_CHECK_LIB(kstat, kstat_close)
 AC_CHECK_LIB(crypto, CRYPTO_realloc)
 
+# minor adjustments for debian
+AC_SEARCH_LIBS([clock_gettime], [rt pthread])
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
