@@ -561,33 +561,55 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				/* update host table */
 				if (host_thread == 1) {
 					if (!ignore_sysinfo) {
-						snprintf(update_sql, BUFSIZE, "UPDATE host "
-							"SET status='%i', status_event_count='%i', status_fail_date='%s',"
-								" status_rec_date='%s', status_last_error='%s', min_time='%f',"
-								" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-								" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
-								" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%u', "
-								" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
-							"WHERE id='%i'",
-							host->status,
-							host->status_event_count,
-							host->status_fail_date,
-							host->status_rec_date,
-							host->status_last_error,
-							host->min_time,
-							host->max_time,
-							host->cur_time,
-							host->avg_time,
-							host->total_polls,
-							host->failed_polls,
-							host->availability,
-							host->snmp_sysDescr,
-							host->snmp_sysObjectID,
-							host->snmp_sysUpTimeInstance,
-							host->snmp_sysContact,
-							host->snmp_sysName,
-							host->snmp_sysLocation,
-							host->id);
+						if (host->ignore_host != TRUE) {
+							snprintf(update_sql, BUFSIZE, "UPDATE host "
+								"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+									" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+									" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
+									" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%u', "
+									" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
+								"WHERE id='%i'",
+								host->status,
+								host->status_event_count,
+								host->status_fail_date,
+								host->status_rec_date,
+								host->status_last_error,
+								host->min_time,
+								host->max_time,
+								host->cur_time,
+								host->avg_time,
+								host->total_polls,
+								host->failed_polls,
+								host->availability,
+								host->snmp_sysDescr,
+								host->snmp_sysObjectID,
+								host->snmp_sysUpTimeInstance,
+								host->snmp_sysContact,
+								host->snmp_sysName,
+								host->snmp_sysLocation,
+								host->id);
+						} else {
+							snprintf(update_sql, BUFSIZE, "UPDATE host "
+								"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+									" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+									" failed_polls='%i', availability='%.4f' "
+								"WHERE id='%i'",
+								host->status,
+								host->status_event_count,
+								host->status_fail_date,
+								host->status_rec_date,
+								host->status_last_error,
+								host->min_time,
+								host->max_time,
+								host->cur_time,
+								host->avg_time,
+								host->total_polls,
+								host->failed_polls,
+								host->availability,
+								host->id);
+						}
 					} else {
 						snprintf(update_sql, BUFSIZE, "UPDATE host "
 							"SET status='%i', status_event_count='%i', status_fail_date='%s',"

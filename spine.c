@@ -218,6 +218,7 @@ int main(int argc, char *argv[]) {
 	int host_id = 0;
 	int i;
 	int thread_status = 0;
+	int total_items   = 0;
 	int change_host   = TRUE;
 	int current_thread;
 
@@ -674,6 +675,18 @@ int main(int argc, char *argv[]) {
 			current_thread  = 1;
 		}else{
 			current_thread++;
+		}
+
+		/* adjust device threads in cases where the host does not have sufficient data sources */
+		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(*) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		tresult   = db_query(&mysql, querybuf);
+		mysql_row = mysql_fetch_row(tresult);
+
+		total_items = atoi(mysql_row[0]);
+		db_free_result(tresult);
+
+		if (total_items < device_threads) {
+			device_threads = total_items;
 		}
 
 		change_host = (current_thread >= device_threads) ? TRUE : FALSE;
