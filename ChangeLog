@@ -7,6 +7,7 @@ The Cacti Group | spine
 -issue#54: Spine should always report if ICMP fails
 -issue#58: Error on poller.c: escaping string from snmp_sysLocation
 -issue#63: Adjust Device Threads if a Device has fewer Data Sources
+-issue: Align SQL_MODE's in spine with Cacti's database api
 
 1.1.38
 -feature: release to match Cacti release
