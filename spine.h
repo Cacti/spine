@@ -336,11 +336,16 @@ typedef struct config_struct {
 	int    end_host_id;
 	char   host_id_list[BIG_BUFSIZE];
 	/* database connection information */
-	char   dbhost[SMALL_BUFSIZE];
-	char   dbdb[SMALL_BUFSIZE];
-	char   dbuser[SMALL_BUFSIZE];
-	char   dbpass[SMALL_BUFSIZE];
-	unsigned int dbport;
+	char   db_host[SMALL_BUFSIZE];
+	char   db_db[SMALL_BUFSIZE];
+	char   db_user[SMALL_BUFSIZE];
+	char   db_pass[SMALL_BUFSIZE];
+	int    db_ssl;
+	char   db_ssl_key[BIG_BUFSIZE];
+	char   db_ssl_cert[BIG_BUFSIZE];
+	char   db_ssl_ca[BIG_BUFSIZE];
+	int    d_b;
+	unsigned int db_port;
 	int    dbversion;
 	/* path information */
 	char   path_logfile[SMALL_BUFSIZE];
@@ -379,11 +384,15 @@ typedef struct config_struct {
 	/* Remote polling mode */
 	int    mode;
 	/* remote database connection information */
-	char   rdbhost[SMALL_BUFSIZE];
-	char   rdbdb[SMALL_BUFSIZE];
-	char   rdbuser[SMALL_BUFSIZE];
-	char   rdbpass[SMALL_BUFSIZE];
-	unsigned int rdbport;
+	char   rdb_host[SMALL_BUFSIZE];
+	char   rdb_db[SMALL_BUFSIZE];
+	char   rdb_user[SMALL_BUFSIZE];
+	char   rdb_pass[SMALL_BUFSIZE];
+	int    rdb_ssl;
+	char   rdb_ssl_key[BIG_BUFSIZE];
+	char   rdb_ssl_cert[BIG_BUFSIZE];
+	char   rdb_ssl_ca[BIG_BUFSIZE];
+	unsigned int rdb_port;
 	int    rdbversion;
 } config_t;
 
