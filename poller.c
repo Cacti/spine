@@ -193,7 +193,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	db_connect(set.dbdb, &mysql);
+	db_connect(set.db_db, &mysql);
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
 	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");

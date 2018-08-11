@@ -79,7 +79,7 @@ int db_insert(MYSQL *mysql, const char *query) {
 				}else if (error == 2006 && errno == EINTR) {
 					db_disconnect(mysql);
 					usleep(50000);
-					db_connect(set.dbdb, mysql);
+					db_connect(set.db_db, mysql);
 					error_count++;
 
 					if (error_count > 30) {
@@ -147,7 +147,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 			}else if (error == 2006 && errno == EINTR) {
 				db_disconnect(mysql);
 				usleep(50000);
-				db_connect(set.dbdb, mysql);
+				db_connect(set.db_db, mysql);
 				error_count++;
 
 				if (error_count > 30) {
@@ -196,31 +196,25 @@ void db_connect(const char *database, MYSQL *mysql) {
 	 */
 	if (set.poller_id > 1) {
 		if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
-			if ((hostname = strdup(set.dbhost)) == NULL) {
-				die("FATAL: malloc(): strdup() failed");
-			}
+			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 			if (stat(hostname, &socket_stat) == 0) {
 				if (socket_stat.st_mode & S_IFSOCK) {
-					socket = strdup (set.dbhost);
+					socket = strdup (set.db_host);
 					hostname = NULL;
 				}
 			}else if ((socket = strstr(hostname,":"))) {
 				*socket++ = 0x0;
 			}
 		}else{
-			if ((hostname = strdup(set.rdbhost)) == NULL) {
-				die("FATAL: malloc(): strdup() failed");
-			}
+			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 		}
 	}else{
-		if ((hostname = strdup(set.dbhost)) == NULL) {
-			die("FATAL: malloc(): strdup() failed");
-		}
+		STRDUP_OR_DIE(hostname,strdup(set.db_host),"db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
-				socket = strdup (set.dbhost);
+				socket = strdup (set.db_host);
 				hostname = NULL;
 			}
 		}else if ((socket = strstr(hostname,":"))) {
@@ -234,40 +228,45 @@ void db_connect(const char *database, MYSQL *mysql) {
 	timeout = 5;
 	rtimeout = 10;
 	wtimeout = 20;
+	my_bool reconnect = 1;
 
 	mysql_init(mysql);
 	if (mysql == NULL) {
 		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
 	}
 
-	options_error = mysql_options(mysql, MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set read timeout value");
-	}
-
-	options_error = mysql_options(mysql, MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set read timeout value");
-	}
-
-	options_error = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set timeout value");
-	}
+	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout, "read timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout, "write timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout, "general timeout");
 
 	#ifdef MYSQL_OPT_RECONNECT
-	my_bool reconnect = 1;
-	options_error = mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set reconnect option\n");
-	}
+	MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
 	#endif
 
 	#ifdef MYSQL_OPT_RETRY_COUNT
-	options_error = mysql_options(mysql, MYSQL_OPT_RETRY_COUNT, &tries);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set retry count option\n");
+	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
+	#endif
+
+	/* set SSL options if available */
+	#ifdef MYSQL_OPT_SSL_KEY
+	char *ssl_key;
+	char *ssl_ca;
+	char *ssl_cert;
+
+	if (set.poller_id > 1 && (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY)) {
+		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
+		STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
+		STRDUP_OR_DIE(ssl_cert, set.rdb_ssl_cert, "rdb_ssl_cert");
+	} else {
+		STRDUP_OR_DIE(ssl_key, set.db_ssl_key, "rdb_ssl_key");
+		STRDUP_OR_DIE(ssl_ca, set.db_ssl_ca, "db_ssl_ca");
+		STRDUP_OR_DIE(ssl_cert, set.db_ssl_cert, "db_ssl_cert");
 	}
+
+	if (strlen(ssl_key)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY, ssl_key,  "ssl key");
+	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
+	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
+
 	#endif
 
 	while (tries > 0) {
@@ -275,12 +274,12 @@ void db_connect(const char *database, MYSQL *mysql) {
 
 		if (set.poller_id > 1) {
 			if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
-				connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
+				connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, database, set.db_port, socket, 0);
 			}else{
-				connect_error = mysql_real_connect(mysql, hostname, set.rdbuser, set.rdbpass, set.rdbdb, set.rdbport, socket, 0);
+				connect_error = mysql_real_connect(mysql, hostname, set.rdb_user, set.rdb_pass, set.rdb_db, set.rdb_port, socket, 0);
 			}
 		}else{
-			connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
+			connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, database, set.db_port, socket, 0);
 		}
 
 		if (!connect_error) {

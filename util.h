@@ -73,6 +73,13 @@ unsigned long long hex2dec(char *str);
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))
 
+/* macro to duplicate string and die if fails */
+#define STRDUP_OR_DIE(dst, src, reason)	\
+	if ((dst = strdup(src)) == NULL) {\
+		die("FATAL: malloc() failed during strdup() for %s", reason);\
+	}\
+
+
 /* get highres time as double */
 extern double get_time_as_double(void);
 

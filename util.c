@@ -303,7 +303,7 @@ void read_config_options() {
 	char       sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
 	const char *res;
 
-	db_connect(set.dbdb, &mysql);
+	db_connect(set.db_db, &mysql);
 
 	/* get the mysql server version */
 	set.dbversion = 0;
@@ -677,16 +677,24 @@ int read_spine_config(char *file) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdbhost, p2);
-				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdbdb, p2);
-				else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdbuser, p2);
-				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdbpass, p2);
-				else if (STRIMATCH(p1, "RDB_Port"))         set.rdbport    = atoi(p2);
-				else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.dbhost, p2);
-				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.dbdb, p2);
-				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.dbuser, p2);
-				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.dbpass, p2);
-				else if (STRIMATCH(p1, "DB_Port"))          set.dbport    = atoi(p2);
+				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
+				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
+				else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdb_user, p2);
+				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
+				else if (STRIMATCH(p1, "RDB_Port"))         set.rdb_port    = atoi(p2);
+				else if (STRIMATCH(p1, "RDB_UseSSL"))       set.rdb_ssl     = atoi(p2);
+				else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
+				else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
+				else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
+				else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.db_host, p2);
+				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.db_db, p2);
+				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.db_user, p2);
+				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
+				else if (STRIMATCH(p1, "DB_Port"))          set.db_port    = atoi(p2);
+				else if (STRIMATCH(p1, "DB_UseSSL"))        set.db_ssl     = atoi(p2);
+				else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
+				else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
+				else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
 				else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
 				else if (STRIMATCH(p1, "DB_PreG")) {
 					if (!set.stderr_notty) {
@@ -703,7 +711,7 @@ int read_spine_config(char *file) {
 			}
 		}
 
-		if (strlen(set.dbpass) == 0) *set.dbpass = '\0';
+		if (strlen(set.db_pass) == 0) *set.db_pass = '\0';
 
 		return 0;
 	}
@@ -718,20 +726,20 @@ void config_defaults() {
 	set.threads = DEFAULT_THREADS;
 
 	/* default server */
-	set.dbport  = DEFAULT_DB_PORT;
+	set.db_port  = DEFAULT_DB_PORT;
 
-	STRNCOPY(set.dbhost, DEFAULT_DB_HOST);
-	STRNCOPY(set.dbdb,   DEFAULT_DB_DB  );
-	STRNCOPY(set.dbuser, DEFAULT_DB_USER);
-	STRNCOPY(set.dbpass, DEFAULT_DB_PASS);
+	STRNCOPY(set.db_host, DEFAULT_DB_HOST);
+	STRNCOPY(set.db_db,   DEFAULT_DB_DB  );
+	STRNCOPY(set.db_user, DEFAULT_DB_USER);
+	STRNCOPY(set.db_pass, DEFAULT_DB_PASS);
 
 	/* remote default server */
-	set.rdbport  = DEFAULT_DB_PORT;
+	set.rdb_port  = DEFAULT_DB_PORT;
 
-	STRNCOPY(set.rdbhost, DEFAULT_DB_HOST);
-	STRNCOPY(set.rdbdb,   DEFAULT_DB_DB  );
-	STRNCOPY(set.rdbuser, DEFAULT_DB_USER);
-	STRNCOPY(set.rdbpass, DEFAULT_DB_PASS);
+	STRNCOPY(set.rdb_host, DEFAULT_DB_HOST);
+	STRNCOPY(set.rdb_db,   DEFAULT_DB_DB  );
+	STRNCOPY(set.rdb_user, DEFAULT_DB_USER);
+	STRNCOPY(set.rdb_pass, DEFAULT_DB_PASS);
 
 	STRNCOPY(config_paths[0], CONFIG_PATH_1);
 	STRNCOPY(config_paths[1], CONFIG_PATH_2);
