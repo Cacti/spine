@@ -435,9 +435,10 @@ int php_init(int php_process) {
 				php_processes[php_process].php_state = PHP_BUSY;
 			}
 		}
+
+		free(result_string);
 	}
 
-	free(result_string);
 
 	return TRUE;
 }

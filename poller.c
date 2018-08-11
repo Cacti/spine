@@ -732,6 +732,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										} else {
 											SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 										}
+										free(poll_result);
 									}
 								} else {
 									poll_result = snmp_get(host, reindex->arg1);
@@ -740,6 +741,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									} else {
 										SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 									}
+									free(poll_result);
 								}
 							} else {
 								SPINE_LOG(("WARNING: Device[%i] TH[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
@@ -1726,10 +1728,6 @@ int is_multipart_output(char *result) {
 void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 	char *poll_result;
 
-	if (!(poll_result = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: poller.c poll_result");
-	}
-
 	if (set.mibs || system) {
 		if (is_debug_device(host->id)) {
 			SPINE_LOG(("Updating Full System Information Table"));
@@ -1741,30 +1739,36 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysDescr, poll_result);
 		}
+		free(poll_result);
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysObjectID, poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysContact, poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysName, poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysLocation, poll_result);
+			free(poll_result);
 		}
 	} else {
 		if (is_debug_device(host->id)) {
@@ -1776,10 +1780,9 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
+			free(poll_result);
 		}
 	}
-
-	free(poll_result);
 }
 
 /*! \fn int validate_result(char *result)

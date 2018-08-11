@@ -210,7 +210,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 		}
 	}else{
-		STRDUP_OR_DIE(hostname,strdup(set.db_host),"db_host")
+		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
