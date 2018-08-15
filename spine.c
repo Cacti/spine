@@ -908,7 +908,7 @@ static void display_help(int only_version) {
 		"database, but they can be overridden with the --option=S:V",
 		"parameter.",
 		"",
-		"Spine is distributed under the Terms of the GNU Lessor",
+		"Spine is distributed under the Terms of the GNU Lesser",
 		"General Public License Version 2.1. (http://www.gnu.org/licenses/lgpl.txt)",
 		"For more information, see http://www.cacti.net",
 
