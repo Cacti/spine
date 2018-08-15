@@ -242,7 +242,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" ORDER BY snmp_port %s", host_id, limits);
 
 		/* host structure for uptime checks */
-		snprintf(query2, BUFSIZE,
+		snprintf(query2, BIG_BUFSIZE,
 			"SELECT id, hostname, snmp_community, snmp_version, "
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
@@ -313,7 +313,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* host structure for uptime checks */
-		snprintf(query2, BUFSIZE,
+		snprintf(query2, BIG_BUFSIZE,
 			"SELECT id, hostname, snmp_community, snmp_version, "
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
@@ -567,7 +567,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (host_thread == 1) {
 					if (!ignore_sysinfo) {
 						if (host->ignore_host != TRUE) {
-							snprintf(update_sql, BUFSIZE, "UPDATE host "
+							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
 								"SET status='%i', status_event_count='%i', status_fail_date='%s',"
 									" status_rec_date='%s', status_last_error='%s', min_time='%f',"
 									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
