@@ -701,6 +701,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						perform_assert = FALSE;
 					}
 
+					poll_result = NULL;
+
 					if (perform_assert) {
 						switch(reindex->action) {
 						case POLLER_ACTION_SNMP: /* snmp */
@@ -732,7 +734,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										} else {
 											SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 										}
-										free(poll_result);
 									}
 								} else {
 									poll_result = snmp_get(host, reindex->arg1);
@@ -741,7 +742,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									} else {
 										SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 									}
-									free(poll_result);
 								}
 							} else {
 								SPINE_LOG(("WARNING: Device[%i] TH[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
@@ -905,7 +905,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							}
 
 							free(query3);
-							free(poll_result);
+
+							if (poll_result != NULL) {
+								free(poll_result);
+							}
 						}
 					}
 				}
