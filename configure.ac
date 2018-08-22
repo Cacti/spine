@@ -180,7 +180,7 @@ if test x$ENABLED_SOL_PRIV != xno; then
   if test x$FOUND_PRIV_H != xno; then
     AC_MSG_RESULT([yes])
     AC_DEFINE([SOLAR_PRIV], [1],
-      [If upport for Solaris privileges should be enabled]
+      [If Support for Solaris privileges should be enabled]
     )
   else
     AC_MSG_RESULT([no])
@@ -472,5 +472,29 @@ if test -z "$HAVE_GETHOSTBYNAME_R"; then
 	AC_DEFINE(HAVE_GETHOSTBYNAME_R_MUTEX_LOCK, 1, [Using traditional of gethostbyname_r()])
 	HAVE_GETHOSTBYNAME_R=yes
 fi
+
+# See if we can support backtracing
+AC_MSG_CHECKING([if we can support backtracing])
+AC_TRY_COMPILE(
+  [
+    #include <stdlib.h>
+    #include <execinfo.h>
+  ],[
+    void *array[10];
+    size_t size;
+
+    // get void*'s for all entries on the stack
+    size = backtrace(array, 10);
+    if (size) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ],
+  [  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_EXECINFO_H,1,[Do we have backtracing capabilities?])
+  ],
+  AC_MSG_RESULT(no)
+)
 
 AC_OUTPUT(Makefile)

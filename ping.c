@@ -1103,20 +1103,20 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		case AVAIL_SNMP_OR_PING:
 		case AVAIL_SNMP_AND_PING:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
-				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
+				snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 			} else {
-				snprintf(host->status_last_error, SMALL_BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
+				snprintf(host->status_last_error, BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
-				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", "Device does not require SNMP");
+				snprintf(host->status_last_error, BUFSIZE, "%s", "Device does not require SNMP");
 			} else {
-				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->snmp_response);
+				snprintf(host->status_last_error, BUFSIZE, "%s", ping->snmp_response);
 			}
 			break;
 		default:
-			snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
+			snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 		}
 
 		/* determine if to send an alert and update remainder of statistics */

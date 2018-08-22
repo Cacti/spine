@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
 	int num_rows = 0;
 	int device_counter = 0;
 	int valid_conf_file = FALSE;
-	char querybuf[BIG_BUFSIZE], *qp = querybuf;
+	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
 	double host_time_double = 0;
 	int itemsPT = 0;
@@ -266,6 +266,7 @@ int main(int argc, char *argv[]) {
 
 	/* set the default exit code */
 	set.exit_code = 0;
+	set.exit_size = 0;
 
 	/* get static defaults for system */
 	config_defaults();

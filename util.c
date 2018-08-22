@@ -782,7 +782,22 @@ void die(const char *format, ...) {
 		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
+	printf("\n");
 	SPINE_LOG(("%s", flogmessage));
+	printf("\n");
+
+#ifdef HAS_EXECINFO_H
+	printf("Generating backtrace...%ld line(s)...\n", set.exit_size);
+	if (set.exit_size) {
+		char **exit_strings = backtrace_symbols(set.exit_stack, set.exit_size);
+		if (exit_strings) {
+			for (int row = 0; row < set.exit_size; row++)
+			        printf("%3d: %s\n", row, exit_strings[row]);
+
+			free(exit_strings);
+		}
+	}
+#endif
 
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
@@ -1554,7 +1569,7 @@ void checkAsRoot() {
 	free(p);
 	#else
 	if (hasCaps() != TRUE) {
-		seteuid(0);
+		int ret = seteuid(0);
 
 		if (geteuid() != 0) {
 			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));

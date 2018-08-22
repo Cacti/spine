@@ -51,6 +51,10 @@
 #define DISABLE_STDERR
 #endif
 
+#ifdef HAS_EXECINFO_H
+#include <execinfo.h>
+#endif
+
 /* if a host is legal, return TRUE */
 #define HOSTID_DEFINED(x)	((x) >= 0)
 
@@ -381,6 +385,9 @@ typedef struct config_struct {
 	int    php_current_server;
 	/* Exit code if we need it */
 	int    exit_code;
+	size_t exit_size;
+	void*  exit_stack[10];
+
 	/* Remote polling mode */
 	int    mode;
 	/* remote database connection information */
@@ -509,7 +516,7 @@ typedef struct host_struct {
 	int    status_event_count;
 	char   status_fail_date[40];
 	char   status_rec_date[40];
-	char   status_last_error[SMALL_BUFSIZE];
+	char   status_last_error[BUFSIZE];
 	double min_time;
 	double max_time;
 	double cur_time;
