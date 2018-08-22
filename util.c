@@ -791,7 +791,8 @@ void die(const char *format, ...) {
 	if (set.exit_size) {
 		char **exit_strings = backtrace_symbols(set.exit_stack, set.exit_size);
 		if (exit_strings) {
-			for (int row = 0; row < set.exit_size; row++)
+			int row = 0;
+			for (row = 0; row < set.exit_size; row++)
 			        printf("%3d: %s\n", row, exit_strings[row]);
 
 			free(exit_strings);
