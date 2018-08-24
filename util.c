@@ -782,9 +782,7 @@ void die(const char *format, ...) {
 		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
-	printf("\n");
 	SPINE_LOG(("%s", flogmessage));
-	printf("\n");
 
 #ifdef HAS_EXECINFO_H
 	printf("Generating backtrace...%ld line(s)...\n", set.exit_size);
