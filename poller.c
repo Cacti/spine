@@ -124,7 +124,7 @@ void *child(void *arg) {
  */
 void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
-	char query2[BUFSIZE];
+	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
 	char query4[BUFSIZE];
 	char query5[BUFSIZE];
@@ -157,7 +157,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int    php_process;
 
 	char *poll_result = NULL;
-	char update_sql[BUFSIZE];
+	char update_sql[BIG_BUFSIZE];
 	char temp_poll_result[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
@@ -595,7 +595,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								host->snmp_sysLocation,
 								host->id);
 						} else {
-							snprintf(update_sql, BUFSIZE, "UPDATE host "
+							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
 								"SET status='%i', status_event_count='%i', status_fail_date='%s',"
 									" status_rec_date='%s', status_last_error='%s', min_time='%f',"
 									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
@@ -616,7 +616,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								host->id);
 						}
 					} else {
-						snprintf(update_sql, BUFSIZE, "UPDATE host "
+						snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
 							"SET status='%i', status_event_count='%i', status_fail_date='%s',"
 								" status_rec_date='%s', status_last_error='%s', min_time='%f',"
 								" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"

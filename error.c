@@ -46,6 +46,11 @@
 static void spine_signal_handler(int spine_signal) {
 	signal(spine_signal, SIG_DFL);
 
+#if HAS_EXECINFO_H
+	// get void*'s for all entries on the stack
+	set.exit_size = backtrace(set.exit_stack, 10);
+#endif
+
 	set.exit_code = spine_signal;
 
 	switch (spine_signal) {
@@ -80,6 +85,8 @@ static int spine_fatal_signals[] = {
 	SIGBUS,
 	SIGFPE,
 	SIGQUIT,
+	SIGSYS,
+	SIGABRT,
 	0
 };
 
@@ -97,6 +104,7 @@ void install_spine_signal_handler(void) {
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
 		if (sa.sa_handler == SIG_DFL) {
+			printf("Replacing action %d\n", i);
 			sa.sa_handler = spine_signal_handler;
 			sigemptyset(&sa.sa_mask);
 			sa.sa_flags = SA_RESTART;
