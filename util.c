@@ -1568,13 +1568,17 @@ void checkAsRoot() {
 	free(p);
 	#else
 	if (hasCaps() != TRUE) {
+		SPINE_LOG_DEBUG(("DEBUG: Spine running as %d UID, %d EUID", getuid(), geteuid()));
 		int ret = seteuid(0);
+		if (ret != 0) {
+			SPINE_LOG_DEBUG(("WARNING: Spine NOT able to set effective UID to 0"));
+		}
 
 		if (geteuid() != 0) {
-			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
+			SPINE_LOG_DEBUG(("WARNING: Spine NOT running as root.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
 			set.icmp_avail = FALSE;
 		} else {
-			SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
+			SPINE_LOG_DEBUG(("DEBUG: Spine is running as root."));
 			set.icmp_avail = TRUE;
 
 			if (seteuid(getuid()) == -1) {
@@ -1585,6 +1589,7 @@ void checkAsRoot() {
 		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));
 		set.icmp_avail = TRUE;
 	}
+	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not "));
 	#endif
 	#endif
 }
