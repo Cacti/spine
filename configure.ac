@@ -67,6 +67,7 @@ case $host_alias in
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
 *freebsd*)
   LIBS="$LIBS -pthread"
+  LDFLAGS="-lexecinfo"
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
   ShLib="dylib";;
