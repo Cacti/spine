@@ -1092,9 +1092,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 				if ((last_snmp_port != poller_items[i].snmp_port) ||
 					(last_snmp_version != poller_items[i].snmp_version) ||
-					((poller_items[i].snmp_version < 3) &&
+					(poller_items[i].snmp_version < 3 &&
 					(!STRMATCH(last_snmp_community, poller_items[i].snmp_community))) ||
-					((poller_items[i].snmp_version > 2) &&
+					(poller_items[i].snmp_version > 2 &&
 					(!STRMATCH(last_snmp_username, poller_items[i].snmp_username)) ||
 					(!STRMATCH(last_snmp_password, poller_items[i].snmp_password)) ||
 					(!STRMATCH(last_snmp_auth_protocol, poller_items[i].snmp_auth_protocol)) ||

@@ -442,7 +442,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
+							if (pkt->icmp_type == ICMP_ECHOREPLY) {
 								if (is_debug_device(host->id)) {
 									SPINE_LOG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								} else {
@@ -765,6 +765,9 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	/* initilize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
+	/* initialize total time */
+	total_time = 0;
+
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
 		/* initialize variables */
@@ -897,7 +900,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	int    rv;
 
 	buf = malloc(len*sizeof(char));
-	memset(buf, 0, sizeof(buf));
+	memset(buf, 0, len*sizeof(char));
 
 	while (1) {
 		rv = gethostbyname_r(hostname, &result_buf, buf, len,
