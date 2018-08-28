@@ -136,6 +136,7 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
 AC_CHECK_HEADERS(assert.h ctype.h errno.h signal.h math.h malloc.h netdb.h)
 AC_CHECK_HEADERS(signal.h stdarg.h stdio.h syslog.h)
+AC_CHECK_HEADERS(execinfo.h)
 AC_CHECK_HEADERS(
   netinet/in_systm.h netinet/in.h netinet/ip.h netinet/ip_icmp.h,
   [],
@@ -476,7 +477,7 @@ fi
 
 # See if we can support backtracing
 AC_MSG_CHECKING([if we can support backtracing])
-AC_TRY_COMPILE(
+AC_TRY_LINK(
   [
     #include <stdlib.h>
     #include <execinfo.h>
@@ -484,7 +485,7 @@ AC_TRY_COMPILE(
     void *array[10];
     size_t size;
 
-    // get void*'s for all entries on the stack
+    # get void*'s for all entries on the stack
     size = backtrace(array, 10);
     if (size) {
       exit(0);
