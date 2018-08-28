@@ -91,7 +91,7 @@ void *child(void *arg) {
 	thread_mutex_lock(LOCK_PEND);
 	pending_threads--;
 
-	SPINE_LOG_MEDIUM(("POLLR: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
+	SPINE_LOG_MEDIUM(("POLLER: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
 	thread_mutex_unlock(LOCK_PEND);
 
 	/* end the thread */
