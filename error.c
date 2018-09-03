@@ -104,7 +104,6 @@ void install_spine_signal_handler(void) {
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
 		if (sa.sa_handler == SIG_DFL) {
-			printf("Replacing action %d\n", i);
 			sa.sa_handler = spine_signal_handler;
 			sigemptyset(&sa.sa_mask);
 			sa.sa_flags = SA_RESTART;

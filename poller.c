@@ -1095,13 +1095,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					(poller_items[i].snmp_version < 3 &&
 					(!STRMATCH(last_snmp_community, poller_items[i].snmp_community))) ||
 					(poller_items[i].snmp_version > 2 &&
-					(!STRMATCH(last_snmp_username, poller_items[i].snmp_username)) ||
+					((!STRMATCH(last_snmp_username, poller_items[i].snmp_username)) ||
 					(!STRMATCH(last_snmp_password, poller_items[i].snmp_password)) ||
 					(!STRMATCH(last_snmp_auth_protocol, poller_items[i].snmp_auth_protocol)) ||
 					(!STRMATCH(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase)) ||
 					(!STRMATCH(last_snmp_priv_protocol, poller_items[i].snmp_priv_protocol)) ||
 					(!STRMATCH(last_snmp_context, poller_items[i].snmp_context)) ||
-					(!STRMATCH(last_snmp_engine_id, poller_items[i].snmp_engine_id)))) {
+					(!STRMATCH(last_snmp_engine_id, poller_items[i].snmp_engine_id))))) {
 
 					if (num_oids > 0) {
 						snmp_get_multi(host, snmp_oids, num_oids);
@@ -1287,7 +1287,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						}
 
-						if (poller_items[snmp_oids[j].array_position].result != NULL) {
+						if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
 							/* insert a NaN in place of the actual value if the snmp agent restarts */
 							if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
 								SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
@@ -1361,7 +1361,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 				}
 
-				if (poller_items[i].result != NULL) {
+				if (!IS_UNDEFINED(poller_items[i].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
 					if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
 						SET_UNDEFINED(poller_items[i].result);
@@ -1425,7 +1425,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 				}
 
-				if (poller_items[i].result != NULL) {
+				if (IS_UNDEFINED(poller_items[i].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
 					if ((spike_kill) && (!STRIMATCH(poller_items[i].result,":"))) {
 						SET_UNDEFINED(poller_items[i].result);
@@ -1521,7 +1521,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				}
 
-				if (poller_items[snmp_oids[j].array_position].result != NULL) {
+				if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
 					if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
 						SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
