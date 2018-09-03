@@ -126,7 +126,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	snmp_sess_init(&session);
 
 	/* Bind to snmp_clientaddr if specified */
-	if (NULL != set.snmp_clientaddr  && strlen(set.snmp_clientaddr) > 0) {
+	size_t len = strlen(set.snmp_clientaddr);
+	if (len > 0 && len <= SMALL_BUFSIZE) {
 		#if SNMP_LOCALNAME == 1
 		session.localname = strdup(set.snmp_clientaddr);
 		#endif
@@ -201,8 +202,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		}
 
 		if (snmp_engine_id && strlen(snmp_engine_id)) {
-			session.contextEngineID      = snmp_engine_id;
-			session.contextEngineIDLen   = strlen(session.contextEngineID);
+			session.contextEngineID      = (unsigned char*) snmp_engine_id;
+			session.contextEngineIDLen   = strlen(snmp_engine_id);
 		}
 
 		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
