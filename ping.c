@@ -383,26 +383,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					return HOST_DOWN;
 				}
 
-				/* record start time */
-				if (total_time == 0) {
-					/* establish timeout value */
-					timeout.tv_sec  = rint(host_timeout / 1000);
-					timeout.tv_usec = rint((int) host_timeout % 1000) * 1000;
+				/* decrement the timeout value by the total time */
+				timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
-					/* set the socket send and receive timeout */
-					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-					begin_time = get_time_as_double();
-				} else {
-					/* decrement the timeout value by the total time */
-					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
-					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
-
-					/* set the socket send and receive timeout */
-					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-				}
+				/* set the socket send and receive timeout */
+				setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 				/* send packet to destination */
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
@@ -428,13 +415,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 					if (return_code < 0) {
 						if (errno == EINTR) {
+							/* call was interrupted by some system event */
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
 							} else {
 								SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
 							}
-							/* call was interrupted by some system event */
-				//			usleep(10000);
+
 							goto keep_listening;
 						}
 					} else {
@@ -587,6 +575,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* set total time */
 	total_time = 0;
 
+	begin_time = get_time_as_double();
+
 	/* remove "udp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
@@ -640,8 +630,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 					/* set the socket send and receive timeout */
 					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-					begin_time = get_time_as_double();
 				} else {
 					/* decrement the timeout value by the total time */
 					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
@@ -768,6 +756,9 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	/* initialize total time */
 	total_time = 0;
 
+	/* initialize begin time */
+	begin_time = get_time_as_double();
+
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
 		/* initialize variables */
@@ -780,26 +771,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 			retry_count = 0;
 
 			while (1) {
-				/* record start time */
-				if (total_time == 0) {
-					/* establish timeout value */
-					timeout.tv_sec  = rint(host_timeout / 1000);
-					timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
+				/* establish timeout value */
+				timeout.tv_sec  = rint(host_timeout / 1000);
+				timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
 
-					/* set the socket send and receive timeout */
-					setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-					begin_time = get_time_as_double();
-				} else {
-					/* decrement the timeout value by the total time */
-					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
-					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
-
-					/* set the socket send and receive timeout */
-					setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-				}
+				/* set the socket send and receive timeout */
+				setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 				/* make the connection */
 				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
