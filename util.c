@@ -307,7 +307,7 @@ void read_config_options() {
 
 	db_connect(LOCAL, &mysql);
 
-	if (set.mode == REMOTE_ONLINE) {
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		db_connect(REMOTE, &mysqlr);
 		mode = REMOTE;
 	} else {
@@ -654,6 +654,209 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
 	db_disconnect(&mysql);
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_disconnect(&mysqlr);
+	}
+}
+
+void poller_push_data_to_main() {
+	MYSQL      mysql;
+	MYSQL      mysqlr;
+	MYSQL_RES  *result;
+	MYSQL_ROW  row;
+	int        num_rows;
+	int        rows;
+	char       sqlbuf[HUGE_BUFSIZE];
+	char       *sqlp = sqlbuf;
+	char       query[BUFSIZE];
+	char       prefix[BUFSIZE];
+	char       suffix[BUFSIZE];
+	char       tmpstr[SMALL_BUFSIZE];
+
+	db_connect(LOCAL, &mysql);
+	db_connect(REMOTE, &mysqlr);
+
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+
+	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
+
+	snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+		"status, status_event_count, status_fail_date, status_rec_date, "
+		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+		"total_polls, failed_polls, availability, last_updated "
+		"FROM host "
+		"WHERE poller_id = %d", set.poller_id);
+
+	snprintf(prefix, BUFSIZE, "INSERT INTO host (id, snmp_sysDescr, snmp_sysObjectID, "
+		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+		"status, status_event_count, status_fail_date, status_rec_date, "
+		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+		"total_polls, failed_polls, availability, last_updated) VALUES ");
+
+	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+		"snmp_sysDescr=VALUES(snmp_sysDescr), "
+		"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
+        "snmp_sysUpTimeInstance=VALUES(snmp_sysUpTimeInstance), "
+		"snmp_sysContact=VALUES(snmp_sysContact), "
+		"snmp_sysName=VALUES(snmp_sysName), "
+		"snmp_sysLocation=VALUES(snmp_sysLocation), "
+        "status=VALUES(status), "
+		"status_event_count=VALUES(status_event_count), "
+		"status_fail_date=VALUES(status_fail_date), "
+		"status_rec_date=VALUES(status_rec_date), "
+        "status_last_error=VALUES(status_last_error), "
+		"min_time=VALUES(min_time), "
+		"max_time=VALUES(max_time), "
+		"cur_time=VALUES(cur_time), "
+		"avg_time=VALUES(avg_time), "
+		"polling_time=VALUES(polling_time), "
+        "total_polls=VALUES(total_polls), "
+		"failed_polls=VALUES(failed_polls), "
+		"availability=VALUES(availability), "
+		"last_updated=VALUES(last_updated)");
+
+	memset(sqlbuf, 0, sizeof(sqlbuf));
+
+	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
+		num_rows = mysql_num_rows(result);
+		rows = 0;
+
+		if (num_rows > 0) {
+			while ((row = mysql_fetch_row(result))) {
+				if (rows < 500) {
+					if (rows == 0) {
+						sqlp  = sqlbuf;
+						sqlp += sprintf(sqlp, "%s", prefix);
+						sqlp += sprintf(sqlp, " (");
+					} else {
+						sqlp += sprintf(sqlp, ", (");
+					}
+
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[0])); // id
+
+					db_escape(&mysql, tmpstr, row[1]); // snmp_sysDescr
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[2]); // snmp_sysObjectID
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[3]); // snmp_sysUpTimeInstance
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[4]); // snmp_sysContact
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[5]); // snmp_sysName
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[6]); // snmp_sysLocation
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[7]); // status
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[8])); // status_event_count
+
+					db_escape(&mysql, tmpstr, row[9]);  // status_event_date
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[10]); // status_rec_date
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, row[11]); // status_last_error
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%f, ", row[12]); // min_time
+					sqlp += sprintf(sqlp, "%f, ", row[13]); // max_time
+					sqlp += sprintf(sqlp, "%f, ", row[14]); // cur_time
+					sqlp += sprintf(sqlp, "%f, ", row[15]); // avg_time
+					sqlp += sprintf(sqlp, "%f, ", row[16]); // polling_time
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[17])); // total_polls
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[18])); // failed_polls
+					sqlp += sprintf(sqlp, "%f, ", row[19]); // availability
+
+					db_escape(&mysql, tmpstr, row[20]); // last_updated
+					sqlp += sprintf(sqlp, "'%s'", tmpstr);
+
+					sqlp += sprintf(sqlp, ")");
+
+					rows++;
+				} else {
+					sqlp += sprintf(sqlp, "%s", suffix);
+					db_insert(&mysqlr, REMOTE, sqlbuf);
+
+					rows = 0;
+					memset(sqlbuf, 0, sizeof(sqlbuf));
+				}
+			}
+		}
+
+		if (rows > 0) {
+			sqlp += sprintf(sqlp, "%s", suffix);
+			db_insert(&mysqlr, REMOTE, sqlbuf);
+		}
+	}
+
+	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
+
+	snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		"FROM poller_item "
+		"WHERE poller_id = %d", set.poller_id);
+
+	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
+
+	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+		"rrd_next_step=VALUES(rrd_next_step)");
+
+	memset(sqlbuf, 0, sizeof(sqlbuf));
+
+	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
+		num_rows = mysql_num_rows(result);
+		rows = 0;
+
+		if (num_rows > 0) {
+			while ((row = mysql_fetch_row(result))) {
+				if (rows < 10000) {
+					if (rows == 0) {
+						sqlp = sqlbuf;
+						sqlp += sprintf(sqlp, "%s", prefix);
+						sqlp += sprintf(sqlp, " (");
+					} else {
+						sqlp += sprintf(sqlp, ", (");
+					}
+
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[0])); // local_data_id
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[1])); // host_id
+
+					db_escape(&mysql, tmpstr, row[2]); // rrd_name
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%d, ", atoi(row[3])); // rrd_step
+					sqlp += sprintf(sqlp, "%d",   atoi(row[4])); // rrd_next_step
+
+					sqlp += sprintf(sqlp, ")");
+
+					rows++;
+				} else {
+					sqlp += sprintf(sqlp, "%s", suffix);
+					db_insert(&mysqlr, REMOTE, sqlbuf);
+
+					rows = 0;
+					memset(sqlbuf, 0, sizeof(sqlbuf));
+				}
+			}
+		}
+
+		if (rows > 0) {
+			sqlp += sprintf(sqlp, "%s", suffix);
+			db_insert(&mysqlr, REMOTE, sqlbuf);
+
+			rows = 0;
+			memset(sqlbuf, 0, sizeof(sqlbuf));
+		}
+	}
+
+	db_free_result(result);
+	db_disconnect(&mysql);
+	db_disconnect(&mysqlr);
 }
 
 /*! \fn int read_spine_config(char *file)

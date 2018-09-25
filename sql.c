@@ -49,10 +49,10 @@
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int    error;
 	int    error_count = 0;
-	char   query_frag[BUFSIZE];
+	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
-	snprintf(query_frag, BUFSIZE, "%s", query);
+	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
 	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
@@ -77,7 +77,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 					}
 
 					continue;
-				}else if (error == 2006 && errno == EINTR) {
+				} else if (error == 2006 && errno == EINTR) {
 					db_disconnect(mysql);
 					usleep(50000);
 					db_connect(type, mysql);
@@ -88,14 +88,14 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 					}
 
 					continue;
-				}else{
+				} else {
 					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
 					return FALSE;
 				}
-			}else{
+			} else {
 				return TRUE;
 			}
-		}else{
+		} else {
 			return TRUE;
 		}
 	}
@@ -117,10 +117,10 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	int    error       = 0;
 	int    error_count = 0;
 
-	char   query_frag[BUFSIZE];
+	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
-	snprintf(query_frag, BUFSIZE, "%s", query);
+	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
 	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
@@ -145,7 +145,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				}
 
 				continue;
-			}else if (error == 2006 && errno == EINTR) {
+			} else if (error == 2006 && errno == EINTR) {
 				db_disconnect(mysql);
 				usleep(50000);
 				db_connect(type, mysql);
@@ -156,10 +156,10 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				}
 
 				continue;
-			}else{
+			} else {
 				die("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql));
 			}
-		}else{
+		} else {
 			mysql_res = mysql_store_result(mysql);
 
 			break;
@@ -204,13 +204,13 @@ void db_connect(int type, MYSQL *mysql) {
 					socket = strdup (set.db_host);
 					hostname = NULL;
 				}
-			}else if ((socket = strstr(hostname,":"))) {
+			} else if ((socket = strstr(hostname,":"))) {
 				*socket++ = 0x0;
 			}
 		} else {
 			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 		}
-	}else{
+	} else {
 		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
@@ -218,7 +218,7 @@ void db_connect(int type, MYSQL *mysql) {
 				socket = strdup (set.db_host);
 				hostname = NULL;
 			}
-		}else if ((socket = strstr(hostname,":"))) {
+		} else if ((socket = strstr(hostname,":"))) {
 			*socket++ = 0x0;
 		}
 	}
@@ -232,6 +232,7 @@ void db_connect(int type, MYSQL *mysql) {
 	my_bool reconnect = 1;
 
 	mysql_init(mysql);
+
 	if (mysql == NULL) {
 		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
 	}
@@ -276,10 +277,10 @@ void db_connect(int type, MYSQL *mysql) {
 		if (set.poller_id > 1) {
 			if (type == LOCAL) {
 				connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, set.db_db, set.db_port, socket, 0);
-			}else{
+			} else {
 				connect_error = mysql_real_connect(mysql, hostname, set.rdb_user, set.rdb_pass, set.rdb_db, set.rdb_port, socket, 0);
 			}
-		}else{
+		} else {
 			connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, set.db_db, set.db_port, socket, 0);
 		}
 
@@ -302,11 +303,11 @@ void db_connect(int type, MYSQL *mysql) {
 				#ifndef SOLAR_THREAD
 				usleep(2000);
 				#endif
-			}else{
+			} else {
 				tries   = 0;
 				success = FALSE;
 			}
-		}else{
+		} else {
 			tries   = 0;
 			success = TRUE;
 		}
@@ -350,7 +351,7 @@ int append_hostrange(char *obuf, const char *colname) {
 			colname,
 			set.start_host_id,
 			set.end_host_id);
-	}else{
+	} else {
 		return 0;
 	}
 }

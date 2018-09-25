@@ -111,6 +111,7 @@ int     *debug_devices;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
+void poller_push_data_to_main();
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -242,13 +243,13 @@ int main(int argc, char *argv[]) {
 	/* detect and compensate for stdin/stderr ttys */
 	if (!isatty(fileno(stdout))) {
 		set.stdout_notty = TRUE;
-	}else{
+	} else {
 		set.stdout_notty = FALSE;
 	}
 
 	if (!isatty(fileno(stderr))) {
 		set.stderr_notty = TRUE;
-	}else{
+	} else {
 		set.stderr_notty = FALSE;
 	}
 
@@ -392,7 +393,7 @@ int main(int argc, char *argv[]) {
 
 			if (*value) {
 				*value++ = '\0';
-			}else{
+			} else {
 				die("ERROR: -O requires setting:value");
 			}
 
@@ -451,7 +452,7 @@ int main(int argc, char *argv[]) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("NOTE: The Shell Command Exists in the current directory\n");
 		}
-	}else{
+	} else {
 		set.cygwinshloc = 1;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("NOTE: The Shell Command Exists in the /bin directory\n");
@@ -473,10 +474,10 @@ int main(int argc, char *argv[]) {
 	if (conf_file) {
 		if ((read_spine_config(conf_file)) < 0) {
 			die("ERROR: Could not read config file: %s", conf_file);
-		}else{
+		} else {
 			valid_conf_file = TRUE;
 		}
-	}else{
+	} else {
 		if (!(conf_file = calloc(CONFIG_PATHS, BUFSIZE))) {
 			die("ERROR: Fatal malloc error: spine.c conf_file!");
 		}
@@ -498,7 +499,7 @@ int main(int argc, char *argv[]) {
 	if (valid_conf_file) {
 		/* read settings table from the database to further establish environment */
 		read_config_options();
-	}else{
+	} else {
 		die("FATAL: Unable to read configuration file!");
 	}
 
@@ -518,7 +519,7 @@ int main(int argc, char *argv[]) {
 			token = strtok(NULL, ",");
 			i++;
 		}
-	}else{
+	} else {
 		debug_devices[0] = '\0';
 	}
 
@@ -531,7 +532,7 @@ int main(int argc, char *argv[]) {
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
-	}else{
+	} else {
 		if (!set.stdout_notty) {
 			printf("SPINE: Version %s starting\n", VERSION);
 		}
@@ -542,7 +543,7 @@ int main(int argc, char *argv[]) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			SPINE_LOG(("DEBUG: MySQL is Thread Safe!"));
 		}
-	}else{
+	} else {
 		SPINE_LOG(("WARNING: MySQL is NOT Thread Safe!"));
 	}
 
@@ -570,7 +571,7 @@ int main(int argc, char *argv[]) {
 	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'poller_id'");
 	if (mysql_num_rows(result)) {
 		set.poller_id_exists = TRUE;
-	}else{
+	} else {
 		set.poller_id_exists = FALSE;
 
 		if (set.poller_id > 0) {
@@ -583,27 +584,27 @@ int main(int argc, char *argv[]) {
 	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'device_threads'");
 	if (mysql_num_rows(result)) {
 		set.device_threads_exists = TRUE;
-	}else{
+	} else {
 		set.device_threads_exists = FALSE;
 	}
 	db_free_result(result);
 
 	if (set.device_threads_exists) {
 		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
-	}else{
+	} else {
 		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));
 	}
 
 	/* obtain the list of hosts to poll */
 	if (set.device_threads_exists) {
 		qp += sprintf(qp, "SELECT id, device_threads FROM host");
-	}else{
+	} else {
 		qp += sprintf(qp, "SELECT id, '1' as device_threads FROM host");
 	}
 	qp += sprintf(qp, " WHERE disabled=''");
 	if (!strlen(set.host_id_list)) {
 		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
-	}else{
+	} else {
 		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
 	}
 	if (set.poller_id_exists) {
@@ -614,7 +615,7 @@ int main(int argc, char *argv[]) {
 	result = db_query(&mysql, LOCAL, querybuf);
 	if (set.poller_id == 0) {
 		num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
-	}else{
+	} else {
 		num_rows = mysql_num_rows(result); /* pollerid 0 takes care of not host based data sources */
 	}
 
@@ -663,7 +664,7 @@ int main(int argc, char *argv[]) {
 	if (set.poller_id == 0) {
 		host_id     = 0;
 		change_host = FALSE;
-	}else{
+	} else {
 		change_host = TRUE;
 	}
 
@@ -674,7 +675,7 @@ int main(int argc, char *argv[]) {
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
 			current_thread  = 1;
-		}else{
+		} else {
 			current_thread++;
 		}
 
@@ -706,7 +707,7 @@ int main(int argc, char *argv[]) {
 				host_time = get_host_poll_time();
 				host_time_double = get_time_as_double();
 			}
-		}else{
+		} else {
 			itemsPT   = 0;
 			if (host_time) free(host_time);
 			host_time = get_host_poll_time();
@@ -733,7 +734,7 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
 				canexit = TRUE;
 				break;
-			}else if (errno == EINTR) {
+			} else if (errno == EINTR) {
 				usleep(10000);
 				goto retry1;
 			}
@@ -807,6 +808,11 @@ int main(int argc, char *argv[]) {
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
 
+	/* push data back to the main server */
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		poller_push_data_to_main();
+	}
+
 	/* print out stats */
 	gettimeofday(&now, NULL);
 
@@ -854,7 +860,7 @@ int main(int argc, char *argv[]) {
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
 		SPINE_LOG(("Time: %.4f s, Threads: %i, Devices: %i", (end_time - begin_time), set.threads, num_rows));
-	}else{
+	} else {
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
 			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
