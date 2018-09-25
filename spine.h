@@ -505,12 +505,12 @@ typedef struct host_struct {
 	int    snmp_port;
 	int    snmp_timeout;
 	int    snmp_retries;
-	char   snmp_sysDescr[300];
+	char   snmp_sysDescr[600];
 	char   snmp_sysObjectID[160];
 	u_int  snmp_sysUpTimeInstance;
 	char   snmp_sysContact[300];
 	char   snmp_sysName[300];
-	char   snmp_sysLocation[300];
+	char   snmp_sysLocation[600];
 	int    max_oids;
 	int    availability_method;
 	int    ping_method;

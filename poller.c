@@ -510,11 +510,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (row[30] != NULL) host->availability = atof(row[30]);
 
 				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atoi(row[31]);
-				if (row[32] != NULL) STRNCOPY(host->snmp_sysDescr, row[32]);
-				if (row[33] != NULL) STRNCOPY(host->snmp_sysObjectID, row[33]);
-				if (row[34] != NULL) STRNCOPY(host->snmp_sysContact, row[34]);
-				if (row[35] != NULL) STRNCOPY(host->snmp_sysName, row[35]);
-				if (row[36] != NULL) STRNCOPY(host->snmp_sysLocation, row[36]);
+				if (row[32] != NULL) db_escape(&mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), row[32]);
+				if (row[33] != NULL) db_escape(&mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), row[33]);
+				if (row[34] != NULL) db_escape(&mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), row[34]);
+				if (row[35] != NULL) db_escape(&mysql, host->snmp_sysName, sizeof(host->snmp_sysName), row[35]);
+				if (row[36] != NULL) db_escape(&mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), row[36]);
 
 				/* correct max_oid bounds issues */
 				if ((host->max_oids == 0) || (host->max_oids > 100)) {
@@ -701,7 +701,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
 
 					if (row[3] != NULL) {
-						db_escape(&mysql, reindex->assert_value, row[3]);
+						db_escape(&mysql, reindex->assert_value, sizeof(reindex->assert_value), row[3]);
 					}
 
 					if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
@@ -901,7 +901,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							 *     the assert to fail */
 							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
-									db_escape(&mysql, temp_poll_result, poll_result);
+									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
 									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, reindex->arg1);
 									db_insert(&mysql, LOCAL, query3);
 								}
@@ -1770,13 +1770,13 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysDescr, poll_result);
+			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
 		}
 		free(poll_result);
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysObjectID, poll_result);
+			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
 			free(poll_result);
 		}
 
@@ -1788,19 +1788,19 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysContact, poll_result);
+			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
 			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysName, poll_result);
+			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
 			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysLocation, poll_result);
+			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);
 			free(poll_result);
 		}
 	} else {

@@ -55,7 +55,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
 
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
@@ -123,7 +123,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
 
 	while (1) {
 		if (mysql_query(mysql, query)) {
@@ -356,7 +356,7 @@ int append_hostrange(char *obuf, const char *colname) {
 	}
 }
 
-/*! \fn void db_escape(MYSQL *mysql, char *output, const char *input)
+/*! \fn void db_escape(MYSQL *mysql, char *output, int max_size, const char *input)
  *  \brief Escapse a text string to make it safe for mysql insert/updates
  *  \param mysql the connection object
  *  \param output a pointer to the output string
@@ -368,12 +368,23 @@ int append_hostrange(char *obuf, const char *colname) {
  *  \return void
  *
  */
-void db_escape(MYSQL *mysql, char *output, const char *input) {
+void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	if (input == NULL) return;
 
-	output[0] = '\0';
+	char input_trimmed[BUFSIZE];
+	int  input_size;
 
-	mysql_real_escape_string(mysql, output, input, strlen(input));
+	input_size = strlen(input);
+
+	if (input_size > max_size) {
+		strncpy(input_trimmed, input, max_size - 10);
+		input_trimmed[max_size-10] = 0;
+	} else {
+		strncpy(input_trimmed, input, input_size);
+		input_trimmed[input_size] = 0;
+	}
+
+	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
 }
 
 void db_free_result(MYSQL_RES *result) {

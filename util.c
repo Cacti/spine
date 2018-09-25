@@ -738,28 +738,28 @@ void poller_push_data_to_main() {
 
 					sqlp += sprintf(sqlp, "%s, ", row[0]); // id
 
-					db_escape(&mysql, tmpstr, row[1]); // snmp_sysDescr
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[2]); // snmp_sysObjectID
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[3]); // snmp_sysUpTimeInstance
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[4]); // snmp_sysContact
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[5]); // snmp_sysName
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[6]); // snmp_sysLocation
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[7]); // status
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
 					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count
 
-					db_escape(&mysql, tmpstr, row[9]);  // status_event_date
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_event_date
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[10]); // status_rec_date
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, row[11]); // status_last_error
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
 					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time
@@ -771,7 +771,7 @@ void poller_push_data_to_main() {
 					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls
 					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability
 
-					db_escape(&mysql, tmpstr, row[20]); // last_updated
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated
 					sqlp += sprintf(sqlp, "'%s'", tmpstr);
 
 					sqlp += sprintf(sqlp, ")");
@@ -823,7 +823,7 @@ void poller_push_data_to_main() {
 					sqlp += sprintf(sqlp, "%s, ", row[0]); // local_data_id
 					sqlp += sprintf(sqlp, "%s, ", row[1]); // host_id
 
-					db_escape(&mysql, tmpstr, row[2]); // rrd_name
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // rrd_name
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
 					sqlp += sprintf(sqlp, "%s, ", row[3]); // rrd_step

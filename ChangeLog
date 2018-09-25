@@ -2,6 +2,8 @@ The Cacti Group | spine
 
 1.2.0
 -feature: Allow threads to be set a Data Collector level
+-feature: Support Cacti 1.2's new data collection method
+-feature: Escape strings more rubustly
 -issue#50: make in Debian 7: undefined reference to `clock_gettime'
 -issue#53: Variables are not being escaped properly when updating database
 -issue#54: Spine should always report if ICMP fails
