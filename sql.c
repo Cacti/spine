@@ -34,9 +34,10 @@
 #include "common.h"
 #include "spine.h"
 
-/*! \fn int db_insert(MYSQL *mysql, const char *query)
+/*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
+ *  \param type  the database to connect to local or remote
  *  \param query the database query to execute
  *
  *	Unless the SQL_readonly boolean is set to TRUE, the function will execute
@@ -45,7 +46,7 @@
  *  \return TRUE if successful, or FALSE if not.
  *
  */
-int db_insert(MYSQL *mysql, const char *query) {
+int db_insert(MYSQL *mysql, int type, const char *query) {
 	int    error;
 	int    error_count = 0;
 	char   query_frag[BUFSIZE];
@@ -79,7 +80,7 @@ int db_insert(MYSQL *mysql, const char *query) {
 				}else if (error == 2006 && errno == EINTR) {
 					db_disconnect(mysql);
 					usleep(50000);
-					db_connect(set.db_db, mysql);
+					db_connect(type, mysql);
 					error_count++;
 
 					if (error_count > 30) {
@@ -110,7 +111,7 @@ int db_insert(MYSQL *mysql, const char *query) {
  *  \return MYSQL_RES a MySQL result structure
  *
  */
-MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
+MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	MYSQL_RES  *mysql_res = 0;
 
 	int    error       = 0;
@@ -147,7 +148,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 			}else if (error == 2006 && errno == EINTR) {
 				db_disconnect(mysql);
 				usleep(50000);
-				db_connect(set.db_db, mysql);
+				db_connect(type, mysql);
 				error_count++;
 
 				if (error_count > 30) {
@@ -178,7 +179,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
  *  fails more than 20 times, the function will fail and Spine will terminate.
  *
  */
-void db_connect(const char *database, MYSQL *mysql) {
+void db_connect(int type, MYSQL *mysql) {
 	int    tries;
 	int    timeout;
 	int    rtimeout;
@@ -195,7 +196,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 	 * and if it is a socket file, setup mysql to use it.
 	 */
 	if (set.poller_id > 1) {
-		if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
+		if (type == LOCAL) {
 			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 			if (stat(hostname, &socket_stat) == 0) {
@@ -206,7 +207,7 @@ void db_connect(const char *database, MYSQL *mysql) {
 			}else if ((socket = strstr(hostname,":"))) {
 				*socket++ = 0x0;
 			}
-		}else{
+		} else {
 			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 		}
 	}else{
@@ -253,12 +254,12 @@ void db_connect(const char *database, MYSQL *mysql) {
 	char *ssl_ca;
 	char *ssl_cert;
 
-	if (set.poller_id > 1 && (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY)) {
+	if (set.poller_id > 1 && type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
 		STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
 		STRDUP_OR_DIE(ssl_cert, set.rdb_ssl_cert, "rdb_ssl_cert");
 	} else {
-		STRDUP_OR_DIE(ssl_key, set.db_ssl_key, "rdb_ssl_key");
+		STRDUP_OR_DIE(ssl_key, set.db_ssl_key, "db_ssl_key");
 		STRDUP_OR_DIE(ssl_ca, set.db_ssl_ca, "db_ssl_ca");
 		STRDUP_OR_DIE(ssl_cert, set.db_ssl_cert, "db_ssl_cert");
 	}
@@ -273,13 +274,13 @@ void db_connect(const char *database, MYSQL *mysql) {
 		tries--;
 
 		if (set.poller_id > 1) {
-			if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
-				connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, database, set.db_port, socket, 0);
+			if (type == LOCAL) {
+				connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, set.db_db, set.db_port, socket, 0);
 			}else{
 				connect_error = mysql_real_connect(mysql, hostname, set.rdb_user, set.rdb_pass, set.rdb_db, set.rdb_port, socket, 0);
 			}
 		}else{
-			connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, database, set.db_port, socket, 0);
+			connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, set.db_db, set.db_port, socket, 0);
 		}
 
 		if (!connect_error) {

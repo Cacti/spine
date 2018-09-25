@@ -190,19 +190,32 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	error_string = malloc(DBL_BUFSIZE);
 
 	MYSQL     mysql;
+	MYSQL     mysqlr;
+	MYSQL     mysqlt;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	db_connect(set.db_db, &mysql);
+	db_connect(LOCAL, &mysql);
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+
+	if (set.mode == REMOTE_ONLINE) {
+		db_connect(REMOTE, &mysqlr);
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+	}
 
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
@@ -390,12 +403,16 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	/* if the host is a real host.  Note host_id=0 is not host based data source */
 	if (host_id) {
 		/* get data about this host */
-		if ((result = db_query(&mysql, query2)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query2)) != 0) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
-				mysql_close(&mysql);
+				db_disconnect(&mysql);
+
+				if (set.mode == REMOTE_ONLINE) {
+					db_disconnect(&mysqlr);
+				}
 
 				#ifndef OLD_MYSQL
 				mysql_thread_end();
@@ -637,7 +654,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							host->id);
 					}
 
-					db_insert(&mysql, update_sql);
+					db_insert(&mysql, LOCAL, update_sql);
 				}
 			} else {
 				SPINE_LOG(("Device[%i] TH[%i] ERROR: MySQL Returned a Null Device Result", host->id, host_thread));
@@ -657,7 +674,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		if ((result = db_query(&mysql, query4)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query4)) != 0) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows > 0) {
@@ -835,7 +852,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 								if (host_thread == 1) {
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-									db_insert(&mysql, query3);
+									db_insert(&mysql, LOCAL, query3);
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
@@ -852,7 +869,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 								if (host_thread == 1) {
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-									db_insert(&mysql, query3);
+									db_insert(&mysql, LOCAL, query3);
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
@@ -871,7 +888,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 									if (host_thread == 1) {
 										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-										db_insert(&mysql, query3);
+										db_insert(&mysql, LOCAL, query3);
 									}
 									assert_fail = TRUE;
 									previous_assert_failure = TRUE;
@@ -886,7 +903,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, poll_result);
 									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, reindex->arg1);
-									db_insert(&mysql, query3);
+									db_insert(&mysql, LOCAL, query3);
 								}
 
 								if ((assert_fail) &&
@@ -937,12 +954,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	num_rows = 0;
 	if (set.poller_interval == 0) {
 		/* get the number of agents */
-		if ((result = db_query(&mysql, query9)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query9)) != 0) {
 			num_snmp_agents = mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if ((result = db_query(&mysql, query1)) != 0) {
+			if ((result = db_query(&mysql, LOCAL, query1)) != 0) {
 				num_rows = mysql_num_rows(result);
 			} else {
 				SPINE_LOG(("Device[%i] TH[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
@@ -952,12 +969,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		}
 	} else {
 		/* get the number of agents */
-		if ((result = db_query(&mysql, query10)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query10)) != 0) {
 			num_snmp_agents = (int)mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if ((result = db_query(&mysql, query5)) != 0) {
+			if ((result = db_query(&mysql, LOCAL, query5)) != 0) {
 				num_rows = mysql_num_rows(result);
 			} else {
 				SPINE_LOG(("Device[%i] TH[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
@@ -1548,6 +1565,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			strncat(query12, query11, strlen(query11));
 		}
 
+		int mode;
+		if (set.mode == REMOTE_ONLINE) {
+			mysqlt = mysqlr;
+			mode   = REMOTE;
+		} else {
+			mysqlt = mysql;
+			mode   = LOCAL;
+		}
+
 		i = 0;
 		while (i < rows_processed) {
 			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s','%s','%s')",
@@ -1564,7 +1590,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				strncat(query3, posuffix, strlen(posuffix));
 
 				/* insert the record */
-				db_insert(&mysql, query3);
+				db_insert(&mysqlt, mode, query3);
 
 				/* re-initialize the query buffer */
 				query3[0] = '\0';
@@ -1575,7 +1601,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					/* append the suffix */
 					strncat(query12, posuffix, strlen(posuffix));
 
-					db_insert(&mysql, query12);
+					db_insert(&mysqlt, mode, query12);
 
 					query12[0] = '\0';
 					strncat(query12, query11, strlen(query11));
@@ -1612,14 +1638,14 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			strncat(query3, posuffix, strlen(posuffix));
 
 			/* insert records into database */
-			db_insert(&mysql, query3);
+			db_insert(&mysqlt, mode, query3);
 
 			/* insert the record for boost */
 			if (set.boost_redirect && set.boost_enabled) {
 				/* append the suffix */
 				strncat(query12, posuffix, strlen(posuffix));
 
-				db_insert(&mysql, query12);
+				db_insert(&mysqlt, mode, query12);
 			}
 		}
 
@@ -1646,7 +1672,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == last_host_thread) {
-		db_query(&mysql, query6);
+		db_query(&mysql, LOCAL, query6);
 	}
 
 	/* record the polling time for the device */
@@ -1661,9 +1687,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	poll_time = get_time_as_double();
 	query1[0] = '\0';
 	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
-	db_query(&mysql, query1);
+	db_query(&mysql, LOCAL, query1);
 
-	mysql_close(&mysql);
+	db_disconnect(&mysql);
+
+	if (set.mode == REMOTE_ONLINE) {
+		db_disconnect(&mysqlr);
+	}
 
 	#ifndef OLD_MYSQL
 	mysql_thread_end();

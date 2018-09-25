@@ -42,6 +42,9 @@
 #define TRUE 1
 #endif
 
+#define LOCAL 0
+#define REMOTE 1
+
 #ifndef __GNUC__
 # define __attribute__(x)  /* NOTHING */
 #endif

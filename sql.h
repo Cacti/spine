@@ -31,9 +31,9 @@
  +-------------------------------------------------------------------------+
 */
 
-extern int db_insert(MYSQL *mysql, const char *query);
-extern MYSQL_RES *db_query(MYSQL *mysql, const char *query);
-extern void db_connect(const char *database, MYSQL *mysql);
+extern int db_insert(MYSQL *mysql, int type, const char *query);
+extern MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query);
+extern void db_connect(int type, MYSQL *mysql);
 extern void db_disconnect(MYSQL *mysql);
 extern void db_escape(MYSQL *mysql, char *output, const char *input);
 extern void db_free_result(MYSQL_RES *result);

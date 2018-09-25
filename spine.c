@@ -523,11 +523,11 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* connect to database */
-	db_connect(set.db_db, &mysql);
+	db_connect(LOCAL, &mysql);
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
@@ -567,7 +567,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* determine if the poller_id field exists in the host table */
-	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'poller_id'");
+	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'poller_id'");
 	if (mysql_num_rows(result)) {
 		set.poller_id_exists = TRUE;
 	}else{
@@ -580,7 +580,7 @@ int main(int argc, char *argv[]) {
 	db_free_result(result);
 
 	/* determine if the device_threads field exists in the host table */
-	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'device_threads'");
+	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'device_threads'");
 	if (mysql_num_rows(result)) {
 		set.device_threads_exists = TRUE;
 	}else{
@@ -611,7 +611,7 @@ int main(int argc, char *argv[]) {
 	}
 	qp += sprintf(qp, " ORDER BY polling_time DESC");
 
-	result = db_query(&mysql, querybuf);
+	result = db_query(&mysql, LOCAL, querybuf);
 	if (set.poller_id == 0) {
 		num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
 	}else{
@@ -628,7 +628,7 @@ int main(int argc, char *argv[]) {
 
 	/* mark the spine process as started */
 	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
-	db_insert(&mysql, querybuf);
+	db_insert(&mysql, LOCAL, querybuf);
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
@@ -680,7 +680,7 @@ int main(int argc, char *argv[]) {
 
 		/* adjust device threads in cases where the host does not have sufficient data sources */
 		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(*) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
-		tresult   = db_query(&mysql, querybuf);
+		tresult   = db_query(&mysql, LOCAL, querybuf);
 		mysql_row = mysql_fetch_row(tresult);
 
 		total_items = atoi(mysql_row[0]);
@@ -696,7 +696,7 @@ int main(int argc, char *argv[]) {
 		if (device_threads > 1) {
 			if (current_thread == 1) {
 				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
-				tresult   = db_query(&mysql, querybuf);
+				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
 				itemsPT   = atoi(mysql_row[0]);
@@ -812,11 +812,11 @@ int main(int argc, char *argv[]) {
 
 	/* update the db for |data_time| on graphs */
 	if (set.poller_id == 1) {
-		db_insert(&mysql, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
+		db_insert(&mysql, LOCAL, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
 	}
 
 	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-	db_insert(&mysql, querybuf);
+	db_insert(&mysql, LOCAL, querybuf);
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
@@ -840,7 +840,7 @@ int main(int argc, char *argv[]) {
 
 	/* close mysql */
 	db_free_result(result);
-	mysql_close(&mysql);
+	db_disconnect(&mysql);
 
 	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
 
