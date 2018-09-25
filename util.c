@@ -667,7 +667,7 @@ void poller_push_data_to_main() {
 	MYSQL_ROW  row;
 	int        num_rows;
 	int        rows;
-	char       sqlbuf[HUGE_BUFSIZE];
+	char       sqlbuf[MEGA_BUFSIZE];
 	char       *sqlp = sqlbuf;
 	char       query[BUFSIZE];
 	char       prefix[BUFSIZE];
@@ -719,9 +719,7 @@ void poller_push_data_to_main() {
         "total_polls=VALUES(total_polls), "
 		"failed_polls=VALUES(failed_polls), "
 		"availability=VALUES(availability), "
-		"last_updated=VALUES(last_updated)");
-
-	memset(sqlbuf, 0, sizeof(sqlbuf));
+		"last_updated=VALUES(last_updated);\0");
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);
@@ -738,7 +736,7 @@ void poller_push_data_to_main() {
 						sqlp += sprintf(sqlp, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[0])); // id
+					sqlp += sprintf(sqlp, "%s, ", row[0]); // id
 
 					db_escape(&mysql, tmpstr, row[1]); // snmp_sysDescr
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
@@ -755,7 +753,7 @@ void poller_push_data_to_main() {
 					db_escape(&mysql, tmpstr, row[7]); // status
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[8])); // status_event_count
+					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count
 
 					db_escape(&mysql, tmpstr, row[9]);  // status_event_date
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
@@ -764,14 +762,14 @@ void poller_push_data_to_main() {
 					db_escape(&mysql, tmpstr, row[11]); // status_last_error
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%f, ", row[12]); // min_time
-					sqlp += sprintf(sqlp, "%f, ", row[13]); // max_time
-					sqlp += sprintf(sqlp, "%f, ", row[14]); // cur_time
-					sqlp += sprintf(sqlp, "%f, ", row[15]); // avg_time
-					sqlp += sprintf(sqlp, "%f, ", row[16]); // polling_time
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[17])); // total_polls
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[18])); // failed_polls
-					sqlp += sprintf(sqlp, "%f, ", row[19]); // availability
+					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time
+					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time
+					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time
+					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time
+					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time
+					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls
+					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls
+					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability
 
 					db_escape(&mysql, tmpstr, row[20]); // last_updated
 					sqlp += sprintf(sqlp, "'%s'", tmpstr);
@@ -784,7 +782,6 @@ void poller_push_data_to_main() {
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
-					memset(sqlbuf, 0, sizeof(sqlbuf));
 				}
 			}
 		}
@@ -795,18 +792,18 @@ void poller_push_data_to_main() {
 		}
 	}
 
+	db_free_result(result);
+
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
 	snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 		"FROM poller_item "
-		"WHERE poller_id = %d", set.poller_id);
+		"WHERE poller_id = %i", set.poller_id);
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
 	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
-		"rrd_next_step=VALUES(rrd_next_step)");
-
-	memset(sqlbuf, 0, sizeof(sqlbuf));
+		"rrd_next_step=VALUES(rrd_next_step);\0");
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);
@@ -823,14 +820,14 @@ void poller_push_data_to_main() {
 						sqlp += sprintf(sqlp, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[0])); // local_data_id
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[1])); // host_id
+					sqlp += sprintf(sqlp, "%s, ", row[0]); // local_data_id
+					sqlp += sprintf(sqlp, "%s, ", row[1]); // host_id
 
 					db_escape(&mysql, tmpstr, row[2]); // rrd_name
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%d, ", atoi(row[3])); // rrd_step
-					sqlp += sprintf(sqlp, "%d",   atoi(row[4])); // rrd_next_step
+					sqlp += sprintf(sqlp, "%s, ", row[3]); // rrd_step
+					sqlp += sprintf(sqlp, "%s",   row[4]); // rrd_next_step
 
 					sqlp += sprintf(sqlp, ")");
 
@@ -840,7 +837,6 @@ void poller_push_data_to_main() {
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
-					memset(sqlbuf, 0, sizeof(sqlbuf));
 				}
 			}
 		}
@@ -850,11 +846,11 @@ void poller_push_data_to_main() {
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 
 			rows = 0;
-			memset(sqlbuf, 0, sizeof(sqlbuf));
 		}
 	}
 
 	db_free_result(result);
+
 	db_disconnect(&mysql);
 	db_disconnect(&mysqlr);
 }
