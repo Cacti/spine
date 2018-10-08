@@ -233,8 +233,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	}
 	memset(reindex, 0, sizeof(reindex_t));
 
-	sysUptime[0] = '\0';
-
 	/* determine the SQL limits using the poller instructions */
 	if (host_data_ids > 0) {
 		snprintf(limits, SMALL_BUFSIZE, "LIMIT %i, %i", host_data_ids * (host_thread - 1), host_data_ids);
@@ -263,7 +261,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"status, status_event_count, status_fail_date, "
 				"status_rec_date, status_last_error, "
 				"min_time, max_time, cur_time, avg_time, "
-				"total_polls, failed_polls, availability, snmp_sysUptimeInstance, snmp_sysDescr, snmp_sysObjectID, "
+				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
                 "snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
 			" WHERE id=%i", host_id);
@@ -334,7 +332,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"status, status_event_count, status_fail_date, "
 				"status_rec_date, status_last_error, "
 				"min_time, max_time, cur_time, avg_time, "
-				"total_polls, failed_polls, availability, snmp_sysUptimeInstance, snmp_sysDescr, snmp_sysObjectID, "
+				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
 				"snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
 			" WHERE id=%i", host_id);
@@ -684,6 +682,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					SPINE_LOG_DEBUG(("Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				}
 
+				// Cache uptime in case we need it again
+				sysUptime[0] = '\0';
 				while ((row = mysql_fetch_row(result))) {
 					assert_fail = FALSE;
 					reindex_err = FALSE;
@@ -730,47 +730,34 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							/* check to see if you are checking uptime */
 							if (!reindex_err) {
-								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
-									if (strlen(sysUptime) > 0) {
-										if (!(poll_result = (char *) malloc(BUFSIZE))) {
-											die("ERROR: Fatal malloc error: poller.c poll_result");
-										}
-										poll_result[0] = '\0';
-
-										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-										if (is_debug_device(host->id)) {
-											SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										} else {
-											SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										}
-									} else {
-										poll_result = snmp_get(host, reindex->arg1);
-										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
-										if (is_debug_device(host->id)) {
-											SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										} else {
-											SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										}
+								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") &&
+								   (strlen(sysUptime) > 0)) {
+									if (!(poll_result = (char *) malloc(BUFSIZE))) {
+										die("ERROR: Fatal malloc error: poller.c poll_result");
 									}
+									poll_result[0] = '\0';
+									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 								} else {
 									poll_result = snmp_get(host, reindex->arg1);
-									if (is_debug_device(host->id)) {
-										SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-									} else {
-										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-									}
+									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+								}
+
+								if (is_debug_device(host->id)) {
+									SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
+								} else {
+									SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
 								}
 							} else {
-								SPINE_LOG(("WARNING: Device[%i] HT[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
 							}
 
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
 							poll_result = trim(exec_poll(host, reindex->arg1));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -778,9 +765,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							php_process = php_get_process();
 							poll_result = trim(php_cmd(reindex->arg1, php_process));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -792,9 +779,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -806,21 +793,21 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1), '\n'));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
 						case POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT: /* script (php script server); count number of lines */
 							//php_process = php_get_process(); // todo not yet provided by cmd.php!
 							//sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
-							//SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Recache DataQuery[%i] SERVER Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+							//SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] SERVER Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
-							SPINE_LOG(("Device[%i] HT[%i] Recache DataQuery[%i] *SKIPPING* Script Server Count: %s,  (arg_num_indexes required)", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+							SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] *SKIPPING* Script Server Count: %s,  (arg_num_indexes required)", host->id, host_thread, reindex->data_query_id, reindex->arg1));
 
 							break;
 						default:
@@ -940,7 +927,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			/* free the host result */
 			mysql_free_result(result);
 		} else {
-			SPINE_LOG(("Device[%i] HT[%i] ERROR: Recache Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: RECACHE Query Returned Null Result!", host->id, host_thread));
 		}
 
 		/* close the host snmp session, we will create again momentarily */
