@@ -743,9 +743,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								}
 
 								if (is_debug_device(host->id)) {
-									SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
 								} else {
-									SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
+									SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
 								}
 							} else {
 								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
@@ -755,9 +755,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
 							poll_result = trim(exec_poll(host, reindex->arg1));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -765,9 +765,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							php_process = php_get_process();
 							poll_result = trim(php_cmd(reindex->arg1, php_process));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -779,9 +779,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -793,21 +793,26 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1), '\n'));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
 						case POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT: /* script (php script server); count number of lines */
-							//php_process = php_get_process(); // todo not yet provided by cmd.php!
-							//sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
-							//SPINE_LOG_MEDIUM(("Device[%i] HT[%i] RECACHE DQ[%i] SERVER Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
-							SPINE_LOG(("Device[%i] HT[%i] RECACHE DQ[%i] *SKIPPING* Script Server Count: %s,  (arg_num_indexes required)", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+
+							php_process = php_get_process();
+
+							sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
+							if (is_debug_device(host->id)) {
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+							} else {
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+							}
 
 							break;
 						default:
@@ -823,18 +828,18 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							/* assume ok if host is up and result wasn't obtained */
 							if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 								assert_fail = FALSE;
 							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG_HIGH(("Device[%i] HT[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								if (host_thread == 1) {
@@ -845,13 +850,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								previous_assert_failure = TRUE;
 							} else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG_HIGH(("Device[%i] HT[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								if (host_thread == 1) {
@@ -864,13 +869,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							} else if (strcmp(reindex->assert_value, "0")) {
 								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
-										SPINE_LOG(("Device[%i] HT[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 									} else {
 										if (set.spine_log_level == 1) {
 											errors++;
 										}
 
-										SPINE_LOG_HIGH(("Device[%i] HT[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 									}
 
 									if (host_thread == 1) {
