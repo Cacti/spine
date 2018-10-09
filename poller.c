@@ -159,6 +159,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char *poll_result = NULL;
 	char update_sql[BIG_BUFSIZE];
 	char temp_poll_result[BUFSIZE];
+	char temp_arg1[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
 	int  num_snmp_agents   = 0;
@@ -806,7 +807,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poll_result[0] = '\0';
 
 							php_process = php_get_process();
-
 							sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -894,7 +894,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
-									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, reindex->arg1);
+									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
+									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, temp_arg1);
 									db_insert(&mysql, LOCAL, query3);
 								}
 
