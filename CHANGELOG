@@ -1,6 +1,6 @@
 The Cacti Group | spine
 
-1.2.0
+1.2.0 Beta 1
 -feature: Allow threads to be set a Data Collector level
 -feature: Support Cacti 1.2's new data collection method
 -feature: Escape strings more rubustly
