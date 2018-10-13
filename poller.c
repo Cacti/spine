@@ -846,7 +846,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 									if (set.mode == REMOTE_ONLINE) {
-										db_insert(&mysqlr, LOCAL, query3);
+										db_insert(&mysqlr, REMOTE, query3);
+									} else {
+										db_insert(&mysql, LOCAL, query3);
 									}
 								}
 								assert_fail = TRUE;
@@ -866,7 +868,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 									if (set.mode == REMOTE_ONLINE) {
-										db_insert(&mysqlr, LOCAL, query3);
+										db_insert(&mysqlr, REMOTE, query3);
+									} else {
+										db_insert(&mysql, LOCAL, query3);
 									}
 								}
 								assert_fail = TRUE;
@@ -888,7 +892,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 										if (set.mode == REMOTE_ONLINE) {
-											db_insert(&mysqlr, LOCAL, query3);
+											db_insert(&mysqlr, REMOTE, query3);
+										} else {
+											db_insert(&mysql, LOCAL, query3);
 										}
 									}
 									assert_fail = TRUE;
