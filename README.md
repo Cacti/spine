@@ -35,7 +35,7 @@ please do the following:
 make
 make install
 chown root:root /usr/local/spine/bin/spine
-chmod +s /usr/local/spine/bin/spine
+chmod u+s /usr/local/spine/bin/spine
 ```
 
 To compile and install Spine using MySQL versions previous to 5.5
