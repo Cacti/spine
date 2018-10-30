@@ -719,7 +719,7 @@ void poller_push_data_to_main() {
         "total_polls=VALUES(total_polls), "
 		"failed_polls=VALUES(failed_polls), "
 		"availability=VALUES(availability), "
-		"last_updated=VALUES(last_updated);\0");
+		"last_updated=VALUES(last_updated);");
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);
@@ -803,7 +803,7 @@ void poller_push_data_to_main() {
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
 	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
-		"rrd_next_step=VALUES(rrd_next_step);\0");
+		"rrd_next_step=VALUES(rrd_next_step);");
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);

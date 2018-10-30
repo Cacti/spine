@@ -211,7 +211,9 @@ int main(int argc, char *argv[]) {
 	pthread_attr_t attr;
 
 	int* ids = NULL;
+	int mode = REMOTE;
 	MYSQL mysql;
+	MYSQL mysqlr;
 	MYSQL_RES *result  = NULL;
 	MYSQL_RES *tresult = NULL;
 	MYSQL_ROW mysql_row;
@@ -526,6 +528,13 @@ int main(int argc, char *argv[]) {
 	/* connect to database */
 	db_connect(LOCAL, &mysql);
 
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_connect(REMOTE, &mysqlr);
+		mode = REMOTE;
+	} else {
+		mode = LOCAL;
+	}
+
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
@@ -629,7 +638,11 @@ int main(int argc, char *argv[]) {
 
 	/* mark the spine process as started */
 	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
-	db_insert(&mysql, LOCAL, querybuf);
+	if (mode == REMOTE) {
+		db_insert(&mysqlr, REMOTE, querybuf);
+	} else {
+		db_insert(&mysql, LOCAL, querybuf);
+	}
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
@@ -822,7 +835,11 @@ int main(int argc, char *argv[]) {
 	}
 
 	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-	db_insert(&mysql, LOCAL, querybuf);
+	if (mode == REMOTE) {
+		db_insert(&mysqlr, REMOTE, querybuf);
+	} else {
+		db_insert(&mysql, LOCAL, querybuf);
+	}
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
@@ -847,6 +864,10 @@ int main(int argc, char *argv[]) {
 	/* close mysql */
 	db_free_result(result);
 	db_disconnect(&mysql);
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_disconnect(&mysqlr);
+	}
 
 	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
 
