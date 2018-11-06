@@ -10,7 +10,7 @@ AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
 AM_INIT_AUTOMAKE([foreign])
-AM_CONFIG_HEADER(config/config.h)
+AC_CONFIG_HEADERS(config/config.h)
 
 # static libraries
 AC_ARG_WITH(static,
@@ -81,7 +81,7 @@ AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
-AC_PROG_LIBTOOL
+LT_INIT
 
 AC_MSG_CHECKING([whether to enable -Wall])
 AC_ARG_ENABLE(warnings,
