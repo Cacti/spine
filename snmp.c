@@ -68,6 +68,7 @@ void snmp_spine_init(void) {
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
 #endif
 
+setenv("MIBS", "", 1);
 netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
 netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
 netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
@@ -81,7 +82,7 @@ netsnmp_ds_toggle_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_CHECK_RANGE
 	SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION));
 	SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s", netsnmp_get_version()));
 
-	if(STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
+	if (STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
 		init_snmp("spine");
 	} else {
 		/* report the error and quit spine */
@@ -126,7 +127,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	snmp_sess_init(&session);
 
 	/* Bind to snmp_clientaddr if specified */
-	if (NULL != set.snmp_clientaddr  && strlen(set.snmp_clientaddr) > 0) {
+	size_t len = strlen(set.snmp_clientaddr);
+	if (len > 0 && len <= SMALL_BUFSIZE) {
 		#if SNMP_LOCALNAME == 1
 		session.localname = strdup(set.snmp_clientaddr);
 		#endif
@@ -201,8 +203,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		}
 
 		if (snmp_engine_id && strlen(snmp_engine_id)) {
-			session.contextEngineID      = snmp_engine_id;
-			session.contextEngineIDLen   = strlen(session.contextEngineID);
+			session.contextEngineID      = (unsigned char*) snmp_engine_id;
+			session.contextEngineIDLen   = strlen(snmp_engine_id);
 		}
 
 		session.securityAuthKeyLen   = USM_AUTH_KU_LEN;
@@ -362,9 +364,9 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
 
-					snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
+					snprint_asciistring(result_string, RESULTS_BUFFER, temp_result, strlen(temp_result));
 				}
 			}
 		}
@@ -441,9 +443,9 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					vars = response->variables;
 
 					if (vars != NULL) {
-						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprintf(result_string, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
+						snprint_asciistring(result_string, RESULTS_BUFFER, temp_result, strlen(temp_result));
 					} else {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
@@ -667,7 +669,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 
 				for (i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
-						snmp_snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
 

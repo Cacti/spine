@@ -91,7 +91,7 @@ void *child(void *arg) {
 	thread_mutex_lock(LOCK_PEND);
 	pending_threads--;
 
-	SPINE_LOG_MEDIUM(("POLLR: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
+	SPINE_LOG_MEDIUM(("POLLER: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
 	thread_mutex_unlock(LOCK_PEND);
 
 	/* end the thread */
@@ -124,7 +124,7 @@ void *child(void *arg) {
  */
 void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
-	char query2[BUFSIZE];
+	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
 	char query4[BUFSIZE];
 	char query5[BUFSIZE];
@@ -157,8 +157,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int    php_process;
 
 	char *poll_result = NULL;
-	char update_sql[BUFSIZE];
+	char update_sql[BIG_BUFSIZE];
 	char temp_poll_result[BUFSIZE];
+	char temp_arg1[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
 	int  num_snmp_agents   = 0;
@@ -179,6 +180,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int last_data_query_id      = 0;
 	int perform_assert          = TRUE;
 	int new_buffer              = TRUE;
+	int ignore_sysinfo          = TRUE;
 
 	reindex_t   *reindex;
 	host_t      *host;
@@ -189,14 +191,32 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	error_string = malloc(DBL_BUFSIZE);
 
 	MYSQL     mysql;
+	MYSQL     mysqlr;
+	MYSQL     mysqlt;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	db_connect(set.dbdb, &mysql);
+	db_connect(LOCAL, &mysql);
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+
+	if (set.mode == REMOTE_ONLINE) {
+		db_connect(REMOTE, &mysqlr);
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+	}
 
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
@@ -213,8 +233,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
 	}
 	memset(reindex, 0, sizeof(reindex_t));
-
-	sysUptime[0] = '\0';
 
 	/* determine the SQL limits using the poller instructions */
 	if (host_data_ids > 0) {
@@ -236,7 +254,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" ORDER BY snmp_port %s", host_id, limits);
 
 		/* host structure for uptime checks */
-		snprintf(query2, BUFSIZE,
+		snprintf(query2, BIG_BUFSIZE,
 			"SELECT id, hostname, snmp_community, snmp_version, "
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
@@ -244,7 +262,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"status, status_event_count, status_fail_date, "
 				"status_rec_date, status_last_error, "
 				"min_time, max_time, cur_time, avg_time, "
-				"total_polls, failed_polls, availability, snmp_sysUptimeInstance, snmp_sysDescr, snmp_sysObjectID, "
+				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
                 "snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
 			" WHERE id=%i", host_id);
@@ -307,7 +325,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* host structure for uptime checks */
-		snprintf(query2, BUFSIZE,
+		snprintf(query2, BIG_BUFSIZE,
 			"SELECT id, hostname, snmp_community, snmp_version, "
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
@@ -315,7 +333,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"status, status_event_count, status_fail_date, "
 				"status_rec_date, status_last_error, "
 				"min_time, max_time, cur_time, avg_time, "
-				"total_polls, failed_polls, availability, snmp_sysUptimeInstance, snmp_sysDescr, snmp_sysObjectID, "
+				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
 				"snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
 			" WHERE id=%i", host_id);
@@ -384,12 +402,16 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	/* if the host is a real host.  Note host_id=0 is not host based data source */
 	if (host_id) {
 		/* get data about this host */
-		if ((result = db_query(&mysql, query2)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query2)) != 0) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
-				mysql_close(&mysql);
+				db_disconnect(&mysql);
+
+				if (set.mode == REMOTE_ONLINE) {
+					db_disconnect(&mysqlr);
+				}
 
 				#ifndef OLD_MYSQL
 				mysql_thread_end();
@@ -487,15 +509,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (row[30] != NULL) host->availability = atof(row[30]);
 
 				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atoi(row[31]);
-				if (row[32] != NULL) STRNCOPY(host->snmp_sysDescr, row[32]);
-				if (row[33] != NULL) STRNCOPY(host->snmp_sysObjectID, row[33]);
-				if (row[34] != NULL) STRNCOPY(host->snmp_sysContact, row[34]);
-				if (row[35] != NULL) STRNCOPY(host->snmp_sysName, row[35]);
-				if (row[36] != NULL) STRNCOPY(host->snmp_sysLocation, row[36]);
+				if (row[32] != NULL) db_escape(&mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), row[32]);
+				if (row[33] != NULL) db_escape(&mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), row[33]);
+				if (row[34] != NULL) db_escape(&mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), row[34]);
+				if (row[35] != NULL) db_escape(&mysql, host->snmp_sysName, sizeof(host->snmp_sysName), row[35]);
+				if (row[36] != NULL) db_escape(&mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), row[36]);
 
 				/* correct max_oid bounds issues */
 				if ((host->max_oids == 0) || (host->max_oids > 100)) {
-					SPINE_LOG(("Device[%i] TH[%i] WARNING: Max OIDS is out of range with value of '%i'.  Resetting to default of 5", host_id, host_thread, host->max_oids));
+					SPINE_LOG(("Device[%i] HT[%i] WARNING: Max OIDS is out of range with value of '%i'.  Resetting to default of 5", host_id, host_thread, host->max_oids));
 					host->max_oids = 5;
 				}
 
@@ -532,9 +554,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					update_host_status(HOST_UP, host, ping, host->availability_method);
 
 					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] TH[%i] No host availability check possible for '%s'", host->id, host_thread, host->hostname));
+						SPINE_LOG(("Device[%i] HT[%i] No host availability check possible for '%s'", host->id, host_thread, host->hostname));
 					} else {
-						SPINE_LOG_MEDIUM(("Device[%i] TH[%i] No host availability check possible for '%s'", host->id, host_thread, host->hostname));
+						SPINE_LOG_MEDIUM(("Device[%i] HT[%i] No host availability check possible for '%s'", host->id, host_thread, host->hostname));
 					}
 				} else {
 					if (ping_host(host, ping) == HOST_UP) {
@@ -545,6 +567,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							if ((host->availability_method != AVAIL_PING) && (host->availability_method != AVAIL_NONE)) {
 								if (host->snmp_session != NULL) {
 									get_system_information(host, &mysql, 1);
+									ignore_sysinfo = FALSE;
 								}
 							}
 						}
@@ -558,38 +581,82 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 				/* update host table */
 				if (host_thread == 1) {
-					snprintf(update_sql, BUFSIZE, "UPDATE host "
-						"SET status='%i', status_event_count='%i', status_fail_date='%s',"
-							" status_rec_date='%s', status_last_error='%s', min_time='%f',"
-							" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-							" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
-							" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%u', "
-							" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
-						"WHERE id='%i'",
-						host->status,
-						host->status_event_count,
-						host->status_fail_date,
-						host->status_rec_date,
-						host->status_last_error,
-						host->min_time,
-						host->max_time,
-						host->cur_time,
-						host->avg_time,
-						host->total_polls,
-						host->failed_polls,
-						host->availability,
-						host->snmp_sysDescr,
-						host->snmp_sysObjectID,
-						host->snmp_sysUpTimeInstance,
-						host->snmp_sysContact,
-						host->snmp_sysName,
-						host->snmp_sysLocation,
-						host->id);
+					if (!ignore_sysinfo) {
+						if (host->ignore_host != TRUE) {
+							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+								"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+									" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+									" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
+									" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%u', "
+									" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
+								"WHERE id='%i'",
+								host->status,
+								host->status_event_count,
+								host->status_fail_date,
+								host->status_rec_date,
+								host->status_last_error,
+								host->min_time,
+								host->max_time,
+								host->cur_time,
+								host->avg_time,
+								host->total_polls,
+								host->failed_polls,
+								host->availability,
+								host->snmp_sysDescr,
+								host->snmp_sysObjectID,
+								host->snmp_sysUpTimeInstance,
+								host->snmp_sysContact,
+								host->snmp_sysName,
+								host->snmp_sysLocation,
+								host->id);
+						} else {
+							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+								"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+									" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+									" failed_polls='%i', availability='%.4f' "
+								"WHERE id='%i'",
+								host->status,
+								host->status_event_count,
+								host->status_fail_date,
+								host->status_rec_date,
+								host->status_last_error,
+								host->min_time,
+								host->max_time,
+								host->cur_time,
+								host->avg_time,
+								host->total_polls,
+								host->failed_polls,
+								host->availability,
+								host->id);
+						}
+					} else {
+						snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+							"SET status='%i', status_event_count='%i', status_fail_date='%s',"
+								" status_rec_date='%s', status_last_error='%s', min_time='%f',"
+								" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+								" failed_polls='%i', availability='%.4f' "
+							"WHERE id='%i'",
+							host->status,
+							host->status_event_count,
+							host->status_fail_date,
+							host->status_rec_date,
+							host->status_last_error,
+							host->min_time,
+							host->max_time,
+							host->cur_time,
+							host->avg_time,
+							host->total_polls,
+							host->failed_polls,
+							host->availability,
+							host->id);
+					}
 
-					db_insert(&mysql, update_sql);
+					db_insert(&mysql, LOCAL, update_sql);
 				}
 			} else {
-				SPINE_LOG(("Device[%i] TH[%i] ERROR: MySQL Returned a Null Device Result", host->id, host_thread));
+				SPINE_LOG(("Device[%i] HT[%i] ERROR: MySQL Returned a Null Device Result", host->id, host_thread));
 				num_rows = 0;
 				host->ignore_host = TRUE;
 			}
@@ -606,16 +673,18 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* do the reindex check for this host if not script based */
 	if ((!host->ignore_host) && (host_id)) {
-		if ((result = db_query(&mysql, query4)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query4)) != 0) {
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows > 0) {
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] TH[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
+					SPINE_LOG(("Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				} else {
-					SPINE_LOG_DEBUG(("Device[%i] TH[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
+					SPINE_LOG_DEBUG(("Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				}
 
+				// Cache uptime in case we need it again
+				sysUptime[0] = '\0';
 				while ((row = mysql_fetch_row(result))) {
 					assert_fail = FALSE;
 					reindex_err = FALSE;
@@ -633,7 +702,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
 
 					if (row[3] != NULL) {
-						db_escape(&mysql, reindex->assert_value, row[3]);
+						db_escape(&mysql, reindex->assert_value, sizeof(reindex->assert_value), row[3]);
 					}
 
 					if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
@@ -650,6 +719,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						perform_assert = FALSE;
 					}
 
+					poll_result = NULL;
+
 					if (perform_assert) {
 						switch(reindex->action) {
 						case POLLER_ACTION_SNMP: /* snmp */
@@ -660,47 +731,34 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							/* check to see if you are checking uptime */
 							if (!reindex_err) {
-								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
-									if (strlen(sysUptime) > 0) {
-										if (!(poll_result = (char *) malloc(BUFSIZE))) {
-											die("ERROR: Fatal malloc error: poller.c poll_result");
-										}
-										poll_result[0] = '\0';
-
-										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-										if (is_debug_device(host->id)) {
-											SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										} else {
-											SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										}
-									} else {
-										poll_result = snmp_get(host, reindex->arg1);
-										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
-										if (is_debug_device(host->id)) {
-											SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										} else {
-											SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-										}
+								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") &&
+								   (strlen(sysUptime) > 0)) {
+									if (!(poll_result = (char *) malloc(BUFSIZE))) {
+										die("ERROR: Fatal malloc error: poller.c poll_result");
 									}
+									poll_result[0] = '\0';
+									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 								} else {
 									poll_result = snmp_get(host, reindex->arg1);
-									if (is_debug_device(host->id)) {
-										SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-									} else {
-										SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] OID: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
-									}
+									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+								}
+
+								if (is_debug_device(host->id)) {
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
+								} else {
+									SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, poll_result));
 								}
 							} else {
-								SPINE_LOG(("WARNING: Device[%i] TH[%i] DataQuery[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
 							}
 
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
 							poll_result = trim(exec_poll(host, reindex->arg1));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -708,9 +766,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							php_process = php_get_process();
 							poll_result = trim(php_cmd(reindex->arg1, php_process));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -722,9 +780,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i]: OID_COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
@@ -736,25 +794,29 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1), '\n'));
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] CMD Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							}
 
 							break;
 						case POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT: /* script (php script server); count number of lines */
-							//php_process = php_get_process(); // todo not yet provided by cmd.php!
-							//sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
-							//SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Recache DataQuery[%i] SERVER Count: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
-							SPINE_LOG(("Device[%i] TH[%i] Recache DataQuery[%i] *SKIPPING* Script Server Count: %s,  (arg_num_indexes required)", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+
+							php_process = php_get_process();
+							sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
+							if (is_debug_device(host->id)) {
+								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+							} else {
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+							}
 
 							break;
 						default:
-							SPINE_LOG(("Device[%i] TH[%i] ERROR: Unknown Assert Action!", host->id, host_thread));
+							SPINE_LOG(("Device[%i] HT[%i] ERROR: Unknown Assert Action!", host->id, host_thread));
 						}
 
 						if (!reindex_err) {
@@ -766,40 +828,50 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							/* assume ok if host is up and result wasn't obtained */
 							if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 								assert_fail = FALSE;
 							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG_HIGH(("Device[%i] TH[%i] ASSERT: '%s' .eq. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								if (host_thread == 1) {
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-									db_insert(&mysql, query3);
+
+									if (set.mode == REMOTE_ONLINE) {
+										db_insert(&mysqlr, REMOTE, query3);
+									} else {
+										db_insert(&mysql, LOCAL, query3);
+									}
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							} else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG_HIGH(("Device[%i] TH[%i] ASSERT: '%s' .gt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								if (host_thread == 1) {
 									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-									db_insert(&mysql, query3);
+
+									if (set.mode == REMOTE_ONLINE) {
+										db_insert(&mysqlr, REMOTE, query3);
+									} else {
+										db_insert(&mysql, LOCAL, query3);
+									}
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
@@ -807,18 +879,23 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							} else if (strcmp(reindex->assert_value, "0")) {
 								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
-										SPINE_LOG(("Device[%i] TH[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 									} else {
 										if (set.spine_log_level == 1) {
 											errors++;
 										}
 
-										SPINE_LOG_HIGH(("Device[%i] TH[%i] ASSERT: '%s' .lt. '%s' failed. Recaching host '%s', data query #%i", host->id, host_thread, reindex->assert_value, poll_result, host->hostname, reindex->data_query_id));
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 									}
 
 									if (host_thread == 1) {
 										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-										db_insert(&mysql, query3);
+
+										if (set.mode == REMOTE_ONLINE) {
+											db_insert(&mysqlr, REMOTE, query3);
+										} else {
+											db_insert(&mysql, LOCAL, query3);
+										}
 									}
 									assert_fail = TRUE;
 									previous_assert_failure = TRUE;
@@ -831,43 +908,47 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							 *     the assert to fail */
 							if ((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
-									db_escape(&mysql, temp_poll_result, poll_result);
-									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, reindex->arg1);
-									db_insert(&mysql, query3);
+									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
+									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
+									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, temp_arg1);
+									db_insert(&mysql, LOCAL, query3);
 								}
 
 								if ((assert_fail) &&
 									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {
 									spike_kill = TRUE;
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
-										SPINE_LOG(("Device[%i] TH[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
+										SPINE_LOG(("Device[%i] HT[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
 									} else {
 										if (set.spine_log_level == 1) {
 											errors++;
 										}
 
-										SPINE_LOG_MEDIUM(("Device[%i] TH[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
+										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
 									}
 								}
 							}
 
 							free(query3);
-							free(poll_result);
+
+							if (poll_result != NULL) {
+								free(poll_result);
+							}
 						}
 					}
 				}
 			} else {
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] TH[%i] Device has no information for recache.", host->id, host_thread));
+					SPINE_LOG(("Device[%i] HT[%i] Device has no information for recache.", host->id, host_thread));
 				} else {
-					SPINE_LOG_HIGH(("Device[%i] TH[%i] Device has no information for recache.", host->id, host_thread));
+					SPINE_LOG_HIGH(("Device[%i] HT[%i] Device has no information for recache.", host->id, host_thread));
 				}
 			}
 
 			/* free the host result */
 			mysql_free_result(result);
 		} else {
-			SPINE_LOG(("Device[%i] TH[%i] ERROR: Recache Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: RECACHE Query Returned Null Result!", host->id, host_thread));
 		}
 
 		/* close the host snmp session, we will create again momentarily */
@@ -881,33 +962,33 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	num_rows = 0;
 	if (set.poller_interval == 0) {
 		/* get the number of agents */
-		if ((result = db_query(&mysql, query9)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query9)) != 0) {
 			num_snmp_agents = mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if ((result = db_query(&mysql, query1)) != 0) {
+			if ((result = db_query(&mysql, LOCAL, query1)) != 0) {
 				num_rows = mysql_num_rows(result);
 			} else {
-				SPINE_LOG(("Device[%i] TH[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
+				SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 			}
 		} else {
-			SPINE_LOG(("Device[%i] TH[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
 		}
 	} else {
 		/* get the number of agents */
-		if ((result = db_query(&mysql, query10)) != 0) {
+		if ((result = db_query(&mysql, LOCAL, query10)) != 0) {
 			num_snmp_agents = (int)mysql_num_rows(result);
 			mysql_free_result(result);
 
 			/* get the poller items */
-			if ((result = db_query(&mysql, query5)) != 0) {
+			if ((result = db_query(&mysql, LOCAL, query5)) != 0) {
 				num_rows = mysql_num_rows(result);
 			} else {
-				SPINE_LOG(("Device[%i] TH[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
+				SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 			}
 		} else {
-			SPINE_LOG(("Device[%i] TH[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
 		}
 	}
 
@@ -993,9 +1074,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		/* log an informative message */
 		if (is_debug_device(host_id)) {
-			SPINE_LOG(("Device[%i] TH[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
+			SPINE_LOG(("Device[%i] HT[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
 		} else {
-			SPINE_LOG_MEDIUM(("Device[%i] TH[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
+			SPINE_LOG_MEDIUM(("Device[%i] HT[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
 		}
 
 		i = 0; k = 0;
@@ -1036,27 +1117,27 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 				if ((last_snmp_port != poller_items[i].snmp_port) ||
 					(last_snmp_version != poller_items[i].snmp_version) ||
-					((poller_items[i].snmp_version < 3) &&
+					(poller_items[i].snmp_version < 3 &&
 					(!STRMATCH(last_snmp_community, poller_items[i].snmp_community))) ||
-					((poller_items[i].snmp_version > 2) &&
-					(!STRMATCH(last_snmp_username, poller_items[i].snmp_username)) ||
+					(poller_items[i].snmp_version > 2 &&
+					((!STRMATCH(last_snmp_username, poller_items[i].snmp_username)) ||
 					(!STRMATCH(last_snmp_password, poller_items[i].snmp_password)) ||
 					(!STRMATCH(last_snmp_auth_protocol, poller_items[i].snmp_auth_protocol)) ||
 					(!STRMATCH(last_snmp_priv_passphrase, poller_items[i].snmp_priv_passphrase)) ||
 					(!STRMATCH(last_snmp_priv_protocol, poller_items[i].snmp_priv_protocol)) ||
 					(!STRMATCH(last_snmp_context, poller_items[i].snmp_context)) ||
-					(!STRMATCH(last_snmp_engine_id, poller_items[i].snmp_engine_id)))) {
+					(!STRMATCH(last_snmp_engine_id, poller_items[i].snmp_engine_id))))) {
 
 					if (num_oids > 0) {
 						snmp_get_multi(host, snmp_oids, num_oids);
 
 						for (j = 0; j < num_oids; j++) {
 							if (host->ignore_host) {
-								SPINE_LOG(("Device[%i] TH[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+								SPINE_LOG(("Device[%i] HT[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
 							} else if (IS_UNDEFINED(snmp_oids[j].result)) {
 								if (set.spine_log_level == 2) {
-									SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+									SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 										host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
 										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1077,7 +1158,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 								if (set.spine_log_level == 2) {
-									SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+									SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 										host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
 										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1099,7 +1180,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								/* detect erroneous non-numeric result */
 								if (!validate_result(snmp_oids[j].result)) {
 									if (set.spine_log_level == 2) {
-										SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+										SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 											host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
 											host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 											poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1119,9 +1200,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
 							if (is_debug_device(host_id)) {
-								SPINE_LOG(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
 						}
 
@@ -1159,11 +1240,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 					for (j = 0; j < num_oids; j++) {
 						if (host->ignore_host) {
-							SPINE_LOG(("Device[%i] TH[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+							SPINE_LOG(("Device[%i] HT[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 							SET_UNDEFINED(snmp_oids[j].result);
 						} else if (IS_UNDEFINED(snmp_oids[j].result)) {
 							if (set.spine_log_level == 2) {
-								SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+								SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 									host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
 									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1184,7 +1265,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 							if (set.spine_log_level == 2) {
-								SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+								SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 									host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
 									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1206,7 +1287,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							/* detect erroneous non-numeric result */
 							if (!validate_result(snmp_oids[j].result)) {
 								if (set.spine_log_level == 2) {
-									SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+									SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 										host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
 										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1226,12 +1307,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
 						if (is_debug_device(host_id)) {
-							SPINE_LOG(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						} else {
-							SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						}
 
-						if (poller_items[snmp_oids[j].array_position].result != NULL) {
+						if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
 							/* insert a NaN in place of the actual value if the snmp agent restarts */
 							if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
 								SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
@@ -1258,7 +1339,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (IS_UNDEFINED(poll_result)) {
 					SET_UNDEFINED(poller_items[i].result);
 					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s",
+						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
 							host_id, host_thread, poller_items[i].local_data_id,
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
@@ -1281,7 +1362,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s",
+							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
 								host_id, host_thread, poller_items[i].local_data_id,
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
@@ -1300,12 +1381,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (poll_result) free(poll_result);
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
 				}
 
-				if (poller_items[i].result != NULL) {
+				if (!IS_UNDEFINED(poller_items[i].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
 					if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
 						SET_UNDEFINED(poller_items[i].result);
@@ -1322,7 +1403,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (IS_UNDEFINED(poll_result)) {
 					SET_UNDEFINED(poller_items[i].result);
 					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s",
+						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
 							host_id, host_thread, poller_items[i].local_data_id,
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
@@ -1345,7 +1426,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SCRIPT: %s, output: %s",
+							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
 								host_id, host_thread, poller_items[i].local_data_id,
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
@@ -1364,12 +1445,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (poll_result) free(poll_result);
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] TH[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
 				}
 
-				if (poller_items[i].result != NULL) {
+				if (IS_UNDEFINED(poller_items[i].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
 					if ((spike_kill) && (!STRIMATCH(poller_items[i].result,":"))) {
 						SET_UNDEFINED(poller_items[i].result);
@@ -1378,7 +1459,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 				break;
 			default: /* unknown action, generate error */
-				SPINE_LOG(("Device[%i] TH[%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
+				SPINE_LOG(("Device[%i] HT[%i] DS[%i] ERROR: Unknown Poller Action: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
 
 				break;
 			}
@@ -1393,11 +1474,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 			for (j = 0; j < num_oids; j++) {
 				if (host->ignore_host) {
-					SPINE_LOG(("Device[%i] TH[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
 				} else if (IS_UNDEFINED(snmp_oids[j].result)) {
 					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 							host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version,
 							host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1418,7 +1499,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 							host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version,
 							host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1440,7 +1521,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					/* detect erroneous non-numeric result */
 					if (!validate_result(snmp_oids[j].result)) {
 						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
 								host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version,
 								host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
 								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
@@ -1460,12 +1541,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] TH[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				}
 
-				if (poller_items[snmp_oids[j].array_position].result != NULL) {
+				if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
 					if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
 						SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
@@ -1492,6 +1573,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			strncat(query12, query11, strlen(query11));
 		}
 
+		int mode;
+		if (set.mode == REMOTE_ONLINE) {
+			mysqlt = mysqlr;
+			mode   = REMOTE;
+		} else {
+			mysqlt = mysql;
+			mode   = LOCAL;
+		}
+
 		i = 0;
 		while (i < rows_processed) {
 			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s','%s','%s')",
@@ -1508,7 +1598,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				strncat(query3, posuffix, strlen(posuffix));
 
 				/* insert the record */
-				db_insert(&mysql, query3);
+				db_insert(&mysqlt, mode, query3);
 
 				/* re-initialize the query buffer */
 				query3[0] = '\0';
@@ -1519,7 +1609,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					/* append the suffix */
 					strncat(query12, posuffix, strlen(posuffix));
 
-					db_insert(&mysql, query12);
+					db_insert(&mysqlt, mode, query12);
 
 					query12[0] = '\0';
 					strncat(query12, query11, strlen(query11));
@@ -1556,14 +1646,14 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			strncat(query3, posuffix, strlen(posuffix));
 
 			/* insert records into database */
-			db_insert(&mysql, query3);
+			db_insert(&mysqlt, mode, query3);
 
 			/* insert the record for boost */
 			if (set.boost_redirect && set.boost_enabled) {
 				/* append the suffix */
 				strncat(query12, posuffix, strlen(posuffix));
 
-				db_insert(&mysql, query12);
+				db_insert(&mysqlt, mode, query12);
 			}
 		}
 
@@ -1590,33 +1680,37 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == last_host_thread) {
-		db_query(&mysql, query6);
+		db_query(&mysql, LOCAL, query6);
 	}
 
 	/* record the polling time for the device */
 	poll_time = get_time_as_double() - poll_time;
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("Device[%i] TH[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
+		SPINE_LOG(("Device[%i] HT[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
 	} else {
-		SPINE_LOG_MEDIUM(("Device[%i] TH[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
+		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
 	}
 
 	/* record the total time for the host */
 	poll_time = get_time_as_double();
 	query1[0] = '\0';
 	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
-	db_query(&mysql, query1);
+	db_query(&mysql, LOCAL, query1);
 
-	mysql_close(&mysql);
+	db_disconnect(&mysql);
+
+	if (set.mode == REMOTE_ONLINE) {
+		db_disconnect(&mysqlr);
+	}
 
 	#ifndef OLD_MYSQL
 	mysql_thread_end();
 	#endif
 
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("Device[%i] TH[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+		SPINE_LOG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] TH[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
 	if (error_len > 0) {
@@ -1675,10 +1769,6 @@ int is_multipart_output(char *result) {
 void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 	char *poll_result;
 
-	if (!(poll_result = (char *) malloc(BUFSIZE))) {
-		die("ERROR: Fatal malloc error: poller.c poll_result");
-	}
-
 	if (set.mibs || system) {
 		if (is_debug_device(host->id)) {
 			SPINE_LOG(("Updating Full System Information Table"));
@@ -1688,32 +1778,38 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysDescr, poll_result);
+			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
 		}
+		free(poll_result);
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysObjectID, poll_result);
+			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysContact, poll_result);
+			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysName, poll_result);
+			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
+			free(poll_result);
 		}
 
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
 		if (poll_result) {
-			db_escape(mysql, host->snmp_sysLocation, poll_result);
+			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);
+			free(poll_result);
 		}
 	} else {
 		if (is_debug_device(host->id)) {
@@ -1725,10 +1821,9 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
+			free(poll_result);
 		}
 	}
-
-	free(poll_result);
 }
 
 /*! \fn int validate_result(char *result)

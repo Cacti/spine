@@ -34,9 +34,10 @@
 #include "common.h"
 #include "spine.h"
 
-/*! \fn int db_insert(MYSQL *mysql, const char *query)
+/*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
+ *  \param type  the database to connect to local or remote
  *  \param query the database query to execute
  *
  *	Unless the SQL_readonly boolean is set to TRUE, the function will execute
@@ -45,16 +46,16 @@
  *  \return TRUE if successful, or FALSE if not.
  *
  */
-int db_insert(MYSQL *mysql, const char *query) {
+int db_insert(MYSQL *mysql, int type, const char *query) {
 	int    error;
 	int    error_count = 0;
-	char   query_frag[BUFSIZE];
+	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
-	snprintf(query_frag, BUFSIZE, "%s", query);
+	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
 
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
@@ -76,10 +77,10 @@ int db_insert(MYSQL *mysql, const char *query) {
 					}
 
 					continue;
-				}else if (error == 2006 && errno == EINTR) {
+				} else if (error == 2006 && errno == EINTR) {
 					db_disconnect(mysql);
 					usleep(50000);
-					db_connect(set.dbdb, mysql);
+					db_connect(type, mysql);
 					error_count++;
 
 					if (error_count > 30) {
@@ -87,14 +88,14 @@ int db_insert(MYSQL *mysql, const char *query) {
 					}
 
 					continue;
-				}else{
+				} else {
 					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
 					return FALSE;
 				}
-			}else{
+			} else {
 				return TRUE;
 			}
-		}else{
+		} else {
 			return TRUE;
 		}
 	}
@@ -110,19 +111,19 @@ int db_insert(MYSQL *mysql, const char *query) {
  *  \return MYSQL_RES a MySQL result structure
  *
  */
-MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
+MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	MYSQL_RES  *mysql_res = 0;
 
 	int    error       = 0;
 	int    error_count = 0;
 
-	char   query_frag[BUFSIZE];
+	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
-	snprintf(query_frag, BUFSIZE, "%s", query);
+	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:'%s'", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
 
 	while (1) {
 		if (mysql_query(mysql, query)) {
@@ -144,10 +145,10 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				}
 
 				continue;
-			}else if (error == 2006 && errno == EINTR) {
+			} else if (error == 2006 && errno == EINTR) {
 				db_disconnect(mysql);
 				usleep(50000);
-				db_connect(set.dbdb, mysql);
+				db_connect(type, mysql);
 				error_count++;
 
 				if (error_count > 30) {
@@ -155,10 +156,10 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
 				}
 
 				continue;
-			}else{
+			} else {
 				die("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql));
 			}
-		}else{
+		} else {
 			mysql_res = mysql_store_result(mysql);
 
 			break;
@@ -178,7 +179,7 @@ MYSQL_RES *db_query(MYSQL *mysql, const char *query) {
  *  fails more than 20 times, the function will fail and Spine will terminate.
  *
  */
-void db_connect(const char *database, MYSQL *mysql) {
+void db_connect(int type, MYSQL *mysql) {
 	int    tries;
 	int    timeout;
 	int    rtimeout;
@@ -195,35 +196,29 @@ void db_connect(const char *database, MYSQL *mysql) {
 	 * and if it is a socket file, setup mysql to use it.
 	 */
 	if (set.poller_id > 1) {
-		if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
-			if ((hostname = strdup(set.dbhost)) == NULL) {
-				die("FATAL: malloc(): strdup() failed");
-			}
+		if (type == LOCAL) {
+			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 			if (stat(hostname, &socket_stat) == 0) {
 				if (socket_stat.st_mode & S_IFSOCK) {
-					socket = strdup (set.dbhost);
+					socket = strdup (set.db_host);
 					hostname = NULL;
 				}
-			}else if ((socket = strstr(hostname,":"))) {
+			} else if ((socket = strstr(hostname,":"))) {
 				*socket++ = 0x0;
 			}
-		}else{
-			if ((hostname = strdup(set.rdbhost)) == NULL) {
-				die("FATAL: malloc(): strdup() failed");
-			}
+		} else {
+			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 		}
-	}else{
-		if ((hostname = strdup(set.dbhost)) == NULL) {
-			die("FATAL: malloc(): strdup() failed");
-		}
+	} else {
+		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
-				socket = strdup (set.dbhost);
+				socket = strdup (set.db_host);
 				hostname = NULL;
 			}
-		}else if ((socket = strstr(hostname,":"))) {
+		} else if ((socket = strstr(hostname,":"))) {
 			*socket++ = 0x0;
 		}
 	}
@@ -234,53 +229,59 @@ void db_connect(const char *database, MYSQL *mysql) {
 	timeout = 5;
 	rtimeout = 10;
 	wtimeout = 20;
+	my_bool reconnect = 1;
 
 	mysql_init(mysql);
+
 	if (mysql == NULL) {
 		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
 	}
 
-	options_error = mysql_options(mysql, MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set read timeout value");
-	}
-
-	options_error = mysql_options(mysql, MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set read timeout value");
-	}
-
-	options_error = mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set timeout value");
-	}
+	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout, "read timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout, "write timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout, "general timeout");
 
 	#ifdef MYSQL_OPT_RECONNECT
-	my_bool reconnect = 1;
-	options_error = mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set reconnect option\n");
-	}
+	MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
 	#endif
 
 	#ifdef MYSQL_OPT_RETRY_COUNT
-	options_error = mysql_options(mysql, MYSQL_OPT_RETRY_COUNT, &tries);
-	if (options_error < 0) {
-		die("FATAL: MySQL options unable to set retry count option\n");
+	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
+	#endif
+
+	/* set SSL options if available */
+	#ifdef MYSQL_OPT_SSL_KEY
+	char *ssl_key;
+	char *ssl_ca;
+	char *ssl_cert;
+
+	if (set.poller_id > 1 && type == REMOTE) {
+		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
+		STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
+		STRDUP_OR_DIE(ssl_cert, set.rdb_ssl_cert, "rdb_ssl_cert");
+	} else {
+		STRDUP_OR_DIE(ssl_key, set.db_ssl_key, "db_ssl_key");
+		STRDUP_OR_DIE(ssl_ca, set.db_ssl_ca, "db_ssl_ca");
+		STRDUP_OR_DIE(ssl_cert, set.db_ssl_cert, "db_ssl_cert");
 	}
+
+	if (strlen(ssl_key)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY, ssl_key,  "ssl key");
+	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
+	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
+
 	#endif
 
 	while (tries > 0) {
 		tries--;
 
 		if (set.poller_id > 1) {
-			if (set.mode == REMOTE_OFFLINE || set.mode == REMOTE_RECOVERY) {
-				connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
-			}else{
-				connect_error = mysql_real_connect(mysql, hostname, set.rdbuser, set.rdbpass, set.rdbdb, set.rdbport, socket, 0);
+			if (type == LOCAL) {
+				connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, set.db_db, set.db_port, socket, 0);
+			} else {
+				connect_error = mysql_real_connect(mysql, hostname, set.rdb_user, set.rdb_pass, set.rdb_db, set.rdb_port, socket, 0);
 			}
-		}else{
-			connect_error = mysql_real_connect(mysql, hostname, set.dbuser, set.dbpass, database, set.dbport, socket, 0);
+		} else {
+			connect_error = mysql_real_connect(mysql, hostname, set.db_user, set.db_pass, set.db_db, set.db_port, socket, 0);
 		}
 
 		if (!connect_error) {
@@ -302,11 +303,11 @@ void db_connect(const char *database, MYSQL *mysql) {
 				#ifndef SOLAR_THREAD
 				usleep(2000);
 				#endif
-			}else{
+			} else {
 				tries   = 0;
 				success = FALSE;
 			}
-		}else{
+		} else {
 			tries   = 0;
 			success = TRUE;
 		}
@@ -350,12 +351,12 @@ int append_hostrange(char *obuf, const char *colname) {
 			colname,
 			set.start_host_id,
 			set.end_host_id);
-	}else{
+	} else {
 		return 0;
 	}
 }
 
-/*! \fn void db_escape(MYSQL *mysql, char *output, const char *input)
+/*! \fn void db_escape(MYSQL *mysql, char *output, int max_size, const char *input)
  *  \brief Escapse a text string to make it safe for mysql insert/updates
  *  \param mysql the connection object
  *  \param output a pointer to the output string
@@ -367,12 +368,23 @@ int append_hostrange(char *obuf, const char *colname) {
  *  \return void
  *
  */
-void db_escape(MYSQL *mysql, char *output, const char *input) {
+void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	if (input == NULL) return;
 
-	output[0] = '\0';
+	char input_trimmed[BUFSIZE];
+	int  input_size;
 
-	mysql_real_escape_string(mysql, output, input, strlen(input));
+	input_size = strlen(input);
+
+	if (input_size > max_size) {
+		strncpy(input_trimmed, input, max_size - 10);
+		input_trimmed[max_size-10] = 0;
+	} else {
+		strncpy(input_trimmed, input, input_size);
+		input_trimmed[input_size] = 0;
+	}
+
+	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
 }
 
 void db_free_result(MYSQL_RES *result) {

@@ -111,6 +111,7 @@ int     *debug_devices;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
+void poller_push_data_to_main();
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -190,7 +191,7 @@ int main(int argc, char *argv[]) {
 	int num_rows = 0;
 	int device_counter = 0;
 	int valid_conf_file = FALSE;
-	char querybuf[BIG_BUFSIZE], *qp = querybuf;
+	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
 	double host_time_double = 0;
 	int itemsPT = 0;
@@ -210,7 +211,9 @@ int main(int argc, char *argv[]) {
 	pthread_attr_t attr;
 
 	int* ids = NULL;
+	int mode = REMOTE;
 	MYSQL mysql;
+	MYSQL mysqlr;
 	MYSQL_RES *result  = NULL;
 	MYSQL_RES *tresult = NULL;
 	MYSQL_ROW mysql_row;
@@ -218,6 +221,7 @@ int main(int argc, char *argv[]) {
 	int host_id = 0;
 	int i;
 	int thread_status = 0;
+	int total_items   = 0;
 	int change_host   = TRUE;
 	int current_thread;
 
@@ -241,13 +245,13 @@ int main(int argc, char *argv[]) {
 	/* detect and compensate for stdin/stderr ttys */
 	if (!isatty(fileno(stdout))) {
 		set.stdout_notty = TRUE;
-	}else{
+	} else {
 		set.stdout_notty = FALSE;
 	}
 
 	if (!isatty(fileno(stderr))) {
 		set.stderr_notty = TRUE;
-	}else{
+	} else {
 		set.stderr_notty = FALSE;
 	}
 
@@ -265,6 +269,7 @@ int main(int argc, char *argv[]) {
 
 	/* set the default exit code */
 	set.exit_code = 0;
+	set.exit_size = 0;
 
 	/* get static defaults for system */
 	config_defaults();
@@ -390,7 +395,7 @@ int main(int argc, char *argv[]) {
 
 			if (*value) {
 				*value++ = '\0';
-			}else{
+			} else {
 				die("ERROR: -O requires setting:value");
 			}
 
@@ -449,7 +454,7 @@ int main(int argc, char *argv[]) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("NOTE: The Shell Command Exists in the current directory\n");
 		}
-	}else{
+	} else {
 		set.cygwinshloc = 1;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("NOTE: The Shell Command Exists in the /bin directory\n");
@@ -471,10 +476,10 @@ int main(int argc, char *argv[]) {
 	if (conf_file) {
 		if ((read_spine_config(conf_file)) < 0) {
 			die("ERROR: Could not read config file: %s", conf_file);
-		}else{
+		} else {
 			valid_conf_file = TRUE;
 		}
-	}else{
+	} else {
 		if (!(conf_file = calloc(CONFIG_PATHS, BUFSIZE))) {
 			die("ERROR: Fatal malloc error: spine.c conf_file!");
 		}
@@ -496,7 +501,7 @@ int main(int argc, char *argv[]) {
 	if (valid_conf_file) {
 		/* read settings table from the database to further establish environment */
 		read_config_options();
-	}else{
+	} else {
 		die("FATAL: Unable to read configuration file!");
 	}
 
@@ -516,20 +521,27 @@ int main(int argc, char *argv[]) {
 			token = strtok(NULL, ",");
 			i++;
 		}
-	}else{
+	} else {
 		debug_devices[0] = '\0';
 	}
 
 	/* connect to database */
-	db_connect(set.dbdb, &mysql);
+	db_connect(LOCAL, &mysql);
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_connect(REMOTE, &mysqlr);
+		mode = REMOTE;
+	} else {
+		mode = LOCAL;
+	}
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-	db_insert(&mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
-	}else{
+	} else {
 		if (!set.stdout_notty) {
 			printf("SPINE: Version %s starting\n", VERSION);
 		}
@@ -540,7 +552,7 @@ int main(int argc, char *argv[]) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			SPINE_LOG(("DEBUG: MySQL is Thread Safe!"));
 		}
-	}else{
+	} else {
 		SPINE_LOG(("WARNING: MySQL is NOT Thread Safe!"));
 	}
 
@@ -565,10 +577,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* determine if the poller_id field exists in the host table */
-	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'poller_id'");
+	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'poller_id'");
 	if (mysql_num_rows(result)) {
 		set.poller_id_exists = TRUE;
-	}else{
+	} else {
 		set.poller_id_exists = FALSE;
 
 		if (set.poller_id > 0) {
@@ -578,30 +590,30 @@ int main(int argc, char *argv[]) {
 	db_free_result(result);
 
 	/* determine if the device_threads field exists in the host table */
-	result = db_query(&mysql, "SHOW COLUMNS FROM host LIKE 'device_threads'");
+	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'device_threads'");
 	if (mysql_num_rows(result)) {
 		set.device_threads_exists = TRUE;
-	}else{
+	} else {
 		set.device_threads_exists = FALSE;
 	}
 	db_free_result(result);
 
 	if (set.device_threads_exists) {
 		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
-	}else{
+	} else {
 		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));
 	}
 
 	/* obtain the list of hosts to poll */
 	if (set.device_threads_exists) {
 		qp += sprintf(qp, "SELECT id, device_threads FROM host");
-	}else{
+	} else {
 		qp += sprintf(qp, "SELECT id, '1' as device_threads FROM host");
 	}
 	qp += sprintf(qp, " WHERE disabled=''");
 	if (!strlen(set.host_id_list)) {
 		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
-	}else{
+	} else {
 		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
 	}
 	if (set.poller_id_exists) {
@@ -609,10 +621,10 @@ int main(int argc, char *argv[]) {
 	}
 	qp += sprintf(qp, " ORDER BY polling_time DESC");
 
-	result = db_query(&mysql, querybuf);
+	result = db_query(&mysql, LOCAL, querybuf);
 	if (set.poller_id == 0) {
 		num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
-	}else{
+	} else {
 		num_rows = mysql_num_rows(result); /* pollerid 0 takes care of not host based data sources */
 	}
 
@@ -626,7 +638,11 @@ int main(int argc, char *argv[]) {
 
 	/* mark the spine process as started */
 	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
-	db_insert(&mysql, querybuf);
+	if (mode == REMOTE) {
+		db_insert(&mysqlr, REMOTE, querybuf);
+	} else {
+		db_insert(&mysql, LOCAL, querybuf);
+	}
 
 	/* initialize threads and mutexes */
 	pthread_attr_init(&attr);
@@ -661,7 +677,7 @@ int main(int argc, char *argv[]) {
 	if (set.poller_id == 0) {
 		host_id     = 0;
 		change_host = FALSE;
-	}else{
+	} else {
 		change_host = TRUE;
 	}
 
@@ -672,8 +688,20 @@ int main(int argc, char *argv[]) {
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
 			current_thread  = 1;
-		}else{
+		} else {
 			current_thread++;
+		}
+
+		/* adjust device threads in cases where the host does not have sufficient data sources */
+		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(*) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		tresult   = db_query(&mysql, LOCAL, querybuf);
+		mysql_row = mysql_fetch_row(tresult);
+
+		total_items = atoi(mysql_row[0]);
+		db_free_result(tresult);
+
+		if (total_items < device_threads) {
+			device_threads = total_items;
 		}
 
 		change_host = (current_thread >= device_threads) ? TRUE : FALSE;
@@ -682,7 +710,7 @@ int main(int argc, char *argv[]) {
 		if (device_threads > 1) {
 			if (current_thread == 1) {
 				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
-				tresult   = db_query(&mysql, querybuf);
+				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
 				itemsPT   = atoi(mysql_row[0]);
@@ -692,7 +720,7 @@ int main(int argc, char *argv[]) {
 				host_time = get_host_poll_time();
 				host_time_double = get_time_as_double();
 			}
-		}else{
+		} else {
 			itemsPT   = 0;
 			if (host_time) free(host_time);
 			host_time = get_host_poll_time();
@@ -719,7 +747,7 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
 				canexit = TRUE;
 				break;
-			}else if (errno == EINTR) {
+			} else if (errno == EINTR) {
 				usleep(10000);
 				goto retry1;
 			}
@@ -793,16 +821,25 @@ int main(int argc, char *argv[]) {
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
 
+	/* push data back to the main server */
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		poller_push_data_to_main();
+	}
+
 	/* print out stats */
 	gettimeofday(&now, NULL);
 
 	/* update the db for |data_time| on graphs */
 	if (set.poller_id == 1) {
-		db_insert(&mysql, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
+		db_insert(&mysql, LOCAL, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
 	}
 
 	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-	db_insert(&mysql, querybuf);
+	if (mode == REMOTE) {
+		db_insert(&mysqlr, REMOTE, querybuf);
+	} else {
+		db_insert(&mysql, LOCAL, querybuf);
+	}
 
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
@@ -826,7 +863,11 @@ int main(int argc, char *argv[]) {
 
 	/* close mysql */
 	db_free_result(result);
-	mysql_close(&mysql);
+	db_disconnect(&mysql);
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_disconnect(&mysqlr);
+	}
 
 	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
 
@@ -840,7 +881,7 @@ int main(int argc, char *argv[]) {
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
 		SPINE_LOG(("Time: %.4f s, Threads: %i, Devices: %i", (end_time - begin_time), set.threads, num_rows));
-	}else{
+	} else {
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
 			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
@@ -895,7 +936,7 @@ static void display_help(int only_version) {
 		"database, but they can be overridden with the --option=S:V",
 		"parameter.",
 		"",
-		"Spine is distributed under the Terms of the GNU Lessor",
+		"Spine is distributed under the Terms of the GNU Lesser",
 		"General Public License Version 2.1. (http://www.gnu.org/licenses/lgpl.txt)",
 		"For more information, see http://www.cacti.net",
 

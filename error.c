@@ -46,6 +46,11 @@
 static void spine_signal_handler(int spine_signal) {
 	signal(spine_signal, SIG_DFL);
 
+#if HAS_EXECINFO_H
+	// get void*'s for all entries on the stack
+	set.exit_size = backtrace(set.exit_stack, 10);
+#endif
+
 	set.exit_code = spine_signal;
 
 	switch (spine_signal) {
@@ -80,6 +85,8 @@ static int spine_fatal_signals[] = {
 	SIGBUS,
 	SIGFPE,
 	SIGQUIT,
+	SIGSYS,
+	SIGABRT,
 	0
 };
 

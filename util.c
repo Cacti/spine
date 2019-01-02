@@ -63,7 +63,7 @@ void set_option(const char *option, const char *value) {
 	opttable[nopts++].val = value;
 }
 
-/*! \fn static const char *getsetting(MYSQL *psql, const char *setting)
+/*! \fn static const char *getsetting(MYSQL *psql, int mode, const char *setting)
  *  \brief Returns a character pointer to a Cacti setting.
  *
  *  Given a pointer to a database and the name of a setting, return the string
@@ -76,7 +76,7 @@ void set_option(const char *option, const char *value) {
  *  \return the database option setting
  *
  */
-static const char *getsetting(MYSQL *psql, const char *setting) {
+static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	char      qstring[256];
 	char      *retval;
 	MYSQL_RES *result;
@@ -97,7 +97,63 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 
 	sprintf(qstring, "SELECT value FROM settings WHERE name = '%s'", setting);
 
-	result = db_query(psql, qstring);
+	result = db_query(psql, mode, qstring);
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
+			if (mysql_row != NULL) {
+				retval = strdup(mysql_row[0]);
+				db_free_result(result);
+				return retval;
+			}else{
+				return 0;
+			}
+		}else{
+			db_free_result(result);
+			return 0;
+		}
+	}else{
+		return 0;
+	}
+}
+
+/*! \fn static const char *getpsetting(MYSQL *psql, const char *setting)
+ *  \brief Returns a character pointer to a Cacti poller setting.
+ *
+ *  Given a pointer to a database and the name of a setting,
+ *  return the string which represents the value from the poller table.
+ *  Return NULL if we can't find a setting for whatever reason.
+ *
+ *  NOTE: if the user has provided one of these options on the command line,
+ *  it's intercepted here and returned, overriding the database setting.
+ *
+ *  \return the database option setting
+ *
+ */
+static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
+	char      qstring[256];
+	char      *retval;
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int       i;
+
+	assert(psql    != 0);
+	assert(setting != 0);
+
+	/* see if it's in the option table */
+	for (i=0; i<nopts; i++) {
+		if (STRIMATCH(setting, opttable[i].opt)) {
+			/* FOUND IT! */
+			retval = strdup(opttable[i].val);
+			return retval;
+		}
+	}
+
+	sprintf(qstring, "SELECT %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+
+	result = db_query(psql, mode, qstring);
 
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
@@ -119,7 +175,7 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
 	}
 }
 
-/*! \fn static int getboolsetting(MYSQL *psql, const char *setting, int dflt)
+/*! \fn static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt)
  *  \brief Obtains a boolean option from the database.
  *
  *	Given the parameters for fetching a setting from the database,
@@ -129,13 +185,13 @@ static const char *getsetting(MYSQL *psql, const char *setting) {
  *
  *  \return boolean TRUE or FALSE based upon database setting or the DEFAULT if not found
  */
-static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
+static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) {
 	const char *rc;
 
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	rc = getsetting(psql, setting);
+	rc = getsetting(psql, mode, setting);
 
 	if (rc == 0) return dflt;
 
@@ -171,7 +227,7 @@ static int getboolsetting(MYSQL *psql, const char *setting, int dflt) {
  *  \return the database global variable setting
  *
  */
-static const char *getglobalvariable(MYSQL *psql, const char *setting) {
+static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 	char      qstring[256];
 	char      *retval;
 	MYSQL_RES *result;
@@ -191,7 +247,7 @@ static const char *getglobalvariable(MYSQL *psql, const char *setting) {
 
 	sprintf(qstring, "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
 
-	result = db_query(psql, qstring);
+	result = db_query(psql, mode, qstring);
 
 	if (result != 0) {
 		if (mysql_num_rows(result) > 0) {
@@ -241,37 +297,46 @@ int is_debug_device(int device_id) {
  */
 void read_config_options() {
 	MYSQL      mysql;
+	MYSQL      mysqlr;
 	MYSQL_RES  *result;
 	int        num_rows;
+	int        mode;
 	char       web_root[BUFSIZE];
 	char       sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
 	const char *res;
 
-	db_connect(set.dbdb, &mysql);
+	db_connect(LOCAL, &mysql);
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_connect(REMOTE, &mysqlr);
+		mode = REMOTE;
+	} else {
+		mode = LOCAL;
+	}
 
 	/* get the mysql server version */
 	set.dbversion = 0;
-	if ((res = getglobalvariable(&mysql, "version")) != 0) {
+	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
 		set.dbversion = atoi(res);
 		free((char *)res);
 	}
 
 	/* get logging level from database - overrides spine.conf */
-	if ((res = getsetting(&mysql, "log_verbosity")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
 		const int n = atoi(res);
 		free((char *)res);
 		if (n != 0) set.log_level = n;
 	}
 
 	/* determine script server path operation and default log file processing */
-	if ((res = getsetting(&mysql, "path_webroot")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "path_webroot")) != 0) {
 		snprintf(set.path_php_server, SMALL_BUFSIZE, "%s/script_server.php", res);
 		snprintf(web_root, BUFSIZE, "%s", res);
 		free((char *)res);
 	}
 
 	/* determine logfile path */
-	if ((res = getsetting(&mysql, "path_cactilog")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "path_cactilog")) != 0) {
 		if (strlen(res) != 0) {
 			snprintf(set.path_logfile, SMALL_BUFSIZE, "%s", res);
 		} else {
@@ -287,7 +352,7 @@ void read_config_options() {
  	}
 
 	/* get log separator */
-	if ((res = getsetting(&mysql, "default_datechar")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
 		set.log_datetime_separator = atoi(res);
 		free((char *)res);
 
@@ -297,7 +362,7 @@ void read_config_options() {
 	}
 
 	/* get log separator */
-	if ((res = getsetting(&mysql, "default_datechar")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
 		set.log_datetime_separator = atoi(res);
 		free((char *)res);
 
@@ -313,7 +378,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
 
 	/* determine log file, syslog or both, default is 1 or log file only */
-	if ((res = getsetting(&mysql, "log_destination")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
 		free((char *)res);
 	} else {
@@ -327,7 +392,7 @@ void read_config_options() {
 	set.logfile_processed = TRUE;
 
 	/* get PHP Path Information for Scripting */
-	if ((res = getsetting(&mysql, "path_php_binary")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "path_php_binary")) != 0) {
 		STRNCOPY(set.path_php, res);
 		free((char *)res);
 	}
@@ -336,7 +401,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The path_php variable is %s", set.path_php));
 
 	/* set availability_method */
-	if ((res = getsetting(&mysql, "availability_method")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "availability_method")) != 0) {
 		set.availability_method = atoi(res);
 		free((char *)res);
 	}
@@ -345,7 +410,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i", set.availability_method));
 
 	/* set ping_recovery_count */
-	if ((res = getsetting(&mysql, "ping_recovery_count")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "ping_recovery_count")) != 0) {
 		set.ping_recovery_count = atoi(res);
 		free((char *)res);
 	}
@@ -354,7 +419,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i", set.ping_recovery_count));
 
 	/* set ping_failure_count */
-	if ((res = getsetting(&mysql, "ping_failure_count")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "ping_failure_count")) != 0) {
 		set.ping_failure_count = atoi(res);
 		free((char *)res);
 	}
@@ -363,7 +428,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i", set.ping_failure_count));
 
 	/* set ping_method */
-	if ((res = getsetting(&mysql, "ping_method")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "ping_method")) != 0) {
 		set.ping_method = atoi(res);
 		free((char *)res);
 	}
@@ -372,7 +437,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i", set.ping_method));
 
 	/* set ping_retries */
-	if ((res = getsetting(&mysql, "ping_retries")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "ping_retries")) != 0) {
 		set.ping_retries = atoi(res);
 		free((char *)res);
 	}
@@ -381,7 +446,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i", set.ping_retries));
 
 	/* set ping_timeout */
-	if ( (res = getsetting(&mysql, "ping_timeout")) != 0) {
+	if ( (res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
 		set.ping_timeout = atoi(res);
 		free((char *)res);
 	}
@@ -390,7 +455,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
 
 	/* set snmp_retries */
-	if ( (res = getsetting(&mysql, "snmp_retries")) != 0) {
+	if ( (res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
 		set.snmp_retries = atoi(res);
 		free((char *)res);
 	}
@@ -399,37 +464,37 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The snmp_retries variable is %i", set.snmp_retries));
 
 	/* set logging option for errors */
-	set.log_perror = getboolsetting(&mysql, "log_perror", FALSE);
+	set.log_perror = getboolsetting(&mysql, LOCAL, "log_perror", FALSE);
 
 	/* log the log_perror variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_perror variable is %i", set.log_perror));
 
 	/* set logging option for errors */
-	set.log_pwarn = getboolsetting(&mysql, "log_pwarn", FALSE);
+	set.log_pwarn = getboolsetting(&mysql, LOCAL, "log_pwarn", FALSE);
 
 	/* log the log_pwarn variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i", set.log_pwarn));
 
 	/* set option to increase insert performance */
-	set.boost_redirect = getboolsetting(&mysql, "boost_redirect", FALSE);
+	set.boost_redirect = getboolsetting(&mysql, LOCAL, "boost_redirect", FALSE);
 
 	/* log the boost_redirect variable */
 	SPINE_LOG_DEBUG(("DEBUG: The boost_redirect variable is %i", set.boost_redirect));
 
 	/* set option for determining if boost is enabled */
-	set.boost_enabled = getboolsetting(&mysql, "boost_rrd_update_enable", FALSE);
+	set.boost_enabled = getboolsetting(&mysql, LOCAL, "boost_rrd_update_enable", FALSE);
 
 	/* log the boost_rrd_update_enable variable */
 	SPINE_LOG_DEBUG(("DEBUG: The boost_rrd_update_enable variable is %i", set.boost_enabled));
 
 	/* set logging option for statistics */
-	set.log_pstats = getboolsetting(&mysql, "log_pstats", FALSE);
+	set.log_pstats = getboolsetting(&mysql, LOCAL, "log_pstats", FALSE);
 
 	/* log the log_pstats variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i", set.log_pstats));
 
 	/* get Cacti defined max threads override spine.conf */
-	if ((res = getsetting(&mysql, "max_threads")) != 0) {
+	if ((res = getpsetting(&mysql, mode, "threads")) != 0) {
 		set.threads = atoi(res);
 		free((char *)res);
 		if (set.threads > MAX_THREADS) {
@@ -441,7 +506,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The threads variable is %i", set.threads));
 
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
-	if ((res = getsetting(&mysql, "poller_interval")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "poller_interval")) != 0) {
 		set.poller_interval = atoi(res);
 		free((char *)res);
 	} else {
@@ -456,7 +521,7 @@ void read_config_options() {
 	}
 
 	/* get the concurrent_processes variable to determine thread sleep values */
-	if ((res = getsetting(&mysql, "concurrent_processes")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "concurrent_processes")) != 0) {
 		set.num_parent_processes = atoi(res);
 		free((char *)res);
 	} else {
@@ -467,7 +532,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The number of concurrent processes is %i", set.num_parent_processes));
 
 	/* get the script timeout to establish timeouts */
-	if ((res = getsetting(&mysql, "script_timeout")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "script_timeout")) != 0) {
 		set.script_timeout = atoi(res);
 		free((char *)res);
 		if (set.script_timeout < 5) {
@@ -481,7 +546,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The script timeout is %i", set.script_timeout));
 
 	/* get selective_device_debug string */
-	if ((res = getsetting(&mysql, "selective_device_debug")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "selective_device_debug")) != 0) {
 		STRNCOPY(set.selective_device_debug, res);
 		free((char *)res);
 	}
@@ -490,7 +555,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The selective_device_debug variable is %s", set.selective_device_debug));
 
 	/* get spine_log_level */
-	if ((res = getsetting(&mysql, "spine_log_level")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "spine_log_level")) != 0) {
 		set.spine_log_level = atoi(res);
 		free((char *)res);
 	}
@@ -499,7 +564,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The spine_log_level variable is %i", set.spine_log_level));
 
 	/* get the number of script server processes to run */
-	if ((res = getsetting(&mysql, "php_servers")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "php_servers")) != 0) {
 		set.php_servers = atoi(res);
 		free((char *)res);
 
@@ -537,7 +602,7 @@ void read_config_options() {
 		}
 		sqlp += sprintf(sqlp, " LIMIT 1");
 
-		result = db_query(&mysql, sqlbuf);
+		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
 		db_free_result(result);
 
@@ -557,7 +622,7 @@ void read_config_options() {
 		}
 		sqlp += sprintf(sqlp, " LIMIT 1");
 
-		result = db_query(&mysql, sqlbuf);
+		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
 		db_free_result(result);
 
@@ -574,7 +639,7 @@ void read_config_options() {
 		: "Not "));
 
 	/* determine the maximum oid's to obtain in a single get request */
-	if ((res = getsetting(&mysql, "max_get_size")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "max_get_size")) != 0) {
 		set.snmp_max_get_size = atoi(res);
 		free((char *)res);
 
@@ -589,6 +654,205 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
 	db_disconnect(&mysql);
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_disconnect(&mysqlr);
+	}
+}
+
+void poller_push_data_to_main() {
+	MYSQL      mysql;
+	MYSQL      mysqlr;
+	MYSQL_RES  *result;
+	MYSQL_ROW  row;
+	int        num_rows;
+	int        rows;
+	char       sqlbuf[MEGA_BUFSIZE];
+	char       *sqlp = sqlbuf;
+	char       query[BUFSIZE];
+	char       prefix[BUFSIZE];
+	char       suffix[BUFSIZE];
+	char       tmpstr[SMALL_BUFSIZE];
+
+	db_connect(LOCAL, &mysql);
+	db_connect(REMOTE, &mysqlr);
+
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+	db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+
+	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
+
+	snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+		"status, status_event_count, status_fail_date, status_rec_date, "
+		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+		"total_polls, failed_polls, availability, last_updated "
+		"FROM host "
+		"WHERE poller_id = %d", set.poller_id);
+
+	snprintf(prefix, BUFSIZE, "INSERT INTO host (id, snmp_sysDescr, snmp_sysObjectID, "
+		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+		"status, status_event_count, status_fail_date, status_rec_date, "
+		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+		"total_polls, failed_polls, availability, last_updated) VALUES ");
+
+	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+		"snmp_sysDescr=VALUES(snmp_sysDescr), "
+		"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
+        "snmp_sysUpTimeInstance=VALUES(snmp_sysUpTimeInstance), "
+		"snmp_sysContact=VALUES(snmp_sysContact), "
+		"snmp_sysName=VALUES(snmp_sysName), "
+		"snmp_sysLocation=VALUES(snmp_sysLocation), "
+        "status=VALUES(status), "
+		"status_event_count=VALUES(status_event_count), "
+		"status_fail_date=VALUES(status_fail_date), "
+		"status_rec_date=VALUES(status_rec_date), "
+        "status_last_error=VALUES(status_last_error), "
+		"min_time=VALUES(min_time), "
+		"max_time=VALUES(max_time), "
+		"cur_time=VALUES(cur_time), "
+		"avg_time=VALUES(avg_time), "
+		"polling_time=VALUES(polling_time), "
+        "total_polls=VALUES(total_polls), "
+		"failed_polls=VALUES(failed_polls), "
+		"availability=VALUES(availability), "
+		"last_updated=VALUES(last_updated);");
+
+	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
+		num_rows = mysql_num_rows(result);
+		rows = 0;
+
+		if (num_rows > 0) {
+			while ((row = mysql_fetch_row(result))) {
+				if (rows < 500) {
+					if (rows == 0) {
+						sqlp  = sqlbuf;
+						sqlp += sprintf(sqlp, "%s", prefix);
+						sqlp += sprintf(sqlp, " (");
+					} else {
+						sqlp += sprintf(sqlp, ", (");
+					}
+
+					sqlp += sprintf(sqlp, "%s, ", row[0]); // id
+
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count
+
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_event_date
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time
+					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time
+					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time
+					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time
+					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time
+					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls
+					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls
+					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability
+
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated
+					sqlp += sprintf(sqlp, "'%s'", tmpstr);
+
+					sqlp += sprintf(sqlp, ")");
+
+					rows++;
+				} else {
+					sqlp += sprintf(sqlp, "%s", suffix);
+					db_insert(&mysqlr, REMOTE, sqlbuf);
+
+					rows = 0;
+				}
+			}
+		}
+
+		if (rows > 0) {
+			sqlp += sprintf(sqlp, "%s", suffix);
+			db_insert(&mysqlr, REMOTE, sqlbuf);
+		}
+	}
+
+	db_free_result(result);
+
+	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
+
+	snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		"FROM poller_item "
+		"WHERE poller_id = %i", set.poller_id);
+
+	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
+
+	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+		"rrd_next_step=VALUES(rrd_next_step);");
+
+	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
+		num_rows = mysql_num_rows(result);
+		rows = 0;
+
+		if (num_rows > 0) {
+			while ((row = mysql_fetch_row(result))) {
+				if (rows < 10000) {
+					if (rows == 0) {
+						sqlp = sqlbuf;
+						sqlp += sprintf(sqlp, "%s", prefix);
+						sqlp += sprintf(sqlp, " (");
+					} else {
+						sqlp += sprintf(sqlp, ", (");
+					}
+
+					sqlp += sprintf(sqlp, "%s, ", row[0]); // local_data_id
+					sqlp += sprintf(sqlp, "%s, ", row[1]); // host_id
+
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // rrd_name
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%s, ", row[3]); // rrd_step
+					sqlp += sprintf(sqlp, "%s",   row[4]); // rrd_next_step
+
+					sqlp += sprintf(sqlp, ")");
+
+					rows++;
+				} else {
+					sqlp += sprintf(sqlp, "%s", suffix);
+					db_insert(&mysqlr, REMOTE, sqlbuf);
+
+					rows = 0;
+				}
+			}
+		}
+
+		if (rows > 0) {
+			sqlp += sprintf(sqlp, "%s", suffix);
+			db_insert(&mysqlr, REMOTE, sqlbuf);
+
+			rows = 0;
+		}
+	}
+
+	db_free_result(result);
+
+	db_disconnect(&mysql);
+	db_disconnect(&mysqlr);
 }
 
 /*! \fn int read_spine_config(char *file)
@@ -621,16 +885,24 @@ int read_spine_config(char *file) {
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
-				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdbhost, p2);
-				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdbdb, p2);
-				else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdbuser, p2);
-				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdbpass, p2);
-				else if (STRIMATCH(p1, "RDB_Port"))         set.rdbport    = atoi(p2);
-				else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.dbhost, p2);
-				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.dbdb, p2);
-				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.dbuser, p2);
-				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.dbpass, p2);
-				else if (STRIMATCH(p1, "DB_Port"))          set.dbport    = atoi(p2);
+				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
+				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
+				else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdb_user, p2);
+				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
+				else if (STRIMATCH(p1, "RDB_Port"))         set.rdb_port    = atoi(p2);
+				else if (STRIMATCH(p1, "RDB_UseSSL"))       set.rdb_ssl     = atoi(p2);
+				else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
+				else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
+				else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
+				else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.db_host, p2);
+				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.db_db, p2);
+				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.db_user, p2);
+				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
+				else if (STRIMATCH(p1, "DB_Port"))          set.db_port    = atoi(p2);
+				else if (STRIMATCH(p1, "DB_UseSSL"))        set.db_ssl     = atoi(p2);
+				else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
+				else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
+				else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
 				else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
 				else if (STRIMATCH(p1, "DB_PreG")) {
 					if (!set.stderr_notty) {
@@ -647,7 +919,7 @@ int read_spine_config(char *file) {
 			}
 		}
 
-		if (strlen(set.dbpass) == 0) *set.dbpass = '\0';
+		if (strlen(set.db_pass) == 0) *set.db_pass = '\0';
 
 		return 0;
 	}
@@ -662,20 +934,20 @@ void config_defaults() {
 	set.threads = DEFAULT_THREADS;
 
 	/* default server */
-	set.dbport  = DEFAULT_DB_PORT;
+	set.db_port  = DEFAULT_DB_PORT;
 
-	STRNCOPY(set.dbhost, DEFAULT_DB_HOST);
-	STRNCOPY(set.dbdb,   DEFAULT_DB_DB  );
-	STRNCOPY(set.dbuser, DEFAULT_DB_USER);
-	STRNCOPY(set.dbpass, DEFAULT_DB_PASS);
+	STRNCOPY(set.db_host, DEFAULT_DB_HOST);
+	STRNCOPY(set.db_db,   DEFAULT_DB_DB  );
+	STRNCOPY(set.db_user, DEFAULT_DB_USER);
+	STRNCOPY(set.db_pass, DEFAULT_DB_PASS);
 
 	/* remote default server */
-	set.rdbport  = DEFAULT_DB_PORT;
+	set.rdb_port  = DEFAULT_DB_PORT;
 
-	STRNCOPY(set.rdbhost, DEFAULT_DB_HOST);
-	STRNCOPY(set.rdbdb,   DEFAULT_DB_DB  );
-	STRNCOPY(set.rdbuser, DEFAULT_DB_USER);
-	STRNCOPY(set.rdbpass, DEFAULT_DB_PASS);
+	STRNCOPY(set.rdb_host, DEFAULT_DB_HOST);
+	STRNCOPY(set.rdb_db,   DEFAULT_DB_DB  );
+	STRNCOPY(set.rdb_user, DEFAULT_DB_USER);
+	STRNCOPY(set.rdb_pass, DEFAULT_DB_PASS);
 
 	STRNCOPY(config_paths[0], CONFIG_PATH_1);
 	STRNCOPY(config_paths[1], CONFIG_PATH_2);
@@ -719,6 +991,20 @@ void die(const char *format, ...) {
 	}
 
 	SPINE_LOG(("%s", flogmessage));
+
+#ifdef HAS_EXECINFO_H
+	printf("Generating backtrace...%ld line(s)...\n", set.exit_size);
+	if (set.exit_size) {
+		char **exit_strings = backtrace_symbols(set.exit_stack, set.exit_size);
+		if (exit_strings) {
+			int row = 0;
+			for (row = 0; row < set.exit_size; row++)
+			        printf("%3d: %s\n", row, exit_strings[row]);
+
+			free(exit_strings);
+		}
+	}
+#endif
 
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
@@ -1490,11 +1776,17 @@ void checkAsRoot() {
 	free(p);
 	#else
 	if (hasCaps() != TRUE) {
-		if (seteuid(0) == -1) {
-			SPINE_LOG_DEBUG(("WARNING: Spine NOT running asroot.  This is required if using ICMP.  Please run \"chown root:root spine;chmod +s spine\" to resolve."));
+		SPINE_LOG_DEBUG(("DEBUG: Spine running as %d UID, %d EUID", getuid(), geteuid()));
+		int ret = seteuid(0);
+		if (ret != 0) {
+			SPINE_LOG_DEBUG(("WARNING: Spine NOT able to set effective UID to 0"));
+		}
+
+		if (geteuid() != 0) {
+			SPINE_LOG_DEBUG(("WARNING: Spine NOT running as root.  This is required if using ICMP.  Please run \"chown root:root spine;chmod u+s spine\" to resolve."));
 			set.icmp_avail = FALSE;
 		} else {
-			SPINE_LOG_DEBUG(("DEBUG: Spine is running asroot."));
+			SPINE_LOG_DEBUG(("DEBUG: Spine is running as root."));
 			set.icmp_avail = TRUE;
 
 			if (seteuid(getuid()) == -1) {
@@ -1505,6 +1797,7 @@ void checkAsRoot() {
 		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));
 		set.icmp_avail = TRUE;
 	}
+	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not "));
 	#endif
 	#endif
 }

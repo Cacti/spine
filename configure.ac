@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 1.1.38, http://www.cacti.net/issues.php)
+AC_INIT(Spine Poller, 1.2.0, http://www.cacti.net/issues.php)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -10,7 +10,7 @@ AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
 AM_INIT_AUTOMAKE([foreign])
-AM_CONFIG_HEADER(config/config.h)
+AC_CONFIG_HEADERS(config/config.h)
 
 # static libraries
 AC_ARG_WITH(static,
@@ -67,6 +67,7 @@ case $host_alias in
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
 *freebsd*)
   LIBS="$LIBS -pthread"
+  LDFLAGS="-lexecinfo"
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
   ShLib="dylib";;
@@ -80,7 +81,7 @@ AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_LN_S
-AC_PROG_LIBTOOL
+LT_INIT
 
 AC_MSG_CHECKING([whether to enable -Wall])
 AC_ARG_ENABLE(warnings,
@@ -127,11 +128,15 @@ AC_CHECK_LIB(z, deflate)
 AC_CHECK_LIB(kstat, kstat_close)
 AC_CHECK_LIB(crypto, CRYPTO_realloc)
 
+# minor adjustments for debian
+AC_SEARCH_LIBS([clock_gettime], [rt pthread])
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
 AC_CHECK_HEADERS(assert.h ctype.h errno.h signal.h math.h malloc.h netdb.h)
 AC_CHECK_HEADERS(signal.h stdarg.h stdio.h syslog.h)
+AC_CHECK_HEADERS(execinfo.h)
 AC_CHECK_HEADERS(
   netinet/in_systm.h netinet/in.h netinet/ip.h netinet/ip_icmp.h,
   [],
@@ -177,7 +182,7 @@ if test x$ENABLED_SOL_PRIV != xno; then
   if test x$FOUND_PRIV_H != xno; then
     AC_MSG_RESULT([yes])
     AC_DEFINE([SOLAR_PRIV], [1],
-      [If upport for Solaris privileges should be enabled]
+      [If Support for Solaris privileges should be enabled]
     )
   else
     AC_MSG_RESULT([no])
@@ -469,5 +474,29 @@ if test -z "$HAVE_GETHOSTBYNAME_R"; then
 	AC_DEFINE(HAVE_GETHOSTBYNAME_R_MUTEX_LOCK, 1, [Using traditional of gethostbyname_r()])
 	HAVE_GETHOSTBYNAME_R=yes
 fi
+
+# See if we can support backtracing
+AC_MSG_CHECKING([if we can support backtracing])
+AC_TRY_LINK(
+  [
+    #include <stdlib.h>
+    #include <execinfo.h>
+  ],[
+    void *array[10];
+    size_t size;
+
+    # get void*'s for all entries on the stack
+    size = backtrace(array, 10);
+    if (size) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ],
+  [  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_EXECINFO_H,1,[Do we have backtracing capabilities?])
+  ],
+  AC_MSG_RESULT(no)
+)
 
 AC_OUTPUT(Makefile)

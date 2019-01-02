@@ -59,11 +59,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 		if (host->ping_method == PING_ICMP) {
 			if (set.icmp_avail == FALSE) {
-				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
-				} else {
-					SPINE_LOG_DEBUG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
-				}
+				SPINE_LOG(("Device[%i] DEBUG Falling back to UDP Ping Due to SetUID Issues", host->id));
 				host->ping_method = PING_UDP;
 			}
 		}
@@ -387,26 +383,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					return HOST_DOWN;
 				}
 
-				/* record start time */
-				if (total_time == 0) {
-					/* establish timeout value */
-					timeout.tv_sec  = rint(host_timeout / 1000);
-					timeout.tv_usec = rint((int) host_timeout % 1000) * 1000;
+				/* decrement the timeout value by the total time */
+				timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
-					/* set the socket send and receive timeout */
-					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-					begin_time = get_time_as_double();
-				} else {
-					/* decrement the timeout value by the total time */
-					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
-					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
-
-					/* set the socket send and receive timeout */
-					setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-				}
+				/* set the socket send and receive timeout */
+				setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 				/* send packet to destination */
 				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
@@ -432,13 +415,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 					if (return_code < 0) {
 						if (errno == EINTR) {
+							/* call was interrupted by some system event */
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
 							} else {
 								SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
 							}
-							/* call was interrupted by some system event */
-				//			usleep(10000);
+
 							goto keep_listening;
 						}
 					} else {
@@ -446,7 +430,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-							if ((pkt->icmp_type == ICMP_ECHOREPLY)) {
+							if (pkt->icmp_type == ICMP_ECHOREPLY) {
 								if (is_debug_device(host->id)) {
 									SPINE_LOG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								} else {
@@ -591,6 +575,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* set total time */
 	total_time = 0;
 
+	begin_time = get_time_as_double();
+
 	/* remove "udp:" from hostname */
 	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
 
@@ -644,8 +630,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 					/* set the socket send and receive timeout */
 					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-					begin_time = get_time_as_double();
 				} else {
 					/* decrement the timeout value by the total time */
 					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
@@ -769,6 +753,12 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	/* initilize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
+	/* initialize total time */
+	total_time = 0;
+
+	/* initialize begin time */
+	begin_time = get_time_as_double();
+
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
 		/* initialize variables */
@@ -781,26 +771,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 			retry_count = 0;
 
 			while (1) {
-				/* record start time */
-				if (total_time == 0) {
-					/* establish timeout value */
-					timeout.tv_sec  = rint(host_timeout / 1000);
-					timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
+				/* establish timeout value */
+				timeout.tv_sec  = rint(host_timeout / 1000);
+				timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
 
-					/* set the socket send and receive timeout */
-					setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-					begin_time = get_time_as_double();
-				} else {
-					/* decrement the timeout value by the total time */
-					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
-					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
-
-					/* set the socket send and receive timeout */
-					setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-				}
+				/* set the socket send and receive timeout */
+				setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 				/* make the connection */
 				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
@@ -901,7 +878,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	int    rv;
 
 	buf = malloc(len*sizeof(char));
-	memset(buf, 0, sizeof(buf));
+	memset(buf, 0, len*sizeof(char));
 
 	while (1) {
 		rv = gethostbyname_r(hostname, &result_buf, buf, len,
@@ -1107,20 +1084,20 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		case AVAIL_SNMP_OR_PING:
 		case AVAIL_SNMP_AND_PING:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
-				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
+				snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 			} else {
-				snprintf(host->status_last_error, SMALL_BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
+				snprintf(host->status_last_error, BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
-				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", "Device does not require SNMP");
+				snprintf(host->status_last_error, BUFSIZE, "%s", "Device does not require SNMP");
 			} else {
-				snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->snmp_response);
+				snprintf(host->status_last_error, BUFSIZE, "%s", ping->snmp_response);
 			}
 			break;
 		default:
-			snprintf(host->status_last_error, SMALL_BUFSIZE, "%s", ping->ping_response);
+			snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 		}
 
 		/* determine if to send an alert and update remainder of statistics */

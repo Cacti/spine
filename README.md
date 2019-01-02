@@ -1,5 +1,5 @@
 # Spine: a poller for Cacti
----------------------------
+
 Spine is a high speed poller replacement for `cmd.php`. It is almost 100%
 compatible with the legacy cmd.php processor and provides much more
 flexibility, speed and concurrency than `cmd.php`.
@@ -7,6 +7,19 @@ flexibility, speed and concurrency than `cmd.php`.
 Make sure that you have the proper development environment to compile Spine.
 This includes compilers, header files and things such as libtool. If you
 have questions please consult the forums and/or online documentation.
+
+-----------------------------------------------------------------------------
+
+## 1.2.0 Development
+
+**PLEASE READ**
+
+Feature branch for `1.2.x` has been merged into the `develop` branch. This means
+things may and will break, but they will eventually be fixed.
+
+> DEVELOP branch is currently considered UNSTABLE, use with caution!
+
+-----------------------------------------------------------------------------
 
 ## Unix Installation
 
@@ -22,7 +35,7 @@ please do the following:
 make
 make install
 chown root:root /usr/local/spine/bin/spine
-chmod +s /usr/local/spine/bin/spine
+chmod u+s /usr/local/spine/bin/spine
 ```
 
 To compile and install Spine using MySQL versions previous to 5.5

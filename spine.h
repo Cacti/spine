@@ -42,6 +42,9 @@
 #define TRUE 1
 #endif
 
+#define LOCAL 0
+#define REMOTE 1
+
 #ifndef __GNUC__
 # define __attribute__(x)  /* NOTHING */
 #endif
@@ -49,6 +52,10 @@
 /* Windows does not support stderr.  Therefore, don't use it. */
 #ifdef __CYGWIN__
 #define DISABLE_STDERR
+#endif
+
+#ifdef HAS_EXECINFO_H
+#include <execinfo.h>
 #endif
 
 /* if a host is legal, return TRUE */
@@ -124,8 +131,10 @@
 #define MEDIUM_BUFSIZE 512
 #define BUFSIZE 1024
 #define DBL_BUFSIZE 2048
+#define LRG_BUFSIZE 8096
 #define BIG_BUFSIZE 65535
 #define MEGA_BUFSIZE 1024000
+#define HUGE_BUFSIZE 2048000
 #define LOGSIZE 4096
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
@@ -336,11 +345,16 @@ typedef struct config_struct {
 	int    end_host_id;
 	char   host_id_list[BIG_BUFSIZE];
 	/* database connection information */
-	char   dbhost[SMALL_BUFSIZE];
-	char   dbdb[SMALL_BUFSIZE];
-	char   dbuser[SMALL_BUFSIZE];
-	char   dbpass[SMALL_BUFSIZE];
-	unsigned int dbport;
+	char   db_host[SMALL_BUFSIZE];
+	char   db_db[SMALL_BUFSIZE];
+	char   db_user[SMALL_BUFSIZE];
+	char   db_pass[SMALL_BUFSIZE];
+	int    db_ssl;
+	char   db_ssl_key[BIG_BUFSIZE];
+	char   db_ssl_cert[BIG_BUFSIZE];
+	char   db_ssl_ca[BIG_BUFSIZE];
+	int    d_b;
+	unsigned int db_port;
 	int    dbversion;
 	/* path information */
 	char   path_logfile[SMALL_BUFSIZE];
@@ -376,14 +390,21 @@ typedef struct config_struct {
 	int    php_current_server;
 	/* Exit code if we need it */
 	int    exit_code;
+	size_t exit_size;
+	void*  exit_stack[10];
+
 	/* Remote polling mode */
 	int    mode;
 	/* remote database connection information */
-	char   rdbhost[SMALL_BUFSIZE];
-	char   rdbdb[SMALL_BUFSIZE];
-	char   rdbuser[SMALL_BUFSIZE];
-	char   rdbpass[SMALL_BUFSIZE];
-	unsigned int rdbport;
+	char   rdb_host[SMALL_BUFSIZE];
+	char   rdb_db[SMALL_BUFSIZE];
+	char   rdb_user[SMALL_BUFSIZE];
+	char   rdb_pass[SMALL_BUFSIZE];
+	int    rdb_ssl;
+	char   rdb_ssl_key[BIG_BUFSIZE];
+	char   rdb_ssl_cert[BIG_BUFSIZE];
+	char   rdb_ssl_ca[BIG_BUFSIZE];
+	unsigned int rdb_port;
 	int    rdbversion;
 } config_t;
 
@@ -484,12 +505,12 @@ typedef struct host_struct {
 	int    snmp_port;
 	int    snmp_timeout;
 	int    snmp_retries;
-	char   snmp_sysDescr[300];
+	char   snmp_sysDescr[600];
 	char   snmp_sysObjectID[160];
 	u_int  snmp_sysUpTimeInstance;
 	char   snmp_sysContact[300];
 	char   snmp_sysName[300];
-	char   snmp_sysLocation[300];
+	char   snmp_sysLocation[600];
 	int    max_oids;
 	int    availability_method;
 	int    ping_method;
@@ -500,7 +521,7 @@ typedef struct host_struct {
 	int    status_event_count;
 	char   status_fail_date[40];
 	char   status_rec_date[40];
-	char   status_last_error[SMALL_BUFSIZE];
+	char   status_last_error[BUFSIZE];
 	double min_time;
 	double max_time;
 	double cur_time;
