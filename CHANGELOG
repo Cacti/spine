@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.1
+-feature: release to match Cacti release
+
 1.2.0
 -feature: Allow threads to be set a Data Collector level
 -issue#50: make fails on Debian 7 attempting to locate clock_gettime
