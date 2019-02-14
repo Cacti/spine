@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
 	int device_threads;
 	sem_t thread_init_sem;
 	int a_threads_value;
-	struct timespec until;
+	struct timespec until_spec;
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -660,8 +660,8 @@ int main(int argc, char *argv[]) {
 	sem_init(&thread_init_sem, 0, 1);
 
 	/* specify the point of timeout for timedwait semaphores */
-	until.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
-	until.tv_nsec = 0;
+	until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
+	until_spec.tv_nsec = 0;
 
 	sem_getvalue(&active_threads, &a_threads_value);
 	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
@@ -742,7 +742,7 @@ int main(int argc, char *argv[]) {
 
 		retry1:
 
-		if (sem_timedwait(&active_threads, &until) == -1) {
+		if (sem_timedwait(&active_threads, &until_spec) == -1) {
 			if (errno == ETIMEDOUT) {
 				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
 				canexit = TRUE;
