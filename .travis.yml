@@ -1,29 +1,26 @@
 language: c
 
 compiler:
-  - gcc
+- gcc
 
 before_install:
-  - sudo apt-get -qq update
-  - sudo apt-get install -y tofrodos libmysqlclient-dev libsnmp-dev help2man
-  - sudo ln -s /usr/bin/fromdos /usr/bin/dos2unix
-  - sudo ln -s /usr/bin/todos /usr/bin/unix2dos
+- sudo apt-get -qq update
+- sudo apt-get install -y tofrodos libmysqlclient-dev libsnmp-dev help2man
+- sudo ln -s /usr/bin/fromdos /usr/bin/dos2unix
+- sudo ln -s /usr/bin/todos /usr/bin/unix2dos
 
 install:
-  - "./bootstrap"
+- "./bootstrap"
 
 script:
-  - ./configure
-  - make
+- "./configure"
+- make
 
 notifications:
   email:
     on_success: change
     on_failure: always
     recipients:
-      - developers@cacti.net
+    - developers@cacti.net
   slack:
-    on_success: always
-    on_failure: always
-    rooms:
-      secure: XsyAxzfbf5GjQjNCxsDzLD8L33g1idUglYbcZy/y917Z1zeKTR6qYqJRf90vHB0o8H37aM4iSqsg4V1B4ZlNuHTQ2Ju+BYWugWno6apJ/NIDA8jK3+JIN7/h43eHmI1jgedGMqsEZwE0U6pjZDeFNh2JtznH72RFK5dyrU15bWEcCBQhsWrWTCKtQbrxhGXcflTuV0+4nqKPJDR0+77XhkkXbZsbTEC0MJQFghWVIJZXEtTpYxONEe4t6hEXhIZAgRoHyvGitjIDuEFIzGwtjbSF4KcxdAZWtBDpY+NZ4FMng+B+APs9Z7m8+1CgetXLWcGfc5LY73gNWs8041yHenP2S8Rko21bXrtYUlw9x0bnQOkNKHpTQmM09lPbmjOnPwGhVzdajPKVun7msFrwFDqzw5+tDUYaU+lP/E32MvJ4xEbGNr7Q1XmEg+4bHRTDbmaAEKis27Qo44UyOH+orZ/lhS3aleZ267uhwQKtpNG7ylCTCZMpQ+C5rtlNOs06leNcgLN5DC/0+5LWrMPlA0+xLyfvHoL+EGlv4qBD/hX6RD5Bd/JrKmM0txUA6HBXLUqBqOqNO8AQl74rQwLs2S8dgdEnfSA84FnbrUjPZMN15rqOxXFIRYacJBBm1N8iMqAEHFavA136/zeBhacsd2Ko3fWApM4RqvaGLg0Pbsw=
+    secure: 2FRfCvHDhN0kX4zsqOiz9EL106enqQyQE4+iawOyBXFKDM1QZLMWRIRu2B8GEW8w1OBBFHD7e1S0BawVlpvN++hIkaZl7rdnTuk0CRwpktQ7uVQyyybcs0zWctEIhbgzAfMRX5cez1EWPeHgqXjDbEgFA64Vu2XrRbFIe8hYUkpYxFe8dMEkAr/JCFYSWC4oOKA2OdYhs55AJ0ydZzFt/j83wKWHZ18DXgO3Y+opzDfUkY/EEUefcLmdyv7sKvqLC1QG1FhMpN2ZBGNz1umbL2WouZHZzAyw0moNSRYsOt9za5eWnLHvtoHvv0RTwe9aeab+8v7OMeeqHW/4pUocSBh/QMW5NLTPKvnMpVx0VsnVxKk0Q6e4FfpC1RioxTd+3f7v/5O6cwGOi/1SKJ7TKUX/mihHJiy3VUubcYWXhL6vymcSpM34ejOxNo9tQtnGVWz9OgqfzsNtmwMwrEGv7qeGjhIDsGmN2jOIqT/6ZA6bOyFRkQuQXWxYdngRFIUXqaGaPw1GRPAburBa4tE53b+wRXFKIH1mLsAwzk3r3db6wpVraSfxQHtpVgTU8esM7dsH3RgBDMYoiwXafJ1/GcgdfPRXZr5RAB4JOIxWJEHcULX6k+ktisPFUXzipBeXIQhXsui6d+l0WVjuy/AM3HrHFhN345flJCpHNhkUPFc=
