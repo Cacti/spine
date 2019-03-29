@@ -326,7 +326,9 @@ void db_connect(int type, MYSQL *mysql) {
  *
  */
 void db_disconnect(MYSQL *mysql) {
-	mysql_close(mysql);
+	if (mysql != NULL) {
+		mysql_close(mysql);
+	}
 }
 
 /*! \fn int append_hostrange(char *obuf, const char *colname, const config_t *set)

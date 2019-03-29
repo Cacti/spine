@@ -1,5 +1,9 @@
 The Cacti Group | spine
 
+1.2.3
+-issue#76: Spine unhandled exception signal
+-issue: More recent versions of MariaDB require different client library
+
 1.2.2
 -feature: release to match Cacti release
 

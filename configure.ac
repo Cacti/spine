@@ -121,6 +121,7 @@ fi
 AC_CHECK_LIB(nls, gethostbyname_r)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
+AC_CHECK_LIB(dl, dlclose)
 AC_CHECK_LIB(pthread, pthread_exit)
 
 # Some builds of MySQL require libz - try to detect
@@ -259,21 +260,27 @@ for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; d
   MYSQL_LIB_CHK($i/lib/mysql)
 done
 
+AC_PATH_PROG([MARIADB], [mariadb_config], [])
+
 if test -n "$MYSQL_LIB_DIR" ; then
   LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
 fi
 CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 if test $MYSQL_REENTRANT = 1 ; then
-  LIBS="-lmysqlclient_r $LIBS"
+  LIBS="-lmysqlclient_r -lm -ldl $LIBS"
 else 
   if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
-    LIBS="-lmysqlclient_r $LIBS"
+    LIBS="-lmysqlclient_r -lm -ldl $LIBS"
   else 
     if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
-      LIBS="-lmysqlclient_r $LIBS"
+      LIBS="-lmysqlclient_r -lm -ldl $LIBS"
     else
-      LIBS="-lmysqlclient $LIBS"
+      if test "x$MARIADB" != "x"; then
+        LIBS="-lmariadbclient -lm -ldl $LIBS"
+      else
+        LIBS="-lmysqlclient -lm -ldl $LIBS"
+      fi
     fi
   fi
 fi
