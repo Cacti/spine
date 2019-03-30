@@ -73,11 +73,11 @@ echo "INFO: call bootstrap..."
 ./bootstrap
 
 # Check working directory
-cd ..
+cd ${TMP_DIR}/
 
 # Package it
 echo "INFO: Packaging..."
-tar -zcf cacti-spine-${VERSION}.tar.gz cacti-spine-${VERSION} 
+tar -zcf cacti-spine-${VERSION}.tar.gz cacti-spine-${VERSION}
 [ $? -gt 1 ] && echo "ERROR: Unable to package" && exit -1
 
 # Change working directory
