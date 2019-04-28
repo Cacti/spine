@@ -23,20 +23,29 @@ sure you update the commands as required for that new path.
 To compile and install Spine using MySQL versions 5.5 or higher
 please do the following:
 
-    ./configure
-    make
-    make install
-    chown root:root /usr/local/spine/bin/spine
-    chmod u+s /usr/local/spine/bin/spine
+1. Run the bootstrap process to automatically create the configure script
 
-To compile and install Spine using MySQL versions previous to 5.5
-please do the following:
+   ./bootstratp
 
-    ./configure --with-reentrant
-    make
-    make install
-    chown root:root /usr/local/spine/bin/spine
-    chmod +s /usr/local/spine/bin/spine
+2. Run the configure process to detect what is available on the system
+
+   ./configure
+
+3. Build spine
+
+   make
+
+4. Optionally, install spine to the default location (/usr/local/spine/bin/)
+   but do note that if you manually copy to another folder, change the paths
+   below to reflect the correct folder you want spine to run from:
+
+   make install
+   chown root:root /usr/local/spine/bin/spine
+   chmod u+s /usr/local/spine/bin/spine
+
+To compile and install Spine using MySQL versions previous to 5.5 please add
+the additional --with-reentrant option to the ./configure command above but
+please be aware that Cacti no longer officially supports MySQL prior to 5.5.
 
 Windows Installation
 ====================
