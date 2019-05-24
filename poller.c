@@ -754,7 +754,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
-							poll_result = trim(exec_poll(host, reindex->arg1));
+							poll_result = trim(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"));
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -792,7 +792,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							}
 							poll_result[0] = '\0';
 
-							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1), '\n'));
+							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"), '\n'));
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -1333,7 +1333,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 				break;
 			case POLLER_ACTION_SCRIPT: /* execute script file */
-				poll_result = exec_poll(host, poller_items[i].arg1);
+				poll_result = exec_poll(host, poller_items[i].arg1, poller_items[i].local_data_id, "DS");
 
 				/* process the result */
 				if (IS_UNDEFINED(poll_result)) {
@@ -1853,10 +1853,11 @@ int validate_result(char *result) {
 	return FALSE;
 }
 
-/*! \fn char *exec_poll(host_t *current_host, char *command)
+/*! \fn char *exec_poll(host_t *current_host, char *command, int id, char *type)
  *  \brief polls a host using a script
  *  \param current_host a pointer to the current host structure
  *  \param command the command to be executed
+ *  \param id either the local_data_id or the data_query_id
  *
  *	This function will poll a specific host using the script pointed to by
  *  the command variable.
@@ -1864,7 +1865,7 @@ int validate_result(char *result) {
  *  \return a pointer to a character buffer containing the result.
  *
  */
-char *exec_poll(host_t *current_host, char *command) {
+char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	extern sem_t active_scripts;
 	int cmd_fd;
 	int pid;
@@ -1993,7 +1994,11 @@ char *exec_poll(host_t *current_host, char *command) {
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
 			} else {
-				SPINE_LOG(("Device[%i] ERROR: Empty result [%s]: '%s'", current_host->id, current_host->hostname, command));
+				if (type == "DS") {
+					SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
+				} else {
+					SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
+				}
 				SET_UNDEFINED(result_string);
 			}
 		}
