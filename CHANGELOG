@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.4
+-issue#94: Increase default 'results_buffer' size to 2048 and MySQL max buffer to 131072 bytes
+
 1.2.3
 -issue#76: Spine unhandled exception signal
 -issue: More recent versions of MariaDB require different client library

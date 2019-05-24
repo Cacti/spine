@@ -362,9 +362,9 @@ AC_CHECK_LIB(netsnmp, snmp_timeout)
 
 # ****************** Spine Result Buffer Check ***********************
 # Check for the default spine output buffer size
-results_buffer=1024
+results_buffer=2048
 AC_ARG_WITH(results-buffer,
-  AC_HELP_STRING([--with-results-buffer=N], [The size of the spine results buffer (default=1024)]),
+  AC_HELP_STRING([--with-results-buffer=N], [The size of the spine results buffer (default=2048)]),
   [results_buffer=$withval]
 )
 AC_DEFINE_UNQUOTED(RESULTS_BUFFER, $results_buffer, The size of the spine result buffer)
@@ -382,9 +382,9 @@ AC_MSG_RESULT(checking for the maximum simultaneous spine scripts... $max_script
 
 # ****************** Maximum MySQL Buffer Size ***********************
 # Check for the most scripts that can be active at one time per spine process
-max_mysql_buffer=65536
+max_mysql_buffer=131072
 AC_ARG_WITH(max-mysql-buffer,
-  AC_HELP_STRING([--with-max-mysql-buffer=N], [The maximum SQL insert size allowed (default=65536)]),
+  AC_HELP_STRING([--with-max-mysql-buffer=N], [The maximum SQL insert size allowed (default=131072)]),
   [max_mysql_buffer=$withval]
 )
 AC_DEFINE_UNQUOTED(MAX_MYSQL_BUF_SIZE, $max_mysql_buffer, The maximum MySQL buffer size to insert)
