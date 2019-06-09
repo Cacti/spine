@@ -63,6 +63,7 @@ chmod +s /usr/local/spine/bin/spine
    * help2man
    * libmysqlclient
    * libmysqlclient-devel
+   * libssl-devel
    * libtool
    * m4
    * make
