@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.5
+-issue: Improve detection of MySQL vs. MariaDB client library requirement
+
 1.2.4
 -issue#92: Add Data Source ID to "Empty result' error messages
 -issue#94: Increase default 'results_buffer' size to 2048 and MySQL max buffer to 131072 bytes
