@@ -1994,7 +1994,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 			if (bytes_read > 0) {
 				result_string[bytes_read] = '\0';
 			} else {
-				if (type == "DS") {
+				if (STRIMATCH(type,"DS")) {
 					SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
 				} else {
 					SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
