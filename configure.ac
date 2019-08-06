@@ -260,17 +260,17 @@ for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; d
   MYSQL_LIB_CHK($i/lib/mysql)
 done
 
+if test -n "$MYSQL_LIB_DIR" ; then
+  LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
+fi
+  CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
+
 AC_CHECK_LIB(mysqlclient, mysql_init,
   [ LIBS="-lmysqlclient -lm -ldl $LIBS"
     AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
     HAVE_MYSQL=yes ],
   [ HAVE_MYSQL=no ]
 )
-
-if test -n "$MYSQL_LIB_DIR" ; then
-  LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
-fi
-CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 if test $MYSQL_REENTRANT = 1 ; then
   LIBS="-lmysqlclient_r -lm -ldl $LIBS"
