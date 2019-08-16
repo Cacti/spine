@@ -806,7 +806,7 @@ int main(int argc, char *argv[]) {
 		if (pending_threads == 0) {
 			break;
 		} else if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for Threads to End"));
+			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", pending_threads));
 			break;
 		}
 

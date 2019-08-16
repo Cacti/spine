@@ -1098,7 +1098,7 @@ int spine_log(const char *format, ...) {
 	}
 
 	/* log message prefix */
-	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] ", set.poller_id);
+	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] Process[%i] ", set.poller_id, getpid());
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);

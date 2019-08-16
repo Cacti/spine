@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.6
+-issue#105: Spine should include 'Process[<id>]' in standard logging
+
 1.2.5
 -issue: Improve detection of MySQL vs. MariaDB client library requirement
 -issue#98: Checking type in poller.c causes compiler error
