@@ -207,6 +207,7 @@ int main(int argc, char *argv[]) {
 	#endif /* HAVE_LCAP */
 
 	pthread_t* threads = NULL;
+	poller_thread_t** details = NULL;
 	poller_thread_t* poller_details = NULL;
 	pthread_attr_t attr;
 
@@ -632,6 +633,10 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c threads!");
 	}
 
+	if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
+		die("ERROR: Fatal malloc error: spine.c details!");
+	}
+
 	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
@@ -688,6 +693,10 @@ int main(int argc, char *argv[]) {
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
 			current_thread  = 1;
+
+			if (device_threads < 1) {
+				device_threads = 1;
+			}
 		} else {
 			current_thread++;
 		}
@@ -739,6 +748,8 @@ int main(int argc, char *argv[]) {
 		poller_details->host_time        = host_time;
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
+		poller_details->complete         = FALSE;
+		details[device_counter]          = poller_details;
 
 		retry1:
 
@@ -775,6 +786,9 @@ int main(int argc, char *argv[]) {
 
 				thread_mutex_unlock(LOCK_PEND);
 				sem_post(&thread_init_sem);
+
+				SPINE_LOG_DEVDBG(("INFO: DTS: device = %d, host_id = %d, host_thread = %d, last_host_thread = %d, host_data_ids = %d, complete = %d",
+					device_counter-1, poller_details->host_id, poller_details->host_thread, poller_details->last_host_thread, poller_details->host_data_ids, poller_details->complete));
 
 				break;
 			case EAGAIN:
@@ -816,7 +830,34 @@ int main(int argc, char *argv[]) {
 	}
 
 	sem_getvalue(&active_threads, &a_threads_value);
-	SPINE_LOG_MEDIUM(("SPINE: The Final Value of Threads is %i", set.threads - a_threads_value));
+	int threads_final = set.threads - a_threads_value;
+
+	if (threads_final) {
+		SPINE_LOG_HIGH(("SPINE: The final count of Threads is %i", threads_final));
+		int threads_missing = -1;
+		for (int threads_count = 0; threads_count < num_rows; threads_count++) {
+			poller_thread_t* det = details[threads_count];
+			if (threads_missing == -1 && det == NULL) {
+				threads_missing = threads_count;
+			}
+
+			if (det != NULL) { // && !det->complete) {
+				SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
+					det->complete?"":"in",
+					det->host_id,
+					det->host_data_ids * (det->host_thread - 1),
+					det->host_data_ids * (det->host_thread)));
+				SPINE_LOG_DEVDBG(("INFO: DTF: device = %d, host_id = %d, host_thread = %d, last_host_thread = %d, host_data_ids = %d, complete = %d",
+					threads_count, det->host_id, det->host_thread, det->last_host_thread, det->host_data_ids, det->complete));
+			}
+		}
+
+		if (threads_missing > -1) {
+			SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
+		}
+	} else {
+		SPINE_LOG_MEDIUM(("SPINE: The Final Value of Threads is %i", threads_final));
+	}
 
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
@@ -854,6 +895,13 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
 	/* free malloc'd variables */
+	for (int i = 0; i < num_rows; i++) {
+		if (details[i] != NULL) {
+			free(details[i]);
+		}
+	}
+
+	free(details);
 	free(threads);
 	free(ids);
 	free(conf_file);

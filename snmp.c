@@ -187,7 +187,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.peername    = hostnameport;
 	session.retries     = set.snmp_retries;
 	session.remote_port = snmp_port;
+	//session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
+	SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device '%s' has timeout %ld (%d), retries %d", host_id, hostname, session.timeout, snmp_timeout, session.retries));
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
 		session.community     = (unsigned char*) snmp_community;
@@ -328,6 +330,11 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	char   *result_string;
 	char   temp_result[RESULTS_BUFFER];
 
+	if (current_host->ignore_host) {
+		SPINE_LOG_HIGH(("WARNING: Skipped oid '%s' for Device[%d] as host ignore flag is active", snmp_oid, current_host->id));
+		return NULL;
+	}
+
 	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
@@ -337,18 +344,28 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
-		pdu       = snmp_pdu_create(SNMP_MSG_GET);
 
+		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s)", current_host->id, snmp_oid));
+		pdu       = snmp_pdu_create(SNMP_MSG_GET);
+		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
+
+		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s)", current_host->id, snmp_oid));
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
+			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
 			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		} else {
+			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_add_null_var(%s)", current_host->id, snmp_oid));
 			snmp_add_null_var(pdu, anOID, anOID_len);
+			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
 		}
 
 		/* poll host */
+		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
 		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 
 		/* add status to host structure */
 		current_host->snmp_status = status;
@@ -367,8 +384,12 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 					snprint_asciistring(result_string, RESULTS_BUFFER, temp_result, strlen(temp_result));
+				} else {
+					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
 				}
 			}
+		} else {
+			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
 		}
 
 		if (response) {

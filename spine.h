@@ -135,7 +135,7 @@
 #define BIG_BUFSIZE 65535
 #define MEGA_BUFSIZE 1024000
 #define HUGE_BUFSIZE 2048000
-#define LOGSIZE 4096
+#define LOGSIZE 65535
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
@@ -466,6 +466,7 @@ typedef struct poller_thread {
 	int host_thread;
 	int last_host_thread;
 	int host_data_ids;
+	int complete;
 	char *host_time;
 	double host_time_double;
 	sem_t *thread_init_sem;

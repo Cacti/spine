@@ -68,8 +68,6 @@ void *child(void *arg) {
 	/* Allows main thread to proceed with creation of other threads */
 	sem_post(poller_details.thread_init_sem);
 
-	free(arg);
-
 	if (is_debug_device(host_id)) {
 		SPINE_LOG(("DEBUG: In Poller, About to Start Polling of Device for Device ID %i", host_id));
 	} else {
@@ -90,6 +88,7 @@ void *child(void *arg) {
 
 	thread_mutex_lock(LOCK_PEND);
 	pending_threads--;
+	poller_details.complete = TRUE;
 
 	SPINE_LOG_MEDIUM(("POLLER: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
 	thread_mutex_unlock(LOCK_PEND);
@@ -1776,37 +1775,49 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_LOG_MEDIUM(("Updating Full System Information Table"));
 		}
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0'); [complete]"));
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
 		}
 		free(poll_result);
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0'); [complete]"));
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
 			free(poll_result);
 		}
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]"));
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
 			free(poll_result);
 		}
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0'); [complete]"));
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
 			free(poll_result);
 		}
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0'); [complete]"));
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
 			free(poll_result);
 		}
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0'); [complete]"));
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);
 			free(poll_result);
@@ -1818,7 +1829,9 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_LOG_MEDIUM(("Updating Short System Information Table"));
 		}
 
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');"));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]"));
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
 			free(poll_result);
