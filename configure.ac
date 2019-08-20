@@ -239,10 +239,22 @@ AC_DEFUN([MYSQL_LIB_CHK],
 )
 
 # Determine MySQL installation paths
+MYSQL_SUB_DIR="include include/mysql include/mariadb mysql";
 for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
-  test -f $i/include/mysql.h        && MYSQL_INC_DIR=$i/include        && break
-  test -f $i/include/mysql/mysql.h  && MYSQL_INC_DIR=$i/include/mysql  && break
-  test -f $i/mysql/include/mysql.h  && MYSQL_INC_DIR=$i/mysql/include  && break
+  for d in $MYSQL_SUB_DIR; do
+    if [[ -f $i/$d/mysql.h ]]; then
+      MYSQL_INC_DIR=$i/$d
+      break;
+    fi
+  done
+
+  if [[ ! -z $MYSQL_INC_DIR ]]; then
+    break;
+  fi
+#  test -f $i/include/mysql.h          && MYSQL_INC_DIR=$i/include          && break
+#  test -f $i/include/mysql/mysql.h    && MYSQL_INC_DIR=$i/include/mysql    && break
+#  test -f $i/include/mariadb/mysql.h  && MYSQL_INC_DIR=$i/include/mariadb  && break
+#  test -f $i/mysql/include/mysql.h    && MYSQL_INC_DIR=$i/mysql/include    && break
 done
 
 if test -z "$MYSQL_INC_DIR"; then

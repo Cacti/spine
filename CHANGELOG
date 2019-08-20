@@ -5,6 +5,7 @@ The Cacti Group | spine
 -issue#105: Spine should include 'Process[<id>]' in standard logging
 -issue#107: Log Buffer is too small to handle some output
 -issue#108: Once an SNMP timeout is reached, snmp_get does not honor include_host
+-issue#109: Initial declarations inside for loop cause compile errors
 
 1.2.5
 -issue: Improve detection of MySQL vs. MariaDB client library requirement

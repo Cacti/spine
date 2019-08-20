@@ -835,7 +835,8 @@ int main(int argc, char *argv[]) {
 	if (threads_final) {
 		SPINE_LOG_HIGH(("SPINE: The final count of Threads is %i", threads_final));
 		int threads_missing = -1;
-		for (int threads_count = 0; threads_count < num_rows; threads_count++) {
+		int threads_count;
+		for (threads_count = 0; threads_count < num_rows; threads_count++) {
 			poller_thread_t* det = details[threads_count];
 			if (threads_missing == -1 && det == NULL) {
 				threads_missing = threads_count;
@@ -895,9 +896,10 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
 	/* free malloc'd variables */
-	for (int i = 0; i < num_rows; i++) {
-		if (details[i] != NULL) {
-			free(details[i]);
+        int mrow;
+	for (mrow = 0; i < num_rows; mrow++) {
+		if (details[mrow] != NULL) {
+			free(details[mrow]);
 		}
 	}
 
