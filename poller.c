@@ -819,7 +819,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						}
 
 						if (!reindex_err) {
-							if (!(query3 = (char *)malloc(BUFSIZE))) {
+							if (!(query3 = (char *)malloc(LRG_BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c reindex insert!");
 							}
 							query3[0] = '\0';
@@ -842,7 +842,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								}
 
 								if (host_thread == 1) {
-									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 									if (set.mode == REMOTE_ONLINE) {
 										db_insert(&mysqlr, REMOTE, query3);
@@ -864,7 +864,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								}
 
 								if (host_thread == 1) {
-									snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 									if (set.mode == REMOTE_ONLINE) {
 										db_insert(&mysqlr, REMOTE, query3);
@@ -888,7 +888,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									}
 
 									if (host_thread == 1) {
-										snprintf(query3, BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 										if (set.mode == REMOTE_ONLINE) {
 											db_insert(&mysqlr, REMOTE, query3);
@@ -909,7 +909,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
 									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
-									snprintf(query3, BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, temp_arg1);
+									snprintf(query3, LRG_BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, temp_arg1);
 									db_insert(&mysql, LOCAL, query3);
 								}
 

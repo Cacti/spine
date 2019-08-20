@@ -481,12 +481,12 @@ int main(int argc, char *argv[]) {
 			valid_conf_file = TRUE;
 		}
 	} else {
-		if (!(conf_file = calloc(CONFIG_PATHS, BUFSIZE))) {
+		if (!(conf_file = calloc(CONFIG_PATHS, DBL_BUFSIZE))) {
 			die("ERROR: Fatal malloc error: spine.c conf_file!");
 		}
 
 		for (i=0; i<CONFIG_PATHS; i++) {
-			snprintf(conf_file, BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
+			snprintf(conf_file, DBL_BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_spine_config(conf_file) >= 0) {
 				valid_conf_file = TRUE;
@@ -494,7 +494,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (i == CONFIG_PATHS-1) {
-				snprintf(conf_file, BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
+				snprintf(conf_file, DBL_BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
 			}
 		}
 	}

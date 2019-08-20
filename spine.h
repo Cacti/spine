@@ -357,9 +357,9 @@ typedef struct config_struct {
 	unsigned int db_port;
 	int    dbversion;
 	/* path information */
-	char   path_logfile[SMALL_BUFSIZE];
-	char   path_php[SMALL_BUFSIZE];
-	char   path_php_server[SMALL_BUFSIZE];
+	char   path_logfile[BUFSIZE];
+	char   path_php[BUFSIZE];
+	char   path_php_server[BUFSIZE];
 	/* logging options */
 	int    log_level;
 	int    log_destination;

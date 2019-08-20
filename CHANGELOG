@@ -6,6 +6,7 @@ The Cacti Group | spine
 -issue#107: Log Buffer is too small to handle some output
 -issue#108: Once an SNMP timeout is reached, snmp_get does not honor include_host
 -issue#109: Initial declarations inside for loop cause compile errors
+-issue#110: When compiling, 'directive output may be truncated' messages can appear
 
 1.2.5
 -issue: Improve detection of MySQL vs. MariaDB client library requirement
