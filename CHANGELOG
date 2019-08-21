@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.6
+-issue#101: MySQL 8 has retired 'my_bool' type
 -issue#104: Spine should report which threads are outstanding
 -issue#105: Spine should include 'Process[<id>]' in standard logging
 -issue#107: Log Buffer is too small to handle some output
