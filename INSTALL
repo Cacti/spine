@@ -25,7 +25,7 @@ please do the following:
 
 1. Run the bootstrap process to automatically create the configure script
 
-   ./bootstratp
+   ./bootstrap
 
 2. Run the configure process to detect what is available on the system
 
