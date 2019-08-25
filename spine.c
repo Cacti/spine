@@ -605,7 +605,12 @@ int main(int argc, char *argv[]) {
 	qp += sprintf(qp, " ORDER BY polling_time DESC");
 
 	result = db_query(&mysql, LOCAL, querybuf);
-	num_rows = mysql_num_rows(result); /* pollerid 0 takes care of not host based data sources */
+
+	if (set.poller_id == 1) {
+		num_rows = mysql_num_rows(result) + 1; /* pollerid 1 takes care of not host based data sources */
+	} else {
+		num_rows = mysql_num_rows(result);
+	}
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
 		die("ERROR: Fatal malloc error: spine.c threads!");
@@ -657,7 +662,7 @@ int main(int argc, char *argv[]) {
 	current_thread   = 0;
 
 	/* poller 0 always polls host 0 */
-	if (set.poller_id == 0) {
+	if (set.poller_id == 1) {
 		host_id     = 0;
 		change_host = FALSE;
 	} else {
