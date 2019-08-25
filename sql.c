@@ -187,6 +187,7 @@ void db_connect(int type, MYSQL *mysql) {
 	int    options_error;
 	int    success;
 	int    error;
+	bool   reconnect;
 	MYSQL  *connect_error;
 	char   *hostname;
 	char   *socket = NULL;
@@ -229,7 +230,7 @@ void db_connect(int type, MYSQL *mysql) {
 	timeout = 5;
 	rtimeout = 10;
 	wtimeout = 20;
-	_Bool reconnect = 1;
+	reconnect = 1;
 
 	mysql_init(mysql);
 

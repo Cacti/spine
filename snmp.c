@@ -115,9 +115,9 @@ void snmp_spine_close(void) {
  *
  */
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
-					char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
-					char *snmp_priv_passphrase, char *snmp_priv_protocol,
-					char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout) {
+	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
+	char *snmp_priv_passphrase, char *snmp_priv_protocol,
+	char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout) {
 
 	void   *sessp = NULL;
 	struct snmp_session session;
@@ -187,8 +187,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.peername    = hostnameport;
 	session.retries     = set.snmp_retries;
 	session.remote_port = snmp_port;
-	//session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
+
 	SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device '%s' has timeout %ld (%d), retries %d", host_id, hostname, session.timeout, snmp_timeout, session.retries));
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
@@ -346,7 +346,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 		anOID_len = MAX_OID_LEN;
 
 		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s)", current_host->id, snmp_oid));
-		pdu       = snmp_pdu_create(SNMP_MSG_GET);
+		pdu = snmp_pdu_create(SNMP_MSG_GET);
 		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
 
 		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s)", current_host->id, snmp_oid));

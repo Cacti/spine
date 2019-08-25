@@ -92,7 +92,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <syslog.h>
-
+#include <stdbool.h>
 
 #if HAVE_STDINT_H
 #  include <stdint.h>

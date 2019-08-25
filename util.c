@@ -446,18 +446,22 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i", set.ping_retries));
 
 	/* set ping_timeout */
-	if ( (res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
 		set.ping_timeout = atoi(res);
 		free((char *)res);
+	} else {
+		set.ping_timeout = 400;
 	}
 
 	/* log the ping_timeout variable */
 	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
 
 	/* set snmp_retries */
-	if ( (res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
 		set.snmp_retries = atoi(res);
 		free((char *)res);
+	} else {
+		set.snmp_retries = 3;
 	}
 
 	/* log the snmp_retries variable */
@@ -1098,7 +1102,7 @@ int spine_log(const char *format, ...) {
 	}
 
 	/* log message prefix */
-	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] Process[%i] ", set.poller_id, getpid());
+	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] ", set.poller_id, getpid());
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);

@@ -1685,9 +1685,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	/* record the polling time for the device */
 	poll_time = get_time_as_double() - poll_time;
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("Device[%i] HT[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
+		SPINE_LOG(("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
 	} else {
-		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Total Time: %5.2g Seconds", host_id, host_thread, poll_time));
+		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
 	}
 
 	/* record the total time for the host */
@@ -1768,70 +1768,79 @@ int is_multipart_output(char *result) {
 void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 	char *poll_result;
 
+	SPINE_LOG_MEDIUM(("NOTE: Device[%d] Checking for System Information Update", host->id));
+
 	if (set.mibs || system) {
 		if (is_debug_device(host->id)) {
-			SPINE_LOG(("Updating Full System Information Table"));
+			SPINE_LOG(("NOTE: Device[%d] Updating Full System Information Table", host->id));
 		} else {
-			SPINE_LOG_MEDIUM(("Updating Full System Information Table"));
+			SPINE_LOG_MEDIUM(("NOTE: Device[%d] Updating Full System Information Table", host->id));
 		}
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0'); [complete]", host->id));
+
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
+			free(poll_result);
 		}
-		free(poll_result);
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0'); [complete]", host->id));
+
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
 			free(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
+
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
 			free(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0'); [complete]", host->id));
+
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
 			free(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0'); [complete]", host->id));
+
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
 			free(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0'); [complete]", host->id));
+
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);
 			free(poll_result);
 		}
 	} else {
 		if (is_debug_device(host->id)) {
-			SPINE_LOG(("Updating Short System Information Table"));
+			SPINE_LOG(("NOTE: Device[%d] Updating Short System Information Table", host->id));
 		} else {
-			SPINE_LOG_MEDIUM(("Updating Short System Information Table"));
+			SPINE_LOG_MEDIUM(("NOTE: Device[%d] Updating Short System Information Table", host->id));
 		}
 
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
-		SPINE_LOG_DEVDBG(("poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]"));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
+
 		if (poll_result) {
 			host->snmp_sysUpTimeInstance = atoi(poll_result);
 			free(poll_result);

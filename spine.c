@@ -225,6 +225,9 @@ int main(int argc, char *argv[]) {
 	int total_items   = 0;
 	int change_host   = TRUE;
 	int current_thread;
+	int threads_final = 0;
+	int threads_missing = -1;
+	int threads_count;
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
@@ -316,8 +319,7 @@ int main(int argc, char *argv[]) {
 
 		if (opt) *opt++ = '\0';
 
-		if (STRMATCH(arg, "-f") ||
-			STRMATCH(arg, "--first")) {
+		if (STRMATCH(arg, "-f") || STRMATCH(arg, "--first")) {
 			if (HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -329,8 +331,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-l") ||
-				 STRIMATCH(arg, "--last")) {
+		else if (STRMATCH(arg, "-l") || STRIMATCH(arg, "--last")) {
 			if (HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -342,38 +343,27 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-p") ||
-				 STRIMATCH(arg, "--poller")) {
+		else if (STRMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-N") ||
-				 STRIMATCH(arg, "--mode")) {
-
+		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
 			if (STRIMATCH(getarg(opt, &argv), "online")) {
 				set.mode = REMOTE_ONLINE;
-			}
-
-			else if (STRIMATCH(getarg(opt, &argv), "offline")) {
+			} else if (STRIMATCH(getarg(opt, &argv), "offline")) {
 				set.mode = REMOTE_OFFLINE;
-			}
-
-			else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
+			} else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
 				set.mode = REMOTE_RECOVERY;
-			}
-
-			else {
+			} else {
 				die("ERROR: invalid polling mode '%s' specified", opt);
 			}
 		}
 
-		else if (STRMATCH(arg, "-H") ||
-				 STRIMATCH(arg, "--hostlist")) {
+		else if (STRMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-M") ||
-				 STRMATCH(arg, "--mibs")) {
+		else if (STRMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
 			set.mibs = 1;
 		}
 
@@ -389,10 +379,9 @@ int main(int argc, char *argv[]) {
 			exit(EXIT_SUCCESS);
 		}
 
-		else if (STRMATCH(arg, "-O") ||
-				 STRIMATCH(arg, "--option")) {
-			char	*setting = getarg(opt, &argv);
-			char	*value   = strchr(setting, ':');
+		else if (STRMATCH(arg, "-O") || STRIMATCH(arg, "--option")) {
+			char *setting = getarg(opt, &argv);
+			char *value   = strchr(setting, ':');
 
 			if (*value) {
 				*value++ = '\0';
@@ -403,34 +392,27 @@ int main(int argc, char *argv[]) {
 			set_option(setting, value);
 		}
 
-		else if (STRMATCH(arg, "-R") ||
-				 STRMATCH(arg, "--readonly") ||
-				 STRMATCH(arg, "--read-only")) {
+		else if (STRMATCH(arg, "-R") || STRMATCH(arg, "--readonly") || STRMATCH(arg, "--read-only")) {
 			set.SQL_readonly = TRUE;
 		}
 
-		else if (STRMATCH(arg, "-C") ||
-				 STRMATCH(arg, "--conf")) {
+		else if (STRMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
 			conf_file = strdup(getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-S") ||
-				 STRMATCH(arg, "--stdout")) {
+		else if (STRMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
 			set_option("log_destination", "STDOUT");
 		}
 
-		else if (STRMATCH(arg, "-L") ||
-				 STRMATCH(arg, "--log")) {
+		else if (STRMATCH(arg, "-L") || STRMATCH(arg, "--log")) {
 			set_option("log_destination", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-V") ||
-				 STRMATCH(arg, "--verbosity")) {
+		else if (STRMATCH(arg, "-V") || STRMATCH(arg, "--verbosity")) {
 			set_option("log_verbosity", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "--snmponly") ||
-				 STRMATCH(arg, "--snmp-only")) {
+		else if (STRMATCH(arg, "--snmponly") || STRMATCH(arg, "--snmp-only")) {
 			set.snmponly = TRUE;
 		}
 
@@ -623,11 +605,7 @@ int main(int argc, char *argv[]) {
 	qp += sprintf(qp, " ORDER BY polling_time DESC");
 
 	result = db_query(&mysql, LOCAL, querybuf);
-	if (set.poller_id == 0) {
-		num_rows = mysql_num_rows(result) + 1; /* add 1 for host = 0 */
-	} else {
-		num_rows = mysql_num_rows(result); /* pollerid 0 takes care of not host based data sources */
-	}
+	num_rows = mysql_num_rows(result); /* pollerid 0 takes care of not host based data sources */
 
 	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
 		die("ERROR: Fatal malloc error: spine.c threads!");
@@ -726,12 +704,15 @@ int main(int argc, char *argv[]) {
 				db_free_result(tresult);
 
 				if (host_time) free(host_time);
+
 				host_time = get_host_poll_time();
 				host_time_double = get_time_as_double();
 			}
 		} else {
-			itemsPT   = 0;
+			itemsPT = 0;
+
 			if (host_time) free(host_time);
+
 			host_time = get_host_poll_time();
 			host_time_double = get_time_as_double();
 		}
@@ -749,6 +730,7 @@ int main(int argc, char *argv[]) {
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
+
 		details[device_counter]          = poller_details;
 
 		retry1:
@@ -787,8 +769,14 @@ int main(int argc, char *argv[]) {
 				thread_mutex_unlock(LOCK_PEND);
 				sem_post(&thread_init_sem);
 
-				SPINE_LOG_DEVDBG(("INFO: DTS: device = %d, host_id = %d, host_thread = %d, last_host_thread = %d, host_data_ids = %d, complete = %d",
-					device_counter-1, poller_details->host_id, poller_details->host_thread, poller_details->last_host_thread, poller_details->host_data_ids, poller_details->complete));
+				SPINE_LOG_DEVDBG(("INFO: DTS: device = %d, host_id = %d, host_thread = %d,"
+					" last_host_thread = %d, host_data_ids = %d, complete = %d",
+					device_counter-1,
+					poller_details->host_id,
+					poller_details->host_thread,
+					poller_details->last_host_thread,
+					poller_details->host_data_ids,
+					poller_details->complete));
 
 				break;
 			case EAGAIN:
@@ -805,8 +793,9 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* Restore thread initialization semaphore if thread creation failed */
-		if (thread_status)
+		if (thread_status) {
 			sem_post(&thread_init_sem);
+		}
 	}
 
 	/* wait for all threads to 'complete'
@@ -826,18 +815,19 @@ int main(int argc, char *argv[]) {
 
 		thread_mutex_unlock(LOCK_PEND);
 
-		sleep(1);
+		usleep(100000);
 	}
 
 	sem_getvalue(&active_threads, &a_threads_value);
-	int threads_final = set.threads - a_threads_value;
+
+	threads_final = set.threads - a_threads_value;
 
 	if (threads_final) {
 		SPINE_LOG_HIGH(("SPINE: The final count of Threads is %i", threads_final));
-		int threads_missing = -1;
-		int threads_count;
+
 		for (threads_count = 0; threads_count < num_rows; threads_count++) {
 			poller_thread_t* det = details[threads_count];
+
 			if (threads_missing == -1 && det == NULL) {
 				threads_missing = threads_count;
 			}
@@ -848,8 +838,15 @@ int main(int argc, char *argv[]) {
 					det->host_id,
 					det->host_data_ids * (det->host_thread - 1),
 					det->host_data_ids * (det->host_thread)));
-				SPINE_LOG_DEVDBG(("INFO: DTF: device = %d, host_id = %d, host_thread = %d, last_host_thread = %d, host_data_ids = %d, complete = %d",
-					threads_count, det->host_id, det->host_thread, det->last_host_thread, det->host_data_ids, det->complete));
+
+				SPINE_LOG_DEVDBG(("INFO: DTF: device = %d, host_id = %d, host_thread = %d,"
+					" last_host_thread = %d, host_data_ids = %d, complete = %d",
+					threads_count,
+					det->host_id,
+					det->host_thread,
+					det->last_host_thread,
+					det->host_data_ids,
+					det->complete));
 			}
 		}
 
@@ -896,10 +893,9 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
 	/* free malloc'd variables */
-        int mrow;
-	for (mrow = 0; i < num_rows; mrow++) {
-		if (details[mrow] != NULL) {
-			free(details[mrow]);
+	for (i = 0; i < num_rows; i++) {
+		if (details[i] != NULL) {
+			free(details[i]);
 		}
 	}
 
