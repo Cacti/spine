@@ -103,7 +103,7 @@ The Cacti Group | spine
 1.1.19
 -feature: release to match Cacti release
 
-1.1.18 
+1.1.18
 -issue: Sort devices by polling time to allow long running devices to go first
 
 1.1.17
@@ -200,21 +200,21 @@ The Cacti Group | spine
 -bug:0002639: Spine does not respect snmp_retries from the database
 -bug:0002640: Spine crashes randomly while polling using multiple threads on one device
 -bug:0002549: Spine: hasCaps() always returns FALSE
--bug:0002638: Spine: ping_udp() uses uninitialised socket timeout 
+-bug:0002638: Spine: ping_udp() uses uninitialised socket timeout
 -bug:0002654: On RHEL 6.5, spine ./configure builds Makefile without crypto support
 
 0.8.8f
 -bug:0002604: cacti-spine, configure script ignores LDFLAGS in certain situations
 
 0.8.8e
--bug#0002185: Multiple memory leaks found in spine 
+-bug#0002185: Multiple memory leaks found in spine
 -bug#0002398: Buffer overflow
--bug#0002447: Building spine on Debian Jessie (testing) fails 
+-bug#0002447: Building spine on Debian Jessie (testing) fails
 -bug#0002536: Spine segfaults when 18k+ hosts are to be pulled
 -bug#0002576: Call to a non-existent column of the database in poller.c
 -bug#0002578: spine doesn't compile on ubuntu 12.04
 -bug#0002585: Spine: buffer overflow in logging when RESULTS_BUFFER>LOGSIZE can SEGV
--bug#0002588: Spine "is_numeric" incorrectly returns TRUE for some hexadecimal values 
+-bug#0002588: Spine "is_numeric" incorrectly returns TRUE for some hexadecimal values
 
 0.8.8d
 -feature: add snmp system information gathering
@@ -240,12 +240,12 @@ The Cacti Group | spine
 -feature: Add a reconnect capability when the mysql server goes away
 
 0.8.7h
--bug#0001669: Problems with getting data from script using SPINE on Windows Server 2003 x32 
--bug#0001829: Wrong string numerical value got from Spine SNMP poller 
+-bug#0001669: Problems with getting data from script using SPINE on Windows Server 2003 x32
+-bug#0001829: Wrong string numerical value got from Spine SNMP poller
 -bug#0001899: spine treats undef replies as 0
 -bug#0001968: Spine Error with Cisco FWSM firewalls
--bug#0001974: PRIV_PROC_EXEC is required for Spine on Solaris 10 
--bug#0002059: Spine doing too many (80+) connections when polling 
+-bug#0001974: PRIV_PROC_EXEC is required for Spine on Solaris 10
+-bug#0002059: Spine doing too many (80+) connections when polling
 -bug: Net-snmp API issues cause spine crashes with some SNMP agents
 -bug: Host list not properly initialized
 -bug: Mutex locking issues cause deadlocks in Windows
@@ -254,7 +254,7 @@ The Cacti Group | spine
 -bug: be smart for SNMP V3 and use AuthNoPriv when privacy passphrase is empty
 -bug: Do not fail on insert for a duplicate record
 -bug: Script server results with special characters can cause segfaults
--feature#0001852: Another 10% speedup in spine 
+-feature#0001852: Another 10% speedup in spine
 -feature#0001878: Add Linux Capabilities to Spine
 -feature: Add additional ping methods to allow more precise snmp pings
 -feature: Clean up directory, update bootstrap
@@ -263,7 +263,7 @@ The Cacti Group | spine
 -feature: Multi threaded host polling
 
 0.8.7f
--bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building 
+-bug#0001465: Don't check micro version when comparing installed net-snmp version to version used when building
 -bug#0001497: Prevent constant reindexes if snmp agent continually returns uptime of 0
 -bug#0001510: Speedup spine resorting hosts by estimated polling time
 -bug#0001519: spine enhancement for parallel collection of data at host level
@@ -271,7 +271,7 @@ The Cacti Group | spine
 -bug#0001551: Spine compile problem on AIX 5
 -bug#0001563: Spine Compilation Problem on sql.c
 -bug#0001604: HEX Counter values enclosed in quotes not recognized as HEX
--bug#0001657: Spine output shows drop of latest bit from hex value 
+-bug#0001657: Spine output shows drop of latest bit from hex value
 -bug#0001653: Transient ICMP Socket create failures causing spine to die
 -bug: When performing reindex checks, spine does not trim quotes from string values resulting in reindex faiures
 -bug: Add new option to enable Net-SNMP library vs. header versions
@@ -289,12 +289,12 @@ The Cacti Group | spine
 -bug: Don't perform TCP Ping retries in Windows. You cannot set socket send timeouts in Windows
 
 0.8.7d
--bug#0001310: Feature request for poller.php- single host polling 
+-bug#0001310: Feature request for poller.php- single host polling
 -bug#0001313: Spine takes an excessive amount of time timing out failed tcp pings
--bug#0001358: (cacti + spine) svn. Using snmp v3 constantly get "value: U", whereas snmpget returns correct value 
+-bug#0001358: (cacti + spine) svn. Using snmp v3 constantly get "value: U", whereas snmpget returns correct value
 -bug#0001379: Ping.c might send more then retry_count icmp packages
--bug#0001381: configure script distributed with cacti-spine-0.8.7c is broken 
--bug#0001420: PCOMMAND: Poller[0] Host[80] WARNING: Recache Event Detected for Host 
+-bug#0001381: configure script distributed with cacti-spine-0.8.7c is broken
+-bug#0001420: PCOMMAND: Poller[0] Host[80] WARNING: Recache Event Detected for Host
 -bug: A host that for some reason can not initialize snmp can cause a segfault
 -bug: When using nifty popen, when the script times out, attempt to kill it
 -bug: Under some platforms tcp and udp ping unresponsive
@@ -320,11 +320,11 @@ The Cacti Group | spine
 -bug#0001152: Running spine w/o setuid-root on Solaris
 -bug#0001186: clarify INSTALL documentation.
 -bug#0001231: Compiling Spine on Solaris 10
--bug#0001260: Deadlock in ping.c when resolving bad hostnames 
+-bug#0001260: Deadlock in ping.c when resolving bad hostnames
 -bug#0001271: hex string to decimal conversion
 -bug#0001277: Spine reporting partial result or 'U' for SNMP value
 -bug: Correct a buffer overrun issue in poller.c
--bug: If the script server goes away due to a syntax problem, it will not restart 
+-bug: If the script server goes away due to a syntax problem, it will not restart
 -bug: If the snmp session is not created spine times out
 -bug: If your snmp context changes between poller items, the context would not always change
 -feature: Use threadsafe gethostbyname_r
