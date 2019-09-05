@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.7
+-issue#113: spine1.2.6 couldn't open directory `m4'
+
 1.2.6
 -issue#101: MySQL 8 has retired 'my_bool' type
 -issue#104: Spine should report which threads are outstanding
