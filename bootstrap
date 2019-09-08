@@ -48,10 +48,12 @@ find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
 
 # Prepare a build state
 echo "INFO: Running auto-tools to verify buildability"
+aclocal --install
 libtoolize
 automake --add-missing
 autoreconf --force --install
 [ $? -ne 0 ] && echo "ERROR: 'autoreconf' exited with errors" && exit -1
+
 
 # Provide some meaningful notes
 echo "INFO: Spine bootstrap process completed"

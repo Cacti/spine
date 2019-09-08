@@ -3,8 +3,6 @@ AC_INIT(Spine Poller, 1.2.6, http://www.cacti.net/issues.php)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
-AM_INIT_AUTOMAKE
-AC_PROG_CC
 
 AC_CANONICAL_HOST
 AC_CONFIG_SRCDIR(spine.c)
