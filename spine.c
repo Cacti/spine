@@ -624,6 +624,9 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
 
+	/* initialize winsock library on Windows */
+	SOCK_STARTUP;
+
 	/* mark the spine process as started */
 	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
 	if (mode == REMOTE) {
@@ -941,6 +944,9 @@ int main(int argc, char *argv[]) {
 
 	/* uninstall the spine signal handler */
 	uninstall_spine_signal_handler();
+
+	/* clueanup winsock library on Windows */
+	SOCK_CLEANUP;
 
 	exit(EXIT_SUCCESS);
 }
