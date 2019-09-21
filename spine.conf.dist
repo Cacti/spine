@@ -45,9 +45,9 @@ DB_User       cactiuser
 DB_Pass       cactiuser
 DB_Port       3306
 #DB_UseSSL    0
-#RDB_SSL_Key   
-#RDB_SSL_Cert
-#RDB_SSL_CA
+#DB_SSL_Key
+#DB_SSL_Cert
+#DB_SSL_CA
 
 RDB_Host      localhost
 RDB_Database  cacti
@@ -55,7 +55,7 @@ RDB_User      cactiuser
 RDB_Pass      cactiuser
 RDB_Port      3306
 #RDB_UseSSL    0
-#RDB_SSL_Key   
+#RDB_SSL_Key
 #RDB_SSL_Cert
 #RDB_SSL_CA
 
