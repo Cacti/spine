@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.8
+-issue#119: When calling bootstrap, an invalid error claiming config.h.in is missing can appear on first compile
+
 1.2.7
 -issue#113: When compiling under CentOS, 'm4' directory appears to be missing
 -issue#115: Perform proper initialization and teardown of sockets under Windows
