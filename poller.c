@@ -700,9 +700,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 					if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
 
-					if (row[3] != NULL) {
-						db_escape(&mysql, reindex->assert_value, sizeof(reindex->assert_value), row[3]);
-					}
+					if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), row[3]);
 
 					if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 
@@ -830,7 +828,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 								assert_fail = FALSE;
-							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
+							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value, poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
