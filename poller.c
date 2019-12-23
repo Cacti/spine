@@ -1140,11 +1140,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									if (error_len == 0) {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-									} else {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-									}
+									buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								/* continue */
@@ -1161,11 +1157,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									if (error_len == 0) {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-									} else {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-									}
+									buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								/* is valid output, continue */
@@ -1183,11 +1175,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 											poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 									} else if (set.spine_log_level == 1) {
 										errors++;
-										if (error_len == 0) {
-											error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-										} else {
-											error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-										}
+										buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 									}
 
 									SET_UNDEFINED(snmp_oids[j].result);
@@ -1247,11 +1235,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							} else if (set.spine_log_level == 1) {
 								errors++;
-								if (error_len == 0) {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-								} else {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-								}
+								buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							}
 
 							/* continue */
@@ -1268,11 +1252,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							} else if (set.spine_log_level == 1) {
 								errors++;
-								if (error_len == 0) {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-								} else {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-								}
+								buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							}
 
 							/* is valid output, continue */
@@ -1290,11 +1270,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									if (error_len == 0) {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-									} else {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-									}
+									buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								SET_UNDEFINED(snmp_oids[j].result);
@@ -1341,11 +1317,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-						}
+						buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
 					}
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1364,11 +1336,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							if (error_len == 0) {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-							} else {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-							}
+							buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1405,11 +1373,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-						}
+						buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
 					}
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1428,11 +1392,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							if (error_len == 0) {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-							} else {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-							}
+							buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1481,11 +1441,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-						}
+						buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					}
 
 					/* continue */
@@ -1502,11 +1458,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-						}
+						buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					}
 
 					/* is valid output, continue */
@@ -1524,11 +1476,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							if (error_len == 0) {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-							} else {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-							}
+							buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 						}
 
 						SET_UNDEFINED(snmp_oids[j].result);
@@ -1710,13 +1658,45 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
-	if (error_len > 0) {
-		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, host_id, host_thread, error_string));
-	}
+	buffer_output_errors(error_string, host_id, host_thread, 0, true);
 
 	free(error_string);
 
 	*host_errors = errors;
+}
+
+/*! \fn void buffer_output_errors(local_data_id) {
+ *  \brief buffers output errors and pushes those errors to standard
+ *         output as required.
+ *  \param char* buffer - pointer to the output buffer
+ *  \param int device_id - the device id
+ *  \param int thread id - the device thread
+ *  \param int local_data_id - the local data id
+ *  \param boolean flush - flush any part of buffer
+ */
+void buffer_output_errors(char *error_string, int device_id, int thread_id, int local_data_id, bool flush) {
+	static int bufsize = 0;
+	static int errors  = 0;
+	int error_len;
+	char tbuffer[SMALL_BUFSIZE];
+
+	if (flush && errors) {
+		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, device_id, thread_id, error_string));
+	} else if (!flush) {
+		snprintf(tbuffer, SMALL_BUFSIZE, errors ? ", %i" : "%i", local_data_id);
+		error_len = strlen(tbuffer);
+
+		if (bufsize + error_len >= DBL_BUFSIZE) {
+			SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, device_id, thread_id, error_string));
+			memset(error_string, 0, DBL_BUFSIZE);
+			errors  = 0;
+			bufsize = 0;
+		} else {
+			errors++;
+			snprintf(error_string, DBL_BUFSIZE, "%s", tbuffer);
+			bufsize += error_len;
+		}
+	}
 }
 
 /*! \fn int is_multipart_output(char *result)

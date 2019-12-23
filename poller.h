@@ -37,3 +37,4 @@ extern char *exec_poll(host_t *current_host, char *command, int id, char *type);
 extern void get_system_information(host_t *host, MYSQL *mysql, int system);
 extern int is_multipart_output(char *result);
 extern int validate_result(char *result);
+extern void buffer_output_errors(char * error_string, int device_id, int thread_id, int local_data_id, bool flush);
