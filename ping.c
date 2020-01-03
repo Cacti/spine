@@ -842,60 +842,35 @@ int ping_tcp(host_t *host, ping_t *ping) {
  *
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
-	struct hostent *hostinfo;
-	int retry_count;
-	#if !defined(H_ERRNO_DECLARED) && !defined(_AIX)
-	extern int h_errno;
-	#endif
+	struct addrinfo hints, *hostinfo, *p;
+	int rv, retry_count;
 
-	name->sin_family = AF_INET;
-	name->sin_port   = htons (port);
+	// Initialize the hints structure
+	memset(&hints, 0, sizeof hints);
 
+	// This should be AF_UNSPEC and we should work out if we are using
+	// AF_INET or AF_INET6 later, but without checking the rest of spine
+	// for IPv6 compatibility, lets first make it work with IPv4 only
+	hints.ai_family = AF_INET;
 	retry_count = 0;
-
-	#ifdef HAVE_THREADSAFE_GETHOSTBYNAME
-	retry:
-	hostinfo = gethostbyname(hostname);
-
-	if (!hostinfo) {
-		if (h_errno == TRY_AGAIN && retry_count < 3) {
-			retry_count++;
-			usleep(50000);
-			goto retry;
-		} else {
-			return NULL;
-		}
-	} else {
-		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-	}
-
-	#else
-	#ifdef HAVE_GETHOSTBYNAME_R_GLIBC
-	struct hostent result_buf;
-	size_t len = 1024;
-	char   *buf;
-	int    herr;
-	int    rv;
-
-	buf = malloc(len*sizeof(char));
-	memset(buf, 0, len*sizeof(char));
+	rv = 0;
 
 	while (1) {
-		rv = gethostbyname_r(hostname, &result_buf, buf, len,
-		&hostinfo, &herr);
+		rv = getaddrinfo(hostname, NULL, &hints, &hostinfo);
+		if (rv) {
+			if (rv == TRY_AGAIN && retry_count < 3) {
+				if (hostinfo != NULL) {
+					freeaddrinfo(hostinfo);
+				}
 
-		if (!hostinfo) {
-			if (rv == ERANGE) {
-				len *= 2;
-				buf = realloc(buf, len*sizeof(char));
-
-				continue;
-			} else if (herr == TRY_AGAIN && retry_count < 3) {
 				retry_count++;
 				usleep(50000);
 				continue;
 			} else {
-				free(buf);
+				SPINE_LOG(("WARNING: Error resolving host %s (%s)", hostname, gai_strerror(rv)));
+				if (hostinfo != NULL) {
+					freeaddrinfo(hostinfo);
+				}
 				return FALSE;
 			}
 		} else {
@@ -903,80 +878,17 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 		}
 	}
 
-	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-
-	free(buf);
-	#else
-	#ifdef HAVE_GETHOSTBYNAME_R_SOLARIS
-	size_t  len = 8192;
-	char   *buf = NULL;
-	struct hostent result;
-
-	buf = malloc(len*sizeof(char));
-	memset(buf, 0, sizeof(buf));
-
-	while (1) {
-		hostinfo = gethostbyname_r(hostname, &result, buf, len, &h_errno);
-		if (!hostinfo) {
-			if (errno == ERANGE) {
-				len += 1024;
-				buf = realloc(buf, len*sizeof(char));
-				memset(buf, 0, sizeof(buf));
-
-				continue;
-			} else if (h_errno == TRY_AGAIN && retry_count < 3) {
-				retry_count++;
-				usleep(50000);
-				continue;
-			} else {
-				free(buf);
-				return NULL;
-			}
-		} else {
-			break;
-		}
-	}
-
-	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-
-	free(buf);
-	#else
-	#ifdef HAVE_GETHOSTBYNAME_R_HPUX
-	struct hostent hostent;
-	struct hostent_data buf;
-	int rv;
-
-	rv = gethostbyname_r(hostname, &hostent, &buf);
-	if (!rv) {
-		name->sin_addr = *(struct in_addr *) hostent->h_addr;
-	}
-
-	#else
-	retry:
-	thread_mutex_lock(LOCK_GHBN);
-	hostinfo = gethostbyname(hostname);
-	if (!hostinfo) {
-		thread_mutex_unlock(LOCK_GHBN);
-		if (h_errno == TRY_AGAIN && retry_count < 3) {
-			retry_count++;
-			usleep(50000);
-			goto retry;
-		} else {
-			hostinfo = NULL;
-		}
-	} else {
-		name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
-		thread_mutex_unlock(LOCK_GHBN);
-	}
-	#endif
-	#endif
-	#endif
-	#endif
-
 	if (hostinfo == NULL) {
 		SPINE_LOG(("WARNING: Unknown host %s", hostname));
 		return FALSE;
 	} else {
+		// Copy socket details
+		name->sin_family = hostinfo->ai_family;
+		name->sin_addr = ((struct sockaddr_in *)hostinfo->ai_addr)->sin_addr;
+		name->sin_port = htons(port);
+
+		// Free results var
+		freeaddrinfo(hostinfo);
 		return TRUE;
 	}
 }

@@ -4,6 +4,7 @@ The Cacti Group | spine
 -issue#124: Improve logging of snmp multiple OID get function
 -issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
 -issue#130: Segmentation Fault triggered by a lot of errors
+-issue#131: Replace function gethostbyname with thread safe getaddrinfo
 
 1.2.8
 -issue#119: When calling bootstrap, an invalid error claiming config.h.in is missing can appear on first compile

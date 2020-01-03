@@ -98,27 +98,7 @@ AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
 AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])
 
-# On some systems, gethostbyname() is thread-safe
-AC_ARG_ENABLE(threadsafe_gethostbyname,
-  AC_HELP_STRING(
-    [--enable-threadsafe-gethostbyname],
-	  [Assume gethostbyname() is threadsafe]
-	)
-)
-
-# Check if the user told use gethostbyname() is thread-safe.
-AC_MSG_CHECKING([for threadsafe gethostbyname()])
-if test "x$enable_threadsafe_gethostbyname" = "xyes" ; then
-  AC_MSG_RESULT(yes)
-  AC_DEFINE(HAVE_GETHOSTBYNAME_THREADSAFE, 1, 
-	[Define if gethostbyname is threadsafe])
-  HAVE_GETHOSTBYNAME_THREADSAFE=yes
-else
-  AC_MSG_RESULT(no)
-fi
-
 # Checks for libraries.
-AC_CHECK_LIB(nls, gethostbyname_r)
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
 AC_CHECK_LIB(dl, dlclose)
@@ -435,68 +415,6 @@ if test "$ENABLED_SNMP_VERSION" = "yes"; then
   AC_DEFINE(VERIFY_PACKAGE_VERSION, 1, If we are going to force Net-SNMP library and header versons to be the same)
 else
   AC_MSG_RESULT([no])
-fi
-
-# ****************** gethostbyname_r Check ***********************
-# Linux Variant
-AC_MSG_CHECKING([for glibc gethostbyname_r])
-AC_TRY_LINK([#include <netdb.h>],
-  [struct hostent result_buf;
-    char buf[1024];
-    struct hostent *result;
-    int h_erropp;
-    gethostbyname_r("localhost",
-      &result_buf,
-      buf,
-      sizeof(buf),
-      &result,
-      &h_erropp);
-  ],
-  [AC_MSG_RESULT([yes])
-   AC_DEFINE(HAVE_GETHOSTBYNAME_R_GLIBC, 1, [Using glibc versionf of gethostbyname_r()])
-   HAVE_GETHOSTBYNAME_R=yes
-  ],
-  [AC_MSG_RESULT([no])]
-)
-
-# Solaris or Irix Check
-AC_MSG_CHECKING([for Solaris/Irix gethostbyname_r])
-AC_TRY_LINK([#include <netdb.h>],
-  [struct hostent result;
-   char buf[1024];
-   int h_errnop;
-   gethostbyname_r("localhost",
-     &result,
-     buf,
-     sizeof(buf),
-     &h_errnop);
-  ],
-  [AC_MSG_RESULT([yes])
-   AC_DEFINE(HAVE_GETHOSTBYNAME_R_SOLARIS, 1, [Using Solaris gethostbyname_r()])
-   HAVE_GETHOSTBYNAME_R=yes
-  ],
-  [AC_MSG_RESULT([no])]
-)
-
-# HP-UX Check
-AC_MSG_CHECKING([for HP-UX gethostbyname_r])
-AC_TRY_LINK([#include <netdb.h>],
-  [struct hostent result;
-   char buf[1024];
-   gethostbyname_r("localhost",
-     &result,
-     buf);
-  ],
-  [AC_MSG_RESULT([yes])
-   AC_DEFINE(HAVE_GETHOSTBYNAME_R_HPUX, 1, [Using HPUX gethostbyname_r()])
-   HAVE_GETHOSTBYNAME_R=yes],
-  [AC_MSG_RESULT([no])]
-)
-
-# Not Found, Use Mutex Locking
-if test -z "$HAVE_GETHOSTBYNAME_R"; then
-	AC_DEFINE(HAVE_GETHOSTBYNAME_R_MUTEX_LOCK, 1, [Using traditional of gethostbyname_r()])
-	HAVE_GETHOSTBYNAME_R=yes
 fi
 
 # See if we can support backtracing
