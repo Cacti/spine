@@ -1693,7 +1693,7 @@ void buffer_output_errors(char *error_string, int *buf_errors, int device_id, in
 			bufsize = 0;
 		} else {
 			buf_errors++;
-			snprintf(error_string, DBL_BUFSIZE, "%s", tbuffer);
+			snprintf(error_string, DBL_BUFSIZE, "%s%s", error_string, tbuffer);
 			bufsize += error_len;
 		}
 	}
