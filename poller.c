@@ -139,6 +139,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
 	int  errors = 0;
+	int  buf_errors = 0;
 	char *error_string;
 	int  error_len = 0;
 
@@ -700,7 +701,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 					if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
 
-					if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), row[3]);
+					if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
 
 					if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 
@@ -1140,7 +1141,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+									buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								/* continue */
@@ -1157,7 +1158,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+									buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								/* is valid output, continue */
@@ -1175,7 +1176,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 											poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 									} else if (set.spine_log_level == 1) {
 										errors++;
-										buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+										buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 									}
 
 									SET_UNDEFINED(snmp_oids[j].result);
@@ -1235,7 +1236,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							} else if (set.spine_log_level == 1) {
 								errors++;
-								buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+								buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							}
 
 							/* continue */
@@ -1252,7 +1253,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							} else if (set.spine_log_level == 1) {
 								errors++;
-								buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+								buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							}
 
 							/* is valid output, continue */
@@ -1270,7 +1271,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+									buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								SET_UNDEFINED(snmp_oids[j].result);
@@ -1317,7 +1318,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
+						buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 					}
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1336,7 +1337,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
+							buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1373,7 +1374,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
+						buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 					}
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1392,7 +1393,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							buffer_output_errors(error_string, host_id, host_thread, poller_items[i].local_data_id, false);
+							buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1441,7 +1442,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+						buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					}
 
 					/* continue */
@@ -1458,7 +1459,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+						buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					}
 
 					/* is valid output, continue */
@@ -1476,7 +1477,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							buffer_output_errors(error_string, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+							buffer_output_errors(error_string, &buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 						}
 
 						SET_UNDEFINED(snmp_oids[j].result);
@@ -1658,7 +1659,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
-	buffer_output_errors(error_string, host_id, host_thread, 0, true);
+	buffer_output_errors(error_string, &buf_errors, host_id, host_thread, 0, true);
 
 	free(error_string);
 
@@ -1674,25 +1675,24 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
  *  \param int local_data_id - the local data id
  *  \param boolean flush - flush any part of buffer
  */
-void buffer_output_errors(char *error_string, int device_id, int thread_id, int local_data_id, bool flush) {
+void buffer_output_errors(char *error_string, int *buf_errors, int device_id, int thread_id, int local_data_id, bool flush) {
 	static int bufsize = 0;
-	static int errors  = 0;
 	int error_len;
 	char tbuffer[SMALL_BUFSIZE];
 
-	if (flush && errors) {
-		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, device_id, thread_id, error_string));
+	if (flush && buf_errors > 0) {
+		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", buf_errors, device_id, thread_id, error_string));
 	} else if (!flush) {
-		snprintf(tbuffer, SMALL_BUFSIZE, errors ? ", %i" : "%i", local_data_id);
+		snprintf(tbuffer, SMALL_BUFSIZE, buf_errors > 0 ? ", %i" : "%i", local_data_id);
 		error_len = strlen(tbuffer);
 
 		if (bufsize + error_len >= DBL_BUFSIZE) {
-			SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, device_id, thread_id, error_string));
+			SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", buf_errors, device_id, thread_id, error_string));
 			memset(error_string, 0, DBL_BUFSIZE);
-			errors  = 0;
+			buf_errors  = 0;
 			bufsize = 0;
 		} else {
-			errors++;
+			buf_errors++;
 			snprintf(error_string, DBL_BUFSIZE, "%s", tbuffer);
 			bufsize += error_len;
 		}
