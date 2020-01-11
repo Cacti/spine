@@ -193,8 +193,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	buf_size     = malloc(sizeof(int));
 	buf_errors   = malloc(sizeof(int));
 
-	buf_size     = 0;
-	buf_errors   = 0;
+	*buf_size     = 0;
+	*buf_errors   = 0;
 
 	MYSQL     mysql;
 	MYSQL     mysqlr;
@@ -1684,25 +1684,22 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
  *  \param boolean flush - flush any part of buffer
  */
 void buffer_output_errors(char *error_string, int *buf_size, int *buf_errors, int device_id, int thread_id, int local_data_id, bool flush) {
-	static int bufsize = 0;
 	int error_len;
 	char tbuffer[SMALL_BUFSIZE];
 
-	if (flush && buf_errors > 0) {
-		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", buf_errors, device_id, thread_id, error_string));
+	if (flush && *buf_errors > 0) {
+		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", *buf_errors, device_id, thread_id, error_string));
 	} else if (!flush) {
-		snprintf(tbuffer, SMALL_BUFSIZE, buf_errors > 0 ? ", %i" : "%i", local_data_id);
+		snprintf(tbuffer, SMALL_BUFSIZE, *buf_errors > 0 ? ", %i" : "%i", local_data_id);
 		error_len = strlen(tbuffer);
-
-		if (bufsize + error_len >= DBL_BUFSIZE) {
-			SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", buf_errors, device_id, thread_id, error_string));
-			memset(error_string, 0, DBL_BUFSIZE);
-			buf_errors  = 0;
-			bufsize = 0;
+		if (*buf_size + error_len >= DBL_BUFSIZE) {
+			SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", *buf_errors, device_id, thread_id, error_string));
+			*buf_errors  = 1;
+			*buf_size = snprintf(error_string, DBL_BUFSIZE, "%i", local_data_id);
 		} else {
-			buf_errors++;
-			snprintf(error_string, DBL_BUFSIZE, "%s%s", error_string, tbuffer);
-			bufsize += error_len;
+			(*buf_errors)++;
+			snprintf(error_string + *buf_size, DBL_BUFSIZE, "%s", tbuffer);
+			*buf_size += error_len;
 		}
 	}
 }
