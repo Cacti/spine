@@ -692,7 +692,7 @@ void snmp_get_multi(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids) 
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(strip_alpha(temp_result)));
+						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
 
 						vars = vars->next_variable;
 					}
