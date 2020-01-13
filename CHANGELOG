@@ -5,6 +5,7 @@ The Cacti Group | spine
 -issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
 -issue#130: Segmentation Fault triggered by a lot of errors
 -issue#131: Replace function gethostbyname with thread safe getaddrinfo
+-issue#139: removed strip_alpha for "Wrong-Type" SNMP-Answer
 
 1.2.8
 -issue#119: When calling bootstrap, an invalid error claiming config.h.in is missing can appear on first compile
