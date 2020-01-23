@@ -256,7 +256,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"rrd_num, snmp_port, snmp_timeout, "
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 			" FROM poller_item"
-			" WHERE host_id=%i"
+			" WHERE host_id = %i"
+			" AND deleted = ''"
 			" ORDER BY snmp_port %s", host_id, limits);
 
 		/* host structure for uptime checks */
@@ -271,7 +272,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
                 "snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
-			" WHERE id=%i", host_id);
+			" WHERE id=%i"
+			" AND deleted = ''", host_id);
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
@@ -342,7 +344,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
 				"snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
-			" WHERE id=%i", host_id);
+			" WHERE id=%i"
+			" AND deleted = ''", host_id);
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
