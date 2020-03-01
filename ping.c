@@ -384,9 +384,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, new_hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				} else {
-					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, new_hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				}
 
 				/* decrement the timeout value by the total time */
