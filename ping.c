@@ -383,6 +383,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					return HOST_DOWN;
 				}
 
+				if (is_debug_device(host->id)) {
+					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, icmp->icmp_seq, retry_count, host->ping_retries));
+				} else {
+					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, icmp->icmp_seq, retry_count, host->ping_retries));
+				}
+
 				/* decrement the timeout value by the total time */
 				timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
 				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
