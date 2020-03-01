@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.10
+-feature: release to match Cacti release
+
 1.2.9
 -issue#124: Improve logging of snmp multiple OID get function
 -issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
