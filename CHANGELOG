@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.11
+-issue#134: Feature request: Loop Waiting on 2 of 2 pollers when database name is incorrect
 -issue#144: Improve MySQL Retry Logic
 -issue#149: Segmentation fault in spine 1.2.10 due to IPv6 address using IPv4 ICMP ping
 
