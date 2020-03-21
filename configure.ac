@@ -66,13 +66,12 @@ case $host_alias in
 *solaris*)
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS";;
 *freebsd*)
-  LIBS="$LIBS -pthread"
-  LDFLAGS="-lexecinfo"
+  LIBS="$LIBS -pthread -lexecinfo"
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
   ShLib="dylib";;
 *)
-  LDFLAGS="-lpthread -lssl -lm $LDFLAGS";;
+  LIBS="-lpthread -lssl $LIBS"
 esac
 
 # Checks for programs.
