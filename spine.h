@@ -45,6 +45,9 @@
 #define LOCAL 0
 #define REMOTE 1
 
+#define SPINE_IPV4 1
+#define SPINE_IPV6 2
+
 #ifndef __GNUC__
 # define __attribute__(x)  /* NOTHING */
 #endif

@@ -65,16 +65,22 @@ int ping_host(host_t *host, ping_t *ping) {
 		}
 
 		if (!strstr(host->hostname, "localhost")) {
-			if (host->ping_method == PING_ICMP) {
-				ping_result = ping_icmp(host, ping);
-			} else if (host->ping_method == PING_UDP) {
-				ping_result = ping_udp(host, ping);
-			} else if (host->ping_method == PING_TCP) {
-				ping_result = ping_tcp(host, ping);
+			if (get_address_type(host) == 1) {
+				if (host->ping_method == PING_ICMP) {
+					ping_result = ping_icmp(host, ping);
+				} else if (host->ping_method == PING_UDP) {
+					ping_result = ping_udp(host, ping);
+				} else if (host->ping_method == PING_TCP) {
+					ping_result = ping_tcp(host, ping);
+				}
+			} else if (host->availability_method == AVAIL_PING) {
+				snprintf(ping->ping_status, 50, "0.000");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is IPV6.  Please use the SNMP ping options only.");
+				return HOST_DOWN;
 			}
 		} else {
 			snprintf(ping->ping_status, 50, "0.000");
-			snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device does not require ping");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device does not require ping.");
 			ping_result = HOST_UP;
 		}
 	}
@@ -318,6 +324,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			break;
 		}
 	}
+
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 	if (hasCaps() != TRUE) {
 		if (seteuid(getuid()) == -1) {
@@ -841,6 +848,61 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	}
 }
 
+/*! \fn int get_address_type(host_t *host)
+ *  \brief determines using getaddrinfo the iptype and returns the iptype
+ *
+ *  \return 1 - IPv4, 2 - IPv6, -1 - Unknown
+ */
+int get_address_type(host_t *host) {
+	struct addrinfo hints, *res;
+	char addrstr[255];
+	void *ptr;
+
+	memset(&hints, 0, sizeof(hints));
+
+	hints.ai_family   = AF_UNSPEC;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_flags    = AI_CANONNAME | AI_ADDRCONFIG;
+	int error;
+
+	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res)) != 0) {
+		SPINE_LOG(("WARNING: Unable to determine address info for %s (%s)", host->hostname, gai_strerror(error)));
+		if (res = NULL) {
+			freeaddrinfo(res);
+		}
+		return -1;
+	}
+
+	while (res) {
+		inet_ntop(res->ai_family, res->ai_addr->sa_data, addrstr, 100);
+
+		switch(res->ai_family) {
+			case AF_INET:
+				ptr = &((struct sockaddr_in *) res->ai_addr)->sin_addr;
+				break;
+			case AF_INET6:
+				ptr = &((struct sockaddr_in6 *) res->ai_addr)->sin6_addr;
+				break;
+		}
+
+		inet_ntop(res->ai_family, ptr, addrstr, 100);
+
+		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)\n", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
+
+		if (res->ai_family == PF_INET6) {
+			return SPINE_IPV6;
+		} else {
+			return SPINE_IPV4;
+		}
+
+		res = res->ai_next;
+	}
+
+	freeaddrinfo(res);
+
+	return 1;
+}
+
 /*! \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
  *  \brief converts a hostname to an internet address
  *
@@ -854,33 +916,62 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	// Initialize the hints structure
 	memset(&hints, 0, sizeof hints);
 
-	// This should be AF_UNSPEC and we should work out if we are using
-	// AF_INET or AF_INET6 later, but without checking the rest of spine
-	// for IPv6 compatibility, lets first make it work with IPv4 only
 	hints.ai_family = AF_INET;
+	hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
 	retry_count = 0;
 	rv = 0;
 
-	while (1) {
+	while (TRUE) {
 		rv = getaddrinfo(hostname, NULL, &hints, &hostinfo);
-		if (rv) {
-			if (rv == TRY_AGAIN && retry_count < 3) {
-				if (hostinfo != NULL) {
-					freeaddrinfo(hostinfo);
-				}
 
-				retry_count++;
-				usleep(50000);
-				continue;
-			} else {
-				SPINE_LOG(("WARNING: Error resolving host %s (%s)", hostname, gai_strerror(rv)));
-				if (hostinfo != NULL) {
-					freeaddrinfo(hostinfo);
-				}
-				return FALSE;
-			}
-		} else {
+		if (rv == 0) {
 			break;
+		} else {
+			switch (rv) {
+				case EAI_AGAIN:
+					if (retry_count < 3) {
+						SPINE_LOG(("WARNING: EAGAIN received resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
+						if (hostinfo != NULL) {
+							freeaddrinfo(hostinfo);
+						}
+
+						retry_count++;
+						usleep(50000);
+						continue;
+					} else {
+						SPINE_LOG(("WARNING: Error resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
+						if (hostinfo != NULL) {
+							freeaddrinfo(hostinfo);
+						}
+						return FALSE;
+					}
+
+					break;
+				case EAI_FAIL:
+					SPINE_LOG(("WARNING: DNS Server reported permanent error for host %s (%s)", hostname, gai_strerror(rv)));
+					if (hostinfo != NULL) {
+						freeaddrinfo(hostinfo);
+					}
+					return FALSE;
+
+					break;
+				case EAI_MEMORY:
+					SPINE_LOG(("WARNING: Out of memory trying to resolve host %s (%s)", hostname, gai_strerror(rv)));
+					if (hostinfo != NULL) {
+						freeaddrinfo(hostinfo);
+					}
+					return FALSE;
+
+					break;
+				default:
+					SPINE_LOG(("WARNING: Unknown error while resolving host %s (%s)", hostname, gai_strerror(rv)));
+					if (hostinfo != NULL) {
+						freeaddrinfo(hostinfo);
+					}
+					return FALSE;
+
+					break;
+			}
 		}
 	}
 

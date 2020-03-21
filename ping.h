@@ -142,4 +142,5 @@ extern int ping_tcp(host_t *host, ping_t *ping);
 extern char *remove_tcp_udp_from_hostname(char *hostname);
 extern void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
 extern int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port);
+extern int get_address_type(host_t *host);
 extern unsigned short int get_checksum(void* buf, int len);

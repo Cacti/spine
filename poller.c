@@ -1631,7 +1631,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	free(host);
 	free(reindex);
-	free(ping);
+
+	if (ping != NULL) {
+		free(ping);
+	}
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == last_host_thread) {
