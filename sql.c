@@ -62,8 +62,16 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 			if (mysql_query(mysql, query)) {
 				error = mysql_errno(mysql);
 
-				if (error == 2013 && errno == EINTR) {
+				if (error == 2013 || error == 2006) {
+					db_disconnect(mysql);
 					usleep(50000);
+					db_connect(type, mysql);
+					error_count++;
+
+					if (error_count > 30) {
+						die("FATAL: Too many Reconnect Attempts!\n");
+					}
+
 					continue;
 				}
 
@@ -74,17 +82,6 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 					if (error_count > 30) {
 						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 						return FALSE;
-					}
-
-					continue;
-				} else if (error == 2006 && errno == EINTR) {
-					db_disconnect(mysql);
-					usleep(50000);
-					db_connect(type, mysql);
-					error_count++;
-
-					if (error_count > 30) {
-						die("FATAL: Too many Reconnect Attempts!\n");
 					}
 
 					continue;
