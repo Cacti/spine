@@ -889,9 +889,7 @@ int get_address_type(host_t *host) {
 
 		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)\n", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
 
-		if (res->ai_family == PF_INET6) {
-			return SPINE_IPV6;
-		} else {
+		if (res->ai_family != PF_INET6) {
 			return SPINE_IPV4;
 		}
 
@@ -900,7 +898,7 @@ int get_address_type(host_t *host) {
 
 	freeaddrinfo(res);
 
-	return 1;
+	return SPINE_IPV6;
 }
 
 /*! \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
