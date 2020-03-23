@@ -75,7 +75,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				}
 			} else if (host->availability_method == AVAIL_PING) {
 				snprintf(ping->ping_status, 50, "0.000");
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is Unknown of is IPV6.  Please use the SNMP ping options only.");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is Unknown or is IPV6.  Please use the SNMP ping options only.");
 				return HOST_DOWN;
 			}
 		} else {
