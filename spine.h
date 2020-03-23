@@ -45,6 +45,7 @@
 #define LOCAL 0
 #define REMOTE 1
 
+#define SPINE_NONE 0
 #define SPINE_IPV4 1
 #define SPINE_IPV6 2
 

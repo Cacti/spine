@@ -75,7 +75,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				}
 			} else if (host->availability_method == AVAIL_PING) {
 				snprintf(ping->ping_status, 50, "0.000");
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is IPV6.  Please use the SNMP ping options only.");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is Unknown of is IPV6.  Please use the SNMP ping options only.");
 				return HOST_DOWN;
 			}
 		} else {
@@ -851,12 +851,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 /*! \fn int get_address_type(host_t *host)
  *  \brief determines using getaddrinfo the iptype and returns the iptype
  *
- *  \return 1 - IPv4, 2 - IPv6, -1 - Unknown
+ *  \return 1 - IPv4, 2 - IPv6, 0 - Unknown
  */
 int get_address_type(host_t *host) {
 	struct addrinfo hints, *res;
 	char addrstr[255];
 	void *ptr;
+	int addr_found = FALSE;
 
 	memset(&hints, 0, sizeof(hints));
 
@@ -867,10 +868,10 @@ int get_address_type(host_t *host) {
 
 	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res)) != 0) {
 		SPINE_LOG(("WARNING: Unable to determine address info for %s (%s)", host->hostname, gai_strerror(error)));
-		if (res = NULL) {
+		if (res != NULL) {
 			freeaddrinfo(res);
 		}
-		return -1;
+		return SPINE_NONE;
 	}
 
 	while (res) {
@@ -879,9 +880,11 @@ int get_address_type(host_t *host) {
 		switch(res->ai_family) {
 			case AF_INET:
 				ptr = &((struct sockaddr_in *) res->ai_addr)->sin_addr;
+				addr_found = TRUE;
 				break;
 			case AF_INET6:
 				ptr = &((struct sockaddr_in6 *) res->ai_addr)->sin6_addr;
+				addr_found = TRUE;
 				break;
 		}
 
@@ -890,6 +893,8 @@ int get_address_type(host_t *host) {
 		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)\n", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
 
 		if (res->ai_family != PF_INET6) {
+			freeaddrinfo(res);
+
 			return SPINE_IPV4;
 		}
 
@@ -898,7 +903,11 @@ int get_address_type(host_t *host) {
 
 	freeaddrinfo(res);
 
-	return SPINE_IPV6;
+	if (addr_found) {
+		return SPINE_IPV6;
+	} else {
+		return SPINE_NONE;
+	}
 }
 
 /*! \fn int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port)
