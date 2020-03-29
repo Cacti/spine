@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -233,22 +233,22 @@ char *php_readpipe(int php_process) {
 	default:
 		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
 			bptr = result_string;
-	
+
 			while (1) {
 				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
-	
+
 				if (i <= 0) {
 					SET_UNDEFINED(result_string);
 					break;
 				}
-	
+
 				bptr += i;
 				*bptr = '\0';	/* make what we've got into a string */
-	
+
 				if ((cp = strstr(result_string,"\n")) != 0) {
 					break;
 				}
-	
+
 				if (bptr >= result_string+BUFSIZE) {
 					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 					SET_UNDEFINED(result_string);

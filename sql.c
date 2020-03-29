@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -291,7 +291,7 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 			db_disconnect(mysql);
 
-			if (error == 2013 && errno == EINTR) {
+			if ((error == 2003 || error == 2013) && errno == EINTR) {
 				usleep(50000);
 				tries++;
 				success = FALSE;
