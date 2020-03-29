@@ -383,7 +383,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-					snprint_asciistring(result_string, RESULTS_BUFFER, temp_result, strlen(temp_result));
+					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				} else {
 					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
 				}

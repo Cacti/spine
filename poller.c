@@ -745,9 +745,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									}
 									poll_result[0] = '\0';
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								} else {
+								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
 									poll_result = snmp_get(host, reindex->arg1);
 									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+								} else {
+									poll_result = snmp_get(host, reindex->arg1);
 								}
 
 								if (is_debug_device(host->id)) {
