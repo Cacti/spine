@@ -93,6 +93,7 @@
 #include <stdio.h>
 #include <syslog.h>
 #include <stdbool.h>
+#include <arpa/inet.h>
 
 #if HAVE_STDINT_H
 #  include <stdint.h>
@@ -102,6 +103,8 @@
 #  include <netinet/in_systm.h>
 #  include <netinet/in.h>
 #  include <netinet/ip.h>
+#  include <netinet/ip6.h>
+#  include <netinet/icmp6.h>
 #  include <netinet/ip_icmp.h>
 #endif
 

@@ -6,6 +6,7 @@ The Cacti Group | spine
 -issue#144: Improve MySQL Retry Logic
 -issue#149: Segmentation fault in spine 1.2.10 due to IPv6 address using IPv4 ICMP ping
 -issue#150: FATAL: Spine Encountered a Segmentation Fault [4, Interrupted system call] (Spine thread)
+-issue#151: Spine no longer stripping alpha characters from output
 
 1.2.10
 -feature: release to match Cacti release
