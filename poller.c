@@ -1280,7 +1280,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							/* is valid output, continue */
 						} else {
 							/* remove double or single quotes from string */
-							snprintf(temp_result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
+							snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
 							snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 							/* detect erroneous non-numeric result */
