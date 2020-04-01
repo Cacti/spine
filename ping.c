@@ -854,7 +854,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
  *  \return 1 - IPv4, 2 - IPv6, 0 - Unknown
  */
 int get_address_type(host_t *host) {
-	struct addrinfo hints, *res;
+	struct addrinfo hints, *res, *res_list;
 	char addrstr[255];
 	void *ptr;
 	int addr_found = FALSE;
@@ -866,15 +866,15 @@ int get_address_type(host_t *host) {
 	hints.ai_flags    = AI_CANONNAME | AI_ADDRCONFIG;
 	int error;
 
-	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res)) != 0) {
+	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res_list)) != 0) {
 		SPINE_LOG(("WARNING: Unable to determine address info for %s (%s)", host->hostname, gai_strerror(error)));
-		if (res != NULL) {
-			freeaddrinfo(res);
+		if (res_list != NULL) {
+			freeaddrinfo(res_list);
 		}
 		return SPINE_NONE;
 	}
 
-	while (res) {
+	for (res = res_list; res != NULL; res = res->ai_next) {
 		inet_ntop(res->ai_family, res->ai_addr->sa_data, addrstr, 100);
 
 		switch(res->ai_family) {
@@ -893,15 +893,13 @@ int get_address_type(host_t *host) {
 		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)\n", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
 
 		if (res->ai_family != PF_INET6) {
-			freeaddrinfo(res);
+			freeaddrinfo(res_list);
 
 			return SPINE_IPV4;
 		}
-
-		res = res->ai_next;
 	}
 
-	freeaddrinfo(res);
+	freeaddrinfo(res_list);
 
 	if (addr_found) {
 		return SPINE_IPV6;
