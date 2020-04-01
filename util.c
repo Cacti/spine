@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -912,8 +912,11 @@ int read_spine_config(char *file) {
 					if (!set.stderr_notty) {
 						fprintf(stderr,"WARNING: DB_PreG is no longer supported\n");
 					}
-				}
-				else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
+				} else if (STRIMATCH(p1, "Cacti_Log")) {
+					STRNCOPY(set.path_logfile, p2);
+					set.logfile_processed = 1;
+					set.log_destination = LOGDEST_BOTH;
+				} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
 				else if (!set.stderr_notty) {
 					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
 				}

@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -624,6 +624,9 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
 
+	/* initialize winsock library on Windows */
+	SOCK_STARTUP;
+
 	/* mark the spine process as started */
 	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
 	if (mode == REMOTE) {
@@ -942,6 +945,9 @@ int main(int argc, char *argv[]) {
 	/* uninstall the spine signal handler */
 	uninstall_spine_signal_handler();
 
+	/* clueanup winsock library on Windows */
+	SOCK_CLEANUP;
+
 	exit(EXIT_SUCCESS);
 }
 
@@ -994,7 +1000,7 @@ static void display_help(int only_version) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2004-2019 by The Cacti Group\n", VERSION);
+	printf("SPINE %s  Copyright 2004-2020 by The Cacti Group\n", VERSION);
 
 	if (only_version == FALSE) {
 		printf("\n");

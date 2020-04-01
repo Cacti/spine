@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -62,8 +62,17 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 			if (mysql_query(mysql, query)) {
 				error = mysql_errno(mysql);
 
-				if (error == 2013 && errno == EINTR) {
+				if (error == 2013 || error == 2006) {
+					db_disconnect(mysql);
 					usleep(50000);
+					db_connect(type, mysql);
+					error_count++;
+
+					if (error_count > 30) {
+						SPINE_LOG(("FATAL: Too many Reconnect Attempts!"));
+						exit(1);
+					}
+
 					continue;
 				}
 
@@ -74,17 +83,6 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 					if (error_count > 30) {
 						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 						return FALSE;
-					}
-
-					continue;
-				} else if (error == 2006 && errno == EINTR) {
-					db_disconnect(mysql);
-					usleep(50000);
-					db_connect(type, mysql);
-					error_count++;
-
-					if (error_count > 30) {
-						die("FATAL: Too many Reconnect Attempts!\n");
 					}
 
 					continue;
@@ -141,7 +139,8 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				error_count++;
 
 				if (error_count > 30) {
-					die("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'\n", query_frag);
+					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+					exit(1);
 				}
 
 				continue;
@@ -152,12 +151,14 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				error_count++;
 
 				if (error_count > 30) {
-					die("FATAL: Too many Reconnect Attempts!\n");
+					SPINE_LOG(("FATAL: Too many Reconnect Attempts!"));
+					exit(1);
 				}
 
 				continue;
 			} else {
-				die("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql));
+				SPINE_LOG(("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql)));
+				exit(1);
 			}
 		} else {
 			mysql_res = mysql_store_result(mysql);
@@ -235,7 +236,8 @@ void db_connect(int type, MYSQL *mysql) {
 	mysql_init(mysql);
 
 	if (mysql == NULL) {
-		die("FATAL: MySQL unable to allocate memory and therefore can not connect");
+		SPINE_LOG(("FATAL: MySQL unable to allocate memory and therefore can not connect"));
+		exit(1);
 	}
 
 	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout, "read timeout");
@@ -289,7 +291,7 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 			db_disconnect(mysql);
 
-			if (error == 2013 && errno == EINTR) {
+			if ((error == 2003 || error == 2013) && errno == EINTR) {
 				usleep(50000);
 				tries++;
 				success = FALSE;

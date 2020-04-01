@@ -6,7 +6,7 @@
 # Function: build spine from scratch
 #
 # Description: This script will take a vanilla Spine source
-#              package and attempt to compile it.  It will 
+#              package and attempt to compile it.  It will
 #              attempt to handle nasty things like dos2unix
 #              issues in all files and searching for the
 #              presence of required modules.
@@ -24,7 +24,7 @@ display_help () {
   echo "  install things in non-common locations you may have to use"
   echo "  the install instructions to build."
   echo "--------------------------------------------------------------"
-  echo 
+  echo
 }
 
 # Check for parameters
@@ -43,13 +43,14 @@ echo "INFO: Starting Spine build process"
 echo "INFO: Removing cache directories"
 rm -rf autom4te.cache .deps
 
-# Make sure all files are unix formatted files 
+# Make sure all files are unix formatted files
 find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
 
 # Prepare a build state
 echo "INFO: Running auto-tools to verify buildability"
 aclocal --install
 libtoolize
+autoheader
 automake --add-missing
 autoreconf --force --install
 [ $? -ne 0 ] && echo "ERROR: 'autoreconf' exited with errors" && exit -1

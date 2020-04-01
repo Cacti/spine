@@ -29,6 +29,7 @@
 # | DB_Pass         The password for the Cacti user                         |
 # | SNMP_Clientaddr Bind SNMP to a specific address for sites that use      |
 # |                 higher security levels                                  |
+# | Cacti_Log       Optional path to the Cacti log file                     |
 # +-------------------------------------------------------------------------+
 # | Settings for Remote Polling                                             |
 # +-------------------------------------------------------------------------+
@@ -45,17 +46,18 @@ DB_User       cactiuser
 DB_Pass       cactiuser
 DB_Port       3306
 #DB_UseSSL    0
-#RDB_SSL_Key   
-#RDB_SSL_Cert
-#RDB_SSL_CA
+#DB_SSL_Key
+#DB_SSL_Cert
+#DB_SSL_CA
+#Cacti_Log     /var/www/html/cacti/log/cacti.log
 
-RDB_Host      localhost
-RDB_Database  cacti
-RDB_User      cactiuser
-RDB_Pass      cactiuser
-RDB_Port      3306
+#RDB_Host      localhost
+#RDB_Database  cacti
+#RDB_User      cactiuser
+#RDB_Pass      cactiuser
+#RDB_Port      3306
 #RDB_UseSSL    0
-#RDB_SSL_Key   
+#RDB_SSL_Key
 #RDB_SSL_Cert
 #RDB_SSL_CA
 

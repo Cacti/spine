@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -139,6 +139,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
 	int  errors = 0;
+	int  *buf_errors;
+	int  *buf_size;
 	char *error_string;
 	int  error_len = 0;
 
@@ -188,6 +190,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	snmp_oids_t *snmp_oids;
 
 	error_string = malloc(DBL_BUFSIZE);
+	buf_size     = malloc(sizeof(int));
+	buf_errors   = malloc(sizeof(int));
+
+	*buf_size     = 0;
+	*buf_errors   = 0;
 
 	MYSQL     mysql;
 	MYSQL     mysqlr;
@@ -249,7 +256,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"rrd_num, snmp_port, snmp_timeout, "
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 			" FROM poller_item"
-			" WHERE host_id=%i"
+			" WHERE host_id = %i"
+			" AND deleted = ''"
 			" ORDER BY snmp_port %s", host_id, limits);
 
 		/* host structure for uptime checks */
@@ -264,7 +272,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
                 "snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
-			" WHERE id=%i", host_id);
+			" WHERE id=%i"
+			" AND deleted = ''", host_id);
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
@@ -335,7 +344,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
 				"snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
-			" WHERE id=%i", host_id);
+			" WHERE id=%i"
+			" AND deleted = ''", host_id);
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
@@ -700,9 +710,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 					if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
 
-					if (row[3] != NULL) {
-						db_escape(&mysql, reindex->assert_value, sizeof(reindex->assert_value), row[3]);
-					}
+					if (row[3] != NULL) snprintf(reindex->assert_value, sizeof(reindex->assert_value), "%s", row[3]);
 
 					if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 
@@ -737,9 +745,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									}
 									poll_result[0] = '\0';
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								} else {
+								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
 									poll_result = snmp_get(host, reindex->arg1);
 									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+								} else {
+									poll_result = snmp_get(host, reindex->arg1);
 								}
 
 								if (is_debug_device(host->id)) {
@@ -825,12 +835,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							query3[0] = '\0';
 
 							/* assume ok if host is up and result wasn't obtained */
-							if ((IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 								assert_fail = FALSE;
-							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value,poll_result))) {
+							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value, poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
@@ -1128,7 +1138,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					(!STRMATCH(last_snmp_engine_id, poller_items[i].snmp_engine_id))))) {
 
 					if (num_oids > 0) {
-						snmp_get_multi(host, snmp_oids, num_oids);
+						snmp_get_multi(host, poller_items, snmp_oids, num_oids);
 
 						for (j = 0; j < num_oids; j++) {
 							if (host->ignore_host) {
@@ -1142,11 +1152,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									if (error_len == 0) {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-									} else {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-									}
+									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								/* continue */
@@ -1163,17 +1169,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									if (error_len == 0) {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-									} else {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-									}
+									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								/* is valid output, continue */
 							} else {
 								/* remove double or single quotes from string */
-								snprintf(temp_result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
+								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
 								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 								/* detect erroneous non-numeric result */
@@ -1185,11 +1187,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 											poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 									} else if (set.spine_log_level == 1) {
 										errors++;
-										if (error_len == 0) {
-											error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-										} else {
-											error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-										}
+										buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 									}
 
 									SET_UNDEFINED(snmp_oids[j].result);
@@ -1235,7 +1233,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				}
 
 				if (num_oids >= host->max_oids) {
-					snmp_get_multi(host, snmp_oids, num_oids);
+					snmp_get_multi(host, poller_items, snmp_oids, num_oids);
 
 					for (j = 0; j < num_oids; j++) {
 						if (host->ignore_host) {
@@ -1249,11 +1247,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							} else if (set.spine_log_level == 1) {
 								errors++;
-								if (error_len == 0) {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-								} else {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-								}
+								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							}
 
 							/* continue */
@@ -1270,11 +1264,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 							} else if (set.spine_log_level == 1) {
 								errors++;
-								if (error_len == 0) {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-								} else {
-									error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-								}
+								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							}
 
 							/* is valid output, continue */
@@ -1292,11 +1282,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 								} else if (set.spine_log_level == 1) {
 									errors++;
-									if (error_len == 0) {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-									} else {
-										error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-									}
+									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								}
 
 								SET_UNDEFINED(snmp_oids[j].result);
@@ -1343,11 +1329,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-						}
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 					}
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1366,11 +1348,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							if (error_len == 0) {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-							} else {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-							}
+							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1407,11 +1385,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[i].arg1, poller_items[i].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-						}
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 					}
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
@@ -1430,11 +1404,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							if (error_len == 0) {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[i].local_data_id);
-							} else {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[i].local_data_id);
-							}
+							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						}
 
 						SET_UNDEFINED(poller_items[i].result);
@@ -1469,7 +1439,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		/* process last multi-get request if applicable */
 		if (num_oids > 0) {
-			snmp_get_multi(host, snmp_oids, num_oids);
+			snmp_get_multi(host, poller_items, snmp_oids, num_oids);
 
 			for (j = 0; j < num_oids; j++) {
 				if (host->ignore_host) {
@@ -1483,11 +1453,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-						}
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					}
 
 					/* continue */
@@ -1504,17 +1470,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
-						if (error_len == 0) {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-						} else {
-							error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-						}
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					}
 
 					/* is valid output, continue */
 				} else {
 					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
 					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous non-numeric result */
@@ -1526,11 +1488,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
 						} else if (set.spine_log_level == 1) {
 							errors++;
-							if (error_len == 0) {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, "%i", poller_items[snmp_oids[j].array_position].local_data_id);
-							} else {
-								error_len += snprintf(error_string+error_len, DBL_BUFSIZE-error_len, ", %i", poller_items[snmp_oids[j].array_position].local_data_id);
-							}
+							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 						}
 
 						SET_UNDEFINED(snmp_oids[j].result);
@@ -1712,13 +1670,43 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
-	if (error_len > 0) {
-		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", errors, host_id, host_thread, error_string));
-	}
+	buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
 
 	free(error_string);
+	free(buf_size);
+	free(buf_errors);
 
 	*host_errors = errors;
+}
+
+/*! \fn void buffer_output_errors(local_data_id) {
+ *  \brief buffers output errors and pushes those errors to standard
+ *         output as required.
+ *  \param char* buffer - pointer to the output buffer
+ *  \param int device_id - the device id
+ *  \param int thread id - the device thread
+ *  \param int local_data_id - the local data id
+ *  \param boolean flush - flush any part of buffer
+ */
+void buffer_output_errors(char *error_string, int *buf_size, int *buf_errors, int device_id, int thread_id, int local_data_id, bool flush) {
+	int error_len;
+	char tbuffer[SMALL_BUFSIZE];
+
+	if (flush && *buf_errors > 0) {
+		SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", *buf_errors, device_id, thread_id, error_string));
+	} else if (!flush) {
+		snprintf(tbuffer, SMALL_BUFSIZE, *buf_errors > 0 ? ", %i" : "%i", local_data_id);
+		error_len = strlen(tbuffer);
+		if (*buf_size + error_len >= DBL_BUFSIZE) {
+			SPINE_LOG(("WARNING: Invalid Response(s), Errors[%i] Device[%i] Thread[%i] DS[%s]", *buf_errors, device_id, thread_id, error_string));
+			*buf_errors  = 1;
+			*buf_size = snprintf(error_string, DBL_BUFSIZE, "%i", local_data_id);
+		} else {
+			(*buf_errors)++;
+			snprintf(error_string + *buf_size, DBL_BUFSIZE, "%s", tbuffer);
+			*buf_size += error_len;
+		}
+	}
 }
 
 /*! \fn int is_multipart_output(char *result)

@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2019 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -37,3 +37,4 @@ extern char *exec_poll(host_t *current_host, char *command, int id, char *type);
 extern void get_system_information(host_t *host, MYSQL *mysql, int system);
 extern int is_multipart_output(char *result);
 extern int validate_result(char *result);
+extern void buffer_output_errors(char * error_string, int * buf_size, int * buf_errors, int device_id, int thread_id, int local_data_id, bool flush);

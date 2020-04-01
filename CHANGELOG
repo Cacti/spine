@@ -1,7 +1,31 @@
 The Cacti Group | spine
 
+1.2.11
+-issue#122: Can't compile spine on Openbsd
+-issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
+-issue#134: Feature request: Loop Waiting on 2 of 2 pollers when database name is incorrect
+-issue#144: Improve MySQL Retry Logic
+-issue#149: Segmentation fault in spine 1.2.10 due to IPv6 address using IPv4 ICMP ping
+-issue#150: FATAL: Spine Encountered a Segmentation Fault [4, Interrupted system call] (Spine thread)
+-issue#151: Spine no longer stripping alpha characters from output
+
+1.2.10
+-feature: release to match Cacti release
+
+1.2.9
+-issue#124: Improve logging of snmp multiple OID get function
+-issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
+-issue#130: Segmentation Fault triggered by a lot of errors
+-issue#131: Replace function gethostbyname with thread safe getaddrinfo
+-issue#139: removed strip_alpha for "Wrong-Type" SNMP-Answer
+
+1.2.8
+-issue#119: When calling bootstrap, an invalid error claiming config.h.in is missing can appear on first compile
+
 1.2.7
--issue#113: spine1.2.6 couldn't open directory `m4'
+-issue#113: When compiling under CentOS, 'm4' directory appears to be missing
+-issue#115: Perform proper initialization and teardown of sockets under Windows
+-issue#117: Spine configuration example shows remote database prefix for local database values
 
 1.2.6
 -issue#101: MySQL 8 has retired 'my_bool' type
