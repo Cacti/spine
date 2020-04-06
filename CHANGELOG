@@ -1,13 +1,13 @@
 The Cacti Group | spine
 
 1.2.11
--issue#122: Can't compile spine on Openbsd
--issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
--issue#134: Feature request: Loop Waiting on 2 of 2 pollers when database name is incorrect
--issue#144: Improve MySQL Retry Logic
--issue#149: Segmentation fault in spine 1.2.10 due to IPv6 address using IPv4 ICMP ping
--issue#150: FATAL: Spine Encountered a Segmentation Fault [4, Interrupted system call] (Spine thread)
--issue#151: Spine no longer stripping alpha characters from output
+-issue#122: Unable to compile spine on OpenBSD
+-issue#129: Repeated warnings due to 'Recache Event Detected for Device'
+-issue#134: No error is recorded to log file when database is incorrect
+-issue#144: MySQL retry logic is not working as expected
+-issue#149: When using IPv6 address, segmentation fault can occur due to incorrectly using IPv4 ping
+-issue#150: When polling results are null, segmentation errors may occur
+-issue#151: When collecting data, spine should be stripping alpha characters from output
 
 1.2.10
 -feature: release to match Cacti release
@@ -428,7 +428,7 @@ The Cacti Group | spine
 -feature: enabled signal handling in cactid
 
 0.8.6h
-Not released.  Syncing with Cacti distribution again.
+-feature: Not released.  Syncing with Cacti distribution again.
 
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout
