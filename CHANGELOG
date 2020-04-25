@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.12
+-issue#155: Failed host lookup causes spine to crash
+
 1.2.11
 -issue#122: Unable to compile spine on OpenBSD
 -issue#129: Repeated warnings due to 'Recache Event Detected for Device'

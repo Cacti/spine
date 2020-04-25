@@ -868,9 +868,6 @@ int get_address_type(host_t *host) {
 
 	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res_list)) != 0) {
 		SPINE_LOG(("WARNING: Unable to determine address info for %s (%s)", host->hostname, gai_strerror(error)));
-		if (res_list != NULL) {
-			freeaddrinfo(res_list);
-		}
 		return SPINE_NONE;
 	}
 
