@@ -104,7 +104,9 @@
 #  include <netinet/in.h>
 #  include <netinet/ip.h>
 #  include <netinet/ip6.h>
+#ifndef __CYGWIN__
 #  include <netinet/icmp6.h>
+#endif
 #  include <netinet/ip_icmp.h>
 #endif
 

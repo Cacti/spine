@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.13
+-issue#156: Compile on Cygwin is failing due to icmp6 headers missing
+
 1.2.12
 -issue#155: Failed host lookup causes spine to crash
 

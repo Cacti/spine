@@ -8,6 +8,7 @@ AC_CANONICAL_HOST
 AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
+AC_PROG_CC
 
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config/config.h)
