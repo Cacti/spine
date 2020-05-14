@@ -1171,7 +1171,7 @@ int spine_log(const char *format, ...) {
 
 	/* append a line feed to the log message if needed */
 	if (!strstr(flogmessage, "\n")) {
-		strncat(flogmessage, "\n", 1);
+		strcat(flogmessage, "\n");
 	}
 
 	if ((IS_LOGGING_TO_FILE() &&
@@ -1471,7 +1471,7 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	if (!len) {
 		dst[0] = '\0';
 	} else if (len < obuf) {
-		strncpy(dst, src, len);
+		strncpy(dst, src, sizeof(dst));
 		dst[len] = '\0';
 	} else {
 		strncpy(dst, src, --obuf);

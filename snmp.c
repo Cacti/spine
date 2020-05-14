@@ -186,7 +186,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
 	session.peername    = hostnameport;
 	session.retries     = set.snmp_retries;
-	session.remote_port = snmp_port;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
 	SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device '%s' has timeout %ld (%d), retries %d", host_id, hostname, session.timeout, snmp_timeout, session.retries));
