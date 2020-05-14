@@ -1471,7 +1471,7 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	if (!len) {
 		dst[0] = '\0';
 	} else if (len < obuf) {
-		strncpy(dst, src, sizeof(dst));
+		strncpy(dst, src, len);
 		dst[len] = '\0';
 	} else {
 		strncpy(dst, src, --obuf);
