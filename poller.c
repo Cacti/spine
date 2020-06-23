@@ -1517,7 +1517,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			die("ERROR: Fatal malloc error: poller.c query3 output buffer!");
 		}
 		query3[0] = '\0';
-		strncat(query3, query8, strlen(query3));
+		strncat(query3, query8, strlen(query8));
 
 		out_buffer = strlen(query3);
 
@@ -1527,7 +1527,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				die("ERROR: Fatal malloc error: poller.c query12 boost output buffer!");
 			}
 			query12[0] = '\0';
-			strncat(query12, query11, strlen(query12));
+			strncat(query12, query11, strlen(query11));
 		}
 
 		int mode;
@@ -1552,24 +1552,24 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			/* if the next element to the buffer will overflow it, write to the database */
 			if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
 				/* append the suffix */
-				strncat(query3, posuffix, strlen(query3));
+				strncat(query3, posuffix, strlen(posuffix));
 
 				/* insert the record */
 				db_insert(&mysqlt, mode, query3);
 
 				/* re-initialize the query buffer */
 				query3[0] = '\0';
-				strncat(query3, query8, strlen(query3));
+				strncat(query3, query8, strlen(query8));
 
 				/* insert the record for boost */
 				if (set.boost_redirect && set.boost_enabled) {
 					/* append the suffix */
-					strncat(query12, posuffix, strlen(query12));
+					strncat(query12, posuffix, strlen(posuffix));
 
 					db_insert(&mysqlt, mode, query12);
 
 					query12[0] = '\0';
-					strncat(query12, query11, strlen(query12));
+					strncat(query12, query11, strlen(query11));
 				}
 
 				/* reset the output buffer length */
@@ -1586,10 +1586,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				result_string[0] = ',';
 			}
 
-			strncat(query3, result_string, strlen(query3));
+			strncat(query3, result_string, strlen(result_string));
 
 			if (set.boost_redirect && set.boost_enabled) {
-				strncat(query12, result_string, strlen(query12));
+				strncat(query12, result_string, strlen(result_string));
 			}
 
 			out_buffer = out_buffer + strlen(result_string);
@@ -1600,7 +1600,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* perform the last insert if there is data to process */
 		if (out_buffer > strlen(query8)) {
 			/* append the suffix */
-			strncat(query3, posuffix, strlen(query3));
+			strncat(query3, posuffix, strlen(posuffix));
 
 			/* insert records into database */
 			db_insert(&mysqlt, mode, query3);
@@ -1608,7 +1608,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			/* insert the record for boost */
 			if (set.boost_redirect && set.boost_enabled) {
 				/* append the suffix */
-				strncat(query12, posuffix, strlen(query12));
+				strncat(query12, posuffix, strlen(posuffix));
 
 				db_insert(&mysqlt, mode, query12);
 			}
