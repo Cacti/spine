@@ -695,7 +695,7 @@ int main(int argc, char *argv[]) {
 		total_items = atoi(mysql_row[0]);
 		db_free_result(tresult);
 
-		if (total_items < device_threads) {
+		if (total_items && total_items < device_threads) {
 			device_threads = total_items;
 		}
 
