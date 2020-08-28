@@ -257,12 +257,22 @@ if test -n "$MYSQL_LIB_DIR" ; then
 fi
   CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_CHECK_LIB(mysqlclient, mysql_init,
-  [ LIBS="-lmysqlclient -lm -ldl $LIBS"
-    AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
-    HAVE_MYSQL=yes ],
-  [ HAVE_MYSQL=no ]
-)
+unamestr=$(uname)
+if test $unamestr == 'OpenBSD'; then
+  AC_CHECK_LIB(mysqlclient, mysql_init,
+    [ LIBS="-lmysqlclient -lm $LIBS"
+      AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
+      HAVE_MYSQL=yes ],
+    [ HAVE_MYSQL=no ]
+  )
+else
+  AC_CHECK_LIB(mysqlclient, mysql_init,
+    [ LIBS="-lmysqlclient -lm -ldl $LIBS"
+      AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
+      HAVE_MYSQL=yes ],
+    [ HAVE_MYSQL=no ]
+  )
+fi
 
 if test $MYSQL_REENTRANT = 1 ; then
   LIBS="-lmysqlclient_r -lm -ldl $LIBS"
@@ -274,7 +284,11 @@ else
       LIBS="-lmysqlclient_r -lm -ldl $LIBS"
     else
       if test "$HAVE_MYSQL" == "yes"; then
-        LIBS="-lmysqlclient -lm -ldl $LIBS"
+        if test $unamestr == 'OpenBSD'; then
+          LIBS="-lmysqlclient -lm $LIBS"
+        else
+          LIBS="-lmysqlclient -lm -ldl $LIBS"
+        fi
       else
         LIBS="-lmariadbclient -lm -ldl $LIBS"
       fi

@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.2.15
 -issue#166: Spine error with new versions 1.2.x when the access to temperature SNMP data (worked by changing to a previous versions)
+-issue#168: Patch to compile spine on Openbsd
 
 1.2.14
 -issue#162: Spine not updating rrd_next_step
