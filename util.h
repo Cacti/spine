@@ -51,7 +51,7 @@ extern void set_option(const char *setting, const char *value);
 extern int is_numeric(char *string);
 extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
-extern int is_hexadecimal(const char * str, const short ignore_space);
+extern int is_hexadecimal(const char * str, const short ignore_special);
 
 /* determine if a device is a debug device */
 extern int is_debug_device(int device_id);

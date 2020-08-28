@@ -1345,32 +1345,44 @@ int is_numeric(char *string) {
  *
  *  \return TRUE if the string is valid hex, FALSE otherwise
  *
+ *  The function is modified where the string needs to include
+ *  at least one of the following string ' ', '-', or ':'
+ *
  */
-int is_hexadecimal(const char * str, const short ignore_space) {
+int is_hexadecimal(const char * str, const short ignore_special) {
 	int i = 0;
+	int delim_found = FALSE;
 
 	if (!str) return FALSE;
 
 	while (*str) {
 		switch (*str) {
-		case '0': case '1': case '2': case '3':
-		case '4': case '5': case '6': case '7':
-		case '8': case '9':
-		case 'a': case 'A': case 'b': case 'B':
-		case 'c': case 'C': case 'd': case 'D':
-		case 'e': case 'E': case 'f': case 'F':
-		case '"':
-			break;
-		case ' ': case '\t':
-			if (ignore_space) break;
-		default:
-			return FALSE;
+			case '0': case '1': case '2': case '3':
+			case '4': case '5': case '6': case '7':
+			case '8': case '9':
+			case 'a': case 'A': case 'b': case 'B':
+			case 'c': case 'C': case 'd': case 'D':
+			case 'e': case 'E': case 'f': case 'F':
+			case '"':
+				break;
+			case '-': case ':': case ' ':
+				delim_found = TRUE;
+				break;
+			case '\t':
+				if (ignore_special) {
+					break;
+				}
+			default:
+				return FALSE;
 		}
+
 		str++;
 		i++;
 	}
 
-	if (i < 3) return FALSE;
+	if ((i < 3) || delim_found == FALSE) {
+		return FALSE;
+	}
 
 	return TRUE;
 }
