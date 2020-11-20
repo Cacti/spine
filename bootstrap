@@ -28,14 +28,10 @@ display_help () {
 }
 
 # Check for parameters
-if [ "${1}x" = "--helpx" -o "${1}x" = "-hx" ]; then
+if [ "${1}" = "--help" -o "${1}" = "-h" ]; then
   display_help
   exit 0
 fi
-
-# Check for dos2unix
-which dos2unix > /dev/null 2>&1
-[ $? -gt 0 ] && echo "FATAL: Unable to locate dos2unix utility" && exit -1
 
 echo "INFO: Starting Spine build process"
 
@@ -44,7 +40,10 @@ echo "INFO: Removing cache directories"
 rm -rf autom4te.cache .deps
 
 # Make sure all files are unix formatted files 
-find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
+which dos2unix > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+  find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
+fi
 
 # Prepare a build state
 echo "INFO: Running auto-tools to verify buildability"

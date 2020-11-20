@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.16
+-issue#164: Remove the need of the dos2unix program
 -issue#175: Under heavy load MySQL/MariaDB return 2006 and 2013 errors on query
 -feature#176: Add Data Source turnaround time to debug output
 
