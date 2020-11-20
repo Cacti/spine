@@ -175,6 +175,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char last_snmp_context[65];
 	char last_snmp_engine_id[30];
 	double poll_time = get_time_as_double();
+	double thread_start = 0;
+	double thread_end = 0;
 
 	/* reindex shortcuts to speed polling */
 	int previous_assert_failure = FALSE;
@@ -1090,6 +1092,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		i = 0; k = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
+			thread_start = get_time_as_double();
+
 			switch(poller_items[i].action) {
 			case POLLER_ACTION_SNMP: /* raw SNMP poll */
 				/* initialize or reinitialize snmp as required */
@@ -1196,10 +1200,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
+							thread_end = get_time_as_double();
+
 							if (is_debug_device(host_id)) {
-								SPINE_LOG(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
 						}
 
@@ -1291,10 +1297,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 						snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
+						thread_end = get_time_as_double();
+
 						if (is_debug_device(host_id)) {
-							SPINE_LOG(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						} else {
-							SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						}
 
 						if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
@@ -1357,10 +1365,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 				if (poll_result) free(poll_result);
 
+				thread_end = get_time_as_double();
+
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
 				}
 
 				if (!IS_UNDEFINED(poller_items[i].result)) {
@@ -1413,10 +1423,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 				if (poll_result) free(poll_result);
 
+				thread_end = get_time_as_double();
+
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SS[%i] TT[%.2f] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SS[%i] TT[%.2f] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
 				}
 
 				if (IS_UNDEFINED(poller_items[i].result)) {
@@ -1497,10 +1509,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 				snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
+				thread_end = get_time_as_double();
+
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				}
 
 				if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {

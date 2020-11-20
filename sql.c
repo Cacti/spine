@@ -130,21 +130,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			if (error == 2013 && errno == EINTR) {
 				usleep(50000);
 				continue;
-			}
-
-			if ((error == 1213) || (error == 1205)) {
-				#ifndef SOLAR_THREAD
-				usleep(50000);
-				#endif
-				error_count++;
-
-				if (error_count > 30) {
-					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
-					exit(1);
-				}
-
-				continue;
-			} else if (error == 2006 && errno == EINTR) {
+			} else if (error == 2013 || (error == 2006 && errno == EINTR)) {
 				db_disconnect(mysql);
 				usleep(50000);
 				db_connect(type, mysql);
@@ -156,8 +142,20 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				}
 
 				continue;
+			}
+
+			if ((error == 1213) || (error == 1205)) {
+				usleep(50000);
+				error_count++;
+
+				if (error_count > 30) {
+					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+					exit(1);
+				}
+
+				continue;
 			} else {
-				SPINE_LOG(("FATAL: MySQL Error:'%i', Message:'%s'", error, mysql_error(mysql)));
+				SPINE_LOG(("FATAL: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
 				exit(1);
 			}
 		} else {
@@ -236,7 +234,7 @@ void db_connect(int type, MYSQL *mysql) {
 	mysql_init(mysql);
 
 	if (mysql == NULL) {
-		SPINE_LOG(("FATAL: MySQL unable to allocate memory and therefore can not connect"));
+		SPINE_LOG(("FATAL: Database unable to allocate memory and therefore can not connect"));
 		exit(1);
 	}
 
@@ -299,7 +297,7 @@ void db_connect(int type, MYSQL *mysql) {
 			}
 
 			if (error != 1049 && error != 2005 && error != 1045) {
-				printf("MYSQL: Connection Failed: Error:'%u', Message:'%s'\n", mysql_errno(mysql), mysql_error(mysql));
+				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", mysql_errno(mysql), mysql_error(mysql));
 
 				success = FALSE;
 
