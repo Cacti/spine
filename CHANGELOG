@@ -4,6 +4,7 @@ The Cacti Group | spine
 -issue#164: Remove the need of the dos2unix program
 -issue#171: Spine experiencing MySQL socket error 2002 under load
 -issue#175: Under heavy load MySQL/MariaDB return 2006 and 2013 errors on query
+-issue: Some developer debug log messages falsely labeled as WARNINGS
 -feature#176: Add Data Source turnaround time to debug output
 
 1.2.15

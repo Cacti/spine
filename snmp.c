@@ -344,27 +344,27 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
 
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s)", current_host->id, snmp_oid));
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
 
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid));
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
 			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		} else {
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_add_null_var(%s)", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s)", current_host->id, snmp_oid));
 			snmp_add_null_var(pdu, anOID, anOID_len);
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
 		}
 
 		/* poll host */
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
 		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 
 		/* add status to host structure */
 		current_host->snmp_status = status;
