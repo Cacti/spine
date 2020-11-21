@@ -289,7 +289,7 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 			db_disconnect(mysql);
 
-			if ((error == 2003 || error == 2013) && errno == EINTR) {
+			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
 				usleep(50000);
 				tries++;
 				success = FALSE;
