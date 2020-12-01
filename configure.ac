@@ -248,6 +248,8 @@ fi
 for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
   MYSQL_LIB_CHK($i/lib64)
   MYSQL_LIB_CHK($i/lib64/mysql)
+  MYSQL_LIB_CHK($i/lib/x86_64-linux-gnu)
+  MYSQL_LIB_CHK($i/lib/x86_64-linux-gnu/mysql)
   MYSQL_LIB_CHK($i/lib)
   MYSQL_LIB_CHK($i/lib/mysql)
 done
@@ -290,7 +292,11 @@ else
           LIBS="-lmysqlclient -lm -ldl $LIBS"
         fi
       else
-        LIBS="-lmariadbclient -lm -ldl $LIBS"
+        if test -f $MYSQL_LIB_DIR/libperconaserverclient.a -o -f $MYSQL_LIB_DIR/libperconaserverclient.$ShLib; then
+          LIBS="-lperconaserverclient -lm -ldl $LIBS"
+        else
+          LIBS="-lmariadbclient -lm -ldl $LIBS"
+        fi
       fi
     fi
   fi
