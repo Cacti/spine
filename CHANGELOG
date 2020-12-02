@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.17
+-issue#178: Fix build for Percona (Server database client library)
+
 1.2.16
 -issue: Some developer debug log messages falsely labeled as WARNINGS
 -issue#164: Remove the need of the dos2unix program
