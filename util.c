@@ -1001,7 +1001,7 @@ void die(const char *format, ...) {
 
 #ifdef HAVE_EXECINFO_H
 	int row = 0;
-	char **exit_strings = null;
+	char **exit_strings = NULL;
 
 	fprintf(stderr, "Generating backtrace...%ld line(s)...\n", set.exit_size);
 
