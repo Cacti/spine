@@ -31,6 +31,5 @@
  +-------------------------------------------------------------------------+
 */
 
-extern void spine_print_backtrace(void);
 extern void install_spine_signal_handler(void);
 extern void uninstall_spine_signal_handler(void);

@@ -456,7 +456,7 @@ AC_TRY_LINK(
     }
   ],
   [  AC_MSG_RESULT(yes)
-     AC_DEFINE(HAS_EXECINFO_H,1,[Do we have backtracing capabilities?])
+     AC_DEFINE(HAVE_EXECINFO_H,1,[Do we have backtracing capabilities?])
   ],
   AC_MSG_RESULT(no)
 )

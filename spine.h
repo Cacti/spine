@@ -58,7 +58,7 @@
 #define DISABLE_STDERR
 #endif
 
-#ifdef HAS_EXECINFO_H
+#ifdef HAVE_EXECINFO_H
 #include <execinfo.h>
 #endif
 

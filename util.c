@@ -999,14 +999,20 @@ void die(const char *format, ...) {
 
 	SPINE_LOG(("%s", flogmessage));
 
-#ifdef HAS_EXECINFO_H
-	printf("Generating backtrace...%ld line(s)...\n", set.exit_size);
+#ifdef HAVE_EXECINFO_H
+	int row = 0;
+	char **exit_strings = null;
+
+	fprintf(stderr, "Generating backtrace...%ld line(s)...\n", set.exit_size);
+
 	if (set.exit_size) {
-		char **exit_strings = backtrace_symbols(set.exit_stack, set.exit_size);
+		set.exit_size = backtrace(set.exit_stack, set.exit_size);
+		exit_strings  = backtrace_symbols(set.exit_stack, set.exit_size);
+
 		if (exit_strings) {
-			int row = 0;
-			for (row = 0; row < set.exit_size; row++)
-			        printf("%3d: %s\n", row, exit_strings[row]);
+			for (row = 0; row < set.exit_size; row++) {
+			        fprintf(stderr, "%3d: %s\n", row, exit_strings[row]);
+			}
 
 			free(exit_strings);
 		}

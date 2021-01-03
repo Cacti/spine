@@ -46,73 +46,34 @@
 static void spine_signal_handler(int spine_signal) {
 	signal(spine_signal, SIG_DFL);
 
-#if HAS_EXECINFO_H
-	// get void*'s for all entries on the stack
-	set.exit_size = backtrace(set.exit_stack, 10);
-#endif
-
 	set.exit_code = spine_signal;
 
 	switch (spine_signal) {
 		case SIGABRT:
-			spine_print_backtrace();
 			die("FATAL: Spine Interrupted by Abort Signal");
 			break;
 		case SIGINT:
-			spine_print_backtrace();
 			die("FATAL: Spine Interrupted by Console Operator");
 			break;
 		case SIGSEGV:
-			spine_print_backtrace();
 			die("FATAL: Spine Encountered a Segmentation Fault");
 			break;
 		case SIGBUS:
-			spine_print_backtrace();
 			die("FATAL: Spine Encountered a Bus Error");
 			break;
 		case SIGFPE:
-			spine_print_backtrace();
 			die("FATAL: Spine Encountered a Floating Point Exception");
 			break;
 		case SIGQUIT:
-			spine_print_backtrace();
 			die("FATAL: Spine Encountered a Keyboard Quit Command");
 			break;
 		case SIGPIPE:
-			spine_print_backtrace();
 			die("FATAL: Spine Encountered a Broken Pipe");
 			break;
 		default:
-			spine_print_backtrace();
 			die("FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'", spine_signal);
 			break;
 	}
-}
-
-void spine_print_backtrace() {
-	int nptrs;
-	int bt_buf_size = 100;
-	void *buffer[bt_buf_size];
-	char **strings;
-	int j;
-
-	nptrs = backtrace(buffer, bt_buf_size);
-	fprintf(stderr, "backtrace() returned %d addresses\n", nptrs);
-
-	/* The call backtrace_symbols_fd(buffer, nptrs, STDOUT_FILENO)
-	 * would produce similar output to the following: */
-
-	strings = backtrace_symbols(buffer, nptrs);
-	if (strings == NULL) {
-		perror("Spine backtrace symbols follow");
-		exit(EXIT_FAILURE);
-	}
-
-	for (j = 0; j < nptrs; j++) {
-		fprintf(stderr, "%s\n", strings[j]);
-	}
-
-	free(strings);
 }
 
 static int spine_fatal_signals[] = {
