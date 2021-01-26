@@ -2,6 +2,7 @@
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
  | Copyright (C) 2004-2021 The Cacti Group                                 |
+ | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -384,11 +385,11 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				} else {
-					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
+					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%d]",  snmp_oid, current_host->id, response->errstat));
 				}
 			}
 		} else {
-			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
+			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 		}
 
 		if (response) {
