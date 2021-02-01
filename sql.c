@@ -180,17 +180,20 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
  */
 void db_connect(int type, MYSQL *mysql) {
 	int    tries;
+	int    attempts;
 	int    timeout;
 	int    rtimeout;
 	int    wtimeout;
 	int    options_error;
 	int    success;
 	int    error;
+	char   *message;
 	bool   reconnect;
 	MYSQL  *connect_error;
-	char   *hostname;
+	char   *hostname = NULL;
 	char   *socket = NULL;
 	struct stat socket_stat;
+	static int connections = 0;
 
 	/* see if the hostname variable is a file reference.  If so,
 	 * and if it is a socket file, setup mysql to use it.
@@ -230,6 +233,7 @@ void db_connect(int type, MYSQL *mysql) {
 	rtimeout = 10;
 	wtimeout = 20;
 	reconnect = 1;
+	attempts  = 1;
 
 	mysql_init(mysql);
 
@@ -287,23 +291,19 @@ void db_connect(int type, MYSQL *mysql) {
 
 		if (!connect_error) {
 			error = mysql_errno(mysql);
-			db_disconnect(mysql);
 
 			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
-				usleep(50000);
+				usleep(5000);
 				tries++;
 				success = FALSE;
-				continue;
-			}
-
-			if (error != 1049 && error != 2005 && error != 1045) {
-				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", mysql_errno(mysql), mysql_error(mysql));
-
+			} else if (error == 2002) {
+				printf("Database: Connection Failed: Attempt:'%u', Error:'%u', Message:'%s'\n", attempts, mysql_errno(mysql), mysql_error(mysql));
+				sleep(1);
 				success = FALSE;
-
-				#ifndef SOLAR_THREAD
-				usleep(2000);
-				#endif
+			} else if (error != 1049 && error != 2005 && error != 1045) {
+				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", error, mysql_error(mysql));
+				success = FALSE;
+				usleep(50000);
 			} else {
 				tries   = 0;
 				success = FALSE;
@@ -311,14 +311,23 @@ void db_connect(int type, MYSQL *mysql) {
 		} else {
 			tries   = 0;
 			success = TRUE;
+			break;
 		}
+
+		attempts++;
 	}
 
-	free(hostname);
+	if (hostname != NULL) {
+		free(hostname);
+	}
 
 	if (!success){
-		die("FATAL: Connection Failed, Error:'%i', Message:'%s'", mysql_errno(mysql), mysql_error(mysql));
+		message = mysql_error(mysql);
+		mysql = NULL;
+		die("FATAL: Connection Failed, Error:'%i', Message:'%s'", error, message);
 	}
+
+	connections++;
 }
 
 /*! \fn void db_disconnect(MYSQL *mysql)
