@@ -1021,6 +1021,16 @@ void die(const char *format, ...) {
 	}
 #endif
 
+	// Close the local connection pool
+	if (db_pool_local) {
+		db_close_connection_pool(LOCAL);
+	}
+
+	// Close the remote connection pool
+	if (db_pool_remote) {
+		db_close_connection_pool(REMOTE);
+	}
+
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
 			php_close(PHP_INIT);

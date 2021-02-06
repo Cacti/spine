@@ -99,7 +99,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
-/*! \fn MYSQL_RES *db_query(MYSQL *mysql, const char *query)
+/*! \fn MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query)
  *  \brief executes a query and returns a pointer to the result set.
  *  \param mysql the database connection object
  *  \param query the database query to execute
@@ -133,7 +133,6 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			} else if (error == 2013 || (error == 2006 && errno == EINTR)) {
 				db_disconnect(mysql);
 				usleep(50000);
-				db_connect(type, mysql);
 				error_count++;
 
 				if (error_count > 30) {
@@ -144,12 +143,12 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				continue;
 			}
 
-			if ((error == 1213) || (error == 1205)) {
+			if (error == 1213 || error == 1205) {
 				usleep(50000);
 				error_count++;
 
 				if (error_count > 30) {
-					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occured!, SQL Fragment:'%s'", query_frag));
 					exit(1);
 				}
 
@@ -227,11 +226,11 @@ void db_connect(int type, MYSQL *mysql) {
 	}
 
 	/* initialalize variables */
-	tries   = 10;
-	success = FALSE;
-	timeout = 5;
-	rtimeout = 10;
-	wtimeout = 20;
+	tries     = 10;
+	success   = FALSE;
+	timeout   = 5;
+	rtimeout  = 10;
+	wtimeout  = 20;
 	reconnect = 1;
 	attempts  = 1;
 
@@ -327,6 +326,8 @@ void db_connect(int type, MYSQL *mysql) {
 		die("FATAL: Connection Failed, Error:'%i', Message:'%s'", error, message);
 	}
 
+	SPINE_LOG_DEBUG(("DEBUG: Total Connections made %i", connections));
+
 	connections++;
 }
 
@@ -339,6 +340,140 @@ void db_disconnect(MYSQL *mysql) {
 	if (mysql != NULL) {
 		mysql_close(mysql);
 	}
+}
+
+/*! \fn void db_create_connection_pool(int type)
+ *  \brief Creates a connection pool for spine
+ *  \param type the connection type, LOCAL or REMOTE
+ *
+ */
+void db_create_connection_pool(int type) {
+	int id;
+
+	SPINE_LOG_DEBUG(("Creating Connection Pool of %i threads.", set.threads));
+
+	if (type == LOCAL) {
+		for(id = 0; id < set.threads; id++) {
+			SPINE_LOG_DEBUG(("Creating Local Connection Pool Object %i.", id));
+
+			db_connect(type, &db_pool_local[id].mysql);
+
+			if (&db_pool_remote[id].mysql != NULL) {
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+			}
+
+			db_pool_local[id].free = TRUE;
+			db_pool_local[id].id   = id;
+		}
+	} else {
+		for(id = 0; id < set.threads; id++) {
+			SPINE_LOG_DEBUG(("Creating Remote Connection Pool Object %i.", id));
+
+			db_connect(type, &db_pool_remote[id].mysql);
+
+			if (&db_pool_remote[id].mysql != NULL) {
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+			}
+
+			db_pool_remote[id].free = TRUE;
+			db_pool_remote[id].id   = id;
+		}
+	}
+}
+
+/*! \fn void db_close_connection_pool(int type)
+ *  \brief Closes a connection pool for spine
+ *  \param type the connection type, LOCAL or REMOTE
+ *
+ */
+void db_close_connection_pool(int type) {
+	int id;
+
+	if (type == LOCAL) {
+		for(id = 0; id < set.threads; id++) {
+			SPINE_LOG_DEBUG(("DEBUG: Closing Local Connection Pool ID %i", id));
+			db_disconnect(&db_pool_local[id].mysql);
+		}
+
+		free(db_pool_local);
+	} else {
+		for(id = 0; id < set.threads; id++) {
+			SPINE_LOG_DEBUG(("DEBUG: Closing Remote Connection Pool ID %i", id));
+			db_disconnect(&db_pool_local[id].mysql);
+		}
+
+		free(db_pool_local);
+	}
+}
+
+/*! \fn pool_t db_get_connection(int type)
+ *  \brief returns a free mysql connection from the pool
+ *  \param type the connection type, LOCAL or REMOTE
+ *
+ */
+pool_t db_get_connection(int type) {
+	int id;
+
+	thread_mutex_lock(LOCK_POOL);
+
+	if (type == LOCAL) {
+		SPINE_LOG_DEBUG(("DEBUG: Traversing Local Connection Pool for free connection."));
+		for (id = 0; id < set.threads; id++) {
+			SPINE_LOG_DEBUG(("DEBUG: Checking Local Pool ID %i.", id));
+			if (db_pool_local[id].free == TRUE) {
+				SPINE_LOG_DEBUG(("DEBUG: Allocating Local Pool ID %i.", id));
+				db_pool_local[id].free = FALSE;
+				thread_mutex_unlock(LOCK_POOL);
+				return db_pool_local[id];
+			}
+		}
+	} else {
+		SPINE_LOG_DEBUG(("DEBUG: Traversing Remote Connection Pool for free connection."));
+		for (id = 0; id < set.threads; id++) {
+			SPINE_LOG_DEBUG(("DEBUG: Checking Remote Pool ID %i.", id));
+			if (db_pool_remote[id].free == TRUE) {
+				SPINE_LOG_DEBUG(("DEBUG: Allocating Remote Pool ID %i.", id));
+				db_pool_remote[id].free = FALSE;
+				thread_mutex_unlock(LOCK_POOL);
+				return db_pool_local[id];
+			}
+		}
+	}
+
+	SPINE_LOG(("FATAL: Connection Pool Fatal Error."));
+
+	thread_mutex_unlock(LOCK_POOL);
+}
+
+/*! \fn voi db_release_connection(int id)
+ *  \brief marks a database connection as free
+ *  \param id the connection id
+ *
+ */
+void db_release_connection(int type, int id) {
+	thread_mutex_lock(LOCK_POOL);
+
+	if (type == LOCAL) {
+		SPINE_LOG_DEBUG(("DEBUG: Freeing Local Pool ID %i", id));
+		db_pool_local[id].free = TRUE;
+	} else {
+		SPINE_LOG_DEBUG(("DEBUG: Freeing Remote Pool ID %i", id));
+		db_pool_remote[id].free = TRUE;
+	}
+
+	thread_mutex_unlock(LOCK_POOL);
 }
 
 /*! \fn int append_hostrange(char *obuf, const char *colname, const config_t *set)

@@ -37,6 +37,10 @@ extern void db_connect(int type, MYSQL *mysql);
 extern void db_disconnect(MYSQL *mysql);
 extern void db_escape(MYSQL *mysql, char *output, int max_size, const char *input);
 extern void db_free_result(MYSQL_RES *result);
+extern void db_create_connection_pool(int type);
+extern void db_close_connection_pool(int type);
+extern pool_t db_get_connection(int type);
+extern void db_release_connection(int type, int id);
 
 extern int append_hostrange(char *obuf, const char *colname);
 

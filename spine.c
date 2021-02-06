@@ -109,6 +109,9 @@ php_t	*php_processes = 0;
 char	config_paths[CONFIG_PATHS][BUFSIZE];
 int     *debug_devices;
 
+pool_t  *db_pool_local;
+pool_t  *db_pool_remote;
+
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
 void poller_push_data_to_main();
@@ -508,12 +511,20 @@ int main(int argc, char *argv[]) {
 		debug_devices[0] = '\0';
 	}
 
-	/* connect to database */
+	/* connect for main loop */
 	db_connect(LOCAL, &mysql);
+
+	/* setup local connection pool for hosts */
+	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		db_connect(REMOTE, &mysqlr);
 		mode = REMOTE;
+
+		/* setup remote connection pool for hosts */
+		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;
 	}
@@ -888,6 +899,14 @@ int main(int argc, char *argv[]) {
 		db_insert(&mysql, LOCAL, querybuf);
 	}
 
+	if (db_pool_local) {
+		db_close_connection_pool(LOCAL);
+	}
+
+	if (db_pool_remote) {
+		db_close_connection_pool(REMOTE);
+	}
+
 	/* cleanup and exit program */
 	pthread_attr_destroy(&attr);
 
@@ -1000,7 +1019,7 @@ static void display_help(int only_version) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2004-2020 by The Cacti Group\n", VERSION);
+	printf("SPINE %s  Copyright 2004-2021 by The Cacti Group\n", VERSION);
 
 	if (only_version == FALSE) {
 		printf("\n");

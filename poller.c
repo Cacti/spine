@@ -185,6 +185,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int new_buffer              = TRUE;
 	int ignore_sysinfo          = TRUE;
 
+	pool_t local_cnn;
+	pool_t remote_cnn;
+
 	reindex_t   *reindex;
 	host_t      *host;
 	ping_t      *ping;
@@ -204,26 +207,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	db_connect(LOCAL, &mysql);
+	//db_connect(LOCAL, &mysql);
+	local_cnn = db_get_connection(LOCAL);
+	mysql = local_cnn.mysql;
 
-	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
-
-	if (set.mode == REMOTE_ONLINE) {
-		db_connect(REMOTE, &mysqlr);
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		remote_cnn = db_get_connection(REMOTE);
+		mysqlr = remote_cnn.mysql;
 	}
 
 	/* allocate host and ping structures with appropriate values */
@@ -418,15 +408,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
-				db_disconnect(&mysql);
+				db_release_connection(LOCAL, local_cnn.id);
 
-				if (set.mode == REMOTE_ONLINE) {
-					db_disconnect(&mysqlr);
+				if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+					db_release_connection(REMOTE, remote_cnn.id);
 				}
-
-				#ifndef OLD_MYSQL
-				mysql_thread_end();
-				#endif
 
 				return;
 			}
@@ -1545,11 +1531,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		}
 
 		int mode;
-		if (set.mode == REMOTE_ONLINE) {
-			mysqlt = mysqlr;
+		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+			//mysqlt = mysqlr;
+			mysqlt = remote_cnn.mysql;
 			mode   = REMOTE;
 		} else {
-			mysqlt = mysql;
+			//mysqlt = mysql;
+			mysqlt = local_cnn.mysql;
 			mode   = LOCAL;
 		}
 
@@ -1668,10 +1656,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
 	db_query(&mysql, LOCAL, query1);
 
-	db_disconnect(&mysql);
+	db_release_connection(LOCAL, local_cnn.id);
 
-	if (set.mode == REMOTE_ONLINE) {
-		db_disconnect(&mysqlr);
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		db_release_connection(REMOTE, remote_cnn.id);
 	}
 
 	#ifndef OLD_MYSQL

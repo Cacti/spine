@@ -4,6 +4,7 @@ The Cacti Group | spine
 -issue#178: Fix build for Percona (Server database client library)
 -issue#184: Warning during make process related to backtrace symbols
 -issue#186: Spine having random segfaults when attempting to connect
+-issue#187: With large installations spine can create too many connections causing routers to detect DOS
 
 1.2.16
 -issue: Some developer debug log messages falsely labeled as WARNINGS

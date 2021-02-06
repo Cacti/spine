@@ -58,7 +58,7 @@
 #define DISABLE_STDERR
 #endif
 
-#ifdef HAVE_EXECINFO_H
+#ifdef HAS_EXECINFO_H
 #include <execinfo.h>
 #endif
 
@@ -170,6 +170,7 @@
 #define LOCK_SNMP 0
 #define LOCK_SETEUID 2
 #define LOCK_GHBN 3
+#define LOCK_POOL 4
 #define LOCK_SYSLOG 5
 #define LOCK_PHP 6
 #define LOCK_PHP_PROC_0 7
@@ -187,6 +188,7 @@
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
 #define LOCK_GHBN_O 3
+#define LOCK_POOL_O 4
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
 #define LOCK_PHP_PROC_0_O 7
@@ -552,7 +554,7 @@ typedef struct host_reindex_struct {
 	int    action;
 } reindex_t;
 
-/*! Ping Result Struction
+/*! Ping Result Structure
  *
  * This structure holds the results of a host ping.
  *
@@ -564,6 +566,16 @@ typedef struct ping_results {
 	char   snmp_status[50];
 	char   snmp_response[SMALL_BUFSIZE];
 } ping_t;
+
+/*! MySQL Connection Pool Structure
+ *
+ * This structure holds the mysql connetion pool object.
+ */
+typedef struct db_connection {
+	int   id;
+	int   free;
+	MYSQL mysql;
+} pool_t;
 
 /* Include all Standard Spine Headers */
 #include "poller.h"
@@ -583,5 +595,7 @@ extern php_t  *php_processes;
 extern char   start_datetime[20];
 extern char   config_paths[CONFIG_PATHS][BUFSIZE];
 extern sem_t  active_threads;
+extern pool_t *db_pool_remote;
+extern pool_t *db_pool_local;
 
 #endif /* not _SPINE_H_ */
