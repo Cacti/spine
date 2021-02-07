@@ -160,7 +160,7 @@ int ping_host(host_t *host, ping_t *ping) {
  *
  */
 int ping_snmp(host_t *host, ping_t *ping) {
-	char *poll_result;
+	char *poll_result = NULL;
 	char *oid;
 	double begin_time, end_time, total_time;
 	double one_thousand = 1000.00;

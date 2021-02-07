@@ -183,7 +183,12 @@
 #define LOCK_PHP_PROC_7 14
 #define LOCK_PHP_PROC_8 15
 #define LOCK_PHP_PROC_9 16
-#define LOCK_PEND 17
+#define LOCK_PHP_PROC_10 17
+#define LOCK_PHP_PROC_11 18
+#define LOCK_PHP_PROC_12 19
+#define LOCK_PHP_PROC_13 20
+#define LOCK_PHP_PROC_14 21
+#define LOCK_PEND 30
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -201,7 +206,12 @@
 #define LOCK_PHP_PROC_7_O 14
 #define LOCK_PHP_PROC_8_O 15
 #define LOCK_PHP_PROC_9_O 16
-#define LOCK_PEND_O 17
+#define LOCK_PHP_PROC_10_O 17
+#define LOCK_PHP_PROC_11_O 18
+#define LOCK_PHP_PROC_12_O 19
+#define LOCK_PHP_PROC_13_O 20
+#define LOCK_PHP_PROC_14_O 21
+#define LOCK_PEND_O 30
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -275,7 +285,7 @@
 #define ICMP_HDR_SIZE 8
 
 /* required for PHP Script Server */
-#define MAX_PHP_SERVERS 10
+#define MAX_PHP_SERVERS 15
 #define PHP_READY 0
 #define PHP_BUSY 1
 #define PHP_INIT 999

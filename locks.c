@@ -65,48 +65,63 @@ DEFINE_SPINE_LOCK(php_proc_6)
 DEFINE_SPINE_LOCK(php_proc_7)
 DEFINE_SPINE_LOCK(php_proc_8)
 DEFINE_SPINE_LOCK(php_proc_9)
+DEFINE_SPINE_LOCK(php_proc_10)
+DEFINE_SPINE_LOCK(php_proc_11)
+DEFINE_SPINE_LOCK(php_proc_12)
+DEFINE_SPINE_LOCK(php_proc_13)
+DEFINE_SPINE_LOCK(php_proc_14)
 
 void init_mutexes() {
-	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),       init_snmp_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_SETEUID_O),    init_seteuid_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),       init_ghbn_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_POOL_O),       init_pool_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O),     init_syslog_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O),        init_php_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PEND_O),       init_pend_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_0_O), init_php_proc_0_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_1_O), init_php_proc_1_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_2_O), init_php_proc_2_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_3_O), init_php_proc_3_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_4_O), init_php_proc_4_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_5_O), init_php_proc_5_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_6_O), init_php_proc_6_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_7_O), init_php_proc_7_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_8_O), init_php_proc_8_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_9_O), init_php_proc_9_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),        init_snmp_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SETEUID_O),     init_seteuid_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),        init_ghbn_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_POOL_O),        init_pool_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O),      init_syslog_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O),         init_php_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PEND_O),        init_pend_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_0_O),  init_php_proc_0_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_1_O),  init_php_proc_1_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_2_O),  init_php_proc_2_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_3_O),  init_php_proc_3_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_4_O),  init_php_proc_4_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_5_O),  init_php_proc_5_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_6_O),  init_php_proc_6_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_7_O),  init_php_proc_7_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_8_O),  init_php_proc_8_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_9_O),  init_php_proc_9_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_10_O), init_php_proc_10_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_11_O), init_php_proc_11_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_12_O), init_php_proc_12_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_13_O), init_php_proc_13_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
 }
 
 pthread_mutex_t* get_lock(int lock) {
 	pthread_mutex_t *ret_val = NULL;
 
 	switch (lock) {
-	case LOCK_SNMP:       ret_val = &snmp_lock;       break;
-	case LOCK_SETEUID:    ret_val = &seteuid_lock;    break;
-	case LOCK_GHBN:       ret_val = &ghbn_lock;       break;
-	case LOCK_POOL:       ret_val = &pool_lock;       break;
-	case LOCK_SYSLOG:     ret_val = &syslog_lock;     break;
-	case LOCK_PHP:        ret_val = &php_lock;        break;
-	case LOCK_PHP_PROC_0: ret_val = &php_proc_0_lock; break;
-	case LOCK_PHP_PROC_1: ret_val = &php_proc_1_lock; break;
-	case LOCK_PHP_PROC_2: ret_val = &php_proc_2_lock; break;
-	case LOCK_PHP_PROC_3: ret_val = &php_proc_3_lock; break;
-	case LOCK_PHP_PROC_4: ret_val = &php_proc_4_lock; break;
-	case LOCK_PHP_PROC_5: ret_val = &php_proc_5_lock; break;
-	case LOCK_PHP_PROC_6: ret_val = &php_proc_6_lock; break;
-	case LOCK_PHP_PROC_7: ret_val = &php_proc_7_lock; break;
-	case LOCK_PHP_PROC_8: ret_val = &php_proc_8_lock; break;
-	case LOCK_PHP_PROC_9: ret_val = &php_proc_9_lock; break;
-	case LOCK_PEND:       ret_val = &pend_lock;       break;
+	case LOCK_SNMP:        ret_val = &snmp_lock;        break;
+	case LOCK_SETEUID:     ret_val = &seteuid_lock;     break;
+	case LOCK_GHBN:        ret_val = &ghbn_lock;        break;
+	case LOCK_POOL:        ret_val = &pool_lock;        break;
+	case LOCK_SYSLOG:      ret_val = &syslog_lock;      break;
+	case LOCK_PHP:         ret_val = &php_lock;         break;
+	case LOCK_PHP_PROC_0:  ret_val = &php_proc_0_lock;  break;
+	case LOCK_PHP_PROC_1:  ret_val = &php_proc_1_lock;  break;
+	case LOCK_PHP_PROC_2:  ret_val = &php_proc_2_lock;  break;
+	case LOCK_PHP_PROC_3:  ret_val = &php_proc_3_lock;  break;
+	case LOCK_PHP_PROC_4:  ret_val = &php_proc_4_lock;  break;
+	case LOCK_PHP_PROC_5:  ret_val = &php_proc_5_lock;  break;
+	case LOCK_PHP_PROC_6:  ret_val = &php_proc_6_lock;  break;
+	case LOCK_PHP_PROC_7:  ret_val = &php_proc_7_lock;  break;
+	case LOCK_PHP_PROC_8:  ret_val = &php_proc_8_lock;  break;
+	case LOCK_PHP_PROC_9:  ret_val = &php_proc_9_lock;  break;
+	case LOCK_PHP_PROC_10: ret_val = &php_proc_10_lock; break;
+	case LOCK_PHP_PROC_11: ret_val = &php_proc_11_lock; break;
+	case LOCK_PHP_PROC_12: ret_val = &php_proc_12_lock; break;
+	case LOCK_PHP_PROC_13: ret_val = &php_proc_13_lock; break;
+	case LOCK_PHP_PROC_14: ret_val = &php_proc_14_lock; break;
+	case LOCK_PEND:        ret_val = &pend_lock;        break;
 	}
 
 	return ret_val;
@@ -116,23 +131,28 @@ pthread_once_t* get_attr(int locko) {
 	pthread_once_t *ret_val = NULL;
 
 	switch (locko) {
-	case LOCK_SNMP_O:       ret_val = &snmp_lock_o;       break;
-	case LOCK_SETEUID_O:    ret_val = &seteuid_lock_o;    break;
-	case LOCK_GHBN_O:       ret_val = &ghbn_lock_o;       break;
-	case LOCK_POOL_O:       ret_val = &pool_lock_o;       break;
-	case LOCK_SYSLOG_O:     ret_val = &syslog_lock_o;     break;
-	case LOCK_PHP_O:        ret_val = &php_lock_o;        break;
-	case LOCK_PHP_PROC_0_O: ret_val = &php_proc_0_lock_o; break;
-	case LOCK_PHP_PROC_1_O: ret_val = &php_proc_1_lock_o; break;
-	case LOCK_PHP_PROC_2_O: ret_val = &php_proc_2_lock_o; break;
-	case LOCK_PHP_PROC_3_O: ret_val = &php_proc_3_lock_o; break;
-	case LOCK_PHP_PROC_4_O: ret_val = &php_proc_4_lock_o; break;
-	case LOCK_PHP_PROC_5_O: ret_val = &php_proc_5_lock_o; break;
-	case LOCK_PHP_PROC_6_O: ret_val = &php_proc_6_lock_o; break;
-	case LOCK_PHP_PROC_7_O: ret_val = &php_proc_7_lock_o; break;
-	case LOCK_PHP_PROC_8_O: ret_val = &php_proc_8_lock_o; break;
-	case LOCK_PHP_PROC_9_O: ret_val = &php_proc_9_lock_o; break;
-	case LOCK_PEND_O:       ret_val = &pend_lock_o;       break;
+	case LOCK_SNMP_O:        ret_val = &snmp_lock_o;        break;
+	case LOCK_SETEUID_O:     ret_val = &seteuid_lock_o;     break;
+	case LOCK_GHBN_O:        ret_val = &ghbn_lock_o;        break;
+	case LOCK_POOL_O:        ret_val = &pool_lock_o;        break;
+	case LOCK_SYSLOG_O:      ret_val = &syslog_lock_o;      break;
+	case LOCK_PHP_O:         ret_val = &php_lock_o;         break;
+	case LOCK_PHP_PROC_0_O:  ret_val = &php_proc_0_lock_o;  break;
+	case LOCK_PHP_PROC_1_O:  ret_val = &php_proc_1_lock_o;  break;
+	case LOCK_PHP_PROC_2_O:  ret_val = &php_proc_2_lock_o;  break;
+	case LOCK_PHP_PROC_3_O:  ret_val = &php_proc_3_lock_o;  break;
+	case LOCK_PHP_PROC_4_O:  ret_val = &php_proc_4_lock_o;  break;
+	case LOCK_PHP_PROC_5_O:  ret_val = &php_proc_5_lock_o;  break;
+	case LOCK_PHP_PROC_6_O:  ret_val = &php_proc_6_lock_o;  break;
+	case LOCK_PHP_PROC_7_O:  ret_val = &php_proc_7_lock_o;  break;
+	case LOCK_PHP_PROC_8_O:  ret_val = &php_proc_8_lock_o;  break;
+	case LOCK_PHP_PROC_9_O:  ret_val = &php_proc_9_lock_o;  break;
+	case LOCK_PHP_PROC_10_O: ret_val = &php_proc_10_lock_o; break;
+	case LOCK_PHP_PROC_11_O: ret_val = &php_proc_11_lock_o; break;
+	case LOCK_PHP_PROC_12_O: ret_val = &php_proc_12_lock_o; break;
+	case LOCK_PHP_PROC_13_O: ret_val = &php_proc_13_lock_o; break;
+	case LOCK_PHP_PROC_14_O: ret_val = &php_proc_14_lock_o; break;
+	case LOCK_PEND_O:        ret_val = &pend_lock_o;        break;
 	}
 
 	return ret_val;

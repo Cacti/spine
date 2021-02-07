@@ -60,16 +60,21 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* place lock around mutex */
 	switch (php_process) {
-	case 0: thread_mutex_lock(LOCK_PHP_PROC_0);	break;
-	case 1: thread_mutex_lock(LOCK_PHP_PROC_1);	break;
-	case 2: thread_mutex_lock(LOCK_PHP_PROC_2);	break;
-	case 3: thread_mutex_lock(LOCK_PHP_PROC_3);	break;
-	case 4: thread_mutex_lock(LOCK_PHP_PROC_4);	break;
-	case 5: thread_mutex_lock(LOCK_PHP_PROC_5);	break;
-	case 6: thread_mutex_lock(LOCK_PHP_PROC_6);	break;
-	case 7: thread_mutex_lock(LOCK_PHP_PROC_7);	break;
-	case 8: thread_mutex_lock(LOCK_PHP_PROC_8);	break;
-	case 9: thread_mutex_lock(LOCK_PHP_PROC_9);	break;
+	case 0:  thread_mutex_lock(LOCK_PHP_PROC_0);  break;
+	case 1:  thread_mutex_lock(LOCK_PHP_PROC_1);  break;
+	case 2:  thread_mutex_lock(LOCK_PHP_PROC_2);  break;
+	case 3:  thread_mutex_lock(LOCK_PHP_PROC_3);  break;
+	case 4:  thread_mutex_lock(LOCK_PHP_PROC_4);  break;
+	case 5:  thread_mutex_lock(LOCK_PHP_PROC_5);  break;
+	case 6:  thread_mutex_lock(LOCK_PHP_PROC_6);  break;
+	case 7:  thread_mutex_lock(LOCK_PHP_PROC_7);  break;
+	case 8:  thread_mutex_lock(LOCK_PHP_PROC_8);  break;
+	case 9:  thread_mutex_lock(LOCK_PHP_PROC_9);  break;
+	case 10: thread_mutex_lock(LOCK_PHP_PROC_10); break;
+	case 11: thread_mutex_lock(LOCK_PHP_PROC_11); break;
+	case 12: thread_mutex_lock(LOCK_PHP_PROC_12); break;
+	case 13: thread_mutex_lock(LOCK_PHP_PROC_13); break;
+	case 14: thread_mutex_lock(LOCK_PHP_PROC_14); break;
 	}
 
 	/* send command to the script server */
@@ -100,16 +105,21 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* unlock around php process */
 	switch (php_process) {
-	case 0: thread_mutex_unlock(LOCK_PHP_PROC_0); break;
-	case 1: thread_mutex_unlock(LOCK_PHP_PROC_1); break;
-	case 2: thread_mutex_unlock(LOCK_PHP_PROC_2); break;
-	case 3: thread_mutex_unlock(LOCK_PHP_PROC_3); break;
-	case 4: thread_mutex_unlock(LOCK_PHP_PROC_4); break;
-	case 5: thread_mutex_unlock(LOCK_PHP_PROC_5); break;
-	case 6: thread_mutex_unlock(LOCK_PHP_PROC_6); break;
-	case 7: thread_mutex_unlock(LOCK_PHP_PROC_7); break;
-	case 8: thread_mutex_unlock(LOCK_PHP_PROC_8); break;
-	case 9: thread_mutex_unlock(LOCK_PHP_PROC_9); break;
+	case 0:  thread_mutex_unlock(LOCK_PHP_PROC_0);  break;
+	case 1:  thread_mutex_unlock(LOCK_PHP_PROC_1);  break;
+	case 2:  thread_mutex_unlock(LOCK_PHP_PROC_2);  break;
+	case 3:  thread_mutex_unlock(LOCK_PHP_PROC_3);  break;
+	case 4:  thread_mutex_unlock(LOCK_PHP_PROC_4);  break;
+	case 5:  thread_mutex_unlock(LOCK_PHP_PROC_5);  break;
+	case 6:  thread_mutex_unlock(LOCK_PHP_PROC_6);  break;
+	case 7:  thread_mutex_unlock(LOCK_PHP_PROC_7);  break;
+	case 8:  thread_mutex_unlock(LOCK_PHP_PROC_8);  break;
+	case 9:  thread_mutex_unlock(LOCK_PHP_PROC_9);  break;
+	case 10: thread_mutex_unlock(LOCK_PHP_PROC_10); break;
+	case 11: thread_mutex_unlock(LOCK_PHP_PROC_11); break;
+	case 12: thread_mutex_unlock(LOCK_PHP_PROC_12); break;
+	case 13: thread_mutex_unlock(LOCK_PHP_PROC_13); break;
+	case 14: thread_mutex_unlock(LOCK_PHP_PROC_14); break;
 	}
 
 	return result_string;
