@@ -56,7 +56,29 @@ static void spine_signal_handler(int spine_signal) {
 			die("FATAL: Spine Interrupted by Console Operator");
 			break;
 		case SIGSEGV:
-			die("FATAL: Spine Encountered a Segmentation Fault");
+			printf("FATAL: Spine Encountered a Segmentation Fault\n");
+
+			#ifdef HAVE_EXECINFO_H
+				int row = 0;
+				char **exit_strings = NULL;
+
+				fprintf(stderr, "Generating backtrace...%ld line(s)...\n", set.exit_size);
+
+				if (set.exit_size) {
+					set.exit_size = backtrace(set.exit_stack, set.exit_size);
+					exit_strings  = backtrace_symbols(set.exit_stack, set.exit_size);
+
+					if (exit_strings) {
+						for (row = 0; row < set.exit_size; row++) {
+							fprintf(stderr, "%3d: %s\n", row, exit_strings[row]);
+						}
+
+						free(exit_strings);
+					}
+				}
+			#endif
+			exit(1);
+
 			break;
 		case SIGBUS:
 			die("FATAL: Spine Encountered a Bus Error");

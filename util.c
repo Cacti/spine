@@ -999,38 +999,6 @@ void die(const char *format, ...) {
 
 	SPINE_LOG(("%s", flogmessage));
 
-#ifdef HAVE_EXECINFO_H
-	int row = 0;
-	char **exit_strings = (char **) NULL;
-
-	set.exit_size = 10;
-
-	if (set.exit_size) {
-		set.exit_size = backtrace(set.exit_stack, set.exit_size);
-		exit_strings  = backtrace_symbols(set.exit_stack, set.exit_size);
-
-		if (exit_strings) {
-			fprintf(stderr, "Generating backtrace...%ld line(s)...\n", set.exit_size);
-
-			for (row = 0; row < set.exit_size; row++) {
-				fprintf(stderr, "%3d: %s\n", row, exit_strings[row]);
-			}
-
-			free(exit_strings);
-		}
-	}
-#endif
-
-	// Close the local connection pool
-	if (db_pool_local) {
-		db_close_connection_pool(LOCAL);
-	}
-
-	// Close the remote connection pool
-	if (db_pool_remote) {
-		db_close_connection_pool(REMOTE);
-	}
-
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
 			php_close(PHP_INIT);
