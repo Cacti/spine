@@ -63,9 +63,8 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 				error = mysql_errno(mysql);
 
 				if (error == 2013 || error == 2006) {
-					db_disconnect(mysql);
-					usleep(50000);
-					db_connect(type, mysql);
+					db_reconnect(mysql, error);
+
 					error_count++;
 
 					if (error_count > 30) {
@@ -96,6 +95,33 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 		} else {
 			return TRUE;
 		}
+	}
+}
+
+int db_reconnect(MYSQL *mysql, int error) {
+	ulong  mysql_thread = 0;
+	char   query[100];
+
+	mysql_thread = mysql_thread_id(mysql);
+	mysql_ping(mysql);
+
+	if (mysql_thread_id(mysql) != mysql_thread) {
+		SPINE_LOG(("WARNING: Connection Broken with Error %i.  Reconnect successful.", error));
+		snprintf(query, 100, "KILL %ul;", mysql_thread);
+		mysql_query(mysql, query);
+		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+
+		sleep(1);
+
+		return TRUE;
+	} else {
+		SPINE_LOG(("WARNING: Connection Broken with Error %i.  Reconnect failed.", error));
+		return FALSE;
 	}
 }
 
@@ -130,9 +156,10 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			if (error == 2013 && errno == EINTR) {
 				usleep(50000);
 				continue;
-			} else if (error == 2013 || (error == 2006 && errno == EINTR)) {
-				db_disconnect(mysql);
-				usleep(50000);
+			//} else if (error == 2013 || (error == 2006 && errno == EINTR)) {
+			} else if (error == 2013 || (error == 2006)) {
+				db_reconnect(mysql, error);
+
 				error_count++;
 
 				if (error_count > 30) {
@@ -155,6 +182,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				continue;
 			} else {
 				SPINE_LOG(("FATAL: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
+				SPINE_LOG(("ERROR: The Query Was:'%s'", query));
 				exit(1);
 			}
 		} else {
@@ -178,20 +206,19 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
  *
  */
 void db_connect(int type, MYSQL *mysql) {
-	int    tries;
-	int    attempts;
-	int    timeout;
-	int    rtimeout;
-	int    wtimeout;
-	int    options_error;
-	int    success;
-	int    error;
-	char   *message;
-	bool   reconnect;
-	MYSQL  *connect_error;
-	char   *hostname = NULL;
-	char   *socket = NULL;
-	struct stat socket_stat;
+	int     tries;
+	int     attempts;
+	int     timeout;
+	int     rtimeout;
+	int     wtimeout;
+	int     options_error;
+	int     success;
+	int     error;
+	my_bool reconnect;
+	MYSQL   *connect_error;
+	char    *hostname = NULL;
+	char    *socket = NULL;
+	struct  stat socket_stat;
 	static int connections = 0;
 
 	/* see if the hostname variable is a file reference.  If so,
@@ -237,17 +264,14 @@ void db_connect(int type, MYSQL *mysql) {
 	mysql_init(mysql);
 
 	if (mysql == NULL) {
-		SPINE_LOG(("FATAL: Database unable to allocate memory and therefore can not connect"));
+		printf("FATAL: Database unable to allocate memory and therefore can not connect\n");
 		exit(1);
 	}
 
 	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout, "read timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout, "write timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout, "general timeout");
-
-	#ifdef MYSQL_OPT_RECONNECT
 	MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
-	#endif
 
 	#ifdef MYSQL_OPT_RETRY_COUNT
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
@@ -321,9 +345,8 @@ void db_connect(int type, MYSQL *mysql) {
 	}
 
 	if (!success){
-		message = mysql_error(mysql);
-		mysql = NULL;
-		die("FATAL: Connection Failed, Error:'%i', Message:'%s'", error, message);
+		printf("FATAL: Connection Failed, Error:'%i', Message:'%s'\n", error, mysql_error(mysql));
+		exit(1);
 	}
 
 	SPINE_LOG_DEBUG(("DEBUG: Total Connections made %i", connections));
@@ -423,7 +446,7 @@ void db_close_connection_pool(int type) {
  *  \param type the connection type, LOCAL or REMOTE
  *
  */
-pool_t db_get_connection(int type) {
+pool_t *db_get_connection(int type) {
 	int id;
 
 	thread_mutex_lock(LOCK_POOL);
@@ -436,7 +459,7 @@ pool_t db_get_connection(int type) {
 				SPINE_LOG_DEBUG(("DEBUG: Allocating Local Pool ID %i.", id));
 				db_pool_local[id].free = FALSE;
 				thread_mutex_unlock(LOCK_POOL);
-				return db_pool_local[id];
+				return &db_pool_local[id];
 			}
 		}
 	} else {
@@ -447,7 +470,7 @@ pool_t db_get_connection(int type) {
 				SPINE_LOG_DEBUG(("DEBUG: Allocating Remote Pool ID %i.", id));
 				db_pool_remote[id].free = FALSE;
 				thread_mutex_unlock(LOCK_POOL);
-				return db_pool_local[id];
+				return &db_pool_local[id];
 			}
 		}
 	}
@@ -521,13 +544,11 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	char input_trimmed[BUFSIZE];
 	int  input_size;
 
-	input_size = strlen(input);
-
 	if (input_size > max_size) {
 		strncpy(input_trimmed, input, max_size - 10);
 		input_trimmed[max_size-10] = 0;
 	} else {
-		strncpy(input_trimmed, input, input_size);
+		strncpy(input_trimmed, input, max_size);
 		input_trimmed[input_size] = 0;
 	}
 

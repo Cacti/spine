@@ -134,6 +134,18 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char query11[BUFSIZE];
 	char *query12 = NULL;
 	char posuffix[BUFSIZE];
+
+	int query1_len   = 0;
+	int query2_len   = 0;
+	int query4_len   = 0;
+	int query5_len   = 0;
+	int query6_len   = 0;
+	int query8_len   = 0;
+	int query9_len   = 0;
+	int query10_len  = 0;
+	int query11_len  = 0;
+	int posuffix_len = 0;
+
 	char sysUptime[BUFSIZE];
 	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
@@ -184,9 +196,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int perform_assert          = TRUE;
 	int new_buffer              = TRUE;
 	int ignore_sysinfo          = TRUE;
+	int buf_length              = 0;
 
-	pool_t local_cnn;
-	pool_t remote_cnn;
+	pool_t *local_cnn;
+	pool_t *remote_cnn;
 
 	reindex_t   *reindex;
 	host_t      *host;
@@ -209,22 +222,26 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	//db_connect(LOCAL, &mysql);
 	local_cnn = db_get_connection(LOCAL);
-	mysql = local_cnn.mysql;
+	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
-		mysqlr = remote_cnn.mysql;
+		mysqlr = remote_cnn->mysql;
 	}
 
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
 		die("ERROR: Fatal malloc error: poller.c host struct!");
 	}
+
+	/* set zeros */
 	memset(host, 0, sizeof(host_t));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
 		die("ERROR: Fatal malloc error: poller.c ping struct!");
 	}
+
+	/* set zeros */
 	memset(ping, 0, sizeof(ping_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
@@ -394,6 +411,17 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		"INSERT INTO poller_output_boost"
 		" (local_data_id, rrd_name, time, output) VALUES");
 
+	query1_len   = strlen(query1);
+	query2_len   = strlen(query2);
+	query4_len   = strlen(query4);
+	query5_len   = strlen(query5);
+	query6_len   = strlen(query6);
+	query8_len   = strlen(query8);
+	query9_len   = strlen(query9);
+	query10_len  = strlen(query10);
+	query11_len  = strlen(query11);
+	posuffix_len = strlen(posuffix);
+
 	/* initialize the ping structure variables */
 	snprintf(ping->ping_status,   50,            "down");
 	snprintf(ping->ping_response, SMALL_BUFSIZE, "Ping not performed due to setting.");
@@ -408,10 +436,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
-				db_release_connection(LOCAL, local_cnn.id);
+				db_release_connection(LOCAL, local_cnn->id);
 
 				if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-					db_release_connection(REMOTE, remote_cnn.id);
+					db_release_connection(REMOTE, remote_cnn->id);
 				}
 
 				return;
@@ -842,11 +870,14 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								if (host_thread == 1) {
 									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
-									if (set.mode == REMOTE_ONLINE) {
+									if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 										db_insert(&mysqlr, REMOTE, query3);
 									} else {
 										db_insert(&mysql, LOCAL, query3);
 									}
+
+									/* set zeros */
+									memset(query3, 0, buf_length);
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
@@ -862,13 +893,16 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								}
 
 								if (host_thread == 1) {
-									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) ValueS (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
-									if (set.mode == REMOTE_ONLINE) {
+									if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 										db_insert(&mysqlr, REMOTE, query3);
 									} else {
 										db_insert(&mysql, LOCAL, query3);
 									}
+
+									/* set zeros */
+									memset(query3, 0, buf_length);
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
@@ -886,13 +920,16 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									}
 
 									if (host_thread == 1) {
-										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
-										if (set.mode == REMOTE_ONLINE) {
+										if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 											db_insert(&mysqlr, REMOTE, query3);
 										} else {
 											db_insert(&mysql, LOCAL, query3);
 										}
+
+										/* set zeros */
+										memset(query3, 0, buf_length);
 									}
 									assert_fail = TRUE;
 									previous_assert_failure = TRUE;
@@ -909,6 +946,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
 									snprintf(query3, LRG_BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, temp_arg1);
 									db_insert(&mysql, LOCAL, query3);
+
+									/* set zeros */
+									memset(query3, 0, buf_length);
 								}
 
 								if ((assert_fail) &&
@@ -1512,32 +1552,42 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			}
 		}
 
+		buf_length = MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER;
+
 		/* insert the query results into the database */
-		if (!(query3 = (char *)malloc(MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER))) {
+		if (!(query3 = (char *)malloc(buf_length))) {
 			die("ERROR: Fatal malloc error: poller.c query3 output buffer!");
 		}
-		query3[0] = '\0';
-		strncat(query3, query8, strlen(query8));
+
+		/* set zeros */
+		memset(query3, 0, buf_length);
+
+		/* append data */
+		strncat(query3, query8, query8_len);
 
 		out_buffer = strlen(query3);
 
 		if (set.boost_redirect && set.boost_enabled) {
 			/* insert the query results into the database */
-			if (!(query12 = (char *)malloc(MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER))) {
+			if (!(query12 = (char *)malloc(buf_length))) {
 				die("ERROR: Fatal malloc error: poller.c query12 boost output buffer!");
 			}
-			query12[0] = '\0';
-			strncat(query12, query11, strlen(query11));
+
+			/* set zeros */
+			memset(query12, 0, buf_length);
+
+			/* append data */
+			strncat(query12, query11, query11_len);
 		}
 
 		int mode;
 		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 			//mysqlt = mysqlr;
-			mysqlt = remote_cnn.mysql;
+			mysqlt = remote_cnn->mysql;
 			mode   = REMOTE;
 		} else {
 			//mysqlt = mysql;
-			mysqlt = local_cnn.mysql;
+			mysqlt = local_cnn->mysql;
 			mode   = LOCAL;
 		}
 
@@ -1554,24 +1604,26 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			/* if the next element to the buffer will overflow it, write to the database */
 			if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
 				/* append the suffix */
-				strncat(query3, posuffix, strlen(posuffix));
+				strncat(query3, posuffix, posuffix_len);
 
 				/* insert the record */
 				db_insert(&mysqlt, mode, query3);
 
 				/* re-initialize the query buffer */
-				query3[0] = '\0';
-				strncat(query3, query8, strlen(query8));
+				memset(query3, 0, MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);
+
+				strncat(query3, query8, query8_len);
 
 				/* insert the record for boost */
 				if (set.boost_redirect && set.boost_enabled) {
 					/* append the suffix */
-					strncat(query12, posuffix, strlen(posuffix));
+					strncat(query12, posuffix, posuffix_len);
 
 					db_insert(&mysqlt, mode, query12);
 
-					query12[0] = '\0';
-					strncat(query12, query11, strlen(query11));
+					memset(query12, 0, MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);
+
+					strncat(query12, query11, query11_len);
 				}
 
 				/* reset the output buffer length */
@@ -1588,10 +1640,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				result_string[0] = ',';
 			}
 
-			strncat(query3, result_string, strlen(result_string));
+			strncat(query3, result_string, result_length);
 
 			if (set.boost_redirect && set.boost_enabled) {
-				strncat(query12, result_string, strlen(result_string));
+				strncat(query12, result_string, result_length);
 			}
 
 			out_buffer = out_buffer + strlen(result_string);
@@ -1602,7 +1654,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* perform the last insert if there is data to process */
 		if (out_buffer > strlen(query8)) {
 			/* append the suffix */
-			strncat(query3, posuffix, strlen(posuffix));
+			strncat(query3, posuffix, posuffix_len);
 
 			/* insert records into database */
 			db_insert(&mysqlt, mode, query3);
@@ -1610,7 +1662,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			/* insert the record for boost */
 			if (set.boost_redirect && set.boost_enabled) {
 				/* append the suffix */
-				strncat(query12, posuffix, strlen(posuffix));
+				strncat(query12, posuffix, posuffix_len);
 
 				db_insert(&mysqlt, mode, query12);
 			}
@@ -1656,10 +1708,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
 	db_query(&mysql, LOCAL, query1);
 
-	db_release_connection(LOCAL, local_cnn.id);
+	db_release_connection(LOCAL, local_cnn->id);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-		db_release_connection(REMOTE, remote_cnn.id);
+		db_release_connection(REMOTE, remote_cnn->id);
 	}
 
 	#ifndef OLD_MYSQL
@@ -1906,6 +1958,8 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: poller.c exec_poll!");
 	}
+
+	/* set zeros */
 	memset(result_string, 0, RESULTS_BUFFER);
 
 	/* set script timeout as double */

@@ -33,3 +33,5 @@
 
 extern void install_spine_signal_handler(void);
 extern void uninstall_spine_signal_handler(void);
+extern char ** backtrace_symbols();
+extern int backtrace();

@@ -5,6 +5,8 @@ The Cacti Group | spine
 -issue#184: Warning during make process related to backtrace symbols
 -issue#186: Spine having random segfaults when attempting to connect
 -issue#187: With large installations spine can create too many connections causing routers to detect DOS
+-issue#192: Spine does not properly use the mysql reconnect option
+-issue#193: Spine segfaults when performing certain re-index operation
 -feature#188: More concurrent script servers needed for large installs
 
 1.2.16
