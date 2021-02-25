@@ -41,7 +41,7 @@ extern void db_create_connection_pool(int type);
 extern void db_close_connection_pool(int type);
 extern pool_t *db_get_connection(int type);
 extern void db_release_connection(int type, int id);
-extern int  db_reconnect(MYSQL *mysql, int error);
+extern int  db_reconnect(MYSQL *mysql, int error, char *location);
 
 extern int append_hostrange(char *obuf, const char *colname);
 

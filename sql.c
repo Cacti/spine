@@ -63,7 +63,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 				error = mysql_errno(mysql);
 
 				if (error == 2013 || error == 2006) {
-					db_reconnect(mysql, error);
+					db_reconnect(mysql, error, "db_insert");
 
 					error_count++;
 
@@ -98,7 +98,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
-int db_reconnect(MYSQL *mysql, int error) {
+int db_reconnect(MYSQL *mysql, int error, char *function) {
 	ulong  mysql_thread = 0;
 	char   query[100];
 
@@ -106,7 +106,7 @@ int db_reconnect(MYSQL *mysql, int error) {
 	mysql_ping(mysql);
 
 	if (mysql_thread_id(mysql) != mysql_thread) {
-		SPINE_LOG(("WARNING: Connection Broken with Error %i.  Reconnect successful.", error));
+		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect successful.", function, error));
 		snprintf(query, 100, "KILL %ul;", mysql_thread);
 		mysql_query(mysql, query);
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
@@ -158,7 +158,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				continue;
 			//} else if (error == 2013 || (error == 2006 && errno == EINTR)) {
 			} else if (error == 2013 || (error == 2006)) {
-				db_reconnect(mysql, error);
+				db_reconnect(mysql, error, "db_query");
 
 				error_count++;
 

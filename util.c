@@ -997,7 +997,7 @@ void die(const char *format, ...) {
 		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
-	SPINE_LOG(("%s", flogmessage));
+	fprintf(stderr, "%s", flogmessage);
 
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
