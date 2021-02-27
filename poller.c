@@ -281,14 +281,14 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
                 "snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
-			" WHERE id=%i"
+			" WHERE id = %i"
 			" AND deleted = ''", host_id);
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
 			"SELECT data_query_id, action, op, assert_value, arg1"
 				" FROM poller_reindex"
-				" WHERE host_id=%i", host_id);
+				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
 		snprintf(query5, BUFSIZE,
@@ -298,14 +298,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"rrd_num, snmp_port, snmp_timeout, "
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 			" FROM poller_item"
-			" WHERE host_id=%i AND rrd_next_step <=0"
+			" WHERE host_id = %i"
+			" AND rrd_next_step <= 0"
 			" ORDER by snmp_port %s", host_id, limits);
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step = IF(rrd_next_step - %i > 0, rrd_next_step - %i, rrd_step)"
-			" WHERE host_id=%i", set.poller_interval, set.poller_interval, host_id);
+			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step, rrd_next_step - %i))"
+			" WHERE host_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, host_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -320,15 +321,15 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		snprintf(query9, BUFSIZE,
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
-			" WHERE host_id=%i"
+			" WHERE host_id = %i"
 			" GROUP BY snmp_port %s", host_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
 		snprintf(query10, BUFSIZE,
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
-			" WHERE host_id=%i"
-			" AND rrd_next_step <=0"
+			" WHERE host_id = %i"
+			" AND rrd_next_step <= 0"
 			" GROUP BY snmp_port %s", host_id, limits);
 	} else {
 		snprintf(query1, BUFSIZE,
@@ -338,7 +339,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"rrd_num, snmp_port, snmp_timeout, "
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 			" FROM poller_item"
-			" WHERE host_id=%i AND poller_id=%i"
+			" WHERE host_id = %i"
+			" AND poller_id=%i"
 			" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* host structure for uptime checks */
@@ -353,14 +355,14 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
 				"snmp_sysContact, snmp_sysName, snmp_sysLocation"
 			" FROM host"
-			" WHERE id=%i"
+			" WHERE id = %i"
 			" AND deleted = ''", host_id);
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
 			"SELECT data_query_id, action, op, assert_value, arg1"
 				" FROM poller_reindex"
-				" WHERE host_id=%i", host_id);
+				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
 		snprintf(query5, BUFSIZE,
@@ -370,16 +372,17 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"rrd_num, snmp_port, snmp_timeout, "
 				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 			" FROM poller_item"
-			" WHERE host_id=%i "
-			" AND rrd_next_step <=0 AND poller_id=%i"
+			" WHERE host_id = %i"
+			" AND rrd_next_step <= 0"
+			" AND poller_id = %i"
 			" ORDER by snmp_port %s", host_id, set.poller_id, limits);
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step = IF(rrd_next_step - %i > 0, rrd_next_step - %i, rrd_step)"
-			" WHERE host_id=%i "
-			" AND poller_id=%i", set.poller_interval, set.poller_interval, host_id, set.poller_id);
+			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step, rrd_next_step - %i))"
+			" WHERE host_id = %i"
+			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -394,17 +397,17 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		snprintf(query9, BUFSIZE,
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
-			" WHERE host_id=%i"
-			" AND poller_id=%i"
+			" WHERE host_id = %i"
+			" AND poller_id = %i"
 			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
 		snprintf(query10, BUFSIZE,
 			"SELECT snmp_port, count(snmp_port)"
 			" FROM poller_item"
-			" WHERE host_id=%i"
-			" AND rrd_next_step <=0"
-			" AND poller_id=%i"
+			" WHERE host_id = %i"
+			" AND rrd_next_step <= 0"
+			" AND poller_id = %i"
 			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 	}
 
