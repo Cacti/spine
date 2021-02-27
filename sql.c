@@ -434,10 +434,10 @@ void db_close_connection_pool(int type) {
 	} else {
 		for(id = 0; id < set.threads; id++) {
 			SPINE_LOG_DEBUG(("DEBUG: Closing Remote Connection Pool ID %i", id));
-			db_disconnect(&db_pool_local[id].mysql);
+			db_disconnect(&db_pool_remote[id].mysql);
 		}
 
-		free(db_pool_local);
+		free(db_pool_remote);
 	}
 }
 
