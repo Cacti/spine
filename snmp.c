@@ -517,9 +517,9 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 	status = STAT_DESCRIP_ERROR;
 
 	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("NOTE: walk starts at OID %s", snmp_oid));
+		SPINE_LOG(("DEBUG: walk starts at OID %s", snmp_oid));
 	} else {
-		SPINE_LOG_DEBUG(("NOTE: walk starts at OID %s", snmp_oid));
+		SPINE_LOG_DEBUG(("DEBUG: walk starts at OID %s", snmp_oid));
 	}
 
 	if (current_host->snmp_session != NULL) {

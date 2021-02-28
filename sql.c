@@ -224,22 +224,7 @@ void db_connect(int type, MYSQL *mysql) {
 	/* see if the hostname variable is a file reference.  If so,
 	 * and if it is a socket file, setup mysql to use it.
 	 */
-	if (set.poller_id > 1) {
-		if (type == LOCAL) {
-			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
-
-			if (stat(hostname, &socket_stat) == 0) {
-				if (socket_stat.st_mode & S_IFSOCK) {
-					socket = strdup (set.db_host);
-					hostname = NULL;
-				}
-			} else if ((socket = strstr(hostname,":"))) {
-				*socket++ = 0x0;
-			}
-		} else {
-			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
-		}
-	} else {
+	if (type == LOCAL) {
 		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
@@ -250,6 +235,8 @@ void db_connect(int type, MYSQL *mysql) {
 		} else if ((socket = strstr(hostname,":"))) {
 			*socket++ = 0x0;
 		}
+	} else {
+		STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 	}
 
 	/* initialalize variables */
@@ -283,7 +270,7 @@ void db_connect(int type, MYSQL *mysql) {
 	char *ssl_ca;
 	char *ssl_cert;
 
-	if (set.poller_id > 1 && type == REMOTE) {
+	if (type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
 		STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
 		STRDUP_OR_DIE(ssl_cert, set.rdb_ssl_cert, "rdb_ssl_cert");
@@ -373,15 +360,15 @@ void db_disconnect(MYSQL *mysql) {
 void db_create_connection_pool(int type) {
 	int id;
 
-	SPINE_LOG_DEBUG(("Creating Connection Pool of %i threads.", set.threads));
-
 	if (type == LOCAL) {
+		SPINE_LOG_DEBUG(("DEBUG: Creating Local Connection Pool of %i threads.", set.threads));
+
 		for(id = 0; id < set.threads; id++) {
-			SPINE_LOG_DEBUG(("Creating Local Connection Pool Object %i.", id));
+			SPINE_LOG_DEBUG(("DEBUG: Creating Local Connection %i.", id));
 
 			db_connect(type, &db_pool_local[id].mysql);
 
-			if (&db_pool_remote[id].mysql != NULL) {
+			if (&db_pool_local[id].mysql != NULL) {
 				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
 				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
@@ -395,8 +382,10 @@ void db_create_connection_pool(int type) {
 			db_pool_local[id].id   = id;
 		}
 	} else {
+		SPINE_LOG_DEBUG(("DEBUG: Creating Remote Connection Pool of %i threads.", set.threads));
+
 		for(id = 0; id < set.threads; id++) {
-			SPINE_LOG_DEBUG(("Creating Remote Connection Pool Object %i.", id));
+			SPINE_LOG_DEBUG(("DEBUG: Creating Remote Connection %i.", id));
 
 			db_connect(type, &db_pool_remote[id].mysql);
 
@@ -470,7 +459,7 @@ pool_t *db_get_connection(int type) {
 				SPINE_LOG_DEBUG(("DEBUG: Allocating Remote Pool ID %i.", id));
 				db_pool_remote[id].free = FALSE;
 				thread_mutex_unlock(LOCK_POOL);
-				return &db_pool_local[id];
+				return &db_pool_remote[id];
 			}
 		}
 	}

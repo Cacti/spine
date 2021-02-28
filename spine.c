@@ -498,7 +498,7 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		SPINE_LOG_DEBUG(("Selective Debug Devices %s", set.selective_device_debug));
+		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		int i = 0;
 		char *token = strtok(set.selective_device_debug, ",");
 		while(token) {
@@ -534,10 +534,26 @@ int main(int argc, char *argv[]) {
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
+		SPINE_LOG_DEBUG(("DEBUG: Version %s starting", VERSION));
+
+		if (set.poller_id > 1) {
+			if (mode == REMOTE) {
+				SPINE_LOG_DEBUG(("DEBUG: Sending entries to remote database in 'online' mode"));
+			} else {
+				SPINE_LOG_DEBUG(("DEBUG: Sending entries to local database in 'offline', or 'recovery' mode"));
+			}
+		}
 	} else {
 		if (!set.stdout_notty) {
 			printf("SPINE: Version %s starting\n", VERSION);
+
+			if (set.poller_id > 1) {
+				if (mode == REMOTE) {
+					printf("SPINE: Sending entries to remote database in 'online' mode\n");
+				} else {
+					printf("SPINE: Sending entries to local database in 'offline', or 'recovery' mode\n");
+				}
+			}
 		}
 	}
 
@@ -554,11 +570,11 @@ int main(int argc, char *argv[]) {
 	checkAsRoot();
 
 	/* initialize SNMP */
-	SPINE_LOG_DEBUG(("SPINE: Initializing Net-SNMP API"));
+	SPINE_LOG_DEBUG(("DEBUG: Initializing Net-SNMP API"));
 	snmp_spine_init();
 
 	/* initialize PHP if required */
-	SPINE_LOG_DEBUG(("SPINE: Initializing PHP Script Server(s)"));
+	SPINE_LOG_DEBUG(("DEBUG: Initializing PHP Script Server(s)"));
 
 	/* tell spine that it is parent, and set the poller id */
 	set.parent_fork = SPINE_PARENT;
@@ -788,7 +804,7 @@ int main(int argc, char *argv[]) {
 				thread_mutex_unlock(LOCK_PEND);
 				sem_post(&thread_init_sem);
 
-				SPINE_LOG_DEVDBG(("INFO: DTS: device = %d, host_id = %d, host_thread = %d,"
+				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" last_host_thread = %d, host_data_ids = %d, complete = %d",
 					device_counter-1,
 					poller_details->host_id,
@@ -858,7 +874,7 @@ int main(int argc, char *argv[]) {
 					det->host_data_ids * (det->host_thread - 1),
 					det->host_data_ids * (det->host_thread)));
 
-				SPINE_LOG_DEVDBG(("INFO: DTF: device = %d, host_id = %d, host_thread = %d,"
+				SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
 					" last_host_thread = %d, host_data_ids = %d, complete = %d",
 					threads_count,
 					det->host_id,

@@ -371,12 +371,6 @@ void read_config_options() {
 		}
 	}
 
-	/* log the path_webroot variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
-
-	/* log the path_cactilog variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
-
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, LOCAL, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
@@ -385,10 +379,17 @@ void read_config_options() {
 		set.log_destination = LOGDEST_FILE;
 	}
 
+	/* log the path_webroot variable */
+	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
+
+	/* log the path_cactilog variable */
+	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
+
 	/* log the log_destination variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)",
-			set.log_destination,
-			printable_logdest(set.log_destination)));
+		set.log_destination,
+		printable_logdest(set.log_destination)));
+
 	set.logfile_processed = TRUE;
 
 	/* get PHP Path Information for Scripting */
@@ -1754,7 +1755,7 @@ void checkAsRoot() {
 
 	/* Add priviledge to send/receive ICMP packets */
 	if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0) {
-		SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG(("WARNING: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
 	}
 
 	/* Compute the set of privileges that are never needed */
@@ -1763,12 +1764,12 @@ void checkAsRoot() {
 	/* Remove the set of unneeded privs from Permitted (and by
 	 * implication from Effective) */
 	if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
-		SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG(("WARNING: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
 	}
 
 	/* Remove unneeded priv set from Limit to be safe */
 	if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
-		SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG(("WARNING: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
 	}
 
 	boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);

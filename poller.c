@@ -708,9 +708,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 			if (num_rows > 0) {
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
+					SPINE_LOG(("DEBUG: Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				} else {
-					SPINE_LOG_DEBUG(("Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
+					SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				}
 
 				// Cache uptime in case we need it again
@@ -1587,12 +1587,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		int mode;
 		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-			//mysqlt = mysqlr;
-			mysqlt = remote_cnn->mysql;
+			SPINE_LOG_DEBUG(("DEBUG: Setting up writes to remote database"));
+			mysqlt = mysqlr;
 			mode   = REMOTE;
 		} else {
-			//mysqlt = mysql;
-			mysqlt = local_cnn->mysql;
+			SPINE_LOG_DEBUG(("DEBUG: Setting up writes to local database"));
+			mysqlt = mysql;
 			mode   = LOCAL;
 		}
 
@@ -1724,9 +1724,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	#endif
 
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+		SPINE_LOG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
 	buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
@@ -1984,16 +1984,16 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	fd = popen((char *)proc_command, "r");
 	cmd_fd = fileno(fd);
 	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	}
 	#else
 	cmd_fd = nft_popen((char *)proc_command, "r");
 	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 	}
 	#endif
 
