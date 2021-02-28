@@ -90,7 +90,7 @@ void *child(void *arg) {
 	pending_threads--;
 	poller_details.complete = TRUE;
 
-	SPINE_LOG_MEDIUM(("POLLER: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
+	SPINE_LOG_MEDIUM(("Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
 	thread_mutex_unlock(LOCK_PEND);
 
 	/* end the thread */
@@ -1457,9 +1457,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				thread_end = get_time_as_double();
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] SS[%i] TT[%.2f] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, php_process, poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] SS[%i] TT[%.2f] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, php_process, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, php_process, poller_items[i].arg1, poller_items[i].result));
 				}
 
 				if (IS_UNDEFINED(poller_items[i].result)) {
@@ -1815,13 +1815,13 @@ int is_multipart_output(char *result) {
 void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 	char *poll_result;
 
-	SPINE_LOG_MEDIUM(("NOTE: Device[%d] Checking for System Information Update", host->id));
+	SPINE_LOG_MEDIUM(("Device[%d] Checking for System Information Update", host->id));
 
 	if (set.mibs || system) {
 		if (is_debug_device(host->id)) {
-			SPINE_LOG(("NOTE: Device[%d] Updating Full System Information Table", host->id));
+			SPINE_LOG(("Device[%d] Updating Full System Information Table", host->id));
 		} else {
-			SPINE_LOG_MEDIUM(("NOTE: Device[%d] Updating Full System Information Table", host->id));
+			SPINE_LOG_MEDIUM(("Device[%d] Updating Full System Information Table", host->id));
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0');", host->id));
@@ -1879,9 +1879,9 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		}
 	} else {
 		if (is_debug_device(host->id)) {
-			SPINE_LOG(("NOTE: Device[%d] Updating Short System Information Table", host->id));
+			SPINE_LOG(("Device[%d] Updating Short System Information Table", host->id));
 		} else {
-			SPINE_LOG_MEDIUM(("NOTE: Device[%d] Updating Short System Information Table", host->id));
+			SPINE_LOG_MEDIUM(("Device[%d] Updating Short System Information Table", host->id));
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));

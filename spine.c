@@ -103,6 +103,7 @@ int num_hosts = 0;
 int pending_threads = 0;
 sem_t active_threads;
 sem_t active_scripts;
+double start_time;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -202,6 +203,9 @@ int main(int argc, char *argv[]) {
 	sem_t thread_init_sem;
 	int a_threads_value;
 	struct timespec until_spec;
+
+	gettimeofday(&now, NULL);
+	start_time = TIMEVAL_TO_DOUBLE(now);
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -438,12 +442,12 @@ int main(int argc, char *argv[]) {
 	if (file_exists("./sh.exe")) {
 		set.cygwinshloc = 0;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("NOTE: The Shell Command Exists in the current directory\n");
+			printf("The Shell Command Exists in the current directory\n");
 		}
 	} else {
 		set.cygwinshloc = 1;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("NOTE: The Shell Command Exists in the /bin directory\n");
+			printf("The Shell Command Exists in the /bin directory\n");
 		}
 	}
 	#endif
@@ -545,13 +549,13 @@ int main(int argc, char *argv[]) {
 		}
 	} else {
 		if (!set.stdout_notty) {
-			printf("SPINE: Version %s starting\n", VERSION);
+			printf("Version %s starting\n", VERSION);
 
 			if (set.poller_id > 1) {
 				if (mode == REMOTE) {
-					printf("SPINE: Sending entries to remote database in 'online' mode\n");
+					printf("Sending entries to remote database in 'online' mode\n");
 				} else {
-					printf("SPINE: Sending entries to local database in 'offline', or 'recovery' mode\n");
+					printf("Sending entries to local database in 'offline', or 'recovery' mode\n");
 				}
 			}
 		}
@@ -609,9 +613,9 @@ int main(int argc, char *argv[]) {
 	db_free_result(result);
 
 	if (set.device_threads_exists) {
-		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
+		SPINE_LOG_MEDIUM(("Spine will support multithread device polling."));
 	} else {
-		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));
+		SPINE_LOG_MEDIUM(("Spine did not detect multithreaded device polling."));
 	}
 
 	/* obtain the list of hosts to poll */
@@ -799,7 +803,7 @@ int main(int argc, char *argv[]) {
 				pending_threads++;
 
 				sem_getvalue(&active_threads, &a_threads_value);
-				SPINE_LOG_MEDIUM(("SPINE: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
+				SPINE_LOG_MEDIUM(("Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
 
 				thread_mutex_unlock(LOCK_PEND);
 				sem_post(&thread_init_sem);
@@ -858,7 +862,7 @@ int main(int argc, char *argv[]) {
 	threads_final = set.threads - a_threads_value;
 
 	if (threads_final) {
-		SPINE_LOG_HIGH(("SPINE: The final count of Threads is %i", threads_final));
+		SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
 
 		for (threads_count = 0; threads_count < num_rows; threads_count++) {
 			poller_thread_t* det = details[threads_count];
@@ -889,7 +893,7 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
 		}
 	} else {
-		SPINE_LOG_MEDIUM(("SPINE: The Final Value of Threads is %i", threads_final));
+		SPINE_LOG_MEDIUM(("The Final Value of Threads is %i", threads_final));
 	}
 
 	/* tell Spine that it is now parent */
@@ -973,7 +977,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
-			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
+			fprintf(stdout,"Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
 	}
 

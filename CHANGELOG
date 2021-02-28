@@ -7,6 +7,7 @@ The Cacti Group | spine
 -issue#187: With large installations spine can create too many connections causing routers to detect DOS
 -issue#192: Spine does not properly use the mysql reconnect option
 -issue#193: Spine segfaults when performing certain re-index operation
+-issue#194: Log messaging is inconsistent when logging to standard output
 -feature#188: More concurrent script servers needed for large installs
 
 1.2.16

@@ -1071,6 +1071,7 @@ int spine_log(const char *format, ...) {
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
+	struct timeval now;
 
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
@@ -1078,6 +1079,9 @@ int spine_log(const char *format, ...) {
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
+	char stdoutmessage[LOGSIZE];   /* Message for stdout */
+
+	double cur_time;
 
 	va_start(args, format);
 	vsnprintf(ulogmessage, LOGSIZE - 1, format, args);
@@ -1085,11 +1089,6 @@ int spine_log(const char *format, ...) {
 
 	/* default for "console" messages to go to stdout */
 	fp = stdout;
-
-	if (IS_LOGGING_TO_STDOUT()) {
-		puts(trim(ulogmessage));
-		return TRUE;
-	}
 
 	/* log message prefix */
 	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] ", set.poller_id, getpid());
@@ -1099,6 +1098,14 @@ int spine_log(const char *format, ...) {
 
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
+
+	if (IS_LOGGING_TO_STDOUT()) {
+		gettimeofday(&now, NULL);
+		cur_time = TIMEVAL_TO_DOUBLE(now);
+		sprintf(stdoutmessage, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
+		puts(trim(stdoutmessage));
+		return TRUE;
+	}
 
 	char * log_fmt = get_date_format();
 	if (strlen(log_fmt) == 0) {

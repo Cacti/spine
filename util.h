@@ -95,3 +95,6 @@ extern void checkAsRoot();
 
 /* log format */
 extern char *get_date_format();
+
+/* start time for spine */
+extern double start_time;
