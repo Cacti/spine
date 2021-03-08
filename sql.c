@@ -99,7 +99,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 }
 
 int db_reconnect(MYSQL *mysql, int error, char *function) {
-	ulong  mysql_thread = 0;
+	unsigned long  mysql_thread = 0;
 	char   query[100];
 
 	mysql_thread = mysql_thread_id(mysql);
@@ -214,7 +214,7 @@ void db_connect(int type, MYSQL *mysql) {
 	int     options_error;
 	int     success;
 	int     error;
-	my_bool reconnect;
+	bool    reconnect;
 	MYSQL   *connect_error;
 	char    *hostname = NULL;
 	char    *socket = NULL;
