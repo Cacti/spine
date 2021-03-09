@@ -419,10 +419,6 @@ int main(int argc, char *argv[]) {
 			set_option("log_verbosity", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "--snmponly") || STRMATCH(arg, "--snmp-only")) {
-			set.snmponly = TRUE;
-		}
-
 		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
 			set.start_host_id = atoi(arg);
 		}
@@ -900,7 +896,7 @@ int main(int argc, char *argv[]) {
 	set.parent_fork = SPINE_PARENT;
 
 	/* push data back to the main server */
-	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && !set.SQL_readonly) {
 		poller_push_data_to_main();
 	}
 
@@ -1018,7 +1014,6 @@ static void display_help(int only_version) {
 		"  -R/--readonly      Spine will not write output to the DB",
 		"  -S/--stdout        Logging is performed to standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
-		"  --snmponly         Only do SNMP polling: no scripts",
 		"",
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
         "In their absence, all hosts are processed.",

@@ -690,13 +690,24 @@ void poller_push_data_to_main() {
 
 	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
 
-	snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
-		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
-		"status, status_event_count, status_fail_date, status_rec_date, "
-		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
-		"total_polls, failed_polls, availability, last_updated "
-		"FROM host "
-		"WHERE poller_id = %d", set.poller_id);
+	if (strlen(set.host_id_list)) {
+		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+			"status, status_event_count, status_fail_date, status_rec_date, "
+			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+			"total_polls, failed_polls, availability, last_updated "
+			"FROM host "
+			"WHERE poller_id = %d "
+			"AND id IN (%s)", set.poller_id, set.host_id_list);
+	} else {
+		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+			"status, status_event_count, status_fail_date, status_rec_date, "
+			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+			"total_polls, failed_polls, availability, last_updated "
+			"FROM host "
+			"WHERE poller_id = %d", set.poller_id);
+	}
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO host (id, snmp_sysDescr, snmp_sysObjectID, "
 		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
