@@ -50,10 +50,10 @@ static void spine_signal_handler(int spine_signal) {
 
 	switch (spine_signal) {
 		case SIGABRT:
-			die("FATAL: Spine Interrupted by Abort Signal");
+			fprintf(stderr, "FATAL: Spine Interrupted by Abort Signal\n");
 			break;
 		case SIGINT:
-			die("FATAL: Spine Interrupted by Console Operator");
+			fprintf(stderr, "FATAL: Spine Interrupted by Console Operator\n");
 			break;
 		case SIGSEGV:
 			printf("FATAL: Spine Encountered a Segmentation Fault\n");
@@ -81,19 +81,19 @@ static void spine_signal_handler(int spine_signal) {
 
 			break;
 		case SIGBUS:
-			die("FATAL: Spine Encountered a Bus Error");
+			fprintf(stderr, "FATAL: Spine Encountered a Bus Error\n");
 			break;
 		case SIGFPE:
-			die("FATAL: Spine Encountered a Floating Point Exception");
+			fprintf(stderr, "FATAL: Spine Encountered a Floating Point Exception\n");
 			break;
 		case SIGQUIT:
-			die("FATAL: Spine Encountered a Keyboard Quit Command");
+			fprintf(stderr, "FATAL: Spine Encountered a Keyboard Quit Command\n");
 			break;
 		case SIGPIPE:
-			die("FATAL: Spine Encountered a Broken Pipe");
+			fprintf(stderr, "FATAL: Spine Encountered a Broken Pipe\n");
 			break;
 		default:
-			die("FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'", spine_signal);
+			fprintf(stderr, "FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", spine_signal);
 			break;
 	}
 }

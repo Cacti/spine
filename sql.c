@@ -533,12 +533,12 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	char input_trimmed[BUFSIZE];
 	int  input_size;
 
+	input_size = strlen(input);
+
 	if (input_size > max_size) {
-		strncpy(input_trimmed, input, max_size - 10);
-		input_trimmed[max_size-10] = 0;
+		snprintf(input_trimmed, max_size - 10, "%s", input);
 	} else {
-		strncpy(input_trimmed, input, max_size);
-		input_trimmed[input_size] = 0;
+		snprintf(input_trimmed, max_size, "%s", input);
 	}
 
 	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));

@@ -814,7 +814,8 @@ void poller_push_data_to_main() {
 
 	snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 		"FROM poller_item "
-		"WHERE poller_id = %i", set.poller_id);
+		"WHERE poller_id = %d "
+		"AND host_id IN (%s)", set.poller_id, set.host_id_list);
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
@@ -1114,7 +1115,7 @@ int spine_log(const char *format, ...) {
 		gettimeofday(&now, NULL);
 		cur_time = TIMEVAL_TO_DOUBLE(now);
 		sprintf(stdoutmessage, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
-		puts(trim(stdoutmessage));
+		puts(stdoutmessage);
 		return TRUE;
 	}
 
