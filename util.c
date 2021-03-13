@@ -812,10 +812,17 @@ void poller_push_data_to_main() {
 
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
-	snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
-		"FROM poller_item "
-		"WHERE poller_id = %d "
-		"AND host_id IN (%s)", set.poller_id, set.host_id_list);
+	if (strlen(set.host_id_list)) {
+		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+			"FROM poller_item "
+			"WHERE poller_id = %d "
+			"AND host_id IN (%s)", set.poller_id, set.host_id_list);
+	} else {
+		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+			"FROM poller_item "
+			"WHERE poller_id = %d ",
+			set.poller_id);
+	}
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
