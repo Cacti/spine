@@ -63,16 +63,20 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 				error = mysql_errno(mysql);
 
 				if (error == 2013 || error == 2006) {
-					db_reconnect(mysql, error, "db_insert");
+					if (errno != EINTR) {
+						db_reconnect(mysql, error, "db_insert");
 
-					error_count++;
+						error_count++;
 
-					if (error_count > 30) {
-						SPINE_LOG(("FATAL: Too many Reconnect Attempts!"));
-						exit(1);
+						if (error_count > 30) {
+							die("FATAL: Too many Reconnect Attempts!");
+						}
+
+						continue;
+					} else {
+						usleep(50000);
+						continue;
 					}
-
-					continue;
 				}
 
 				if ((error == 1213) || (error == 1205)) {
@@ -107,7 +111,6 @@ int db_reconnect(MYSQL *mysql, int error, char *function) {
 
 	if (mysql_thread_id(mysql) != mysql_thread) {
 		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect successful.", function, error));
-		snprintf(query, 100, "KILL %ul;", mysql_thread);
 		mysql_query(mysql, query);
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
@@ -153,21 +156,21 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 		if (mysql_query(mysql, query)) {
 			error = mysql_errno(mysql);
 
-			if (error == 2013 && errno == EINTR) {
-				usleep(50000);
-				continue;
-			//} else if (error == 2013 || (error == 2006 && errno == EINTR)) {
-			} else if (error == 2013 || (error == 2006)) {
-				db_reconnect(mysql, error, "db_query");
+			if (error == 2013 || error == 2006) {
+				if (errno != EINTR) {
+					db_reconnect(mysql, error, "db_query");
 
-				error_count++;
+					error_count++;
 
-				if (error_count > 30) {
-					SPINE_LOG(("FATAL: Too many Reconnect Attempts!"));
-					exit(1);
+					if (error_count > 30) {
+						die("FATAL: Too many Reconnect Attempts!");
+					}
+
+					continue;
+				} else {
+					usleep(50000);
+					continue;
 				}
-
-				continue;
 			}
 
 			if (error == 1213 || error == 1205) {
@@ -213,7 +216,7 @@ void db_connect(int type, MYSQL *mysql) {
 	int     wtimeout;
 	int     options_error;
 	int     success;
-	int     error;
+	int     error = 0;
 	bool    reconnect;
 	MYSQL   *connect_error;
 	char    *hostname = NULL;
@@ -224,7 +227,22 @@ void db_connect(int type, MYSQL *mysql) {
 	/* see if the hostname variable is a file reference.  If so,
 	 * and if it is a socket file, setup mysql to use it.
 	 */
-	if (type == LOCAL) {
+	if (set.poller_id > 1) {
+		if (type == LOCAL) {
+			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
+
+			if (stat(hostname, &socket_stat) == 0) {
+				if (socket_stat.st_mode & S_IFSOCK) {
+					socket = strdup (set.db_host);
+					hostname = NULL;
+				}
+			} else if ((socket = strstr(hostname,":"))) {
+				*socket++ = 0x0;
+			}
+		} else {
+			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
+		}
+	} else {
 		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
@@ -235,8 +253,6 @@ void db_connect(int type, MYSQL *mysql) {
 		} else if ((socket = strstr(hostname,":"))) {
 			*socket++ = 0x0;
 		}
-	} else {
-		STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
 	}
 
 	/* initialalize variables */
@@ -467,6 +483,8 @@ pool_t *db_get_connection(int type) {
 	SPINE_LOG(("FATAL: Connection Pool Fatal Error."));
 
 	thread_mutex_unlock(LOCK_POOL);
+
+	return NULL;
 }
 
 /*! \fn voi db_release_connection(int id)
