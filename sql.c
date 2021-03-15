@@ -111,6 +111,7 @@ int db_reconnect(MYSQL *mysql, int error, char *function) {
 
 	if (mysql_thread_id(mysql) != mysql_thread) {
 		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect successful.", function, error));
+		snprintf(query, 100, "KILL %lu;", mysql_thread);
 		mysql_query(mysql, query);
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
