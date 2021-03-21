@@ -1525,9 +1525,6 @@ double get_time_as_double(void) {
  *  \return host_time as a string
  */
 char *get_host_poll_time() {
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
 	char *host_time;
 
 	#define HOST_TIME_STRING_LEN 20
@@ -1537,16 +1534,7 @@ char *get_host_poll_time() {
 	}
 	host_time[0] = '\0';
 
-	/* get time for poller_output table */
-	if (time(&nowbin) == (time_t) - 1) {
-		die("ERROR: Could not get time of day from time() util.c get_host_poll_time()");
-	}
-	localtime_r(&nowbin,&now_time);
-	now_ptr = &now_time;
-
-	if (strftime(host_time, HOST_TIME_STRING_LEN, "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
-		die("ERROR: Could not get string from strftime() util.c get_host_poll_time()");
-	}
+	sprintf(host_time, "%lu", (unsigned long) time(NULL));
 
 	return(host_time);
 }

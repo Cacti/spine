@@ -11,6 +11,7 @@ The Cacti Group | spine
 -issue#195: Spine make issue on newer gcc versions
 -issue#197: Remote data collectors push too much data to main when performing diagnostics
 -feature#188: More concurrent script servers needed for large installs
+-feature: Make spine immune to DST changes
 
 1.2.16
 -issue: Some developer debug log messages falsely labeled as WARNINGS

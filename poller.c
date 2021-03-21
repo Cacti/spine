@@ -1598,7 +1598,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s','%s','%s')",
+			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s',FROM_UNIXTIME(%s),'%s')",
 				poller_items[i].local_data_id,
 				poller_items[i].rrd_name,
 				host_time,
