@@ -1070,18 +1070,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
  	double hundred_percent = 100.00;
 	char   current_date[40];
 
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
-
-	/* get time for poller_output table */
-	if (time(&nowbin) == (time_t) - 1) {
-		die("ERROR: Could not get time of day from time()");
-	}
-	localtime_r(&nowbin,&now_time);
-	now_ptr = &now_time;
-
-	strftime(current_date, 40, "%Y-%m-%d %H:%M", now_ptr);
+	snprintf(current_date, 40, "%lu", time(NULL));
 
 	/* host is down */
 	if (status == HOST_DOWN) {
@@ -1097,7 +1086,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
 				snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 			} else {
-				snprintf(host->status_last_error, BUFSIZE,"%s, %s",ping->snmp_response,ping->ping_response);
+				snprintf(host->status_last_error, BUFSIZE, "%s, %s", ping->snmp_response, ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
