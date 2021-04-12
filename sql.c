@@ -257,7 +257,7 @@ void db_connect(int type, MYSQL *mysql) {
 	}
 
 	/* initialalize variables */
-	tries     = 10;
+	tries     = 2;
 	success   = FALSE;
 	timeout   = 5;
 	rtimeout  = 10;

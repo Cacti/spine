@@ -10,6 +10,7 @@ The Cacti Group | spine
 -issue#194: Log messaging is inconsistent when logging to standard output
 -issue#195: Spine make issue on newer gcc versions
 -issue#197: Remote data collectors push too much data to main when performing diagnostics
+-issue#200: Make spine more responsive when remote connection is down
 -feature#188: More concurrent script servers needed for large installs
 -feature: Make spine immune to DST changes
 
