@@ -11,6 +11,9 @@ The Cacti Group | spine
 -issue#195: Spine make issue on newer gcc versions
 -issue#197: Remote data collectors push too much data to main when performing diagnostics
 -issue#200: Make spine more responsive when remote connection is down
+-issue#202: MySQL SSL Key capability check does not work
+-issue#203: Backtracing support checks do not work
+-issue#204: MySQL Retry Count capability check always fails
 -feature#188: More concurrent script servers needed for large installs
 -feature: Make spine immune to DST changes
 

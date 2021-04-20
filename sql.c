@@ -277,12 +277,12 @@ void db_connect(int type, MYSQL *mysql) {
 	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout, "general timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
 
-	#ifdef MYSQL_OPT_RETRY_COUNT
+	#ifdef HAS_MYSQL_OPT_RETRY_COUNT
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 	#endif
 
 	/* set SSL options if available */
-	#ifdef MYSQL_OPT_SSL_KEY
+	#ifdef HAS_MYSQL_OPT_SSL_KEY
 	char *ssl_key;
 	char *ssl_ca;
 	char *ssl_cert;

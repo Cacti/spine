@@ -447,7 +447,7 @@ AC_TRY_LINK(
     void *array[10];
     size_t size;
 
-    # get void*'s for all entries on the stack
+    // get void*'s for all entries on the stack
     size = backtrace(array, 10);
     if (size) {
       exit(0);
@@ -457,6 +457,44 @@ AC_TRY_LINK(
   ],
   [  AC_MSG_RESULT(yes)
      AC_DEFINE(HAVE_EXECINFO_H,1,[Do we have backtracing capabilities?])
+  ],
+  AC_MSG_RESULT(no)
+)
+
+# See if we can support backtracing
+AC_MSG_CHECKING([if we can support mysql/mariadb retry count])
+AC_TRY_LINK(
+  [
+    #include <stdlib.h>
+    #include "$MYSQL_INC_DIR/mysql.h"
+  ],[
+    if (MYSQL_OPT_RETRY_COUNT) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ],
+  [  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_MYSQL_OPT_RETRY_COUNT,1,[Do we have mysql/maraidb retry count capabilities?])
+  ],
+  AC_MSG_RESULT(no)
+)
+
+# See if we can support backtracing
+AC_MSG_CHECKING([if we can support mysql/mariadb ssl keys])
+AC_TRY_LINK(
+  [
+    #include <stdlib.h>
+    #include "$MYSQL_INC_DIR/mysql.h"
+  ],[
+    if (MYSQL_OPT_SSL_KEY) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ],
+  [  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_MYSQL_OPT_SSL_KEY,1,[Do we have mysql/maraidb ssl keys capabilities?])
   ],
   AC_MSG_RESULT(no)
 )
