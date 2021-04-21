@@ -275,7 +275,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
 				"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
-				"status, status_event_count, UNIX_TIMESTMP(status_fail_date), "
+				"status, status_event_count, UNIX_TIMESTAMP(status_fail_date), "
 				"UNIX_TIMESTAMP(status_rec_date), status_last_error, "
 				"min_time, max_time, cur_time, avg_time, "
 				"total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
