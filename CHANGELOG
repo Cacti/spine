@@ -1,21 +1,21 @@
 The Cacti Group | spine
 
 1.2.17
--issue#178: Fix build for Percona (Server database client library)
--issue#184: Warning during make process related to backtrace symbols
--issue#186: Spine having random segfaults when attempting to connect
--issue#187: With large installations spine can create too many connections causing routers to detect DOS
+-issue#178: When building spine, errors with Percona libraries may appear by tersmitten
+-issue#184: When building spine, make process can report problems with backtrace
+-issue#186: When opening the database, spine can unexpectedly crash
+-issue#187: On large systems, too many connections can cause firewalls to assume a DDoS attack
 -issue#192: Spine does not properly use the mysql reconnect option
--issue#193: Spine segfaults when performing certain re-index operation
--issue#194: Log messaging is inconsistent when logging to standard output
--issue#195: Spine make issue on newer gcc versions
+-issue#193: When performing certain re-index operations, spine can unexpectedly crash
+-issue#194: When logging to standard output, log messaging is inconsistent
+-issue#195: When using newer gcc versions, spine is unable to compile properly
 -issue#197: Remote data collectors push too much data to main when performing diagnostics
 -issue#200: Make spine more responsive when remote connection is down
 -issue#202: MySQL SSL Key capability check does not work
 -issue#203: Backtracing support checks do not work
 -issue#204: MySQL Retry Count capability check always fails
--feature#188: More concurrent script servers needed for large installs
 -feature: Make spine immune to DST changes
+-feature#188: On large systems, more concurrent script servers are needed
 
 1.2.16
 -issue: Some developer debug log messages falsely labeled as WARNINGS
