@@ -284,8 +284,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	}
 
-	/* remove "tcp:" from hostname */
-	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
+	if (!(new_hostname = (char *) malloc(strlen(host->hostname)+1))) {
+		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
+	}
+
+	strcpy(host->hostname, new_hostname);
 
 	/* get ICMP socket */
 	retry_count = 0;
@@ -590,8 +593,11 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 	begin_time = get_time_as_double();
 
-	/* remove "udp:" from hostname */
-	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
+	if (!(new_hostname = (char *) malloc(strlen(host->hostname)+1))) {
+		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
+	}
+
+	strcpy(host->hostname, new_hostname);
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -757,8 +763,11 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
 	}
 
-	/* remove "tcp:" from hostname */
-	new_hostname = remove_tcp_udp_from_hostname(host->hostname);
+	if (!(new_hostname = (char *) malloc(strlen(host->hostname)+1))) {
+		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
+	}
+
+	strcpy(host->hostname, new_hostname);
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -992,32 +1001,96 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	}
 }
 
-/*! \fn char *remove_tcp_udp_from_hostname(char *hostname)
- *  \brief removes 'TCP[6]:' or 'UDP[6]:' from a hostname required to ping
+/*! \fn name_t *get_namebyhost(char *hostname, name_t *name)
+ *  \brief splits the hostname into method, name and port
  *
- *  \return char hostname a trimmed hostname
+ *  \return name_t containing a trimmed hostname, port, and optional method
  *
  */
-char *remove_tcp_udp_from_hostname(char *hostname) {
-	char *cleaned_hostname;
-
-	if (!(cleaned_hostname = (char *) malloc(strlen(hostname)+1))) {
-		die("ERROR: Fatal malloc error: ping.c remove_tcp_udp_from_hostname");
+name_t *get_namebyhost(char *hostname, name_t *name) {
+	if (name == NULL) {
+		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Allocating name_t", hostname));
+		if (!(name = (name_t *) malloc(sizeof(name_t)))) {
+			die("ERROR: Fatal malloc error: ping.c get_namebyhost->name");
+		}
+		memset(name, '\0', sizeof(name_t));
 	}
 
-	if (!strncasecmp(hostname, "TCP:", 4) ||
-		!strncasecmp(hostname, "UDP:", 4)) {
-		memcpy(cleaned_hostname, hostname+4, strlen(hostname)-4);
-		cleaned_hostname[strlen(hostname)-4] = '\0';
-	} else if (!strncasecmp(hostname, "TCP6:", 5) ||
-        !strncasecmp(hostname, "UDP6:", 5)) {
-        memcpy(cleaned_hostname, hostname+5, strlen(hostname)-5);
-        cleaned_hostname[strlen(hostname)-5] = '\0';
-	} else {
-		strcpy(cleaned_hostname, hostname);
+	int tokens = 0;
+	char *stack = NULL;
+	char *token = NULL;
+
+	if (!(stack = (char *) malloc(strlen(hostname)+1))) {
+		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
+	}
+	memset(stack, '\0', strlen(hostname)+1);
+	strncpy(stack, hostname, strlen(hostname));
+	token = strtok(stack, ":");
+
+	if (token == NULL) {
+		SPINE_LOG_DEBUG(("get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
 	}
 
-	return(cleaned_hostname);
+	while (token != NULL && tokens <= 3) {
+		tokens++;
+		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Token #%i", hostname, tokens));
+		if (tokens == 1) {
+			if (strlen(token) == 3) {
+				if (strncasecmp(token, "TCP", 3)) {
+					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv4 method", hostname));
+					name->method = 1;
+				} else if (strncasecmp(hostname, "UDP", 3)) {
+					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have UDPv4 method", hostname));
+					name->method = 2;
+				} else {
+					SPINE_LOG_DEBUG(("get_namebyhost(%s) - No matching method for 3 chars: %s", hostname, token));
+					// assume we have had a method
+					tokens++;
+				}
+			} else if (strlen(token) == 4) {
+				if (strncasecmp(token, "TCP6", 3)) {
+					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv6 method", hostname));
+					name->method = 3;
+				} else if (strncasecmp(hostname, "UDP6", 3)) {
+					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have UDPv6 method", hostname));
+					name->method = 4;
+				} else {
+					SPINE_LOG_DEBUG(("get_namebyhost(%s) - No matching method for 4 chars: %s", hostname, token));
+
+					// assume we have had a method
+					tokens++;
+				}
+			} else {
+				SPINE_LOG_DEBUG(("get_hostbyname(%s) - No matching method for %li chars: %s", hostname, strlen(token), token));
+
+				// assume we have had a method
+				tokens++;
+			}
+		}
+
+		if (tokens == 2) {
+			SPINE_LOG_DEBUG(("get_namebyhost(%s) - Setting hostname: %s", hostname, token));
+			strncpy(name->hostname, token, sizeof(name->hostname));
+			name->hostname[strlen(token)] = '\0';
+		}
+
+		if (tokens == 3 && strlen(token)) {
+			SPINE_LOG_DEBUG(("get_namebyhost(%s) - Setting port: %s", hostname, token));
+			name->port = atoi(token);
+		}
+
+		if (tokens > 3) {
+			SPINE_LOG_DEBUG(("get_namebyhost(%s) - Unexpected token: %i", hostname, tokens));
+		}
+		token = strtok(NULL, ":");
+	}
+
+	if (stack != NULL) {
+		free(stack);
+		stack = NULL;
+	}
+
+	return name;
 }
 
 /*! \fn unsigned short int get_checksum(void* buf, int len)

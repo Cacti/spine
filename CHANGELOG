@@ -15,6 +15,7 @@ The Cacti Group | spine
 -issue#203: Backtracing support checks do not work
 -issue#204: MySQL Retry Count capability check always fails
 -feature: Make spine immune to DST changes
+-feature#181: Parse hostnames from tcp[6]:hostname:port [not fully implemented]
 -feature#188: On large systems, more concurrent script servers are needed
 
 1.2.16

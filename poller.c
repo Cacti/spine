@@ -204,6 +204,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	reindex_t   *reindex;
 	host_t      *host;
 	ping_t      *ping;
+	name_t      *name;
 	target_t    *poller_items;
 	snmp_oids_t *snmp_oids;
 
@@ -243,6 +244,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* set zeros */
 	memset(ping, 0, sizeof(ping_t));
+
+	if (!(name = (name_t *) malloc(sizeof(name_t)))) {
+		die("ERROR: Fatal malloc error: poller.c name struct!");
+	}
+
+	/* set zeros */
+	memset(name, 0, sizeof(name_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
@@ -499,7 +507,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				host->ignore_host = FALSE;
 				if (row[0]  != NULL) host->id = atoi(row[0]);
 
-				if (row[1]  != NULL) STRNCOPY(host->hostname,             row[1]);
+				if (row[1]  != NULL) {
+					name = get_namebyhost(row[1], NULL);
+					STRNCOPY(host->hostname, name->hostname);
+					host->ping_port = name->port;
+				}
 				if (row[2]  != NULL) STRNCOPY(host->snmp_community,       row[2]);
 
 				if (row[3]  != NULL) host->snmp_version = atoi(row[3]);
@@ -1693,6 +1705,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	free(host);
 	free(reindex);
 	free(ping);
+	free(name);
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == last_host_thread) {

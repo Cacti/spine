@@ -577,6 +577,18 @@ typedef struct ping_results {
 	char   snmp_response[SMALL_BUFSIZE];
 } ping_t;
 
+/*! Name Result Structure
+ *
+ * This structure holds the results of a name/port split
+ *
+ */
+typedef struct name_port {
+	// Method = 0 - default, 1 - tcp, 2 - udp
+	int	method;
+	char	hostname[SMALL_BUFSIZE];
+	int	port;
+} name_t;
+
 /*! MySQL Connection Pool Structure
  *
  * This structure holds the mysql connetion pool object.
