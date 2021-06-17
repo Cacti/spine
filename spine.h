@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -170,6 +170,7 @@
 #define LOCK_SNMP 0
 #define LOCK_SETEUID 2
 #define LOCK_GHBN 3
+#define LOCK_POOL 4
 #define LOCK_SYSLOG 5
 #define LOCK_PHP 6
 #define LOCK_PHP_PROC_0 7
@@ -182,11 +183,16 @@
 #define LOCK_PHP_PROC_7 14
 #define LOCK_PHP_PROC_8 15
 #define LOCK_PHP_PROC_9 16
-#define LOCK_PEND 17
+#define LOCK_PHP_PROC_10 17
+#define LOCK_PHP_PROC_11 18
+#define LOCK_PHP_PROC_12 19
+#define LOCK_PHP_PROC_13 20
+#define LOCK_PHP_PROC_14 21
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
 #define LOCK_GHBN_O 3
+#define LOCK_POOL_O 4
 #define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
 #define LOCK_PHP_PROC_0_O 7
@@ -199,7 +205,11 @@
 #define LOCK_PHP_PROC_7_O 14
 #define LOCK_PHP_PROC_8_O 15
 #define LOCK_PHP_PROC_9_O 16
-#define LOCK_PEND_O 17
+#define LOCK_PHP_PROC_10_O 17
+#define LOCK_PHP_PROC_11_O 18
+#define LOCK_PHP_PROC_12_O 19
+#define LOCK_PHP_PROC_13_O 20
+#define LOCK_PHP_PROC_14_O 21
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -273,7 +283,7 @@
 #define ICMP_HDR_SIZE 8
 
 /* required for PHP Script Server */
-#define MAX_PHP_SERVERS 10
+#define MAX_PHP_SERVERS 15
 #define PHP_READY 0
 #define PHP_BUSY 1
 #define PHP_INIT 999
@@ -552,7 +562,7 @@ typedef struct host_reindex_struct {
 	int    action;
 } reindex_t;
 
-/*! Ping Result Struction
+/*! Ping Result Structure
  *
  * This structure holds the results of a host ping.
  *
@@ -564,6 +574,28 @@ typedef struct ping_results {
 	char   snmp_status[50];
 	char   snmp_response[SMALL_BUFSIZE];
 } ping_t;
+
+/*! Name Result Structure
+ *
+ * This structure holds the results of a name/port split
+ *
+ */
+typedef struct name_port {
+	// Method = 0 - default, 1 - tcp, 2 - udp
+	int	method;
+	char	hostname[SMALL_BUFSIZE];
+	int	port;
+} name_t;
+
+/*! MySQL Connection Pool Structure
+ *
+ * This structure holds the mysql connetion pool object.
+ */
+typedef struct db_connection {
+	int   id;
+	int   free;
+	MYSQL mysql;
+} pool_t;
 
 /* Include all Standard Spine Headers */
 #include "poller.h"
@@ -582,6 +614,9 @@ extern config_t set;
 extern php_t  *php_processes;
 extern char   start_datetime[20];
 extern char   config_paths[CONFIG_PATHS][BUFSIZE];
-extern sem_t  active_threads;
+extern sem_t  available_threads;
+extern sem_t  available_scripts;
+extern pool_t *db_pool_remote;
+extern pool_t *db_pool_local;
 
 #endif /* not _SPINE_H_ */

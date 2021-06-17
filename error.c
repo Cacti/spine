@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -46,34 +46,55 @@
 static void spine_signal_handler(int spine_signal) {
 	signal(spine_signal, SIG_DFL);
 
-#if HAS_EXECINFO_H
-	// get void*'s for all entries on the stack
-	set.exit_size = backtrace(set.exit_stack, 10);
-#endif
-
 	set.exit_code = spine_signal;
 
 	switch (spine_signal) {
+		case SIGABRT:
+			fprintf(stderr, "FATAL: Spine Interrupted by Abort Signal\n");
+			break;
 		case SIGINT:
-			die("FATAL: Spine Interrupted by Console Operator");
+			fprintf(stderr, "FATAL: Spine Interrupted by Console Operator\n");
 			break;
 		case SIGSEGV:
-			die("FATAL: Spine Encountered a Segmentation Fault");
+			fprintf(stderr, "FATAL: Spine Encountered a Segmentation Fault\n");
+
+			#ifdef HAVE_EXECINFO_H
+			int row = 0;
+			char **exit_strings = NULL;
+
+			fprintf(stderr, "Generating backtrace...%ld line(s)...\n", set.exit_size);
+
+			if (set.exit_size) {
+				set.exit_size = backtrace(set.exit_stack, set.exit_size);
+				exit_strings  = backtrace_symbols(set.exit_stack, set.exit_size);
+
+				if (exit_strings) {
+					for (row = 0; row < set.exit_size; row++) {
+						fprintf(stderr, "%3d: %s\n", row, exit_strings[row]);
+					}
+
+					free(exit_strings);
+				}
+			}
+			#endif
+
+			exit(1);
+
 			break;
 		case SIGBUS:
-			die("FATAL: Spine Encountered a Bus Error");
+			fprintf(stderr, "FATAL: Spine Encountered a Bus Error\n");
 			break;
 		case SIGFPE:
-			die("FATAL: Spine Encountered a Floating Point Exception");
+			fprintf(stderr, "FATAL: Spine Encountered a Floating Point Exception\n");
 			break;
 		case SIGQUIT:
-			die("FATAL: Spine Encountered a Keyboard Quit Command");
+			fprintf(stderr, "FATAL: Spine Encountered a Keyboard Quit Command\n");
 			break;
 		case SIGPIPE:
-			die("FATAL: Spine Encountered a Broken Pipe");
+			fprintf(stderr, "FATAL: Spine Encountered a Broken Pipe\n");
 			break;
 		default:
-			die("FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'", spine_signal);
+			fprintf(stderr, "FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", spine_signal);
 			break;
 	}
 }

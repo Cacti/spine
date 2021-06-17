@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -32,6 +32,9 @@
 */
 
 extern void *child(void *arg);
+extern void child_cleanup(void *arg);
+extern void child_cleanup_thread(void *arg);
+extern void child_cleanup_script(void *arg);
 extern void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double);
 extern char *exec_poll(host_t *current_host, char *command, int id, char *type);
 extern void get_system_information(host_t *host, MYSQL *mysql, int system);

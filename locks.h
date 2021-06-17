@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -35,5 +35,8 @@ extern void init_mutexes(void);
 extern void thread_mutex_lock(int mutex);
 extern void thread_mutex_unlock(int mutex);
 extern int thread_mutex_trylock(int mutex);
+extern int thread_cond_wait(int mutex);
+extern int thread_cond_timedwait(int mutex, const struct timespec *restrict abstime);
+extern pthread_cond_t* get_cond(int lock);
 extern pthread_mutex_t* get_lock(int lock);
 extern pthread_once_t* get_attr(int locko);

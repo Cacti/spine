@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -51,7 +51,7 @@ extern void set_option(const char *setting, const char *value);
 extern int is_numeric(char *string);
 extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
-extern int is_hexadecimal(const char * str, const short ignore_space);
+extern int is_hexadecimal(const char * str, const short ignore_special);
 
 /* determine if a device is a debug device */
 extern int is_debug_device(int device_id);
@@ -95,3 +95,6 @@ extern void checkAsRoot();
 
 /* log format */
 extern char *get_date_format();
+
+/* start time for spine */
+extern double start_time;

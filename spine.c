@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -100,14 +100,17 @@
 /* Global Variables */
 int entries = 0;
 int num_hosts = 0;
-int pending_threads = 0;
-sem_t active_threads;
-sem_t active_scripts;
+sem_t available_threads;
+sem_t available_scripts;
+double start_time;
 
 config_t set;
 php_t	*php_processes = 0;
 char	config_paths[CONFIG_PATHS][BUFSIZE];
 int     *debug_devices;
+
+pool_t  *db_pool_local;
+pool_t  *db_pool_remote;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
@@ -199,6 +202,9 @@ int main(int argc, char *argv[]) {
 	sem_t thread_init_sem;
 	int a_threads_value;
 	struct timespec until_spec;
+
+	gettimeofday(&now, NULL);
+	start_time = TIMEVAL_TO_DOUBLE(now);
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -412,10 +418,6 @@ int main(int argc, char *argv[]) {
 			set_option("log_verbosity", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "--snmponly") || STRMATCH(arg, "--snmp-only")) {
-			set.snmponly = TRUE;
-		}
-
 		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
 			set.start_host_id = atoi(arg);
 		}
@@ -435,12 +437,12 @@ int main(int argc, char *argv[]) {
 	if (file_exists("./sh.exe")) {
 		set.cygwinshloc = 0;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("NOTE: The Shell Command Exists in the current directory\n");
+			printf("The Shell Command Exists in the current directory\n");
 		}
 	} else {
 		set.cygwinshloc = 1;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("NOTE: The Shell Command Exists in the /bin directory\n");
+			printf("The Shell Command Exists in the /bin directory\n");
 		}
 	}
 	#endif
@@ -495,7 +497,7 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		SPINE_LOG_DEBUG(("Selective Debug Devices %s", set.selective_device_debug));
+		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		int i = 0;
 		char *token = strtok(set.selective_device_debug, ",");
 		while(token) {
@@ -508,12 +510,20 @@ int main(int argc, char *argv[]) {
 		debug_devices[0] = '\0';
 	}
 
-	/* connect to database */
+	/* connect for main loop */
 	db_connect(LOCAL, &mysql);
+
+	/* setup local connection pool for hosts */
+	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		db_connect(REMOTE, &mysqlr);
 		mode = REMOTE;
+
+		/* setup remote connection pool for hosts */
+		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;
 	}
@@ -523,10 +533,26 @@ int main(int argc, char *argv[]) {
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-		SPINE_LOG_DEBUG(("Version %s starting", VERSION));
+		SPINE_LOG_DEBUG(("DEBUG: Version %s starting", VERSION));
+
+		if (set.poller_id > 1) {
+			if (mode == REMOTE) {
+				SPINE_LOG_DEBUG(("DEBUG: Sending entries to remote database in 'online' mode"));
+			} else {
+				SPINE_LOG_DEBUG(("DEBUG: Sending entries to local database in 'offline', or 'recovery' mode"));
+			}
+		}
 	} else {
 		if (!set.stdout_notty) {
-			printf("SPINE: Version %s starting\n", VERSION);
+			printf("Version %s starting\n", VERSION);
+
+			if (set.poller_id > 1) {
+				if (mode == REMOTE) {
+					printf("Sending entries to remote database in 'online' mode\n");
+				} else {
+					printf("Sending entries to local database in 'offline', or 'recovery' mode\n");
+				}
+			}
 		}
 	}
 
@@ -543,11 +569,11 @@ int main(int argc, char *argv[]) {
 	checkAsRoot();
 
 	/* initialize SNMP */
-	SPINE_LOG_DEBUG(("SPINE: Initializing Net-SNMP API"));
+	SPINE_LOG_DEBUG(("DEBUG: Initializing Net-SNMP API"));
 	snmp_spine_init();
 
 	/* initialize PHP if required */
-	SPINE_LOG_DEBUG(("SPINE: Initializing PHP Script Server(s)"));
+	SPINE_LOG_DEBUG(("DEBUG: Initializing PHP Script Server(s)"));
 
 	/* tell spine that it is parent, and set the poller id */
 	set.parent_fork = SPINE_PARENT;
@@ -582,9 +608,9 @@ int main(int argc, char *argv[]) {
 	db_free_result(result);
 
 	if (set.device_threads_exists) {
-		SPINE_LOG_MEDIUM(("NOTE: Spine will support multithread device polling."));
+		SPINE_LOG_MEDIUM(("Spine will support multithread device polling."));
 	} else {
-		SPINE_LOG_MEDIUM(("NOTE: Spine did not detect multithreaded device polling."));
+		SPINE_LOG_MEDIUM(("Spine did not detect multithreaded device polling."));
 	}
 
 	/* obtain the list of hosts to poll */
@@ -641,11 +667,11 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	/* initialize active_threads semaphore */
-	sem_init(&active_threads, 0, set.threads);
+	/* initialize available_threads semaphore */
+	sem_init(&available_threads, 0, set.threads);
 
-	/* initialize active_scripts semaphore */
-	sem_init(&active_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
+	/* initialize available_scripts semaphore */
+	sem_init(&available_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
 
 	/* initialize thread initialization semaphore */
 	sem_init(&thread_init_sem, 0, 1);
@@ -654,8 +680,8 @@ int main(int argc, char *argv[]) {
 	until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
 	until_spec.tv_nsec = 0;
 
-	sem_getvalue(&active_threads, &a_threads_value);
-	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
+	sem_getvalue(&available_threads, &a_threads_value);
+	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = SPINE_FORK;
@@ -688,14 +714,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* adjust device threads in cases where the host does not have sufficient data sources */
-		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(*) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
 		tresult   = db_query(&mysql, LOCAL, querybuf);
 		mysql_row = mysql_fetch_row(tresult);
 
 		total_items = atoi(mysql_row[0]);
 		db_free_result(tresult);
 
-		if (total_items < device_threads) {
+		if (total_items && total_items < device_threads) {
 			device_threads = total_items;
 		}
 
@@ -704,7 +730,7 @@ int main(int argc, char *argv[]) {
 		/* determine how many items will be polled per thread */
 		if (device_threads > 1) {
 			if (current_thread == 1) {
-				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(*)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
+				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
@@ -741,22 +767,57 @@ int main(int argc, char *argv[]) {
 
 		details[device_counter]          = poller_details;
 
-		retry1:
-
-		if (sem_timedwait(&active_threads, &until_spec) == -1) {
-			if (errno == ETIMEDOUT) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
-				canexit = TRUE;
+		/* dev note - errno was never primed at this point in previous version of code */
+		int wait_retries = 0;
+		int sem_err = 0;
+		while (++wait_retries < 100) {
+			sem_err = sem_trywait(&available_threads);
+			if (sem_err == 0) {
 				break;
-			} else if (errno == EINTR) {
-				usleep(10000);
-				goto retry1;
+			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Available Thread Lock Internal"));
+			} else {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Available Thread Lock Internal", sem_err));
 			}
+			usleep(10000);
+		}
+
+		if (sem_err == EDEADLK) {
+			SPINE_LOG(("ERROR: Spine would have deadlocked Available Thread Lock"));
+			break;
+		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Processing Available Thread Lock"));
+			break;
+		} else if (sem_err != 0) {
+			SPINE_LOG(("ERROR: Spine Encounter Unexpected Error %d For Available Thread Lock", sem_err));
+			break;
+		}
+
+		wait_retries = 0;
+		while (++wait_retries < 100) {
+			sem_err = sem_trywait(&thread_init_sem);
+			if (sem_err == 0) {
+				break;
+			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Thread Initialization Lock"));
+			} else {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Thread Initialization Lock", sem_err));
+			}
+			usleep(10000);
+		}
+
+		if (sem_err == EDEADLK) {
+			SPINE_LOG(("ERROR: Spine would have deadlocked Thread Initialization Lock"));
+			break;
+		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Processing Thread Initialization Lock"));
+			break;
+		} else if (sem_err != 0) {
+			SPINE_LOG(("ERROR: Spine Encountered Unexpected Error %d For Thread Initialization Lock", sem_err));
+			break;
 		}
 
 		/* create child process */
-		sem_wait(&thread_init_sem);
-
 		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 		switch (thread_status) {
@@ -767,17 +828,12 @@ int main(int argc, char *argv[]) {
 					device_counter++;
 				}
 
-				sem_wait(&thread_init_sem);
-				thread_mutex_lock(LOCK_PEND);
-				pending_threads++;
+				sem_getvalue(&available_threads, &a_threads_value);
+				SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
-				sem_getvalue(&active_threads, &a_threads_value);
-				SPINE_LOG_MEDIUM(("SPINE: Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
-
-				thread_mutex_unlock(LOCK_PEND);
 				sem_post(&thread_init_sem);
 
-				SPINE_LOG_DEVDBG(("INFO: DTS: device = %d, host_id = %d, host_thread = %d,"
+				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" last_host_thread = %d, host_data_ids = %d, complete = %d",
 					device_counter-1,
 					poller_details->host_id,
@@ -796,7 +852,7 @@ int main(int argc, char *argv[]) {
 			case EINVAL: SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 				break;
 			default:
-				SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
+				SPINE_LOG(("ERROR: Unknown Thread Creation Error - %d", thread_status));
 				break;
 		}
 
@@ -806,32 +862,28 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	sem_getvalue(&available_threads, &a_threads_value);
+
 	/* wait for all threads to 'complete'
  	 * using the mutex here as the semaphore will
      * show zero before the children are done */
-	while (TRUE) {
-		thread_mutex_lock(LOCK_PEND);
-
+	while (a_threads_value < set.threads) {
 		cur_time = get_time_as_double();
 
-		if (pending_threads == 0) {
-			break;
-		} else if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", pending_threads));
+		if (cur_time - begin_time > set.poller_interval) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", set.threads - a_threads_value));
 			break;
 		}
 
-		thread_mutex_unlock(LOCK_PEND);
-
-		usleep(100000);
+		SPINE_LOG_HIGH(("WARNING: Spine Sleeping While Waiting for %d Threads to End", set.threads - a_threads_value));
+		usleep(500000);
+		sem_getvalue(&available_threads, &a_threads_value);
 	}
-
-	sem_getvalue(&active_threads, &a_threads_value);
 
 	threads_final = set.threads - a_threads_value;
 
 	if (threads_final) {
-		SPINE_LOG_HIGH(("SPINE: The final count of Threads is %i", threads_final));
+		SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
 
 		for (threads_count = 0; threads_count < num_rows; threads_count++) {
 			poller_thread_t* det = details[threads_count];
@@ -847,7 +899,7 @@ int main(int argc, char *argv[]) {
 					det->host_data_ids * (det->host_thread - 1),
 					det->host_data_ids * (det->host_thread)));
 
-				SPINE_LOG_DEVDBG(("INFO: DTF: device = %d, host_id = %d, host_thread = %d,"
+				SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
 					" last_host_thread = %d, host_data_ids = %d, complete = %d",
 					threads_count,
 					det->host_id,
@@ -862,14 +914,14 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
 		}
 	} else {
-		SPINE_LOG_MEDIUM(("SPINE: The Final Value of Threads is %i", threads_final));
+		SPINE_LOG_MEDIUM(("The Final Value of Threads is %i", threads_final));
 	}
 
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
 
 	/* push data back to the main server */
-	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && !set.SQL_readonly) {
 		poller_push_data_to_main();
 	}
 
@@ -886,6 +938,14 @@ int main(int argc, char *argv[]) {
 		db_insert(&mysqlr, REMOTE, querybuf);
 	} else {
 		db_insert(&mysql, LOCAL, querybuf);
+	}
+
+	if (db_pool_local) {
+		db_close_connection_pool(LOCAL);
+	}
+
+	if (db_pool_remote) {
+		db_close_connection_pool(REMOTE);
 	}
 
 	/* cleanup and exit program */
@@ -938,7 +998,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
-			fprintf(stdout,"SPINE: Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
+			fprintf(stdout,"Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
 	}
 
@@ -979,7 +1039,6 @@ static void display_help(int only_version) {
 		"  -R/--readonly      Spine will not write output to the DB",
 		"  -S/--stdout        Logging is performed to standard output",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
-		"  --snmponly         Only do SNMP polling: no scripts",
 		"",
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
         "In their absence, all hosts are processed.",
@@ -1000,7 +1059,7 @@ static void display_help(int only_version) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2004-2020 by The Cacti Group\n", VERSION);
+	printf("SPINE %s  Copyright 2004-2021 by The Cacti Group\n", VERSION);
 
 	if (only_version == FALSE) {
 		printf("\n");

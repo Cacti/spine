@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -33,3 +33,5 @@
 
 extern void install_spine_signal_handler(void);
 extern void uninstall_spine_signal_handler(void);
+extern char ** backtrace_symbols();
+extern int backtrace();

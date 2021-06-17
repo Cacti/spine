@@ -1,6 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  | Copyright (C) 2004-2020 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
@@ -186,7 +187,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
 	session.peername    = hostnameport;
 	session.retries     = set.snmp_retries;
-	session.remote_port = snmp_port;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
 	SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device '%s' has timeout %ld (%d), retries %d", host_id, hostname, session.timeout, snmp_timeout, session.retries));
@@ -345,27 +345,27 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
 
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s)", current_host->id, snmp_oid));
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
 
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid));
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
 			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			SET_UNDEFINED(result_string);
 			return result_string;
 		} else {
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_add_null_var(%s)", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s)", current_host->id, snmp_oid));
 			snmp_add_null_var(pdu, anOID, anOID_len);
-			SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
 		}
 
 		/* poll host */
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
 		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-		SPINE_LOG_DEVDBG(("Device[%i] WARNING: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 
 		/* add status to host structure */
 		current_host->snmp_status = status;
@@ -385,11 +385,11 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				} else {
-					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
+					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%d]",  snmp_oid, current_host->id, response->errstat));
 				}
 			}
 		} else {
-			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d]",  snmp_oid, current_host->id));
+			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 		}
 
 		if (response) {
@@ -517,9 +517,9 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 	status = STAT_DESCRIP_ERROR;
 
 	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("NOTE: walk starts at OID %s", snmp_oid));
+		SPINE_LOG(("DEBUG: walk starts at OID %s", snmp_oid));
 	} else {
-		SPINE_LOG_DEBUG(("NOTE: walk starts at OID %s", snmp_oid));
+		SPINE_LOG_DEBUG(("DEBUG: walk starts at OID %s", snmp_oid));
 	}
 
 	if (current_host->snmp_session != NULL) {

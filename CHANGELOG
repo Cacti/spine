@@ -1,13 +1,52 @@
 The Cacti Group | spine
 
+1.2.17
+-issue#178: When building spine, errors with Percona libraries may appear by tersmitten
+-issue#184: When building spine, make process can report problems with backtrace
+-issue#186: When opening the database, spine can unexpectedly crash
+-issue#187: On large systems, too many connections can cause firewalls to assume a DDoS attack
+-issue#192: Spine does not properly use the mysql reconnect option
+-issue#193: When performing certain re-index operations, spine can unexpectedly crash
+-issue#194: When logging to standard output, log messaging is inconsistent
+-issue#195: When using newer gcc versions, spine is unable to compile properly
+-issue#197: Remote data collectors push too much data to main when performing diagnostics
+-issue#200: Make spine more responsive when remote connection is down
+-issue#202: MySQL SSL Key capability check does not work
+-issue#203: Backtracing support checks do not work
+-issue#204: MySQL Retry Count capability check always fails
+-feature: Make spine immune to DST changes
+-feature#181: Parse hostnames from tcp[6]:hostname:port [not fully implemented]
+-feature#188: On large systems, more concurrent script servers are needed
+
+1.2.16
+-issue: Some developer debug log messages falsely labeled as WARNINGS
+-issue#164: Remove the need of the dos2unix program
+-issue#171: Spine experiencing MySQL socket error 2002 under load
+-issue#175: Under heavy load MySQL/MariaDB return 2006 and 2013 errors on query
+-feature: Add backtrace output to stderr for signals
+-feature#176: Add Data Source turnaround time to debug output
+
+1.2.15
+-issue#166: Special characters may not always be ignored properly
+-issue#168: Correct issues with linking under OpenBSD
+
+1.2.14
+-issue#162: Spine not updating rrd_next_step
+
+1.2.13
+-issue#156: Compile on Cygwin is failing due to icmp6 headers missing
+
+1.2.12
+-issue#155: Failed host lookup causes spine to crash
+
 1.2.11
--issue#122: Can't compile spine on Openbsd
--issue#129: PCOMMAND Device[XXXX] WARNING: Recache Event Detected for Device
--issue#134: Feature request: Loop Waiting on 2 of 2 pollers when database name is incorrect
--issue#144: Improve MySQL Retry Logic
--issue#149: Segmentation fault in spine 1.2.10 due to IPv6 address using IPv4 ICMP ping
--issue#150: FATAL: Spine Encountered a Segmentation Fault [4, Interrupted system call] (Spine thread)
--issue#151: Spine no longer stripping alpha characters from output
+-issue#122: Unable to compile spine on OpenBSD
+-issue#129: Repeated warnings due to 'Recache Event Detected for Device'
+-issue#134: No error is recorded to log file when database is incorrect
+-issue#144: MySQL retry logic is not working as expected
+-issue#149: When using IPv6 address, segmentation fault can occur due to incorrectly using IPv4 ping
+-issue#150: When polling results are null, segmentation errors may occur
+-issue#151: When collecting data, spine should be stripping alpha characters from output
 
 1.2.10
 -feature: release to match Cacti release
@@ -428,7 +467,7 @@ The Cacti Group | spine
 -feature: enabled signal handling in cactid
 
 0.8.6h
-Not released.  Syncing with Cacti distribution again.
+-feature: Not released.  Syncing with Cacti distribution again.
 
 0.8.6g
 -bug#0000609: console "error" messages should go to stderr instead of stdout

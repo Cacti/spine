@@ -1,0 +1,12 @@
+.deps
+Makefile
+Makefile.in
+configure
+config.*
+autom4te.cache/
+config/
+libtool
+spine
+spine.1
+*.o
+*.m4

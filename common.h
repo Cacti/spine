@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -104,7 +104,9 @@
 #  include <netinet/in.h>
 #  include <netinet/ip.h>
 #  include <netinet/ip6.h>
+#ifndef __CYGWIN__
 #  include <netinet/icmp6.h>
+#endif
 #  include <netinet/ip_icmp.h>
 #endif
 

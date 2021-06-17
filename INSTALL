@@ -69,6 +69,7 @@ CYGWIN Prerequisite
       * automake
       * dos2unix
       * gcc-core
+      * gcc-debuginfo
       * gzip
       * help2man
       * libmysqlclient

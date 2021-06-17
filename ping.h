@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -139,7 +139,7 @@ extern int ping_snmp(host_t *host, ping_t *ping);
 extern int ping_icmp(host_t *host, ping_t *ping);
 extern int ping_udp(host_t *host, ping_t *ping);
 extern int ping_tcp(host_t *host, ping_t *ping);
-extern char *remove_tcp_udp_from_hostname(char *hostname);
+extern name_t *get_namebyhost(char *hostname, name_t *name);
 extern void update_host_status(int status, host_t *host, ping_t *ping, int availability_method);
 extern int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port);
 extern int get_address_type(host_t *host);

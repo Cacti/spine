@@ -1,0 +1,12 @@
+if [[ -z $SPINE_CONFIG ]]; then
+	export SPINE_CONFIG="/etc/spine.conf";
+fi
+make
+if [[ $? -eq 0 ]]; then
+	echo
+	echo ------
+	echo Debugging using SPINE_CONFIG = $SPINE_CONFIG
+	echo
+	echo
+	gdb -quiet -ex run --args ./spine -R -V 5 -C $SPINE_CONFIG
+fi

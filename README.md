@@ -61,6 +61,7 @@ chmod +s /usr/local/spine/bin/spine
    * gcc-core
    * gzip
    * help2man
+   * inetutils-src
    * libmysqlclient
    * libmariadb-devel
    * libssl-devel

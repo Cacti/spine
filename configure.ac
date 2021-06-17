@@ -1,5 +1,5 @@
 AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 1.2.11, http://www.cacti.net/issues.php)
+AC_INIT(Spine Poller, 1.2.17, http://www.cacti.net/issues.php)
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -8,6 +8,7 @@ AC_CANONICAL_HOST
 AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
+AC_PROG_CC
 
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config/config.h)
@@ -247,6 +248,8 @@ fi
 for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
   MYSQL_LIB_CHK($i/lib64)
   MYSQL_LIB_CHK($i/lib64/mysql)
+  MYSQL_LIB_CHK($i/lib/x86_64-linux-gnu)
+  MYSQL_LIB_CHK($i/lib/x86_64-linux-gnu/mysql)
   MYSQL_LIB_CHK($i/lib)
   MYSQL_LIB_CHK($i/lib/mysql)
 done
@@ -256,12 +259,22 @@ if test -n "$MYSQL_LIB_DIR" ; then
 fi
   CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
-AC_CHECK_LIB(mysqlclient, mysql_init,
-  [ LIBS="-lmysqlclient -lm -ldl $LIBS"
-    AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
-    HAVE_MYSQL=yes ],
-  [ HAVE_MYSQL=no ]
-)
+unamestr=$(uname)
+if test $unamestr == 'OpenBSD'; then
+  AC_CHECK_LIB(mysqlclient, mysql_init,
+    [ LIBS="-lmysqlclient -lm $LIBS"
+      AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
+      HAVE_MYSQL=yes ],
+    [ HAVE_MYSQL=no ]
+  )
+else
+  AC_CHECK_LIB(mysqlclient, mysql_init,
+    [ LIBS="-lmysqlclient -lm -ldl $LIBS"
+      AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
+      HAVE_MYSQL=yes ],
+    [ HAVE_MYSQL=no ]
+  )
+fi
 
 if test $MYSQL_REENTRANT = 1 ; then
   LIBS="-lmysqlclient_r -lm -ldl $LIBS"
@@ -273,9 +286,17 @@ else
       LIBS="-lmysqlclient_r -lm -ldl $LIBS"
     else
       if test "$HAVE_MYSQL" == "yes"; then
-        LIBS="-lmysqlclient -lm -ldl $LIBS"
+        if test $unamestr == 'OpenBSD'; then
+          LIBS="-lmysqlclient -lm $LIBS"
+        else
+          LIBS="-lmysqlclient -lm -ldl $LIBS"
+        fi
       else
-        LIBS="-lmariadbclient -lm -ldl $LIBS"
+        if test -f $MYSQL_LIB_DIR/libperconaserverclient.a -o -f $MYSQL_LIB_DIR/libperconaserverclient.$ShLib; then
+          LIBS="-lperconaserverclient -lm -ldl $LIBS"
+        else
+          LIBS="-lmariadbclient -lm -ldl $LIBS"
+        fi
       fi
     fi
   fi
@@ -426,7 +447,7 @@ AC_TRY_LINK(
     void *array[10];
     size_t size;
 
-    # get void*'s for all entries on the stack
+    // get void*'s for all entries on the stack
     size = backtrace(array, 10);
     if (size) {
       exit(0);
@@ -435,7 +456,45 @@ AC_TRY_LINK(
     }
   ],
   [  AC_MSG_RESULT(yes)
-     AC_DEFINE(HAS_EXECINFO_H,1,[Do we have backtracing capabilities?])
+     AC_DEFINE(HAVE_EXECINFO_H,1,[Do we have backtracing capabilities?])
+  ],
+  AC_MSG_RESULT(no)
+)
+
+# See if we can support backtracing
+AC_MSG_CHECKING([if we can support mysql/mariadb retry count])
+AC_TRY_LINK(
+  [
+    #include <stdlib.h>
+    #include "$MYSQL_INC_DIR/mysql.h"
+  ],[
+    if (MYSQL_OPT_RETRY_COUNT) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ],
+  [  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_MYSQL_OPT_RETRY_COUNT,1,[Do we have mysql/maraidb retry count capabilities?])
+  ],
+  AC_MSG_RESULT(no)
+)
+
+# See if we can support backtracing
+AC_MSG_CHECKING([if we can support mysql/mariadb ssl keys])
+AC_TRY_LINK(
+  [
+    #include <stdlib.h>
+    #include "$MYSQL_INC_DIR/mysql.h"
+  ],[
+    if (MYSQL_OPT_SSL_KEY) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ],
+  [  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_MYSQL_OPT_SSL_KEY,1,[Do we have mysql/maraidb ssl keys capabilities?])
   ],
   AC_MSG_RESULT(no)
 )

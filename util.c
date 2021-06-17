@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2020 The Cacti Group                                 |
+ | Copyright (C) 2004-2021 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -371,12 +371,6 @@ void read_config_options() {
 		}
 	}
 
-	/* log the path_webroot variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
-
-	/* log the path_cactilog variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
-
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, LOCAL, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
@@ -385,10 +379,17 @@ void read_config_options() {
 		set.log_destination = LOGDEST_FILE;
 	}
 
+	/* log the path_webroot variable */
+	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
+
+	/* log the path_cactilog variable */
+	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
+
 	/* log the log_destination variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)",
-			set.log_destination,
-			printable_logdest(set.log_destination)));
+		set.log_destination,
+		printable_logdest(set.log_destination)));
+
 	set.logfile_processed = TRUE;
 
 	/* get PHP Path Information for Scripting */
@@ -689,13 +690,24 @@ void poller_push_data_to_main() {
 
 	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
 
-	snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
-		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
-		"status, status_event_count, status_fail_date, status_rec_date, "
-		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
-		"total_polls, failed_polls, availability, last_updated "
-		"FROM host "
-		"WHERE poller_id = %d", set.poller_id);
+	if (strlen(set.host_id_list)) {
+		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+			"status, status_event_count, status_fail_date, status_rec_date, "
+			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+			"total_polls, failed_polls, availability, last_updated "
+			"FROM host "
+			"WHERE poller_id = %d "
+			"AND id IN (%s)", set.poller_id, set.host_id_list);
+	} else {
+		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
+			"status, status_event_count, status_fail_date, status_rec_date, "
+			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
+			"total_polls, failed_polls, availability, last_updated "
+			"FROM host "
+			"WHERE poller_id = %d", set.poller_id);
+	}
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO host (id, snmp_sysDescr, snmp_sysObjectID, "
 		"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
@@ -800,9 +812,17 @@ void poller_push_data_to_main() {
 
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
-	snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
-		"FROM poller_item "
-		"WHERE poller_id = %i", set.poller_id);
+	if (strlen(set.host_id_list)) {
+		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+			"FROM poller_item "
+			"WHERE poller_id = %d "
+			"AND host_id IN (%s)", set.poller_id, set.host_id_list);
+	} else {
+		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+			"FROM poller_item "
+			"WHERE poller_id = %d ",
+			set.poller_id);
+	}
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
@@ -997,21 +1017,7 @@ void die(const char *format, ...) {
 		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
-	SPINE_LOG(("%s", flogmessage));
-
-#ifdef HAS_EXECINFO_H
-	printf("Generating backtrace...%ld line(s)...\n", set.exit_size);
-	if (set.exit_size) {
-		char **exit_strings = backtrace_symbols(set.exit_stack, set.exit_size);
-		if (exit_strings) {
-			int row = 0;
-			for (row = 0; row < set.exit_size; row++)
-			        printf("%3d: %s\n", row, exit_strings[row]);
-
-			free(exit_strings);
-		}
-	}
-#endif
+	fprintf(stderr, "%s", flogmessage);
 
 	if (set.parent_fork == SPINE_PARENT) {
 		if (set.php_initialized) {
@@ -1084,6 +1090,7 @@ int spine_log(const char *format, ...) {
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
+	struct timeval now;
 
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
@@ -1091,6 +1098,9 @@ int spine_log(const char *format, ...) {
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
+	char stdoutmessage[LOGSIZE];   /* Message for stdout */
+
+	double cur_time;
 
 	va_start(args, format);
 	vsnprintf(ulogmessage, LOGSIZE - 1, format, args);
@@ -1098,11 +1108,6 @@ int spine_log(const char *format, ...) {
 
 	/* default for "console" messages to go to stdout */
 	fp = stdout;
-
-	if (IS_LOGGING_TO_STDOUT()) {
-		puts(trim(ulogmessage));
-		return TRUE;
-	}
 
 	/* log message prefix */
 	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] ", set.poller_id, getpid());
@@ -1112,6 +1117,14 @@ int spine_log(const char *format, ...) {
 
 	localtime_r(&nowbin,&now_time);
 	now_ptr = &now_time;
+
+	if (IS_LOGGING_TO_STDOUT()) {
+		gettimeofday(&now, NULL);
+		cur_time = TIMEVAL_TO_DOUBLE(now);
+		sprintf(stdoutmessage, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
+		puts(stdoutmessage);
+		return TRUE;
+	}
 
 	char * log_fmt = get_date_format();
 	if (strlen(log_fmt) == 0) {
@@ -1171,7 +1184,7 @@ int spine_log(const char *format, ...) {
 
 	/* append a line feed to the log message if needed */
 	if (!strstr(flogmessage, "\n")) {
-		strncat(flogmessage, "\n", 1);
+		strcat(flogmessage, "\n");
 	}
 
 	if ((IS_LOGGING_TO_FILE() &&
@@ -1345,32 +1358,44 @@ int is_numeric(char *string) {
  *
  *  \return TRUE if the string is valid hex, FALSE otherwise
  *
+ *  The function is modified where the string needs to include
+ *  at least one of the following string ' ', '-', or ':'
+ *
  */
-int is_hexadecimal(const char * str, const short ignore_space) {
+int is_hexadecimal(const char * str, const short ignore_special) {
 	int i = 0;
+	int delim_found = FALSE;
 
 	if (!str) return FALSE;
 
 	while (*str) {
 		switch (*str) {
-		case '0': case '1': case '2': case '3':
-		case '4': case '5': case '6': case '7':
-		case '8': case '9':
-		case 'a': case 'A': case 'b': case 'B':
-		case 'c': case 'C': case 'd': case 'D':
-		case 'e': case 'E': case 'f': case 'F':
-		case '"':
-			break;
-		case ' ': case '\t':
-			if (ignore_space) break;
-		default:
-			return FALSE;
+			case '0': case '1': case '2': case '3':
+			case '4': case '5': case '6': case '7':
+			case '8': case '9':
+			case 'a': case 'A': case 'b': case 'B':
+			case 'c': case 'C': case 'd': case 'D':
+			case 'e': case 'E': case 'f': case 'F':
+			case '"':
+				break;
+			case '-': case ':': case ' ':
+				delim_found = TRUE;
+				break;
+			case '\t':
+				if (ignore_special) {
+					break;
+				}
+			default:
+				return FALSE;
 		}
+
 		str++;
 		i++;
 	}
 
-	if (i < 3) return FALSE;
+	if ((i < 3) || delim_found == FALSE) {
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -1500,9 +1525,6 @@ double get_time_as_double(void) {
  *  \return host_time as a string
  */
 char *get_host_poll_time() {
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
 	char *host_time;
 
 	#define HOST_TIME_STRING_LEN 20
@@ -1512,16 +1534,7 @@ char *get_host_poll_time() {
 	}
 	host_time[0] = '\0';
 
-	/* get time for poller_output table */
-	if (time(&nowbin) == (time_t) - 1) {
-		die("ERROR: Could not get time of day from time() util.c get_host_poll_time()");
-	}
-	localtime_r(&nowbin,&now_time);
-	now_ptr = &now_time;
-
-	if (strftime(host_time, HOST_TIME_STRING_LEN, "%Y-%m-%d %H:%M:%S", now_ptr) == (size_t) 0) {
-		die("ERROR: Could not get string from strftime() util.c get_host_poll_time()");
-	}
+	sprintf(host_time, "%lu", (unsigned long) time(NULL));
 
 	return(host_time);
 }
@@ -1756,7 +1769,7 @@ void checkAsRoot() {
 
 	/* Add priviledge to send/receive ICMP packets */
 	if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0) {
-		SPINE_LOG_DEBUG(("Warning: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG(("WARNING: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
 	}
 
 	/* Compute the set of privileges that are never needed */
@@ -1765,12 +1778,12 @@ void checkAsRoot() {
 	/* Remove the set of unneeded privs from Permitted (and by
 	 * implication from Effective) */
 	if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
-		SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG(("WARNING: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
 	}
 
 	/* Remove unneeded priv set from Limit to be safe */
 	if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
-		SPINE_LOG_DEBUG(("Warning: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG(("WARNING: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
 	}
 
 	boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);
