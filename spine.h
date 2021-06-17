@@ -188,7 +188,6 @@
 #define LOCK_PHP_PROC_12 19
 #define LOCK_PHP_PROC_13 20
 #define LOCK_PHP_PROC_14 21
-#define LOCK_PEND 30
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -211,7 +210,6 @@
 #define LOCK_PHP_PROC_12_O 19
 #define LOCK_PHP_PROC_13_O 20
 #define LOCK_PHP_PROC_14_O 21
-#define LOCK_PEND_O 30
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -616,7 +614,8 @@ extern config_t set;
 extern php_t  *php_processes;
 extern char   start_datetime[20];
 extern char   config_paths[CONFIG_PATHS][BUFSIZE];
-extern sem_t  active_threads;
+extern sem_t  available_threads;
+extern sem_t  available_scripts;
 extern pool_t *db_pool_remote;
 extern pool_t *db_pool_local;
 

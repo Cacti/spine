@@ -100,9 +100,8 @@
 /* Global Variables */
 int entries = 0;
 int num_hosts = 0;
-int pending_threads = 0;
-sem_t active_threads;
-sem_t active_scripts;
+sem_t available_threads;
+sem_t available_scripts;
 double start_time;
 
 config_t set;
@@ -668,11 +667,11 @@ int main(int argc, char *argv[]) {
 
 	init_mutexes();
 
-	/* initialize active_threads semaphore */
-	sem_init(&active_threads, 0, set.threads);
+	/* initialize available_threads semaphore */
+	sem_init(&available_threads, 0, set.threads);
 
-	/* initialize active_scripts semaphore */
-	sem_init(&active_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
+	/* initialize available_scripts semaphore */
+	sem_init(&available_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
 
 	/* initialize thread initialization semaphore */
 	sem_init(&thread_init_sem, 0, 1);
@@ -681,8 +680,8 @@ int main(int argc, char *argv[]) {
 	until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
 	until_spec.tv_nsec = 0;
 
-	sem_getvalue(&active_threads, &a_threads_value);
-	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Active Threads is %i", set.threads - a_threads_value));
+	sem_getvalue(&available_threads, &a_threads_value);
+	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = SPINE_FORK;
@@ -768,22 +767,57 @@ int main(int argc, char *argv[]) {
 
 		details[device_counter]          = poller_details;
 
-		retry1:
-
-		if (sem_timedwait(&active_threads, &until_spec) == -1) {
-			if (errno == ETIMEDOUT) {
-				SPINE_LOG(("ERROR: Spine Timed Out While Processing Devices Internal"));
-				canexit = TRUE;
+		/* dev note - errno was never primed at this point in previous version of code */
+		int wait_retries = 0;
+		int sem_err = 0;
+		while (++wait_retries < 100) {
+			sem_err = sem_trywait(&available_threads);
+			if (sem_err == 0) {
 				break;
-			} else if (errno == EINTR) {
-				usleep(10000);
-				goto retry1;
+			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Available Thread Lock Internal"));
+			} else {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Available Thread Lock Internal", sem_err));
 			}
+			usleep(10000);
+		}
+
+		if (sem_err == EDEADLK) {
+			SPINE_LOG(("ERROR: Spine would have deadlocked Available Thread Lock"));
+			break;
+		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Processing Available Thread Lock"));
+			break;
+		} else if (sem_err != 0) {
+			SPINE_LOG(("ERROR: Spine Encounter Unexpected Error %d For Available Thread Lock", sem_err));
+			break;
+		}
+
+		wait_retries = 0;
+		while (++wait_retries < 100) {
+			sem_err = sem_trywait(&thread_init_sem);
+			if (sem_err == 0) {
+				break;
+			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Thread Initialization Lock"));
+			} else {
+				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Thread Initialization Lock", sem_err));
+			}
+			usleep(10000);
+		}
+
+		if (sem_err == EDEADLK) {
+			SPINE_LOG(("ERROR: Spine would have deadlocked Thread Initialization Lock"));
+			break;
+		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Processing Thread Initialization Lock"));
+			break;
+		} else if (sem_err != 0) {
+			SPINE_LOG(("ERROR: Spine Encountered Unexpected Error %d For Thread Initialization Lock", sem_err));
+			break;
 		}
 
 		/* create child process */
-		sem_wait(&thread_init_sem);
-
 		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 		switch (thread_status) {
@@ -794,14 +828,9 @@ int main(int argc, char *argv[]) {
 					device_counter++;
 				}
 
-				sem_wait(&thread_init_sem);
-				thread_mutex_lock(LOCK_PEND);
-				pending_threads++;
+				sem_getvalue(&available_threads, &a_threads_value);
+				SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
-				sem_getvalue(&active_threads, &a_threads_value);
-				SPINE_LOG_MEDIUM(("Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
-
-				thread_mutex_unlock(LOCK_PEND);
 				sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
@@ -823,7 +852,7 @@ int main(int argc, char *argv[]) {
 			case EINVAL: SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 				break;
 			default:
-				SPINE_LOG(("ERROR: Unknown Thread Creation Error"));
+				SPINE_LOG(("ERROR: Unknown Thread Creation Error - %d", thread_status));
 				break;
 		}
 
@@ -833,27 +862,23 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	sem_getvalue(&available_threads, &a_threads_value);
+
 	/* wait for all threads to 'complete'
  	 * using the mutex here as the semaphore will
      * show zero before the children are done */
-	while (TRUE) {
-		thread_mutex_lock(LOCK_PEND);
-
+	while (a_threads_value < set.threads) {
 		cur_time = get_time_as_double();
 
-		if (pending_threads == 0) {
-			break;
-		} else if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", pending_threads));
+		if (cur_time - begin_time > set.poller_interval) {
+			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", set.threads - a_threads_value));
 			break;
 		}
 
-		thread_mutex_unlock(LOCK_PEND);
-
-		usleep(100000);
+		SPINE_LOG_HIGH(("WARNING: Spine Sleeping While Waiting for %d Threads to End", set.threads - a_threads_value));
+		usleep(500000);
+		sem_getvalue(&available_threads, &a_threads_value);
 	}
-
-	sem_getvalue(&active_threads, &a_threads_value);
 
 	threads_final = set.threads - a_threads_value;
 

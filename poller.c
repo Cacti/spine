@@ -6,7 +6,7 @@
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
  | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	   |
+ | version 2.1 of the License, or (at your option) any later version. 	|
  |                                                                         |
  | This program is distributed in the hope that it will be useful,         |
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
@@ -34,7 +34,31 @@
 #include "common.h"
 #include "spine.h"
 
-extern int pending_threads;
+void child_cleanup(void *arg) {
+	poller_thread_t poller_details = *(poller_thread_t*) arg;
+
+	poller_details.complete = TRUE;
+	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] The child has cleaned up", pthread_self()));
+	child_cleanup_thread(arg);
+}
+
+void child_cleanup_thread(void *arg) {
+	sem_post(&available_threads);
+
+	int a_threads_value;
+	sem_getvalue(&available_threads, &a_threads_value);
+
+	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Available Threads is %i (%i outstanding)", pthread_self(), a_threads_value, set.threads - a_threads_value));
+}
+
+void child_cleanup_script(void *arg) {
+	sem_post(&available_scripts);
+
+	int a_scripts_value;
+	sem_getvalue(&available_scripts, &a_scripts_value);
+
+	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Available Scripts is %i (%i outstanding)", pthread_self(), a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
+}
 
 /*! \fn void *child(void *arg)
  *  \brief function is called via the fork command and initiates a poll of a host
@@ -46,6 +70,8 @@ extern int pending_threads;
  *
  */
 void *child(void *arg) {
+	pthread_cleanup_push(child_cleanup, arg);
+
 	int host_id;
 	int host_thread;
 	int last_host_thread;
@@ -53,7 +79,6 @@ void *child(void *arg) {
 	int host_errors;
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
-	int a_threads_value;
 
 	host_errors      = 0;
 
@@ -76,22 +101,7 @@ void *child(void *arg) {
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
 
-	sem_post(&active_threads);
-
-	sem_getvalue(&active_threads, &a_threads_value);
-
-	if (is_debug_device(host_id)) {
-		SPINE_LOG(("DEBUG: The Value of Active Threads is %i for Device ID %i", set.threads - a_threads_value, host_id));
-	} else {
-		SPINE_LOG_DEBUG(("DEBUG: The Value of Active Threads is %i for Device ID %i", set.threads - a_threads_value, host_id));
-	}
-
-	thread_mutex_lock(LOCK_PEND);
-	pending_threads--;
-	poller_details.complete = TRUE;
-
-	SPINE_LOG_MEDIUM(("Active Threads is %i, Pending is %i", set.threads - a_threads_value, pending_threads));
-	thread_mutex_unlock(LOCK_PEND);
+	pthread_cleanup_pop(1);
 
 	/* end the thread */
 	pthread_exit(0);
@@ -1948,7 +1958,6 @@ int validate_result(char *result) {
  *
  */
 char *exec_poll(host_t *current_host, char *command, int id, char *type) {
-	extern sem_t active_scripts;
 	int cmd_fd;
 	int pid;
 	int close_fd = TRUE;
@@ -1988,125 +1997,155 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	timeout.tv_usec = 0;
 
 	/* don't run too many scripts, operating systems do not like that. */
-	sem_wait(&active_scripts);
+	int retries = 0;
+	int sem_err = 0;
+	int needs_cleanup = 0;
 
-	/* record start time */
-	begin_time = get_time_as_double();
-
-	#ifdef USING_TPOPEN
-	fd = popen((char *)proc_command, "r");
-	cmd_fd = fileno(fd);
-	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-	}
-	#else
-	cmd_fd = nft_popen((char *)proc_command, "r");
-	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-	}
-	#endif
-
-	if (cmd_fd > 0) {
-		retry:
-
-		/* Initialize File Descriptors to Review for Input/Output */
-		FD_ZERO(&fds);
-		FD_SET(cmd_fd, &fds);
-
-		/* wait x seconds for pipe response */
-		switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
-		case -1:
-			switch (errno) {
-			case EBADF:
-				SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
-				SET_UNDEFINED(result_string);
-				close_fd = FALSE;
-				break;
-			case EINTR:
-				#ifndef SOLAR_THREAD
-				/* take a moment */
-				usleep(2000);
-				#endif
-
-				/* record end time */
-				end_time = get_time_as_double();
-
-				/* re-establish new timeout value */
-				timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
-				timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
-
-				if ((end_time - begin_time) < set.script_timeout) {
-					goto retry;
-				} else {
-					SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
-					SET_UNDEFINED(result_string);
-					close_fd = FALSE;
-				}
-				break;
-			case EINVAL:
-				SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
-				SET_UNDEFINED(result_string);
-				close_fd = FALSE;
-				break;
-			default:
-				SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
-				SET_UNDEFINED(result_string);
-				close_fd = FALSE;
-				break;
-			}
-		case 0:
-			#ifdef USING_TPOPEN
-			SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));
-
-			close_fd = FALSE;
-			#else
-			SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
-
-			pid = nft_pchild(cmd_fd);
-			kill(pid, SIGKILL);
-			#endif
-
-			SET_UNDEFINED(result_string);
+	pthread_cleanup_push(child_cleanup_script, NULL);
+	while (++retries < 100) {
+		sem_err = sem_trywait(&available_scripts);
+		if (sem_err == 0) {
 			break;
-		default:
-			/* get only one line of output, we will ignore the rest */
-			bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
-			if (bytes_read > 0) {
-				result_string[bytes_read] = '\0';
+		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
+			if (is_debug_device(current_host->id)) {
+				SPINE_LOG(("DEBUG: PT[%ld] Device[%i]: Pausing as unable to obtain a script execution lock", pthread_self(), current_host->id));
 			} else {
-				if (STRIMATCH(type,"DS")) {
-					SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
-				} else {
-					SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
-				}
-				SET_UNDEFINED(result_string);
+				SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Device[%i]: Pausing as unable to obtain a script execution lock", pthread_self(), current_host->id));
+			}
+		} else {
+			if (is_debug_device(current_host->id)) {
+				SPINE_LOG(("DEBUG: PT[%ld] Device[%i]: Pausing as error %d whilst obtaining a script execution lock", pthread_self(), current_host->id, sem_err));
+			} else {
+				SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Device[%i]: Pausing as error %d whilst obtaining a script execution lock", pthread_self(), current_host->id, sem_err));
 			}
 		}
+		usleep(10000);
+	}
 
-		/* close pipe */
+	if (sem_err) {
+		SPINE_LOG(("ERROR: PT[%ld] Device[%i]: Failed to obtain a script execution lock within 10 seconds", pthread_self(), current_host->id));
+	} else {
+		/* Mark for cleanup */
+		needs_cleanup = 1;
+
+		/* record start time */
+		begin_time = get_time_as_double();
+
 		#ifdef USING_TPOPEN
-		/* we leave the old fd open if it timed out. It will have to exit on it's own */
-		if (close_fd) {
-			pclose(fd);
+		fd = popen((char *)proc_command, "r");
+		cmd_fd = fileno(fd);
+		if (is_debug_device(current_host->id)) {
+			SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		} else {
+			SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 		}
 		#else
-		nft_pclose(cmd_fd);
+		cmd_fd = nft_popen((char *)proc_command, "r");
+		if (is_debug_device(current_host->id)) {
+			SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		} else {
+			SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+		}
 		#endif
-	} else {
-		SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
-		SET_UNDEFINED(result_string);
+
+		if (cmd_fd > 0) {
+			retry:
+
+			/* Initialize File Descriptors to Review for Input/Output */
+			FD_ZERO(&fds);
+			FD_SET(cmd_fd, &fds);
+
+			/* wait x seconds for pipe response */
+			switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+			case -1:
+				switch (errno) {
+				case EBADF:
+					SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
+					SET_UNDEFINED(result_string);
+					close_fd = FALSE;
+					break;
+				case EINTR:
+					#ifndef SOLAR_THREAD
+					/* take a moment */
+					usleep(2000);
+					#endif
+
+					/* record end time */
+					end_time = get_time_as_double();
+
+					/* re-establish new timeout value */
+					timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
+					timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+
+					if ((end_time - begin_time) < set.script_timeout) {
+						goto retry;
+					} else {
+						SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
+						SET_UNDEFINED(result_string);
+						close_fd = FALSE;
+					}
+					break;
+				case EINVAL:
+					SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
+					SET_UNDEFINED(result_string);
+					close_fd = FALSE;
+					break;
+				default:
+					SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
+					SET_UNDEFINED(result_string);
+					close_fd = FALSE;
+					break;
+				}
+			case 0:
+				#ifdef USING_TPOPEN
+				SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));
+
+				close_fd = FALSE;
+				#else
+				SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
+
+				pid = nft_pchild(cmd_fd);
+				kill(pid, SIGKILL);
+				#endif
+
+				SET_UNDEFINED(result_string);
+				break;
+			default:
+				/* get only one line of output, we will ignore the rest */
+				bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
+				if (bytes_read > 0) {
+					result_string[bytes_read] = '\0';
+				} else {
+					if (STRIMATCH(type,"DS")) {
+						SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
+					} else {
+						SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
+					}
+					SET_UNDEFINED(result_string);
+				}
+			}
+
+			/* close pipe */
+			#ifdef USING_TPOPEN
+			/* we leave the old fd open if it timed out. It will have to exit on it's own */
+			if (close_fd) {
+				pclose(fd);
+			}
+			#else
+			nft_pclose(cmd_fd);
+			#endif
+		} else {
+			SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
+			SET_UNDEFINED(result_string);
+		}
+
+		#if defined(__CYGWIN__)
+		free(proc_command);
+		#endif
 	}
 
-	#if defined(__CYGWIN__)
-	free(proc_command);
-	#endif
-
 	/* reduce the active script count */
-	sem_post(&active_scripts);
+	pthread_cleanup_pop(needs_cleanup);
 
 	return result_string;
 }
