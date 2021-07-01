@@ -219,28 +219,6 @@ pthread_once_t* get_attr(int locko) {
 	return ret_val;
 }
 
-int thread_cond_timedwait(int mutex, const struct timespec *restrict abstime) {
-	pthread_mutex_t* mt = get_lock(mutex);
-	pthread_cond_t* ct = get_cond(mutex);
-
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Timed wait for lock on %s", get_name(mutex) ));
-
-	int ret_val = pthread_cond_timedwait(ct, mt, abstime);
-
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Timed wait for lock on %s, result = %d", get_name(mutex) , ret_val ));
-}
-
-int thread_cond_wait(int mutex) {
-	pthread_mutex_t* mt = get_lock(mutex);
-	pthread_cond_t* ct = get_cond(mutex);
-
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Cond wait for %s", get_name(mutex) ));
-
-	int ret_val = pthread_cond_wait(ct, mt);
-
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Cond wait for %s, ret_val = %d", get_name(mutex), ret_val ));
-}
-
 void thread_mutex_lock(int mutex) {
 	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex lock for %s", get_name(mutex) ));
 	pthread_mutex_lock(get_lock(mutex));
