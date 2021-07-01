@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.18
+-issue#207: Missing time parameter on FROM_UNIXTIME function
+
 1.2.17
 -issue#178: When building spine, errors with Percona libraries may appear by tersmitten
 -issue#184: When building spine, make process can report problems with backtrace

@@ -197,7 +197,7 @@ int main(int argc, char *argv[]) {
 	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
 	double host_time_double = 0;
-	int itemsPT = 0;
+	int items_per_thread = 0;
 	int device_threads;
 	sem_t thread_init_sem;
 	int a_threads_value;
@@ -734,18 +734,15 @@ int main(int argc, char *argv[]) {
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
-				itemsPT   = atoi(mysql_row[0]);
-				db_free_result(tresult);
+				items_per_thread = atoi(mysql_row[0]);
 
-				if (host_time) free(host_time);
+				db_free_result(tresult);
 
 				host_time = get_host_poll_time();
 				host_time_double = get_time_as_double();
 			}
 		} else {
-			itemsPT = 0;
-
-			if (host_time) free(host_time);
+			items_per_thread = 0;
 
 			host_time = get_host_poll_time();
 			host_time_double = get_time_as_double();
@@ -759,7 +756,7 @@ int main(int argc, char *argv[]) {
 		poller_details->host_id          = host_id;
 		poller_details->host_thread      = current_thread;
 		poller_details->last_host_thread = device_threads;
-		poller_details->host_data_ids    = itemsPT;
+		poller_details->host_data_ids    = items_per_thread;
 		poller_details->host_time        = host_time;
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
@@ -770,8 +767,10 @@ int main(int argc, char *argv[]) {
 		/* dev note - errno was never primed at this point in previous version of code */
 		int wait_retries = 0;
 		int sem_err = 0;
+
 		while (++wait_retries < 100) {
 			sem_err = sem_trywait(&available_threads);
+
 			if (sem_err == 0) {
 				break;
 			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
@@ -779,6 +778,7 @@ int main(int argc, char *argv[]) {
 			} else {
 				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Available Thread Lock Internal", sem_err));
 			}
+
 			usleep(10000);
 		}
 
@@ -794,8 +794,10 @@ int main(int argc, char *argv[]) {
 		}
 
 		wait_retries = 0;
+
 		while (++wait_retries < 100) {
 			sem_err = sem_trywait(&thread_init_sem);
+
 			if (sem_err == 0) {
 				break;
 			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
@@ -803,6 +805,7 @@ int main(int argc, char *argv[]) {
 			} else {
 				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Thread Initialization Lock", sem_err));
 			}
+
 			usleep(10000);
 		}
 

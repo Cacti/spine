@@ -83,6 +83,7 @@ void *child(void *arg) {
 	host_errors      = 0;
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
+
 	host_id          = poller_details.host_id;
 	host_thread      = poller_details.host_thread;
 	last_host_thread = poller_details.last_host_thread;
@@ -109,7 +110,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double *host_time_double)
+/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -1719,6 +1720,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == last_host_thread) {
+		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
+
 		db_query(&mysql, LOCAL, query6);
 	}
 
@@ -1742,9 +1745,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		db_release_connection(REMOTE, remote_cnn->id);
 	}
 
-	#ifndef OLD_MYSQL
 	mysql_thread_end();
-	#endif
 
 	if (is_debug_device(host_id)) {
 		SPINE_LOG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
