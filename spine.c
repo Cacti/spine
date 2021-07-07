@@ -774,6 +774,7 @@ int main(int argc, char *argv[]) {
 				die("ERROR: Invalid sempaphore in call to sem_wait()");
 			} else if (errno = EINTR) {
 				SPINE_LOG_DEVDBG(("WARNING: Interrupted by signal while processing Available Thread Lock"));
+				break;
 			}
 		}
 
@@ -784,6 +785,7 @@ int main(int argc, char *argv[]) {
                                 die("ERROR: Invalid sempaphore in call to sem_wait()");
                         } else if (errno = EINTR) {
                                 SPINE_LOG_DEVDBG(("WARNING: Interrupted by signal while processing Thread Initialization Lock"));
+				break;
                         }
                 }
 
