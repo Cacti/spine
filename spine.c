@@ -765,60 +765,27 @@ int main(int argc, char *argv[]) {
 		details[device_counter]          = poller_details;
 
 		/* dev note - errno was never primed at this point in previous version of code */
-		int wait_retries = 0;
 		int sem_err = 0;
 
-		while (++wait_retries < 100) {
-			sem_err = sem_trywait(&available_threads);
+		sem_err = sem_wait(&available_threads);
 
-			if (sem_err == 0) {
-				break;
-			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Available Thread Lock Internal"));
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Available Thread Lock Internal", sem_err));
+		if (sem_err != 0) {
+			if (errno == EINVAL) {
+				die("ERROR: Invalid sempaphore in call to sem_wait()");
+			} else if (errno = EINTR) {
+				SPINE_LOG_DEVDBG(("WARNING: Interrupted by signal while processing Available Thread Lock"));
 			}
-
-			usleep(10000);
 		}
 
-		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Spine would have deadlocked Available Thread Lock"));
-			break;
-		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Available Thread Lock"));
-			break;
-		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Spine Encounter Unexpected Error %d For Available Thread Lock", sem_err));
-			break;
-		}
-
-		wait_retries = 0;
-
-		while (++wait_retries < 100) {
-			sem_err = sem_trywait(&thread_init_sem);
-
-			if (sem_err == 0) {
-				break;
-			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Thread Initialization Lock"));
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Thread Initialization Lock", sem_err));
-			}
-
-			usleep(10000);
-		}
-
-		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Spine would have deadlocked Thread Initialization Lock"));
-			break;
-		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Thread Initialization Lock"));
-			break;
-		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Spine Encountered Unexpected Error %d For Thread Initialization Lock", sem_err));
-			break;
-		}
+		sem_err = sem_wait(&thread_init_sem);
+		
+		if (sem_err != 0) {
+                        if (errno == EINVAL) {
+                                die("ERROR: Invalid sempaphore in call to sem_wait()");
+                        } else if (errno = EINTR) {
+                                SPINE_LOG_DEVDBG(("WARNING: Interrupted by signal while processing Thread Initialization Lock"));
+                        }
+                }
 
 		/* create child process */
 		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
