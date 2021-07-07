@@ -288,7 +288,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
 	}
 
-	strcpy(host->hostname, new_hostname);
+	strcpy(new_hostname, host->hostname);
 
 	/* get ICMP socket */
 	retry_count = 0;
@@ -597,7 +597,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
 	}
 
-	strcpy(host->hostname, new_hostname);
+	strcpy(new_hostname, host->hostname);
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -767,7 +767,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
 	}
 
-	strcpy(host->hostname, new_hostname);
+	strcpy(new_hostname, host->hostname);
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
