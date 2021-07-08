@@ -324,8 +324,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step, rrd_next_step - %i))"
-			" WHERE host_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, host_id);
+			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i))"
+			" WHERE host_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -399,9 +399,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step, rrd_next_step - %i))"
+			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i))"
 			" WHERE host_id = %i"
-			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
+			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
