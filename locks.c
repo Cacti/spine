@@ -219,7 +219,7 @@ pthread_once_t* get_attr(int locko) {
 	return ret_val;
 }
 
-int thread_cond_timedwait(int mutex, const struct timespec *restrict abstime) {
+int thread_cond_timedwait(int mutex, const struct timespec *__restrict__ abstime) {
 	pthread_mutex_t* mt = get_lock(mutex);
 	pthread_cond_t* ct = get_cond(mutex);
 
