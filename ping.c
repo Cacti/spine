@@ -992,6 +992,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 
 	if (token == NULL) {
 		SPINE_LOG_DEBUG(("get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
+		strncopy(name->hostname, hostname, SMALL_BUFSIZE);
 	}
 
 	while (token != NULL && tokens <= 3) {
