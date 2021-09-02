@@ -276,19 +276,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct   ip    *ip;
 	struct   icmp  *pkt;
 	unsigned char  *packet;
-	char     *new_hostname;
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	} else {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	}
-
-	if (!(new_hostname = (char *) malloc(strlen(host->hostname)+1))) {
-		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
-	}
-
-	strcpy(host->hostname, new_hostname);
 
 	/* get ICMP socket */
 	retry_count = 0;
@@ -309,7 +302,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			if (retry_count > 4) {
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
 				snprintf(ping->ping_status, 50, "down");
-				free(new_hostname);
 				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 				if (hasCaps() != TRUE) {
 					if (seteuid(getuid()) == -1) {
@@ -374,7 +366,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* get address of hostname */
-		if (init_sockaddr(&fromname, new_hostname, 7)) {
+		if (init_sockaddr(&fromname, host->hostname, 7)) {
 			retry_count = 0;
 			total_time  = 0;
 			begin_time  = get_time_as_double();
@@ -387,16 +379,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					free(new_hostname);
 					free(packet);
 					close(icmp_socket);
 					return HOST_DOWN;
 				}
 
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, new_hostname, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				} else {
-					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, new_hostname, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				}
 
 				/* decrement the timeout value by the total time */
@@ -454,7 +445,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								}
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
-								free(new_hostname);
 								free(packet);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 								if (hasCaps() != TRUE) {
@@ -506,7 +496,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			free(new_hostname);
 			free(packet);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
@@ -530,7 +519,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
-		free(new_hostname);
 		free(packet);
 		if (icmp_socket != -1) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
@@ -580,7 +568,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int    request_len;
 	int    return_code;
 	fd_set socket_fds;
-	char   *new_hostname;
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
@@ -592,12 +579,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	total_time = 0;
 
 	begin_time = get_time_as_double();
-
-	if (!(new_hostname = (char *) malloc(strlen(host->hostname)+1))) {
-		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
-	}
-
-	strcpy(host->hostname, new_hostname);
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -612,11 +593,10 @@ int ping_udp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
+		if (init_sockaddr(&servername, host->hostname, host->ping_port)) {
 			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, 50, "down");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Cannot connect to host");
-				free(new_hostname);
 				close(udp_socket);
 				return HOST_DOWN;
 			}
@@ -635,7 +615,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					free(new_hostname);
 					close(udp_socket);
 					return HOST_DOWN;
 				}
@@ -685,7 +664,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 							}
 							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
 							snprintf(ping->ping_status, 50, "%.5f", total_time);
-							free(new_hostname);
 							close(udp_socket);
 							return HOST_UP;
 						}
@@ -698,7 +676,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 					} else {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						free(new_hostname);
 						close(udp_socket);
 						return HOST_DOWN;
 					}
@@ -720,14 +697,12 @@ int ping_udp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			free(new_hostname);
 			close(udp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		free(new_hostname);
 		if (udp_socket != -1) close(udp_socket);
 		return HOST_DOWN;
 	}
@@ -755,19 +730,12 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	struct sockaddr_in servername;
 	int    retry_count;
 	int    return_code;
-	char   *new_hostname;
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
 	} else {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
 	}
-
-	if (!(new_hostname = (char *) malloc(strlen(host->hostname)+1))) {
-		die("ERROR: Fatal malloc error: ping.c ping_icmp() - new_hostname!");
-	}
-
-	strcpy(host->hostname, new_hostname);
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -788,7 +756,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, new_hostname, host->ping_port)) {
+		if (init_sockaddr(&servername, host->hostname, host->ping_port)) {
 			/* first attempt a connect */
 			retry_count = 0;
 
@@ -818,21 +786,18 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					}
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
 					snprintf(ping->ping_status, 50, "%.5f", total_time);
-					free(new_hostname);
 					close(tcp_socket);
 					return HOST_UP;
 				} else {
 					#if defined(__CYGWIN__)
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-					free(new_hostname);
 					close(tcp_socket);
 					return HOST_DOWN;
 					#else
 					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-						free(new_hostname);
 						close(tcp_socket);
 						return HOST_DOWN;
 					} else {
@@ -844,14 +809,12 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			free(new_hostname);
 			close(tcp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		free(new_hostname);
 		if (tcp_socket != -1) close(tcp_socket);
 		return HOST_DOWN;
 	}
