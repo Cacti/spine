@@ -774,14 +774,14 @@ int main(int argc, char *argv[]) {
 			if (sem_err == 0) {
 				break;
 			} else if (sem_err == EPERM) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%ld)", host_id, current_thread, wait_retries));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%d)", host_id, current_thread, wait_retries));
 				break;
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
 			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%ld)", host_id, current_thread, wait_retries));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%d)", host_id, current_thread, wait_retries));
 			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %ld while acquiring Available Thread Lock (%ld)", host_id, current_thread, sem_err, wait_retries));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Available Thread Lock (%d)", host_id, current_thread, sem_err, wait_retries));
 			}
 
 			usleep(100000);
@@ -794,10 +794,10 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock", host_id, current_thread));
 			break;
 		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%ld)", host_id, current_thread, sem_err));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%d)", host_id, current_thread, sem_err));
 			break;
 		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %ld while acquiring Available Thread Lock", host_id, current_thread, sem_err));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %d while acquiring Available Thread Lock", host_id, current_thread, sem_err));
 			break;
 		}
 
@@ -809,14 +809,14 @@ int main(int argc, char *argv[]) {
 			if (sem_err == 0) {
 				break;
 			} else if (sem_err == EPERM) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock (%ld)", host_id, current_thread, wait_retries));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock (%d)", host_id, current_thread, wait_retries));
 				break;
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
 			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
 			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %ld while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			}
 
 			usleep(100000);
@@ -832,7 +832,7 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
 			break;
 		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %ld while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			break;
 		}
 
@@ -891,11 +891,11 @@ int main(int argc, char *argv[]) {
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Device[%i] polling timed out while waiting for %d Threads to End", host_id, current_thread, set.threads - a_threads_value));
+			SPINE_LOG(("ERROR: Device[%i] polling timed out while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
 			break;
 		}
 
-		SPINE_LOG_HIGH(("WARNING: Device[%i] polling sleeping while waiting for %d Threads to End", host_id, current_thread, set.threads - a_threads_value));
+		SPINE_LOG_HIGH(("WARNING: Device[%i] polling sleeping while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
 		usleep(5000000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}

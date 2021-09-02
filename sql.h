@@ -46,8 +46,10 @@ extern int  db_reconnect(MYSQL *mysql, int error, char *location);
 extern int append_hostrange(char *obuf, const char *colname);
 
 #define MYSQL_SET_OPTION(opt, value, desc)	\
+{\
 	options_error = mysql_options(mysql, opt, value); \
 	if (options_error < 0) {\
 	        die("FATAL: MySQL options unable to set %s option", desc);\
 	}\
+}\
 

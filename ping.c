@@ -1024,7 +1024,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
 	}
 	memset(stack, '\0', strlen(hostname)+1);
-	strncpy(stack, hostname, strlen(hostname));
+	strncopy(stack, hostname, strlen(stack));
 	token = strtok(stack, ":");
 
 	if (token == NULL) {

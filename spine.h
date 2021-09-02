@@ -140,6 +140,7 @@
 #define MEGA_BUFSIZE 1024000
 #define HUGE_BUFSIZE 2048000
 #define LOGSIZE 65535
+#define LRG_LOGSIZE 1024000
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
@@ -371,7 +372,7 @@ typedef struct config_struct {
 	unsigned int db_port;
 	int    dbversion;
 	/* path information */
-	char   path_logfile[BUFSIZE];
+	char   path_logfile[DBL_BUFSIZE];
 	char   path_php[BUFSIZE];
 	char   path_php_server[BUFSIZE];
 	/* logging options */

@@ -385,7 +385,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
 
 					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				} else {
-					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%d]",  snmp_oid, current_host->id, response->errstat));
+					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
 				}
 			}
 		} else {

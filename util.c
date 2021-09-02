@@ -338,17 +338,17 @@ void read_config_options() {
 	/* determine logfile path */
 	if ((res = getsetting(&mysql, LOCAL, "path_cactilog")) != 0) {
 		if (strlen(res) != 0) {
-			snprintf(set.path_logfile, SMALL_BUFSIZE, "%s", res);
+			snprintf(set.path_logfile, DBL_BUFSIZE, "%s", res);
 		} else {
 			if (strlen(web_root) != 0) {
-				snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
+				snprintf(set.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
 			} else {
 				set.path_logfile[0] ='\0';
 			}
 		}
 		free((char *)res);
 	} else {
-		snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
+		snprintf(set.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
 
 	/* get log separator */
@@ -674,7 +674,7 @@ void poller_push_data_to_main() {
 	int        rows;
 	char       sqlbuf[MEGA_BUFSIZE];
 	char       *sqlp = sqlbuf;
-	char       query[BUFSIZE];
+	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
 	char       tmpstr[SMALL_BUFSIZE];
@@ -691,7 +691,7 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -700,7 +700,7 @@ void poller_push_data_to_main() {
 			"WHERE poller_id = %d "
 			"AND id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -813,12 +813,12 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d "
 			"AND host_id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d ",
 			set.poller_id);
@@ -994,7 +994,7 @@ void config_defaults() {
 void die(const char *format, ...) {
 	va_list	args;
 	char logmessage[BUFSIZE];
-	char flogmessage[BUFSIZE];
+	char flogmessage[DBL_BUFSIZE];
 	int old_errno = errno;
 
 	va_start(args, format);
@@ -1009,12 +1009,12 @@ void die(const char *format, ...) {
 
 	if (set.logfile_processed) {
 		if (set.parent_fork == SPINE_PARENT) {
-			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)", logmessage);
+			snprintf(flogmessage, DBL_BUFSIZE, "%s (Spine parent)", logmessage);
 		} else {
-			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)", logmessage);
+			snprintf(flogmessage, DBL_BUFSIZE, "%s (Spine thread)", logmessage);
 		}
 	} else {
-		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
+		snprintf(flogmessage, DBL_BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
 	fprintf(stderr, "%s", flogmessage);
@@ -1098,7 +1098,7 @@ int spine_log(const char *format, ...) {
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
-	char stdoutmessage[LOGSIZE];   /* Message for stdout */
+	char stdoutmessage[LRG_LOGSIZE];   /* Message for stdout */
 
 	double cur_time;
 
@@ -1484,27 +1484,24 @@ char *add_slashes(char *string) {
  *
  *  \return pointer to destination string
  *
- */
+*/
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 char *strncopy(char *dst, const char *src, size_t obuf) {
 	assert(dst != 0);
 	assert(src != 0);
 
 	size_t len;
 
-	len = strlen(src);
-
-	if (!len) {
-		dst[0] = '\0';
-	} else if (len < obuf) {
+	len = (strlen(src) < obuf) ? strlen(src) : obuf;
+	if (len) {
 		strncpy(dst, src, len);
-		dst[len] = '\0';
-	} else {
-		strncpy(dst, src, --obuf);
-		dst[obuf] = '\0';
 	}
 
+	dst[len] = '\0';
 	return dst;
 }
+#pragma GCC diagnostic pop
 
 /*! \fn double get_time_as_double()
  *  \brief fetches system time as a double-precison value
