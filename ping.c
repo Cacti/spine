@@ -1033,9 +1033,13 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 
 	while (token != NULL && tokens <= 3) {
 		tokens++;
-		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Token #%i", hostname, tokens));
+		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Token #%i - %s", hostname, tokens, token));
 		if (tokens == 1) {
-			if (strlen(token) == 3) {
+			if (strlen(token) && token[0] == '[') {
+				SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv6 method", hostname));
+				strncpy(name->hostname, hostname, sizeof(name->hostname));
+				break;
+			} else if (strlen(token) == 3) {
 				if (strncasecmp(token, "TCP", 3)) {
 					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv4 method", hostname));
 					name->method = 1;
