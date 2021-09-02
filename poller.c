@@ -38,7 +38,7 @@ void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
 	poller_details.complete = TRUE;
-	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] The child has cleaned up", pthread_self()));
+	SPINE_LOG_DEVDBG(("DEBUG: The child has cleaned up"));
 	child_cleanup_thread(arg);
 }
 
@@ -48,7 +48,7 @@ void child_cleanup_thread(void *arg) {
 	int a_threads_value;
 	sem_getvalue(&available_threads, &a_threads_value);
 
-	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Available Threads is %i (%i outstanding)", pthread_self(), a_threads_value, set.threads - a_threads_value));
+	SPINE_LOG_DEVDBG(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 }
 
 void child_cleanup_script(void *arg) {
@@ -57,7 +57,7 @@ void child_cleanup_script(void *arg) {
 	int a_scripts_value;
 	sem_getvalue(&available_scripts, &a_scripts_value);
 
-	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Available Scripts is %i (%i outstanding)", pthread_self(), a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
+	SPINE_LOG(("DEBUG: Available Scripts is %i (%i outstanding)", a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
 }
 
 /*! \fn void *child(void *arg)
@@ -2003,28 +2003,28 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int needs_cleanup = 0;
 
 	pthread_cleanup_push(child_cleanup_script, NULL);
-	while (++retries < 100) {
+	while (++retries < 300) {
 		sem_err = sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
 		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: PT[%ld] Device[%i]: Pausing as unable to obtain a script execution lock", pthread_self(), current_host->id));
+				SPINE_LOG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Device[%i]: Pausing as unable to obtain a script execution lock", pthread_self(), current_host->id));
+				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
 			}
 		} else {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: PT[%ld] Device[%i]: Pausing as error %d whilst obtaining a script execution lock", pthread_self(), current_host->id, sem_err));
+				SPINE_LOG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Device[%i]: Pausing as error %d whilst obtaining a script execution lock", pthread_self(), current_host->id, sem_err));
+				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			}
 		}
 		usleep(10000);
 	}
 
 	if (sem_err) {
-		SPINE_LOG(("ERROR: PT[%ld] Device[%i]: Failed to obtain a script execution lock within 10 seconds", pthread_self(), current_host->id));
+		SPINE_LOG(("ERROR: Device[%i]: Failed to obtain a script execution lock within 30 seconds", current_host->id));
 	} else {
 		/* Mark for cleanup */
 		needs_cleanup = 1;

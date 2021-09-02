@@ -766,57 +766,73 @@ int main(int argc, char *argv[]) {
 
 		/* dev note - errno was never primed at this point in previous version of code */
 		int wait_retries = 0;
-		int sem_err = 0;
+		unsigned int sem_err = 0;
 
-		while (++wait_retries < 100) {
+		while (++wait_retries < 300) {
 			sem_err = sem_trywait(&available_threads);
 
 			if (sem_err == 0) {
 				break;
+			} else if (sem_err == EPERM) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%ld)", host_id, current_thread, wait_retries));
+				break;
+			} else if (sem_err == EDEADLK) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
 			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Available Thread Lock Internal"));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%ld)", host_id, current_thread, wait_retries));
 			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Available Thread Lock Internal", sem_err));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %ld while acquiring Available Thread Lock (%ld)", host_id, current_thread, sem_err, wait_retries));
 			}
 
-			usleep(10000);
+			usleep(100000);
 		}
 
 		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Spine would have deadlocked Available Thread Lock"));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
+			break;
+		} else if (sem_err == EPERM) {
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock", host_id, current_thread));
 			break;
 		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Available Thread Lock"));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%ld)", host_id, current_thread, sem_err));
 			break;
 		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Spine Encounter Unexpected Error %d For Available Thread Lock", sem_err));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %ld while acquiring Available Thread Lock", host_id, current_thread, sem_err));
 			break;
 		}
 
 		wait_retries = 0;
 
-		while (++wait_retries < 100) {
+		while (++wait_retries < 300) {
 			sem_err = sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
 				break;
+			} else if (sem_err == EPERM) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock (%ld)", host_id, current_thread, wait_retries));
+				break;
+			} else if (sem_err == EDEADLK) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
 			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Thread Initialization Lock"));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
 			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Thread Initialization Lock", sem_err));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %ld while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			}
 
-			usleep(10000);
+			usleep(100000);
 		}
 
 		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Spine would have deadlocked Thread Initialization Lock"));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] would have deadlocked Thread Initialization Lock", host_id, current_thread));
+			break;
+		} else if (sem_err == EPERM) {
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
 			break;
 		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Thread Initialization Lock"));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
 			break;
 		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Spine Encountered Unexpected Error %d For Thread Initialization Lock", sem_err));
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %ld while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			break;
 		}
 
@@ -825,7 +841,7 @@ int main(int argc, char *argv[]) {
 
 		switch (thread_status) {
 			case 0:
-				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
+				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
@@ -852,7 +868,8 @@ int main(int argc, char *argv[]) {
 			case EFAULT:
 				SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
 				break;
-			case EINVAL: SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
+			case EINVAL:
+				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 				break;
 			default:
 				SPINE_LOG(("ERROR: Unknown Thread Creation Error - %d", thread_status));
@@ -874,18 +891,18 @@ int main(int argc, char *argv[]) {
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", set.threads - a_threads_value));
+			SPINE_LOG(("ERROR: Device[%i] polling timed out while waiting for %d Threads to End", host_id, current_thread, set.threads - a_threads_value));
 			break;
 		}
 
-		SPINE_LOG_HIGH(("WARNING: Spine Sleeping While Waiting for %d Threads to End", set.threads - a_threads_value));
+		SPINE_LOG_HIGH(("WARNING: Device[%i] polling sleeping while waiting for %d Threads to End", host_id, current_thread, set.threads - a_threads_value));
 		usleep(5000000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
 
 	threads_final = set.threads - a_threads_value;
 
-	if (threads_final) {
+//	if (threads_final) {
 		SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
 
 		for (threads_count = 0; threads_count < num_rows; threads_count++) {
@@ -916,9 +933,9 @@ int main(int argc, char *argv[]) {
 		if (threads_missing > -1) {
 			SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
 		}
-	} else {
-		SPINE_LOG_MEDIUM(("The Final Value of Threads is %i", threads_final));
-	}
+//	} else {
+//		SPINE_LOG_MEDIUM(("The Final Value of Threads is %i", threads_final));
+//	}
 
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;
