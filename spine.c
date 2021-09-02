@@ -879,7 +879,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		SPINE_LOG_HIGH(("WARNING: Spine Sleeping While Waiting for %d Threads to End", set.threads - a_threads_value));
-		usleep(500000);
+		usleep(5000000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
 
