@@ -57,7 +57,7 @@ void child_cleanup_script(void *arg) {
 	int a_scripts_value;
 	sem_getvalue(&available_scripts, &a_scripts_value);
 
-	SPINE_LOG(("DEBUG: Available Scripts is %i (%i outstanding)", a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
+	SPINE_LOG_DEVDBG(("DEBUG: Available Scripts is %i (%i outstanding)", a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
 }
 
 /*! \fn void *child(void *arg)
@@ -95,9 +95,9 @@ void *child(void *arg) {
 	sem_post(poller_details.thread_init_sem);
 
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("DEBUG: In Poller, About to Start Polling of Device for Device ID %i", host_id));
+		SPINE_LOG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Device for Device ID %i", host_id));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	}
 
 	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
@@ -2003,7 +2003,9 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int needs_cleanup = 0;
 
 	pthread_cleanup_push(child_cleanup_script, NULL);
-	while (++retries < 300) {
+
+	// use the script server timeout value, allow for 50% leeway
+	while (++retries < (set.script_timeout * 15)) {
 		sem_err = sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
