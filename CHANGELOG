@@ -3,6 +3,7 @@ The Cacti Group | spine
 1.2.18
 -issue#207: Missing time parameter on FROM_UNIXTIME function
 -issue#221: IPv6 devices are not properly parsed
+-issue#216: Fix rrd_next_step but being updated properly when rrd_step > poller_interval
 
 1.2.17
 -issue#178: When building spine, errors with Percona libraries may appear by tersmitten
