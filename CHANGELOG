@@ -5,6 +5,7 @@ The Cacti Group | spine
 -issue#221: IPv6 devices are not properly parsed
 -issue#209: Ping no longer works due to hostname changes
 -issue#226: Reduce a number of compiler warnings
+-issue#216: Fix rrd_next_step not updated correctly when rrd_step > poller_interval
 
 1.2.17
 -issue#178: When building spine, errors with Percona libraries may appear by tersmitten
