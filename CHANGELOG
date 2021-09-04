@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.19
+-issue#227: Fix non-void return in thread_mutex_trylock
+
 1.2.18
 -issue#207: Missing time parameter on FROM_UNIXTIME function
 -issue#221: IPv6 devices are not properly parsed

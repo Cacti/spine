@@ -235,4 +235,5 @@ int thread_mutex_trylock(int mutex) {
 	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex try lock for %s", get_name(mutex) ));
 	int ret_val = pthread_mutex_trylock(get_lock(mutex));
 	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex try lock for %s, result = %d", get_name(mutex), ret_val ));
+	return ret_val;
 }
