@@ -1,11 +1,12 @@
 The Cacti Group | spine
 
 1.2.19
--issue#227: Fix non-void return in thread_mutex_trylock
--issue#221: IPv6 devices are not properly parsed
 -issue#209: Ping no longer works due to hostname changes
--issue#226: Reduce a number of compiler warnings
 -issue#216: Fix rrd_next_step not updated correctly when rrd_step > poller_interval
+-issue#220: Unable to build when DES no longer supported
+-issue#221: IPv6 devices are not properly parsed
+-issue#226: Reduce a number of compiler warnings
+-issue#227: Fix non-void return in thread_mutex_trylock
 
 1.2.18
 -issue#207: Missing time parameter on FROM_UNIXTIME function

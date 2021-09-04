@@ -123,9 +123,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	void   *sessp = NULL;
 	struct snmp_session session;
 	char   hostnameport[BUFSIZE];
+	int    snmp_errored;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
+	snmp_errored = 0;
 
 	/* Bind to snmp_clientaddr if specified */
 	size_t len = strlen(set.snmp_clientaddr);
@@ -248,12 +250,17 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		} else {
 			if (strcmp(snmp_priv_protocol, "DES") == 0) {
+				#if defined(USM_PRIV_PROTO_DES_LEN)
 				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, USM_PRIV_PROTO_DES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_DES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
 				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+				#else
+				SPINE_LOG(("SNMP: Error DES is no longer supported on this system"));
+				return 0;
+				#endif
 			} else {
 				#if defined(USM_PRIV_PROTO_AES_LEN)
 				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
@@ -277,6 +284,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKey,
 				&(session.securityPrivKeyLen)) != SNMPERR_SUCCESS) {
 				SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from privacy pass phrase."));
+				return 0;
 			}
 		}
 	}
