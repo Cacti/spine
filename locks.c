@@ -70,6 +70,7 @@ DEFINE_SPINE_LOCK(php_proc_11)
 DEFINE_SPINE_LOCK(php_proc_12)
 DEFINE_SPINE_LOCK(php_proc_13)
 DEFINE_SPINE_LOCK(php_proc_14)
+DEFINE_SPINE_LOCK(thdet)
 
 void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),        init_snmp_lock);
@@ -93,6 +94,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_12_O), init_php_proc_12_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_13_O), init_php_proc_13_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_THDET_O),       init_thdet_lock);
 }
 
 const char* get_name(int lock) {
@@ -118,6 +120,7 @@ const char* get_name(int lock) {
 		case LOCK_PHP_PROC_12: return "php_proc_12";
 		case LOCK_PHP_PROC_13: return "php_proc_13";
 		case LOCK_PHP_PROC_14: return "php_proc_14";
+		case LOCK_THDET:       return "thdet";
 	}
 
 	return "Unknown lock";
@@ -148,6 +151,7 @@ pthread_cond_t* get_cond(int lock) {
 		case LOCK_PHP_PROC_12: ret_val = &php_proc_12_cond; break;
 		case LOCK_PHP_PROC_13: ret_val = &php_proc_13_cond; break;
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_cond; break;
+		case LOCK_THDET:       ret_val = &thdet_cond;       break;
 	}
 
 	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning cond for %s", get_name(lock) ));
@@ -180,6 +184,7 @@ pthread_mutex_t* get_lock(int lock) {
 		case LOCK_PHP_PROC_12: ret_val = &php_proc_12_lock; break;
 		case LOCK_PHP_PROC_13: ret_val = &php_proc_13_lock; break;
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_lock; break;
+		case LOCK_THDET:       ret_val = &thdet_lock;       break;
 	}
 
 	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning lock for %s", get_name(lock) ));
@@ -212,6 +217,7 @@ pthread_once_t* get_attr(int locko) {
 		case LOCK_PHP_PROC_12_O: ret_val = &php_proc_12_lock_o; break;
 		case LOCK_PHP_PROC_13_O: ret_val = &php_proc_13_lock_o; break;
 		case LOCK_PHP_PROC_14_O: ret_val = &php_proc_14_lock_o; break;
+		case LOCK_THDET_O:       ret_val = &thdet_lock_o;       break;
 	}
 
 	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning attr for %s", get_name(locko) ));

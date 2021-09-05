@@ -112,6 +112,8 @@ int     *debug_devices;
 pool_t  *db_pool_local;
 pool_t  *db_pool_remote;
 
+poller_thread_t** details = NULL;
+
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
 void poller_push_data_to_main();
@@ -213,7 +215,6 @@ int main(int argc, char *argv[]) {
 	#endif /* HAVE_LCAP */
 
 	pthread_t* threads = NULL;
-	poller_thread_t** details = NULL;
 	poller_thread_t* poller_details = NULL;
 	pthread_attr_t attr;
 
@@ -753,16 +754,20 @@ int main(int argc, char *argv[]) {
 			die("ERROR: Fatal malloc error: spine.c poller_details!");
 		}
 
+		poller_details->device_counter   = device_counter;
 		poller_details->host_id          = host_id;
 		poller_details->host_thread      = current_thread;
-		poller_details->last_host_thread = device_threads;
+		poller_details->host_threads     = device_threads;
 		poller_details->host_data_ids    = items_per_thread;
 		poller_details->host_time        = host_time;
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
+		poller_details->threads_complete = 0;
 
-		details[device_counter]          = poller_details;
+		thread_mutex_lock(LOCK_THDET);
+		details[device_counter] = poller_details;
+		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
 		int wait_retries = 0;
@@ -853,11 +858,11 @@ int main(int argc, char *argv[]) {
 				sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
-					" last_host_thread = %d, host_data_ids = %d, complete = %d",
+					" host_threads = %d, host_data_ids = %d, complete = %d",
 					device_counter-1,
 					poller_details->host_id,
 					poller_details->host_thread,
-					poller_details->last_host_thread,
+					poller_details->host_threads,
 					poller_details->host_data_ids,
 					poller_details->complete));
 
@@ -896,46 +901,46 @@ int main(int argc, char *argv[]) {
 		}
 
 		SPINE_LOG_HIGH(("WARNING: Device[%i] polling sleeping while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
-		usleep(5000000);
+		usleep(500000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
 
 	threads_final = set.threads - a_threads_value;
 
-//	if (threads_final) {
-		SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
+	SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
 
-		for (threads_count = 0; threads_count < num_rows; threads_count++) {
-			poller_thread_t* det = details[threads_count];
+	for (threads_count = 0; threads_count < num_rows; threads_count++) {
+		thread_mutex_lock(LOCK_THDET);
 
-			if (threads_missing == -1 && det == NULL) {
-				threads_missing = threads_count;
-			}
+		poller_thread_t* det = details[threads_count];
 
-			if (det != NULL) { // && !det->complete) {
-				SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
-					det->complete?"":"in",
-					det->host_id,
-					det->host_data_ids * (det->host_thread - 1),
-					det->host_data_ids * (det->host_thread)));
-
-				SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
-					" last_host_thread = %d, host_data_ids = %d, complete = %d",
-					threads_count,
-					det->host_id,
-					det->host_thread,
-					det->last_host_thread,
-					det->host_data_ids,
-					det->complete));
-			}
+		if (threads_missing == -1 && det == NULL) {
+			threads_missing = threads_count;
 		}
 
-		if (threads_missing > -1) {
-			SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
+		if (det != NULL) { // && !det->complete) {
+			SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
+				det->complete ? "":"in",
+				det->host_id,
+				det->host_data_ids * (det->host_thread - 1),
+				det->host_data_ids * (det->host_thread)));
+
+			SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
+				" host_threads = %d, host_data_ids = %d, complete = %d",
+				threads_count,
+				det->host_id,
+				det->host_thread,
+				det->host_threads,
+				det->host_data_ids,
+				det->complete));
 		}
-//	} else {
-//		SPINE_LOG_MEDIUM(("The Final Value of Threads is %i", threads_final));
-//	}
+
+		thread_mutex_unlock(LOCK_THDET);
+	}
+
+	if (threads_missing > -1) {
+		SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
+	}
 
 	/* tell Spine that it is now parent */
 	set.parent_fork = SPINE_PARENT;

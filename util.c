@@ -119,6 +119,36 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	}
 }
 
+/*! \fn int putsetting(MYSQL *psql, const char *setting, const char *value)
+ *  \brief Set's a specific Cacti setting.
+ *
+ *  Given a pointer to a database and the name of a setting, and value of that setting
+ *  set the Cacti setting in the database to the value.
+ *
+ *  \return true for sucessful or false for failed
+ *
+ */
+int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
+	char  qstring[512];
+	int   result = 0;
+
+	assert(psql    != 0);
+	assert(mysetting != 0);
+	assert(myvalue   != 0);
+
+	sprintf(qstring, "INSERT INTO settings (name, value) "
+		"VALUES ('%s', '%s') "
+		"ON DUPLICATE KEY UPDATE value=VALUES(value)", mysetting, myvalue);
+
+	result = db_insert(psql, mode, qstring);
+
+	if (result == 0) {
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
 /*! \fn static const char *getpsetting(MYSQL *psql, const char *setting)
  *  \brief Returns a character pointer to a Cacti poller setting.
  *
@@ -304,6 +334,10 @@ void read_config_options() {
 	char       web_root[BUFSIZE];
 	char       sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
 	const char *res;
+	char       spine_capabilities[SMALL_BUFSIZE];
+
+	/* publish spine snmpv3 capabilities to the database */
+	memset(spine_capabilities, 0, sizeof(spine_capabilities));
 
 	db_connect(LOCAL, &mysql);
 
@@ -657,6 +691,34 @@ void read_config_options() {
 
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
+
+	strcat(spine_capabilities, "authProtocols: \"");
+	#ifndef NETSNMP_DISABLE_MD5
+	strcat(spine_capabilities, "MD5,");
+	#endif
+	#ifdef HAVE_EVP_SHA224
+	strcat(spine_capabilities, "SHA224,SHA256");
+	#endif
+	#ifdef HAVE_EVP_SHA384
+	strcat(spine_capabilities, ",SHA384,SHA512");
+	#endif
+	strcat(spine_capabilities, "\"");
+
+	strcat(spine_capabilities, ", privProtocols: \"");
+	#ifndef NETSNMP_DISABLE_DES
+	strcat(spine_capabilities, "DES");
+	#endif
+	#ifdef HAVE_AES
+	strcat(spine_capabilities, ",AES");
+	#ifdef NETSNMP_DRAFT_BLUMENTHAL_AES_04
+	strcat(spine_capabilities, ",AES192,AES256");
+	#endif
+	#endif
+	strcat(spine_capabilities, "\"");
+
+	if (set.poller_id == 1) {
+		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
+	}
 
 	db_disconnect(&mysql);
 

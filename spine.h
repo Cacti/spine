@@ -189,6 +189,7 @@
 #define LOCK_PHP_PROC_12 19
 #define LOCK_PHP_PROC_13 20
 #define LOCK_PHP_PROC_14 21
+#define LOCK_THDET 40
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -211,6 +212,7 @@
 #define LOCK_PHP_PROC_12_O 19
 #define LOCK_PHP_PROC_13_O 20
 #define LOCK_PHP_PROC_14_O 21
+#define LOCK_THDET_O 40
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -477,10 +479,12 @@ typedef struct snmp_oids {
  *
  */
 typedef struct poller_thread {
+	int device_counter;
 	int host_id;
 	int host_thread;
-	int last_host_thread;
+	int host_threads;
 	int host_data_ids;
+	int threads_complete;
 	int complete;
 	char *host_time;
 	double host_time_double;

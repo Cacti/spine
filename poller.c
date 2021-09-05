@@ -37,8 +37,8 @@
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
-	poller_details.complete = TRUE;
-	SPINE_LOG_DEVDBG(("DEBUG: The child has cleaned up"));
+	SPINE_LOG_DEVDBG(("DEBUG: Device[%i] HT[%i] The Device Thread has cleaned up.", poller_details.host_id, poller_details.host_thread));
+
 	child_cleanup_thread(arg);
 }
 
@@ -72,21 +72,24 @@ void child_cleanup_script(void *arg) {
 void *child(void *arg) {
 	pthread_cleanup_push(child_cleanup, arg);
 
+	int device_counter;
 	int host_id;
 	int host_thread;
-	int last_host_thread;
+	int host_threads;
 	int host_data_ids;
 	int host_errors;
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
+	extern poller_thread_t** details;
 
-	host_errors      = 0;
+	host_errors = 0;
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
+	device_counter   = poller_details.device_counter;
 	host_id          = poller_details.host_id;
 	host_thread      = poller_details.host_thread;
-	last_host_thread = poller_details.last_host_thread;
+	host_threads     = poller_details.host_threads;
 	host_data_ids    = poller_details.host_data_ids;
 	host_time_double = poller_details.host_time_double;
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
@@ -100,7 +103,7 @@ void *child(void *arg) {
 		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	}
 
-	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
+	poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
 
 	pthread_cleanup_pop(1);
 
@@ -110,7 +113,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
+/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -132,7 +135,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
+void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
@@ -208,6 +211,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int new_buffer              = TRUE;
 	int ignore_sysinfo          = TRUE;
 	int buf_length              = 0;
+
+	extern poller_thread_t** details;
 
 	pool_t *local_cnn;
 	pool_t *remote_cnn;
@@ -1621,7 +1626,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s',FROM_UNIXTIME(%s),'%s')",
+			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 				poller_items[i].local_data_id,
 				poller_items[i].rrd_name,
 				host_time,
@@ -1719,7 +1724,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	free(name);
 
 	/* update poller_items table for next polling interval */
-	if (host_thread == last_host_thread) {
+	if (host_thread == host_threads) {
 		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
 
 		db_query(&mysql, LOCAL, query6);
@@ -1734,10 +1739,17 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	}
 
 	/* record the total time for the host */
-	poll_time = get_time_as_double();
-	query1[0] = '\0';
-	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
-	db_query(&mysql, LOCAL, query1);
+	thread_mutex_lock(LOCK_THDET);
+	details[device_counter]->threads_complete++;
+	if (details[device_counter]->threads_complete == details[device_counter]->host_threads) {
+		details[device_counter]->complete = TRUE;
+
+		poll_time = get_time_as_double();
+		query1[0] = '\0';
+		snprintf(query1, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
+		db_query(&mysql, LOCAL, query1);
+	}
+	thread_mutex_unlock(LOCK_THDET);
 
 	db_release_connection(LOCAL, local_cnn->id);
 
