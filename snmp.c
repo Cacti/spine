@@ -123,7 +123,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	void   *sessp = NULL;
 	struct snmp_session session;
 	char   hostnameport[BUFSIZE];
-	int    snmp_errored;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
