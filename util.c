@@ -692,15 +692,18 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
-	strcat(spine_capabilities, "authProtocols: \"");
+	strcat(spine_capabilities, "{ authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
 	strcat(spine_capabilities, "MD5,");
 	#endif
-	#ifdef HAVE_EVP_SHA224
-	strcat(spine_capabilities, "SHA224,SHA256");
+
+	strcat(spine_capabilities, "SHA");
+
+	#if defined(HAVE_EVP_SHA224) && defined(usmHMAC128SHA224AuthProtocol)
+	strcat(spine_capabilities, ",SHA-224,SHA-256");
 	#endif
-	#ifdef HAVE_EVP_SHA384
-	strcat(spine_capabilities, ",SHA384,SHA512");
+	#if defined(HAVE_EVP_SHA384) && defined(usmHMAC256SHA384AuthProtocol)
+	strcat(spine_capabilities, ",SHA-384,SHA-512");
 	#endif
 	strcat(spine_capabilities, "\"");
 
@@ -709,12 +712,15 @@ void read_config_options() {
 	strcat(spine_capabilities, "DES");
 	#endif
 	#ifdef HAVE_AES
-	strcat(spine_capabilities, ",AES");
-	#ifdef NETSNMP_DRAFT_BLUMENTHAL_AES_04
-	strcat(spine_capabilities, ",AES192,AES256");
+	strcat(spine_capabilities, ",AES,AES-128");
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES192PrivProtocol)
+	strcat(spine_capabilities, ",AES-192");
+	#endif
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES256PrivProtocol)
+	strcat(spine_capabilities, ",AES-256");
 	#endif
 	#endif
-	strcat(spine_capabilities, "\"");
+	strcat(spine_capabilities, "\" }");
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
