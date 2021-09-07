@@ -287,8 +287,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, USM_PRIV_PROTO_DES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_DES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-
-				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
 				SPINE_LOG(("SNMP: Error DES is no longer supported on this system"));
@@ -299,21 +297,21 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OID_LENGTH(usmAES128PrivProtocol));
 				session.securityPrivProtoLen = OID_LENGTH(usmAES128PrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-				#endif
-
-				/* set the security level to authenticate, and encrypted */
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES-192") == 0) {
 				#ifdef NETSNMP_DRAFT_BLUMENTHAL_AES_04
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES192PrivProtocol, OID_LENGTH(usmAES192PrivProtocol));
 				session.securityPrivProtoLen = OID_LENGTH(usmAES192PrivProtocol);
 				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES192);
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES192 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Error AES-192 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
 				return 0;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES-256") == 0) {
@@ -321,15 +319,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES256PrivProtocol, OID_LENGTH(usmAES256PrivProtocol));
 				session.securityPrivProtoLen = OID_LENGTH(usmAES256PrivProtocol);
 				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES256);
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES256 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Error AES-256 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
 				return 0;
 				#endif
 			}
 
 			/* set the privacy key to the hashed version. */
-			if (generate_Ku(session.securityAuthProto,
-				session.securityAuthProtoLen,
+			if (generate_Ku(session.securityPrivProto,
+				session.securityPrivProtoLen,
 				(u_char *) snmp_priv_passphrase,
 				strlen(snmp_priv_passphrase),
 				session.securityPrivKey,
