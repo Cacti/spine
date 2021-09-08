@@ -224,32 +224,33 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
 		} else if (strcmp(snmp_auth_protocol, "SHA224") == 0) {
-			#if defined(HAVE_EVP_SHA224) && defined(usmHMAC128SHA224AuthProtocol)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OIDSIZE(usmHMAC128SHA224AuthProtocol));
-			session.securityAuthProtoLen = OIDSIZE(usmHMAC128SHA224AuthProtocol);
+			#if defined(HAVE_EVP_SHA224)
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol));
+			session.securityAuthProtoLen = OID_LENGTH(usmHMAC128SHA224AuthProtocol);
 			#else
 			SPINE_LOG(("SNMP: Error SHA224 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA256") == 0) {
-			#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OIDSIZE(usmHMAC192SHA256AuthProtocol));
-			session.securityAuthProtoLen = OIDSIZE(usmHMAC192SHA256AuthProtocol);
+			//#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
+			#if defined(HAVE_EVP_SHA224)
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol));
+			session.securityAuthProtoLen = OID_LENGTH(usmHMAC192SHA256AuthProtocol);
 			#else
 			SPINE_LOG(("SNMP: Error SHA256 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA384") == 0) {
-			#if defined(HAVE_EVP_SHA384) && defined(usmHMAC256SHA384AuthProtocol)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OIDSIZE(usmHMAC256SHA384AuthProtocol));
+			#if defined(HAVE_EVP_SHA384)
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC256SHA384_AUTH_LEN;
 			#else
 			SPINE_LOG(("SNMP: Error SHA384 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA512") == 0) {
-			#if defined(HAVE_EVP_SHA384) && defined(usmHMAC384SHA512AuthProtocol)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OIDSIZE(usmHMAC384SHA512AuthProtocol));
+			#if defined(HAVE_EVP_SHA384)
+			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC384SHA512_AUTH_LEN;
 			#else
 			SPINE_LOG(("SNMP: Error SHA512 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
@@ -264,15 +265,15 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				(u_char *) snmp_password,
 				strlen(snmp_password),
 				session.securityAuthKey,
-				&(session.securityAuthKeyLen)) != SNMPERR_SUCCESS) {
+				&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
 				SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
 			}
 		}
 
 		/* set the privacy protocol to none */
 		if (strcmp(snmp_priv_protocol, "[None]") == 0 || (strlen(snmp_priv_passphrase) == 0)) {
-			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OIDSIZE(usmNoPrivProtocol));
-			session.securityPrivProtoLen = OIDSIZE(usmNoPrivProtocol);
+			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol));
+			session.securityPrivProtoLen = OID_LENGTH(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
 			/* set the security level to authenticate, but not encrypted */
@@ -292,22 +293,22 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				SPINE_LOG(("SNMP: Error DES is no longer supported on this system"));
 				return 0;
 				#endif
-			} else if (strcmp(snmp_priv_protocol, "AES") == 0 || strcmp(snmp_priv_protocol, "AES128") == 0) {
+			} else if (strcmp(snmp_priv_protocol, "AES128") == 0) {
 				#if defined(USM_PRIV_PROTO_AES_LEN)
 				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OIDSIZE(usmAES128PrivProtocol));
-				session.securityPrivProtoLen = OIDSIZE(usmAES128PrivProtocol);
+				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OID_LENGTH(usmAES128PrivProtocol));
+				session.securityPrivProtoLen = OID_LENGTH(usmAES128PrivProtocol);
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES192") == 0) {
 				#ifdef NETSNMP_DRAFT_BLUMENTHAL_AES_04
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES192PrivProtocol, OIDSIZE(usmAES192PrivProtocol));
-				session.securityPrivProtoLen = OIDSIZE(usmAES192PrivProtocol);
+				session.securityPrivProto    = snmp_duplicate_objid(usmAES192PrivProtocol, OID_LENGTH(usmAES192PrivProtocol));
+				session.securityPrivProtoLen = OID_LENGTH(usmAES192PrivProtocol);
 				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES192);
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
@@ -316,8 +317,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES256") == 0) {
 				#ifdef NETSNMP_DRAFT_BLUMENTHAL_AES_04
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES256PrivProtocol, OIDSIZE(usmAES256PrivProtocol));
-				session.securityPrivProtoLen = OIDSIZE(usmAES256PrivProtocol);
+				session.securityPrivProto    = snmp_duplicate_objid(usmAES256PrivProtocol, OID_LENGTH(usmAES256PrivProtocol));
+				session.securityPrivProtoLen = OID_LENGTH(usmAES256PrivProtocol);
 				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES256);
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else

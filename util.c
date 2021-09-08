@@ -699,11 +699,11 @@ void read_config_options() {
 
 	strcat(spine_capabilities, "SHA");
 
-	#if defined(HAVE_EVP_SHA224) && defined(usmHMAC128SHA224AuthProtocol)
-	strcat(spine_capabilities, ",SHA-224,SHA-256");
+	#if defined(HAVE_EVP_SHA224)
+	strcat(spine_capabilities, ",SHA224,SHA256");
 	#endif
-	#if defined(HAVE_EVP_SHA384) && defined(usmHMAC256SHA384AuthProtocol)
-	strcat(spine_capabilities, ",SHA-384,SHA-512");
+	#if defined(HAVE_EVP_SHA384)
+	strcat(spine_capabilities, ",SHA384,SHA512");
 	#endif
 	strcat(spine_capabilities, "\"");
 
@@ -712,12 +712,12 @@ void read_config_options() {
 	strcat(spine_capabilities, "DES");
 	#endif
 	#ifdef HAVE_AES
-	strcat(spine_capabilities, ",AES,AES-128");
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES192PrivProtocol)
-	strcat(spine_capabilities, ",AES-192");
+	strcat(spine_capabilities, ",AES,AES128");
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	strcat(spine_capabilities, ",AES192");
 	#endif
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES256PrivProtocol)
-	strcat(spine_capabilities, ",AES-256");
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	strcat(spine_capabilities, ",AES256");
 	#endif
 	#endif
 	strcat(spine_capabilities, "\" }");

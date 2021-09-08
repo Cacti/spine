@@ -195,7 +195,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
-	char last_snmp_auth_protocol[5];
+	char last_snmp_auth_protocol[7];
 	char last_snmp_priv_passphrase[200];
 	char last_snmp_priv_protocol[7];
 	char last_snmp_context[65];
