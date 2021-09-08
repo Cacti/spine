@@ -712,7 +712,7 @@ void read_config_options() {
 	strcat(spine_capabilities, "DES");
 	#endif
 	#ifdef HAVE_AES
-	strcat(spine_capabilities, ",AES,AES128");
+	strcat(spine_capabilities, ",AES128");
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	strcat(spine_capabilities, ",AES192");
 	#endif
