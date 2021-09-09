@@ -699,10 +699,10 @@ void read_config_options() {
 
 	strcat(spine_capabilities, "SHA");
 
-	#if defined(HAVE_EVP_SHA224)
+	#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
 	strcat(spine_capabilities, ",SHA224,SHA256");
 	#endif
-	#if defined(HAVE_EVP_SHA384)
+	#if defined(HAVE_EVP_SHA384) && defined(usmHMAC384SHA512AuthProtocol)
 	strcat(spine_capabilities, ",SHA384,SHA512");
 	#endif
 	strcat(spine_capabilities, "\"");
@@ -713,10 +713,10 @@ void read_config_options() {
 	#endif
 	#ifdef HAVE_AES
 	strcat(spine_capabilities, ",AES128");
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES192PrivProtocol)
 	strcat(spine_capabilities, ",AES192");
 	#endif
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES256PrivProtocol)
 	strcat(spine_capabilities, ",AES256");
 	#endif
 	#endif
