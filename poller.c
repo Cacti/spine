@@ -465,10 +465,18 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
-				db_release_connection(LOCAL, local_cnn->id);
+				if (local_cnn != NULL) {
+					db_release_connection(LOCAL, local_cnn->id);
+				} else {
+					SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
+				}
 
 				if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-					db_release_connection(REMOTE, remote_cnn->id);
+					if (remote_cnn != NULL) {
+						db_release_connection(REMOTE, remote_cnn->id);
+					} else {
+						SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
+					}
 				}
 
 				return;
@@ -1751,10 +1759,18 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	}
 	thread_mutex_unlock(LOCK_THDET);
 
-	db_release_connection(LOCAL, local_cnn->id);
+	if (local_cnn != NULL) {
+		db_release_connection(LOCAL, local_cnn->id);
+	} else {
+		SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
+	}
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-		db_release_connection(REMOTE, remote_cnn->id);
+		if (remote_cnn != NULL) {
+			db_release_connection(REMOTE, remote_cnn->id);
+		} else {
+			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
+		}
 	}
 
 	mysql_thread_end();
