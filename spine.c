@@ -190,7 +190,6 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
  *
  */
 int main(int argc, char *argv[]) {
-	struct timeval now;
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
 	int num_rows = 0;
@@ -205,8 +204,7 @@ int main(int argc, char *argv[]) {
 	int a_threads_value;
 	struct timespec until_spec;
 
-	gettimeofday(&now, NULL);
-	start_time = TIMEVAL_TO_DOUBLE(now);
+	start_time = get_time_as_double();
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -771,114 +769,104 @@ int main(int argc, char *argv[]) {
 
 		/* dev note - errno was never primed at this point in previous version of code */
 		int wait_retries = 0;
+		int loop_count = 0;
+		double progress_time = 0;
 		unsigned int sem_err = 0;
 
-		while (++wait_retries < 300) {
+		while (TRUE) {
 			sem_err = sem_trywait(&available_threads);
 
 			if (sem_err == 0) {
+				// Acquired a thread
 				break;
-			} else if (sem_err == EPERM) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%d)", host_id, current_thread, wait_retries));
-				break;
+			} else if (sem_err == EINTR) {
+				// Interrupted by signal handler
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%d)", host_id, current_thread, wait_retries));
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Available Thread Lock (%d)", host_id, current_thread, sem_err, wait_retries));
+			} else if (sem_err == EAGAIN) {
+				// Keep trying
+			}
+
+			loop_count++;
+
+			if (loop_count == 10) {
+				progress_time = get_time_as_double() - start_time;
+
+				if (progress_time + 1 > set.poller_interval) {
+					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
+					goto spine_timeout;
+					break;
+				}
+
+				loop_count = 0;
 			}
 
 			usleep(100000);
 		}
 
-		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
-			break;
-		} else if (sem_err == EPERM) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock", host_id, current_thread));
-			break;
-		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Available Thread Lock (%d)", host_id, current_thread, sem_err));
-			break;
-		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %d while acquiring Available Thread Lock", host_id, current_thread, sem_err));
-			break;
-		}
+		loop_count = 0;
 
-		wait_retries = 0;
-
-		while (++wait_retries < 300) {
+		while (TRUE) {
 			sem_err = sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
+				// Acquired a thread
 				break;
-			} else if (sem_err == EPERM) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock (%d)", host_id, current_thread, wait_retries));
-				break;
+			} else if (sem_err == EINTR) {
+				// Interrupted by signal handler
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
+			} else if (sem_err == EAGAIN) {
+				// Keep trying
 			} else {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			}
 
+			if (loop_count == 10) {
+				progress_time = get_time_as_double() - start_time;
+
+				if (progress_time + 1 > set.poller_interval) {
+					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
+					goto spine_timeout;
+					break;
+				}
+
+				loop_count = 0;
+			}
+
 			usleep(100000);
 		}
 
-		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] would have deadlocked Thread Initialization Lock", host_id, current_thread));
-			break;
-		} else if (sem_err == EPERM) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
-			break;
-		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] timed out while acquiring Thread Initialization Lock", host_id, current_thread));
-			break;
-		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
-			break;
-		}
-
 		/* create child process */
+		thread_retry:
+
 		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
-		switch (thread_status) {
-			case 0:
-				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
+		if (thread_status == 0) {
+			SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
 
-				if (change_host) {
-					device_counter++;
-				}
+			if (change_host) {
+				device_counter++;
+			}
 
-				sem_getvalue(&available_threads, &a_threads_value);
-				SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
+			sem_getvalue(&available_threads, &a_threads_value);
+			SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
-				sem_post(&thread_init_sem);
+			sem_post(&thread_init_sem);
 
-				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
-					" host_threads = %d, host_data_ids = %d, complete = %d",
-					device_counter-1,
-					poller_details->host_id,
-					poller_details->host_thread,
-					poller_details->host_threads,
-					poller_details->host_data_ids,
-					poller_details->complete));
-
-				break;
-			case EAGAIN:
-				SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread"));
-				break;
-			case EFAULT:
-				SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
-				break;
-			case EINVAL:
-				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
-				break;
-			default:
-				SPINE_LOG(("ERROR: Unknown Thread Creation Error - %d", thread_status));
-				break;
+			SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
+				" host_threads = %d, host_data_ids = %d, complete = %d",
+				device_counter-1,
+				poller_details->host_id,
+				poller_details->host_thread,
+				poller_details->host_threads,
+				poller_details->host_data_ids,
+				poller_details->complete));
+		} else if (thread_status == EAGAIN) {
+			usleep(100000);
+			goto thread_retry;
+		} else if (thread_status == EINVAL) {
+			SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 		}
 
 		/* Restore thread initialization semaphore if thread creation failed */
@@ -904,6 +892,8 @@ int main(int argc, char *argv[]) {
 		usleep(500000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
+
+	spine_timeout:
 
 	threads_final = set.threads - a_threads_value;
 
@@ -949,9 +939,6 @@ int main(int argc, char *argv[]) {
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && !set.SQL_readonly) {
 		poller_push_data_to_main();
 	}
-
-	/* print out stats */
-	gettimeofday(&now, NULL);
 
 	/* update the db for |data_time| on graphs */
 	if (set.poller_id == 1) {
@@ -1016,7 +1003,7 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: Net-SNMP Close Completed"));
 
 	/* finally add some statistics to the log and exit */
-	end_time = TIMEVAL_TO_DOUBLE(now);
+	end_time = get_time_as_double();
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
 		SPINE_LOG(("Time: %.4f s, Threads: %i, Devices: %i", (end_time - begin_time), set.threads, num_rows));

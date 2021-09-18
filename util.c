@@ -1187,8 +1187,7 @@ int spine_log(const char *format, ...) {
 	now_ptr = &now_time;
 
 	if (IS_LOGGING_TO_STDOUT()) {
-		gettimeofday(&now, NULL);
-		cur_time = TIMEVAL_TO_DOUBLE(now);
+		cur_time = get_time_as_double();
 		sprintf(stdoutmessage, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
 		puts(stdoutmessage);
 		return TRUE;
@@ -1581,7 +1580,7 @@ double get_time_as_double(void) {
 
 	gettimeofday(&now, NULL);
 
-	return TIMEVAL_TO_DOUBLE(now);
+	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
 }
 
 /*! \fn string *get_host_poll_time()

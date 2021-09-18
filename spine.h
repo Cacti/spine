@@ -319,9 +319,6 @@
 #define STRMATCH(a,b)	(strcmp((a),(b)) == 0)
 #define STRIMATCH(a,b)	(strcasecmp((a),(b)) == 0)
 
-/* convert timeval to double (rounding to the nearest microsecond) */
-#define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000) )
-
 /* When any kind of poller wants to set an undefined value; this particular
  * value used ('U') springs from the requirements of rrdupdate. We also
  * include the corresponding test macro which looks for the literal string
