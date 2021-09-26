@@ -772,6 +772,7 @@ int main(int argc, char *argv[]) {
 		int loop_count = 0;
 		double progress_time = 0;
 		unsigned int sem_err = 0;
+		int spine_timeout = FALSE;
 
 		while (TRUE) {
 			sem_err = sem_trywait(&available_threads);
@@ -794,7 +795,7 @@ int main(int argc, char *argv[]) {
 
 				if (progress_time + 1 > set.poller_interval) {
 					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
-					goto spine_timeout;
+					spine_timeout = TRUE;
 					break;
 				}
 
@@ -806,7 +807,7 @@ int main(int argc, char *argv[]) {
 
 		loop_count = 0;
 
-		while (TRUE) {
+		while (!spine_timeout) {
 			sem_err = sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
@@ -827,7 +828,7 @@ int main(int argc, char *argv[]) {
 
 				if (progress_time + 1 > set.poller_interval) {
 					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
-					goto spine_timeout;
+					spine_timeout = TRUE;
 					break;
 				}
 
@@ -837,41 +838,43 @@ int main(int argc, char *argv[]) {
 			usleep(100000);
 		}
 
-		/* create child process */
-		thread_retry:
+		if (!spine_timeout) {
+			/* create child process */
+			thread_retry:
 
-		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
+			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
-		if (thread_status == 0) {
-			SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
+			if (thread_status == 0) {
+				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
 
-			if (change_host) {
-				device_counter++;
+				if (change_host) {
+					device_counter++;
+				}
+
+				sem_getvalue(&available_threads, &a_threads_value);
+				SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
+
+				sem_post(&thread_init_sem);
+
+				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
+					" host_threads = %d, host_data_ids = %d, complete = %d",
+					device_counter-1,
+					poller_details->host_id,
+					poller_details->host_thread,
+					poller_details->host_threads,
+					poller_details->host_data_ids,
+					poller_details->complete));
+			} else if (thread_status == EAGAIN) {
+				usleep(100000);
+				goto thread_retry;
+			} else if (thread_status == EINVAL) {
+				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 			}
 
-			sem_getvalue(&available_threads, &a_threads_value);
-			SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
-
-			sem_post(&thread_init_sem);
-
-			SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
-				" host_threads = %d, host_data_ids = %d, complete = %d",
-				device_counter-1,
-				poller_details->host_id,
-				poller_details->host_thread,
-				poller_details->host_threads,
-				poller_details->host_data_ids,
-				poller_details->complete));
-		} else if (thread_status == EAGAIN) {
-			usleep(100000);
-			goto thread_retry;
-		} else if (thread_status == EINVAL) {
-			SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
-		}
-
-		/* Restore thread initialization semaphore if thread creation failed */
-		if (thread_status) {
-			sem_post(&thread_init_sem);
+			/* Restore thread initialization semaphore if thread creation failed */
+			if (thread_status) {
+				sem_post(&thread_init_sem);
+			}
 		}
 	}
 
@@ -892,8 +895,6 @@ int main(int argc, char *argv[]) {
 		usleep(500000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
-
-	spine_timeout:
 
 	threads_final = set.threads - a_threads_value;
 
