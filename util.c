@@ -621,6 +621,21 @@ void read_config_options() {
 	/* log the script timeout value */
 	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i", set.php_servers));
 
+	/* get the number of script server processes to run */
+	if ((res = getsetting(&mysql, LOCAL, "active_profiles")) != 0) {
+		set.active_profiles = atoi(res);
+		free((char *)res);
+
+		if (set.active_profiles <= 0) {
+			set.active_profiles = 0;
+		}
+	} else {
+		set.active_profiles = 0;
+	}
+
+	/* log the script timeout value */
+	SPINE_LOG_DEBUG(("DEBUG: The number of active data source profiles is %i", set.active_profiles));
+
 	/*----------------------------------------------------------------
 	 * determine if the php script server is required by searching for
 	 * all the host records for an action of POLLER_ACTION_PHP_SCRIPT_SERVER.

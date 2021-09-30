@@ -346,6 +346,7 @@ typedef struct config_struct {
 	int    parent_fork;
 	int    num_parent_processes;
 	int    script_timeout;
+	int    active_profiles;
 	int    threads;
 	int    logfile_processed;
 	int    boost_enabled;

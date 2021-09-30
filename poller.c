@@ -315,16 +315,28 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
-		snprintf(query5, BUFSIZE,
-			"SELECT action, hostname, snmp_community, "
-				"snmp_version, snmp_username, snmp_password, "
-				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-				"rrd_num, snmp_port, snmp_timeout, "
-				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" ORDER by snmp_port %s", host_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query5, BUFSIZE,
+				"SELECT action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" ORDER by snmp_port %s", host_id, limits);
+		} else {
+			snprintf(query5, BUFSIZE,
+				"SELECT action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" ORDER by snmp_port %s", host_id, limits);
+		}
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
@@ -349,12 +361,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			" GROUP BY snmp_port %s", host_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
-		snprintf(query10, BUFSIZE,
-			"SELECT snmp_port, count(snmp_port)"
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" GROUP BY snmp_port %s", host_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" GROUP BY snmp_port %s", host_id, limits);
+		} else {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" GROUP BY snmp_port %s", host_id, limits);
+		}
 	} else {
 		snprintf(query1, BUFSIZE,
 			"SELECT action, hostname, snmp_community, "
@@ -389,17 +409,30 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
-		snprintf(query5, BUFSIZE,
-			"SELECT action, hostname, snmp_community, "
-				"snmp_version, snmp_username, snmp_password, "
-				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-				"rrd_num, snmp_port, snmp_timeout, "
-				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" AND poller_id = %i"
-			" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query5, BUFSIZE,
+				"SELECT action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" AND poller_id = %i"
+				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+		} else {
+			snprintf(query5, BUFSIZE,
+				"SELECT action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND poller_id = %i"
+				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+		}
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
@@ -426,13 +459,22 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
-		snprintf(query10, BUFSIZE,
-			"SELECT snmp_port, count(snmp_port)"
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" AND poller_id = %i"
-			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" AND poller_id = %i"
+				" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
+		} else {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND poller_id = %i"
+				" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
+		}
 	}
 
 	/* query to add output records to the poller output table */
@@ -1732,7 +1774,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	free(name);
 
 	/* update poller_items table for next polling interval */
-	if (host_thread == host_threads) {
+	if (host_thread == host_threads && set.active_profiles != 1) {
 		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
 
 		db_query(&mysql, LOCAL, query6);
