@@ -1,13 +1,13 @@
 The Cacti Group | spine
 
 1.2.19
--issue#172: datasources not getting fetched with spine (works fine with cmd.php)
+-issue#172: Issues with polling loop may skip some datasources
 -issue#209: Ping no longer works due to hostname changes
--issue#216: Fix rrd_next_step not updated correctly when rrd_step > poller_interval
+-issue#216: RRD steps are not always calculated correctly
 -issue#220: Unable to build when DES no longer supported
 -issue#221: IPv6 devices are not properly parsed
 -issue#226: Reduce a number of compiler warnings
--issue#227: Fix non-void return in thread_mutex_trylock
+-issue#227: Compiler warnings due to lack of return in thread_mutex_trylock
 -feature#235: Improve performance of Cacti poller on heavily loaded systems
 
 1.2.18
