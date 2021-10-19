@@ -8,6 +8,7 @@ The Cacti Group | spine
 -issue#221: IPv6 devices are not properly parsed
 -issue#226: Reduce a number of compiler warnings
 -issue#227: Compiler warnings due to lack of return in thread_mutex_trylock
+-issue#237: Spine will not look at non-timetics uptime when sysUpTimeInstance overflows
 -feature#235: Improve performance of Cacti poller on heavily loaded systems
 
 1.2.18
