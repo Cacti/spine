@@ -1947,7 +1947,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		poll_result = snmp_get(host, ".1.3.6.1.6.3.10.2.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
-		if (poll_result) {
+		if (poll_result && is_numeric(poll_result)) {
 			host->snmp_sysUpTimeInstance = atol(poll_result) * 100;
 			free(poll_result);
 		} else {
@@ -1957,7 +1957,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
-			if (poll_result) {
+			if (poll_result && is_numeric(poll_result)) {
 				host->snmp_sysUpTimeInstance = atol(poll_result);
 				free(poll_result);
 			}
@@ -2000,14 +2000,14 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		poll_result = snmp_get(host, ".1.3.6.1.6.3.10.2.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
-		if (strlen(poll_result) == 0) {
+		if (poll_result && is_numeric(poll_result)) {
 			free(poll_result);
 			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 			poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 		}
 
-		if (poll_result) {
+		if (poll_result && is_numeric(poll_result)) {
 			host->snmp_sysUpTimeInstance = atol(poll_result);
 			free(poll_result);
 		}
