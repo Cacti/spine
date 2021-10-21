@@ -847,7 +847,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
 									poll_result = snmp_get(host, ".1.3.6.1.6.3.10.2.1.3.0");
 
-									if (poll_result) {
+									if (poll_result && is_numeric(poll_result)) {
 										snprintf(sysUptime, BUFSIZE, "%llu", atol(poll_result) * 100);
 									} else {
 										free(poll_result);
