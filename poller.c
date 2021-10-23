@@ -616,7 +616,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				if (row[29] != NULL) host->failed_polls = atoi(row[29]);
 				if (row[30] != NULL) host->availability = atof(row[30]);
 
-				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atol(row[31]);
+				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atoll(row[31]);
 				if (row[32] != NULL) db_escape(&mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), row[32]);
 				if (row[33] != NULL) db_escape(&mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), row[33]);
 				if (row[34] != NULL) db_escape(&mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), row[34]);
@@ -848,7 +848,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									poll_result = snmp_get(host, ".1.3.6.1.6.3.10.2.1.3.0");
 
 									if (poll_result && is_numeric(poll_result)) {
-										snprintf(sysUptime, BUFSIZE, "%llu", atol(poll_result) * 100);
+										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
 										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 									} else {
 										free(poll_result);
@@ -972,7 +972,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								}
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
-							} else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
+							} else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) < atoll(poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
@@ -999,7 +999,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								previous_assert_failure = TRUE;
 							/* if uptime is set to '0' don't fail out */
 							} else if (strcmp(reindex->assert_value, "0")) {
-								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
+								if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) > atoll(poll_result))) {
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
 										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 									} else {
@@ -1949,7 +1949,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
 		if (poll_result && is_numeric(poll_result)) {
-			host->snmp_sysUpTimeInstance = atol(poll_result) * 100;
+			host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
 			snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
 			free(poll_result);
 		} else {
@@ -1960,7 +1960,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
 			if (poll_result && is_numeric(poll_result)) {
-				host->snmp_sysUpTimeInstance = atol(poll_result);
+				host->snmp_sysUpTimeInstance = atoll(poll_result);
 				free(poll_result);
 			}
 		}
@@ -2003,7 +2003,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
 		if (poll_result && is_numeric(poll_result)) {
-			host->snmp_sysUpTimeInstance = atol(poll_result) * 100;
+			host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
 			snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
 
 			free(poll_result);
@@ -2015,7 +2015,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
 			if (poll_result && is_numeric(poll_result)) {
-				host->snmp_sysUpTimeInstance = atol(poll_result);
+				host->snmp_sysUpTimeInstance = atoll(poll_result);
 				free(poll_result);
 			}
 		}
