@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.20
+-issue#238: Timeouts due to new Uptime checks
+
 1.2.19
 -issue#172: Issues with polling loop may skip some datasources
 -issue#209: Ping no longer works due to hostname changes
