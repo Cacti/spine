@@ -755,12 +755,13 @@ void poller_push_data_to_main() {
 	MYSQL_ROW  row;
 	int        num_rows;
 	int        rows;
-	char       sqlbuf[MEGA_BUFSIZE];
+	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
 	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
-	char       tmpstr[SMALL_BUFSIZE];
+	// tmpstr needs to be greater than 2 * the maximum column size being processed below
+	char       tmpstr[BUFSIZE];
 
 	db_connect(LOCAL, &mysql);
 	db_connect(REMOTE, &mysqlr);
@@ -835,42 +836,42 @@ void poller_push_data_to_main() {
 						sqlp += sprintf(sqlp, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%s, ", row[0]); // id
+					sqlp += sprintf(sqlp, "%s, ", row[0]); // id mediumint
 
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID varchar(128)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance bigint
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-
-					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count
-
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_event_date
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status tinyint
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time
-					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time
-					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time
-					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time
-					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time
-					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls
-					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls
-					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability
+					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count mediumint
 
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_fail_date timestamp
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date timestamp
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error varchar(255)
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time double
+					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls int
+					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls int
+					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability decimal(8,5)
+
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated timestamp
 					sqlp += sprintf(sqlp, "'%s'", tmpstr);
 
 					sqlp += sprintf(sqlp, ")");

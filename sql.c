@@ -550,12 +550,10 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	if (input == NULL) return;
 
 	char input_trimmed[BUFSIZE];
-	int  input_size;
+	int  max_escaped_input_size = (strlen(input) * 2) + 1;
 
-	input_size = strlen(input);
-
-	if (input_size > max_size) {
-		snprintf(input_trimmed, max_size - 10, "%s", input);
+	if (max_escaped_input_size > max_size) {
+		snprintf(input_trimmed, (max_size / 2) - 1, "%s", input);
 	} else {
 		snprintf(input_trimmed, max_size, "%s", input);
 	}
