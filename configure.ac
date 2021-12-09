@@ -113,7 +113,6 @@ AC_CHECK_LIB(crypto, CRYPTO_realloc)
 AC_SEARCH_LIBS([clock_gettime], [rt pthread])
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_CHECK_HEADERS(sys/socket.h sys/select.h sys/wait.h sys/time.h)
 AC_CHECK_HEADERS(assert.h ctype.h errno.h signal.h math.h malloc.h netdb.h)
 AC_CHECK_HEADERS(signal.h stdarg.h stdio.h syslog.h)
