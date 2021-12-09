@@ -1,5 +1,5 @@
-AC_PREREQ(2.53)
-AC_INIT(Spine Poller, 1.2.19, http://www.cacti.net/issues.php)
+AC_PREREQ([2.69])
+AC_INIT([Spine Poller],[1.2.19],[http://www.cacti.net/issues.php])
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -15,10 +15,8 @@ AC_CONFIG_HEADERS(config/config.h)
 
 # static libraries
 AC_ARG_WITH(static,
-  AC_HELP_STRING(
-    [--with-static],
-    [Build using static libraries]
-  ),
+  AS_HELP_STRING([--with-static],[Build using static libraries
+  ]),
   [CFLAGS="-static $CFLAGS"]
 )
 
@@ -26,29 +24,23 @@ AC_CONFIG_MACRO_DIR([m4])
 
 # mysql
 AC_ARG_WITH(mysql,
-  AC_HELP_STRING(
-    [--with-mysql],
-    [MySQL base directory [[/usr/local/mysql]]]
-  ),
+  AS_HELP_STRING([--with-mysql],[MySQL base directory [[/usr/local/mysql]]
+  ]),
   [MYSQL_DIR=$withval]
 )
 
 # snmp
 AC_ARG_WITH(snmp,
-  AC_HELP_STRING(
-    [--with-snmp],
-    [SNMP base directory [[/usr/(local/)include]]]
-  ),
+  AS_HELP_STRING([--with-snmp],[SNMP base directory [[/usr/(local/)include]]
+  ]),
   [SNMP_DIR=$withval]
 )
 
 # reentrant
 MYSQL_REENTRANT=0
 AC_ARG_WITH(reentrant,
-  AC_HELP_STRING(
-    [--with-reentrant],
-    [If using MySQL versions less than 5.5 you must choose this option]
-  ),
+  AS_HELP_STRING([--with-reentrant],[If using MySQL versions less than 5.5 you must choose this option
+  ]),
   [MYSQL_REENTRANT=1]
 )
 
@@ -143,7 +135,18 @@ AC_HEADER_TIME
 AC_STRUCT_TM
 
 # Checks for library functions.
-AC_TYPE_SIGNAL
+AC_DIAGNOSE([obsolete],[your code may safely assume C89 semantics that RETSIGTYPE is void.
+Remove this warning and the `AC_CACHE_CHECK' when you adjust the code.])dnl
+AC_CACHE_CHECK([return type of signal handlers],[ac_cv_type_signal],[AC_COMPILE_IFELSE(
+[AC_LANG_PROGRAM([#include <sys/types.h>
+#include <signal.h>
+],
+		 [return *(signal (0, 0)) (0) == 1;])],
+		   [ac_cv_type_signal=int],
+		   [ac_cv_type_signal=void])])
+AC_DEFINE_UNQUOTED([RETSIGTYPE],[$ac_cv_type_signal],[Define as the return type of signal handlers
+		    (`int' or `void').])
+
 AC_CHECK_FUNCS(malloc calloc gettimeofday strerror strtoll)
 
 # ****************** Solaris Privileges Check ***********************
@@ -356,22 +359,17 @@ fi
 
 # Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
-AC_TRY_COMPILE([#include <net-snmp-config.h>], [exit(NETSNMP_USE_OPENSSL != 1);],
-  [  AC_MSG_RESULT(yes)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <net-snmp-config.h>]], [[exit(NETSNMP_USE_OPENSSL != 1);]])],[  AC_MSG_RESULT(yes)
      SNMP_SSL=yes
-  ],
-  AC_MSG_RESULT(no)
-)
+  ],[AC_MSG_RESULT(no)
+])
 
-AC_TRY_COMPILE([ #include <net-snmp-config.h> 
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ #include <net-snmp-config.h> 
   #include <net-snmp/utilities.h>
   #include <net-snmp/net-snmp-includes.h>
   #include <net-snmp/config_api.h>
-  #include <net-snmp/mib_api.h> ], 
-  [struct snmp_session session; snmp_sess_init(&session); session.localname = strdup("hello")],
-  havelocalname=1,
-  havelocalname=0
-)
+  #include <net-snmp/mib_api.h> ]], [[struct snmp_session session; snmp_sess_init(&session); session.localname = strdup("hello")]])],[havelocalname=1],[havelocalname=0
+])
 AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session structure member exists)
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
@@ -380,7 +378,7 @@ AC_CHECK_LIB(netsnmp, snmp_timeout)
 # Check for the default spine output buffer size
 results_buffer=2048
 AC_ARG_WITH(results-buffer,
-  AC_HELP_STRING([--with-results-buffer=N], [The size of the spine results buffer (default=2048)]),
+  AS_HELP_STRING([--with-results-buffer=N],[The size of the spine results buffer (default=2048)]),
   [results_buffer=$withval]
 )
 AC_DEFINE_UNQUOTED(RESULTS_BUFFER, $results_buffer, The size of the spine result buffer)
@@ -390,7 +388,7 @@ AC_MSG_RESULT(checking for the spine results buffer size... $results_buffer byte
 # Check for the most scripts that can be active at one time per spine process
 max_scripts=20
 AC_ARG_WITH(max-scripts,
-  AC_HELP_STRING([--with-max-scripts=N], [The maximum simultaneous spine scripts that can run (default=20)]),
+  AS_HELP_STRING([--with-max-scripts=N],[The maximum simultaneous spine scripts that can run (default=20)]),
   [max_scripts=$withval]
 )
 AC_DEFINE_UNQUOTED(MAX_SIMULTANEOUS_SCRIPTS, $max_scripts, The maximum number of simultaneous running scripts)
@@ -400,7 +398,7 @@ AC_MSG_RESULT(checking for the maximum simultaneous spine scripts... $max_script
 # Check for the most scripts that can be active at one time per spine process
 max_mysql_buffer=131072
 AC_ARG_WITH(max-mysql-buffer,
-  AC_HELP_STRING([--with-max-mysql-buffer=N], [The maximum SQL insert size allowed (default=131072)]),
+  AS_HELP_STRING([--with-max-mysql-buffer=N],[The maximum SQL insert size allowed (default=131072)]),
   [max_mysql_buffer=$withval]
 )
 AC_DEFINE_UNQUOTED(MAX_MYSQL_BUF_SIZE, $max_mysql_buffer, The maximum MySQL buffer size to insert)
@@ -438,11 +436,10 @@ fi
 
 # See if we can support backtracing
 AC_MSG_CHECKING([if we can support backtracing])
-AC_TRY_LINK(
-  [
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
     #include <execinfo.h>
-  ],[
+  ]], [[
     void *array[10];
     size_t size;
 
@@ -453,49 +450,42 @@ AC_TRY_LINK(
     } else {
       exit(1);
     }
-  ],
-  [  AC_MSG_RESULT(yes)
+  ]])],[  AC_MSG_RESULT(yes)
      AC_DEFINE(HAVE_EXECINFO_H,1,[Do we have backtracing capabilities?])
-  ],
-  AC_MSG_RESULT(no)
-)
+  ],[AC_MSG_RESULT(no)
+])
 
 # See if we can support backtracing
 AC_MSG_CHECKING([if we can support mysql/mariadb retry count])
-AC_TRY_LINK(
-  [
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
     #include "$MYSQL_INC_DIR/mysql.h"
-  ],[
+  ]], [[
     if (MYSQL_OPT_RETRY_COUNT) {
       exit(0);
     } else {
       exit(1);
     }
-  ],
-  [  AC_MSG_RESULT(yes)
+  ]])],[  AC_MSG_RESULT(yes)
      AC_DEFINE(HAS_MYSQL_OPT_RETRY_COUNT,1,[Do we have mysql/maraidb retry count capabilities?])
-  ],
-  AC_MSG_RESULT(no)
-)
+  ],[AC_MSG_RESULT(no)
+])
 
 # See if we can support backtracing
 AC_MSG_CHECKING([if we can support mysql/mariadb ssl keys])
-AC_TRY_LINK(
-  [
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
     #include "$MYSQL_INC_DIR/mysql.h"
-  ],[
+  ]], [[
     if (MYSQL_OPT_SSL_KEY) {
       exit(0);
     } else {
       exit(1);
     }
-  ],
-  [  AC_MSG_RESULT(yes)
+  ]])],[  AC_MSG_RESULT(yes)
      AC_DEFINE(HAS_MYSQL_OPT_SSL_KEY,1,[Do we have mysql/maraidb ssl keys capabilities?])
-  ],
-  AC_MSG_RESULT(no)
-)
+  ],[AC_MSG_RESULT(no)
+])
 
-AC_OUTPUT(Makefile)
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
