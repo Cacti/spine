@@ -761,7 +761,7 @@ void poller_push_data_to_main() {
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
 	// tmpstr needs to be greater than 2 * the maximum column size being processed below
-	char       tmpstr[BUFSIZE];
+	char       tmpstr[DBL_BUFSIZE];
 
 	db_connect(LOCAL, &mysql);
 	db_connect(REMOTE, &mysqlr);

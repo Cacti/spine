@@ -549,7 +549,7 @@ int append_hostrange(char *obuf, const char *colname) {
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	if (input == NULL) return;
 
-	char input_trimmed[BUFSIZE];
+	char input_trimmed[DBL_BUFSIZE];
 	int  max_escaped_input_size = (strlen(input) * 2) + 1;
 
 	if (max_escaped_input_size > max_size) {
