@@ -350,8 +350,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			" (local_data_id, rrd_name, time, output) VALUES");
 
 		/* query suffix to add rows to the poller output table */
-		snprintf(posuffix, BUFSIZE,
-			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+		if (set.dbonupdate == 0) {
+			snprintf(posuffix, BUFSIZE,
+				" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+		} else {
+			snprintf(posuffix, BUFSIZE,
+				" AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+		}
 
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,

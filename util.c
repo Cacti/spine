@@ -136,9 +136,15 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 	assert(mysetting != 0);
 	assert(myvalue   != 0);
 
-	sprintf(qstring, "INSERT INTO settings (name, value) "
-		"VALUES ('%s', '%s') "
-		"ON DUPLICATE KEY UPDATE value=VALUES(value)", mysetting, myvalue);
+	if (set.dbonupdate == 0) {
+		sprintf(qstring, "INSERT INTO settings (name, value) "
+			"VALUES ('%s', '%s') "
+			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
+	} else {
+		sprintf(qstring, "INSERT INTO settings (name, value) "
+			"VALUES ('%s', '%s') AS rs "
+			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
+	}
 
 	result = db_insert(psql, mode, qstring);
 
@@ -349,10 +355,17 @@ void read_config_options() {
 	}
 
 	/* get the mysql server version */
-	set.dbversion = 0;
 	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
-		set.dbversion = atoi(res);
+		snprintf(set.dbversion, SMALL_BUFSIZE, "%s", res);
 		free((char *)res);
+	}
+
+	if (STRIMATCH(set.dbversion, "mariadb")) {
+		set.dbonupdate = 0;
+	} else if (STRIMATCH(set.dbversion, "8.")) {
+		set.dbonupdate = 1;
+	} else {
+		set.dbonupdate = 0;
 	}
 
 	/* get logging level from database - overrides spine.conf */
@@ -418,6 +431,9 @@ void read_config_options() {
 
 	/* log the path_cactilog variable */
 	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
+
+	/* the version variable */
+	SPINE_LOG_DEBUG(("DEBUG: The version variable is %s", set.dbversion));
 
 	/* log the log_destination variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)",
@@ -799,27 +815,51 @@ void poller_push_data_to_main() {
 		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
 		"total_polls, failed_polls, availability, last_updated) VALUES ");
 
-	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
-		"snmp_sysDescr=VALUES(snmp_sysDescr), "
-		"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
-        "snmp_sysUpTimeInstance=VALUES(snmp_sysUpTimeInstance), "
-		"snmp_sysContact=VALUES(snmp_sysContact), "
-		"snmp_sysName=VALUES(snmp_sysName), "
-		"snmp_sysLocation=VALUES(snmp_sysLocation), "
-        "status=VALUES(status), "
-		"status_event_count=VALUES(status_event_count), "
-		"status_fail_date=VALUES(status_fail_date), "
-		"status_rec_date=VALUES(status_rec_date), "
-        "status_last_error=VALUES(status_last_error), "
-		"min_time=VALUES(min_time), "
-		"max_time=VALUES(max_time), "
-		"cur_time=VALUES(cur_time), "
-		"avg_time=VALUES(avg_time), "
-		"polling_time=VALUES(polling_time), "
-        "total_polls=VALUES(total_polls), "
-		"failed_polls=VALUES(failed_polls), "
-		"availability=VALUES(availability), "
-		"last_updated=VALUES(last_updated);");
+	if (set.dbonupdate == 0) {
+		snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+			"snmp_sysDescr=VALUES(snmp_sysDescr), "
+			"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
+			"snmp_sysUpTimeInstance=VALUES(snmp_sysUpTimeInstance), "
+			"snmp_sysContact=VALUES(snmp_sysContact), "
+			"snmp_sysName=VALUES(snmp_sysName), "
+			"snmp_sysLocation=VALUES(snmp_sysLocation), "
+			"status=VALUES(status), "
+			"status_event_count=VALUES(status_event_count), "
+			"status_fail_date=VALUES(status_fail_date), "
+			"status_rec_date=VALUES(status_rec_date), "
+			"status_last_error=VALUES(status_last_error), "
+			"min_time=VALUES(min_time), "
+			"max_time=VALUES(max_time), "
+			"cur_time=VALUES(cur_time), "
+			"avg_time=VALUES(avg_time), "
+			"polling_time=VALUES(polling_time), "
+			"total_polls=VALUES(total_polls), "
+			"failed_polls=VALUES(failed_polls), "
+			"availability=VALUES(availability), "
+			"last_updated=VALUES(last_updated)");
+	} else {
+		snprintf(suffix, BUFSIZE, " AS rs ON DUPLICATE KEY UPDATE "
+			"snmp_sysDescr=rs.snmp_sysDescr, "
+			"snmp_sysObjectID=rs.snmp_sysObjectID, "
+			"snmp_sysUpTimeInstance=rs.snmp_sysUpTimeInstance, "
+			"snmp_sysContact=rs.snmp_sysContact, "
+			"snmp_sysName=rs.snmp_sysName, "
+			"snmp_sysLocation=rs.snmp_sysLocation, "
+			"status=rs.status, "
+			"status_event_count=rs.status_event_count, "
+			"status_fail_date=rs.status_fail_date, "
+			"status_rec_date=rs.status_rec_date, "
+			"status_last_error=rs.status_last_error, "
+			"min_time=rs.min_time, "
+			"max_time=rs.max_time, "
+			"cur_time=rs.cur_time, "
+			"avg_time=rs.avg_time, "
+			"polling_time=rs.polling_time, "
+			"total_polls=rs.total_polls, "
+			"failed_polls=rs.failed_polls, "
+			"availability=rs.availability, "
+			"last_updated=rs.last_updated");
+	}
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);
@@ -910,8 +950,13 @@ void poller_push_data_to_main() {
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
-	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
-		"rrd_next_step=VALUES(rrd_next_step);");
+	if (set.dbonupdate == 0) {
+		snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+			"rrd_next_step=VALUES(rrd_next_step)");
+	} else {
+		snprintf(suffix, BUFSIZE, " AS rs ON DUPLICATE KEY UPDATE "
+			"rrd_next_step=rs.rrd_next_step");
+	}
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);

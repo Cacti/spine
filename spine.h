@@ -370,7 +370,8 @@ typedef struct config_struct {
 	char   db_ssl_ca[BIG_BUFSIZE];
 	int    d_b;
 	unsigned int db_port;
-	int    dbversion;
+	char   dbversion[SMALL_BUFSIZE];
+	int    dbonupdate;
 	/* path information */
 	char   path_logfile[DBL_BUFSIZE];
 	char   path_php[BUFSIZE];
@@ -420,7 +421,8 @@ typedef struct config_struct {
 	char   rdb_ssl_cert[BIG_BUFSIZE];
 	char   rdb_ssl_ca[BIG_BUFSIZE];
 	unsigned int rdb_port;
-	int    rdbversion;
+	char   rdbversion[SMALL_BUFSIZE];
+	int    rdbonupdate;
 } config_t;
 
 /*! Target Structure

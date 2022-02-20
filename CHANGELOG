@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.20
+-issue#233: MySQL 8.0 compatibility fix for spine - VALUES function
 -issue#238: Timeouts due to new Uptime checks
 -issue#240: Spine obsolete macro you should run autoupdate
 -issue#241: Invalid query errors when remote poller hosts return long sysDescription values
