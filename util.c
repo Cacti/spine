@@ -362,7 +362,7 @@ void read_config_options() {
 
 	if (STRIMATCH(set.dbversion, "mariadb")) {
 		set.dbonupdate = 0;
-	} else if (STRIMATCH(set.dbversion, "8.")) {
+	} else if (strpos(set.dbversion, "8.") == 0) {
 		set.dbonupdate = 1;
 	} else {
 		set.dbonupdate = 0;
@@ -1736,6 +1736,21 @@ char *reverse(char* str) {
 	}
 
 	return str;
+}
+
+/*! \fn strpos()
+ *  \brief looks for the position of needle in haystack
+ *
+ *  \return the position of -1 if not found
+ */
+int strpos(char *haystack, char *needle) {
+	char *p = strstr(haystack, needle);
+
+	if (p) {
+		return p - haystack;
+	}
+
+	return -1;
 }
 
 /*! \fn char_count()
