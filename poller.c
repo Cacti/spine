@@ -189,7 +189,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	char temp_arg1[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
-	int  num_snmp_agents   = 0;
 	int  last_snmp_version = 0;
 	int  last_snmp_port    = 0;
 	char last_snmp_community[50];
@@ -316,26 +315,51 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* multiple polling interval query for items */
 		if (set.active_profiles != 1) {
-			snprintf(query5, BUFSIZE,
-				"SELECT action, hostname, snmp_community, "
-					"snmp_version, snmp_username, snmp_password, "
-					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-				" FROM poller_item"
-				" WHERE host_id = %i"
-				" AND rrd_next_step <= 0"
-				" ORDER by snmp_port %s", host_id, limits);
+			if (set.total_snmp_ports == 1) {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND rrd_next_step <= 0"
+					" %s", host_id, limits);
+			} else {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND rrd_next_step <= 0"
+					" ORDER BY snmp_port %s", host_id, limits);
+			}
 		} else {
-			snprintf(query5, BUFSIZE,
-				"SELECT action, hostname, snmp_community, "
-					"snmp_version, snmp_username, snmp_password, "
-					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-				" FROM poller_item"
-				" WHERE host_id = %i"
-				" ORDER by snmp_port %s", host_id, limits);
+			if (set.total_snmp_ports == 1) {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" %s", host_id, limits);
+			} else {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" ORDER BY snmp_port %s", host_id, limits);
+			}
 		}
 
 		/* query to setup the next polling interval in cacti */
@@ -1099,34 +1123,18 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	/* calculate the number of poller items to poll this cycle */
 	num_rows = 0;
 	if (set.poller_interval == 0) {
-		/* get the number of agents */
-		if ((result = db_query(&mysql, LOCAL, query9)) != 0) {
-			num_snmp_agents = mysql_num_rows(result);
-			mysql_free_result(result);
-
-			/* get the poller items */
-			if ((result = db_query(&mysql, LOCAL, query1)) != 0) {
-				num_rows = mysql_num_rows(result);
-			} else {
-				SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
-			}
+		/* get the poller items */
+		if ((result = db_query(&mysql, LOCAL, query1)) != 0) {
+			num_rows = mysql_num_rows(result);
 		} else {
-			SPINE_LOG(("Device[%i] HT[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 		}
 	} else {
-		/* get the number of agents */
-		if ((result = db_query(&mysql, LOCAL, query10)) != 0) {
-			num_snmp_agents = (int)mysql_num_rows(result);
-			mysql_free_result(result);
-
-			/* get the poller items */
-			if ((result = db_query(&mysql, LOCAL, query5)) != 0) {
-				num_rows = mysql_num_rows(result);
-			} else {
-				SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
-			}
+		/* get the poller items */
+		if ((result = db_query(&mysql, LOCAL, query5)) != 0) {
+			num_rows = mysql_num_rows(result);
 		} else {
-			SPINE_LOG(("Device[%i] HT[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 		}
 	}
 

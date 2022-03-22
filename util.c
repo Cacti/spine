@@ -637,7 +637,7 @@ void read_config_options() {
 	/* log the script timeout value */
 	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i", set.php_servers));
 
-	/* get the number of script server processes to run */
+	/* get the number of active profiles on the system run */
 	if ((res = getsetting(&mysql, LOCAL, "active_profiles")) != 0) {
 		set.active_profiles = atoi(res);
 		free((char *)res);
@@ -651,6 +651,21 @@ void read_config_options() {
 
 	/* log the script timeout value */
 	SPINE_LOG_DEBUG(("DEBUG: The number of active data source profiles is %i", set.active_profiles));
+
+	/* get the number of snmp_ports in use */
+	if ((res = getsetting(&mysql, LOCAL, "total_snmp_ports")) != 0) {
+		set.total_snmp_ports = atoi(res);
+		free((char *)res);
+
+		if (set.total_snmp_ports <= 0) {
+			set.total_snmp_ports = 0;
+		}
+	} else {
+		set.total_snmp_ports = 0;
+	}
+
+	/* log the script timeout value */
+	SPINE_LOG_DEBUG(("DEBUG: The number of snmp ports on the system is %i", set.total_snmp_ports));
 
 	/*----------------------------------------------------------------
 	 * determine if the php script server is required by searching for

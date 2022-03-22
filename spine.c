@@ -713,7 +713,12 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* adjust device threads in cases where the host does not have sufficient data sources */
-		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		if (set.active_profiles != 1) {
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		} else {
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
+		}
+
 		tresult   = db_query(&mysql, LOCAL, querybuf);
 		mysql_row = mysql_fetch_row(tresult);
 
@@ -729,7 +734,12 @@ int main(int argc, char *argv[]) {
 		/* determine how many items will be polled per thread */
 		if (device_threads > 1) {
 			if (current_thread == 1) {
-				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
+				if (set.active_profiles != 1) {
+					snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
+				} else {
+					snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+				}
+
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
