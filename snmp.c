@@ -224,7 +224,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
 		} else if (strcmp(snmp_auth_protocol, "SHA224") == 0) {
-			#if defined(HAVE_EVP_SHA224)
+			#if defined(HAVE_EVP_SHA224) && defined(usmHMAC128SHA224AuthProtocol)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC128SHA224AuthProtocol);
 			#else
@@ -232,8 +232,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA256") == 0) {
-			//#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
-			#if defined(HAVE_EVP_SHA224)
+			#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC192SHA256AuthProtocol);
 			#else
@@ -241,7 +240,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA384") == 0) {
-			#if defined(HAVE_EVP_SHA384)
+			#if defined(HAVE_EVP_SHA384) && defined(usmHMAC256SHA384AuthProtocol)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC256SHA384_AUTH_LEN;
 			#else
@@ -249,7 +248,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA512") == 0) {
-			#if defined(HAVE_EVP_SHA384)
+			#if defined(HAVE_EVP_SHA384) && defined(usmHMAC384SHA512AuthProtocol)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC384SHA512_AUTH_LEN;
 			#else
@@ -306,7 +305,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES192") == 0) {
-				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES192PrivProtocol)
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES192PrivProtocol, OID_LENGTH(usmAES192PrivProtocol));
 				session.securityPrivProtoLen = OID_LENGTH(usmAES192PrivProtocol);
 				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES192);
@@ -316,7 +315,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				return 0;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES256") == 0) {
-				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES256PrivProtocol)
 				session.securityPrivProto    = snmp_duplicate_objid(usmAES256PrivProtocol, OID_LENGTH(usmAES256PrivProtocol));
 				session.securityPrivProtoLen = OID_LENGTH(usmAES256PrivProtocol);
 				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES256);
