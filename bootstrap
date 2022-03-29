@@ -42,7 +42,9 @@ rm -rf autom4te.cache .deps
 # Make sure all files are unix formatted files 
 which dos2unix > /dev/null 2>&1
 if [ $? -eq 0 ]; then
-  find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
+  find . -name \*.h -exec dos2unix {} \; > /dev/null 2>&1
+  find . -name \*.c -exec dos2unix {} \; > /dev/null 2>&1
+  find . -name \*.sh -exec dos2unix {} \; > /dev/null 2>&1
 fi
 
 # Prepare a build state
