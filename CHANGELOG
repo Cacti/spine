@@ -5,6 +5,7 @@ The Cacti Group | spine
 -issue#238: Timeouts due to new Uptime checks
 -issue#240: Spine obsolete macro you should run autoupdate
 -issue#241: Invalid query errors when remote poller hosts return long sysDescription values
+-issue#243: Spine will not compile on FreeBSD13
 -issue#244: SQL sytax error for remote pollers
 -issue#247: SNMPv3 with SHA256 throws "SHA256 is not supported on this system. Upgrade the Net-SNMP API to 5.8+"
 -feature#252: Improve spine performance when there are only one snmp agent ports in use
