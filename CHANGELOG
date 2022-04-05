@@ -1,14 +1,14 @@
 The Cacti Group | spine
 
 1.2.20
--issue#233: MySQL 8.0 compatibility fix for spine - VALUES function
--issue#238: Timeouts due to new Uptime checks
--issue#240: Spine obsolete macro you should run autoupdate
--issue#241: Invalid query errors when remote poller hosts return long sysDescription values
--issue#243: Spine will not compile on FreeBSD13
--issue#244: SQL sytax error for remote pollers
--issue#247: SNMPv3 with SHA256 throws "SHA256 is not supported on this system. Upgrade the Net-SNMP API to 5.8+"
--feature#252: Improve spine performance when there are only one snmp agent ports in use
+-issue#233: Add support for newer versions of MySQL/MariaDB
+-issue#238: When checking for uptime of device, don't assume a non-responce is always fatal
+-issue#240: When compiling, newer systems may complain about obsolete macros
+-issue#241: When querying devices, long descriptions can become truncated
+-issue#243: When compiling, FreeBSD may complain about missing backtrace functions
+-issue#244: When building queries, commands may become truncated
+-issue#247: When compiling with SNMPv3 support, SHA256 may incorrectly appear to be not supported
+-feature#252: Improve spine performance when only one snmp agent port is in use
 
 1.2.19
 -issue#172: Issues with polling loop may skip some datasources
