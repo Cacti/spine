@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.21
+-issue#258: Disable DES if Net-SNMP doesn't have it
+
 1.2.20
 -issue#233: Add support for newer versions of MySQL/MariaDB
 -issue#238: When checking for uptime of device, don't assume a non-responce is always fatal
