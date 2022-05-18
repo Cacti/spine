@@ -283,7 +283,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		} else {
 			if (strcmp(snmp_priv_protocol, "DES") == 0) {
-				#if defined(USM_PRIV_PROTO_DES_LEN)
+				#if defined(USM_PRIV_PROTO_DES_LEN) && !defined(NETSNMP_DISABLE_DES)
 				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, USM_PRIV_PROTO_DES_LEN);
 				session.securityPrivProtoLen = USM_PRIV_PROTO_DES_LEN;
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
