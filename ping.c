@@ -859,7 +859,7 @@ int get_address_type(host_t *host) {
 
 		inet_ntop(res->ai_family, ptr, addrstr, 100);
 
-		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)\n", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
+		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
 
 		if (res->ai_family != PF_INET6) {
 			freeaddrinfo(res_list);
