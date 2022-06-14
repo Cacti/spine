@@ -52,6 +52,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
+	memset(query_frag, 0, LRG_BUFSIZE);
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
@@ -148,6 +149,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
+	memset(query_frag, 0, LRG_BUFSIZE);
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */

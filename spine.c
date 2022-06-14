@@ -103,6 +103,7 @@ int num_hosts = 0;
 sem_t available_threads;
 sem_t available_scripts;
 double start_time;
+double total_time;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -205,6 +206,7 @@ int main(int argc, char *argv[]) {
 	struct timespec until_spec;
 
 	start_time = get_time_as_double();
+	total_time = 0;
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -812,7 +814,16 @@ int main(int argc, char *argv[]) {
 				loop_count = 0;
 			}
 
-			usleep(100000);
+			usleep(10000);
+
+			total_time = get_time_as_double();
+
+			if (total_time - start_time > set.poller_interval) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices External", host_id, current_thread));
+				spine_timeout = TRUE;
+				canexit = TRUE;
+				break;
+			}
 		}
 
 		loop_count = 0;
@@ -845,7 +856,16 @@ int main(int argc, char *argv[]) {
 				loop_count = 0;
 			}
 
-			usleep(100000);
+			usleep(10000);
+
+			total_time = get_time_as_double();
+
+			if (total_time - start_time > set.poller_interval) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices Internal", host_id, current_thread));
+				spine_timeout = TRUE;
+				canexit = TRUE;
+				break;
+			}
 		}
 
 		if (!spine_timeout) {
@@ -875,7 +895,7 @@ int main(int argc, char *argv[]) {
 					poller_details->host_data_ids,
 					poller_details->complete));
 			} else if (thread_status == EAGAIN) {
-				usleep(100000);
+				usleep(10000);
 				goto thread_retry;
 			} else if (thread_status == EINVAL) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
@@ -940,7 +960,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (threads_missing > -1) {
-		SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
+		SPINE_LOG(("WARNING: There were %d threads which did not run", num_rows - threads_missing));
 	}
 
 	/* tell Spine that it is now parent */
