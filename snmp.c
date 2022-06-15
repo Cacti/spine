@@ -435,16 +435,17 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
+			} else if (response->errstat == SNMP_ERR_NOERROR &&
+				response->variables != NULL &&
+				response->variables->name != NULL) {
+
+				vars = response->variables;
+
+				snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+
+				snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 			} else {
-				if (response->errstat == SNMP_ERR_NOERROR) {
-					vars = response->variables;
-
-					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-
-					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
-				} else {
-					SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
-				}
+				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
 			}
 		} else {
 			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));

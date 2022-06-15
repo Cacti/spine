@@ -3,6 +3,7 @@ The Cacti Group | spine
 1.2.22
 -issue#269: Latest spine does not timeout as it was designed when the poller interval expires
 -issue#270: Spine logging at -V 5 includes an extra line feed
+-issue#271: Spine encounters a segmentation fault due to incorrect snmp response
 
 1.2.21
 -issue#258: Disable DES if Net-SNMP doesn't have it
