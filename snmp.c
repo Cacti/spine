@@ -408,6 +408,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
 
 		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid));
+
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
 			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
 			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
@@ -441,9 +442,20 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 				vars = response->variables;
 
-				snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+				if (vars->type == SNMP_NOSUCHOBJECT) {
+					SET_UNDEFINED(result_string);
+					status = STAT_ERROR;
+				} else if (vars->type == SNMP_NOSUCHINSTANCE) {
+					SET_UNDEFINED(result_string);
+					status = STAT_ERROR;
+				} else if (vars->type == SNMP_ENDOFMIBVIEW) {
+					SET_UNDEFINED(result_string);
+					status = STAT_ERROR;
+				} else {
+					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-				snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
+					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
+				}
 			} else {
 				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
 			}

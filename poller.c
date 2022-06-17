@@ -866,15 +866,19 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							/* check to see if you are checking uptime */
 							if (!reindex_err) {
-								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") &&
-								   (strlen(sysUptime) > 0)) {
+								if ((strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") ||
+									strstr(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")) && strlen(sysUptime) > 0) {
+
 									if (!(poll_result = (char *) malloc(BUFSIZE))) {
 										die("ERROR: Fatal malloc error: poller.c poll_result");
 									}
+
 									poll_result[0] = '\0';
+
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
 									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
+
 									if (is_debug_device(host->id)) {
 										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
 									} else {

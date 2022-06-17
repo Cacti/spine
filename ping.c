@@ -204,7 +204,9 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			if (host->snmp_status == SNMPERR_UNKNOWN_OBJID) {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
+
 				free(poll_result);
+
 				return HOST_UP;
 			} else if (host->snmp_status != SNMPERR_SUCCESS) {
 				if (is_debug_device(host->id)) {
@@ -220,18 +222,22 @@ int ping_snmp(host_t *host, ping_t *ping) {
 						SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Unknown Error", host->id));
 					}
 				}
+
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
 				free(poll_result);
+
 				return HOST_DOWN;
 			} else {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 				free(poll_result);
+
 				return HOST_UP;
 			}
 		} else {
 			snprintf(ping->snmp_status, 50, "0.00");
 			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device does not require SNMP");
+
 			return HOST_UP;
 		}
 	} else {
@@ -1157,6 +1163,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				if (set.ping_failure_count == 1) {
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
+
 			/* host is down, but not ready to issue log message */
 			} else {
 				/* host down for the first time, set event date */
@@ -1164,6 +1171,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			}
+
 		/* host is recovering, put back in failed state */
 		} else if (host->status == HOST_RECOVERING) {
 			host->status_event_count = 1;
@@ -1176,6 +1184,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		} else {
 			host->status_event_count++;
 		}
+
 	/* host is up!! */
 	} else {
 		/* update total polls and availability */
