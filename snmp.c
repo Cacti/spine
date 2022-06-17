@@ -445,12 +445,15 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 				if (vars->type == SNMP_NOSUCHOBJECT) {
 					SET_UNDEFINED(result_string);
 					status = STAT_ERROR;
+					SPINE_LOG_HIGH(("ERROR: No such Object for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else if (vars->type == SNMP_NOSUCHINSTANCE) {
 					SET_UNDEFINED(result_string);
 					status = STAT_ERROR;
+					SPINE_LOG_HIGH(("ERROR: No such Instance for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 					SET_UNDEFINED(result_string);
 					status = STAT_ERROR;
+					SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else {
 					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
@@ -459,8 +462,26 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			} else {
 				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
 			}
+		} else if (response != NULL && response->variables != NULL) {
+			vars = response->variables;
+
+			if (vars->type == SNMP_NOSUCHOBJECT) {
+				SET_UNDEFINED(result_string);
+				status = STAT_ERROR;
+				SPINE_LOG_HIGH(("ERROR: No such Object for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			} else if (vars->type == SNMP_NOSUCHINSTANCE) {
+				SET_UNDEFINED(result_string);
+				status = STAT_ERROR;
+				SPINE_LOG_HIGH(("ERROR: No such Instance for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			} else if (vars->type == SNMP_ENDOFMIBVIEW) {
+				SET_UNDEFINED(result_string);
+				status = STAT_ERROR;
+				SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			}
+		} else if (status == STAT_TIMEOUT) {
+			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 		} else {
-			SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 		}
 
 		if (response) {
