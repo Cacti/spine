@@ -285,9 +285,9 @@ void db_connect(int type, MYSQL *mysql) {
 
 	/* set SSL options if available */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
-	char *ssl_key;
-	char *ssl_ca;
-	char *ssl_cert;
+	char *ssl_key  = NULL;
+	char *ssl_ca   = NULL;
+	char *ssl_cert = NULL;
 
 	if (type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
@@ -348,6 +348,18 @@ void db_connect(int type, MYSQL *mysql) {
 
 	if (hostname != NULL) {
 		free(hostname);
+	}
+
+	if (ssl_key != NULL) {
+		free(ssl_key);
+	}
+
+	if (ssl_ca != NULL) {
+		free(ssl_ca);
+	}
+
+	if (ssl_cert != NULL) {
+		free(ssl_cert);
 	}
 
 	if (!success){

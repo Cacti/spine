@@ -979,9 +979,11 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 name_t *get_namebyhost(char *hostname, name_t *name) {
 	if (name == NULL) {
 		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Allocating name_t", hostname));
+
 		if (!(name = (name_t *) malloc(sizeof(name_t)))) {
 			die("ERROR: Fatal malloc error: ping.c get_namebyhost->name");
 		}
+
 		memset(name, '\0', sizeof(name_t));
 	}
 
@@ -992,6 +994,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	if (!(stack = (char *) malloc(strlen(hostname)+1))) {
 		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
 	}
+
 	memset(stack, '\0', strlen(hostname)+1);
 	strncopy(stack, hostname, strlen(stack));
 	token = strtok(stack, ":");

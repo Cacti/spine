@@ -588,9 +588,9 @@ typedef struct ping_results {
  */
 typedef struct name_port {
 	// Method = 0 - default, 1 - tcp, 2 - udp
-	int	method;
-	char	hostname[SMALL_BUFSIZE];
-	int	port;
+	char hostname[SMALL_BUFSIZE];
+	int  method;
+	int  port;
 } name_t;
 
 /*! MySQL Connection Pool Structure

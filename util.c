@@ -1659,26 +1659,6 @@ double get_time_as_double(void) {
 	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
 }
 
-/*! \fn string *get_host_poll_time()
- *  \brief fetches start time for host being polled
- *
- *  \return host_time as a string
- */
-char *get_host_poll_time() {
-	char *host_time;
-
-	#define HOST_TIME_STRING_LEN 20
-
-	if (!(host_time = (char *) malloc(HOST_TIME_STRING_LEN))) {
-		die("ERROR: Fatal malloc error: util.c host_time");
-	}
-	host_time[0] = '\0';
-
-	sprintf(host_time, "%lu", (unsigned long) time(NULL));
-
-	return(host_time);
-}
-
 /*! \fn trim()
  *  \brief removes leading and trailing blanks, tabs, line feeds and
  *         carriage returns from a string.

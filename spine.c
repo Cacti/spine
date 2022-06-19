@@ -651,6 +651,12 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
 
+	if (!(host_time = (char *) malloc(SMALL_BUFSIZE))) {
+		die("ERROR: Fatal malloc error: util.c host_time");
+	}
+
+	memset(host_time, 0, SMALL_BUFSIZE);
+
 	/* initialize winsock library on Windows */
 	SOCK_STARTUP;
 
@@ -749,13 +755,14 @@ int main(int argc, char *argv[]) {
 
 				db_free_result(tresult);
 
-				host_time = get_host_poll_time();
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+
 				host_time_double = get_time_as_double();
 			}
 		} else {
 			items_per_thread = 0;
 
-			host_time = get_host_poll_time();
+			sprintf(host_time, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 
@@ -907,6 +914,8 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
+
+	free(host_time);
 
 	sem_getvalue(&available_threads, &a_threads_value);
 

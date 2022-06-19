@@ -216,12 +216,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	pool_t *local_cnn;
 	pool_t *remote_cnn;
 
-	reindex_t   *reindex;
-	host_t      *host;
-	ping_t      *ping;
-	name_t      *name;
-	target_t    *poller_items;
-	snmp_oids_t *snmp_oids;
+	reindex_t   *reindex = NULL;
+	host_t      *host = NULL;
+	ping_t      *ping = NULL;
+	name_t      *name = NULL;
+	target_t    *poller_items = NULL;
+	snmp_oids_t *snmp_oids = NULL;
 
 	error_string = malloc(DBL_BUFSIZE);
 	buf_size     = malloc(sizeof(int));
@@ -259,13 +259,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	/* set zeros */
 	memset(ping, 0, sizeof(ping_t));
-
-	if (!(name = (name_t *) malloc(sizeof(name_t)))) {
-		die("ERROR: Fatal malloc error: poller.c name struct!");
-	}
-
-	/* set zeros */
-	memset(name, 0, sizeof(name_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
@@ -550,6 +543,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
+				free(host);
+				free(reindex);
+				free(ping);
+
 				return;
 			}
 
@@ -558,8 +555,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 			if (row) {
 				/* initialize variables first */
-				host->id                      = 0;					// 0
-				host->hostname[0]             = '\0';				// 1
+				host->id                      = 0;                 // 0
+				host->hostname[0]             = '\0';              // 1
 				host->snmp_session            = NULL;              // -
 				host->snmp_community[0]       = '\0';              // 2
 				host->snmp_version            = 1;                 // 3
@@ -606,7 +603,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					name = get_namebyhost(row[1], NULL);
 					STRNCOPY(host->hostname, name->hostname);
 					host->ping_port = name->port;
+					free(name);
 				}
+
 				if (row[2]  != NULL) STRNCOPY(host->snmp_community,       row[2]);
 
 				if (row[3]  != NULL) host->snmp_version = atoi(row[3]);
@@ -1801,7 +1800,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	free(host);
 	free(reindex);
 	free(ping);
-	free(name);
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == host_threads && set.active_profiles != 1) {
