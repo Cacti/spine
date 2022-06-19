@@ -95,6 +95,8 @@ void *child(void *arg) {
 
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
 
+	thread_mutex_unlock(LOCK_HOST_TIME);
+
 	/* Allows main thread to proceed with creation of other threads */
 	sem_post(poller_details.thread_init_sem);
 

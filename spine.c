@@ -890,6 +890,8 @@ int main(int argc, char *argv[]) {
 			/* create child process */
 			thread_retry:
 
+			thread_mutex_lock(LOCK_HOST_TIME);
+
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 			if (thread_status == 0) {

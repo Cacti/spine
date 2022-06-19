@@ -190,6 +190,7 @@
 #define LOCK_PHP_PROC_13 20
 #define LOCK_PHP_PROC_14 21
 #define LOCK_THDET 40
+#define LOCK_HOST_TIME 41
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -213,6 +214,7 @@
 #define LOCK_PHP_PROC_13_O 20
 #define LOCK_PHP_PROC_14_O 21
 #define LOCK_THDET_O 40
+#define LOCK_HOST_TIME_O 41
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
