@@ -340,9 +340,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	/* open SNMP Session */
-	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		if (is_debug_device(host_id)) {

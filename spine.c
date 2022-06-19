@@ -236,6 +236,9 @@ int main(int argc, char *argv[]) {
 	int threads_missing = -1;
 	int threads_count;
 
+	/* we must initilize snmp in the main thread */
+	struct snmp_session session;
+
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
 	/* install the spine signal handler */
@@ -704,6 +707,14 @@ int main(int argc, char *argv[]) {
 	} else {
 		change_host = TRUE;
 	}
+
+	/**
+     * We must initilize the first snmp session
+     * in the main thread to initilize the mib files
+     * and other structures.  After which it's snmp
+     * is thread safe in threads
+     */
+	snmp_sess_init(&session);
 
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
