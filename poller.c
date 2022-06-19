@@ -92,6 +92,7 @@ void *child(void *arg) {
 	host_threads     = poller_details.host_threads;
 	host_data_ids    = poller_details.host_data_ids;
 	host_time_double = poller_details.host_time_double;
+
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
 
 	/* Allows main thread to proceed with creation of other threads */
@@ -859,7 +860,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						switch(reindex->action) {
 						case POLLER_ACTION_SNMP: /* snmp */
 							/* if there is no snmp session, don't probe */
-							if (!host->snmp_session) {
+							if (host->snmp_session == NULL) {
 								reindex_err = TRUE;
 							}
 
@@ -1117,7 +1118,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		/* close the host snmp session, we will create again momentarily */
-		if (host->snmp_session) {
+		if (host->snmp_session != NULL) {
 			snmp_host_cleanup(host->snmp_session);
 			host->snmp_session = NULL;
 		}
@@ -1260,7 +1261,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				}
 
 				/* catch snmp initialization issues */
-				if (!host->snmp_session) {
+				if (host->snmp_session == NULL) {
 					host->ignore_host = TRUE;
 					break;
 				}
@@ -1354,7 +1355,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 					}
 
-					snmp_host_cleanup(host->snmp_session);
+					if (host->snmp_session != NULL) {
+						snmp_host_cleanup(host->snmp_session);
+						host->snmp_session = NULL;
+					}
+
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
 						poller_items[i].snmp_version, poller_items[i].snmp_community,
 						poller_items[i].snmp_username, poller_items[i].snmp_password,
@@ -1781,8 +1786,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		/* cleanup memory and prepare for function exit */
-		if (host->snmp_session) {
+		if (host->snmp_session != NULL) {
 			snmp_host_cleanup(host->snmp_session);
+			host->snmp_session = NULL;
 		}
 
 		free(query3);
