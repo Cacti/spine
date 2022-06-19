@@ -926,8 +926,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	free(host_time);
-
 	sem_getvalue(&available_threads, &a_threads_value);
 
 	/* wait for all threads to 'complete'
@@ -1035,6 +1033,7 @@ int main(int argc, char *argv[]) {
 	free(ids);
 	free(conf_file);
 	free(debug_devices);
+	free(host_time);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
