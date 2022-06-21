@@ -407,30 +407,38 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
 		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
 
-		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid));
+		if (pdu != NULL) {
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid));
 
-		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
-			SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
-			SET_UNDEFINED(result_string);
-			return result_string;
-		} else {
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s)", current_host->id, snmp_oid));
-			snmp_add_null_var(pdu, anOID, anOID_len);
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
+			if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
+				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+				SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+				SET_UNDEFINED(result_string);
+				return result_string;
+			} else {
+				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
+				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s)", current_host->id, snmp_oid));
+				snmp_add_null_var(pdu, anOID, anOID_len);
+				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
+			}
+
+			/* poll host */
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
+			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 		}
-
-		/* poll host */
-		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
-		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 
 		/* add status to host structure */
 		current_host->snmp_status = status;
 
 		/* liftoff, successful poll, process it!! */
-		if (status == STAT_SUCCESS) {
+		if (status == STAT_DESCRIP_ERROR) {
+			SPINE_LOG(("ERROR: Unable to create SNMP PDU"));
+
+			SET_UNDEFINED(result_string);
+			status = STAT_ERROR;
+			response = NULL;
+		} else if (status == STAT_SUCCESS) {
 			if (response == NULL) {
 				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get"));
 
@@ -477,6 +485,10 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
 				SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			} else {
+				SET_UNDEFINED(result_string);
+				status = STAT_ERROR;
+				SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 			}
 		} else if (status == STAT_TIMEOUT) {
 			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
@@ -484,7 +496,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 		}
 
-		if (response) {
+		if (response != NULL && status != STAT_DESCRIP_ERROR) {
 			snmp_free_pdu(response);
 			response = NULL;
 		}

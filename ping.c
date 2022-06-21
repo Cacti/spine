@@ -96,7 +96,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	switch (host->availability_method) {
 		case AVAIL_SNMP_AND_PING:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
 				} else {
@@ -110,7 +110,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				return HOST_DOWN;
 			}
 		case AVAIL_SNMP_OR_PING:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
 				} else {
@@ -172,7 +172,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 
 	if (host->snmp_session) {
-		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
+		if (strlen(host->snmp_community) != 0 || host->snmp_version == 3) {
 			/* by default, we look at sysUptime */
 			if (host->availability_method == AVAIL_SNMP_GET_NEXT) {
 				oid = strdup(".1.3");
@@ -1133,14 +1133,14 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		switch (availability_method) {
 		case AVAIL_SNMP_OR_PING:
 		case AVAIL_SNMP_AND_PING:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 			} else {
 				snprintf(host->status_last_error, BUFSIZE, "%s, %s", ping->snmp_response, ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				snprintf(host->status_last_error, BUFSIZE, "%s", "Device does not require SNMP");
 			} else {
 				snprintf(host->status_last_error, BUFSIZE, "%s", ping->snmp_response);
@@ -1196,14 +1196,14 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 		/* determine the ping statistic to set and do so */
 		if (availability_method == AVAIL_SNMP_AND_PING) {
-			if (strlen(host->snmp_community) == 0) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				ping_time = atof(ping->ping_status);
 			} else {
 				/* calculate the average of the two times */
 				ping_time = (atof(ping->snmp_status) + atof(ping->ping_status)) / 2;
 			}
 		} else if (availability_method == AVAIL_SNMP) {
-			if (strlen(host->snmp_community) == 0) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				ping_time = 0.000;
 			} else {
 				ping_time = atof(ping->snmp_status);
