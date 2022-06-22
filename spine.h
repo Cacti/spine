@@ -237,6 +237,8 @@
 #define IS_LOGGING_TO_SYSLOG() ((set.log_destination) == LOGDEST_SYSLOG || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_STDOUT() ((set.log_destination) == LOGDEST_STDOUT )
 
+#define SPINE_FREE(s) do { if (s) { free((void *)s); s = NULL; } } while(0)
+
 /* logging levels */
 #define POLLER_VERBOSITY_NONE 1
 #define POLLER_VERBOSITY_LOW 2

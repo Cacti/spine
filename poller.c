@@ -546,9 +546,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
-				free(host);
-				free(reindex);
-				free(ping);
+				SPINE_FREE(host);
+				SPINE_FREE(reindex);
+				SPINE_FREE(ping);
 
 				return;
 			}
@@ -606,7 +606,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					name = get_namebyhost(row[1], NULL);
 					STRNCOPY(host->hostname, name->hostname);
 					host->ping_port = name->port;
-					free(name);
+					SPINE_FREE(name);
 				}
 
 				if (row[2]  != NULL) STRNCOPY(host->snmp_community,       row[2]);
@@ -891,7 +891,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
 										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 									} else {
-										free(poll_result);
+										SPINE_FREE(poll_result);
 										poll_result = snmp_get(host, reindex->arg1);
 										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
 									}
@@ -1097,11 +1097,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								}
 							}
 
-							free(query3);
-
-							if (poll_result != NULL) {
-								free(poll_result);
-							}
+							SPINE_FREE(query3);
+							SPINE_FREE(poll_result);
 						}
 					}
 				}
@@ -1508,7 +1505,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
-				if (poll_result) free(poll_result);
+				SPINE_FREE(poll_result);
 
 				thread_end = get_time_as_double();
 
@@ -1566,7 +1563,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
-				if (poll_result) free(poll_result);
+				SPINE_FREE(poll_result);
 
 				thread_end = get_time_as_double();
 
@@ -1793,21 +1790,21 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			host->snmp_session = NULL;
 		}
 
-		free(query3);
+		SPINE_FREE(query3);
 		if (set.boost_redirect && set.boost_enabled) {
-			free(query12);
+			SPINE_FREE(query12);
 		}
 
-		free(poller_items);
-		free(snmp_oids);
+		SPINE_FREE(poller_items);
+		SPINE_FREE(snmp_oids);
 	} else {
 		/* free the mysql result */
 		mysql_free_result(result);
 	}
 
-	free(host);
-	free(reindex);
-	free(ping);
+	SPINE_FREE(host);
+	SPINE_FREE(reindex);
+	SPINE_FREE(ping);
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == host_threads && set.active_profiles != 1) {
@@ -1861,9 +1858,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
 
-	free(error_string);
-	free(buf_size);
-	free(buf_errors);
+	SPINE_FREE(error_string);
+	SPINE_FREE(buf_size);
+	SPINE_FREE(buf_errors);
 
 	*host_errors = errors;
 }
@@ -1960,7 +1957,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0');", host->id));
@@ -1969,7 +1966,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0');", host->id));
@@ -1979,9 +1976,9 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		if (poll_result && is_numeric(poll_result)) {
 			host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
 			snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		} else {
-			free(poll_result);
+			SPINE_FREE(poll_result);
 
 			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 			poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
@@ -1989,7 +1986,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 			if (poll_result && is_numeric(poll_result)) {
 				host->snmp_sysUpTimeInstance = atoll(poll_result);
-				free(poll_result);
+				SPINE_FREE(poll_result);
 			}
 		}
 
@@ -1999,7 +1996,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0');", host->id));
@@ -2008,7 +2005,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0');", host->id));
@@ -2017,7 +2014,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 	} else {
 		if (is_debug_device(host->id)) {
@@ -2034,9 +2031,9 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
 			snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
 
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		} else {
-			free(poll_result);
+			SPINE_FREE(poll_result);
 
 			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 			poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
@@ -2044,7 +2041,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 			if (poll_result && is_numeric(poll_result)) {
 				host->snmp_sysUpTimeInstance = atoll(poll_result);
-				free(poll_result);
+				SPINE_FREE(poll_result);
 			}
 		}
 	}
@@ -2274,7 +2271,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		}
 
 		#if defined(__CYGWIN__)
-		free(proc_command);
+		SPINE_FREE(proc_command);
 		#endif
 	}
 

@@ -1026,16 +1026,16 @@ int main(int argc, char *argv[]) {
 	/* free malloc'd variables */
 	for (i = 0; i < num_rows; i++) {
 		if (details[i] != NULL) {
-			free(details[i]);
+			SPINE_FREE(details[i]);
 		}
 	}
 
-	free(details);
-	free(threads);
-	free(ids);
-	free(conf_file);
-	free(debug_devices);
-	free(host_time);
+	SPINE_FREE(details);
+	SPINE_FREE(threads);
+	SPINE_FREE(ids);
+	SPINE_FREE(conf_file);
+	SPINE_FREE(debug_devices);
+	SPINE_FREE(host_time);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 

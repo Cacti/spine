@@ -196,7 +196,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			/* record end time */
 			end_time = get_time_as_double();
 
-			free(oid);
+			SPINE_FREE(oid);
 
 			total_time = (end_time - begin_time) * one_thousand;
 
@@ -205,9 +205,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 
-				if (poll_result) {
-					free(poll_result);
-				}
+				SPINE_FREE(poll_result);
 
 				return HOST_UP;
 			} else if (host->snmp_status != SNMPERR_SUCCESS) {
@@ -227,18 +225,14 @@ int ping_snmp(host_t *host, ping_t *ping) {
 
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
 
-				if (poll_result) {
-					free(poll_result);
-				}
+				SPINE_FREE(poll_result);
 
 				return HOST_DOWN;
 			} else {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 
-				if (poll_result) {
-					free(poll_result);
-				}
+				SPINE_FREE(poll_result);
 
 				return HOST_UP;
 			}
