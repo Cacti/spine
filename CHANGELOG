@@ -4,6 +4,7 @@ The Cacti Group | spine
 -issue#269: Latest spine does not timeout as it was designed when the poller interval expires
 -issue#270: Spine logging at -V 5 includes an extra line feed
 -issue#271: Spine encounters a segmentation fault due to incorrect snmp response
+-issue#272: Properly handle devices that timeout responding to the Extended Uptime OID .1.3.6.1.6.3.10.2.1.3.0
 
 1.2.21
 -issue#258: Disable DES if Net-SNMP doesn't have it
