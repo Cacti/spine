@@ -205,7 +205,9 @@ int ping_snmp(host_t *host, ping_t *ping) {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
 
-				free(poll_result);
+				if (poll_result) {
+					free(poll_result);
+				}
 
 				return HOST_UP;
 			} else if (host->snmp_status != SNMPERR_SUCCESS) {
@@ -224,13 +226,19 @@ int ping_snmp(host_t *host, ping_t *ping) {
 				}
 
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
-				free(poll_result);
+
+				if (poll_result) {
+					free(poll_result);
+				}
 
 				return HOST_DOWN;
 			} else {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
-				free(poll_result);
+
+				if (poll_result) {
+					free(poll_result);
+				}
 
 				return HOST_UP;
 			}
