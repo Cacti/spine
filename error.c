@@ -48,15 +48,32 @@ static void spine_signal_handler(int spine_signal) {
 
 	set.exit_code = spine_signal;
 
+	/* variables for time display */
+	time_t nowbin;
+	struct tm now_time;
+	struct tm *now_ptr;
+	struct timeval now;
+
+	/* get time for poller_output table */
+	nowbin = time(&nowbin);
+
+	localtime_r(&nowbin,&now_time);
+	now_ptr = &now_time;
+
+	char *log_fmt = get_date_format();
+	char logtime[50];
+
+	strftime(logtime, 50, log_fmt, now_ptr);
+
 	switch (spine_signal) {
 		case SIGABRT:
-			fprintf(stderr, "FATAL: Spine Interrupted by Abort Signal\n");
+			fprintf(stderr, "%s FATAL: Spine Interrupted by Abort Signal\n", logtime);
 			break;
 		case SIGINT:
-			fprintf(stderr, "FATAL: Spine Interrupted by Console Operator\n");
+			fprintf(stderr, "%s FATAL: Spine Interrupted by Console Operator\n", logtime);
 			break;
 		case SIGSEGV:
-			fprintf(stderr, "FATAL: Spine Encountered a Segmentation Fault\n");
+			fprintf(stderr, "%s FATAL: Spine Encountered a Segmentation Fault\n", logtime);
 
 			#ifdef HAVE_EXECINFO_H
 			int row = 0;
@@ -82,19 +99,19 @@ static void spine_signal_handler(int spine_signal) {
 
 			break;
 		case SIGBUS:
-			fprintf(stderr, "FATAL: Spine Encountered a Bus Error\n");
+			fprintf(stderr, "%s FATAL: Spine Encountered a Bus Error\n", logtime);
 			break;
 		case SIGFPE:
-			fprintf(stderr, "FATAL: Spine Encountered a Floating Point Exception\n");
+			fprintf(stderr, "%s FATAL: Spine Encountered a Floating Point Exception\n", logtime);
 			break;
 		case SIGQUIT:
-			fprintf(stderr, "FATAL: Spine Encountered a Keyboard Quit Command\n");
+			fprintf(stderr, "%s FATAL: Spine Encountered a Keyboard Quit Command\n", logtime);
 			break;
 		case SIGPIPE:
-			fprintf(stderr, "FATAL: Spine Encountered a Broken Pipe\n");
+			fprintf(stderr, "%s FATAL: Spine Encountered a Broken Pipe\n", logtime);
 			break;
 		default:
-			fprintf(stderr, "FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", spine_signal);
+			fprintf(stderr, "%s FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", logtime, spine_signal);
 			break;
 	}
 }
