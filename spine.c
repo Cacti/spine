@@ -767,7 +767,9 @@ int main(int argc, char *argv[]) {
 				db_free_result(tresult);
 
 				sprintf(host_time, "%lu", (unsigned long) time(NULL));
-
+				host_time_double = get_time_as_double();
+			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
