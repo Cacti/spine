@@ -789,7 +789,9 @@ int main(int argc, char *argv[]) {
 		poller_details->host_thread      = current_thread;
 		poller_details->host_threads     = device_threads;
 		poller_details->host_data_ids    = items_per_thread;
-		poller_details->host_time        = host_time;
+
+		snprintf(poller_details->host_time, 40, "%s", host_time);
+
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
