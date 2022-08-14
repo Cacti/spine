@@ -1,11 +1,11 @@
 The Cacti Group | spine
 
 1.2.22
--issue#269: Latest spine does not timeout as it was designed when the poller interval expires
--issue#270: Spine logging at -V 5 includes an extra line feed
--issue#271: Spine encounters a segmentation fault due to incorrect snmp response
--issue#272: Properly handle devices that timeout responding to the Extended Uptime OID .1.3.6.1.6.3.10.2.1.3.0
--issue#274: Spine get's interrupted via 2013 errors which leads to SIGABORTS
+-issue#269: When polling time is exceed, spine does not always exit as expected
+-issue#270: Spine logging at `-V 5` includes an extra line feed
+-issue#271: Incorrect SNMP responses can cause spine to crash
+-issue#272: Properly handle devices that timeout responding to the Extended Uptime
+-issue#274: MariaDB can cause spine to abort prematurely despite error handling
 -feature#273: Spine should log the error time when exiting via signal
 
 1.2.21
