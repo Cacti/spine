@@ -325,7 +325,7 @@ int php_init(int php_process) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 		/* establish arguments for script server execution */
-		if (set.cacti_version > 1222) {
+		if (set.cacti_version <= 1222) {
 			argv[0] = set.path_php;
 			argv[1] = "-q";
 			argv[2] = set.path_php_server;
@@ -357,6 +357,7 @@ int php_init(int php_process) {
 			argv[3] = "--environ=spine";
 			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
 			argv[4] = poller_id;
+
 			argv[5] = NULL;
 		}
 
