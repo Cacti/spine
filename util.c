@@ -368,6 +368,12 @@ void read_config_options() {
 		set.dbonupdate = 0;
 	}
 
+	/* get the cacti version from the database */
+	set.cacti_version = get_cacti_version(&mysql, LOCAL);
+
+	/* log the path_webroot variable */
+	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %s", set.cacti_version));
+
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
 		const int n = atoi(res);
@@ -1956,3 +1962,55 @@ void checkAsRoot() {
 	#endif
 	#endif
 }
+
+/*! \fn int get_cacti_version(MYSQL *psql, int mode, const char *setting)
+ *  \brief Returns the version of Cacti as a decimal
+ *
+ *  Given a pointer to a database get the version of Cacti and convert
+ *  to an integer.
+ *
+ *  \return the cacti version
+ *
+ */
+int get_cacti_version(MYSQL *psql, int mode) {
+	char      qstring[256];
+	char      *retval;
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int       i;
+	int       major, minor, point;
+	int       cacti_version;
+
+	assert(psql != 0);
+
+	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+
+	result = db_query(psql, mode, qstring);
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
+			if (mysql_row != NULL) {
+				retval = strdup(mysql_row[0]);
+				db_free_result(result);
+
+				if (STRIMATCH(retval, "new_install")) {
+					return 0;
+				} else {
+					sscanf(retval, "%d.%d.%d", &major, &minor, &point);
+					cacti_version = (major * 1000) + (minor * 100) + (point * 1);
+					return cacti_version;
+				}
+			}else{
+				return 0;
+			}
+		}else{
+			db_free_result(result);
+			return 0;
+		}
+	}else{
+		return 0;
+	}
+}
+

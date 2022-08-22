@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.23
+-feature#277 Spine should prevent the script server from connecting to remote when offline
+
 1.2.22
 -issue#269: When polling time is exceed, spine does not always exit as expected
 -issue#270: Spine logging at `-V 5` includes an extra line feed
