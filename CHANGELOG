@@ -4,6 +4,8 @@ The Cacti Group | spine
 -feature#277 Spine should prevent the script server from connecting to remote when offline
 
 1.2.22
+-issue#265: Periodically spine crashes with sigabort due to MariaDB API buffer overruns
+-issue#267: FATAL: Spine Encountered a Segmentation Fault
 -issue#269: When polling time is exceed, spine does not always exit as expected
 -issue#270: Spine logging at `-V 5` includes an extra line feed
 -issue#271: Incorrect SNMP responses can cause spine to crash
