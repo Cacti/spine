@@ -377,6 +377,7 @@ typedef struct config_struct {
 	unsigned int db_port;
 	char   dbversion[SMALL_BUFSIZE];
 	int    dbonupdate;
+	int   cacti_version;
 	/* path information */
 	char   path_logfile[DBL_BUFSIZE];
 	char   path_php[BUFSIZE];
