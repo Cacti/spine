@@ -350,6 +350,7 @@ void db_connect(int type, MYSQL *mysql) {
 		free(hostname);
 	}
 
+    #ifdef HAS_MYSQL_OPT_SSL_KEY
 	if (ssl_key != NULL) {
 		free(ssl_key);
 	}
@@ -361,6 +362,7 @@ void db_connect(int type, MYSQL *mysql) {
 	if (ssl_cert != NULL) {
 		free(ssl_cert);
 	}
+    #endif
 
 	if (!success){
 		printf("FATAL: Connection Failed, Error:'%i', Message:'%s'\n", error, mysql_error(mysql));

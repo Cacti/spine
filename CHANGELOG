@@ -1,7 +1,8 @@
 The Cacti Group | spine
 
 1.2.23
--feature#277 Spine should prevent the script server from connecting to remote when offline
+-issue#279: spine does not compile with SQL TLS deactivated
+-feature#277: Spine should prevent the script server from connecting to remote when offline
 
 1.2.22
 -issue#265: Periodically spine crashes with sigabort due to MariaDB API buffer overruns
