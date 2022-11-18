@@ -158,7 +158,7 @@ pthread_cond_t* get_cond(int lock) {
 		case LOCK_HOST_TIME:   ret_val = &host_time_cond;   break;
 	}
 
-	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning cond for %s", get_name(lock) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [ RET ] Returning cond for %s", get_name(lock)));
 
 	return ret_val;
 }
@@ -192,7 +192,7 @@ pthread_mutex_t* get_lock(int lock) {
 		case LOCK_HOST_TIME:   ret_val = &host_time_lock;   break;
 	}
 
-	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning lock for %s", get_name(lock) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [ RET ] Returning lock for %s", get_name(lock)));
 
 	return ret_val;
 }
@@ -226,26 +226,27 @@ pthread_once_t* get_attr(int locko) {
 		case LOCK_HOST_TIME_O:   ret_val = &host_time_lock_o;   break;
 	}
 
-	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning attr for %s", get_name(locko) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [ RET ] Returning attr for %s", get_name(locko)));
 
 	return ret_val;
 }
 
 void thread_mutex_lock(int mutex) {
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex lock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex lock for %s", get_name(mutex)));
 	pthread_mutex_lock(get_lock(mutex));
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex lock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [ END ] Mutex lock for %s", get_name(mutex)));
 }
 
 void thread_mutex_unlock(int mutex) {
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex unlock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex unlock for %s", get_name(mutex)));
 	pthread_mutex_unlock(get_lock(mutex));
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex unlock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [ END ] Mutex unlock for %s", get_name(mutex)));
 }
 
 int thread_mutex_trylock(int mutex) {
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex try lock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex try lock for %s", get_name(mutex)));
 	int ret_val = pthread_mutex_trylock(get_lock(mutex));
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex try lock for %s, result = %d", get_name(mutex), ret_val ));
+	SPINE_LOG_DEVDBG(("LOCKS: [ END ] Mutex try lock for %s, result = %d", get_name(mutex), ret_val));
 	return ret_val;
 }
+
