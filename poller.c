@@ -6,7 +6,7 @@
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
  | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	|
+ | version 2.1 of the License, or (at your option) any later version.      |
  |                                                                         |
  | This program is distributed in the hope that it will be useful,         |
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
@@ -898,6 +898,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+								     // Ensure uptime is empty to start with
+								     snprintf(sysUptime, BUFSIZE, "");
+
 									// Check the legacy poll result first
 									poll_result = snmp_get(host, reindex->arg1);
 
@@ -918,8 +921,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 									if (poll_result && is_numeric(poll_result)) {
 										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
-										snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 									}
+
+									// Use the primed uptime to repopulate the poll_result
+									// This ensures whichever response was valid gets used
+									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 
 									if (is_debug_device(host->id)) {
 										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
