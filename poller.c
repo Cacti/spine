@@ -727,7 +727,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
-				if (update_lasttime > 0) {
+				if (*update_lasttime > 0) {
 					sprintf(query13, "REPLACE INTO settings (name, value) VALUES ('time_last_change_device', '%lu')", (unsigned long)time(NULL));
 
 					if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
