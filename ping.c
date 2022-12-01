@@ -1171,21 +1171,18 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				}
 
 				*update_lasttime = 1;
-			/* host is down, but not ready to issue log message */
 			} else {
 				/* host down for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			}
-
-		/* host is recovering, put back in failed state */
 		} else if (host->status == HOST_RECOVERING) {
+			/* host is recovering, put back in failed state */
 			host->status_event_count = 1;
 			host->status = HOST_DOWN;
-
-		/* host was unknown and now is down */
 		} else if (host->status == HOST_UNKNOWN) {
+			/* host was unknown and now is down */
 			host->status = HOST_DOWN;
 			host->status_event_count = 0;
 
@@ -1193,9 +1190,9 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		} else {
 			host->status_event_count++;
 		}
-
-	/* host is up!! */
 	} else {
+		/* host is up!! */
+
 		/* update total polls and availability */
 		host->total_polls = host->total_polls + 1;
 		host->availability = hundred_percent * (host->total_polls - host->failed_polls) / host->total_polls;
@@ -1236,7 +1233,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			* host->avg_time) + ping_time) / (host->total_polls-host->failed_polls);
 
 		/* the host was down, now it's recovering */
-		if ((host->status == HOST_DOWN) || (host->status == HOST_RECOVERING )) {
+		if ((host->status == HOST_DOWN) || (host->status == HOST_RECOVERING)) {
 			/* just up, change to recovering */
 			if (host->status == HOST_DOWN) {
 				host->status = HOST_RECOVERING;
@@ -1261,21 +1258,25 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 				/* reset the event counter */
 				host->status_event_count = 0;
-			/* host is recovering, but not ready to issue log message */
 			} else {
 				/* host recovering for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_rec_date, 40, "%s", current_date);
 				}
 			}
-		} else {
-		/* host was unknown and now is up */
+		} else if (host->status_event_count > 0) {
+			/* host was unknown and now is up */
 			host->status = HOST_UP;
 			host->status_event_count = 0;
 
 			*update_lasttime = 1;
+		} else {
+			/* host was unknown and now is up */
+			host->status = HOST_UP;
+			host->status_event_count = 0;
 		}
 	}
+
 	/* if the user wants a flood of information then flood them */
 	if (set.log_level >= POLLER_VERBOSITY_HIGH) {
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {
