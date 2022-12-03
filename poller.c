@@ -214,7 +214,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int new_buffer              = TRUE;
 	int ignore_sysinfo          = TRUE;
 	int buf_length              = 0;
-	int *update_lasttime;
 
 	extern poller_thread_t** details;
 
@@ -254,13 +253,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
 		die("ERROR: Fatal malloc error: poller.c host struct!");
 	}
-
-	/* allocate update_lasttime with appropriate values */
-	if (!(update_lasttime = (int *) malloc(sizeof(int)))) {
-		die("ERROR: Fatal malloc error: poller.c update_lasttime variable!");
-	}
-
-	*update_lasttime = 0;
 
 	/* set zeros */
 	memset(host, 0, sizeof(host_t));
@@ -699,7 +691,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					(strlen(host->snmp_community) == 0) &&
 					(host->snmp_version < 3)) {
 					host->ignore_host = FALSE;
-					update_host_status(HOST_UP, host, ping, host->availability_method, update_lasttime);
+					update_host_status(HOST_UP, host, ping, host->availability_method);
 
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] HT[%i] No host availability check possible for '%s'", host->id, host_thread, host->hostname));
@@ -710,7 +702,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;
 						if (host_thread == 1) {
-							update_host_status(HOST_UP, host, ping, host->availability_method, update_lasttime);
+							update_host_status(HOST_UP, host, ping, host->availability_method);
 
 							if ((host->availability_method != AVAIL_PING) && (host->availability_method != AVAIL_NONE)) {
 								if (host->snmp_session != NULL) {
@@ -722,18 +714,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					} else {
 						host->ignore_host = TRUE;
 						if (host_thread == 1) {
-							update_host_status(HOST_DOWN, host, ping, host->availability_method, update_lasttime);
+							update_host_status(HOST_DOWN, host, ping, host->availability_method);
 						}
-					}
-				}
-
-				if (*update_lasttime > 0) {
-					sprintf(query13, "REPLACE INTO settings (name, value) VALUES ('time_last_change_device', '%lu')", (unsigned long)time(NULL));
-
-					if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-						db_insert(&mysqlr, REMOTE, query13);
-					} else {
-						db_insert(&mysql, LOCAL, query13);
 					}
 				}
 
@@ -1856,7 +1838,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	SPINE_FREE(host);
 	SPINE_FREE(reindex);
 	SPINE_FREE(ping);
-	SPINE_FREE(update_lasttime);
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == host_threads && set.active_profiles != 1) {

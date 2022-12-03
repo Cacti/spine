@@ -1110,14 +1110,13 @@ unsigned short int get_checksum(void* buf, int len) {
  *  \param host a pointer to the current host structure
  *  \param ping a pointer to the current hosts ping structure
  *  \param availability_method the method that was used to poll the host
- *  \param update_lasttime pointer to trigger to expire the device row cache
  *
  *  This function will determine if the host is UP, DOWN, or RECOVERING based upon
  *  the ping result and it's current status.  It will update the Cacti database
  *  with the calculated status.
  *
  */
-void update_host_status(int status, host_t *host, ping_t *ping, int availability_method, int *update_lasttime) {
+void update_host_status(int status, host_t *host, ping_t *ping, int availability_method) {
 	int    issue_log_message = FALSE;
 	double ping_time;
  	double hundred_percent = 100.00;
@@ -1169,8 +1168,6 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				if (set.ping_failure_count == 1) {
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
-
-				*update_lasttime = 1;
 			} else {
 				/* host down for the first time, set event date */
 				if (host->status_event_count == 1) {
@@ -1185,8 +1182,6 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			/* host was unknown and now is down */
 			host->status = HOST_DOWN;
 			host->status_event_count = 0;
-
-			*update_lasttime = 1;
 		} else {
 			host->status_event_count++;
 		}
@@ -1242,8 +1237,6 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				host->status_event_count++;
 			}
 
-			*update_lasttime = 1;
-
 			/* if it's time to issue a recovery message, indicate so */
 			if (host->status_event_count >= set.ping_recovery_count) {
 				/* host is up, flag it that way */
@@ -1268,8 +1261,6 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			/* host was unknown and now is up */
 			host->status = HOST_UP;
 			host->status_event_count = 0;
-
-			*update_lasttime = 1;
 		} else {
 			/* host was unknown and now is up */
 			host->status = HOST_UP;
