@@ -6,7 +6,7 @@
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
  | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
+ | version 2.1 of the License, or (at your option) any later version. 	   |
  |                                                                         |
  | This program is distributed in the hope that it will be useful,         |
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
@@ -33,7 +33,6 @@
 
 #include "common.h"
 #include "spine.h"
-#include "regex.h"
 
 static int nopts = 0;
 
@@ -2013,30 +2012,4 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	}else{
 		return 0;
 	}
-}
-
-char *regex_replace(const char *exp, const char *value) {
-	regex_t regex;
-	int reti;
-	char msgbuf[100];
-
-	/* Compile regular expression */
-	reti = regcomp(&regex, exp, 0);
-	if (reti) {
-		// regex failed, just return what we have
-		return value;
-	}
-
-	/* Execute regular expression */
-	regmatch_t matches[MAX_MATCHES];
-	reti = regexec(&regex, value, MAX_MATCHES, matches, 0);
-	if (!reti) {
-		// regex matched
-		memcpy(msgbuf, value + matches[0].rm_so, matches[0].rm_eo - matches[0].rm_so);
-	}
-
-	/* Free memory allocated to the pattern buffer by regcomp() */
-	regfree(&regex);
-
-	return (reti) ? value : msgbuf;
 }
