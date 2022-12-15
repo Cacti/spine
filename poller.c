@@ -1350,7 +1350,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								/* is valid output, continue */
 							} else {
 								/* remove double or single quotes from string */
-								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+								snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, trim(snmp_oids[j].result)));
 								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 								/* detect erroneous non-numeric result */
@@ -1451,7 +1451,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							/* is valid output, continue */
 						} else {
 							/* remove double or single quotes from string */
-							snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+							snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, trim(snmp_oids[j].result)));
 							snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 							/* detect erroneous non-numeric result */
@@ -1520,7 +1520,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
 				} else {
 					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, trim(poll_result)));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -1578,7 +1578,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%lld", hex2dec(poll_result));
 				} else {
 					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, trim(poll_result)));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -1663,7 +1663,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					/* is valid output, continue */
 				} else {
 					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(snmp_oids[j].result)));
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, trim(snmp_oids[j].result)));
 					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous non-numeric result */
