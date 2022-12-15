@@ -52,6 +52,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
+	memset(query_frag, 0, LRG_BUFSIZE);
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
@@ -148,6 +149,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	char   query_frag[LRG_BUFSIZE];
 
 	/* save a fragment just in case */
+	memset(query_frag, 0, LRG_BUFSIZE);
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
@@ -260,8 +262,8 @@ void db_connect(int type, MYSQL *mysql) {
 	tries     = 2;
 	success   = FALSE;
 	timeout   = 5;
-	rtimeout  = 10;
-	wtimeout  = 20;
+	rtimeout  = 30;
+	wtimeout  = 30;
 	reconnect = 1;
 	attempts  = 1;
 
@@ -272,9 +274,9 @@ void db_connect(int type, MYSQL *mysql) {
 		exit(1);
 	}
 
-	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (char *)&rtimeout, "read timeout");
-	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (char *)&wtimeout, "write timeout");
-	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout, "general timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (int *)&rtimeout, "read timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (int *)&wtimeout, "write timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (int *)&timeout, "general timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
 
 	#ifdef HAS_MYSQL_OPT_RETRY_COUNT
@@ -283,9 +285,9 @@ void db_connect(int type, MYSQL *mysql) {
 
 	/* set SSL options if available */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
-	char *ssl_key;
-	char *ssl_ca;
-	char *ssl_cert;
+	char *ssl_key  = NULL;
+	char *ssl_ca   = NULL;
+	char *ssl_cert = NULL;
 
 	if (type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
@@ -347,6 +349,20 @@ void db_connect(int type, MYSQL *mysql) {
 	if (hostname != NULL) {
 		free(hostname);
 	}
+
+    #ifdef HAS_MYSQL_OPT_SSL_KEY
+	if (ssl_key != NULL) {
+		free(ssl_key);
+	}
+
+	if (ssl_ca != NULL) {
+		free(ssl_ca);
+	}
+
+	if (ssl_cert != NULL) {
+		free(ssl_cert);
+	}
+    #endif
 
 	if (!success){
 		printf("FATAL: Connection Failed, Error:'%i', Message:'%s'\n", error, mysql_error(mysql));
@@ -549,13 +565,11 @@ int append_hostrange(char *obuf, const char *colname) {
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	if (input == NULL) return;
 
-	char input_trimmed[BUFSIZE];
-	int  input_size;
+	char input_trimmed[DBL_BUFSIZE];
+	int  max_escaped_input_size = (strlen(input) * 2) + 1;
 
-	input_size = strlen(input);
-
-	if (input_size > max_size) {
-		snprintf(input_trimmed, max_size - 10, "%s", input);
+	if (max_escaped_input_size > max_size) {
+		snprintf(input_trimmed, (max_size / 2) - 1, "%s", input);
 	} else {
 		snprintf(input_trimmed, max_size, "%s", input);
 	}

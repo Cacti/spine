@@ -140,6 +140,7 @@
 #define MEGA_BUFSIZE 1024000
 #define HUGE_BUFSIZE 2048000
 #define LOGSIZE 65535
+#define LRG_LOGSIZE 1024000
 #define BITSINBYTE 8
 #define THIRTYTWO 4294967295ul
 #define SIXTYFOUR 18446744073709551615ul
@@ -188,6 +189,8 @@
 #define LOCK_PHP_PROC_12 19
 #define LOCK_PHP_PROC_13 20
 #define LOCK_PHP_PROC_14 21
+#define LOCK_THDET 40
+#define LOCK_HOST_TIME 41
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -210,6 +213,8 @@
 #define LOCK_PHP_PROC_12_O 19
 #define LOCK_PHP_PROC_13_O 20
 #define LOCK_PHP_PROC_14_O 21
+#define LOCK_THDET_O 40
+#define LOCK_HOST_TIME_O 41
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -231,6 +236,8 @@
 #define IS_LOGGING_TO_FILE()   ((set.log_destination) == LOGDEST_FILE   || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_SYSLOG() ((set.log_destination) == LOGDEST_SYSLOG || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_STDOUT() ((set.log_destination) == LOGDEST_STDOUT )
+
+#define SPINE_FREE(s) do { if (s) { free((void *)s); s = NULL; } } while(0)
 
 /* logging levels */
 #define POLLER_VERBOSITY_NONE 1
@@ -316,9 +323,6 @@
 #define STRMATCH(a,b)	(strcmp((a),(b)) == 0)
 #define STRIMATCH(a,b)	(strcasecmp((a),(b)) == 0)
 
-/* convert timeval to double (rounding to the nearest microsecond) */
-#define TIMEVAL_TO_DOUBLE(tv)	( (tv).tv_sec + ((double) (tv).tv_usec / 1000000) )
-
 /* When any kind of poller wants to set an undefined value; this particular
  * value used ('U') springs from the requirements of rrdupdate. We also
  * include the corresponding test macro which looks for the literal string
@@ -346,6 +350,8 @@ typedef struct config_struct {
 	int    parent_fork;
 	int    num_parent_processes;
 	int    script_timeout;
+	int    active_profiles;
+	int    total_snmp_ports;;
 	int    threads;
 	int    logfile_processed;
 	int    boost_enabled;
@@ -369,9 +375,11 @@ typedef struct config_struct {
 	char   db_ssl_ca[BIG_BUFSIZE];
 	int    d_b;
 	unsigned int db_port;
-	int    dbversion;
+	char   dbversion[SMALL_BUFSIZE];
+	int    dbonupdate;
+	int   cacti_version;
 	/* path information */
-	char   path_logfile[BUFSIZE];
+	char   path_logfile[DBL_BUFSIZE];
 	char   path_php[BUFSIZE];
 	char   path_php_server[BUFSIZE];
 	/* logging options */
@@ -419,7 +427,8 @@ typedef struct config_struct {
 	char   rdb_ssl_cert[BIG_BUFSIZE];
 	char   rdb_ssl_ca[BIG_BUFSIZE];
 	unsigned int rdb_port;
-	int    rdbversion;
+	char   rdbversion[SMALL_BUFSIZE];
+	int    rdbonupdate;
 } config_t;
 
 /*! Target Structure
@@ -439,7 +448,7 @@ typedef struct target_struct {
 	int    snmp_version;
 	char   snmp_username[50];
 	char   snmp_password[50];
-	char   snmp_auth_protocol[5];
+	char   snmp_auth_protocol[7];
 	char   snmp_priv_passphrase[200];
 	char   snmp_priv_protocol[7];
 	char   snmp_context[65];
@@ -476,12 +485,14 @@ typedef struct snmp_oids {
  *
  */
 typedef struct poller_thread {
+	int device_counter;
 	int host_id;
 	int host_thread;
-	int last_host_thread;
+	int host_threads;
 	int host_data_ids;
+	int threads_complete;
 	int complete;
-	char *host_time;
+	char host_time[40];
 	double host_time_double;
 	sem_t *thread_init_sem;
 } poller_thread_t;
@@ -512,7 +523,7 @@ typedef struct host_struct {
 	int    snmp_version;
 	char   snmp_username[50];
 	char   snmp_password[50];
-	char   snmp_auth_protocol[5];
+	char   snmp_auth_protocol[7];
 	char   snmp_priv_passphrase[200];
 	char   snmp_priv_protocol[7];
 	char   snmp_context[65];
@@ -522,7 +533,7 @@ typedef struct host_struct {
 	int    snmp_retries;
 	char   snmp_sysDescr[600];
 	char   snmp_sysObjectID[160];
-	u_int  snmp_sysUpTimeInstance;
+	unsigned long long snmp_sysUpTimeInstance;
 	char   snmp_sysContact[300];
 	char   snmp_sysName[300];
 	char   snmp_sysLocation[600];
@@ -582,9 +593,9 @@ typedef struct ping_results {
  */
 typedef struct name_port {
 	// Method = 0 - default, 1 - tcp, 2 - udp
-	int	method;
-	char	hostname[SMALL_BUFSIZE];
-	int	port;
+	char hostname[SMALL_BUFSIZE];
+	int  method;
+	int  port;
 } name_t;
 
 /*! MySQL Connection Pool Structure

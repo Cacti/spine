@@ -65,6 +65,7 @@ extern char *trim(char *str);
 extern char *rtrim(char *str);
 extern char *ltrim(char *str);
 extern char *reverse(char *str);
+extern int strpos(char *haystack, char *needle) ;
 extern int char_count(const char *str, int chr);
 
 /* custom hex2dec that returns a string instead of a number */
@@ -82,9 +83,6 @@ unsigned long long hex2dec(char *str);
 
 /* get highres time as double */
 extern double get_time_as_double(void);
-
-/* get host polling time */
-extern char *get_host_poll_time(void);
 
 /* function to check to see if program has capability to use raw socket with
    out uid = 0 */

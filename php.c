@@ -291,7 +291,8 @@ int php_init(int php_process) {
 	int  php2cacti_pdes[2];
 	pid_t  pid;
 	char poller_id[TINY_BUFSIZE];
-	char *argv[6];
+	char mode[TINY_BUFSIZE];
+	char *argv[7];
 	int  cancel_state;
 	char *result_string = 0;
 	int num_processes;
@@ -324,13 +325,41 @@ int php_init(int php_process) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 		/* establish arguments for script server execution */
-		argv[0] = set.path_php;
-		argv[1] = "-q";
-		argv[2] = set.path_php_server;
-		argv[3] = "spine";
-		snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
-		argv[4] = poller_id;
-		argv[5] = NULL;
+		if (set.cacti_version <= 1222) {
+			argv[0] = set.path_php;
+			argv[1] = "-q";
+			argv[2] = set.path_php_server;
+			argv[3] = "spine";
+			snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
+			argv[4] = poller_id;
+			argv[5] = NULL;
+		} else if (set.poller_id > 1) {
+			argv[0] = set.path_php;
+			argv[1] = "-q";
+			argv[2] = set.path_php_server;
+			argv[3] = "--environ=spine";
+
+			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
+			argv[4] = poller_id;
+
+			if (set.mode == REMOTE_ONLINE) {
+				snprintf(mode, TINY_BUFSIZE, "--mode=online");
+			} else {
+				snprintf(mode, TINY_BUFSIZE, "--mode=offline");
+			}
+			argv[5] = mode;
+
+			argv[6] = NULL;
+		} else {
+			argv[0] = set.path_php;
+			argv[1] = "-q";
+			argv[2] = set.path_php_server;
+			argv[3] = "--environ=spine";
+			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
+			argv[4] = poller_id;
+
+			argv[5] = NULL;
+		}
 
 		/* fork a child process */
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process", i));

@@ -42,7 +42,10 @@ rm -rf autom4te.cache .deps
 # Make sure all files are unix formatted files
 which dos2unix > /dev/null 2>&1
 if [ $? -eq 0 ]; then
-  find . -type f -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
+  for e in $(echo "ac am c h in md mdlrc rb sh yml"); do
+    echo "INFO: Ensuring UNIX format for *.$e"
+    find . -type f -name \*.$e -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
+  done
 fi
 
 # Prepare a build state

@@ -8,5 +8,5 @@ if [[ $? -eq 0 ]]; then
 	echo Debugging using SPINE_CONFIG = $SPINE_CONFIG
 	echo
 	echo
-	gdb -quiet -ex run --args ./spine -R -V 5 -C $SPINE_CONFIG
+	gdb -quiet -ex run --args ./spine -R -V 6 -C $SPINE_CONFIG
 fi

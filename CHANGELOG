@@ -1,5 +1,48 @@
 The Cacti Group | spine
 
+1.2.23
+-issue#287: Unexpected reindexing occurs when using uptime as the reindex method
+-issue#279: spine does not compile with SQL TLS deactivated
+-feature#277: Spine should prevent the script server from connecting to remote when offline
+-feature#286: Add 'Row Cache' support for spine
+
+1.2.22
+-issue#265: Periodically spine crashes with sigabort due to MariaDB API buffer overruns
+-issue#267: FATAL: Spine Encountered a Segmentation Fault
+-issue#269: When polling time is exceed, spine does not always exit as expected
+-issue#270: Spine logging at `-V 5` includes an extra line feed
+-issue#271: Incorrect SNMP responses can cause spine to crash
+-issue#272: Properly handle devices that timeout responding to the Extended Uptime
+-issue#274: MariaDB can cause spine to abort prematurely despite error handling
+-feature#273: Spine should log the error time when exiting via signal
+
+1.2.21
+-issue#258: Disable DES if Net-SNMP doesn't have it
+
+1.2.20
+-issue#233: Add support for newer versions of MySQL/MariaDB
+-issue#238: When checking for uptime of device, don't assume a non-responce is always fatal
+-issue#240: When compiling, newer systems may complain about obsolete macros
+-issue#241: When querying devices, long descriptions can become truncated
+-issue#243: When compiling, FreeBSD may complain about missing backtrace functions
+-issue#244: When building queries, commands may become truncated
+-issue#247: When compiling with SNMPv3 support, SHA256 may incorrectly appear to be not supported
+-feature#252: Improve spine performance when only one snmp agent port is in use
+
+1.2.19
+-issue#172: Issues with polling loop may skip some datasources
+-issue#209: Ping no longer works due to hostname changes
+-issue#216: RRD steps are not always calculated correctly
+-issue#220: Unable to build when DES no longer supported
+-issue#221: IPv6 devices are not properly parsed
+-issue#226: Reduce a number of compiler warnings
+-issue#227: Compiler warnings due to lack of return in thread_mutex_trylock
+-issue#237: Spine will not look at non-timetics uptime when sysUpTimeInstance overflows
+-feature#235: Improve performance of Cacti poller on heavily loaded systems
+
+1.2.18
+-issue#207: Missing time parameter on FROM_UNIXTIME function
+
 1.2.17
 -issue#178: When building spine, errors with Percona libraries may appear by tersmitten
 -issue#184: When building spine, make process can report problems with backtrace

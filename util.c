@@ -119,6 +119,42 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	}
 }
 
+/*! \fn int putsetting(MYSQL *psql, const char *setting, const char *value)
+ *  \brief Set's a specific Cacti setting.
+ *
+ *  Given a pointer to a database and the name of a setting, and value of that setting
+ *  set the Cacti setting in the database to the value.
+ *
+ *  \return true for sucessful or false for failed
+ *
+ */
+int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
+	char  qstring[512];
+	int   result = 0;
+
+	assert(psql    != 0);
+	assert(mysetting != 0);
+	assert(myvalue   != 0);
+
+	if (set.dbonupdate == 0) {
+		sprintf(qstring, "INSERT INTO settings (name, value) "
+			"VALUES ('%s', '%s') "
+			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
+	} else {
+		sprintf(qstring, "INSERT INTO settings (name, value) "
+			"VALUES ('%s', '%s') AS rs "
+			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
+	}
+
+	result = db_insert(psql, mode, qstring);
+
+	if (result == 0) {
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
 /*! \fn static const char *getpsetting(MYSQL *psql, const char *setting)
  *  \brief Returns a character pointer to a Cacti poller setting.
  *
@@ -304,6 +340,10 @@ void read_config_options() {
 	char       web_root[BUFSIZE];
 	char       sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
 	const char *res;
+	char       spine_capabilities[SMALL_BUFSIZE];
+
+	/* publish spine snmpv3 capabilities to the database */
+	memset(spine_capabilities, 0, sizeof(spine_capabilities));
 
 	db_connect(LOCAL, &mysql);
 
@@ -315,11 +355,24 @@ void read_config_options() {
 	}
 
 	/* get the mysql server version */
-	set.dbversion = 0;
 	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
-		set.dbversion = atoi(res);
+		snprintf(set.dbversion, SMALL_BUFSIZE, "%s", res);
 		free((char *)res);
 	}
+
+	if (STRIMATCH(set.dbversion, "mariadb")) {
+		set.dbonupdate = 0;
+	} else if (strpos(set.dbversion, "8.") == 0) {
+		set.dbonupdate = 1;
+	} else {
+		set.dbonupdate = 0;
+	}
+
+	/* get the cacti version from the database */
+	set.cacti_version = get_cacti_version(&mysql, LOCAL);
+
+	/* log the path_webroot variable */
+	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %s", set.cacti_version));
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
@@ -338,17 +391,17 @@ void read_config_options() {
 	/* determine logfile path */
 	if ((res = getsetting(&mysql, LOCAL, "path_cactilog")) != 0) {
 		if (strlen(res) != 0) {
-			snprintf(set.path_logfile, SMALL_BUFSIZE, "%s", res);
+			snprintf(set.path_logfile, DBL_BUFSIZE, "%s", res);
 		} else {
 			if (strlen(web_root) != 0) {
-				snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
+				snprintf(set.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
 			} else {
 				set.path_logfile[0] ='\0';
 			}
 		}
 		free((char *)res);
 	} else {
-		snprintf(set.path_logfile, SMALL_BUFSIZE, "%s/log/cacti.log", web_root);
+		snprintf(set.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
 
 	/* get log separator */
@@ -384,6 +437,9 @@ void read_config_options() {
 
 	/* log the path_cactilog variable */
 	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
+
+	/* the version variable */
+	SPINE_LOG_DEBUG(("DEBUG: The version variable is %s", set.dbversion));
 
 	/* log the log_destination variable */
 	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)",
@@ -587,6 +643,36 @@ void read_config_options() {
 	/* log the script timeout value */
 	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i", set.php_servers));
 
+	/* get the number of active profiles on the system run */
+	if ((res = getsetting(&mysql, LOCAL, "active_profiles")) != 0) {
+		set.active_profiles = atoi(res);
+		free((char *)res);
+
+		if (set.active_profiles <= 0) {
+			set.active_profiles = 0;
+		}
+	} else {
+		set.active_profiles = 0;
+	}
+
+	/* log the script timeout value */
+	SPINE_LOG_DEBUG(("DEBUG: The number of active data source profiles is %i", set.active_profiles));
+
+	/* get the number of snmp_ports in use */
+	if ((res = getsetting(&mysql, LOCAL, "total_snmp_ports")) != 0) {
+		set.total_snmp_ports = atoi(res);
+		free((char *)res);
+
+		if (set.total_snmp_ports <= 0) {
+			set.total_snmp_ports = 0;
+		}
+	} else {
+		set.total_snmp_ports = 0;
+	}
+
+	/* log the script timeout value */
+	SPINE_LOG_DEBUG(("DEBUG: The number of snmp ports on the system is %i", set.total_snmp_ports));
+
 	/*----------------------------------------------------------------
 	 * determine if the php script server is required by searching for
 	 * all the host records for an action of POLLER_ACTION_PHP_SCRIPT_SERVER.
@@ -658,6 +744,40 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
+	strcat(spine_capabilities, "{ authProtocols: \"");
+	#ifndef NETSNMP_DISABLE_MD5
+	strcat(spine_capabilities, "MD5,");
+	#endif
+
+	strcat(spine_capabilities, "SHA");
+
+	#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
+	strcat(spine_capabilities, ",SHA224,SHA256");
+	#endif
+	#if defined(HAVE_EVP_SHA384) && defined(usmHMAC384SHA512AuthProtocol)
+	strcat(spine_capabilities, ",SHA384,SHA512");
+	#endif
+	strcat(spine_capabilities, "\"");
+
+	strcat(spine_capabilities, ", privProtocols: \"");
+	#ifndef NETSNMP_DISABLE_DES
+	strcat(spine_capabilities, "DES");
+	#endif
+	#ifdef HAVE_AES
+	strcat(spine_capabilities, ",AES128");
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES192PrivProtocol)
+	strcat(spine_capabilities, ",AES192");
+	#endif
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES256PrivProtocol)
+	strcat(spine_capabilities, ",AES256");
+	#endif
+	#endif
+	strcat(spine_capabilities, "\" }");
+
+	if (set.poller_id == 1) {
+		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
+	}
+
 	db_disconnect(&mysql);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
@@ -672,12 +792,13 @@ void poller_push_data_to_main() {
 	MYSQL_ROW  row;
 	int        num_rows;
 	int        rows;
-	char       sqlbuf[MEGA_BUFSIZE];
+	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
-	char       query[BUFSIZE];
+	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
-	char       tmpstr[SMALL_BUFSIZE];
+	// tmpstr needs to be greater than 2 * the maximum column size being processed below
+	char       tmpstr[DBL_BUFSIZE];
 
 	db_connect(LOCAL, &mysql);
 	db_connect(REMOTE, &mysqlr);
@@ -691,7 +812,7 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -700,7 +821,7 @@ void poller_push_data_to_main() {
 			"WHERE poller_id = %d "
 			"AND id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -715,27 +836,51 @@ void poller_push_data_to_main() {
 		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
 		"total_polls, failed_polls, availability, last_updated) VALUES ");
 
-	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
-		"snmp_sysDescr=VALUES(snmp_sysDescr), "
-		"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
-        "snmp_sysUpTimeInstance=VALUES(snmp_sysUpTimeInstance), "
-		"snmp_sysContact=VALUES(snmp_sysContact), "
-		"snmp_sysName=VALUES(snmp_sysName), "
-		"snmp_sysLocation=VALUES(snmp_sysLocation), "
-        "status=VALUES(status), "
-		"status_event_count=VALUES(status_event_count), "
-		"status_fail_date=VALUES(status_fail_date), "
-		"status_rec_date=VALUES(status_rec_date), "
-        "status_last_error=VALUES(status_last_error), "
-		"min_time=VALUES(min_time), "
-		"max_time=VALUES(max_time), "
-		"cur_time=VALUES(cur_time), "
-		"avg_time=VALUES(avg_time), "
-		"polling_time=VALUES(polling_time), "
-        "total_polls=VALUES(total_polls), "
-		"failed_polls=VALUES(failed_polls), "
-		"availability=VALUES(availability), "
-		"last_updated=VALUES(last_updated);");
+	if (set.dbonupdate == 0) {
+		snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+			"snmp_sysDescr=VALUES(snmp_sysDescr), "
+			"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
+			"snmp_sysUpTimeInstance=VALUES(snmp_sysUpTimeInstance), "
+			"snmp_sysContact=VALUES(snmp_sysContact), "
+			"snmp_sysName=VALUES(snmp_sysName), "
+			"snmp_sysLocation=VALUES(snmp_sysLocation), "
+			"status=VALUES(status), "
+			"status_event_count=VALUES(status_event_count), "
+			"status_fail_date=VALUES(status_fail_date), "
+			"status_rec_date=VALUES(status_rec_date), "
+			"status_last_error=VALUES(status_last_error), "
+			"min_time=VALUES(min_time), "
+			"max_time=VALUES(max_time), "
+			"cur_time=VALUES(cur_time), "
+			"avg_time=VALUES(avg_time), "
+			"polling_time=VALUES(polling_time), "
+			"total_polls=VALUES(total_polls), "
+			"failed_polls=VALUES(failed_polls), "
+			"availability=VALUES(availability), "
+			"last_updated=VALUES(last_updated)");
+	} else {
+		snprintf(suffix, BUFSIZE, " AS rs ON DUPLICATE KEY UPDATE "
+			"snmp_sysDescr=rs.snmp_sysDescr, "
+			"snmp_sysObjectID=rs.snmp_sysObjectID, "
+			"snmp_sysUpTimeInstance=rs.snmp_sysUpTimeInstance, "
+			"snmp_sysContact=rs.snmp_sysContact, "
+			"snmp_sysName=rs.snmp_sysName, "
+			"snmp_sysLocation=rs.snmp_sysLocation, "
+			"status=rs.status, "
+			"status_event_count=rs.status_event_count, "
+			"status_fail_date=rs.status_fail_date, "
+			"status_rec_date=rs.status_rec_date, "
+			"status_last_error=rs.status_last_error, "
+			"min_time=rs.min_time, "
+			"max_time=rs.max_time, "
+			"cur_time=rs.cur_time, "
+			"avg_time=rs.avg_time, "
+			"polling_time=rs.polling_time, "
+			"total_polls=rs.total_polls, "
+			"failed_polls=rs.failed_polls, "
+			"availability=rs.availability, "
+			"last_updated=rs.last_updated");
+	}
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);
@@ -752,42 +897,42 @@ void poller_push_data_to_main() {
 						sqlp += sprintf(sqlp, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%s, ", row[0]); // id
+					sqlp += sprintf(sqlp, "%s, ", row[0]); // id mediumint
 
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID varchar(128)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance bigint
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation varchar(300)
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-
-					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count
-
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_event_date
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status tinyint
 					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time
-					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time
-					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time
-					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time
-					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time
-					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls
-					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls
-					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability
+					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count mediumint
 
-					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_fail_date timestamp
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date timestamp
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error varchar(255)
+					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+
+					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time decimal(10,5)
+					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time double
+					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls int
+					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls int
+					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability decimal(8,5)
+
+					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated timestamp
 					sqlp += sprintf(sqlp, "'%s'", tmpstr);
 
 					sqlp += sprintf(sqlp, ")");
@@ -813,12 +958,12 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d "
 			"AND host_id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d ",
 			set.poller_id);
@@ -826,8 +971,13 @@ void poller_push_data_to_main() {
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
-	snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
-		"rrd_next_step=VALUES(rrd_next_step);");
+	if (set.dbonupdate == 0) {
+		snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
+			"rrd_next_step=VALUES(rrd_next_step)");
+	} else {
+		snprintf(suffix, BUFSIZE, " AS rs ON DUPLICATE KEY UPDATE "
+			"rrd_next_step=rs.rrd_next_step");
+	}
 
 	if ((result = db_query(&mysql, LOCAL, query)) != 0) {
 		num_rows = mysql_num_rows(result);
@@ -994,7 +1144,7 @@ void config_defaults() {
 void die(const char *format, ...) {
 	va_list	args;
 	char logmessage[BUFSIZE];
-	char flogmessage[BUFSIZE];
+	char flogmessage[DBL_BUFSIZE];
 	int old_errno = errno;
 
 	va_start(args, format);
@@ -1009,12 +1159,12 @@ void die(const char *format, ...) {
 
 	if (set.logfile_processed) {
 		if (set.parent_fork == SPINE_PARENT) {
-			snprintf(flogmessage, BUFSIZE, "%s (Spine parent)", logmessage);
+			snprintf(flogmessage, DBL_BUFSIZE, "%s (Spine parent)", logmessage);
 		} else {
-			snprintf(flogmessage, BUFSIZE, "%s (Spine thread)", logmessage);
+			snprintf(flogmessage, DBL_BUFSIZE, "%s (Spine thread)", logmessage);
 		}
 	} else {
-		snprintf(flogmessage, BUFSIZE, "%s (Spine init)", logmessage);
+		snprintf(flogmessage, DBL_BUFSIZE, "%s (Spine init)", logmessage);
 	}
 
 	fprintf(stderr, "%s", flogmessage);
@@ -1098,7 +1248,7 @@ int spine_log(const char *format, ...) {
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
-	char stdoutmessage[LOGSIZE];   /* Message for stdout */
+	char stdoutmessage[LRG_LOGSIZE];   /* Message for stdout */
 
 	double cur_time;
 
@@ -1110,7 +1260,7 @@ int spine_log(const char *format, ...) {
 	fp = stdout;
 
 	/* log message prefix */
-	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] ", set.poller_id, getpid());
+	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] PT[%ld] ", set.poller_id, getpid(), pthread_self());
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
@@ -1119,8 +1269,7 @@ int spine_log(const char *format, ...) {
 	now_ptr = &now_time;
 
 	if (IS_LOGGING_TO_STDOUT()) {
-		gettimeofday(&now, NULL);
-		cur_time = TIMEVAL_TO_DOUBLE(now);
+		cur_time = get_time_as_double();
 		sprintf(stdoutmessage, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
 		puts(stdoutmessage);
 		return TRUE;
@@ -1484,27 +1633,24 @@ char *add_slashes(char *string) {
  *
  *  \return pointer to destination string
  *
- */
+*/
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 char *strncopy(char *dst, const char *src, size_t obuf) {
 	assert(dst != 0);
 	assert(src != 0);
 
 	size_t len;
 
-	len = strlen(src);
-
-	if (!len) {
-		dst[0] = '\0';
-	} else if (len < obuf) {
+	len = (strlen(src) < obuf) ? strlen(src) : obuf;
+	if (len) {
 		strncpy(dst, src, len);
-		dst[len] = '\0';
-	} else {
-		strncpy(dst, src, --obuf);
-		dst[obuf] = '\0';
 	}
 
+	dst[len] = '\0';
 	return dst;
 }
+#pragma GCC diagnostic pop
 
 /*! \fn double get_time_as_double()
  *  \brief fetches system time as a double-precison value
@@ -1516,27 +1662,7 @@ double get_time_as_double(void) {
 
 	gettimeofday(&now, NULL);
 
-	return TIMEVAL_TO_DOUBLE(now);
-}
-
-/*! \fn string *get_host_poll_time()
- *  \brief fetches start time for host being polled
- *
- *  \return host_time as a string
- */
-char *get_host_poll_time() {
-	char *host_time;
-
-	#define HOST_TIME_STRING_LEN 20
-
-	if (!(host_time = (char *) malloc(HOST_TIME_STRING_LEN))) {
-		die("ERROR: Fatal malloc error: util.c host_time");
-	}
-	host_time[0] = '\0';
-
-	sprintf(host_time, "%lu", (unsigned long) time(NULL));
-
-	return(host_time);
+	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
 }
 
 /*! \fn trim()
@@ -1611,6 +1737,21 @@ char *reverse(char* str) {
 	}
 
 	return str;
+}
+
+/*! \fn strpos()
+ *  \brief looks for the position of needle in haystack
+ *
+ *  \return the position of -1 if not found
+ */
+int strpos(char *haystack, char *needle) {
+	char *p = strstr(haystack, needle);
+
+	if (p) {
+		return p - haystack;
+	}
+
+	return -1;
 }
 
 /*! \fn char_count()
@@ -1820,4 +1961,55 @@ void checkAsRoot() {
 	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not "));
 	#endif
 	#endif
+}
+
+/*! \fn int get_cacti_version(MYSQL *psql, int mode, const char *setting)
+ *  \brief Returns the version of Cacti as a decimal
+ *
+ *  Given a pointer to a database get the version of Cacti and convert
+ *  to an integer.
+ *
+ *  \return the cacti version
+ *
+ */
+int get_cacti_version(MYSQL *psql, int mode) {
+	char      qstring[256];
+	char      *retval;
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int       i;
+	int       major, minor, point;
+	int       cacti_version;
+
+	assert(psql != 0);
+
+	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+
+	result = db_query(psql, mode, qstring);
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
+			if (mysql_row != NULL) {
+				retval = strdup(mysql_row[0]);
+				db_free_result(result);
+
+				if (STRIMATCH(retval, "new_install")) {
+					return 0;
+				} else {
+					sscanf(retval, "%d.%d.%d", &major, &minor, &point);
+					cacti_version = (major * 1000) + (minor * 100) + (point * 1);
+					return cacti_version;
+				}
+			}else{
+				return 0;
+			}
+		}else{
+			db_free_result(result);
+			return 0;
+		}
+	}else{
+		return 0;
+	}
 }

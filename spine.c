@@ -103,6 +103,7 @@ int num_hosts = 0;
 sem_t available_threads;
 sem_t available_scripts;
 double start_time;
+double total_time;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -111,6 +112,8 @@ int     *debug_devices;
 
 pool_t  *db_pool_local;
 pool_t  *db_pool_remote;
+
+poller_thread_t** details = NULL;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
@@ -188,7 +191,6 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
  *
  */
 int main(int argc, char *argv[]) {
-	struct timeval now;
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
 	int num_rows = 0;
@@ -197,14 +199,14 @@ int main(int argc, char *argv[]) {
 	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
 	double host_time_double = 0;
-	int itemsPT = 0;
+	int items_per_thread = 0;
 	int device_threads;
 	sem_t thread_init_sem;
 	int a_threads_value;
 	struct timespec until_spec;
 
-	gettimeofday(&now, NULL);
-	start_time = TIMEVAL_TO_DOUBLE(now);
+	start_time = get_time_as_double();
+	total_time = 0;
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -213,7 +215,6 @@ int main(int argc, char *argv[]) {
 	#endif /* HAVE_LCAP */
 
 	pthread_t* threads = NULL;
-	poller_thread_t** details = NULL;
 	poller_thread_t* poller_details = NULL;
 	pthread_attr_t attr;
 
@@ -234,6 +235,9 @@ int main(int argc, char *argv[]) {
 	int threads_final = 0;
 	int threads_missing = -1;
 	int threads_count;
+
+	/* we must initilize snmp in the main thread */
+	struct snmp_session session;
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
@@ -650,6 +654,12 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
 
+	if (!(host_time = (char *) malloc(SMALL_BUFSIZE))) {
+		die("ERROR: Fatal malloc error: util.c host_time");
+	}
+
+	memset(host_time, 0, SMALL_BUFSIZE);
+
 	/* initialize winsock library on Windows */
 	SOCK_STARTUP;
 
@@ -698,6 +708,14 @@ int main(int argc, char *argv[]) {
 		change_host = TRUE;
 	}
 
+	/**
+     * We must initilize the first snmp session
+     * in the main thread to initilize the mib files
+     * and other structures.  After which it's snmp
+     * is thread safe in threads
+     */
+	snmp_sess_init(&session);
+
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
 		if (change_host) {
@@ -714,7 +732,12 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* adjust device threads in cases where the host does not have sufficient data sources */
-		snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		if (set.active_profiles != 1) {
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		} else {
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
+		}
+
 		tresult   = db_query(&mysql, LOCAL, querybuf);
 		mysql_row = mysql_fetch_row(tresult);
 
@@ -730,24 +753,29 @@ int main(int argc, char *argv[]) {
 		/* determine how many items will be polled per thread */
 		if (device_threads > 1) {
 			if (current_thread == 1) {
-				snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
+				if (set.active_profiles != 1) {
+					snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
+				} else {
+					snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+				}
+
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
-				itemsPT   = atoi(mysql_row[0]);
+				items_per_thread = atoi(mysql_row[0]);
+
 				db_free_result(tresult);
 
-				if (host_time) free(host_time);
-
-				host_time = get_host_poll_time();
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				host_time_double = get_time_as_double();
+			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
-			itemsPT = 0;
+			items_per_thread = 0;
 
-			if (host_time) free(host_time);
-
-			host_time = get_host_poll_time();
+			sprintf(host_time, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 
@@ -756,73 +784,122 @@ int main(int argc, char *argv[]) {
 			die("ERROR: Fatal malloc error: spine.c poller_details!");
 		}
 
+		poller_details->device_counter   = device_counter;
 		poller_details->host_id          = host_id;
 		poller_details->host_thread      = current_thread;
-		poller_details->last_host_thread = device_threads;
-		poller_details->host_data_ids    = itemsPT;
-		poller_details->host_time        = host_time;
+		poller_details->host_threads     = device_threads;
+		poller_details->host_data_ids    = items_per_thread;
+
+		snprintf(poller_details->host_time, 40, "%s", host_time);
+
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
+		poller_details->threads_complete = 0;
 
-		details[device_counter]          = poller_details;
+		thread_mutex_lock(LOCK_THDET);
+		details[device_counter] = poller_details;
+		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
 		int wait_retries = 0;
-		int sem_err = 0;
-		while (++wait_retries < 100) {
+		int loop_count = 0;
+		double progress_time = 0;
+		unsigned int sem_err = 0;
+		int spine_timeout = FALSE;
+
+		while (TRUE) {
 			sem_err = sem_trywait(&available_threads);
+
 			if (sem_err == 0) {
+				// Acquired a thread
 				break;
-			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Available Thread Lock Internal"));
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Available Thread Lock Internal", sem_err));
+			} else if (sem_err == EINTR) {
+				// Interrupted by signal handler
+			} else if (sem_err == EDEADLK) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
+			} else if (sem_err == EAGAIN) {
+				// Keep trying
 			}
+
+			loop_count++;
+
+			if (loop_count == 10) {
+				progress_time = get_time_as_double() - start_time;
+
+				if (progress_time + 1 > set.poller_interval) {
+					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
+					spine_timeout = TRUE;
+					break;
+				}
+
+				loop_count = 0;
+			}
+
 			usleep(10000);
+
+			total_time = get_time_as_double();
+
+			if (total_time - start_time > set.poller_interval) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices External", host_id, current_thread));
+				spine_timeout = TRUE;
+				canexit = TRUE;
+				break;
+			}
 		}
 
-		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Spine would have deadlocked Available Thread Lock"));
-			break;
-		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Available Thread Lock"));
-			break;
-		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Spine Encounter Unexpected Error %d For Available Thread Lock", sem_err));
-			break;
-		}
+		loop_count = 0;
 
-		wait_retries = 0;
-		while (++wait_retries < 100) {
+		while (!spine_timeout) {
 			sem_err = sem_trywait(&thread_init_sem);
+
 			if (sem_err == 0) {
+				// Acquired a thread
 				break;
-			} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Timed Out While Processing Thread Initialization Lock"));
+			} else if (sem_err == EINTR) {
+				// Interrupted by signal handler
+			} else if (sem_err == EDEADLK) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
+			} else if (sem_err == EAGAIN) {
+				// Keep trying
 			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Spine Error %ld While Processing Thread Initialization Lock", sem_err));
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			}
+
+			if (loop_count == 10) {
+				progress_time = get_time_as_double() - start_time;
+
+				if (progress_time + 1 > set.poller_interval) {
+					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
+					spine_timeout = TRUE;
+					break;
+				}
+
+				loop_count = 0;
+			}
+
 			usleep(10000);
+
+			total_time = get_time_as_double();
+
+			if (total_time - start_time > set.poller_interval) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices Internal", host_id, current_thread));
+				spine_timeout = TRUE;
+				canexit = TRUE;
+				break;
+			}
 		}
 
-		if (sem_err == EDEADLK) {
-			SPINE_LOG(("ERROR: Spine would have deadlocked Thread Initialization Lock"));
-			break;
-		} else if (sem_err == ETIMEDOUT || sem_err == EWOULDBLOCK || wait_retries >= 100) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Processing Thread Initialization Lock"));
-			break;
-		} else if (sem_err != 0) {
-			SPINE_LOG(("ERROR: Spine Encountered Unexpected Error %d For Thread Initialization Lock", sem_err));
-			break;
-		}
+		if (!spine_timeout) {
+			/* create child process */
+			thread_retry:
 
-		/* create child process */
-		thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
+			thread_mutex_lock(LOCK_HOST_TIME);
 
-		switch (thread_status) {
-			case 0:
-				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created"));
+			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
+
+			if (thread_status == 0) {
+				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
@@ -834,31 +911,24 @@ int main(int argc, char *argv[]) {
 				sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
-					" last_host_thread = %d, host_data_ids = %d, complete = %d",
+					" host_threads = %d, host_data_ids = %d, complete = %d",
 					device_counter-1,
 					poller_details->host_id,
 					poller_details->host_thread,
-					poller_details->last_host_thread,
+					poller_details->host_threads,
 					poller_details->host_data_ids,
 					poller_details->complete));
+			} else if (thread_status == EAGAIN) {
+				usleep(10000);
+				goto thread_retry;
+			} else if (thread_status == EINVAL) {
+				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
+			}
 
-				break;
-			case EAGAIN:
-				SPINE_LOG(("ERROR: The System Lacked the Resources to Create a Thread"));
-				break;
-			case EFAULT:
-				SPINE_LOG(("ERROR: The Thread or Attribute were Invalid"));
-				break;
-			case EINVAL: SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
-				break;
-			default:
-				SPINE_LOG(("ERROR: Unknown Thread Creation Error - %d", thread_status));
-				break;
-		}
-
-		/* Restore thread initialization semaphore if thread creation failed */
-		if (thread_status) {
-			sem_post(&thread_init_sem);
+			/* Restore thread initialization semaphore if thread creation failed */
+			if (thread_status) {
+				sem_post(&thread_init_sem);
+			}
 		}
 	}
 
@@ -871,50 +941,50 @@ int main(int argc, char *argv[]) {
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Spine Timed Out While Waiting for %d Threads to End", set.threads - a_threads_value));
+			SPINE_LOG(("ERROR: Device[%i] polling timed out while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
 			break;
 		}
 
-		SPINE_LOG_HIGH(("WARNING: Spine Sleeping While Waiting for %d Threads to End", set.threads - a_threads_value));
+		SPINE_LOG_HIGH(("WARNING: Device[%i] polling sleeping while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
 		usleep(500000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
 
 	threads_final = set.threads - a_threads_value;
 
-	if (threads_final) {
-		SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
+	SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
 
-		for (threads_count = 0; threads_count < num_rows; threads_count++) {
-			poller_thread_t* det = details[threads_count];
+	for (threads_count = 0; threads_count < num_rows; threads_count++) {
+		thread_mutex_lock(LOCK_THDET);
 
-			if (threads_missing == -1 && det == NULL) {
-				threads_missing = threads_count;
-			}
+		poller_thread_t* det = details[threads_count];
 
-			if (det != NULL) { // && !det->complete) {
-				SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
-					det->complete?"":"in",
-					det->host_id,
-					det->host_data_ids * (det->host_thread - 1),
-					det->host_data_ids * (det->host_thread)));
-
-				SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
-					" last_host_thread = %d, host_data_ids = %d, complete = %d",
-					threads_count,
-					det->host_id,
-					det->host_thread,
-					det->last_host_thread,
-					det->host_data_ids,
-					det->complete));
-			}
+		if (threads_missing == -1 && det == NULL) {
+			threads_missing = threads_count;
 		}
 
-		if (threads_missing > -1) {
-			SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
+		if (det != NULL) { // && !det->complete) {
+			SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
+				det->complete ? "":"in",
+				det->host_id,
+				det->host_data_ids * (det->host_thread - 1),
+				det->host_data_ids * (det->host_thread)));
+
+			SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
+				" host_threads = %d, host_data_ids = %d, complete = %d",
+				threads_count,
+				det->host_id,
+				det->host_thread,
+				det->host_threads,
+				det->host_data_ids,
+				det->complete));
 		}
-	} else {
-		SPINE_LOG_MEDIUM(("The Final Value of Threads is %i", threads_final));
+
+		thread_mutex_unlock(LOCK_THDET);
+	}
+
+	if (threads_missing > -1) {
+		SPINE_LOG(("WARNING: There were %d threads which did not run", num_rows - threads_missing));
 	}
 
 	/* tell Spine that it is now parent */
@@ -924,9 +994,6 @@ int main(int argc, char *argv[]) {
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && !set.SQL_readonly) {
 		poller_push_data_to_main();
 	}
-
-	/* print out stats */
-	gettimeofday(&now, NULL);
 
 	/* update the db for |data_time| on graphs */
 	if (set.poller_id == 1) {
@@ -963,15 +1030,16 @@ int main(int argc, char *argv[]) {
 	/* free malloc'd variables */
 	for (i = 0; i < num_rows; i++) {
 		if (details[i] != NULL) {
-			free(details[i]);
+			SPINE_FREE(details[i]);
 		}
 	}
 
-	free(details);
-	free(threads);
-	free(ids);
-	free(conf_file);
-	free(debug_devices);
+	SPINE_FREE(details);
+	SPINE_FREE(threads);
+	SPINE_FREE(ids);
+	SPINE_FREE(conf_file);
+	SPINE_FREE(debug_devices);
+	SPINE_FREE(host_time);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
@@ -991,7 +1059,7 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: Net-SNMP Close Completed"));
 
 	/* finally add some statistics to the log and exit */
-	end_time = TIMEVAL_TO_DOUBLE(now);
+	end_time = get_time_as_double();
 
 	if (set.log_level >= POLLER_VERBOSITY_MEDIUM) {
 		SPINE_LOG(("Time: %.4f s, Threads: %i, Devices: %i", (end_time - begin_time), set.threads, num_rows));

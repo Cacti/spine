@@ -6,7 +6,7 @@
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
  | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	|
+ | version 2.1 of the License, or (at your option) any later version.      |
  |                                                                         |
  | This program is distributed in the hope that it will be useful,         |
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
@@ -37,8 +37,8 @@
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
-	poller_details.complete = TRUE;
-	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] The child has cleaned up", pthread_self()));
+	SPINE_LOG_DEVDBG(("DEBUG: Device[%i] HT[%i] The Device Thread has cleaned up.", poller_details.host_id, poller_details.host_thread));
+
 	child_cleanup_thread(arg);
 }
 
@@ -48,7 +48,7 @@ void child_cleanup_thread(void *arg) {
 	int a_threads_value;
 	sem_getvalue(&available_threads, &a_threads_value);
 
-	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Available Threads is %i (%i outstanding)", pthread_self(), a_threads_value, set.threads - a_threads_value));
+	SPINE_LOG_DEVDBG(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 }
 
 void child_cleanup_script(void *arg) {
@@ -57,7 +57,7 @@ void child_cleanup_script(void *arg) {
 	int a_scripts_value;
 	sem_getvalue(&available_scripts, &a_scripts_value);
 
-	SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Available Scripts is %i (%i outstanding)", pthread_self(), a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
+	SPINE_LOG_DEVDBG(("DEBUG: Available Scripts is %i (%i outstanding)", a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
 }
 
 /*! \fn void *child(void *arg)
@@ -72,34 +72,41 @@ void child_cleanup_script(void *arg) {
 void *child(void *arg) {
 	pthread_cleanup_push(child_cleanup, arg);
 
+	int device_counter;
 	int host_id;
 	int host_thread;
-	int last_host_thread;
+	int host_threads;
 	int host_data_ids;
 	int host_errors;
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
+	extern poller_thread_t** details;
 
-	host_errors      = 0;
+	host_errors = 0;
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
+
+	device_counter   = poller_details.device_counter;
 	host_id          = poller_details.host_id;
 	host_thread      = poller_details.host_thread;
-	last_host_thread = poller_details.last_host_thread;
+	host_threads     = poller_details.host_threads;
 	host_data_ids    = poller_details.host_data_ids;
 	host_time_double = poller_details.host_time_double;
+
 	snprintf(host_time, SMALL_BUFSIZE, "%s", poller_details.host_time);
+
+	thread_mutex_unlock(LOCK_HOST_TIME);
 
 	/* Allows main thread to proceed with creation of other threads */
 	sem_post(poller_details.thread_init_sem);
 
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("DEBUG: In Poller, About to Start Polling of Device for Device ID %i", host_id));
+		SPINE_LOG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: In Poller, About to Start Polling of Device for Device ID %i", host_id));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	}
 
-	poll_host(host_id, host_thread, last_host_thread, host_data_ids, host_time, &host_errors, host_time_double);
+	poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
 
 	pthread_cleanup_pop(1);
 
@@ -109,7 +116,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double *host_time_double)
+/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -131,7 +138,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int host_id, int host_thread, int last_host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
+void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
@@ -143,6 +150,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char query10[BUFSIZE];
 	char query11[BUFSIZE];
 	char *query12 = NULL;
+	char query13[BUFSIZE];
 	char posuffix[BUFSIZE];
 
 	int query1_len   = 0;
@@ -185,13 +193,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	char temp_arg1[BUFSIZE];
 	char limits[SMALL_BUFSIZE];
 
-	int  num_snmp_agents   = 0;
 	int  last_snmp_version = 0;
 	int  last_snmp_port    = 0;
 	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
-	char last_snmp_auth_protocol[5];
+	char last_snmp_auth_protocol[7];
 	char last_snmp_priv_passphrase[200];
 	char last_snmp_priv_protocol[7];
 	char last_snmp_context[65];
@@ -208,15 +215,17 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	int ignore_sysinfo          = TRUE;
 	int buf_length              = 0;
 
+	extern poller_thread_t** details;
+
 	pool_t *local_cnn;
 	pool_t *remote_cnn;
 
-	reindex_t   *reindex;
-	host_t      *host;
-	ping_t      *ping;
-	name_t      *name;
-	target_t    *poller_items;
-	snmp_oids_t *snmp_oids;
+	reindex_t   *reindex = NULL;
+	host_t      *host = NULL;
+	ping_t      *ping = NULL;
+	name_t      *name = NULL;
+	target_t    *poller_items = NULL;
+	snmp_oids_t *snmp_oids = NULL;
 
 	error_string = malloc(DBL_BUFSIZE);
 	buf_size     = malloc(sizeof(int));
@@ -254,13 +263,6 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	/* set zeros */
 	memset(ping, 0, sizeof(ping_t));
-
-	if (!(name = (name_t *) malloc(sizeof(name_t)))) {
-		die("ERROR: Fatal malloc error: poller.c name struct!");
-	}
-
-	/* set zeros */
-	memset(name, 0, sizeof(name_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
 		die("ERROR: Fatal malloc error: poller.c reindex poll!");
@@ -309,22 +311,59 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
-		snprintf(query5, BUFSIZE,
-			"SELECT action, hostname, snmp_community, "
-				"snmp_version, snmp_username, snmp_password, "
-				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-				"rrd_num, snmp_port, snmp_timeout, "
-				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" ORDER by snmp_port %s", host_id, limits);
+		if (set.active_profiles != 1) {
+			if (set.total_snmp_ports == 1) {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND rrd_next_step <= 0"
+					" %s", host_id, limits);
+			} else {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND rrd_next_step <= 0"
+					" ORDER BY snmp_port %s", host_id, limits);
+			}
+		} else {
+			if (set.total_snmp_ports == 1) {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" %s", host_id, limits);
+			} else {
+				snprintf(query5, BUFSIZE,
+					"SELECT action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" ORDER BY snmp_port %s", host_id, limits);
+			}
+		}
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step, rrd_next_step - %i))"
-			" WHERE host_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, host_id);
+			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i))"
+			" WHERE host_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -332,8 +371,13 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" (local_data_id, rrd_name, time, output) VALUES");
 
 		/* query suffix to add rows to the poller output table */
-		snprintf(posuffix, BUFSIZE,
-			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+		if (set.dbonupdate == 0) {
+			snprintf(posuffix, BUFSIZE,
+				" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+		} else {
+			snprintf(posuffix, BUFSIZE,
+				" AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+		}
 
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
@@ -343,12 +387,20 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" GROUP BY snmp_port %s", host_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
-		snprintf(query10, BUFSIZE,
-			"SELECT snmp_port, count(snmp_port)"
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" GROUP BY snmp_port %s", host_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" GROUP BY snmp_port %s", host_id, limits);
+		} else {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" GROUP BY snmp_port %s", host_id, limits);
+		}
 	} else {
 		snprintf(query1, BUFSIZE,
 			"SELECT action, hostname, snmp_community, "
@@ -383,24 +435,37 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
-		snprintf(query5, BUFSIZE,
-			"SELECT action, hostname, snmp_community, "
-				"snmp_version, snmp_username, snmp_password, "
-				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-				"rrd_num, snmp_port, snmp_timeout, "
-				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" AND poller_id = %i"
-			" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query5, BUFSIZE,
+				"SELECT action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" AND poller_id = %i"
+				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+		} else {
+			snprintf(query5, BUFSIZE,
+				"SELECT action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND poller_id = %i"
+				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+		}
 
 		/* query to setup the next polling interval in cacti */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
-			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step, rrd_next_step - %i))"
+			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i))"
 			" WHERE host_id = %i"
-			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
+			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -420,13 +485,22 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 
 		/* number of agent's count for multiple polling intervals */
-		snprintf(query10, BUFSIZE,
-			"SELECT snmp_port, count(snmp_port)"
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND rrd_next_step <= 0"
-			" AND poller_id = %i"
-			" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
+		if (set.active_profiles != 1) {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND rrd_next_step <= 0"
+				" AND poller_id = %i"
+				" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
+		} else {
+			snprintf(query10, BUFSIZE,
+				"SELECT snmp_port, count(snmp_port)"
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND poller_id = %i"
+				" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
+		}
 	}
 
 	/* query to add output records to the poller output table */
@@ -459,11 +533,23 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
-				db_release_connection(LOCAL, local_cnn->id);
+				if (local_cnn != NULL) {
+					db_release_connection(LOCAL, local_cnn->id);
+				} else {
+					SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
+				}
 
 				if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-					db_release_connection(REMOTE, remote_cnn->id);
+					if (remote_cnn != NULL) {
+						db_release_connection(REMOTE, remote_cnn->id);
+					} else {
+						SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
+					}
 				}
+
+				SPINE_FREE(host);
+				SPINE_FREE(reindex);
+				SPINE_FREE(ping);
 
 				return;
 			}
@@ -473,8 +559,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 			if (row) {
 				/* initialize variables first */
-				host->id                      = 0;					// 0
-				host->hostname[0]             = '\0';				// 1
+				host->id                      = 0;                 // 0
+				host->hostname[0]             = '\0';              // 1
 				host->snmp_session            = NULL;              // -
 				host->snmp_community[0]       = '\0';              // 2
 				host->snmp_version            = 1;                 // 3
@@ -521,7 +607,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					name = get_namebyhost(row[1], NULL);
 					STRNCOPY(host->hostname, name->hostname);
 					host->ping_port = name->port;
+					SPINE_FREE(name);
 				}
+
 				if (row[2]  != NULL) STRNCOPY(host->snmp_community,       row[2]);
 
 				if (row[3]  != NULL) host->snmp_version = atoi(row[3]);
@@ -560,7 +648,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				if (row[29] != NULL) host->failed_polls = atoi(row[29]);
 				if (row[30] != NULL) host->availability = atof(row[30]);
 
-				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atoi(row[31]);
+				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atoll(row[31]);
 				if (row[32] != NULL) db_escape(&mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), row[32]);
 				if (row[33] != NULL) db_escape(&mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), row[33]);
 				if (row[34] != NULL) db_escape(&mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), row[34]);
@@ -640,7 +728,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
 									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
 									" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
-									" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%u', "
+									" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%llu', "
 									" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
 								"WHERE id='%i'",
 								host->status,
@@ -775,22 +863,57 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						switch(reindex->action) {
 						case POLLER_ACTION_SNMP: /* snmp */
 							/* if there is no snmp session, don't probe */
-							if (!host->snmp_session) {
+							if (host->snmp_session == NULL) {
 								reindex_err = TRUE;
 							}
 
 							/* check to see if you are checking uptime */
 							if (!reindex_err) {
-								if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") &&
-								   (strlen(sysUptime) > 0)) {
+								if ((strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") ||
+									strstr(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")) && strlen(sysUptime) > 0) {
+
 									if (!(poll_result = (char *) malloc(BUFSIZE))) {
 										die("ERROR: Fatal malloc error: poller.c poll_result");
 									}
+
 									poll_result[0] = '\0';
+
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+								     // Ensure uptime is empty to start with
+								     snprintf(sysUptime, BUFSIZE, "");
+
+									// Check the legacy poll result first
 									poll_result = snmp_get(host, reindex->arg1);
-									snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+
+									if (poll_result && is_numeric(poll_result)) {
+										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+									}
+
+									if (is_debug_device(host->id)) {
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+									} else {
+										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+									}
+
+									SPINE_FREE(poll_result);
+
+									// Check the modern uptimeInsance second
+									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
+
+									if (poll_result && is_numeric(poll_result)) {
+										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
+									}
+
+									// Use the primed uptime to repopulate the poll_result
+									// This ensures whichever response was valid gets used
+									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
+
+									if (is_debug_device(host->id)) {
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+									} else {
+										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+									}
 								} else {
 									poll_result = snmp_get(host, reindex->arg1);
 								}
@@ -807,6 +930,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
 							poll_result = trim(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"));
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -816,7 +940,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							break;
 						case POLLER_ACTION_PHP_SCRIPT_SERVER: /* script (php script server) */
 							php_process = php_get_process();
+
 							poll_result = trim(php_cmd(reindex->arg1, php_process));
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -831,6 +957,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poll_result[0] = '\0';
 
 							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -845,6 +972,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poll_result[0] = '\0';
 
 							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"), '\n'));
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -859,7 +987,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 							poll_result[0] = '\0';
 
 							php_process = php_get_process();
+
 							sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
+
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
 							} else {
@@ -882,6 +1012,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
+
 								assert_fail = FALSE;
 							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value, poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
@@ -906,9 +1037,10 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									/* set zeros */
 									memset(query3, 0, buf_length);
 								}
+
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
-							} else if ((!strcmp(reindex->op, ">")) && (strtoll(reindex->assert_value, (char **)NULL, 10) < strtoll(poll_result, (char **)NULL, 10))) {
+							} else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) < atoll(poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
@@ -931,11 +1063,12 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 									/* set zeros */
 									memset(query3, 0, buf_length);
 								}
+
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							/* if uptime is set to '0' don't fail out */
 							} else if (strcmp(reindex->assert_value, "0")) {
-								if ((!strcmp(reindex->op, "<")) && (strtoll(reindex->assert_value, (char **)NULL, 10) > strtoll(poll_result, (char **)NULL, 10))) {
+								if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) > atoll(poll_result))) {
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
 										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 									} else {
@@ -958,6 +1091,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 										/* set zeros */
 										memset(query3, 0, buf_length);
 									}
+
 									assert_fail = TRUE;
 									previous_assert_failure = TRUE;
 								}
@@ -971,7 +1105,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
 									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
+
 									snprintf(query3, LRG_BUFSIZE, "UPDATE poller_reindex SET assert_value='%s' WHERE host_id='%i' AND data_query_id='%i' AND arg1='%s'", temp_poll_result, host_id, reindex->data_query_id, temp_arg1);
+
 									db_insert(&mysql, LOCAL, query3);
 
 									/* set zeros */
@@ -981,6 +1117,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								if ((assert_fail) &&
 									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {
 									spike_kill = TRUE;
+
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
 										SPINE_LOG(("Device[%i] HT[%i] NOTICE: Spike Kill in Effect for '%s'", host_id, host_thread, host->hostname));
 									} else {
@@ -993,11 +1130,8 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 								}
 							}
 
-							free(query3);
-
-							if (poll_result != NULL) {
-								free(poll_result);
-							}
+							SPINE_FREE(query3);
+							SPINE_FREE(poll_result);
 						}
 					}
 				}
@@ -1016,7 +1150,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		}
 
 		/* close the host snmp session, we will create again momentarily */
-		if (host->snmp_session) {
+		if (host->snmp_session != NULL) {
 			snmp_host_cleanup(host->snmp_session);
 			host->snmp_session = NULL;
 		}
@@ -1025,34 +1159,18 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	/* calculate the number of poller items to poll this cycle */
 	num_rows = 0;
 	if (set.poller_interval == 0) {
-		/* get the number of agents */
-		if ((result = db_query(&mysql, LOCAL, query9)) != 0) {
-			num_snmp_agents = mysql_num_rows(result);
-			mysql_free_result(result);
-
-			/* get the poller items */
-			if ((result = db_query(&mysql, LOCAL, query1)) != 0) {
-				num_rows = mysql_num_rows(result);
-			} else {
-				SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
-			}
+		/* get the poller items */
+		if ((result = db_query(&mysql, LOCAL, query1)) != 0) {
+			num_rows = mysql_num_rows(result);
 		} else {
-			SPINE_LOG(("Device[%i] HT[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 		}
 	} else {
-		/* get the number of agents */
-		if ((result = db_query(&mysql, LOCAL, query10)) != 0) {
-			num_snmp_agents = (int)mysql_num_rows(result);
-			mysql_free_result(result);
-
-			/* get the poller items */
-			if ((result = db_query(&mysql, LOCAL, query5)) != 0) {
-				num_rows = mysql_num_rows(result);
-			} else {
-				SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
-			}
+		/* get the poller items */
+		if ((result = db_query(&mysql, LOCAL, query5)) != 0) {
+			num_rows = mysql_num_rows(result);
 		} else {
-			SPINE_LOG(("Device[%i] HT[%i] ERROR: Agent Count Query Returned Null Result!", host->id, host_thread));
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, host_thread));
 		}
 	}
 
@@ -1175,7 +1293,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 				}
 
 				/* catch snmp initialization issues */
-				if (!host->snmp_session) {
+				if (host->snmp_session == NULL) {
 					host->ignore_host = TRUE;
 					break;
 				}
@@ -1269,7 +1387,11 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 						memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 					}
 
-					snmp_host_cleanup(host->snmp_session);
+					if (host->snmp_session != NULL) {
+						snmp_host_cleanup(host->snmp_session);
+						host->snmp_session = NULL;
+					}
+
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
 						poller_items[i].snmp_version, poller_items[i].snmp_community,
 						poller_items[i].snmp_username, poller_items[i].snmp_password,
@@ -1416,7 +1538,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					}
 				}
 
-				if (poll_result) free(poll_result);
+				SPINE_FREE(poll_result);
 
 				thread_end = get_time_as_double();
 
@@ -1474,7 +1596,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 					}
 				}
 
-				if (poll_result) free(poll_result);
+				SPINE_FREE(poll_result);
 
 				thread_end = get_time_as_double();
 
@@ -1620,7 +1742,7 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 		i = 0;
 		while (i < rows_processed) {
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i,'%s',FROM_UNIXTIME(%s),'%s')",
+			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 				poller_items[i].local_data_id,
 				poller_items[i].rrd_name,
 				host_time,
@@ -1696,29 +1818,31 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 		}
 
 		/* cleanup memory and prepare for function exit */
-		if (host->snmp_session) {
+		if (host->snmp_session != NULL) {
 			snmp_host_cleanup(host->snmp_session);
+			host->snmp_session = NULL;
 		}
 
-		free(query3);
+		SPINE_FREE(query3);
 		if (set.boost_redirect && set.boost_enabled) {
-			free(query12);
+			SPINE_FREE(query12);
 		}
 
-		free(poller_items);
-		free(snmp_oids);
+		SPINE_FREE(poller_items);
+		SPINE_FREE(snmp_oids);
 	} else {
 		/* free the mysql result */
 		mysql_free_result(result);
 	}
 
-	free(host);
-	free(reindex);
-	free(ping);
-	free(name);
+	SPINE_FREE(host);
+	SPINE_FREE(reindex);
+	SPINE_FREE(ping);
 
 	/* update poller_items table for next polling interval */
-	if (host_thread == last_host_thread) {
+	if (host_thread == host_threads && set.active_profiles != 1) {
+		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
+
 		db_query(&mysql, LOCAL, query6);
 	}
 
@@ -1731,20 +1855,33 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 	}
 
 	/* record the total time for the host */
-	poll_time = get_time_as_double();
-	query1[0] = '\0';
-	snprintf(query1, BUFSIZE, "UPDATE host SET polling_time=%.3f - %.3f WHERE id=%i", poll_time, host_time_double, host_id);
-	db_query(&mysql, LOCAL, query1);
+	thread_mutex_lock(LOCK_THDET);
+	details[device_counter]->threads_complete++;
+	if (details[device_counter]->threads_complete == details[device_counter]->host_threads) {
+		details[device_counter]->complete = TRUE;
 
-	db_release_connection(LOCAL, local_cnn->id);
+		poll_time = get_time_as_double();
+		query1[0] = '\0';
+		snprintf(query1, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
+		db_query(&mysql, LOCAL, query1);
+	}
+	thread_mutex_unlock(LOCK_THDET);
 
-	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-		db_release_connection(REMOTE, remote_cnn->id);
+	if (local_cnn != NULL) {
+		db_release_connection(LOCAL, local_cnn->id);
+	} else {
+		SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
 	}
 
-	#ifndef OLD_MYSQL
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		if (remote_cnn != NULL) {
+			db_release_connection(REMOTE, remote_cnn->id);
+		} else {
+			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
+		}
+	}
+
 	mysql_thread_end();
-	#endif
 
 	if (is_debug_device(host_id)) {
 		SPINE_LOG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
@@ -1754,9 +1891,9 @@ void poll_host(int host_id, int host_thread, int last_host_thread, int host_data
 
 	buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
 
-	free(error_string);
-	free(buf_size);
-	free(buf_errors);
+	SPINE_FREE(error_string);
+	SPINE_FREE(buf_size);
+	SPINE_FREE(buf_errors);
 
 	*host_errors = errors;
 }
@@ -1853,7 +1990,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0');", host->id));
@@ -1862,16 +1999,29 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
+		// Get the legacy system uptime instance first
 		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
-		if (poll_result) {
-			host->snmp_sysUpTimeInstance = atoi(poll_result);
-			free(poll_result);
+		if (poll_result && is_numeric(poll_result)) {
+			host->snmp_sysUpTimeInstance = atoll(poll_result);
+			SPINE_FREE(poll_result);
+
+			// Attempt to get the more modern version
+			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0');", host->id));
+			poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
+			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
+
+			if (poll_result && is_numeric(poll_result)) {
+				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
+				snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
+			}
+
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0');", host->id));
@@ -1880,7 +2030,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0');", host->id));
@@ -1889,7 +2039,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0');", host->id));
@@ -1898,7 +2048,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);
-			free(poll_result);
+			SPINE_FREE(poll_result);
 		}
 	} else {
 		if (is_debug_device(host->id)) {
@@ -1907,13 +2057,26 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_LOG_MEDIUM(("Device[%d] Updating Short System Information Table", host->id));
 		}
 
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
+		// Get the legacy system uptime instance first
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
-		if (poll_result) {
-			host->snmp_sysUpTimeInstance = atoi(poll_result);
-			free(poll_result);
+		if (poll_result && is_numeric(poll_result)) {
+			host->snmp_sysUpTimeInstance = atoll(poll_result);
+			SPINE_FREE(poll_result);
+
+			// Attempt to get the more modern version
+			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0');", host->id));
+			poll_result = snmp_get(host, ".1.3.6.1.6.3.10.2.1.3.0");
+			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
+
+			if (poll_result && is_numeric(poll_result)) {
+				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
+				snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
+			}
+
+			SPINE_FREE(poll_result);
 		}
 	}
 }
@@ -2002,28 +2165,30 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int needs_cleanup = 0;
 
 	pthread_cleanup_push(child_cleanup_script, NULL);
-	while (++retries < 100) {
+
+	// use the script server timeout value, allow for 50% leeway
+	while (++retries < (set.script_timeout * 15)) {
 		sem_err = sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
 		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: PT[%ld] Device[%i]: Pausing as unable to obtain a script execution lock", pthread_self(), current_host->id));
+				SPINE_LOG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Device[%i]: Pausing as unable to obtain a script execution lock", pthread_self(), current_host->id));
+				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
 			}
 		} else {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: PT[%ld] Device[%i]: Pausing as error %d whilst obtaining a script execution lock", pthread_self(), current_host->id, sem_err));
+				SPINE_LOG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: PT[%ld] Device[%i]: Pausing as error %d whilst obtaining a script execution lock", pthread_self(), current_host->id, sem_err));
+				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			}
 		}
 		usleep(10000);
 	}
 
 	if (sem_err) {
-		SPINE_LOG(("ERROR: PT[%ld] Device[%i]: Failed to obtain a script execution lock within 10 seconds", pthread_self(), current_host->id));
+		SPINE_LOG(("ERROR: Device[%i]: Failed to obtain a script execution lock within 30 seconds", current_host->id));
 	} else {
 		/* Mark for cleanup */
 		needs_cleanup = 1;
@@ -2140,7 +2305,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		}
 
 		#if defined(__CYGWIN__)
-		free(proc_command);
+		SPINE_FREE(proc_command);
 		#endif
 	}
 
