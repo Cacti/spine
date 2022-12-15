@@ -329,7 +329,7 @@ int main(int argc, char *argv[]) {
 
 		if (opt) *opt++ = '\0';
 
-		if (STRMATCH(arg, "-f") || STRMATCH(arg, "--first")) {
+		if (STRIMATCH(arg, "-f") || STRMATCH(arg, "--first")) {
 			if (HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -341,7 +341,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-l") || STRIMATCH(arg, "--last")) {
+		else if (STRIMATCH(arg, "-l") || STRIMATCH(arg, "--last")) {
 			if (HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -353,11 +353,11 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
+		else if (STRIMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
+		else if (STRIMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
 			if (STRIMATCH(getarg(opt, &argv), "online")) {
 				set.mode = REMOTE_ONLINE;
 			} else if (STRIMATCH(getarg(opt, &argv), "offline")) {
@@ -369,15 +369,15 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
+		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
+		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
 			set.mibs = 1;
 		}
 
-		else if (STRMATCH(arg, "-h") || STRMATCH(arg, "--help")) {
+		else if (STRIMATCH(arg, "-h") || STRMATCH(arg, "--help")) {
 			display_help(FALSE);
 
 			exit(EXIT_SUCCESS);
@@ -389,7 +389,7 @@ int main(int argc, char *argv[]) {
 			exit(EXIT_SUCCESS);
 		}
 
-		else if (STRMATCH(arg, "-O") || STRIMATCH(arg, "--option")) {
+		else if (STRIMATCH(arg, "-O") || STRIMATCH(arg, "--option")) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
@@ -402,19 +402,19 @@ int main(int argc, char *argv[]) {
 			set_option(setting, value);
 		}
 
-		else if (STRMATCH(arg, "-R") || STRMATCH(arg, "--readonly") || STRMATCH(arg, "--read-only")) {
+		else if (STRIMATCH(arg, "-R") || STRMATCH(arg, "--readonly") || STRMATCH(arg, "--read-only")) {
 			set.SQL_readonly = TRUE;
 		}
 
-		else if (STRMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
+		else if (STRIMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
 			conf_file = strdup(getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
+		else if (STRIMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
 			set_option("log_destination", "STDOUT");
 		}
 
-		else if (STRMATCH(arg, "-L") || STRMATCH(arg, "--log")) {
+		else if (STRIMATCH(arg, "-D") || STRMATCH(arg, "--log")) {
 			set_option("log_destination", getarg(opt, &argv));
 		}
 
