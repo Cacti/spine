@@ -279,7 +279,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	/* single polling interval query for items */
 	if (set.poller_id == 0) {
 		snprintf(query1, BUFSIZE,
-			"SELECT action, hostname, snmp_community, "
+			"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 				"snmp_version, snmp_username, snmp_password, "
 				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 				"rrd_num, snmp_port, snmp_timeout, "
@@ -291,7 +291,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* host structure for uptime checks */
 		snprintf(query2, BIG_BUFSIZE,
-			"SELECT id, hostname, snmp_community, snmp_version, "
+			"SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, "
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
 				"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
@@ -306,7 +306,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
-			"SELECT data_query_id, action, op, assert_value, arg1"
+			"SELECT SQL_NO_CACHE data_query_id, action, op, assert_value, arg1"
 				" FROM poller_reindex"
 				" WHERE host_id = %i", host_id);
 
@@ -314,7 +314,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		if (set.active_profiles != 1) {
 			if (set.total_snmp_ports == 1) {
 				snprintf(query5, BUFSIZE,
-					"SELECT action, hostname, snmp_community, "
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 						"snmp_version, snmp_username, snmp_password, "
 						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 						"rrd_num, snmp_port, snmp_timeout, "
@@ -325,7 +325,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					" %s", host_id, limits);
 			} else {
 				snprintf(query5, BUFSIZE,
-					"SELECT action, hostname, snmp_community, "
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 						"snmp_version, snmp_username, snmp_password, "
 						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 						"rrd_num, snmp_port, snmp_timeout, "
@@ -338,7 +338,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		} else {
 			if (set.total_snmp_ports == 1) {
 				snprintf(query5, BUFSIZE,
-					"SELECT action, hostname, snmp_community, "
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 						"snmp_version, snmp_username, snmp_password, "
 						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 						"rrd_num, snmp_port, snmp_timeout, "
@@ -348,7 +348,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					" %s", host_id, limits);
 			} else {
 				snprintf(query5, BUFSIZE,
-					"SELECT action, hostname, snmp_community, "
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 						"snmp_version, snmp_username, snmp_password, "
 						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 						"rrd_num, snmp_port, snmp_timeout, "
@@ -381,7 +381,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
-			"SELECT snmp_port, count(snmp_port)"
+			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
 			" FROM poller_item"
 			" WHERE host_id = %i"
 			" GROUP BY snmp_port %s", host_id, limits);
@@ -389,21 +389,21 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		/* number of agent's count for multiple polling intervals */
 		if (set.active_profiles != 1) {
 			snprintf(query10, BUFSIZE,
-				"SELECT snmp_port, count(snmp_port)"
+				"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND rrd_next_step <= 0"
 				" GROUP BY snmp_port %s", host_id, limits);
 		} else {
 			snprintf(query10, BUFSIZE,
-				"SELECT snmp_port, count(snmp_port)"
+				"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" GROUP BY snmp_port %s", host_id, limits);
 		}
 	} else {
 		snprintf(query1, BUFSIZE,
-			"SELECT action, hostname, snmp_community, "
+			"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 				"snmp_version, snmp_username, snmp_password, "
 				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 				"rrd_num, snmp_port, snmp_timeout, "
@@ -415,7 +415,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* host structure for uptime checks */
 		snprintf(query2, BIG_BUFSIZE,
-			"SELECT id, hostname, snmp_community, snmp_version, "
+			"SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, "
 				"snmp_username, snmp_password, snmp_auth_protocol, "
 				"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
 				"availability_method, ping_method, ping_port, ping_timeout, ping_retries, "
@@ -430,14 +430,14 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* data query structure for reindex detection */
 		snprintf(query4, BUFSIZE,
-			"SELECT data_query_id, action, op, assert_value, arg1"
+			"SELECT SQL_NO_CACHE data_query_id, action, op, assert_value, arg1"
 				" FROM poller_reindex"
 				" WHERE host_id = %i", host_id);
 
 		/* multiple polling interval query for items */
 		if (set.active_profiles != 1) {
 			snprintf(query5, BUFSIZE,
-				"SELECT action, hostname, snmp_community, "
+				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 					"snmp_version, snmp_username, snmp_password, "
 					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 					"rrd_num, snmp_port, snmp_timeout, "
@@ -449,7 +449,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
 		} else {
 			snprintf(query5, BUFSIZE,
-				"SELECT action, hostname, snmp_community, "
+				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
 					"snmp_version, snmp_username, snmp_password, "
 					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 					"rrd_num, snmp_port, snmp_timeout, "
@@ -478,7 +478,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
-			"SELECT snmp_port, count(snmp_port)"
+			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
 			" FROM poller_item"
 			" WHERE host_id = %i"
 			" AND poller_id = %i"
@@ -487,7 +487,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		/* number of agent's count for multiple polling intervals */
 		if (set.active_profiles != 1) {
 			snprintf(query10, BUFSIZE,
-				"SELECT snmp_port, count(snmp_port)"
+				"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND rrd_next_step <= 0"
@@ -495,7 +495,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				" GROUP BY snmp_port %s", host_id, set.poller_id, limits);
 		} else {
 			snprintf(query10, BUFSIZE,
-				"SELECT snmp_port, count(snmp_port)"
+				"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND poller_id = %i"
@@ -2134,6 +2134,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	double begin_time = 0;
 	double end_time = 0;
 	double script_timeout;
+	double remaining_usec = 0;
 	struct timeval timeout;
 	char *proc_command;
 	char *result_string;
@@ -2239,10 +2240,16 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 					end_time = get_time_as_double();
 
 					/* re-establish new timeout value */
-					timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
-					timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+					timeout.tv_sec  = rint(floor(script_timeout-(end_time-begin_time)));
+					remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
 
-					if ((end_time - begin_time) < set.script_timeout) {
+					if (remaining_usec > 0) {
+						timeout.tv_usec = rint(remaining_usec * 1000000);
+					} else {
+						timeout.tv_usec = 0;
+					}
+
+					if (timeout.tv_sec + timeout.tv_usec > 0) {
 						goto retry;
 					} else {
 						SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
