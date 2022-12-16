@@ -299,7 +299,8 @@ int php_init(int php_process) {
 	int  php2cacti_pdes[2];
 	pid_t  pid;
 	char poller_id[TINY_BUFSIZE];
-	char *argv[6];
+	char mode[TINY_BUFSIZE];
+	char *argv[7];
 	int  cancel_state;
 	char *result_string = 0;
 	int num_processes;
