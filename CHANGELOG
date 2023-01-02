@@ -1,5 +1,23 @@
 The Cacti Group | spine
 
+1.2.23
+-issue#287: Unexpected reindexing occurs when using uptime as the reindex method
+-issue#279: spine does not compile with SQL TLS deactivated
+-feature#277: Spine should prevent the script server from connecting to remote when offline
+-feature#292: Improve Script Server Timeout Logging
+-feature#293: Add SQL_NO_CACHE to Spine Queries
+
+
+1.2.22
+-issue#265: Periodically spine crashes with sigabort due to MariaDB API buffer overruns
+-issue#267: FATAL: Spine Encountered a Segmentation Fault
+-issue#269: When polling time is exceed, spine does not always exit as expected
+-issue#270: Spine logging at `-V 5` includes an extra line feed
+-issue#271: Incorrect SNMP responses can cause spine to crash
+-issue#272: Properly handle devices that timeout responding to the Extended Uptime
+-issue#274: MariaDB can cause spine to abort prematurely despite error handling
+-feature#273: Spine should log the error time when exiting via signal
+
 1.2.21
 -issue#258: Disable DES if Net-SNMP doesn't have it
 

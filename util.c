@@ -95,7 +95,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT value FROM settings WHERE name = '%s'", setting);
+	sprintf(qstring, "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -187,7 +187,7 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+	sprintf(qstring, "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
 
 	result = db_query(psql, mode, qstring);
 
@@ -367,6 +367,12 @@ void read_config_options() {
 	} else {
 		set.dbonupdate = 0;
 	}
+
+	/* get the cacti version from the database */
+	set.cacti_version = get_cacti_version(&mysql, LOCAL);
+
+	/* log the path_webroot variable */
+	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %s", set.cacti_version));
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
@@ -679,7 +685,7 @@ void read_config_options() {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
 		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
 		if (set.poller_id_exists) {
@@ -699,7 +705,7 @@ void read_config_options() {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
 		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += sprintf(sqlp, " AND host_id IN(%s)", set.host_id_list);
 		if (set.poller_id_exists) {
@@ -806,7 +812,7 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -815,7 +821,7 @@ void poller_push_data_to_main() {
 			"WHERE poller_id = %d "
 			"AND id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -952,12 +958,12 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d "
 			"AND host_id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d ",
 			set.poller_id);
@@ -1659,26 +1665,6 @@ double get_time_as_double(void) {
 	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
 }
 
-/*! \fn string *get_host_poll_time()
- *  \brief fetches start time for host being polled
- *
- *  \return host_time as a string
- */
-char *get_host_poll_time() {
-	char *host_time;
-
-	#define HOST_TIME_STRING_LEN 20
-
-	if (!(host_time = (char *) malloc(HOST_TIME_STRING_LEN))) {
-		die("ERROR: Fatal malloc error: util.c host_time");
-	}
-	host_time[0] = '\0';
-
-	sprintf(host_time, "%lu", (unsigned long) time(NULL));
-
-	return(host_time);
-}
-
 /*! \fn trim()
  *  \brief removes leading and trailing blanks, tabs, line feeds and
  *         carriage returns from a string.
@@ -1976,3 +1962,55 @@ void checkAsRoot() {
 	#endif
 	#endif
 }
+
+/*! \fn int get_cacti_version(MYSQL *psql, int mode, const char *setting)
+ *  \brief Returns the version of Cacti as a decimal
+ *
+ *  Given a pointer to a database get the version of Cacti and convert
+ *  to an integer.
+ *
+ *  \return the cacti version
+ *
+ */
+int get_cacti_version(MYSQL *psql, int mode) {
+	char      qstring[256];
+	char      *retval;
+	MYSQL_RES *result;
+	MYSQL_ROW mysql_row;
+	int       i;
+	int       major, minor, point;
+	int       cacti_version;
+
+	assert(psql != 0);
+
+	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+
+	result = db_query(psql, mode, qstring);
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
+			if (mysql_row != NULL) {
+				retval = strdup(mysql_row[0]);
+				db_free_result(result);
+
+				if (STRIMATCH(retval, "new_install")) {
+					return 0;
+				} else {
+					sscanf(retval, "%d.%d.%d", &major, &minor, &point);
+					cacti_version = (major * 1000) + (minor * 100) + (point * 1);
+					return cacti_version;
+				}
+			}else{
+				return 0;
+			}
+		}else{
+			db_free_result(result);
+			return 0;
+		}
+	}else{
+		return 0;
+	}
+}
+

@@ -103,6 +103,7 @@ int num_hosts = 0;
 sem_t available_threads;
 sem_t available_scripts;
 double start_time;
+double total_time;
 
 config_t set;
 php_t	*php_processes = 0;
@@ -205,6 +206,7 @@ int main(int argc, char *argv[]) {
 	struct timespec until_spec;
 
 	start_time = get_time_as_double();
+	total_time = 0;
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -233,6 +235,9 @@ int main(int argc, char *argv[]) {
 	int threads_final = 0;
 	int threads_missing = -1;
 	int threads_count;
+
+	/* we must initilize snmp in the main thread */
+	struct snmp_session session;
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
@@ -614,9 +619,9 @@ int main(int argc, char *argv[]) {
 
 	/* obtain the list of hosts to poll */
 	if (set.device_threads_exists) {
-		qp += sprintf(qp, "SELECT id, device_threads FROM host");
+		qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads FROM host");
 	} else {
-		qp += sprintf(qp, "SELECT id, '1' as device_threads FROM host");
+		qp += sprintf(qp, "SELECT SQL_NO_CACHE id, '1' as device_threads FROM host");
 	}
 	qp += sprintf(qp, " WHERE disabled=''");
 	if (!strlen(set.host_id_list)) {
@@ -648,6 +653,12 @@ int main(int argc, char *argv[]) {
 	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
 		die("ERROR: Fatal malloc error: spine.c host id's!");
 	}
+
+	if (!(host_time = (char *) malloc(SMALL_BUFSIZE))) {
+		die("ERROR: Fatal malloc error: util.c host_time");
+	}
+
+	memset(host_time, 0, SMALL_BUFSIZE);
 
 	/* initialize winsock library on Windows */
 	SOCK_STARTUP;
@@ -697,6 +708,14 @@ int main(int argc, char *argv[]) {
 		change_host = TRUE;
 	}
 
+	/**
+     * We must initilize the first snmp session
+     * in the main thread to initilize the mib files
+     * and other structures.  After which it's snmp
+     * is thread safe in threads
+     */
+	snmp_sess_init(&session);
+
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
 		if (change_host) {
@@ -714,9 +733,9 @@ int main(int argc, char *argv[]) {
 
 		/* adjust device threads in cases where the host does not have sufficient data sources */
 		if (set.active_profiles != 1) {
-			snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
 		} else {
-			snprintf(querybuf, BIG_BUFSIZE, "SELECT COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
 		}
 
 		tresult   = db_query(&mysql, LOCAL, querybuf);
@@ -735,9 +754,9 @@ int main(int argc, char *argv[]) {
 		if (device_threads > 1) {
 			if (current_thread == 1) {
 				if (set.active_profiles != 1) {
-					snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
+					snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
 				} else {
-					snprintf(querybuf, BIG_BUFSIZE, "SELECT CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+					snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
 				}
 
 				tresult   = db_query(&mysql, LOCAL, querybuf);
@@ -747,13 +766,16 @@ int main(int argc, char *argv[]) {
 
 				db_free_result(tresult);
 
-				host_time = get_host_poll_time();
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				host_time_double = get_time_as_double();
+			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
 			items_per_thread = 0;
 
-			host_time = get_host_poll_time();
+			sprintf(host_time, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 
@@ -767,7 +789,9 @@ int main(int argc, char *argv[]) {
 		poller_details->host_thread      = current_thread;
 		poller_details->host_threads     = device_threads;
 		poller_details->host_data_ids    = items_per_thread;
-		poller_details->host_time        = host_time;
+
+		snprintf(poller_details->host_time, 40, "%s", host_time);
+
 		poller_details->host_time_double = host_time_double;
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
@@ -812,7 +836,16 @@ int main(int argc, char *argv[]) {
 				loop_count = 0;
 			}
 
-			usleep(100000);
+			usleep(10000);
+
+			total_time = get_time_as_double();
+
+			if (total_time - start_time > set.poller_interval) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices External", host_id, current_thread));
+				spine_timeout = TRUE;
+				canexit = TRUE;
+				break;
+			}
 		}
 
 		loop_count = 0;
@@ -845,12 +878,23 @@ int main(int argc, char *argv[]) {
 				loop_count = 0;
 			}
 
-			usleep(100000);
+			usleep(10000);
+
+			total_time = get_time_as_double();
+
+			if (total_time - start_time > set.poller_interval) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices Internal", host_id, current_thread));
+				spine_timeout = TRUE;
+				canexit = TRUE;
+				break;
+			}
 		}
 
 		if (!spine_timeout) {
 			/* create child process */
 			thread_retry:
+
+			thread_mutex_lock(LOCK_HOST_TIME);
 
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
@@ -875,7 +919,7 @@ int main(int argc, char *argv[]) {
 					poller_details->host_data_ids,
 					poller_details->complete));
 			} else if (thread_status == EAGAIN) {
-				usleep(100000);
+				usleep(10000);
 				goto thread_retry;
 			} else if (thread_status == EINVAL) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
@@ -940,7 +984,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (threads_missing > -1) {
-		SPINE_LOG_HIGH(("ERROR: There were %d threads which did not run", num_rows - threads_missing));
+		SPINE_LOG(("WARNING: There were %d threads which did not run", num_rows - threads_missing));
 	}
 
 	/* tell Spine that it is now parent */
@@ -986,15 +1030,16 @@ int main(int argc, char *argv[]) {
 	/* free malloc'd variables */
 	for (i = 0; i < num_rows; i++) {
 		if (details[i] != NULL) {
-			free(details[i]);
+			SPINE_FREE(details[i]);
 		}
 	}
 
-	free(details);
-	free(threads);
-	free(ids);
-	free(conf_file);
-	free(debug_devices);
+	SPINE_FREE(details);
+	SPINE_FREE(threads);
+	SPINE_FREE(ids);
+	SPINE_FREE(conf_file);
+	SPINE_FREE(debug_devices);
+	SPINE_FREE(host_time);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 

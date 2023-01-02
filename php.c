@@ -84,7 +84,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
 		result_string = strdup("U");
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost.  Restarting PHP Script Server", php_process));
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
 
 		php_close(php_process);
 		php_init(php_process);
@@ -93,9 +93,9 @@ char *php_cmd(const char *php_command, int php_process) {
 		if (retries < 3) {
 			goto retry;
 		}
-	}else{
+	} else {
 		/* read the result from the php_command */
-		result_string = php_readpipe(php_process);
+		result_string = php_readpipe(php_process, command);
 
 		/* check for a null */
 		if (!strlen(result_string)) {
@@ -148,7 +148,7 @@ int php_get_process(void) {
 	return i;
 }
 
-/*! \fn char *php_readpipe(int php_process)
+/*! \fn char *php_readpipe(int php_process, char *command)
  *  \brief read a line from a PHP Script Server process
  *  \param php_process the PHP Script Server process to obtain output from
  *
@@ -159,11 +159,12 @@ int php_get_process(void) {
  *
  *  \return a string pointer to the PHP Script Server response
  */
-char *php_readpipe(int php_process) {
+char *php_readpipe(int php_process, char *command) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
+	double remaining_usec = 0;
 	char *result_string;
 
 	int  i;
@@ -206,14 +207,21 @@ char *php_readpipe(int php_process) {
 				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
-				timeout.tv_sec = rint(floor(set.script_timeout-(end_time-begin_time)));
-				timeout.tv_usec = rint((set.script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+				timeout.tv_sec  = rint(floor(set.script_timeout-(end_time-begin_time)));
+				remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
 
-				if ((end_time - begin_time) < set.script_timeout) {
+				if (remaining_usec > 0) {
+					timeout.tv_usec = rint(remaining_usec * 1000000);
+				} else {
+					timeout.tv_usec = 0;
+				}
+
+				if (timeout.tv_sec + timeout.tv_usec > 0) {
 					goto retry;
-				}else{
+				} else {
 					SPINE_LOG(("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.", php_process));
 				}
+
 				break;
 			case EINVAL:
 				SPINE_LOG(("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.", php_process));
@@ -233,7 +241,7 @@ char *php_readpipe(int php_process) {
 		php_init(php_process);
 		break;
 	case 0:
-		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time and will therefore be restarted", php_process));
+		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - start_time, command));
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
@@ -264,7 +272,7 @@ char *php_readpipe(int php_process) {
 					SET_UNDEFINED(result_string);
 				}
 			}
-		}else{
+		} else {
 			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
 			SET_UNDEFINED(result_string);
 		}
@@ -291,17 +299,19 @@ int php_init(int php_process) {
 	int  php2cacti_pdes[2];
 	pid_t  pid;
 	char poller_id[TINY_BUFSIZE];
-	char *argv[6];
+	char mode[TINY_BUFSIZE];
+	char *argv[7];
 	int  cancel_state;
 	char *result_string = 0;
 	int num_processes;
 	int i;
 	int retry_count = 0;
+	char *command = strdup("INIT");
 
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
-	}else{
+	} else {
 		num_processes = 1;
 	}
 
@@ -324,13 +334,41 @@ int php_init(int php_process) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 		/* establish arguments for script server execution */
-		argv[0] = set.path_php;
-		argv[1] = "-q";
-		argv[2] = set.path_php_server;
-		argv[3] = "spine";
-		snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
-		argv[4] = poller_id;
-		argv[5] = NULL;
+		if (set.cacti_version <= 1222) {
+			argv[0] = set.path_php;
+			argv[1] = "-q";
+			argv[2] = set.path_php_server;
+			argv[3] = "spine";
+			snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
+			argv[4] = poller_id;
+			argv[5] = NULL;
+		} else if (set.poller_id > 1) {
+			argv[0] = set.path_php;
+			argv[1] = "-q";
+			argv[2] = set.path_php_server;
+			argv[3] = "--environ=spine";
+
+			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
+			argv[4] = poller_id;
+
+			if (set.mode == REMOTE_ONLINE) {
+				snprintf(mode, TINY_BUFSIZE, "--mode=online");
+			} else {
+				snprintf(mode, TINY_BUFSIZE, "--mode=offline");
+			}
+			argv[5] = mode;
+
+			argv[6] = NULL;
+		} else {
+			argv[0] = set.path_php;
+			argv[1] = "-q";
+			argv[2] = set.path_php_server;
+			argv[3] = "--environ=spine";
+			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
+			argv[4] = poller_id;
+
+			argv[5] = NULL;
+		}
 
 		/* fork a child process */
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process", i));
@@ -351,7 +389,7 @@ int php_init(int php_process) {
 						usleep(50000);
 						#endif
 						goto retry;
-					}else{
+					} else {
 						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Resources", i));
 					}
 				case ENOMEM:
@@ -362,7 +400,7 @@ int php_init(int php_process) {
 						usleep(50000);
 						#endif
 						goto retry;
-					}else{
+					} else {
 						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Memory", i));
 					}
 				default:
@@ -407,7 +445,7 @@ int php_init(int php_process) {
 			php_processes[i].php_pid = pid;
 			php_processes[i].php_write_fd = cacti2php_pdes[1];
 			php_processes[i].php_read_fd = php2cacti_pdes[0];
-		}else{
+		} else {
 			php_processes[php_process].php_pid = pid;
 			php_processes[php_process].php_write_fd = cacti2php_pdes[1];
 			php_processes[php_process].php_read_fd = php2cacti_pdes[0];
@@ -418,9 +456,9 @@ int php_init(int php_process) {
 
 		/* check pipe to insure startup took place */
 		if (php_process == PHP_INIT) {
-			result_string = php_readpipe(i);
-		}else{
-			result_string = php_readpipe(php_process);
+			result_string = php_readpipe(i, command);
+		} else {
+			result_string = php_readpipe(php_process, command);
 		}
 
 		if (strstr(result_string, "Started")) {
@@ -428,18 +466,17 @@ int php_init(int php_process) {
 				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", i, php2cacti_pdes[0], cacti2php_pdes[1]));
 
 				php_processes[i].php_state = PHP_READY;
-			}else{
+			} else {
 				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", php_process, php2cacti_pdes[0], cacti2php_pdes[1]));
 
 				php_processes[php_process].php_state = PHP_READY;
 			}
-		}else{
-
+		} else {
 			if (php_process == PHP_INIT) {
 				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", i, result_string));
 
 				php_processes[i].php_state = PHP_BUSY;
-			}else{
+			} else {
 				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", php_process, result_string));
 
 				php_processes[php_process].php_state = PHP_BUSY;
@@ -473,7 +510,7 @@ void php_close(int php_process) {
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
-	}else{
+	} else {
 		num_processes = 1;
 	}
 
@@ -485,7 +522,7 @@ void php_close(int php_process) {
 		/* tell the script server to close */
 		if (php_process == PHP_INIT) {
 			phpp = &php_processes[i];
-		}else{
+		} else {
 			phpp = &php_processes[php_process];
 		}
 

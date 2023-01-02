@@ -71,6 +71,7 @@ DEFINE_SPINE_LOCK(php_proc_12)
 DEFINE_SPINE_LOCK(php_proc_13)
 DEFINE_SPINE_LOCK(php_proc_14)
 DEFINE_SPINE_LOCK(thdet)
+DEFINE_SPINE_LOCK(host_time)
 
 void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),        init_snmp_lock);
@@ -95,6 +96,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_13_O), init_php_proc_13_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_THDET_O),       init_thdet_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_HOST_TIME_O),   init_host_time_lock);
 }
 
 const char* get_name(int lock) {
@@ -121,6 +123,7 @@ const char* get_name(int lock) {
 		case LOCK_PHP_PROC_13: return "php_proc_13";
 		case LOCK_PHP_PROC_14: return "php_proc_14";
 		case LOCK_THDET:       return "thdet";
+		case LOCK_HOST_TIME:   return "host_time";
 	}
 
 	return "Unknown lock";
@@ -152,9 +155,10 @@ pthread_cond_t* get_cond(int lock) {
 		case LOCK_PHP_PROC_13: ret_val = &php_proc_13_cond; break;
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_cond; break;
 		case LOCK_THDET:       ret_val = &thdet_cond;       break;
+		case LOCK_HOST_TIME:   ret_val = &host_time_cond;   break;
 	}
 
-	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning cond for %s", get_name(lock) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning cond for %s", get_name(lock)));
 
 	return ret_val;
 }
@@ -185,9 +189,10 @@ pthread_mutex_t* get_lock(int lock) {
 		case LOCK_PHP_PROC_13: ret_val = &php_proc_13_lock; break;
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_lock; break;
 		case LOCK_THDET:       ret_val = &thdet_lock;       break;
+		case LOCK_HOST_TIME:   ret_val = &host_time_lock;   break;
 	}
 
-	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning lock for %s", get_name(lock) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning lock for %s", get_name(lock)));
 
 	return ret_val;
 }
@@ -218,28 +223,30 @@ pthread_once_t* get_attr(int locko) {
 		case LOCK_PHP_PROC_13_O: ret_val = &php_proc_13_lock_o; break;
 		case LOCK_PHP_PROC_14_O: ret_val = &php_proc_14_lock_o; break;
 		case LOCK_THDET_O:       ret_val = &thdet_lock_o;       break;
+		case LOCK_HOST_TIME_O:   ret_val = &host_time_lock_o;   break;
 	}
 
-	SPINE_LOG_DEVDBG(( "LOCKS: [ RET ] Returning attr for %s", get_name(locko) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning attr for %s", get_name(locko)));
 
 	return ret_val;
 }
 
 void thread_mutex_lock(int mutex) {
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex lock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex lock for %s", get_name(mutex)));
 	pthread_mutex_lock(get_lock(mutex));
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex lock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [END]   Mutex lock for %s", get_name(mutex)));
 }
 
 void thread_mutex_unlock(int mutex) {
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex unlock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex unlock for %s", get_name(mutex)));
 	pthread_mutex_unlock(get_lock(mutex));
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex unlock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [END]   Mutex unlock for %s", get_name(mutex)));
 }
 
 int thread_mutex_trylock(int mutex) {
-	SPINE_LOG_DEVDBG(( "LOCKS: [START] Mutex try lock for %s", get_name(mutex) ));
+	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex try lock for %s", get_name(mutex)));
 	int ret_val = pthread_mutex_trylock(get_lock(mutex));
-	SPINE_LOG_DEVDBG(( "LOCKS: [ END ] Mutex try lock for %s, result = %d", get_name(mutex), ret_val ));
+	SPINE_LOG_DEVDBG(("LOCKS: [END]   Mutex try lock for %s, result = %d", get_name(mutex), ret_val));
 	return ret_val;
 }
+

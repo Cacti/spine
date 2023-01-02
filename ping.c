@@ -96,7 +96,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 	switch (host->availability_method) {
 		case AVAIL_SNMP_AND_PING:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
 				} else {
@@ -110,7 +110,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				return HOST_DOWN;
 			}
 		case AVAIL_SNMP_OR_PING:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				if (ping_result == HOST_UP) {
 					return HOST_UP;
 				} else {
@@ -172,7 +172,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 
 	if (host->snmp_session) {
-		if ((strlen(host->snmp_community) != 0) || (host->snmp_version == 3)) {
+		if (strlen(host->snmp_community) != 0 || host->snmp_version == 3) {
 			/* by default, we look at sysUptime */
 			if (host->availability_method == AVAIL_SNMP_GET_NEXT) {
 				oid = strdup(".1.3");
@@ -196,7 +196,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			/* record end time */
 			end_time = get_time_as_double();
 
-			free(oid);
+			SPINE_FREE(oid);
 
 			total_time = (end_time - begin_time) * one_thousand;
 
@@ -204,7 +204,9 @@ int ping_snmp(host_t *host, ping_t *ping) {
 			if (host->snmp_status == SNMPERR_UNKNOWN_OBJID) {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
-				free(poll_result);
+
+				SPINE_FREE(poll_result);
+
 				return HOST_UP;
 			} else if (host->snmp_status != SNMPERR_SUCCESS) {
 				if (is_debug_device(host->id)) {
@@ -220,18 +222,24 @@ int ping_snmp(host_t *host, ping_t *ping) {
 						SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Unknown Error", host->id));
 					}
 				}
+
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device did not respond to SNMP");
-				free(poll_result);
+
+				SPINE_FREE(poll_result);
+
 				return HOST_DOWN;
 			} else {
 				snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device responded to SNMP");
 				snprintf(ping->snmp_status, 50, "%.5f", total_time);
-				free(poll_result);
+
+				SPINE_FREE(poll_result);
+
 				return HOST_UP;
 			}
 		} else {
 			snprintf(ping->snmp_status, 50, "0.00");
 			snprintf(ping->snmp_response, SMALL_BUFSIZE, "Device does not require SNMP");
+
 			return HOST_UP;
 		}
 	} else {
@@ -859,7 +867,7 @@ int get_address_type(host_t *host) {
 
 		inet_ntop(res->ai_family, ptr, addrstr, 100);
 
-		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)\n", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
+		SPINE_LOG_HIGH(("Device[%d] IPv%d address %s (%s)", host->id, res->ai_family == PF_INET6 ? 6:4, addrstr, res->ai_canonname));
 
 		if (res->ai_family != PF_INET6) {
 			freeaddrinfo(res_list);
@@ -973,9 +981,11 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 name_t *get_namebyhost(char *hostname, name_t *name) {
 	if (name == NULL) {
 		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Allocating name_t", hostname));
+
 		if (!(name = (name_t *) malloc(sizeof(name_t)))) {
 			die("ERROR: Fatal malloc error: ping.c get_namebyhost->name");
 		}
+
 		memset(name, '\0', sizeof(name_t));
 	}
 
@@ -986,6 +996,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	if (!(stack = (char *) malloc(strlen(hostname)+1))) {
 		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
 	}
+
 	memset(stack, '\0', strlen(hostname)+1);
 	strncopy(stack, hostname, strlen(stack));
 	token = strtok(stack, ":");
@@ -1124,14 +1135,14 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		switch (availability_method) {
 		case AVAIL_SNMP_OR_PING:
 		case AVAIL_SNMP_AND_PING:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
 			} else {
 				snprintf(host->status_last_error, BUFSIZE, "%s, %s", ping->snmp_response, ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
-			if ((strlen(host->snmp_community) == 0) && (host->snmp_version < 3)) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				snprintf(host->status_last_error, BUFSIZE, "%s", "Device does not require SNMP");
 			} else {
 				snprintf(host->status_last_error, BUFSIZE, "%s", ping->snmp_response);
@@ -1157,41 +1168,40 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 				if (set.ping_failure_count == 1) {
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
-			/* host is down, but not ready to issue log message */
 			} else {
 				/* host down for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_fail_date, 40, "%s", current_date);
 				}
 			}
-		/* host is recovering, put back in failed state */
 		} else if (host->status == HOST_RECOVERING) {
+			/* host is recovering, put back in failed state */
 			host->status_event_count = 1;
 			host->status = HOST_DOWN;
-
-		/* host was unknown and now is down */
 		} else if (host->status == HOST_UNKNOWN) {
+			/* host was unknown and now is down */
 			host->status = HOST_DOWN;
 			host->status_event_count = 0;
 		} else {
 			host->status_event_count++;
 		}
-	/* host is up!! */
 	} else {
+		/* host is up!! */
+
 		/* update total polls and availability */
 		host->total_polls = host->total_polls + 1;
 		host->availability = hundred_percent * (host->total_polls - host->failed_polls) / host->total_polls;
 
 		/* determine the ping statistic to set and do so */
 		if (availability_method == AVAIL_SNMP_AND_PING) {
-			if (strlen(host->snmp_community) == 0) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				ping_time = atof(ping->ping_status);
 			} else {
 				/* calculate the average of the two times */
 				ping_time = (atof(ping->snmp_status) + atof(ping->ping_status)) / 2;
 			}
 		} else if (availability_method == AVAIL_SNMP) {
-			if (strlen(host->snmp_community) == 0) {
+			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
 				ping_time = 0.000;
 			} else {
 				ping_time = atof(ping->snmp_status);
@@ -1218,7 +1228,7 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 			* host->avg_time) + ping_time) / (host->total_polls-host->failed_polls);
 
 		/* the host was down, now it's recovering */
-		if ((host->status == HOST_DOWN) || (host->status == HOST_RECOVERING )) {
+		if ((host->status == HOST_DOWN) || (host->status == HOST_RECOVERING)) {
 			/* just up, change to recovering */
 			if (host->status == HOST_DOWN) {
 				host->status = HOST_RECOVERING;
@@ -1241,19 +1251,23 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 
 				/* reset the event counter */
 				host->status_event_count = 0;
-			/* host is recovering, but not ready to issue log message */
 			} else {
 				/* host recovering for the first time, set event date */
 				if (host->status_event_count == 1) {
 					snprintf(host->status_rec_date, 40, "%s", current_date);
 				}
 			}
+		} else if (host->status_event_count > 0) {
+			/* host was unknown and now is up */
+			host->status = HOST_UP;
+			host->status_event_count = 0;
 		} else {
-		/* host was unknown and now is up */
+			/* host was unknown and now is up */
 			host->status = HOST_UP;
 			host->status_event_count = 0;
 		}
 	}
+
 	/* if the user wants a flood of information then flood them */
 	if (set.log_level >= POLLER_VERBOSITY_HIGH) {
 		if ((host->status == HOST_UP) || (host->status == HOST_RECOVERING)) {

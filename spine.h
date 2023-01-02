@@ -190,6 +190,7 @@
 #define LOCK_PHP_PROC_13 20
 #define LOCK_PHP_PROC_14 21
 #define LOCK_THDET 40
+#define LOCK_HOST_TIME 41
 
 #define LOCK_SNMP_O 0
 #define LOCK_SETEUID_O 2
@@ -213,6 +214,7 @@
 #define LOCK_PHP_PROC_13_O 20
 #define LOCK_PHP_PROC_14_O 21
 #define LOCK_THDET_O 40
+#define LOCK_HOST_TIME_O 41
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0
@@ -234,6 +236,8 @@
 #define IS_LOGGING_TO_FILE()   ((set.log_destination) == LOGDEST_FILE   || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_SYSLOG() ((set.log_destination) == LOGDEST_SYSLOG || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_STDOUT() ((set.log_destination) == LOGDEST_STDOUT )
+
+#define SPINE_FREE(s) do { if (s) { free((void *)s); s = NULL; } } while(0)
 
 /* logging levels */
 #define POLLER_VERBOSITY_NONE 1
@@ -373,6 +377,7 @@ typedef struct config_struct {
 	unsigned int db_port;
 	char   dbversion[SMALL_BUFSIZE];
 	int    dbonupdate;
+	int   cacti_version;
 	/* path information */
 	char   path_logfile[DBL_BUFSIZE];
 	char   path_php[BUFSIZE];
@@ -487,7 +492,7 @@ typedef struct poller_thread {
 	int host_data_ids;
 	int threads_complete;
 	int complete;
-	char *host_time;
+	char host_time[40];
 	double host_time_double;
 	sem_t *thread_init_sem;
 } poller_thread_t;
@@ -588,9 +593,9 @@ typedef struct ping_results {
  */
 typedef struct name_port {
 	// Method = 0 - default, 1 - tcp, 2 - udp
-	int	method;
-	char	hostname[SMALL_BUFSIZE];
-	int	port;
+	char hostname[SMALL_BUFSIZE];
+	int  method;
+	int  port;
 } name_t;
 
 /*! MySQL Connection Pool Structure
