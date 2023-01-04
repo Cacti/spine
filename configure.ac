@@ -1,3 +1,24 @@
+# +-------------------------------------------------------------------------+
+# | Copyright (C) 2004-2023 The Cacti Group                                 |
+# |                                                                         |
+# | This program is free software; you can redistribute it and/or           |
+# | modify it under the terms of the GNU General Public License             |
+# | as published by the Free Software Foundation; either version 2          |
+# | of the License, or (at your option) any later version.                  |
+# |                                                                         |
+# | This program is distributed in the hope that it will be useful,         |
+# | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
+# | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
+# | GNU General Public License for more details.                            |
+# +-------------------------------------------------------------------------+
+# | Cacti: The Complete RRDtool-based Graphing Solution                     |
+# +-------------------------------------------------------------------------+
+# | This code is designed, written, and maintained by the Cacti Group. See  |
+# | about.php and/or the AUTHORS file for specific developer information.   |
+# +-------------------------------------------------------------------------+
+# | http://www.cacti.net/                                                   |
+# +-------------------------------------------------------------------------+
+
 AC_PREREQ([2.63])
 AC_INIT([Spine Poller],[1.2.23],[http://www.cacti.net/issues.php])
 
@@ -180,7 +201,7 @@ for file in sys/capability.h;do
     test -f /usr/include/$file && CAPLOC=$file && break
 done
 
-AC_CHECK_HEADER($CAPLOC, [FOUND_SYS_CAPABILITY_H=yes], 
+AC_CHECK_HEADER($CAPLOC, [FOUND_SYS_CAPABILITY_H=yes],
 	[FOUND_SYS_CAPABILITY_H=no])
 
 # If we should use the Linux Capabilities support
@@ -280,10 +301,10 @@ fi
 
 if test $MYSQL_REENTRANT = 1 ; then
   LIBS="-lmysqlclient_r -lm -ldl $LIBS"
-else 
+else
   if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
     LIBS="-lmysqlclient_r -lm -ldl $LIBS"
-  else 
+  else
     if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
       LIBS="-lmysqlclient_r -lm -ldl $LIBS"
     else
@@ -365,7 +386,7 @@ AC_TRY_COMPILE([#include <net-snmp-config.h>], [return NETSNMP_USE_OPENSSL != 1;
   ],[AC_MSG_RESULT(no)
 ])
 
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ #include <net-snmp-config.h> 
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ #include <net-snmp-config.h>
   #include <net-snmp/utilities.h>
   #include <net-snmp/net-snmp-includes.h>
   #include <net-snmp/config_api.h>

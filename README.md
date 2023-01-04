@@ -133,3 +133,6 @@ chmod +s /usr/local/spine/bin/spine
 3. On older MySQL versions, different libraries had to be used to make MySQL
    thread safe. MySQL versions 5.0 and 5.1 require this flag. If you are using
    these version of MySQL, you must use the --with-reentrant configure flag.
+
+-----------------------------------------------------------------------------
+Copyright (c) 2004-2023 - The Cacti Group, Inc.

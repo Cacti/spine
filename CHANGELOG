@@ -602,3 +602,6 @@ The Cacti Group | spine
 -bug: fixed issue that prevented multi ds item RRD?s from updating
 -bug: fixed invalid string length calculation that was truncating output over 4 characters
 -bug: small log file reformatting
+
+-----------------------------------------------
+Copyright (c) 2004-2023 - The Cacti Group, Inc.

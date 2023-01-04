@@ -1,7 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2021 The Cacti Group                                 |
+ | Copyright (C) 2004-2023 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -1127,7 +1127,7 @@ static void display_help(int only_version) {
 		0 /* ENDMARKER */
 	};
 
-	printf("SPINE %s  Copyright 2004-2021 by The Cacti Group\n", VERSION);
+	printf("SPINE %s  Copyright 2004-2023 by The Cacti Group\n", VERSION);
 
 	if (only_version == FALSE) {
 		printf("\n");
