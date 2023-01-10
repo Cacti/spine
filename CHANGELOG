@@ -3,6 +3,9 @@ The Cacti Group | spine
 1.3.0
 -feature#5090: Enhance number recognition within Spine
 
+1.2.24
+-issue#296: In some environments snmp_get without response cause SIGSEGV
+
 1.2.23
 -issue#287: Unexpected reindexing occurs when using uptime as the reindex method
 -issue#279: spine does not compile with SQL TLS deactivated

@@ -388,15 +388,16 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	char   *result_string;
 	char   temp_result[RESULTS_BUFFER];
 
-	if (current_host->ignore_host) {
-		SPINE_LOG_HIGH(("WARNING: Skipped oid '%s' for Device[%d] as host ignore flag is active", snmp_oid, current_host->id));
-		return NULL;
-	}
-
 	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: snmp.c snmp_get!");
 	}
 	result_string[0] = '\0';
+
+	if (current_host->ignore_host) {
+		SPINE_LOG_HIGH(("WARNING: Skipped oid '%s' for Device[%d] as host ignore flag is active", snmp_oid, current_host->id));
+		SET_UNDEFINED(result_string);
+		return result_string;
+	}
 
 	status = STAT_DESCRIP_ERROR;
 
