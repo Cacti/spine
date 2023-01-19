@@ -6,6 +6,7 @@ The Cacti Group | spine
 1.2.23
 -issue#287: Unexpected reindexing occurs when using uptime as the reindex method
 -issue#279: spine does not compile with SQL TLS deactivated
+-issue#298: Odd Cacti log format issue when script server timeout happened
 -feature#277: Spine should prevent the script server from connecting to remote when offline
 -feature#292: Improve Script Server Timeout Logging
 -feature#293: Add SQL_NO_CACHE to Spine Queries
