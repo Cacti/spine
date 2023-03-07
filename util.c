@@ -1635,7 +1635,9 @@ char *add_slashes(char *string) {
  *
 */
 #pragma GCC diagnostic push
+#if (defined(__GNUC__) && (__GNUC__ > 7)) || (__GNUC__ == 7 && defined(__GNUC_MINOR__) && __GNUC_MINOR__ > 1)
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 char *strncopy(char *dst, const char *src, size_t obuf) {
 	assert(dst != 0);
 	assert(src != 0);
