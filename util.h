@@ -101,3 +101,6 @@ extern char *get_date_format();
 
 /* start time for spine */
 extern double start_time;
+
+/* the version of Cacti as a decimal */
+int get_cacti_version(MYSQL *psql, int mode);
