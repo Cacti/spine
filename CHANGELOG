@@ -4,6 +4,11 @@ The Cacti Group | spine
 -feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site
 
+1.2.25
+-issue#303: Compile warning appears due to GCC flag on RHEL7/RHEL8
+-issue#305: Compile error appears due to execinfo.h on FreeBSD
+-issue#306: Bootstrap shell script contains some PHP cruft
+
 1.2.24
 -issue#296: In some environments snmp_get without response cause SIGSEGV
 
