@@ -590,50 +590,39 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* determine if the poller_id field exists in the host table */
-	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'poller_id'");
-	if (mysql_num_rows(result)) {
-		set.poller_id_exists = TRUE;
-	} else {
-		set.poller_id_exists = FALSE;
-
-		if (set.poller_id > 0) {
-			SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
-		}
+	set.poller_id_exists = db_column_exists(&mysql, LOCAL, "host", "poller_id");
+	if (!set.poller_id_exists && set.poller_id > 0) {
+		SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
 	}
-	db_free_result(result);
 
 	/* determine if the device_threads field exists in the host table */
-	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'device_threads'");
-	if (mysql_num_rows(result)) {
-		set.device_threads_exists = TRUE;
-	} else {
-		set.device_threads_exists = FALSE;
-	}
-	db_free_result(result);
-
+	set.device_threads_exists = db_column_exists(&mysql, LOCAL, "host", "device_threads");
 	if (set.device_threads_exists) {
 		SPINE_LOG_MEDIUM(("Spine will support multithread device polling."));
+		qp += sprintf(qp, "SELECT h.id, h.device_threads FROM host h");
 	} else {
 		SPINE_LOG_MEDIUM(("Spine did not detect multithreaded device polling."));
+		qp += sprintf(qp, "SELECT h.id, '1' as device_threads FROM host h");
 	}
 
-	/* obtain the list of hosts to poll */
-	if (set.device_threads_exists) {
-		qp += sprintf(qp, "SELECT id, device_threads FROM host");
-	} else {
-		qp += sprintf(qp, "SELECT id, '1' as device_threads FROM host");
+	qp += sprintf(qp, " LEFT JOIN sites s ON s.id = h.site_id WHERE IFNULL(h.disabled,'') != 'on'");
+
+	/* Add site disabled restriction if column present */
+   if (db_column_exists(&mysql, LOCAL, "sites", "disabled")) {
+		qp += sprintf(qp, " AND IFNULL(s.disabled, '') != 'on'");
 	}
-	qp += sprintf(qp, " WHERE disabled=''");
+
 	if (!strlen(set.host_id_list)) {
-		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
+		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
 	} else {
-		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
+		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
 	}
 	if (set.poller_id_exists) {
-		qp += sprintf(qp, " AND host.poller_id=%i", set.poller_id);
+		qp += sprintf(qp, " AND h.poller_id=%i", set.poller_id);
 	}
-	qp += sprintf(qp, " ORDER BY polling_time DESC");
+	qp += sprintf(qp, " ORDER BY h.polling_time DESC");
 
+	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
 	result = db_query(&mysql, LOCAL, querybuf);
 
 	if (set.poller_id == 1) {

@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.3.0
 -feature#5090: Enhance number recognition within Spine
+-feature#3740: Ability to disable a site
 
 1.2.24
 -issue#296: In some environments snmp_get without response cause SIGSEGV

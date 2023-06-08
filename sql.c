@@ -580,3 +580,26 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 void db_free_result(MYSQL_RES *result) {
 	mysql_free_result(result);
 }
+
+int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column) {
+	char       query_frag[BUFSIZE];
+   MYSQL_RES *result;
+	int        exists;
+
+	/* save a fragment just in case */
+	memset(query_frag, 0, BUFSIZE);
+	snprintf(query_frag, BUFSIZE, "SHOW COLUMNS FROM `%s` LIKE '%s'", table, column);
+
+	/* show the sql query */
+	SPINE_LOG_DEVDBG(("DEVDBG: db_column_exists('%s','%s'): %s", table, column, query_frag));
+
+	result = db_query(mysql, LOCAL, query_frag);
+	if (mysql_num_rows(result)) {
+		exists = TRUE;
+	} else {
+		exists = FALSE;
+	}
+
+	db_free_result(result);
+	return exists;
+}
