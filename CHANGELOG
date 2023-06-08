@@ -1,5 +1,10 @@
 The Cacti Group | spine
 
+1.2.25
+-issue#303: Compile warning appears due to GCC flag on RHEL7/RHEL8
+-issue#305: Compile error appears due to execinfo.h on FreeBSD
+-issue#306: Bootstrap shell script contains some PHP cruft
+
 1.2.24
 -issue#296: When ignoring older OIDs, segmentation faults can be caused
 
