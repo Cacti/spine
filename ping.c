@@ -76,7 +76,7 @@ int ping_host(host_t *host, ping_t *ping) {
 			} else if (host->availability_method == AVAIL_PING) {
 				snprintf(ping->ping_status, 50, "0.000");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is Unknown or is IPV6.  Please use the SNMP ping options only.");
-				return HOST_DOWN;
+				ping_result = HOST_DOWN;
 			}
 		} else {
 			snprintf(ping->ping_status, 50, "0.000");
@@ -90,57 +90,34 @@ int ping_host(host_t *host, ping_t *ping) {
 		(host->availability_method == AVAIL_SNMP_GET_SYSDESC) ||
 		(host->availability_method == AVAIL_SNMP_GET_NEXT) ||
 		(host->availability_method == AVAIL_SNMP_AND_PING) ||
-		((host->availability_method == AVAIL_SNMP_OR_PING) && (ping_result != HOST_UP))) {
-		snmp_result = ping_snmp(host, ping);
+		(host->availability_method == AVAIL_SNMP_OR_PING)) {
+
+		/* If we are in AND mode and already have a failed ping result, we don't need SNMP */
+		if ((ping_result == HOST_DOWN) && (host->availability_method == AVAIL_SNMP_AND_PING)) {
+			snmp_result = ping_result;
+		} else {
+			/* Lets assume the host is up because if we are in OR mode then we have already
+			 * pinged the host successfully, or some when silly people have not entered an
+			 * snmp_community under v1/2, we assume that this was successfully anyway */
+			snmp_result = HOST_UP;
+			if ((host->availability_method != AVAIL_SNMP_OR_PING) &&
+				((strlen(host->snmp_community) > 0) || (host->snmp_version >= 3))) {
+				snmp_result = ping_snmp(host, ping);
+			}
+		}
 	}
 
 	switch (host->availability_method) {
 		case AVAIL_SNMP_AND_PING:
-			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
-				if (ping_result == HOST_UP) {
-					return HOST_UP;
-				} else {
-					return HOST_DOWN;
-				}
-			}
-
-			if ((snmp_result == HOST_UP) && (ping_result == HOST_UP)) {
-				return HOST_UP;
-			} else {
-				return HOST_DOWN;
-			}
+			return ((ping_result == HOST_UP) && (snmp_result == HOST_UP)) ? HOST_UP : HOST_DOWN;
 		case AVAIL_SNMP_OR_PING:
-			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
-				if (ping_result == HOST_UP) {
-					return HOST_UP;
-				} else {
-					return HOST_DOWN;
-				}
-			}
-
-			if (snmp_result == HOST_UP) {
-				return HOST_UP;
-			}
-
-			if (ping_result == HOST_UP) {
-				return HOST_UP;
-			} else {
-				return HOST_DOWN;
-			}
+			return ((ping_result == HOST_UP) || (snmp_result == HOST_UP)) ? HOST_UP : HOST_DOWN;
 		case AVAIL_SNMP:
 		case AVAIL_SNMP_GET_NEXT:
 		case AVAIL_SNMP_GET_SYSDESC:
-			if (snmp_result == HOST_UP) {
-				return HOST_UP;
-			} else {
-				return HOST_DOWN;
-			}
+			return (snmp_result == HOST_UP) ? HOST_UP : HOST_DOWN;
 		case AVAIL_PING:
-			if (ping_result == HOST_UP) {
-				return HOST_UP;
-			} else {
-				return HOST_DOWN;
-			}
+			return (ping_result == HOST_UP) ? HOST_UP : HOST_DOWN;
 		case AVAIL_NONE:
 			return HOST_UP;
 		default:
