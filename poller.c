@@ -1115,7 +1115,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								}
 
 								if ((assert_fail) &&
-									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0")))) {
+									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") && !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")))) {
 									spike_kill = TRUE;
 
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {

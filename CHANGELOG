@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.2.25
 -issue#303: Compile warning appears due to GCC flag on RHEL7/RHEL8
+-issue#304: Downed device detection only checks one of the two uptime OIDs
 -issue#305: Compile error appears due to execinfo.h on FreeBSD
 -issue#306: Bootstrap shell script contains some PHP cruft
 
