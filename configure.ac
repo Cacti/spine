@@ -20,7 +20,7 @@
 # +-------------------------------------------------------------------------+
 
 AC_PREREQ([2.63])
-AC_INIT([Spine Poller],[1.2.24],[http://www.cacti.net/issues.php])
+AC_INIT([Spine Poller],[1.2.25],[http://www.cacti.net/issues.php])
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
