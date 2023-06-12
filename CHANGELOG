@@ -17,7 +17,9 @@ The Cacti Group | spine
 -issue#279: spine does not compile with SQL TLS deactivated
 -issue#298: Odd Cacti log format issue when script server timeout happened
 -feature#277: Spine should prevent the script server from connecting to remote when offline
--feature#286: Add 'Row Cache' support for spine
+-feature#292: Improve Script Server Timeout Logging
+-feature#293: Add SQL_NO_CACHE to Spine Queries
+
 
 1.2.22
 -issue#265: Periodically spine crashes with sigabort due to MariaDB API buffer overruns

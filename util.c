@@ -96,7 +96,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT value FROM settings WHERE name = '%s'", setting);
+	sprintf(qstring, "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -188,7 +188,7 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+	sprintf(qstring, "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
 
 	result = db_query(psql, mode, qstring);
 
@@ -686,7 +686,7 @@ void read_config_options() {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
 		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
 		if (set.poller_id_exists) {
@@ -706,7 +706,7 @@ void read_config_options() {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT action FROM poller_item");
+		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
 		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += sprintf(sqlp, " AND host_id IN(%s)", set.host_id_list);
 		if (set.poller_id_exists) {
@@ -813,7 +813,7 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -822,7 +822,7 @@ void poller_push_data_to_main() {
 			"WHERE poller_id = %d "
 			"AND id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, MEGA_BUFSIZE, "SELECT id, snmp_sysDescr, snmp_sysObjectID, "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE id, snmp_sysDescr, snmp_sysObjectID, "
 			"snmp_sysUpTimeInstance, snmp_sysContact, snmp_sysName, snmp_sysLocation, "
 			"status, status_event_count, status_fail_date, status_rec_date, "
 			"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
@@ -959,12 +959,12 @@ void poller_push_data_to_main() {
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
 	if (strlen(set.host_id_list)) {
-		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d "
 			"AND host_id IN (%s)", set.poller_id, set.host_id_list);
 	} else {
-		snprintf(query, MEGA_BUFSIZE, "SELECT local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
+		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
 			"FROM poller_item "
 			"WHERE poller_id = %d ",
 			set.poller_id);
