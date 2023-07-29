@@ -5,6 +5,7 @@ The Cacti Group | spine
 -issue#304: Downed device detection only checks one of the two uptime OIDs
 -issue#305: Compile error appears due to execinfo.h on FreeBSD
 -issue#306: Bootstrap shell script contains some PHP cruft
+-issue#308: Function strip_alpha() does not strip non-numeric leading characters
 -issue: Remove legacy setting not possible in Cacti 1.2.x+
 -feature: Do not sort by snmp port if you only have snmp on one port
 -feature: Order Devices by their number of poller items and Device Threads

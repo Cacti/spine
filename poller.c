@@ -2271,54 +2271,55 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 			/* wait x seconds for pipe response */
 			switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
-			case -1:
-				switch (errno) {
-				case EBADF:
-					SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
-					SET_UNDEFINED(result_string);
-					close_fd = FALSE;
-					break;
-				case EINTR:
-					#ifndef SOLAR_THREAD
-					/* take a moment */
-					usleep(2000);
-					#endif
+				case -1:
+					switch (errno) {
+						case EBADF:
+							SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
+							SET_UNDEFINED(result_string);
+							close_fd = FALSE;
+							break;
+						case EINTR:
+							#ifndef SOLAR_THREAD
+							/* take a moment */
+							usleep(2000);
+							#endif
 
-					/* record end time */
-					end_time = get_time_as_double();
+							/* record end time */
+							end_time = get_time_as_double();
 
-					/* re-establish new timeout value */
-					timeout.tv_sec  = rint(floor(script_timeout-(end_time-begin_time)));
-					remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
+							/* re-establish new timeout value */
+							timeout.tv_sec  = rint(floor(script_timeout-(end_time-begin_time)));
+							remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
 
-					if (remaining_usec > 0) {
-						timeout.tv_usec = rint(remaining_usec * 1000000);
-					} else {
-						timeout.tv_usec = 0;
+							if (remaining_usec > 0) {
+								timeout.tv_usec = rint(remaining_usec * 1000000);
+							} else {
+								timeout.tv_usec = 0;
+							}
+							timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
+							timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+
+							if (timeout.tv_sec + timeout.tv_usec > 0) {
+								goto retry;
+							} else {
+								SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
+								SET_UNDEFINED(result_string);
+								close_fd = FALSE;
+							}
+							break;
+						case EINVAL:
+							SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
+							SET_UNDEFINED(result_string);
+							close_fd = FALSE;
+							break;
+						default:
+							SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
+							SET_UNDEFINED(result_string);
+							close_fd = FALSE;
+							break;
 					}
-					timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
-					timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
 
-					if (timeout.tv_sec + timeout.tv_usec > 0) {
-					if ((end_time - begin_time) < set.script_timeout) {
-						goto retry;
-					} else {
-						SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
-						SET_UNDEFINED(result_string);
-						close_fd = FALSE;
-					}
 					break;
-				case EINVAL:
-					SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
-					SET_UNDEFINED(result_string);
-					close_fd = FALSE;
-					break;
-				default:
-					SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
-					SET_UNDEFINED(result_string);
-					close_fd = FALSE;
-					break;
-				}
 			case 0:
 				#ifdef USING_TPOPEN
 				SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));

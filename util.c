@@ -1558,9 +1558,12 @@ int is_hexadecimal(const char * str, const short ignore_special) {
  */
 char *strip_alpha(char *string) {
 	int i;
+	int j;
 
 	i = strlen(string);
+	j = 0;
 
+	/* trim trailing characters */
 	while (i >= 0) {
 		if (isdigit((int)string[i])) {
 			break;
@@ -1569,6 +1572,21 @@ char *strip_alpha(char *string) {
 		}
 		i--;
 	}
+
+	/* trim leading characters */
+	while (j < i) {
+		if (isdigit((int)string[j])) {
+			break;
+		} else if (string[j] == '-') {
+			break;
+		} else if (string[j] == '+') {
+			break;
+		} else {
+			j++;
+		}
+	}
+
+	string = &string[j];
 
 	return string;
 }
