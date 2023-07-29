@@ -1580,7 +1580,7 @@ char *strip_alpha(char *string) {
 		} else if (string[j] == '-') {
 			break;
 		} else if (string[j] == '+') {
-			break;
+			j++;
 		} else {
 			j++;
 		}
