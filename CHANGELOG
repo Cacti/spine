@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.25
+-issue#291: Enhance number recognition within Spine
 -issue#294: Sort Devices by thier total number of poller items to query
 -issue#303: Compile warning appears due to GCC flag on RHEL7/RHEL8
 -issue#304: Downed device detection only checks one of the two uptime OIDs
