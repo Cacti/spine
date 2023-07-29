@@ -6,7 +6,7 @@
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
  | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	   |
+ | version 2.1 of the License, or (at your option) any later version.      |
  |                                                                         |
  | This program is distributed in the hope that it will be useful,         |
  | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
@@ -602,37 +602,21 @@ int main(int argc, char *argv[]) {
 	}
 	db_free_result(result);
 
-	/* determine if the device_threads field exists in the host table */
-	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'device_threads'");
-	if (mysql_num_rows(result)) {
-		set.device_threads_exists = TRUE;
-	} else {
-		set.device_threads_exists = FALSE;
-	}
-	db_free_result(result);
-
-	if (set.device_threads_exists) {
-		SPINE_LOG_MEDIUM(("Spine will support multithread device polling."));
-	} else {
-		SPINE_LOG_MEDIUM(("Spine did not detect multithreaded device polling."));
-	}
-
 	/* obtain the list of hosts to poll */
-	if (set.device_threads_exists) {
-		qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads FROM host");
-	} else {
-		qp += sprintf(qp, "SELECT SQL_NO_CACHE id, '1' as device_threads FROM host");
-	}
-	qp += sprintf(qp, " WHERE disabled=''");
+	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host INNER JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
+	qp += sprintf(qp, " WHERE disabled = ''");
+
 	if (!strlen(set.host_id_list)) {
 		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
 	} else {
 		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
 	}
+
 	if (set.poller_id_exists) {
-		qp += sprintf(qp, " AND host.poller_id=%i", set.poller_id);
+		qp += sprintf(qp, " AND host.poller_id = %i", set.poller_id);
 	}
-	qp += sprintf(qp, " ORDER BY polling_time DESC");
+
+	qp += sprintf(qp, " ORDER BY picount DESC");
 
 	result = db_query(&mysql, LOCAL, querybuf);
 

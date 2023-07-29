@@ -150,7 +150,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	char query10[BUFSIZE];
 	char query11[BUFSIZE];
 	char *query12 = NULL;
-	char query13[BUFSIZE];
 	char posuffix[BUFSIZE];
 
 	int query1_len   = 0;
@@ -278,16 +277,28 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	/* single polling interval query for items */
 	if (set.poller_id == 0) {
-		snprintf(query1, BUFSIZE,
-			"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
-				"snmp_version, snmp_username, snmp_password, "
-				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-				"rrd_num, snmp_port, snmp_timeout, "
-				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND deleted = ''"
-			" ORDER BY snmp_port %s", host_id, limits);
+		if (set.total_snmp_ports == 1) {
+			snprintf(query1, BUFSIZE,
+				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND deleted = '' %s", host_id, limits);
+		} else {
+			snprintf(query1, BUFSIZE,
+				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND deleted = ''"
+				" ORDER BY snmp_port %s", host_id, limits);
+		}
 
 		/* host structure for uptime checks */
 		snprintf(query2, BIG_BUFSIZE,
@@ -402,16 +413,28 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				" GROUP BY snmp_port %s", host_id, limits);
 		}
 	} else {
-		snprintf(query1, BUFSIZE,
-			"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
-				"snmp_version, snmp_username, snmp_password, "
-				"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-				"rrd_num, snmp_port, snmp_timeout, "
-				"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-			" FROM poller_item"
-			" WHERE host_id = %i"
-			" AND poller_id=%i"
-			" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+		if (set.total_snmp_ports == 1) {
+			snprintf(query1, BUFSIZE,
+				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND poller_id=%i %s", host_id, set.poller_id, limits);
+		} else {
+			snprintf(query1, BUFSIZE,
+				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+					"snmp_version, snmp_username, snmp_password, "
+					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+					"rrd_num, snmp_port, snmp_timeout, "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+				" FROM poller_item"
+				" WHERE host_id = %i"
+				" AND poller_id=%i"
+				" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+		}
 
 		/* host structure for uptime checks */
 		snprintf(query2, BIG_BUFSIZE,
@@ -436,28 +459,53 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* multiple polling interval query for items */
 		if (set.active_profiles != 1) {
-			snprintf(query5, BUFSIZE,
-				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
-					"snmp_version, snmp_username, snmp_password, "
-					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-				" FROM poller_item"
-				" WHERE host_id = %i"
-				" AND rrd_next_step <= 0"
-				" AND poller_id = %i"
-				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+			if (set.total_snmp_ports == 1) {
+				snprintf(query5, BUFSIZE,
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND rrd_next_step <= 0"
+					" AND poller_id = %i %s", host_id, set.poller_id, limits);
+			} else {
+				snprintf(query5, BUFSIZE,
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND rrd_next_step <= 0"
+					" AND poller_id = %i"
+					" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+			}
 		} else {
-			snprintf(query5, BUFSIZE,
-				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
-					"snmp_version, snmp_username, snmp_password, "
-					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
-					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
-				" FROM poller_item"
-				" WHERE host_id = %i"
-				" AND poller_id = %i"
-				" ORDER by snmp_port %s", host_id, set.poller_id, limits);
+			if (set.total_snmp_ports == 1) {
+				snprintf(query5, BUFSIZE,
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND poller_id = %i %s", host_id, set.poller_id, limits);
+			} else {
+				snprintf(query5, BUFSIZE,
+					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
+						"snmp_version, snmp_username, snmp_password, "
+						"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
+						"rrd_num, snmp_port, snmp_timeout, "
+						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					" FROM poller_item"
+					" WHERE host_id = %i"
+					" AND poller_id = %i"
+					" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+			}
 		}
 
 		/* query to setup the next polling interval in cacti */
@@ -2248,8 +2296,11 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 					} else {
 						timeout.tv_usec = 0;
 					}
+					timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
+					timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
 
 					if (timeout.tv_sec + timeout.tv_usec > 0) {
+					if ((end_time - begin_time) < set.script_timeout) {
 						goto retry;
 					} else {
 						SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));

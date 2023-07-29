@@ -345,13 +345,12 @@ typedef struct config_struct {
 	/* general configuration/runtime settings */
 	int    poller_id;
 	int    poller_id_exists;
-	int    device_threads_exists;
 	int    poller_interval;
 	int    parent_fork;
 	int    num_parent_processes;
 	int    script_timeout;
 	int    active_profiles;
-	int    total_snmp_ports;;
+	int    total_snmp_ports;
 	int    threads;
 	int    logfile_processed;
 	int    boost_enabled;
@@ -377,7 +376,7 @@ typedef struct config_struct {
 	unsigned int db_port;
 	char   dbversion[SMALL_BUFSIZE];
 	int    dbonupdate;
-	int   cacti_version;
+	int    cacti_version;
 	/* path information */
 	char   path_logfile[DBL_BUFSIZE];
 	char   path_php[BUFSIZE];
