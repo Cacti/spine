@@ -2213,6 +2213,11 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int sem_err = 0;
 	int needs_cleanup = 0;
 
+	/* used for checking executable status */
+	char executable[BUFSIZE];
+	char *saveptr = NULL;
+	char *token;
+
 	pthread_cleanup_push(child_cleanup_script, NULL);
 
 	// use the script server timeout value, allow for 50% leeway
@@ -2245,121 +2250,133 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		/* record start time */
 		begin_time = get_time_as_double();
 
-		#ifdef USING_TPOPEN
-		fd = popen((char *)proc_command, "r");
-		cmd_fd = fileno(fd);
-		if (is_debug_device(current_host->id)) {
-			SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-		} else {
-			SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-		}
-		#else
-		cmd_fd = nft_popen((char *)proc_command, "r");
-		if (is_debug_device(current_host->id)) {
-			SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-		} else {
-			SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-		}
-		#endif
+		/* peel the executable from the command */
+		saveptr = proc_command;
+		sprintf(executable, "%s", proc_command);
+		token = strtok_r(executable, " ", &saveptr);
 
-		if (cmd_fd > 0) {
-			retry:
+		SPINE_LOG_DEBUG(("The executable is '%s' in \'%s\'", executable, proc_command));
 
-			/* Initialize File Descriptors to Review for Input/Output */
-			FD_ZERO(&fds);
-			FD_SET(cmd_fd, &fds);
-
-			/* wait x seconds for pipe response */
-			switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
-				case -1:
-					switch (errno) {
-						case EBADF:
-							SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
-							SET_UNDEFINED(result_string);
-							close_fd = FALSE;
-							break;
-						case EINTR:
-							#ifndef SOLAR_THREAD
-							/* take a moment */
-							usleep(2000);
-							#endif
-
-							/* record end time */
-							end_time = get_time_as_double();
-
-							/* re-establish new timeout value */
-							timeout.tv_sec  = rint(floor(script_timeout-(end_time-begin_time)));
-							remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
-
-							if (remaining_usec > 0) {
-								timeout.tv_usec = rint(remaining_usec * 1000000);
-							} else {
-								timeout.tv_usec = 0;
-							}
-							timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
-							timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
-
-							if (timeout.tv_sec + timeout.tv_usec > 0) {
-								goto retry;
-							} else {
-								SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
-								SET_UNDEFINED(result_string);
-								close_fd = FALSE;
-							}
-							break;
-						case EINVAL:
-							SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
-							SET_UNDEFINED(result_string);
-							close_fd = FALSE;
-							break;
-						default:
-							SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
-							SET_UNDEFINED(result_string);
-							close_fd = FALSE;
-							break;
-					}
-
-					break;
-			case 0:
-				#ifdef USING_TPOPEN
-				SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));
-
-				close_fd = FALSE;
-				#else
-				SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
-
-				pid = nft_pchild(cmd_fd);
-				kill(pid, SIGKILL);
-				#endif
-
-				SET_UNDEFINED(result_string);
-				break;
-			default:
-				/* get only one line of output, we will ignore the rest */
-				bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
-				if (bytes_read > 0) {
-					result_string[bytes_read] = '\0';
-				} else {
-					if (STRIMATCH(type,"DS")) {
-						SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
-					} else {
-						SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
-					}
-					SET_UNDEFINED(result_string);
-				}
-			}
-
-			/* close pipe */
+		if (file_exists(executable) && access(executable, X_OK) != -1) {
 			#ifdef USING_TPOPEN
-			/* we leave the old fd open if it timed out. It will have to exit on it's own */
-			if (close_fd) {
-				pclose(fd);
+			fd = popen((char *)proc_command, "r");
+			cmd_fd = fileno(fd);
+			if (is_debug_device(current_host->id)) {
+				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+			} else {
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			}
 			#else
-			nft_pclose(cmd_fd);
+			cmd_fd = nft_popen((char *)proc_command, "r");
+			if (is_debug_device(current_host->id)) {
+				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+			} else {
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+			}
 			#endif
+
+			if (cmd_fd > 0) {
+				retry:
+
+				/* Initialize File Descriptors to Review for Input/Output */
+				FD_ZERO(&fds);
+				FD_SET(cmd_fd, &fds);
+
+				/* wait x seconds for pipe response */
+				switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+					case -1:
+						switch (errno) {
+							case EBADF:
+								SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
+								SET_UNDEFINED(result_string);
+								close_fd = FALSE;
+								break;
+							case EINTR:
+								#ifndef SOLAR_THREAD
+								/* take a moment */
+								usleep(2000);
+								#endif
+
+								/* record end time */
+								end_time = get_time_as_double();
+
+								/* re-establish new timeout value */
+								timeout.tv_sec  = rint(floor(script_timeout-(end_time-begin_time)));
+								remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
+
+								if (remaining_usec > 0) {
+									timeout.tv_usec = rint(remaining_usec * 1000000);
+								} else {
+									timeout.tv_usec = 0;
+								}
+								timeout.tv_sec = rint(floor(script_timeout-(end_time-begin_time)));
+								timeout.tv_usec = rint((script_timeout-(end_time-begin_time)-timeout.tv_sec)*1000000);
+
+								if (timeout.tv_sec + timeout.tv_usec > 0) {
+									goto retry;
+								} else {
+									SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
+									SET_UNDEFINED(result_string);
+									close_fd = FALSE;
+								}
+								break;
+							case EINVAL:
+								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
+								SET_UNDEFINED(result_string);
+								close_fd = FALSE;
+								break;
+							default:
+								SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
+								SET_UNDEFINED(result_string);
+								close_fd = FALSE;
+								break;
+						}
+
+						break;
+				case 0:
+					#ifdef USING_TPOPEN
+					SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));
+
+					close_fd = FALSE;
+					#else
+					SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
+
+					pid = nft_pchild(cmd_fd);
+					kill(pid, SIGKILL);
+					#endif
+
+					SET_UNDEFINED(result_string);
+					break;
+				default:
+					/* get only one line of output, we will ignore the rest */
+					bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
+					if (bytes_read > 0) {
+						result_string[bytes_read] = '\0';
+					} else {
+						if (STRIMATCH(type,"DS")) {
+							SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
+						} else {
+							SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", current_host->id, id, current_host->hostname, command));
+						}
+						SET_UNDEFINED(result_string);
+					}
+				}
+
+				/* close pipe */
+				#ifdef USING_TPOPEN
+				/* we leave the old fd open if it timed out. It will have to exit on it's own */
+				if (close_fd) {
+					pclose(fd);
+				}
+				#else
+				nft_pclose(cmd_fd);
+				#endif
+			} else {
+				SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
+				SET_UNDEFINED(result_string);
+			}
 		} else {
-			SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
+			SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN.  File '%s' does not exist or is not executable.", current_host->id, command));
 			SET_UNDEFINED(result_string);
 		}
 
