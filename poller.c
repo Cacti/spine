@@ -2256,7 +2256,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		token = strtok_r(executable, " ", &saveptr);
 
 		/* cheesy little hack to add /usr/bin/ if its not included */
-		if (strstr("/", executable) == NULL) {
+		if (strstr(executable, "/") == NULL) {
 			saveptr = proc_command;
 			sprintf(executable, "/usr/bin/%s", proc_command);
 			token = strtok_r(executable, " ", &saveptr);
@@ -2264,7 +2264,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 		SPINE_LOG_DEBUG(("The executable is '%s' in \'%s\'", executable, proc_command));
 
-		if (file_exists(executable) && access(executable, X_OK) != -1) {
+		if (access(executable, X_OK | F_OK) != -1) {
 			#ifdef USING_TPOPEN
 			fd = popen((char *)proc_command, "r");
 			cmd_fd = fileno(fd);
