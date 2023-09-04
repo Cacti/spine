@@ -1,16 +1,20 @@
 The Cacti Group | spine
 
 1.2.25
--issue#291: Enhance number recognition within Spine
--issue#294: Sort Devices by thier total number of poller items to query
+-issue#234: Spine should see if script to be executed is executable
+-issue#291: Enhance number recognition
+-issue#294: When polling devices, sort by larger number of items first
+-issue#298: Log format may be corrupted when timeout occurs
 -issue#303: Compile warning appears due to GCC flag on RHEL7/RHEL8
 -issue#304: Downed device detection only checks one of the two uptime OIDs
 -issue#305: Compile error appears due to execinfo.h on FreeBSD
 -issue#306: Bootstrap shell script contains some PHP cruft
--issue#308: Function strip_alpha() does not strip non-numeric leading characters
--issue: Remove legacy setting not possible in Cacti 1.2.x+
+-issue#308: Padding is not always removed from the start of non-numeric strings
+-issue#311: Improve SNMP result handling for non-numeric results
+-issue#312: Further improve SNMP result handling for non-numeric results
+-issue#313: Remove check for the max_oids column which has been present since Cacti v1.0
+-issue#314: Minimize Sorting when fetching poller records for maximum performance
 -feature#234: Spine should see if script to be executed is executable
--feature: Do not sort by snmp port if you only have snmp on one port
 
 1.2.24
 -issue#296: When ignoring older OIDs, segmentation faults can be caused
