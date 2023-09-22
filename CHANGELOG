@@ -4,6 +4,9 @@ The Cacti Group | spine
 -feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site
 
+1.2.26
+-issue#317: WARNING: MYSQL_OPT_RECONNECT is deprecated and will be removed in a future version.
+
 1.2.25
 -issue#303: Compile warning appears due to GCC flag on RHEL7/RHEL8
 -issue#305: Compile error appears due to execinfo.h on FreeBSD
