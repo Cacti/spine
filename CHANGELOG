@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.26
+-issue#317: WARNING: MYSQL_OPT_RECONNECT is deprecated and will be removed in a future version.
+
 1.2.25
 -issue#234: Spine should see if script to be executed is executable
 -issue#291: Enhance number recognition

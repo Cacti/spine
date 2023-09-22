@@ -277,7 +277,10 @@ void db_connect(int type, MYSQL *mysql) {
 	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (int *)&rtimeout, "read timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (int *)&wtimeout, "write timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (int *)&timeout, "general timeout");
-	MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
+
+	#if defined(MARIADB_BASE_VERSION) || (MYSQL_VERSION_ID < 80034 && MYSQL_VERSION_ID >= 50013)
+		MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
+	#endif
 
 	#ifdef HAS_MYSQL_OPT_RETRY_COUNT
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
