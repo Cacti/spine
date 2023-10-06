@@ -20,6 +20,7 @@ To compile and install Spine using MySQL versions 5.5 or higher please do the
 following:
 
 ```shell
+./bootstrap
 ./configure
 make
 make install
@@ -31,6 +32,7 @@ To compile and install Spine using MySQL versions previous to 5.5 please do the
 following:
 
 ```shell
+./bootstrap
 ./configure --with-reentrant
 make
 make install
