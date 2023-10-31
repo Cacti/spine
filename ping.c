@@ -47,6 +47,8 @@
 int ping_host(host_t *host, ping_t *ping) {
 	int ping_result;
 	int snmp_result;
+	double start_time;
+	double end_time;
 
 	/* snmp pinging has been selected at a minimum */
 	ping_result = 0;
@@ -102,7 +104,23 @@ int ping_host(host_t *host, ping_t *ping) {
 			snmp_result = HOST_UP;
 			if ((host->availability_method != AVAIL_SNMP_OR_PING) &&
 				((strlen(host->snmp_community) > 0) || (host->snmp_version >= 3))) {
+				start_time = get_time_as_double();
 				snmp_result = ping_snmp(host, ping);
+				end_time = get_time_as_double();
+
+				if (snmp_result == HOST_UP) {
+					if (is_debug_device(host->id)) {
+						SPINE_LOG(("Device[%i] INFO: SNMP Device Alive, Time:%.4f ms", host->id, end_time - start_time));
+					} else {
+						SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device Alive, Time:%.4f ms", host->id, end_time - start_time));
+					}
+				} else {
+					if (is_debug_device(host->id)) {
+						SPINE_LOG(("Device[%i] INFO: SNMP Device Down, Time:%.4f ms", host->id, end_time - start_time));
+					} else {
+						SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device Down, Time:%.4f ms", host->id, end_time - start_time));
+					}
+				}
 			}
 		}
 	}
@@ -194,9 +212,9 @@ int ping_snmp(host_t *host, ping_t *ping) {
 					}
 				} else {
 					if (host->snmp_status == STAT_TIMEOUT) {
-						SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Timeout", host->id));
+						SPINE_LOG_HIGH(("Device[%i] SNMP Ping Timeout", host->id));
 					} else {
-						SPINE_LOG_MEDIUM(("Device[%i] SNMP Ping Unknown Error", host->id));
+						SPINE_LOG_HIGH(("Device[%i] SNMP Ping Unknown Error", host->id));
 					}
 				}
 
@@ -424,9 +442,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if (pkt->icmp_type == ICMP_ECHOREPLY) {
 								if (is_debug_device(host->id)) {
-									SPINE_LOG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+									SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								} else {
-									SPINE_LOG_DEBUG(("Device[%i] DEBUG: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+									SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								}
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
@@ -643,9 +661,9 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 						if (return_code == -1 && (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED)) {
 							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] DEBUG: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+								SPINE_LOG(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 							} else {
-								SPINE_LOG_DEBUG(("Device[%i] DEBUG: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+								SPINE_LOG_MEDIUM(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 							}
 							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
 							snprintf(ping->ping_status, 50, "%.5f", total_time);
@@ -765,9 +783,9 @@ int ping_tcp(host_t *host, ping_t *ping) {
 
 				if ((return_code == -1 && errno == ECONNREFUSED) || return_code == 0) {
 					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] DEBUG: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						SPINE_LOG(("Device[%i] INFO: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 					} else {
-						SPINE_LOG_DEBUG(("Device[%i] DEBUG: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						SPINE_LOG_MEDIUM(("Device[%i] INFO: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 					}
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
 					snprintf(ping->ping_status, 50, "%.5f", total_time);

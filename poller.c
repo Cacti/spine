@@ -581,6 +581,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 			if (num_rows != 1) {
 				mysql_free_result(result);
+
 				if (local_cnn != NULL) {
 					db_release_connection(LOCAL, local_cnn->id);
 				} else {
@@ -598,6 +599,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				SPINE_FREE(host);
 				SPINE_FREE(reindex);
 				SPINE_FREE(ping);
+				SPINE_FREE(error_string);
+				SPINE_FREE(buf_size);
+				SPINE_FREE(buf_errors);
 
 				return;
 			}
@@ -753,7 +757,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							update_host_status(HOST_UP, host, ping, host->availability_method);
 
 							if ((host->availability_method != AVAIL_PING) && (host->availability_method != AVAIL_NONE)) {
-								if (host->snmp_session != NULL) {
+								if (host->snmp_session != NULL && set.mibs) {
 									get_system_information(host, &mysql, 1);
 									ignore_sysinfo = FALSE;
 								}
@@ -857,6 +861,33 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		host->max_oids     = 1;
 		host->snmp_session = NULL;
 		host->ignore_host  = FALSE;
+	}
+
+	if (set.ping_only) {
+		SPINE_FREE(host);
+		SPINE_FREE(reindex);
+		SPINE_FREE(ping);
+		SPINE_FREE(error_string);
+		SPINE_FREE(buf_size);
+		SPINE_FREE(buf_errors);
+
+		if (local_cnn != NULL) {
+			db_release_connection(LOCAL, local_cnn->id);
+		} else {
+			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
+		}
+
+		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+			if (remote_cnn != NULL) {
+				db_release_connection(REMOTE, remote_cnn->id);
+			} else {
+				SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
+			}
+		}
+
+		mysql_thread_end();
+
+		return;
 	}
 
 	/* do the reindex check for this host if not script based */

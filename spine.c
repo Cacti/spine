@@ -357,6 +357,10 @@ int main(int argc, char *argv[]) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
+		else if (STRMATCH(arg, "-P") || STRIMATCH(arg, "--pingonly")) {
+			set.ping_only = TRUE;
+		}
+
 		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
 			if (STRIMATCH(getarg(opt, &argv), "online")) {
 				set.mode = REMOTE_ONLINE;
@@ -433,6 +437,10 @@ int main(int argc, char *argv[]) {
 		else {
 			die("ERROR: %s is an unknown command-line parameter", arg);
 		}
+	}
+
+	if (set.ping_only) {
+		set.mibs = 0;
 	}
 
 	/* we attempt to support scripts better in cygwin */
@@ -583,7 +591,7 @@ int main(int argc, char *argv[]) {
 	set.parent_fork = SPINE_PARENT;
 
 	/* initialize the script server */
-	if (set.php_required) {
+	if (set.php_required && !set.ping_only) {
 		php_init(PHP_INIT);
 		set.php_initialized    = TRUE;
 		set.php_current_server = 0;
@@ -603,7 +611,7 @@ int main(int argc, char *argv[]) {
 	db_free_result(result);
 
 	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host INNER JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
+	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
 	qp += sprintf(qp, " WHERE disabled = ''");
 
 	if (!strlen(set.host_id_list)) {
@@ -648,11 +656,13 @@ int main(int argc, char *argv[]) {
 	SOCK_STARTUP;
 
 	/* mark the spine process as started */
-	snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
-	if (mode == REMOTE) {
-		db_insert(&mysqlr, REMOTE, querybuf);
-	} else {
-		db_insert(&mysql, LOCAL, querybuf);
+	if (!set.ping_only) {
+		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
+		if (mode == REMOTE) {
+			db_insert(&mysqlr, REMOTE, querybuf);
+		} else {
+			db_insert(&mysql, LOCAL, querybuf);
+		}
 	}
 
 	/* initialize threads and mutexes */
@@ -675,7 +685,7 @@ int main(int argc, char *argv[]) {
 	until_spec.tv_nsec = 0;
 
 	sem_getvalue(&available_threads, &a_threads_value);
-	SPINE_LOG_MEDIUM(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
+	SPINE_LOG_HIGH(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
 	set.parent_fork = SPINE_FORK;
@@ -716,20 +726,24 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* adjust device threads in cases where the host does not have sufficient data sources */
-		if (set.active_profiles != 1) {
-			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		if (!set.ping_only) {
+			if (set.active_profiles != 1) {
+				snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+			} else {
+				snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
+			}
+
+			tresult   = db_query(&mysql, LOCAL, querybuf);
+			mysql_row = mysql_fetch_row(tresult);
+
+			total_items = atoi(mysql_row[0]);
+			db_free_result(tresult);
+
+			if (total_items && total_items < device_threads) {
+				device_threads = total_items;
+			}
 		} else {
-			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
-		}
-
-		tresult   = db_query(&mysql, LOCAL, querybuf);
-		mysql_row = mysql_fetch_row(tresult);
-
-		total_items = atoi(mysql_row[0]);
-		db_free_result(tresult);
-
-		if (total_items && total_items < device_threads) {
-			device_threads = total_items;
+			device_threads = 1;
 		}
 
 		change_host = (current_thread >= device_threads) ? TRUE : FALSE;
@@ -890,7 +904,7 @@ int main(int argc, char *argv[]) {
 				}
 
 				sem_getvalue(&available_threads, &a_threads_value);
-				SPINE_LOG_MEDIUM(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
+				SPINE_LOG_HIGH(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
 				sem_post(&thread_init_sem);
 
@@ -938,30 +952,33 @@ int main(int argc, char *argv[]) {
 
 	SPINE_LOG_HIGH(("The final count of Threads is %i", threads_final));
 
-	for (threads_count = 0; threads_count < num_rows; threads_count++) {
+	if (!set.ping_only) {
 		thread_mutex_lock(LOCK_THDET);
 
-		poller_thread_t* det = details[threads_count];
+		for (threads_count = 0; threads_count < num_rows; threads_count++) {
 
-		if (threads_missing == -1 && det == NULL) {
-			threads_missing = threads_count;
-		}
+			poller_thread_t* det = details[threads_count];
 
-		if (det != NULL) { // && !det->complete) {
-			SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
-				det->complete ? "":"in",
-				det->host_id,
-				det->host_data_ids * (det->host_thread - 1),
-				det->host_data_ids * (det->host_thread)));
+			if (threads_missing == -1 && det == NULL) {
+				threads_missing = threads_count;
+			}
 
-			SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
-				" host_threads = %d, host_data_ids = %d, complete = %d",
-				threads_count,
-				det->host_id,
-				det->host_thread,
-				det->host_threads,
-				det->host_data_ids,
-				det->complete));
+			if (det != NULL) { // && !det->complete) {
+				SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
+					det->complete ? "":"in",
+					det->host_id,
+					det->host_data_ids * (det->host_thread - 1),
+					det->host_data_ids * (det->host_thread)));
+
+				SPINE_LOG_DEVDBG(("DEBUG: DTF: device = %d, host_id = %d, host_thread = %d,"
+					" host_threads = %d, host_data_ids = %d, complete = %d",
+					threads_count,
+					det->host_id,
+					det->host_thread,
+					det->host_threads,
+					det->host_data_ids,
+					det->complete));
+			}
 		}
 
 		thread_mutex_unlock(LOCK_THDET);
@@ -980,15 +997,17 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* update the db for |data_time| on graphs */
-	if (set.poller_id == 1) {
-		db_insert(&mysql, LOCAL, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
-	}
+	if (!set.ping_only) {
+		if (set.poller_id == 1) {
+			db_insert(&mysql, LOCAL, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
+		}
 
-	snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-	if (mode == REMOTE) {
-		db_insert(&mysqlr, REMOTE, querybuf);
-	} else {
-		db_insert(&mysql, LOCAL, querybuf);
+		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+		if (mode == REMOTE) {
+			db_insert(&mysqlr, REMOTE, querybuf);
+		} else {
+			db_insert(&mysql, LOCAL, querybuf);
+		}
 	}
 
 	if (db_pool_local) {
@@ -1005,7 +1024,7 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: Thread Cleanup Complete"));
 
 	/* close the php script server */
-	if (set.php_required) {
+	if (set.php_required && !set.ping_only) {
 		php_close(PHP_INIT);
 	}
 
@@ -1050,7 +1069,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		/* provide output if running from command line */
 		if (!set.stdout_notty) {
-			fprintf(stdout,"Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
+			fprintf(stdout, "Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
 	}
 
@@ -1090,6 +1109,7 @@ static void display_help(int only_version) {
 		"                     The default is 'online'.",
 		"  -R/--readonly      Spine will not write output to the DB",
 		"  -S/--stdout        Logging is performed to standard output",
+		"  -P/--pingonly      Ping device and update device status only",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
 		"",
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",

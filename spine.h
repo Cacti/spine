@@ -399,6 +399,7 @@ typedef struct config_struct {
 	int    ping_timeout;
 	int    ping_failure_count;
 	int    ping_recovery_count;
+	int    ping_only;
 	/* snmp options */
 	int    snmp_max_get_size;
 	int    snmp_retries;

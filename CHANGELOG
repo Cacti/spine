@@ -2,6 +2,7 @@ The Cacti Group | spine
 
 1.2.26
 -issue#317: WARNING: MYSQL_OPT_RECONNECT is deprecated and will be removed in a future version.
+-issue#321: Spine does not check a host with no poller items
 
 1.2.25
 -issue#234: Spine should see if script to be executed is executable

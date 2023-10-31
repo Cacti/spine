@@ -189,7 +189,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.retries     = set.snmp_retries;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
-	SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device '%s' has a timeout of %ld (%d), with %d retries", host_id, hostnameport, session.timeout, snmp_timeout, session.retries));
+	SPINE_LOG_HIGH(("Device[%i] INFO: SNMP Device '%s' has a timeout of %ld (%d), with %d retries", host_id, hostnameport, session.timeout, snmp_timeout, session.retries));
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
 		session.community     = (unsigned char*) snmp_community;
