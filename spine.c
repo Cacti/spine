@@ -322,6 +322,7 @@ int main(int argc, char *argv[]) {
 	set.logfile_processed = FALSE;
 	set.parent_fork       = SPINE_PARENT;
 	set.mode              = REMOTE_ONLINE;
+	set.has_device_0      = FALSE;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -540,6 +541,14 @@ int main(int argc, char *argv[]) {
 		mode = LOCAL;
 	}
 
+
+	/* check for device 0 items */
+	result = db_query(&mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
+	if (mysql_num_rows(result)) {
+		set.has_device_0 = TRUE;
+	}
+	db_free_result(result);
+
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
@@ -566,6 +575,12 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
+	}
+
+	if (set.has_device_0) {
+		SPINE_LOG_MEDIUM(("Device 0 Poller Items found.  Ensure that these entries are accurate"));
+	} else {
+		SPINE_LOG_MEDIUM(("No Device 0 Poller Items found."));
 	}
 
 	/* see if mysql is thread safe */
@@ -629,7 +644,11 @@ int main(int argc, char *argv[]) {
 	result = db_query(&mysql, LOCAL, querybuf);
 
 	if (set.poller_id == 1) {
-		num_rows = mysql_num_rows(result) + 1; /* pollerid 1 takes care of not host based data sources */
+		if (set.has_device_0) {
+			num_rows = mysql_num_rows(result) + 1; /* pollerid 1 takes care of non host based data sources */
+		} else {
+			num_rows = mysql_num_rows(result); /* pollerid 1 takes care of non host based data sources */
+		}
 	} else {
 		num_rows = mysql_num_rows(result);
 	}
@@ -694,8 +713,8 @@ int main(int argc, char *argv[]) {
 	device_threads   = 1;
 	current_thread   = 0;
 
-	/* poller 0 always polls host 0 */
-	if (set.poller_id == 1) {
+	/* poller 1 always polls host 0 but only if it exists */
+	if (set.poller_id == 1 && set.has_device_0 == TRUE) {
 		host_id     = 0;
 		change_host = FALSE;
 	} else {
