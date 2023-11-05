@@ -365,6 +365,7 @@ typedef struct config_struct {
 	int    start_host_id;
 	int    end_host_id;
 	char   host_id_list[BIG_BUFSIZE];
+	int    has_device_0;
 	/* database connection information */
 	char   db_host[SMALL_BUFSIZE];
 	char   db_db[SMALL_BUFSIZE];
