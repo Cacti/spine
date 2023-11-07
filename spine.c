@@ -917,14 +917,14 @@ int main(int argc, char *argv[]) {
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 			if (thread_status == 0) {
-				SPINE_LOG_DEBUG(("DEBUG: Valid Thread to be Created (%ld)", threads[device_counter]));
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", poller_details->host_id, threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
 				}
 
 				sem_getvalue(&available_threads, &a_threads_value);
-				SPINE_LOG_HIGH(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
+				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
 
 				sem_post(&thread_init_sem);
 
@@ -959,11 +959,11 @@ int main(int argc, char *argv[]) {
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Device[%i] polling timed out while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
+			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.threads - a_threads_value));
 			break;
 		}
 
-		SPINE_LOG_HIGH(("WARNING: Device[%i] polling sleeping while waiting for %d Threads to End", host_id, set.threads - a_threads_value));
+		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
 		usleep(500000);
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
@@ -976,7 +976,6 @@ int main(int argc, char *argv[]) {
 		thread_mutex_lock(LOCK_THDET);
 
 		for (threads_count = 0; threads_count < num_rows; threads_count++) {
-
 			poller_thread_t* det = details[threads_count];
 
 			if (threads_missing == -1 && det == NULL) {
@@ -984,9 +983,9 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (det != NULL) { // && !det->complete) {
-				SPINE_LOG_HIGH(("INFO: Thread %scomplete for Device[%d] and %d to %d sources",
-					det->complete ? "":"in",
+				SPINE_LOG_HIGH(("INFO: Device[%i] Thread %scomplete and %d to %d sources",
 					det->host_id,
+					det->complete ? "":"in",
 					det->host_data_ids * (det->host_thread - 1),
 					det->host_data_ids * (det->host_thread)));
 
