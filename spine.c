@@ -791,7 +791,13 @@ int main(int argc, char *argv[]) {
 				host_time_double = get_time_as_double();
 			}
 		} else {
-			items_per_thread = 0;
+			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+			tresult   = db_query(&mysql, LOCAL, querybuf);
+			mysql_row = mysql_fetch_row(tresult);
+
+			items_per_thread = atoi(mysql_row[0]);
+
+			db_free_result(tresult);
 
 			sprintf(host_time, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
