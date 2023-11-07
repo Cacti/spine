@@ -284,7 +284,7 @@ fi
 unamestr=$(uname)
 if test $unamestr == 'OpenBSD'; then
   AC_CHECK_LIB(mysqlclient, mysql_init,
-    [ LIBS="-lmysqlclient -lm $LIBS"
+    [ LIBS="-lmysqlclient -lexecinfo -lm $LIBS"
       AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
       HAVE_MYSQL=yes ],
     [ HAVE_MYSQL=no ]
