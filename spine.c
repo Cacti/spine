@@ -1126,6 +1126,7 @@ static void display_help(int only_version) {
 		"  -l/--last=X        End polling with host id X",
 		"  -H/--hostlist=X    Poll the list of host ids, separated by comma's",
 		"  -p/--poller=X      Set the poller id to X",
+		"  -t/--threads=X     Override the database threads setting.",
 		"  -C/--conf=F        Read spine configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
 		"  -M/--mibs          Refresh the device System Mib data",
