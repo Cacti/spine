@@ -256,6 +256,9 @@ int main(int argc, char *argv[]) {
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
 
+	/* initialize number of threads */
+	set.threads = 1;
+
 	/* detect and compensate for stdin/stderr ttys */
 	if (!isatty(fileno(stdout))) {
 		set.stdout_notty = TRUE;
@@ -356,6 +359,10 @@ int main(int argc, char *argv[]) {
 
 		else if (STRMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
+		}
+
+		else if (STRMATCH(arg, "-t") || STRIMATCH(arg, "--threads")) {
+			set.threads = atoi(getarg(opt, &argv));
 		}
 
 		else if (STRMATCH(arg, "-P") || STRIMATCH(arg, "--pingonly")) {
@@ -1125,6 +1132,7 @@ static void display_help(int only_version) {
 		"  -l/--last=X        End polling with host id X",
 		"  -H/--hostlist=X    Poll the list of host ids, separated by comma's",
 		"  -p/--poller=X      Set the poller id to X",
+		"  -t/--threads=X     Override the database threads setting.",
 		"  -C/--conf=F        Read spine configuration from file F",
 		"  -O/--option=S:V    Override DB settings 'set' with value 'V'",
 		"  -M/--mibs          Refresh the device System Mib data",
