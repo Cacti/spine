@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.26
+-issue#315: Invalid ERROR: No such Instance for oid '.1.3.6.1.6.3.10.2.1.3.0' when per second uptime OID is not found
 -issue#317: WARNING: MYSQL_OPT_RECONNECT is deprecated and will be removed in a future version.
 -issue#321: Spine does not check a host with no poller items
 -issue#323: Wrong number of devices in stats due to device 0 assumption
