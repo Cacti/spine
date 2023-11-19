@@ -6,6 +6,7 @@ The Cacti Group | spine
 -issue#321: Spine does not check a host with no poller items
 -issue#323: Wrong number of devices in stats due to device 0 assumption
 -feature#329: Allow users to override the threads setting at the command line
+-feature#331: Introduce a ping only option -P | --ping for rapid service checks
 
 1.2.25
 -issue#234: Spine should see if script to be executed is executable
