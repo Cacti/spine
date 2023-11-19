@@ -463,7 +463,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					if (!strstr(snmp_oid, ".1.3.6.1.6.3.10.2.1.3.0")) {
 						SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 					} else {
-						SPINE_LOG_DEBUG(("NOTE: Per second level uptime oid missing oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+						SPINE_LOG_DEBUG(("NOTE: Legacy SNMP agent found!  No per second Uptime oid found '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
 					}
 				} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 					SET_UNDEFINED(result_string);
