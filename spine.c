@@ -258,6 +258,7 @@ int main(int argc, char *argv[]) {
 
 	/* initialize number of threads */
 	set.threads = 1;
+	set.threads_set = FALSE;
 
 	/* detect and compensate for stdin/stderr ttys */
 	if (!isatty(fileno(stdout))) {
@@ -363,6 +364,7 @@ int main(int argc, char *argv[]) {
 
 		else if (STRMATCH(arg, "-t") || STRIMATCH(arg, "--threads")) {
 			set.threads = atoi(getarg(opt, &argv));
+			set.threads_set = TRUE;
 		}
 
 		else if (STRMATCH(arg, "-P") || STRIMATCH(arg, "--pingonly")) {

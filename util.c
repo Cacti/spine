@@ -555,7 +555,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i", set.log_pstats));
 
 	/* get Cacti defined max threads override spine.conf */
-	if (set.threads == 1) {
+	if (set.threads_set == FALSE) {
 		if ((res = getpsetting(&mysql, mode, "threads")) != 0) {
 			set.threads = atoi(res);
 			free((char *)res);
