@@ -256,6 +256,10 @@ int main(int argc, char *argv[]) {
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
 
+	/* initialize number of threads */
+	set.threads = 1;
+	set.threads_set = FALSE;
+
 	/* detect and compensate for stdin/stderr ttys */
 	if (!isatty(fileno(stdout))) {
 		set.stdout_notty = TRUE;
@@ -357,7 +361,16 @@ int main(int argc, char *argv[]) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
-		else if (STRIMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
+		else if (STRMATCH(arg, "-t") || STRIMATCH(arg, "--threads")) {
+			set.threads = atoi(getarg(opt, &argv));
+			set.threads_set = TRUE;
+		}
+
+		else if (STRMATCH(arg, "-P") || STRIMATCH(arg, "--pingonly")) {
+			set.ping_only = TRUE;
+		}
+
+		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
 			if (STRIMATCH(getarg(opt, &argv), "online")) {
 				set.mode = REMOTE_ONLINE;
 			} else if (STRIMATCH(getarg(opt, &argv), "offline")) {

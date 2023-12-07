@@ -353,6 +353,7 @@ typedef struct config_struct {
 	int    active_profiles;
 	int    total_snmp_ports;;
 	int    threads;
+	int    threads_set;
 	int    logfile_processed;
 	int    boost_enabled;
 	int    boost_redirect;
