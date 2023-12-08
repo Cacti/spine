@@ -404,15 +404,13 @@ void db_create_connection_pool(int type) {
 
 			db_connect(type, &db_pool_local[id].mysql);
 
-			if (&db_pool_local[id].mysql != NULL) {
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-				db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
-			}
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
 
 			db_pool_local[id].free = TRUE;
 			db_pool_local[id].id   = id;
@@ -425,15 +423,13 @@ void db_create_connection_pool(int type) {
 
 			db_connect(type, &db_pool_remote[id].mysql);
 
-			if (&db_pool_remote[id].mysql != NULL) {
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-				db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
-			}
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
 
 			db_pool_remote[id].free = TRUE;
 			db_pool_remote[id].id   = id;
