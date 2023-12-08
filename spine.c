@@ -931,7 +931,7 @@ int main(int argc, char *argv[]) {
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 			if (thread_status == 0) {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", poller_details->host_id, threads[device_counter]));
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", poller_details->host_id, (long int)threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
