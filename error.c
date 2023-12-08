@@ -52,7 +52,6 @@ static void spine_signal_handler(int spine_signal) {
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
-	struct timeval now;
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
