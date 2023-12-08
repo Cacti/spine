@@ -831,7 +831,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 int get_address_type(host_t *host) {
 	struct addrinfo hints, *res, *res_list;
 	char addrstr[255];
-	void *ptr;
+	void *ptr = NULL;
 	int addr_found = FALSE;
 
 	memset(&hints, 0, sizeof(hints));
@@ -887,7 +887,7 @@ int get_address_type(host_t *host) {
  *
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
-	struct addrinfo hints, *hostinfo, *p;
+	struct addrinfo hints, *hostinfo;
 	int rv, retry_count;
 
 	// Initialize the hints structure

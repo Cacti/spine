@@ -153,14 +153,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	char query13[BUFSIZE];
 	char posuffix[BUFSIZE];
 
-	int query1_len   = 0;
-	int query2_len   = 0;
-	int query4_len   = 0;
-	int query5_len   = 0;
-	int query6_len   = 0;
 	int query8_len   = 0;
-	int query9_len   = 0;
-	int query10_len  = 0;
 	int query11_len  = 0;
 	int posuffix_len = 0;
 
@@ -508,14 +501,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		"INSERT INTO poller_output_boost"
 		" (local_data_id, rrd_name, time, output) VALUES");
 
-	query1_len   = strlen(query1);
-	query2_len   = strlen(query2);
-	query4_len   = strlen(query4);
-	query5_len   = strlen(query5);
-	query6_len   = strlen(query6);
 	query8_len   = strlen(query8);
-	query9_len   = strlen(query9);
-	query10_len  = strlen(query10);
 	query11_len  = strlen(query11);
 	posuffix_len = strlen(posuffix);
 
