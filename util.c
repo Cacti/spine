@@ -372,7 +372,7 @@ void read_config_options() {
 	set.cacti_version = get_cacti_version(&mysql, LOCAL);
 
 	/* log the path_webroot variable */
-	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %s", set.cacti_version));
+	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %d", set.cacti_version));
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
@@ -1262,6 +1262,7 @@ int spine_log(const char *format, ...) {
 	fp = stdout;
 
 	/* log message prefix */
+
 	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] PT[%ld] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
 
 	/* get time for poller_output table */
