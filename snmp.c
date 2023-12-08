@@ -587,7 +587,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					if (vars != NULL) {
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprint_asciistring(result_string, RESULTS_BUFFER, temp_result, strlen(temp_result));
+						snprint_asciistring(result_string, RESULTS_BUFFER, (unsigned char *)temp_result, strlen(temp_result));
 					} else {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
