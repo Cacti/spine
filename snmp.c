@@ -324,8 +324,28 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				SPINE_LOG(("SNMP: Error AES-256 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
 				return 0;
 				#endif
+			} else if(strcmp(snmp_priv_protocol, "AES192C") == 0) {
+				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(USM_CREATE_USER_PRIV_AES192_CISCO)
+				session.securityPrivProto    = snmp_duplicate_objid(usmAES192CiscoPrivProtocol, OID_LENGTH(usmAES192CiscoPrivProtocol));
+				session.securityPrivProtoLen = OID_LENGTH(usmAES192CiscoPrivProtocol);
+				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES192);
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+				#else
+				SPINE_LOG(("SNMP: Error AES192C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				return 0;
+				#endif
+			} else if(strcmp(snmp_priv_protocol, "AES256C") == 0) {
+				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(USM_CREATE_USER_PRIV_AES256_CISCO)
+				session.securityPrivProto    = snmp_duplicate_objid(usmAES256CiscoPrivProtocol, OID_LENGTH(usmAES256CiscoPrivProtocol));
+				session.securityPrivProtoLen = OID_LENGTH(usmAES256CiscoPrivProtocol);
+				session.securityPrivKeyLen   = BYTESIZE(SNMP_TRANS_PRIVLEN_AES256);
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+				#else
+				SPINE_LOG(("SNMP: Error AES256C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				return 0;
+				#endif
 			}
-
+			
 			/* set the privacy key to the hashed version. */
 			if (generate_Ku(session.securityAuthProto,
 				session.securityAuthProtoLen,
