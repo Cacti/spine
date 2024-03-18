@@ -154,19 +154,19 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
-	session.securityEngineID = 0;
+	session.securityEngineID    = 0;
 	session.securityEngineIDLen = 0;
 
-	session.securityName = 0;
+	session.securityName    = 0;
 	session.securityNameLen = 0;
 
-	session.contextEngineID = 0;
+	session.contextEngineID    = 0;
 	session.contextEngineIDLen = 0;
 
-	session.contextName = 0;
+	session.contextName    = 0;
 	session.contextNameLen = 0;
 
-	session.contextEngineID = 0;
+	session.contextEngineID    = 0;
 	session.contextEngineIDLen = 0;
 
 	/* verify snmp version is accurate */
@@ -290,6 +290,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
 				SPINE_LOG(("SNMP: Error DES is no longer supported on this system"));
+				return 0;
+				#endif
+			} else if (strcmp(snmp_priv_protocol, "AES") == 0) {
+				#if defined(USM_PRIV_PROTO_AES_LEN)
+				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
+				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
+				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
+				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
+				#else
+				SPINE_LOG(("SNMP: Error AES is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
 				return 0;
 				#endif
 			} else if (strcmp(snmp_priv_protocol, "AES128") == 0) {
