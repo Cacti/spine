@@ -3,9 +3,6 @@ The Cacti Group | spine
 1.2.27
 -issue: Restore AES Support
 
-1.2.27
--issue: Restore AES Support
-
 1.2.26
 -issue#315: Errors cam be reported when uptime OID is not present
 -issue#317: MySQL reconnect option is depreciated
