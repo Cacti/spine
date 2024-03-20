@@ -452,7 +452,7 @@ typedef struct target_struct {
 	char   snmp_password[50];
 	char   snmp_auth_protocol[7];
 	char   snmp_priv_passphrase[200];
-	char   snmp_priv_protocol[7];
+	char   snmp_priv_protocol[8];
 	char   snmp_context[65];
 	char   snmp_engine_id[30];
 	int    snmp_port;
@@ -527,7 +527,7 @@ typedef struct host_struct {
 	char   snmp_password[50];
 	char   snmp_auth_protocol[7];
 	char   snmp_priv_passphrase[200];
-	char   snmp_priv_protocol[7];
+	char   snmp_priv_protocol[8];
 	char   snmp_context[65];
 	char   snmp_engine_id[30];
 	int    snmp_port;
