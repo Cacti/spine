@@ -193,7 +193,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	char last_snmp_password[50];
 	char last_snmp_auth_protocol[7];
 	char last_snmp_priv_passphrase[200];
-	char last_snmp_priv_protocol[7];
+	char last_snmp_priv_protocol[8];
 	char last_snmp_context[65];
 	char last_snmp_engine_id[30];
 	double poll_time = get_time_as_double();
