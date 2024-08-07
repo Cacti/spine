@@ -1,8 +1,7 @@
 /*
  ex: set tabstop=4 shiftwidth=4 autoindent:
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2023 The Cacti Group                                 |
- | Copyright (C) 2004-2023 The Cacti Group                                 |
+ | Copyright (C) 2004-2024 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU Lesser General Public              |
@@ -355,7 +354,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				return 0;
 				#endif
 			}
-			
+
 			/* set the privacy key to the hashed version. */
 			SPINE_LOG_MEDIUM(("SNMP: Using privacy protocol(len): %s(%d)", snmp_priv_protocol, session.securityPrivKeyLen));
 			if (generate_Ku(session.securityAuthProto,
