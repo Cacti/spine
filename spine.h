@@ -279,6 +279,8 @@
 #define PING_ICMP 1
 #define PING_UDP 2
 #define PING_TCP 3
+#define PING_SNMP 4
+#define PING_TCP_CLOSED 5
 
 #define HOST_UNKNOWN 0
 #define HOST_DOWN 1

@@ -72,7 +72,7 @@ int ping_host(host_t *host, ping_t *ping) {
 					ping_result = ping_icmp(host, ping);
 				} else if (host->ping_method == PING_UDP) {
 					ping_result = ping_udp(host, ping);
-				} else if (host->ping_method == PING_TCP) {
+				} else if (host->ping_method == PING_TCP || host->ping_method == PING_TCP_CLOSED) {
 					ping_result = ping_tcp(host, ping);
 				}
 			} else if (host->availability_method == AVAIL_PING) {
@@ -163,7 +163,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering SNMP Ping", host->id));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering SNMP Ping", host->id));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering SNMP Ping", host->id));
 	}
 
 	if (host->snmp_session) {
@@ -283,7 +283,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering ICMP Ping", host->id));
 	}
 
 	/* get ICMP socket */
@@ -390,7 +390,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				} else {
-					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG_DEBUG(("DEBUG: Device[%i] Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				}
 
 				/* decrement the timeout value by the total time */
@@ -430,7 +430,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
 							} else {
-								SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
+								SPINE_LOG_DEBUG(("DEBUG: Device[%i] Received EINTR", host->id));
 							}
 
 							goto keep_listening;
@@ -486,7 +486,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
 					} else {
-						SPINE_LOG_DEBUG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
+						SPINE_LOG_DEBUG(("DEBUG: Device[%i] Exceeded Device Timeout, Retrying", host->id));
 					}
 				}
 
@@ -575,7 +575,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering UDP Ping", host->id));
 	}
 
 	/* set total time */
@@ -689,7 +689,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 				} else {
-					SPINE_LOG_DEBUG(("Device[%i] DEBUG: UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+					SPINE_LOG_DEBUG(("DEBUG: Device[%i] UDP Timeout, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 				}
 
 				retry_count++;
@@ -737,7 +737,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
 	} else {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering TCP Ping", host->id));
 	}
 
 	/* convert the host timeout to a double precision number in seconds */
@@ -781,7 +781,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				/* caculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				if ((return_code == -1 && errno == ECONNREFUSED) || return_code == 0) {
+				if ((return_code == -1 && errno == ECONNREFUSED && host->ping_method == PING_TCP_CLOSED) || return_code == 0) {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] INFO: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 					} else {
@@ -975,7 +975,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
  */
 name_t *get_namebyhost(char *hostname, name_t *name) {
 	if (name == NULL) {
-		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Allocating name_t", hostname));
+		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Allocating name_t", hostname));
 
 		if (!(name = (name_t *) malloc(sizeof(name_t)))) {
 			die("ERROR: Fatal malloc error: ping.c get_namebyhost->name");
@@ -997,45 +997,45 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	token = strtok(stack, ":");
 
 	if (token == NULL) {
-		SPINE_LOG_DEBUG(("get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
+		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
 		strncopy(name->hostname, hostname, SMALL_BUFSIZE);
 	}
 
 	while (token != NULL && tokens <= 3) {
 		tokens++;
-		SPINE_LOG_DEBUG(("get_namebyhost(%s) - Token #%i - %s", hostname, tokens, token));
+		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Token #%i - %s", hostname, tokens, token));
 		if (tokens == 1) {
 			if (strlen(token) && token[0] == '[') {
-				SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv6 method", hostname));
+				SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
 				strncpy(name->hostname, hostname, sizeof(name->hostname));
 				break;
 			} else if (strlen(token) == 3) {
 				if (strncasecmp(token, "TCP", 3)) {
-					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv4 method", hostname));
+					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv4 method", hostname));
 					name->method = 1;
 				} else if (strncasecmp(hostname, "UDP", 3)) {
-					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have UDPv4 method", hostname));
+					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv4 method", hostname));
 					name->method = 2;
 				} else {
-					SPINE_LOG_DEBUG(("get_namebyhost(%s) - No matching method for 3 chars: %s", hostname, token));
+					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No matching method for 3 chars: %s", hostname, token));
 					// assume we have had a method
 					tokens++;
 				}
 			} else if (strlen(token) == 4) {
 				if (strncasecmp(token, "TCP6", 3)) {
-					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have TCPv6 method", hostname));
+					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
 					name->method = 3;
 				} else if (strncasecmp(hostname, "UDP6", 3)) {
-					SPINE_LOG_DEBUG(("get_namebyhost(%s) - Have UDPv6 method", hostname));
+					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv6 method", hostname));
 					name->method = 4;
 				} else {
-					SPINE_LOG_DEBUG(("get_namebyhost(%s) - No matching method for 4 chars: %s", hostname, token));
+					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No matching method for 4 chars: %s", hostname, token));
 
 					// assume we have had a method
 					tokens++;
 				}
 			} else {
-				SPINE_LOG_DEBUG(("get_hostbyname(%s) - No matching method for %li chars: %s", hostname, strlen(token), token));
+				SPINE_LOG_DEBUG(("DEBUG: get_hostbyname(%s) - No matching method for %li chars: %s", hostname, strlen(token), token));
 
 				// assume we have had a method
 				tokens++;
@@ -1043,18 +1043,18 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		}
 
 		if (tokens == 2) {
-			SPINE_LOG_DEBUG(("get_namebyhost(%s) - Setting hostname: %s", hostname, token));
+			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting hostname: %s", hostname, token));
 			strncpy(name->hostname, token, sizeof(name->hostname));
 			name->hostname[strlen(token)] = '\0';
 		}
 
 		if (tokens == 3 && strlen(token)) {
-			SPINE_LOG_DEBUG(("get_namebyhost(%s) - Setting port: %s", hostname, token));
+			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting port: %s", hostname, token));
 			name->port = atoi(token);
 		}
 
 		if (tokens > 3) {
-			SPINE_LOG_DEBUG(("get_namebyhost(%s) - Unexpected token: %i", hostname, tokens));
+			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Unexpected token: %i", hostname, tokens));
 		}
 		token = strtok(NULL, ":");
 	}

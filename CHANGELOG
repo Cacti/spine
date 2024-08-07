@@ -1,5 +1,9 @@
 The Cacti Group | spine
 
+1.2.28
+-issue#350: The Availability/Reachability setting of "Ping or SNMP Uptime" is not working in latest spine"
+-issue#351: TCP ping returns always Alive
+
 1.2.27
 -issue#349: Removal of AES Privacy Protocol was pre-mature
 
