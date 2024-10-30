@@ -137,4 +137,4 @@ chmod +s /usr/local/spine/bin/spine
    these version of MySQL, you must use the --with-reentrant configure flag.
 
 -----------------------------------------------------------------------------
-Copyright (c) 2004-2023 - The Cacti Group, Inc.
+Copyright (c) 2004-2024 - The Cacti Group, Inc.
