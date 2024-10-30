@@ -334,7 +334,7 @@ int main(int argc, char *argv[]) {
 
 		if (opt) *opt++ = '\0';
 
-		if (STRMATCH(arg, "-f") || STRMATCH(arg, "--first")) {
+		if (STRIMATCH(arg, "-f") || STRMATCH(arg, "--first")) {
 			if (HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -346,7 +346,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-l") || STRIMATCH(arg, "--last")) {
+		else if (STRIMATCH(arg, "-l") || STRIMATCH(arg, "--last")) {
 			if (HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: %s can only be used once", arg);
 			}
@@ -358,7 +358,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
+		else if (STRIMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
 			set.poller_id = atoi(getarg(opt, &argv));
 		}
 
@@ -383,15 +383,15 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		else if (STRMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
+		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
+		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
 			set.mibs = 1;
 		}
 
-		else if (STRMATCH(arg, "-h") || STRMATCH(arg, "--help")) {
+		else if (STRIMATCH(arg, "-h") || STRMATCH(arg, "--help")) {
 			display_help(FALSE);
 
 			exit(EXIT_SUCCESS);
@@ -403,7 +403,7 @@ int main(int argc, char *argv[]) {
 			exit(EXIT_SUCCESS);
 		}
 
-		else if (STRMATCH(arg, "-O") || STRIMATCH(arg, "--option")) {
+		else if (STRIMATCH(arg, "-O") || STRIMATCH(arg, "--option")) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
@@ -416,19 +416,19 @@ int main(int argc, char *argv[]) {
 			set_option(setting, value);
 		}
 
-		else if (STRMATCH(arg, "-R") || STRMATCH(arg, "--readonly") || STRMATCH(arg, "--read-only")) {
+		else if (STRIMATCH(arg, "-R") || STRMATCH(arg, "--readonly") || STRMATCH(arg, "--read-only")) {
 			set.SQL_readonly = TRUE;
 		}
 
-		else if (STRMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
+		else if (STRIMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
 			conf_file = strdup(getarg(opt, &argv));
 		}
 
-		else if (STRMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
+		else if (STRIMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
 			set_option("log_destination", "STDOUT");
 		}
 
-		else if (STRMATCH(arg, "-L") || STRMATCH(arg, "--log")) {
+		else if (STRIMATCH(arg, "-D") || STRMATCH(arg, "--log")) {
 			set_option("log_destination", getarg(opt, &argv));
 		}
 
@@ -622,34 +622,27 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* determine if the poller_id field exists in the host table */
-	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'poller_id'");
-	if (mysql_num_rows(result)) {
-		set.poller_id_exists = TRUE;
-	} else {
-		set.poller_id_exists = FALSE;
-
-		if (set.poller_id > 0) {
-			SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
-		}
+	set.poller_id_exists = db_column_exists(&mysql, LOCAL, "host", "poller_id");
+	if (!set.poller_id_exists && set.poller_id > 0) {
+		SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
 	}
-	db_free_result(result);
 
 	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
+	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
 	qp += sprintf(qp, " WHERE disabled = ''");
 
 	if (!strlen(set.host_id_list)) {
-		qp += append_hostrange(qp, "id");	/* AND id BETWEEN a AND b */
+		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
 	} else {
-		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
+		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
 	}
 
 	if (set.poller_id_exists) {
-		qp += sprintf(qp, " AND host.poller_id = %i", set.poller_id);
+		qp += sprintf(qp, " AND h.poller_id=%i", set.poller_id);
 	}
+	qp += sprintf(qp, " ORDER BY h.polling_time DESC");
 
-	qp += sprintf(qp, " ORDER BY picount DESC");
-
+	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
 	result = db_query(&mysql, LOCAL, querybuf);
 
 	if (set.poller_id == 1) {
@@ -996,7 +989,7 @@ int main(int argc, char *argv[]) {
 				threads_missing = threads_count;
 			}
 
-			if (det != NULL) { // && !det->complete) {
+      if (det != NULL) { // && !det->complete) {
 				SPINE_LOG_HIGH(("INFO: Device[%i] Thread %scomplete and %d to %d sources",
 					det->host_id,
 					det->complete ? "":"in",

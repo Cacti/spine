@@ -73,12 +73,12 @@ CYGWIN Prerequisite
       * gzip
       * help2man
       * libmysqlclient
-      * libmysqlclient-devel
+      * libmariadb-devel
       * libtool
       * m4
       * make
       * net-snmp-devel
-      * openssl-devel
+      * libssl-devel
       * wget
 
 7. Wait for installation to complete, coffee time!
