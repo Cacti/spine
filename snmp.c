@@ -354,7 +354,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				return 0;
 				#endif
 			}
-			
+
 			/* set the privacy key to the hashed version. */
 			SPINE_LOG_MEDIUM(("SNMP: Using privacy protocol(len): %s(%d)", snmp_priv_protocol, session.securityPrivKeyLen));
 			if (generate_Ku(session.securityAuthProto,

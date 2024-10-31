@@ -20,7 +20,7 @@
 # +-------------------------------------------------------------------------+
 
 AC_PREREQ([2.63])
-AC_INIT([Spine Poller],[1.3.0],[http://www.cacti.net/issues.php])
+AC_INIT([Spine Poller],[1.2.28],[http://www.cacti.net/issues.php])
 
 AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
@@ -282,7 +282,7 @@ fi
   CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
 
 unamestr=$(uname)
-if test $unamestr = 'OpenBSD'; then
+if test $unamestr == 'OpenBSD'; then
   AC_CHECK_LIB(mysqlclient, mysql_init,
     [ LIBS="-lmysqlclient -lexecinfo -lm $LIBS"
       AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
@@ -307,8 +307,8 @@ else
     if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
       LIBS="-lmysqlclient_r -lm -ldl $LIBS"
     else
-      if test "$HAVE_MYSQL" = "yes"; then
-        if test $unamestr = 'OpenBSD'; then
+      if test "$HAVE_MYSQL" == "yes"; then
+        if test $unamestr == 'OpenBSD'; then
           LIBS="-lmysqlclient -lm $LIBS"
         else
           LIBS="-lmysqlclient -lm -ldl $LIBS"
@@ -379,8 +379,7 @@ fi
 
 # Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
-AC_TRY_COMPILE([#include <net-snmp-config.h>], [return NETSNMP_USE_OPENSSL != 1;],
-  [  AC_MSG_RESULT(yes)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <net-snmp-config.h>]], [[exit(NETSNMP_USE_OPENSSL != 1);]])],[  AC_MSG_RESULT(yes)
      SNMP_SSL=yes
   ],[AC_MSG_RESULT(no)
 ])
