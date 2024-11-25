@@ -736,6 +736,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					} else {
 						SPINE_LOG_MEDIUM(("Device[%i] HT[%i] No host availability check possible for '%s'", host->id, host_thread, host->hostname));
 					}
+				} else if (host->availability_method == AVAIL_STREAM) {
+					update_host_status(HOST_UP, host, ping, host->availability_method);
 				} else {
 					if (ping_host(host, ping) == HOST_UP) {
 						host->ignore_host = FALSE;

@@ -638,7 +638,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (set.poller_id_exists) {
-		qp += sprintf(qp, " AND host.poller_id = %i", set.poller_id);
+		qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
 	}
 
 	qp += sprintf(qp, " ORDER BY picount DESC");

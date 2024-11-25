@@ -57,14 +57,6 @@ AC_ARG_WITH(snmp,
   [SNMP_DIR=$withval]
 )
 
-# reentrant
-MYSQL_REENTRANT=0
-AC_ARG_WITH(reentrant,
-  AS_HELP_STRING([--with-reentrant],[If using MySQL versions less than 5.5 you must choose this option
-  ]),
-  [MYSQL_REENTRANT=1]
-)
-
 # if host_alias is empty, ac_cv_host_alias may still have the info
 if test -z "$host_alias"; then
   host_alias=$ac_cv_host_alias
@@ -298,27 +290,23 @@ else
   )
 fi
 
-if test $MYSQL_REENTRANT = 1 ; then
+if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
   LIBS="-lmysqlclient_r -lm -ldl $LIBS"
 else
-  if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
+  if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
     LIBS="-lmysqlclient_r -lm -ldl $LIBS"
   else
-    if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
-      LIBS="-lmysqlclient_r -lm -ldl $LIBS"
-    else
-      if test "$HAVE_MYSQL" = "yes"; then
-        if test $unamestr = 'OpenBSD'; then
-          LIBS="-lmysqlclient -lm $LIBS"
-        else
-          LIBS="-lmysqlclient -lm -ldl $LIBS"
-        fi
+    if test "$HAVE_MYSQL" = "yes"; then
+      if test $unamestr = 'OpenBSD'; then
+        LIBS="-lmysqlclient -lm $LIBS"
       else
-        if test -f $MYSQL_LIB_DIR/libperconaserverclient.a -o -f $MYSQL_LIB_DIR/libperconaserverclient.$ShLib; then
-          LIBS="-lperconaserverclient -lm -ldl $LIBS"
-        else
-          LIBS="-lmariadbclient -lm -ldl $LIBS"
-        fi
+        LIBS="-lmysqlclient -lm -ldl $LIBS"
+      fi
+    else
+      if test -f $MYSQL_LIB_DIR/libperconaserverclient.a -o -f $MYSQL_LIB_DIR/libperconaserverclient.$ShLib; then
+        LIBS="-lperconaserverclient -lm -ldl $LIBS"
+      else
+        LIBS="-lmariadbclient -lm -ldl $LIBS"
       fi
     fi
   fi
