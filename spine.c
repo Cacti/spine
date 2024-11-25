@@ -631,6 +631,8 @@ int main(int argc, char *argv[]) {
 	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
 	qp += sprintf(qp, " WHERE disabled = ''");
 
+	qp += sprintf(qp, " AND availability_method != %d", AVAIL_STREAM);
+
 	if (!strlen(set.host_id_list)) {
 		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
 	} else {
