@@ -243,7 +243,7 @@ char *php_readpipe(int php_process, char *command) {
 	case 0:
 		/* record end time */
 		end_time = get_time_as_double();
-		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - start_time, command));
+		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - begin_time, command));
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */

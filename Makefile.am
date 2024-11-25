@@ -1,5 +1,3 @@
-## Makefile.am -- Process this file with automake to produce Makefile.in
-#
 # +-------------------------------------------------------------------------+
 # | Copyright (C) 2004-2024 The Cacti Group                                 |
 # |                                                                         |
