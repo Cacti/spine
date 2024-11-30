@@ -658,23 +658,25 @@ int main(int argc, char *argv[]) {
 		num_rows = mysql_num_rows(result);
 	}
 
-	if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
-		die("ERROR: Fatal malloc error: spine.c threads!");
-	}
+	if (num_rows > 0) {
+		if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
+			die("ERROR: Fatal malloc error: spine.c threads!");
+		}
 
-	if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
-		die("ERROR: Fatal malloc error: spine.c details!");
-	}
+		if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
+			die("ERROR: Fatal malloc error: spine.c details!");
+		}
 
-	if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
-		die("ERROR: Fatal malloc error: spine.c host id's!");
-	}
+		if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
+			die("ERROR: Fatal malloc error: spine.c host id's!");
+		}
 
-	if (!(host_time = (char *) malloc(SMALL_BUFSIZE))) {
-		die("ERROR: Fatal malloc error: util.c host_time");
-	}
+		if (!(host_time = (char *) malloc(SMALL_BUFSIZE))) {
+			die("ERROR: Fatal malloc error: util.c host_time");
+		}
 
-	memset(host_time, 0, SMALL_BUFSIZE);
+		memset(host_time, 0, SMALL_BUFSIZE);
+	}
 
 	/* initialize winsock library on Windows */
 	SOCK_STARTUP;
@@ -1032,6 +1034,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+
 		if (mode == REMOTE) {
 			db_insert(&mysqlr, REMOTE, querybuf);
 		} else {
