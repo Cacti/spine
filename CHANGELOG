@@ -5,6 +5,7 @@ The Cacti Group | spine
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site
+-feature#6001: Extend SYSTEM STATS
 -feature: Make spine work with Stream feature
 
 1.2.28
