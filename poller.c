@@ -1969,7 +1969,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
-	buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
+	if (set.spine_log_level == 1) {
+		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
+	}
 
 	SPINE_FREE(error_string);
 	SPINE_FREE(buf_size);
