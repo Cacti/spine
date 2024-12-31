@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -236,7 +236,7 @@ int main(int argc, char *argv[]) {
 	int threads_missing = -1;
 	int threads_count;
 
-	/* we must initilize snmp in the main thread */
+	/* we must initialize snmp in the main thread */
 	struct snmp_session session;
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
@@ -469,7 +469,7 @@ int main(int argc, char *argv[]) {
 	}
 	#endif
 
-	/* we require either both the first and last hosts, or niether host */
+	/* we require either both the first and last hosts, or neither host */
 	if ((HOSTID_DEFINED(set.start_host_id) != HOSTID_DEFINED(set.end_host_id)) &&
 		(!strlen(set.host_id_list))) {
 		die("ERROR: must provide both -f/-l, a hostlist (-H/--hostlist), or neither");
@@ -729,8 +729,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	/**
-     * We must initilize the first snmp session
-     * in the main thread to initilize the mib files
+     * We must initialize the first snmp session
+     * in the main thread to initialize the mib files
      * and other structures.  After which it's snmp
      * is thread safe in threads
      */

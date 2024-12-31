@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -126,7 +126,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
  *  Given a pointer to a database and the name of a setting, and value of that setting
  *  set the Cacti setting in the database to the value.
  *
- *  \return true for sucessful or false for failed
+ *  \return true for successful or false for failed
  *
  */
 int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
@@ -1091,7 +1091,7 @@ int read_spine_config(char *file) {
 					set.log_destination = LOGDEST_BOTH;
 				} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
 				else if (!set.stderr_notty) {
-					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
+					fprintf(stderr,"WARNING: Unrecognized directive: %s=%s in %s\n", p1, p2, file);
 				}
 
 				*p1 = '\0';
@@ -1230,7 +1230,7 @@ char * get_date_format() {
 
 /*! \fn void spine_log(const char *format, ...)
  *  \brief output's log information to the desired cacti logfile.
- *  \param *logmessage a pointer to the pre-formated log message.
+ *  \param *logmessage a pointer to the pre-formatted log message.
  *
  */
 int spine_log(const char *format, ...) {
@@ -1388,7 +1388,7 @@ int spine_log(const char *format, ...) {
 }
 
 /*! \fn int file_exists(const char *filename)
- *  \brief checks for the existance of a file.
+ *  \brief checks for the existence of a file.
  *  \param *filename the name of the file to check for.
  *
  *  \return TRUE if found FALSE if not.
@@ -1677,7 +1677,7 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 #pragma GCC diagnostic pop
 
 /*! \fn double get_time_as_double()
- *  \brief fetches system time as a double-precison value
+ *  \brief fetches system time as a double-precision value
  *
  *  \return system time (at microsecond resolution) as a double
  */
@@ -1932,7 +1932,7 @@ void checkAsRoot() {
 		SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown"));
 	}
 
-	/* Add priviledge to send/receive ICMP packets */
+	/* Add privilege to send/receive ICMP packets */
 	if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0) {
 		SPINE_LOG_DEBUG(("WARNING: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
 	}

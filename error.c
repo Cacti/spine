@@ -25,13 +25,13 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
 */
 
-/* These functions handle simple singal handling functions for Spine.  It was
+/* These functions handle simple signal handling functions for Spine.  It was
    written to handle specifically issues with the Solaris threading model in
    version 2.8.
 */
@@ -40,7 +40,7 @@
 #include "spine.h"
 
 /*! \fn static void spine_signal_handler(int spine_signal)
- *  \brief interupts the os default signal handler as appropriate.
+ *  \brief interrupts the os default signal handler as appropriate.
  *
  */
 static void spine_signal_handler(int spine_signal) {

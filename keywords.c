@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -106,7 +106,7 @@ static const struct keyword actions[] = {
  *  \param dflt the default value to be returned if the string can not be found
  *
  *	Given a table of keywords and a user's word, look that word up in the
- *	table and return the value associted with it. If the word is not found,
+ *	table and return the value associated with it. If the word is not found,
  *	return the user-provide default value.
  *
  *	The default-value parameter can be used for either the actual default

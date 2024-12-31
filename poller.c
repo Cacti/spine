@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -122,7 +122,7 @@ void *child(void *arg) {
  *
  *	This function is core to Spine.  It will take a host_id and then poll it.
  *
- *  Prior to the poll, the system will ping the host to verifiy that it is up.
+ *  Prior to the poll, the system will ping the host to verify that it is up.
  *  In addition, the system will check to see if any reindexing of data query's
  *  is required.
  *
@@ -965,7 +965,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 									SPINE_FREE(poll_result);
 
-									// Check the modern uptimeInsance second
+									// Check the modern snmp engine uptime in seconds
 									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
 									if (poll_result && is_numeric(poll_result)) {
@@ -1242,7 +1242,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	}
 
 	if (num_rows > 0) {
-		/* retreive each hosts polling items from poller cache and load into array */
+		/* retrieve each hosts polling items from poller cache and load into array */
 		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
 
 		i = 0;
@@ -1849,7 +1849,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				new_buffer = TRUE;
 			}
 
-			/* if this is our first pass, or we just outputted to the database, need to change the delimeter */
+			/* if this is our first pass, or we just outputted to the database, need to change the delimiter */
 			if (new_buffer) {
 				result_string[0] = ' ';
 			} else {

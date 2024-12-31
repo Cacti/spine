@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -413,7 +413,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* record end time */
 				end_time = get_time_as_double();
 
-				/* caculate total time */
+				/* calculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
 				if (total_time < host_timeout) {
@@ -586,7 +586,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
 
-	/* initilize the socket */
+	/* initialize the socket */
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	/* hostname must be nonblank */
@@ -651,7 +651,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* record end time */
 				end_time = get_time_as_double();
 
-				/* caculate total time */
+				/* calculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
 				/* check to see which socket talked */
@@ -743,7 +743,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
 
-	/* initilize the socket */
+	/* initialize the socket */
 	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	/* initialize total time */
@@ -778,7 +778,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				/* record end time */
 				end_time = get_time_as_double();
 
-				/* caculate total time */
+				/* calculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
 				if ((return_code == -1 && errno == ECONNREFUSED && host->ping_method == PING_TCP_CLOSED) || return_code == 0) {

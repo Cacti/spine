@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -181,7 +181,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				error_count++;
 
 				if (error_count > 30) {
-					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occured!, SQL Fragment:'%s'", query_frag));
+					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 					exit(1);
 				}
 
@@ -202,7 +202,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 }
 
 /*! \fn void db_connect(char *database, MYSQL *mysql)
- *  \brief opens a connection to a MySQL databse.
+ *  \brief opens a connection to a MySQL database.
  *  \param database a string pointer to the database name
  *  \param mysql a pointer to a mysql database connection object
  *
@@ -524,7 +524,7 @@ void db_release_connection(int type, int id) {
 
 /*! \fn int append_hostrange(char *obuf, const char *colname, const config_t *set)
  *  \brief appends a host range to a sql select statement
- *  \param obuf the sql select statment to have the host range appended
+ *  \param obuf the sql select statement to have the host range appended
  *  \param colname the sql column name that will have the host range checked
  *  \param set global runtime settings
  *
@@ -550,7 +550,7 @@ int append_hostrange(char *obuf, const char *colname) {
 }
 
 /*! \fn void db_escape(MYSQL *mysql, char *output, int max_size, const char *input)
- *  \brief Escapse a text string to make it safe for mysql insert/updates
+ *  \brief Escapes a text string to make it safe for mysql insert/updates
  *  \param mysql the connection object
  *  \param output a pointer to the output string
  *  \param a pointer to the input string
