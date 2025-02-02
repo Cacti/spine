@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.29
+-no changes
+
 1.2.28
 -issue#350: When using Ping or SNMP Uptime, host is not always detected properly
 -issue#351: Add Ping Method where connection refused assumes host is up
