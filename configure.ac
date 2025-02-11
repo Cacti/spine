@@ -318,11 +318,11 @@ if test "x$SNMP_DIR" != "x"; then
     test -f $SNMP_DIR/$i/net-snmp-config.h  && SNMP_INCDIR=$SNMP_DIR$i && break
   done
 
-  # Accomodate 64-Bit Libraries
+  # Accommodate 64-Bit Libraries
   test -f $SNMP_DIR/lib64/libnetsnmp.a -o -f $SNMP_DIR/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib64
 
   if test -z "$SNMP_LIBDIR"; then
-    # Accomodate 32-Bit Libraries
+    # Accommodate 32-Bit Libraries
     test -f $SNMP_DIR/lib/libnetsnmp.a -o -f $SNMP_DIR/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$SNMP_DIR/lib
   fi
 else
@@ -335,14 +335,14 @@ else
     test -f $i/snmp/include/net-snmp/net-snmp-config.h && SNMP_INCDIR=$i/snmp/include/net-snmp && break
   done
 
-  # Accomodate 64-Bit Libraries
+  # Accommodate 64-Bit Libraries
   for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/snmp /usr/local/snmp; do
     test -f $i/lib64/libnetsnmp.a -o -f $i/lib64/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib64 && break
   done
 
   # Only check for 32 Bit libraries if the 64 bit are not found
   if test -z "$SNMP_LIBDIR"; then
-    # Accomodate 32-Bit Libraries
+    # Accommodate 32-Bit Libraries
     for i in /usr /usr/local /usr/pkg /usr/snmp /opt /opt/net-snmp /opt/snmp /usr/local/snmp; do
       test -f $i/lib/libnetsnmp.a -o -f $i/lib/libnetsnmp.$ShLib && SNMP_LIBDIR=$i/lib && break
     done
@@ -438,7 +438,7 @@ AC_ARG_ENABLE(strict-snmp,
     )
 if test "$ENABLED_SNMP_VERSION" = "yes"; then
   AC_MSG_RESULT([yes])
-  AC_DEFINE(VERIFY_PACKAGE_VERSION, 1, If we are going to force Net-SNMP library and header versons to be the same)
+  AC_DEFINE(VERIFY_PACKAGE_VERSION, 1, If we are going to force Net-SNMP library and header versions to be the same)
 else
   AC_MSG_RESULT([no])
 fi

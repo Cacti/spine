@@ -17,7 +17,7 @@
 # |   - Larry Adams (current development and enhancements)                  |
 # |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
 # |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
-# |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+# |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
 # +-------------------------------------------------------------------------+
 # | Settings                                                                |
 # +-------------------------------------------------------------------------+

@@ -25,7 +25,7 @@
  |   - Larry Adams (current development and enhancements)                  |
  |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
  |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implimentation details) |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
  +-------------------------------------------------------------------------+
  | - Cacti - http://www.cacti.net/                                         |
  +-------------------------------------------------------------------------+
@@ -115,7 +115,7 @@
  *
  * The conditional tests are modelled after the assert() mechanism, which
  * checks the first parameter, and if it's true, it evaluates the second
- * paramater. If the test is not true, then the second part is *guaranteed*
+ * parameter. If the test is not true, then the second part is *guaranteed*
  * not to be evaluated.
  *
  * The (void) prefix is to forestall compiler warnings about expressions
@@ -605,7 +605,7 @@ typedef struct name_port {
 
 /*! MySQL Connection Pool Structure
  *
- * This structure holds the mysql connetion pool object.
+ * This structure holds the mysql connection pool object.
  */
 typedef struct db_connection {
 	int   id;
