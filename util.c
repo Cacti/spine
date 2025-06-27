@@ -1041,7 +1041,6 @@ void poller_push_data_to_main() {
 int read_spine_config(char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
-	char *buffer;
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
 
@@ -1058,7 +1057,7 @@ int read_spine_config(char *file) {
 		}
 
 		while (!feof(fp)) {
-			buffer = fgets(buff, BUFSIZE, fp);
+			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
@@ -1243,7 +1242,6 @@ int spine_log(const char *format, ...) {
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
-	struct timeval now;
 
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
@@ -1459,8 +1457,6 @@ int is_ipaddress(const char *string) {
  *
  */
 int is_numeric(char *string) {
-	long local_lval;
-	double local_dval;
 	char *end_ptr_long, *end_ptr_double;
 	int conv_base=10;
 	int length;
@@ -1473,7 +1469,7 @@ int is_numeric(char *string) {
 
  	/* check for an integer */
 	errno = 0;
-	local_lval = strtol(string, &end_ptr_long, conv_base);
+	strtol(string, &end_ptr_long, conv_base);
 
 	if (errno != ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
@@ -1492,7 +1488,7 @@ int is_numeric(char *string) {
 
  	/* check for a float */
 	errno = 0;
-	local_dval = strtod(string, &end_ptr_double);
+	strtod(string, &end_ptr_double);
 	if (errno != ERANGE) {
 		if (end_ptr_double == string + length) { /* floating point string */
 			return TRUE;
@@ -2001,7 +1997,6 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
-	int       i;
 	int       major, minor, point;
 	int       cacti_version;
 
@@ -2038,7 +2033,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	}
 }
 
-char *regex_replace(const char *exp, const char *value) {
+char *regex_replace(char *exp, char *value) {
 	regex_t regex;
 	int reti;
 	char msgbuf[100];

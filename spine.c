@@ -203,7 +203,7 @@ int main(int argc, char *argv[]) {
 	int device_threads;
 	sem_t thread_init_sem;
 	int a_threads_value;
-	struct timespec until_spec;
+	//struct timespec until_spec;
 
 	start_time = get_time_as_double();
 	total_time = 0;
@@ -707,8 +707,8 @@ int main(int argc, char *argv[]) {
 	sem_init(&thread_init_sem, 0, 1);
 
 	/* specify the point of timeout for timedwait semaphores */
-	until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
-	until_spec.tv_nsec = 0;
+	//until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
+	//until_spec.tv_nsec = 0;
 
 	sem_getvalue(&available_threads, &a_threads_value);
 	SPINE_LOG_HIGH(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
@@ -832,7 +832,6 @@ int main(int argc, char *argv[]) {
 		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
-		int wait_retries = 0;
 		int loop_count = 0;
 		double progress_time = 0;
 		unsigned int sem_err = 0;

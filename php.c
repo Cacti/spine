@@ -508,7 +508,6 @@ int php_init(int php_process) {
 void php_close(int php_process) {
 	int i;
 	int num_processes;
-	ssize_t bytes;
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
@@ -538,7 +537,7 @@ void php_close(int php_process) {
 		if (phpp->php_write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
 
-			bytes = write(phpp->php_write_fd, quit, strlen(quit));
+			write(phpp->php_write_fd, quit, strlen(quit));
 
 			close(phpp->php_write_fd);
 			phpp->php_write_fd = -1;
