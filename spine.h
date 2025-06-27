@@ -468,7 +468,7 @@ typedef struct target_struct {
 	char   rrd_name[30];
 	char   rrd_path[255];
 	int    rrd_num;
-	char   arg1[512];
+	char   arg1[1024];
 	char   arg2[255];
 	char   arg3[255];
 } target_t;
@@ -480,7 +480,7 @@ typedef struct target_struct {
  */
 typedef struct snmp_oids {
 	int    array_position;
-	char   oid[512];
+	char   oid[1024];
 	char   result[RESULTS_BUFFER];
 } snmp_oids_t;
 
@@ -573,7 +573,7 @@ typedef struct host_struct {
 typedef struct host_reindex_struct {
 	char   op[4];
 	char   assert_value[100];
-	char   arg1[512];
+	char   arg1[1024];
 	int    data_query_id;
 	int    action;
 } reindex_t;
