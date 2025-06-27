@@ -443,28 +443,6 @@ else
   AC_MSG_RESULT([no])
 fi
 
-# See if we can support backtracing
-AC_MSG_CHECKING([if we can support backtracing])
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-    #include <stdlib.h>
-    #include <execinfo.h>
-  ]], [[
-    void *array[10];
-    size_t size;
-
-    // get void*'s for all entries on the stack
-    size = backtrace(array, 10);
-    if (size) {
-      exit(0);
-    } else {
-      exit(1);
-    }
-  ]])],[  AC_MSG_RESULT(yes)
-     AC_DEFINE(HAVE_EXECINFO_H,1,[Do we have backtracing capabilities?])
-  ],[AC_MSG_RESULT(no)
-])
-
-# See if we can support backtracing
 AC_MSG_CHECKING([if we can support mysql/mariadb retry count])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
