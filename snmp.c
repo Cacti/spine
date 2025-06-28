@@ -483,8 +483,16 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 				if (vars->type == SNMP_NOSUCHOBJECT) {
 					SET_UNDEFINED(result_string);
-					status = STAT_ERROR;
-					SPINE_LOG_HIGH(("ERROR: No such Object for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+
+					if (!strstr(snmp_oid, ".1.3.6.1.2.1.1.1.0") && !strstr(snmp_oid, ".1.3.6.1.2.1.1.3.0")) {
+						SET_UNDEFINED(result_string);
+						status = STAT_ERROR;
+						SPINE_LOG_DEBUG(("DEBUG: OID '%s' for Device[%d], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id));
+					} else {
+						SPINE_LOG_HIGH(("DEBUG: OID '%s' for Device[%d], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id));
+						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
+					}
 				} else if (vars->type == SNMP_NOSUCHINSTANCE) {
 					SET_UNDEFINED(result_string);
 					status = STAT_ERROR;
