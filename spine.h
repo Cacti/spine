@@ -346,7 +346,6 @@ typedef struct config_struct {
 	int    stderr_notty;
 	/* general configuration/runtime settings */
 	int    poller_id;
-	int    poller_id_exists;
 	int    poller_interval;
 	int    parent_fork;
 	int    num_parent_processes;

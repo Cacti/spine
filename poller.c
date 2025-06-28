@@ -80,7 +80,6 @@ void *child(void *arg) {
 	int host_errors;
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
-	extern poller_thread_t** details;
 
 	host_errors = 0;
 
@@ -164,7 +163,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int  *buf_errors;
 	int  *buf_size;
 	char *error_string;
-	int  error_len = 0;
 
 	int    num_rows;
 	int    assert_fail = FALSE;
@@ -946,7 +944,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
 								     // Ensure uptime is empty to start with
-								     snprintf(sysUptime, BUFSIZE, "");
+								     sysUptime[0] = '\0';
 
 									// Check the legacy poll result first
 									poll_result = snmp_get(host, reindex->arg1);
@@ -1938,6 +1936,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
 	}
 
+	#pragma GCC diagnostic push
+	#if (defined(__GNUC__) && (__GNUC__ > 7)) || (__GNUC__ == 7 && defined(__GNUC_MINOR__) && __GNUC_MINOR__ > 1)
+	#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+	#endif
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		if (remote_cnn != NULL) {
 			db_release_connection(REMOTE, remote_cnn->id);
@@ -1945,6 +1947,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
 		}
 	}
+	#pragma GCC diagnostic pop
 
 	mysql_thread_end();
 
@@ -2188,9 +2191,9 @@ int validate_result(char *result) {
 char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int cmd_fd;
 	int pid;
-	int close_fd = TRUE;
 
 	#ifdef USING_TPOPEN
+	int close_fd = TRUE;
 	FILE *fd;
 	#endif
 
@@ -2233,7 +2236,6 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	/* used for checking executable status */
 	char executable[BUFSIZE];
 	char *saveptr = NULL;
-	char *token;
 
 	pthread_cleanup_push(child_cleanup_script, NULL);
 
@@ -2270,13 +2272,13 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		/* peel the executable from the command */
 		saveptr = proc_command;
 		sprintf(executable, "%s", proc_command);
-		token = strtok_r(executable, " ", &saveptr);
+		strtok_r(executable, " ", &saveptr);
 
 		/* cheesy little hack to add /usr/bin/ if its not included */
 		if (strstr(executable, "/") == NULL) {
 			saveptr = proc_command;
 			sprintf(executable, "/usr/bin/%s", proc_command);
-			token = strtok_r(executable, " ", &saveptr);
+			strtok_r(executable, " ", &saveptr);
 		}
 
 		SPINE_LOG_DEBUG(("The executable is '%s' in \'%s\'", executable, proc_command));
@@ -2313,7 +2315,10 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 							case EBADF:
 								SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
 								SET_UNDEFINED(result_string);
+
+								#ifdef USING_TPOPEN
 								close_fd = FALSE;
+								#endif
 								break;
 							case EINTR:
 								#ifndef SOLAR_THREAD
@@ -2341,18 +2346,29 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 								} else {
 									SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
 									SET_UNDEFINED(result_string);
+
+									#ifdef USING_TPOPEN
 									close_fd = FALSE;
+									#endif
 								}
 								break;
 							case EINVAL:
 								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
 								SET_UNDEFINED(result_string);
+
+								#ifdef USING_TPOPEN
 								close_fd = FALSE;
+								#endif
+
 								break;
 							default:
 								SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
 								SET_UNDEFINED(result_string);
+
+								#ifdef USING_TPOPEN
 								close_fd = FALSE;
+								#endif
+
 								break;
 						}
 

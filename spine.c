@@ -203,7 +203,6 @@ int main(int argc, char *argv[]) {
 	int device_threads;
 	sem_t thread_init_sem;
 	int a_threads_value;
-	struct timespec until_spec;
 
 	start_time = get_time_as_double();
 	total_time = 0;
@@ -487,12 +486,12 @@ int main(int argc, char *argv[]) {
 			valid_conf_file = TRUE;
 		}
 	} else {
-		if (!(conf_file = calloc(CONFIG_PATHS, DBL_BUFSIZE))) {
+		if (!(conf_file = calloc(CONFIG_PATHS, LRG_BUFSIZE))) {
 			die("ERROR: Fatal malloc error: spine.c conf_file!");
 		}
 
 		for (i=0; i<CONFIG_PATHS; i++) {
-			snprintf(conf_file, DBL_BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
+			snprintf(conf_file, LRG_BUFSIZE, "%s%s", config_paths[i], DEFAULT_CONF_FILE);
 
 			if (read_spine_config(conf_file) >= 0) {
 				valid_conf_file = TRUE;
@@ -500,7 +499,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (i == CONFIG_PATHS-1) {
-				snprintf(conf_file, DBL_BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
+				snprintf(conf_file, LRG_BUFSIZE, "%s%s", config_paths[0], DEFAULT_CONF_FILE);
 			}
 		}
 	}
@@ -621,19 +620,6 @@ int main(int argc, char *argv[]) {
 		set.php_current_server = 0;
 	}
 
-	/* determine if the poller_id field exists in the host table */
-	result = db_query(&mysql, LOCAL, "SHOW COLUMNS FROM host LIKE 'poller_id'");
-	if (mysql_num_rows(result)) {
-		set.poller_id_exists = TRUE;
-	} else {
-		set.poller_id_exists = FALSE;
-
-		if (set.poller_id > 0) {
-			SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
-		}
-	}
-	db_free_result(result);
-
 	/* obtain the list of hosts to poll */
 	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
 	qp += sprintf(qp, " WHERE disabled = ''");
@@ -644,9 +630,7 @@ int main(int argc, char *argv[]) {
 		qp += sprintf(qp, " AND id IN(%s)", set.host_id_list);
 	}
 
-	if (set.poller_id_exists) {
-		qp += sprintf(qp, " AND host.poller_id = %i", set.poller_id);
-	}
+	qp += sprintf(qp, " AND host.poller_id = %i", set.poller_id);
 
 	qp += sprintf(qp, " ORDER BY picount DESC");
 
@@ -707,10 +691,6 @@ int main(int argc, char *argv[]) {
 
 	/* initialize thread initialization semaphore */
 	sem_init(&thread_init_sem, 0, 1);
-
-	/* specify the point of timeout for timedwait semaphores */
-	until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
-	until_spec.tv_nsec = 0;
 
 	sem_getvalue(&available_threads, &a_threads_value);
 	SPINE_LOG_HIGH(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
@@ -834,7 +814,6 @@ int main(int argc, char *argv[]) {
 		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
-		int wait_retries = 0;
 		int loop_count = 0;
 		double progress_time = 0;
 		unsigned int sem_err = 0;

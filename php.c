@@ -300,8 +300,8 @@ int php_init(int php_process) {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
 	pid_t  pid;
-	char poller_id[TINY_BUFSIZE];
-	char mode[TINY_BUFSIZE];
+	char poller_id[BUFSIZE];
+	char mode[BUFSIZE];
 	char *argv[7];
 	int  cancel_state;
 	char *result_string = 0;
@@ -341,7 +341,7 @@ int php_init(int php_process) {
 			argv[1] = "-q";
 			argv[2] = set.path_php_server;
 			argv[3] = "spine";
-			snprintf(poller_id, TINY_BUFSIZE, "%d", set.poller_id);
+			snprintf(poller_id, BUFSIZE, "%d", set.poller_id);
 			argv[4] = poller_id;
 			argv[5] = NULL;
 		} else if (set.poller_id > 1) {
@@ -350,13 +350,13 @@ int php_init(int php_process) {
 			argv[2] = set.path_php_server;
 			argv[3] = "--environ=spine";
 
-			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
+			snprintf(poller_id, BUFSIZE, "--poller=%d", set.poller_id);
 			argv[4] = poller_id;
 
 			if (set.mode == REMOTE_ONLINE) {
-				snprintf(mode, TINY_BUFSIZE, "--mode=online");
+				snprintf(mode, BUFSIZE, "--mode=online");
 			} else {
-				snprintf(mode, TINY_BUFSIZE, "--mode=offline");
+				snprintf(mode, BUFSIZE, "--mode=offline");
 			}
 			argv[5] = mode;
 
@@ -366,7 +366,7 @@ int php_init(int php_process) {
 			argv[1] = "-q";
 			argv[2] = set.path_php_server;
 			argv[3] = "--environ=spine";
-			snprintf(poller_id, TINY_BUFSIZE, "--poller=%d", set.poller_id);
+			snprintf(poller_id, BUFSIZE, "--poller=%d", set.poller_id);
 			argv[4] = poller_id;
 
 			argv[5] = NULL;
@@ -508,7 +508,6 @@ int php_init(int php_process) {
 void php_close(int php_process) {
 	int i;
 	int num_processes;
-	ssize_t bytes;
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
@@ -538,7 +537,7 @@ void php_close(int php_process) {
 		if (phpp->php_write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
 
-			bytes = write(phpp->php_write_fd, quit, strlen(quit));
+			write(phpp->php_write_fd, quit, strlen(quit));
 
 			close(phpp->php_write_fd);
 			phpp->php_write_fd = -1;

@@ -687,13 +687,11 @@ void read_config_options() {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
-		if (set.poller_id_exists) {
-			sqlp += sprintf(sqlp, " AND poller_id=%i", set.poller_id);
-		}
-		sqlp += sprintf(sqlp, " LIMIT 1");
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -707,13 +705,11 @@ void read_config_options() {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-		sqlp += sprintf(sqlp, " AND host_id IN(%s)", set.host_id_list);
-		if (set.poller_id_exists) {
-			sqlp += sprintf(sqlp, " AND poller_id=%i", set.poller_id);
-		}
-		sqlp += sprintf(sqlp, " LIMIT 1");
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -1040,7 +1036,6 @@ void poller_push_data_to_main() {
 int read_spine_config(char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
-	char *buffer;
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
 
@@ -1057,7 +1052,7 @@ int read_spine_config(char *file) {
 		}
 
 		while (!feof(fp)) {
-			buffer = fgets(buff, BUFSIZE, fp);
+			fgets(buff, BUFSIZE, fp);
 			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
@@ -1242,14 +1237,13 @@ int spine_log(const char *format, ...) {
 	time_t nowbin;
 	struct tm now_time;
 	struct tm *now_ptr;
-	struct timeval now;
 
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
 
 	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
-	char flogmessage[LOGSIZE];     /* Formatted Log Message */
+	char flogmessage[LRG_LOGSIZE];     /* Formatted Log Message */
 	char stdoutmessage[LRG_LOGSIZE];   /* Message for stdout */
 
 	double cur_time;
@@ -1458,8 +1452,6 @@ int is_ipaddress(const char *string) {
  *
  */
 int is_numeric(char *string) {
-	long local_lval;
-	double local_dval;
 	char *end_ptr_long, *end_ptr_double;
 	int conv_base=10;
 	int length;
@@ -1472,7 +1464,7 @@ int is_numeric(char *string) {
 
  	/* check for an integer */
 	errno = 0;
-	local_lval = strtol(string, &end_ptr_long, conv_base);
+	strtol(string, &end_ptr_long, conv_base);
 
 	if (errno != ERANGE) {
 		if (end_ptr_long == string + length) { /* integer string */
@@ -1491,7 +1483,7 @@ int is_numeric(char *string) {
 
  	/* check for a float */
 	errno = 0;
-	local_dval = strtod(string, &end_ptr_double);
+	strtod(string, &end_ptr_double);
 	if (errno != ERANGE) {
 		if (end_ptr_double == string + length) { /* floating point string */
 			return TRUE;
@@ -1658,6 +1650,7 @@ char *add_slashes(char *string) {
 #pragma GCC diagnostic push
 #if (defined(__GNUC__) && (__GNUC__ > 7)) || (__GNUC__ == 7 && defined(__GNUC_MINOR__) && __GNUC_MINOR__ > 1)
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 #endif
 char *strncopy(char *dst, const char *src, size_t obuf) {
 	assert(dst != 0);
@@ -2000,7 +1993,6 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
-	int       i;
 	int       major, minor, point;
 	int       cacti_version;
 
