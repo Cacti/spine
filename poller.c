@@ -863,10 +863,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
 		}
 
-		#pragma GCC diagnostic push
-		#if (defined(__GNUC__) && (__GNUC__ > 7)) || (__GNUC__ == 7 && defined(__GNUC_MINOR__) && __GNUC_MINOR__ > 1)
-		#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-		#endif
 		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 			if (remote_cnn != NULL) {
 				db_release_connection(REMOTE, remote_cnn->id);
@@ -874,7 +870,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
 			}
 		}
-		#pragma GCC diagnostic pop
 
 		mysql_thread_end();
 
