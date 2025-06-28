@@ -688,13 +688,11 @@ void read_config_options() {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
-		if (set.poller_id_exists) {
-			sqlp += sprintf(sqlp, " AND poller_id=%i", set.poller_id);
-		}
-		sqlp += sprintf(sqlp, " LIMIT 1");
+		sqlp += snprintf(sqlp, BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -708,13 +706,11 @@ void read_config_options() {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += sprintf(sqlp, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += sprintf(sqlp, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-		sqlp += sprintf(sqlp, " AND host_id IN(%s)", set.host_id_list);
-		if (set.poller_id_exists) {
-			sqlp += sprintf(sqlp, " AND poller_id=%i", set.poller_id);
-		}
-		sqlp += sprintf(sqlp, " LIMIT 1");
+		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
+		sqlp += snprintf(sqlp, BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);

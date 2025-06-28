@@ -621,12 +621,6 @@ int main(int argc, char *argv[]) {
 		set.php_current_server = 0;
 	}
 
-	/* determine if the poller_id field exists in the host table */
-	set.poller_id_exists = db_column_exists(&mysql, LOCAL, "host", "poller_id");
-	if (!set.poller_id_exists && set.poller_id > 0) {
-		SPINE_LOG(("WARNING: PollerID > 0, but 'host' table does NOT contain the poller_id column!!"));
-	}
-
 	/* obtain the list of hosts to poll */
 	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
 	qp += sprintf(qp, " WHERE disabled = ''");
@@ -639,10 +633,7 @@ int main(int argc, char *argv[]) {
 		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
 	}
 
-	if (set.poller_id_exists) {
-		qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
-	}
-
+	qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
 	qp += sprintf(qp, " ORDER BY picount DESC");
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
