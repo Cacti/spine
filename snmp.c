@@ -482,8 +482,6 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 				vars = response->variables;
 
 				if (vars->type == SNMP_NOSUCHOBJECT) {
-					SET_UNDEFINED(result_string);
-
 					if (!strstr(snmp_oid, ".1.3.6.1.2.1.1.1.0") && !strstr(snmp_oid, ".1.3.6.1.2.1.1.3.0")) {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
