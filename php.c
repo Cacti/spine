@@ -508,6 +508,7 @@ int php_init(int php_process) {
 void php_close(int php_process) {
 	int i;
 	int num_processes;
+	int len;
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
@@ -537,10 +538,12 @@ void php_close(int php_process) {
 		if (phpp->php_write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
 
-			write(phpp->php_write_fd, quit, strlen(quit));
+			len = write(phpp->php_write_fd, quit, strlen(quit));
 
-			close(phpp->php_write_fd);
-			phpp->php_write_fd = -1;
+			if (len >= 0) {
+				close(phpp->php_write_fd);
+				phpp->php_write_fd = -1;
+			}
 
 			/* wait before killing php */
 			#ifndef SOLAR_THREAD

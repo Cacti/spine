@@ -339,7 +339,8 @@ void read_config_options() {
 	int        num_rows;
 	int        mode;
 	char       web_root[BUFSIZE];
-	char       sqlbuf[SMALL_BUFSIZE], *sqlp = sqlbuf;
+	char       sqlbuf[HUGE_BUFSIZE];
+	char       *sqlp = sqlbuf;
 	const char *res;
 	char       spine_capabilities[SMALL_BUFSIZE];
 
@@ -1039,6 +1040,7 @@ int read_spine_config(char *file) {
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
+	char *chars;
 
 	if ((fp = fopen(file, "rb")) == NULL) {
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
@@ -1053,8 +1055,9 @@ int read_spine_config(char *file) {
 		}
 
 		while (!feof(fp)) {
-			fgets(buff, BUFSIZE, fp);
-			if (!feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
+			chars = fgets(buff, BUFSIZE, fp);
+
+			if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
 				sscanf(buff, "%15s %255s", p1, p2);
 
 				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
