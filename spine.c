@@ -532,6 +532,9 @@ int main(int argc, char *argv[]) {
 		debug_devices[0] = '\0';
 	}
 
+	/* initialize mysql objects for threads */
+	mysql_library_init(0, NULL, NULL);
+
 	/* connect for main loop */
 	db_connect(LOCAL, &mysql);
 
@@ -1065,6 +1068,7 @@ int main(int argc, char *argv[]) {
 	SPINE_FREE(conf_file);
 	SPINE_FREE(debug_devices);
 	SPINE_FREE(host_time);
+	SPINE_FREE(php_processes);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
