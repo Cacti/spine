@@ -488,6 +488,7 @@ int php_init(int php_process) {
 		free(result_string);
 	}
 
+	free(command);
 
 	return TRUE;
 }

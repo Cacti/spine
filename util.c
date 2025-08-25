@@ -77,7 +77,7 @@ void set_option(const char *option, const char *value) {
  *
  */
 static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[256];
+	char      qstring[LRG_BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -129,7 +129,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
  *
  */
 int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
-	char  qstring[512];
+	char  qstring[LRG_BUFSIZE];
 	int   result = 0;
 
 	assert(psql    != 0);
@@ -169,7 +169,7 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
  *
  */
 static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[256];
+	char      qstring[LRG_BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -264,7 +264,7 @@ static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) 
  *
  */
 static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[256];
+	char      qstring[LRG_BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -1097,6 +1097,8 @@ int read_spine_config(char *file) {
 		}
 
 		if (strlen(set.db_pass) == 0) *set.db_pass = '\0';
+
+		fclose(fp);
 
 		return 0;
 	}
@@ -1992,7 +1994,7 @@ void checkAsRoot() {
  *
  */
 int get_cacti_version(MYSQL *psql, int mode) {
-	char      qstring[256];
+	char      qstring[LRG_BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -2014,10 +2016,15 @@ int get_cacti_version(MYSQL *psql, int mode) {
 				db_free_result(result);
 
 				if (STRIMATCH(retval, "new_install")) {
+					SPINE_FREE(retval);
+
 					return 0;
 				} else {
 					sscanf(retval, "%d.%d.%d", &major, &minor, &point);
 					cacti_version = (major * 1000) + (minor * 100) + (point * 1);
+
+					SPINE_FREE(retval);
+
 					return cacti_version;
 				}
 			}else{
