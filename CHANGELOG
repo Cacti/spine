@@ -4,6 +4,7 @@ The Cacti Group | spine
 -issue#365: Removing Backtrace Support
 -issue#366: Failing to actually a poll device that returns "NoSuchObject"
 -issue#370: Errors experienced with very long OIDs
+-issue#374: Error DES is no longer supported on this system
 -issue: Clear up a few very minor leaks in spine
 
 1.2.29
