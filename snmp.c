@@ -216,7 +216,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, USM_AUTH_PROTO_MD5_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_MD5_LEN;
 			#else
-			SPINE_LOG(("SNMP: Device[%d] Error MD5 is no longer supported on this system.", host_id));
+			SPINE_LOG(("SNMP: Device[%i] Error MD5 is no longer supported on this system.", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA") == 0) {
@@ -227,7 +227,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC128SHA224AuthProtocol);
 			#else
-			SPINE_LOG(("SNMP: Device[%d] Error SHA224 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
+			SPINE_LOG(("SNMP: Device[%i] Error SHA224 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA256") == 0) {
@@ -235,7 +235,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC192SHA256AuthProtocol);
 			#else
-			SPINE_LOG(("SNMP: Device[%d] Error SHA256 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
+			SPINE_LOG(("SNMP: Device[%i] Error SHA256 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA384") == 0) {
@@ -243,7 +243,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC256SHA384_AUTH_LEN;
 			#else
-			SPINE_LOG(("SNMP: Device[%d] Error SHA384 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
+			SPINE_LOG(("SNMP: Device[%i] Error SHA384 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA512") == 0) {
@@ -251,7 +251,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC384SHA512_AUTH_LEN;
 			#else
-			SPINE_LOG(("SNMP: Device[%d] Error SHA512 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
+			SPINE_LOG(("SNMP: Device[%i] Error SHA512 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		}
@@ -264,7 +264,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				strlen(snmp_password),
 				session.securityAuthKey,
 				&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
-				SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from authentication pass phrase."));
+				SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication pass phrase.", host_id));
 			}
 		}
 
@@ -288,7 +288,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error DES is no longer supported on this system"));
+				SPINE_LOG(("SNMP: Device[%i] Error DES is no longer supported on this system", host_id));
 				return 0;
 				#endif
 			} else if (strcmp(snmp_priv_protocol, "AES") == 0) {
@@ -298,7 +298,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Device[%i] Error AES is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
 				return 0;
 				#endif
 			} else if (strcmp(snmp_priv_protocol, "AES128") == 0) {
@@ -320,7 +320,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES192;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES-192 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Device[%i] Error AES-192 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
 				return 0;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES256") == 0) {
@@ -330,7 +330,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES256;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES-256 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Device[%i] Error AES-256 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
 				return 0;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES192C") == 0) {
@@ -340,7 +340,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES192;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES192C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Device[%i] Error AES192C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
 				return 0;
 				#endif
 			} else if(strcmp(snmp_priv_protocol, "AES256C") == 0) {
@@ -350,20 +350,21 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES256;
 				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
 				#else
-				SPINE_LOG(("SNMP: Error AES256C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries."));
+				SPINE_LOG(("SNMP: Device[%i] Error AES256C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
 				return 0;
 				#endif
 			}
 
 			/* set the privacy key to the hashed version. */
-			SPINE_LOG_MEDIUM(("SNMP: Using privacy protocol(len): %s(%zu)", snmp_priv_protocol, session.securityPrivKeyLen));
+			SPINE_LOG_MEDIUM(("SNMP: Device[%i] Using privacy protocol(len): %s(%ld)", host_id, snmp_priv_protocol, session.securityPrivKeyLen));
+
 			if (generate_Ku(session.securityAuthProto,
 				session.securityAuthProtoLen,
 				(u_char *) snmp_priv_passphrase,
 				strlen(snmp_priv_passphrase),
 				session.securityPrivKey,
 				&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
-				SPINE_LOG(("SNMP: Error generating SNMPv3 Ku from privacy pass phrase."));
+				SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
 				return 0;
 			}
 		}
@@ -376,9 +377,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 	if (!sessp) {
 		if (is_debug_device(host_id)) {
-			SPINE_LOG(("ERROR: Problem initializing SNMP session '%s'", hostname));
+			SPINE_LOG(("ERROR: Device[%i] Problem initializing SNMP session '%s'", host_id, hostname));
 		} else {
-			SPINE_LOG_MEDIUM(("ERROR: Problem initializing SNMP session '%s'", hostname));
+			SPINE_LOG_MEDIUM(("ERROR: Device[%i] Problem initializing SNMP session '%s'", host_id, hostname));
 		}
 	}
 
@@ -424,7 +425,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	result_string[0] = '\0';
 
 	if (current_host->ignore_host) {
-		SPINE_LOG_HIGH(("WARNING: Skipped oid '%s' for Device[%d] as host ignore flag is active", snmp_oid, current_host->id));
+		SPINE_LOG_HIGH(("WARNING: Skipped oid '%s' for Device[%i] as host ignore flag is active", snmp_oid, current_host->id));
 		SET_UNDEFINED(result_string);
 		return result_string;
 	}
@@ -485,9 +486,9 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					if (!strstr(snmp_oid, ".1.3.6.1.2.1.1.1.0") && !strstr(snmp_oid, ".1.3.6.1.2.1.1.3.0")) {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
-						SPINE_LOG_DEBUG(("DEBUG: OID '%s' for Device[%d], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id));
+						SPINE_LOG_DEBUG(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id));
 					} else {
-						SPINE_LOG_HIGH(("DEBUG: OID '%s' for Device[%d], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id));
+						SPINE_LOG_HIGH(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id));
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 						snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 					}
@@ -497,21 +498,21 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 					// We will ignore the new OID error
 					if (!strstr(snmp_oid, ".1.3.6.1.6.3.10.2.1.3.0")) {
-						SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+						SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 					} else {
-						SPINE_LOG_DEBUG(("NOTE: Legacy SNMP agent found!  No per second Uptime oid found '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+						SPINE_LOG_DEBUG(("NOTE: Legacy SNMP agent found!  No per second Uptime oid found '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 					}
 				} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 					SET_UNDEFINED(result_string);
 					status = STAT_ERROR;
-					SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+					SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else {
 					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				}
 			} else {
-				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%d] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
+				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%i] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
 			}
 		} else if (response != NULL && response->variables != NULL) {
 			vars = response->variables;
@@ -519,30 +520,30 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			if (vars->type == SNMP_NOSUCHOBJECT) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-				SPINE_LOG_HIGH(("ERROR: No such Object for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+				SPINE_LOG_HIGH(("ERROR: No such Object for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 			} else if (vars->type == SNMP_NOSUCHINSTANCE) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
 
 				// We will ignore the new OID error
 				if (!strstr(snmp_oid, ".1.3.6.1.6.3.10.2.1.3.0")) {
-					SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+					SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else {
-					SPINE_LOG_DEBUG(("NOTE: Per second level uptime oid missing oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+					SPINE_LOG_DEBUG(("NOTE: Per second level uptime oid missing oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 				}
 			} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-				SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+				SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 			} else {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-				SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+				SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 			}
 		} else if (status == STAT_TIMEOUT) {
-			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 		} else {
-			SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%d] with Status[%d]",  snmp_oid, current_host->id, status));
+			SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 		}
 
 		if (response != NULL && status != STAT_DESCRIP_ERROR) {
