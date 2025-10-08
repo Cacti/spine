@@ -216,7 +216,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, USM_AUTH_PROTO_MD5_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_MD5_LEN;
 			#else
-			SPINE_LOG(("SNMP: Error MD5 is no longer supported on this system."));
+			SPINE_LOG(("SNMP: Device[%d] Error MD5 is no longer supported on this system.", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA") == 0) {
@@ -227,7 +227,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC128SHA224AuthProtocol);
 			#else
-			SPINE_LOG(("SNMP: Error SHA224 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
+			SPINE_LOG(("SNMP: Device[%d] Error SHA224 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA256") == 0) {
@@ -235,7 +235,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC192SHA256AuthProtocol);
 			#else
-			SPINE_LOG(("SNMP: Error SHA256 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
+			SPINE_LOG(("SNMP: Device[%d] Error SHA256 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA384") == 0) {
@@ -243,7 +243,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC256SHA384_AUTH_LEN;
 			#else
-			SPINE_LOG(("SNMP: Error SHA384 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
+			SPINE_LOG(("SNMP: Device[%d] Error SHA384 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA512") == 0) {
@@ -251,7 +251,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC384SHA512_AUTH_LEN;
 			#else
-			SPINE_LOG(("SNMP: Error SHA512 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+"));
+			SPINE_LOG(("SNMP: Device[%d] Error SHA512 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
 			return 0;
 			#endif
 		}
