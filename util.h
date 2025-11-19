@@ -77,7 +77,8 @@ unsigned long long hex2dec(char *str);
 char *regex_replace(char *exp, char *value);
 
 /* macro to copy string to string with an ending null */
-#define STRNCOPY(dst, src)	strncopy((dst), (src), sizeof(dst))
+#define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))
+#define USTRNCOPY(dst, src) ustrncopy((dst), (src), sizeof(dst))
 
 /* macro to duplicate string and die if fails */
 #define STRDUP_OR_DIE(dst, src, reason)	\

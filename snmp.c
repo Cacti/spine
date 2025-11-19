@@ -223,7 +223,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
 			session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
 		} else if (strcmp(snmp_auth_protocol, "SHA224") == 0) {
-			#if defined(HAVE_EVP_SHA224) && defined(NETSNMP_USMAUTH_HMAC128SHA224)
+			#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC128SHA224AuthProtocol);
 			#else
@@ -231,7 +231,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA256") == 0) {
-			#if defined(HAVE_EVP_SHA224) && defined(NETSNMP_USMAUTH_HMAC192SHA256)
+			#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol));
 			session.securityAuthProtoLen = OID_LENGTH(usmHMAC192SHA256AuthProtocol);
 			#else
@@ -239,7 +239,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA384") == 0) {
-			#if defined(HAVE_EVP_SHA384) && defined(NETSNMP_USMAUTH_HMAC256SHA384)
+			#if defined(NETSNMP_USMAUTH_HMAC256SHA384)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC256SHA384_AUTH_LEN;
 			#else
@@ -247,7 +247,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 			#endif
 		} else if (strcmp(snmp_auth_protocol, "SHA512") == 0) {
-			#if defined(HAVE_EVP_SHA384) && defined(NETSNMP_USMAUTH_HMAC384SHA512)
+			#if defined(NETSNMP_USMAUTH_HMAC384SHA512)
 			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol));
 			session.securityAuthProtoLen = USM_HMAC384SHA512_AUTH_LEN;
 			#else

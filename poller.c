@@ -564,7 +564,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			num_rows = mysql_num_rows(result);
 
 			if (num_rows != 1) {
-				mysql_free_result(result);
+				db_free_result(result);
 
 				if (local_cnn != NULL) {
 					db_release_connection(LOCAL, local_cnn->id);
@@ -698,7 +698,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				}
 
 				/* free the host result */
-				mysql_free_result(result);
+				db_free_result(result);
 
 				if (((host->snmp_version >= 1) && (host->snmp_version <= 2) &&
 					(strlen(host->snmp_community) > 0)) ||
@@ -1209,7 +1209,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			}
 
 			/* free the host result */
-			mysql_free_result(result);
+			db_free_result(result);
 		} else {
 			SPINE_LOG(("Device[%i] HT[%i] ERROR: RECACHE Query Returned Null Result!", host->id, host_thread));
 		}
@@ -1311,7 +1311,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		/* free the mysql result */
-		mysql_free_result(result);
+		db_free_result(result);
 
 		/* create an array for snmp oids */
 		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
@@ -1439,9 +1439,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							thread_end = get_time_as_double();
 
 							if (is_debug_device(host_id)) {
-								SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
 						}
 
@@ -1540,9 +1540,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						thread_end = get_time_as_double();
 
 						if (is_debug_device(host_id)) {
-							SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						} else {
-							SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+							SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						}
 
 						if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
@@ -1608,9 +1608,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				thread_end = get_time_as_double();
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), poller_items[i].arg1, poller_items[i].result));
 				}
 
 				if (!IS_UNDEFINED(poller_items[i].result)) {
@@ -1666,9 +1666,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				thread_end = get_time_as_double();
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), php_process, poller_items[i].arg1, poller_items[i].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (thread_end - thread_start) * 1000, php_process, poller_items[i].arg1, poller_items[i].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), php_process, poller_items[i].arg1, poller_items[i].result));
 				}
 
 				if (IS_UNDEFINED(poller_items[i].result)) {
@@ -1752,9 +1752,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				thread_end = get_time_as_double();
 
 				if (is_debug_device(host_id)) {
-					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+					SPINE_LOG(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (thread_end - thread_start) * 1000, host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
+					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				}
 
 				if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
@@ -1897,7 +1897,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		SPINE_FREE(snmp_oids);
 	} else {
 		/* free the mysql result */
-		mysql_free_result(result);
+		db_free_result(result);
 	}
 
 	SPINE_FREE(host);
