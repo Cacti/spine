@@ -744,33 +744,50 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
+	int authCount = 0;
+
 	strcat(spine_capabilities, "{ authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
-	strcat(spine_capabilities, "MD5,");
+	strcat(spine_capabilities, "MD5");
+	authCount++;
 	#endif
 
-	strcat(spine_capabilities, "SHA");
+	strcat(spine_capabilities, (authCount == 0 ? "SHA":",SHA"));
+	authCount++;
 
-	#if defined(usmHMAC192SHA256AuthProtocol)
+	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
 	strcat(spine_capabilities, ",SHA224,SHA256");
+	authCount++;
 	#endif
-	#if defined(usmHMAC384SHA512AuthProtocol)
+
+	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
 	strcat(spine_capabilities, ",SHA384,SHA512");
+	authCount++;
 	#endif
 	strcat(spine_capabilities, "\"");
 
+	int privCount = 0;
+
 	strcat(spine_capabilities, ", privProtocols: \"");
+
 	#ifndef NETSNMP_DISABLE_DES
 	strcat(spine_capabilities, "DES");
+	privCount++;
 	#endif
+
 	#ifdef HAVE_AES
-	strcat(spine_capabilities, ",AES128");
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES192PrivProtocol)
-	strcat(spine_capabilities, ",AES192");
+	strcat(spine_capabilities, (privCount == 0 ? "AES128":",AES128"));
+	privCount++;
 	#endif
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(usmAES256PrivProtocol)
-	strcat(spine_capabilities, ",AES256");
+
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	strcat(spine_capabilities, (privCount == 0 ? "AES192":",AES192"));
+	privCount++;
 	#endif
+
+	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	strcat(spine_capabilities, (privCount == 0 ? "AES256":",AES256"));
+	privCount++;
 	#endif
 	strcat(spine_capabilities, "\" }");
 
