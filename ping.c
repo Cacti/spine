@@ -418,9 +418,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				if (total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+					return_code = recvfrom(icmp_socket, socket_reply, LRG_BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 					#else
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
+					return_code = recvfrom(icmp_socket, socket_reply, LRG_BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
 					#endif
 
 					if (return_code < 0) {
@@ -1131,20 +1131,20 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		case AVAIL_SNMP_OR_PING:
 		case AVAIL_SNMP_AND_PING:
 			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
-				snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
+				snprintf(host->status_last_error, LRG_BUFSIZE, "%s", ping->ping_response);
 			} else {
-				snprintf(host->status_last_error, BUFSIZE, "%s, %s", ping->snmp_response, ping->ping_response);
+				snprintf(host->status_last_error, LRG_BUFSIZE, "%s, %s", ping->snmp_response, ping->ping_response);
 			}
 			break;
 		case AVAIL_SNMP:
 			if (strlen(host->snmp_community) == 0 && host->snmp_version < 3) {
-				snprintf(host->status_last_error, BUFSIZE, "%s", "Device does not require SNMP");
+				snprintf(host->status_last_error, LRG_BUFSIZE, "%s", "Device does not require SNMP");
 			} else {
-				snprintf(host->status_last_error, BUFSIZE, "%s", ping->snmp_response);
+				snprintf(host->status_last_error, LRG_BUFSIZE, "%s", ping->snmp_response);
 			}
 			break;
 		default:
-			snprintf(host->status_last_error, BUFSIZE, "%s", ping->ping_response);
+			snprintf(host->status_last_error, LRG_BUFSIZE, "%s", ping->ping_response);
 		}
 
 		/* determine if to send an alert and update remainder of statistics */

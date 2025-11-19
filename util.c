@@ -108,14 +108,14 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 				db_free_result(result);
 				return retval;
 			}else{
-				return 0;
+				return strdup("");
 			}
 		}else{
 			db_free_result(result);
-			return 0;
+			return strdup("");
 		}
 	}else{
-		return 0;
+		return strdup("");
 	}
 }
 
@@ -341,7 +341,7 @@ void read_config_options() {
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
 	const char *res;
-	char       spine_capabilities[SMALL_BUFSIZE];
+	char       spine_capabilities[LRG_BUFSIZE];
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
@@ -357,7 +357,7 @@ void read_config_options() {
 
 	/* get the mysql server version */
 	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
-		snprintf(set.dbversion, SMALL_BUFSIZE, "%s", res);
+		snprintf(set.dbversion, LRG_BUFSIZE, "%s", res);
 		free((char *)res);
 	}
 
@@ -384,7 +384,7 @@ void read_config_options() {
 
 	/* determine script server path operation and default log file processing */
 	if ((res = getsetting(&mysql, LOCAL, "path_webroot")) != 0) {
-		snprintf(set.path_php_server, SMALL_BUFSIZE, "%s/script_server.php", res);
+		snprintf(set.path_php_server, LRG_BUFSIZE, "%s/script_server.php", res);
 		snprintf(web_root, BUFSIZE, "%s", res);
 		free((char *)res);
 	}
@@ -688,11 +688,11 @@ void read_config_options() {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " AND poller_id=%i", set.poller_id);
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " LIMIT 1");
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -706,11 +706,11 @@ void read_config_options() {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " AND poller_id=%i", set.poller_id);
-		sqlp += snprintf(sqlp, SMALL_BUFSIZE, " LIMIT 1");
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, LRG_BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -750,10 +750,10 @@ void read_config_options() {
 
 	strcat(spine_capabilities, "SHA");
 
-	#if defined(HAVE_EVP_SHA224) && defined(usmHMAC192SHA256AuthProtocol)
+	#if defined(usmHMAC192SHA256AuthProtocol)
 	strcat(spine_capabilities, ",SHA224,SHA256");
 	#endif
-	#if defined(HAVE_EVP_SHA384) && defined(usmHMAC384SHA512AuthProtocol)
+	#if defined(usmHMAC384SHA512AuthProtocol)
 	strcat(spine_capabilities, ",SHA384,SHA512");
 	#endif
 	strcat(spine_capabilities, "\"");
@@ -1246,7 +1246,7 @@ int spine_log(const char *format, ...) {
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
 
-	char logprefix[SMALL_BUFSIZE]; /* Formatted Log Prefix */
+	char logprefix[LRG_BUFSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LRG_LOGSIZE];     /* Formatted Log Message */
 	char stdoutmessage[LRG_LOGSIZE];   /* Message for stdout */
@@ -1262,7 +1262,7 @@ int spine_log(const char *format, ...) {
 
 	/* log message prefix */
 
-	snprintf(logprefix, SMALL_BUFSIZE, "SPINE: Poller[%i] PID[%i] PT[%ld] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
+	snprintf(logprefix, LRG_BUFSIZE, "SPINE: Poller[%i] PID[%i] PT[%ld] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);

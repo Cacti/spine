@@ -367,17 +367,17 @@ typedef struct config_struct {
 	char   host_id_list[BIG_BUFSIZE];
 	int    has_device_0;
 	/* database connection information */
-	char   db_host[SMALL_BUFSIZE];
-	char   db_db[SMALL_BUFSIZE];
-	char   db_user[SMALL_BUFSIZE];
-	char   db_pass[SMALL_BUFSIZE];
+	char   db_host[LRG_BUFSIZE];
+	char   db_db[LRG_BUFSIZE];
+	char   db_user[LRG_BUFSIZE];
+	char   db_pass[LRG_BUFSIZE];
 	int    db_ssl;
 	char   db_ssl_key[BIG_BUFSIZE];
 	char   db_ssl_cert[BIG_BUFSIZE];
 	char   db_ssl_ca[BIG_BUFSIZE];
 	int    d_b;
 	unsigned int db_port;
-	char   dbversion[SMALL_BUFSIZE];
+	char   dbversion[LRG_BUFSIZE];
 	int    dbonupdate;
 	int    cacti_version;
 	/* path information */
@@ -390,7 +390,7 @@ typedef struct config_struct {
 	int    log_perror;
 	int    log_pwarn;
 	int    log_pstats;
-	char   selective_device_debug[SMALL_BUFSIZE];
+	char   selective_device_debug[LRG_BUFSIZE];
 	int    spine_log_level;
 	int    log_datetime_separator;
 	int    log_datetime_format;
@@ -406,7 +406,7 @@ typedef struct config_struct {
 	/* snmp options */
 	int    snmp_max_get_size;
 	int    snmp_retries;
-	char   snmp_clientaddr[SMALL_BUFSIZE];
+	char   snmp_clientaddr[LRG_BUFSIZE];
 	int    mibs;
 	/* PHP Script Server Options */
 	int    php_required;
@@ -421,16 +421,16 @@ typedef struct config_struct {
 	/* Remote polling mode */
 	int    mode;
 	/* remote database connection information */
-	char   rdb_host[SMALL_BUFSIZE];
-	char   rdb_db[SMALL_BUFSIZE];
-	char   rdb_user[SMALL_BUFSIZE];
-	char   rdb_pass[SMALL_BUFSIZE];
+	char   rdb_host[LRG_BUFSIZE];
+	char   rdb_db[LRG_BUFSIZE];
+	char   rdb_user[LRG_BUFSIZE];
+	char   rdb_pass[LRG_BUFSIZE];
 	int    rdb_ssl;
 	char   rdb_ssl_key[BIG_BUFSIZE];
 	char   rdb_ssl_cert[BIG_BUFSIZE];
 	char   rdb_ssl_ca[BIG_BUFSIZE];
 	unsigned int rdb_port;
-	char   rdbversion[SMALL_BUFSIZE];
+	char   rdbversion[LRG_BUFSIZE];
 	int    rdbonupdate;
 } config_t;
 
@@ -582,11 +582,11 @@ typedef struct host_reindex_struct {
  *
  */
 typedef struct ping_results {
-	char   hostname[SMALL_BUFSIZE];
+	char   hostname[LRG_BUFSIZE];
 	char   ping_status[50];
-	char   ping_response[SMALL_BUFSIZE];
+	char   ping_response[LRG_BUFSIZE];
 	char   snmp_status[50];
-	char   snmp_response[SMALL_BUFSIZE];
+	char   snmp_response[LRG_BUFSIZE];
 } ping_t;
 
 /*! Name Result Structure
@@ -596,7 +596,7 @@ typedef struct ping_results {
  */
 typedef struct name_port {
 	// Method = 0 - default, 1 - tcp, 2 - udp
-	char hostname[SMALL_BUFSIZE];
+	char hostname[LRG_BUFSIZE];
 	int  method;
 	int  port;
 } name_t;

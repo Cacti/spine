@@ -386,6 +386,8 @@ void db_disconnect(MYSQL *mysql) {
 	if (mysql != NULL) {
 		mysql_close(mysql);
 	}
+
+	mysql = NULL;
 }
 
 /*! \fn void db_create_connection_pool(int type)
