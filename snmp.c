@@ -338,7 +338,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		}
 
-		SPINE_LOG(("SNMP: Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol));
+		SPINE_LOG_MEDIUM(("Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol));
 	}
 
 	/* open SNMP Session */
