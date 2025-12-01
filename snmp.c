@@ -123,6 +123,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	struct snmp_session session;
 	char   hostnameport[BUFSIZE];
 
+	char   *Apsz = NULL;
+	char   *Xpsz = NULL;
+	char   *Cpsz = NULL;
+	int    priv_type;
+	int    zero_sensitive = 0;
+
 	/* initialize SNMP */
 	snmp_sess_init(&session);
 
@@ -194,6 +200,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.community     = (unsigned char*) snmp_community;
 		session.community_len = strlen(snmp_community);
 	} else {
+		session.community       = (unsigned char *) Cpsz;
+		session.community_len   = 0;
+
 		session.securityName    = snmp_username;
 		session.securityNameLen = strlen(session.securityName);
 
@@ -207,65 +216,17 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.contextEngineIDLen = strlen(snmp_engine_id);
 		}
 
-		session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-
 		/* set the authentication protocol */
-		if (strcmp(snmp_auth_protocol, "MD5") == 0) {
-			#ifndef NETSNMP_DISABLE_MD5
-			/* set the authentication method to MD5 */
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMACMD5AuthProtocol, USM_AUTH_PROTO_MD5_LEN);
-			session.securityAuthProtoLen = USM_AUTH_PROTO_MD5_LEN;
-			#else
-			SPINE_LOG(("SNMP: Device[%i] Error MD5 is no longer supported on this system.", host_id));
-			return 0;
-			#endif
-		} else if (strcmp(snmp_auth_protocol, "SHA") == 0) {
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
-			session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
-		} else if (strcmp(snmp_auth_protocol, "SHA224") == 0) {
-			#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol));
-			session.securityAuthProtoLen = OID_LENGTH(usmHMAC128SHA224AuthProtocol);
-			#else
-			SPINE_LOG(("SNMP: Device[%i] Error SHA224 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
-			return 0;
-			#endif
-		} else if (strcmp(snmp_auth_protocol, "SHA256") == 0) {
-			#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol));
-			session.securityAuthProtoLen = OID_LENGTH(usmHMAC192SHA256AuthProtocol);
-			#else
-			SPINE_LOG(("SNMP: Device[%i] Error SHA256 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
-			return 0;
-			#endif
-		} else if (strcmp(snmp_auth_protocol, "SHA384") == 0) {
-			#if defined(NETSNMP_USMAUTH_HMAC256SHA384)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol));
-			session.securityAuthProtoLen = USM_HMAC256SHA384_AUTH_LEN;
-			#else
-			SPINE_LOG(("SNMP: Device[%i] Error SHA384 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
-			return 0;
-			#endif
-		} else if (strcmp(snmp_auth_protocol, "SHA512") == 0) {
-			#if defined(NETSNMP_USMAUTH_HMAC384SHA512)
-			session.securityAuthProto    = snmp_duplicate_objid(usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol));
-			session.securityAuthProtoLen = USM_HMAC384SHA512_AUTH_LEN;
-			#else
-			SPINE_LOG(("SNMP: Device[%i] Error SHA512 is not supported on this system.  Upgrade the Net-SNMP API to 5.8+", host_id));
-			return 0;
-			#endif
-		}
+		int auth_type = usm_lookup_auth_type(snmp_auth_protocol);
+		if (auth_type > 0) {
+			const oid *auth_proto;
 
-		if (strlen(snmp_password)) {
-			/* set the authentication key to the hashed version. The password must me at least 8 char */
-			if (generate_Ku(session.securityAuthProto,
-				session.securityAuthProtoLen,
-				(u_char *) snmp_password,
-				strlen(snmp_password),
-				session.securityAuthKey,
-				&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
-				SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication pass phrase.", host_id));
-			}
+            auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
+            free(session.securityAuthProto);
+            session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
+		} else {
+			SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
+			return 0;
 		}
 
 		/* set the privacy protocol to none */
@@ -281,91 +242,99 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
 			}
 		} else {
-			if (strcmp(snmp_priv_protocol, "DES") == 0) {
-				#if defined(USM_PRIV_PROTO_DES_LEN) && !defined(NETSNMP_DISABLE_DES)
-				session.securityPrivProto    = snmp_duplicate_objid(usmDESPrivProtocol, USM_PRIV_PROTO_DES_LEN);
-				session.securityPrivProtoLen = USM_PRIV_PROTO_DES_LEN;
-				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				SPINE_LOG(("SNMP: Device[%i] Error DES is no longer supported on this system", host_id));
+			const oid *priv_proto;
+
+			priv_type = usm_lookup_priv_type(snmp_priv_protocol);
+
+			if (priv_type < 0) {
+				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
 				return 0;
-				#endif
-			} else if (strcmp(snmp_priv_protocol, "AES") == 0) {
-				#if defined(USM_PRIV_PROTO_AES_LEN)
-				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
-				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
-				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				SPINE_LOG(("SNMP: Device[%i] Error AES is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
-				return 0;
-				#endif
-			} else if (strcmp(snmp_priv_protocol, "AES128") == 0) {
-				#if defined(USM_PRIV_PROTO_AES_LEN)
-				session.securityPrivProto    = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
-				session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
-				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES128PrivProtocol, OID_LENGTH(usmAES128PrivProtocol));
-				session.securityPrivProtoLen = OID_LENGTH(usmAES128PrivProtocol);
-				session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#endif
-			} else if(strcmp(snmp_priv_protocol, "AES192") == 0) {
-				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(USM_CREATE_USER_PRIV_AES192)
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES192PrivProtocol, OID_LENGTH(usmAES192PrivProtocol));
-				session.securityPrivProtoLen = OID_LENGTH(usmAES192PrivProtocol);
-				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES192;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				SPINE_LOG(("SNMP: Device[%i] Error AES-192 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
-				return 0;
-				#endif
-			} else if(strcmp(snmp_priv_protocol, "AES256") == 0) {
-				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(USM_CREATE_USER_PRIV_AES256)
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES256PrivProtocol, OID_LENGTH(usmAES256PrivProtocol));
-				session.securityPrivProtoLen = OID_LENGTH(usmAES256PrivProtocol);
-				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES256;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				SPINE_LOG(("SNMP: Device[%i] Error AES-256 is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
-				return 0;
-				#endif
-			} else if(strcmp(snmp_priv_protocol, "AES192C") == 0) {
-				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(USM_CREATE_USER_PRIV_AES192_CISCO)
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES192CiscoPrivProtocol, OID_LENGTH(usmAES192CiscoPrivProtocol));
-				session.securityPrivProtoLen = OID_LENGTH(usmAES192CiscoPrivProtocol);
-				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES192;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				SPINE_LOG(("SNMP: Device[%i] Error AES192C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
-				return 0;
-				#endif
-			} else if(strcmp(snmp_priv_protocol, "AES256C") == 0) {
-				#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04) && defined(USM_CREATE_USER_PRIV_AES256_CISCO)
-				session.securityPrivProto    = snmp_duplicate_objid(usmAES256CiscoPrivProtocol, OID_LENGTH(usmAES256CiscoPrivProtocol));
-				session.securityPrivProtoLen = OID_LENGTH(usmAES256CiscoPrivProtocol);
-				session.securityPrivKeyLen   = SNMP_TRANS_PRIVLEN_AES256;
-				session.securityLevel        = SNMP_SEC_LEVEL_AUTHPRIV;
-				#else
-				SPINE_LOG(("SNMP: Device[%i] Error AES256C is not supported in the Net-SNMP API, upgrade the Net-SNMP libraries.", host_id));
-				return 0;
-				#endif
 			}
 
-			/* set the privacy key to the hashed version. */
-			SPINE_LOG_MEDIUM(("SNMP: Device[%i] Using privacy protocol(len): %s(%ld)", host_id, snmp_priv_protocol, session.securityPrivKeyLen));
+			priv_proto = sc_get_priv_oid(priv_type, &session.securityPrivProtoLen);
+			free(session.securityPrivProto);
+			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
+			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
 
-			if (generate_Ku(session.securityAuthProto,
-				session.securityAuthProtoLen,
-				(u_char *) snmp_priv_passphrase,
-				strlen(snmp_priv_passphrase),
-				session.securityPrivKey,
-				&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
-				SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
-				return 0;
+			// Auth Protocol Setup
+			if (Apsz && zero_sensitive) {
+				memset(Apsz, 0x0, strlen(Apsz));
+			}
+
+			free(Apsz);
+			Apsz = strdup(snmp_password);
+
+			if (zero_sensitive) {
+	            memset(snmp_password, 0x0, strlen(snmp_password));
+			}
+
+			// Privacy Protocol Setup
+			if (Xpsz && zero_sensitive) {
+				memset(Xpsz, 0x0, strlen(Xpsz));
+			}
+
+			free(Xpsz);
+			Xpsz = strdup(snmp_priv_passphrase);
+
+			if (zero_sensitive) {
+				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
+			}
+
+			if (Apsz) {
+				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+				if (session.securityAuthProto == NULL) {
+					/*
+					 * get .conf set default
+					 */
+					const oid *def = get_default_authtype(&session.securityAuthProtoLen);
+					session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
+				}
+
+				if (session.securityAuthProto == NULL) {
+					session.securityAuthProto    = snmp_duplicate_objid(SNMP_DEFAULT_AUTH_PROTO, SNMP_DEFAULT_AUTH_PROTOLEN);
+					session.securityAuthProtoLen = SNMP_DEFAULT_AUTH_PROTOLEN;
+				}
+
+				if (generate_Ku(session.securityAuthProto,
+					session.securityAuthProtoLen,
+					(u_char *) Apsz, strlen(Apsz),
+					session.securityAuthKey,
+					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
+					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication pass phrase.", host_id));
+					return 0;
+				}
+
+				free(Apsz);
+				Apsz = NULL;
+			}
+
+			if (Xpsz) {
+				session.securityPrivKeyLen = USM_PRIV_KU_LEN;
+				if (session.securityPrivProto == NULL) {
+					/*
+					 * get .conf set default
+					 */
+					const oid *def = get_default_privtype(&session.securityPrivProtoLen);
+					session.securityPrivProto =
+					snmp_duplicate_objid(def, session.securityPrivProtoLen);
+				}
+
+				if (session.securityPrivProto == NULL) {
+					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
+					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
+				}
+
+				if (generate_Ku(session.securityAuthProto,
+					session.securityAuthProtoLen,
+					(u_char *) Xpsz, strlen(Xpsz),
+					session.securityPrivKey,
+					&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
+					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
+					return 0;
+				}
+
+				free(Xpsz);
+				Xpsz = NULL;
 			}
 		}
 	}
