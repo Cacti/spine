@@ -367,17 +367,17 @@ typedef struct config_struct {
 	char   host_id_list[BIG_BUFSIZE];
 	int    has_device_0;
 	/* database connection information */
-	char   db_host[LRG_BUFSIZE];
-	char   db_db[LRG_BUFSIZE];
-	char   db_user[LRG_BUFSIZE];
-	char   db_pass[LRG_BUFSIZE];
+	char   db_host[BUFSIZE];
+	char   db_db[BUFSIZE];
+	char   db_user[BUFSIZE];
+	char   db_pass[BUFSIZE];
 	int    db_ssl;
 	char   db_ssl_key[BIG_BUFSIZE];
 	char   db_ssl_cert[BIG_BUFSIZE];
 	char   db_ssl_ca[BIG_BUFSIZE];
 	int    d_b;
 	unsigned int db_port;
-	char   dbversion[LRG_BUFSIZE];
+	char   dbversion[BUFSIZE];
 	int    dbonupdate;
 	int    cacti_version;
 	/* path information */
@@ -406,7 +406,7 @@ typedef struct config_struct {
 	/* snmp options */
 	int    snmp_max_get_size;
 	int    snmp_retries;
-	char   snmp_clientaddr[LRG_BUFSIZE];
+	char   snmp_clientaddr[BUFSIZE];
 	int    mibs;
 	/* PHP Script Server Options */
 	int    php_required;
@@ -421,16 +421,16 @@ typedef struct config_struct {
 	/* Remote polling mode */
 	int    mode;
 	/* remote database connection information */
-	char   rdb_host[LRG_BUFSIZE];
-	char   rdb_db[LRG_BUFSIZE];
-	char   rdb_user[LRG_BUFSIZE];
-	char   rdb_pass[LRG_BUFSIZE];
+	char   rdb_host[BUFSIZE];
+	char   rdb_db[BUFSIZE];
+	char   rdb_user[BUFSIZE];
+	char   rdb_pass[BUFSIZE];
 	int    rdb_ssl;
 	char   rdb_ssl_key[BIG_BUFSIZE];
 	char   rdb_ssl_cert[BIG_BUFSIZE];
 	char   rdb_ssl_ca[BIG_BUFSIZE];
 	unsigned int rdb_port;
-	char   rdbversion[LRG_BUFSIZE];
+	char   rdbversion[BUFSIZE];
 	int    rdbonupdate;
 } config_t;
 
@@ -582,11 +582,11 @@ typedef struct host_reindex_struct {
  *
  */
 typedef struct ping_results {
-	char   hostname[LRG_BUFSIZE];
+	char   hostname[BUFSIZE];
 	char   ping_status[50];
-	char   ping_response[LRG_BUFSIZE];
+	char   ping_response[BUFSIZE];
 	char   snmp_status[50];
-	char   snmp_response[LRG_BUFSIZE];
+	char   snmp_response[BUFSIZE];
 } ping_t;
 
 /*! Name Result Structure
@@ -596,7 +596,7 @@ typedef struct ping_results {
  */
 typedef struct name_port {
 	// Method = 0 - default, 1 - tcp, 2 - udp
-	char hostname[LRG_BUFSIZE];
+	char hostname[BUFSIZE];
 	int  method;
 	int  port;
 } name_t;
