@@ -78,7 +78,7 @@ void set_option(const char *option, const char *value) {
  *
  */
 static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[LRG_BUFSIZE];
+	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -130,7 +130,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
  *
  */
 int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
-	char  qstring[LRG_BUFSIZE];
+	char  qstring[BUFSIZE];
 	int   result = 0;
 
 	assert(psql    != 0);
@@ -170,7 +170,7 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
  *
  */
 static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[LRG_BUFSIZE];
+	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -265,7 +265,7 @@ static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) 
  *
  */
 static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[LRG_BUFSIZE];
+	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
@@ -342,7 +342,7 @@ void read_config_options() {
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
 	const char *res;
-	char       spine_capabilities[LRG_BUFSIZE];
+	char       spine_capabilities[BUFSIZE];
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
@@ -358,7 +358,7 @@ void read_config_options() {
 
 	/* get the mysql server version */
 	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
-		snprintf(set.dbversion, LRG_BUFSIZE, "%s", res);
+		snprintf(set.dbversion, BUFSIZE, "%s", res);
 		free((char *)res);
 	}
 
@@ -385,7 +385,7 @@ void read_config_options() {
 
 	/* determine script server path operation and default log file processing */
 	if ((res = getsetting(&mysql, LOCAL, "path_webroot")) != 0) {
-		snprintf(set.path_php_server, LRG_BUFSIZE, "%s/script_server.php", res);
+		snprintf(set.path_php_server, BUFSIZE, "%s/script_server.php", res);
 		snprintf(web_root, BUFSIZE, "%s", res);
 		free((char *)res);
 	}
@@ -689,11 +689,11 @@ void read_config_options() {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " AND poller_id=%i", set.poller_id);
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " LIMIT 1");
+		sqlp += snprintf(sqlp, BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -707,11 +707,11 @@ void read_config_options() {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " AND poller_id=%i", set.poller_id);
-		sqlp += snprintf(sqlp, LRG_BUFSIZE, " LIMIT 1");
+		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
+		sqlp += snprintf(sqlp, BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		sqlp += snprintf(sqlp, BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
+		sqlp += snprintf(sqlp, BUFSIZE, " AND poller_id=%i", set.poller_id);
+		sqlp += snprintf(sqlp, BUFSIZE, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -1264,10 +1264,10 @@ int spine_log(const char *format, ...) {
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
 
-	char logprefix[LRG_BUFSIZE]; /* Formatted Log Prefix */
+	char logprefix[LOGSIZE]; /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];     /* Formatted Log Message */
-	char stdoutmessage[LRG_LOGSIZE];   /* Message for stdout */
+	char stdoutmessage[LOGSIZE];   /* Message for stdout */
 
 	double cur_time;
 
@@ -1280,7 +1280,7 @@ int spine_log(const char *format, ...) {
 
 	/* log message prefix */
 
-	snprintf(logprefix, LRG_BUFSIZE, "SPINE: Poller[%i] PID[%i] PT[%ld] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
+	snprintf(logprefix, LOGSIZE, "SPINE: Poller[%i] PID[%i] PT[%ld] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
@@ -1290,7 +1290,7 @@ int spine_log(const char *format, ...) {
 
 	if (IS_LOGGING_TO_STDOUT()) {
 		cur_time = get_time_as_double();
-		sprintf(stdoutmessage, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
+		snprintf(stdoutmessage, LOGSIZE, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
 		puts(stdoutmessage);
 		return TRUE;
 	}
@@ -2011,7 +2011,7 @@ void checkAsRoot() {
  *
  */
 int get_cacti_version(MYSQL *psql, int mode) {
-	char      qstring[LRG_BUFSIZE];
+	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
 	MYSQL_ROW mysql_row;
