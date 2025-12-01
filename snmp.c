@@ -300,7 +300,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					(u_char *) Apsz, strlen(Apsz),
 					session.securityAuthKey,
 					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
-					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication pass phrase.", host_id));
+					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
 					return 0;
 				}
 
@@ -337,6 +337,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				Xpsz = NULL;
 			}
 		}
+
+		SPINE_LOG(("SNMP: Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol));
 	}
 
 	/* open SNMP Session */
