@@ -1263,10 +1263,11 @@ int spine_log(const char *format, ...) {
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
 
-	char logprefix[LOGSIZE]; /* Formatted Log Prefix */
-	char ulogmessage[LOGSIZE];     /* Un-Formatted Log Message */
-	char flogmessage[LOGSIZE];     /* Formatted Log Message */
-	char stdoutmessage[LOGSIZE];   /* Message for stdout */
+	int  of = 20;
+	char logprefix[LOGSIZE];        /* Formatted Log Prefix */
+	char ulogmessage[LOGSIZE];      /* Un-Formatted Log Message */
+	char flogmessage[LOGSIZE];      /* Formatted Log Message */
+	char stdoutmessage[LOGSIZE+of]; /* Message for stdout */
 
 	double cur_time;
 
@@ -1289,12 +1290,13 @@ int spine_log(const char *format, ...) {
 
 	if (IS_LOGGING_TO_STDOUT()) {
 		cur_time = get_time_as_double();
-		snprintf(stdoutmessage, LOGSIZE, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
+		snprintf(stdoutmessage, LOGSIZE + of, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
 		puts(stdoutmessage);
 		return TRUE;
 	}
 
 	char * log_fmt = get_date_format();
+
 	if (strlen(log_fmt) == 0) {
 		#ifdef DISABLE_STDERR
 		fp = stdout;
@@ -1311,7 +1313,11 @@ int spine_log(const char *format, ...) {
 		}
 	}
 
-	if (strftime(flogmessage, 50, log_fmt, now_ptr) == (size_t) 0) {
+	int prefix_len = strlen(logprefix);
+	int ulog_len   = strlen(ulogmessage);
+	int flog_len   = 0;
+
+	if ((flog_len = strftime(flogmessage, 50, log_fmt, now_ptr)) == (int) 0) {
 		#ifdef DISABLE_STDERR
 		fp = stdout;
 		#else
@@ -1327,8 +1333,17 @@ int spine_log(const char *format, ...) {
 		}
 	}
 
-	strncat(flogmessage, logprefix,   sizeof(flogmessage) - 1);
-	strncat(flogmessage, ulogmessage, sizeof(flogmessage) - 50);
+	/* determine how many characters to append */
+	if (prefix_len > LOGSIZE - flog_len - 1) {
+		prefix_len = LOGSIZE - flog_len - 1;
+	}
+
+	if (ulog_len + prefix_len > LOGSIZE - flog_len - 1) {
+		ulog_len = LOGSIZE - flog_len - prefix_len - 1;
+	}
+
+	strncat(flogmessage, logprefix,   prefix_len);
+	strncat(flogmessage, ulogmessage, ulog_len);
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {

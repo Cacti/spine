@@ -550,7 +550,7 @@ typedef struct host_struct {
 	int    status_event_count;
 	char   status_fail_date[40];
 	char   status_rec_date[40];
-	char   status_last_error[BUFSIZE];
+	char   status_last_error[BUFSIZE * 2 + 2];
 	double min_time;
 	double max_time;
 	double cur_time;
