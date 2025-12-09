@@ -53,7 +53,6 @@ DEFINE_SPINE_LOCK(snmp)
 DEFINE_SPINE_LOCK(seteuid)
 DEFINE_SPINE_LOCK(ghbn)
 DEFINE_SPINE_LOCK(pool)
-DEFINE_SPINE_LOCK(syslog)
 DEFINE_SPINE_LOCK(php)
 DEFINE_SPINE_LOCK(php_proc_0)
 DEFINE_SPINE_LOCK(php_proc_1)
@@ -78,7 +77,6 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SETEUID_O),     init_seteuid_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),        init_ghbn_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_POOL_O),        init_pool_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_SYSLOG_O),      init_syslog_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O),         init_php_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_0_O),  init_php_proc_0_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_1_O),  init_php_proc_1_lock);
@@ -105,7 +103,6 @@ const char* get_name(int lock) {
 		case LOCK_SETEUID:     return "seteuid";
 		case LOCK_GHBN:        return "ghbn";
 		case LOCK_POOL:        return "pool";
-		case LOCK_SYSLOG:      return "syslog";
 		case LOCK_PHP:         return "php";
 		case LOCK_PHP_PROC_0:  return "php_proc_0";
 		case LOCK_PHP_PROC_1:  return "php_proc_1";
@@ -137,7 +134,6 @@ pthread_cond_t* get_cond(int lock) {
 		case LOCK_SETEUID:     ret_val = &seteuid_cond;     break;
 		case LOCK_GHBN:        ret_val = &ghbn_cond;        break;
 		case LOCK_POOL:        ret_val = &pool_cond;        break;
-		case LOCK_SYSLOG:      ret_val = &syslog_cond;      break;
 		case LOCK_PHP:         ret_val = &php_cond;         break;
 		case LOCK_PHP_PROC_0:  ret_val = &php_proc_0_cond;  break;
 		case LOCK_PHP_PROC_1:  ret_val = &php_proc_1_cond;  break;
@@ -171,7 +167,6 @@ pthread_mutex_t* get_lock(int lock) {
 		case LOCK_SETEUID:     ret_val = &seteuid_lock;     break;
 		case LOCK_GHBN:        ret_val = &ghbn_lock;        break;
 		case LOCK_POOL:        ret_val = &pool_lock;        break;
-		case LOCK_SYSLOG:      ret_val = &syslog_lock;      break;
 		case LOCK_PHP:         ret_val = &php_lock;         break;
 		case LOCK_PHP_PROC_0:  ret_val = &php_proc_0_lock;  break;
 		case LOCK_PHP_PROC_1:  ret_val = &php_proc_1_lock;  break;
@@ -205,7 +200,6 @@ pthread_once_t* get_attr(int locko) {
 		case LOCK_SETEUID_O:     ret_val = &seteuid_lock_o;     break;
 		case LOCK_GHBN_O:        ret_val = &ghbn_lock_o;        break;
 		case LOCK_POOL_O:        ret_val = &pool_lock_o;        break;
-		case LOCK_SYSLOG_O:      ret_val = &syslog_lock_o;      break;
 		case LOCK_PHP_O:         ret_val = &php_lock_o;         break;
 		case LOCK_PHP_PROC_0_O:  ret_val = &php_proc_0_lock_o;  break;
 		case LOCK_PHP_PROC_1_O:  ret_val = &php_proc_1_lock_o;  break;

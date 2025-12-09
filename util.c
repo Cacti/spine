@@ -1348,8 +1348,8 @@ int spine_log(const char *format, ...) {
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {
-		thread_mutex_lock(LOCK_SYSLOG);
 		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
+
 		if ((strstr(flogmessage,"ERROR") || (strstr(flogmessage, "FATAL"))) && (set.log_perror)) {
 			syslog(LOG_CRIT,"%s\n", flogmessage);
 		}
@@ -1363,7 +1363,6 @@ int spine_log(const char *format, ...) {
 		}
 
 		closelog();
-		thread_mutex_unlock(LOCK_SYSLOG);
 	}
 
 	/* append a line feed to the log message if needed */

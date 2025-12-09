@@ -172,7 +172,6 @@
 #define LOCK_SETEUID 2
 #define LOCK_GHBN 3
 #define LOCK_POOL 4
-#define LOCK_SYSLOG 5
 #define LOCK_PHP 6
 #define LOCK_PHP_PROC_0 7
 #define LOCK_PHP_PROC_1 8
@@ -196,7 +195,6 @@
 #define LOCK_SETEUID_O 2
 #define LOCK_GHBN_O 3
 #define LOCK_POOL_O 4
-#define LOCK_SYSLOG_O 5
 #define LOCK_PHP_O 6
 #define LOCK_PHP_PROC_0_O 7
 #define LOCK_PHP_PROC_1_O 8
