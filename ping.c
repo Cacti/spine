@@ -418,9 +418,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				if (total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
-					return_code = recvfrom(icmp_socket, socket_reply, LRG_BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 					#else
-					return_code = recvfrom(icmp_socket, socket_reply, LRG_BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
+					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
 					#endif
 
 					if (return_code < 0) {
