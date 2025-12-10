@@ -7,6 +7,7 @@ The Cacti Group | spine
 -issue#373: Spine SNMPv3 SHA-512 auth doesn't work
 -issue#374: Error DES is no longer supported on this system
 -issue#383: Spine returns Segmentation fault
+-issue#384: ICMP Buffer overflows on Debian/Unbuntu related recvfrom() calls
 -issue: Clear up a few very minor leaks in spine
 
 1.2.29
