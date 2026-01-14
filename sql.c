@@ -292,6 +292,19 @@ void db_connect(int type, MYSQL *mysql) {
 	char *ssl_ca   = NULL;
 	char *ssl_cert = NULL;
 
+	/* if the users has explicitly said to disable SSL, do that now */
+	if (type == LOCAL) {
+		if (set.db_ssl == 0) {
+			bool ssl_enforce = 0;
+			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
+		}
+	} else {
+		if (set.rdb_ssl == 0) {
+			bool ssl_enforce = 0;
+			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
+		}
+	}
+
 	if (type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
 		STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
