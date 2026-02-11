@@ -469,7 +469,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ],[AC_MSG_RESULT(no)
 ])
 
-AC_MSG_CHECKING([if we mysql/mariadb supports verify certificats])
+AC_MSG_CHECKING([if we mysql/mariadb supports verify certificates])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
     #include "$MYSQL_INC_DIR/mysql.h"
