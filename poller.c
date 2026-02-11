@@ -1944,6 +1944,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			host_id, set.poller_id, errors, error_string);
 
 		db_query(&mysql, LOCAL, error_query);
+
+		free(error_query);
 	}
 
 	thread_mutex_unlock(LOCK_THDET);
