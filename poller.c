@@ -1933,14 +1933,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	}
 
 	if (errors > 0) {
-		snprintf(query1, BUFSIZE, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
+		int error_query_len = strlen(error_string) + BUFSIZE;
+		char *error_query = (char *)malloc(error_query_len);
+
+		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
 			" VALUES(%i, %i, %i, \"%s\")"
 			" ON DUPLICATE KEY UPDATE"
 			" errors = errors + VALUES(errors),"
 			" local_data_ids = CONCAT(local_data_ids, \", \", VALUES(local_data_ids))",
 			host_id, set.poller_id, errors, error_string);
 
-		db_query(&mysql, LOCAL, query1);
+		db_query(&mysql, LOCAL, error_query);
 	}
 
 	thread_mutex_unlock(LOCK_THDET);
