@@ -293,6 +293,7 @@ void db_connect(int type, MYSQL *mysql) {
 	char *ssl_cert = NULL;
 
 	/* if the users has explicitly said to disable SSL, do that now */
+	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
 	if (type == LOCAL) {
 		if (set.db_ssl == 0) {
 			bool ssl_enforce = 0;
@@ -304,6 +305,7 @@ void db_connect(int type, MYSQL *mysql) {
 			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
 		}
 	}
+	#endif
 
 	if (type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
