@@ -293,7 +293,7 @@ void db_connect(int type, MYSQL *mysql) {
 	char *ssl_cert = NULL;
 
 	/* if the users has explicitly said to disable SSL, do that now */
-	#ifdef MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
 	if (type == LOCAL) {
 		if (set.db_ssl == 0) {
 			bool ssl_enforce = 0;

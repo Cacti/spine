@@ -469,6 +469,21 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ],[AC_MSG_RESULT(no)
 ])
 
+AC_MSG_CHECKING([if we mysql/mariadb supports verify certificats])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+    #include <stdlib.h>
+    #include "$MYSQL_INC_DIR/mysql.h"
+  ]], [[
+    if (MYSQL_OPT_SSL_VERIFY_SERVER_CERT) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ]])],[  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT,1,[Do we have mysql/maraidb verify certificate support?])
+  ],[AC_MSG_RESULT(no)
+])
+
 # See if we can support backtracing
 AC_MSG_CHECKING([if we can support mysql/mariadb ssl keys])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
