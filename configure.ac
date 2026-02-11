@@ -465,7 +465,22 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
       exit(1);
     }
   ]])],[  AC_MSG_RESULT(yes)
-     AC_DEFINE(HAS_MYSQL_OPT_RETRY_COUNT,1,[Do we have mysql/maraidb retry count capabilities?])
+     AC_DEFINE(HAS_MYSQL_OPT_RETRY_COUNT,1,[Do we have mysql/mariadb retry count capabilities?])
+  ],[AC_MSG_RESULT(no)
+])
+
+AC_MSG_CHECKING([if we mysql/mariadb supports verify certificates])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+    #include <stdlib.h>
+    #include "$MYSQL_INC_DIR/mysql.h"
+  ]], [[
+    if (MYSQL_OPT_SSL_VERIFY_SERVER_CERT) {
+      exit(0);
+    } else {
+      exit(1);
+    }
+  ]])],[  AC_MSG_RESULT(yes)
+     AC_DEFINE(HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT,1,[Do we have mysql/mariadb verify certificate support?])
   ],[AC_MSG_RESULT(no)
 ])
 
@@ -481,7 +496,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
       exit(1);
     }
   ]])],[  AC_MSG_RESULT(yes)
-     AC_DEFINE(HAS_MYSQL_OPT_SSL_KEY,1,[Do we have mysql/maraidb ssl keys capabilities?])
+     AC_DEFINE(HAS_MYSQL_OPT_SSL_KEY,1,[Do we have mysql/mariadb ssl keys capabilities?])
   ],[AC_MSG_RESULT(no)
 ])
 
