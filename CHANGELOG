@@ -1,14 +1,17 @@
 The Cacti Group | spine
 
 1.2.31
--issue#365: Removing Backtrace Support
--issue#366: Failing to actually a poll device that returns "NoSuchObject"
--issue#370: Errors experienced with very long OIDs
--issue#373: Spine SNMPv3 SHA-512 auth doesn't work
--issue#374: Error DES is no longer supported on this system
--issue#383: Spine returns Segmentation fault
--issue#384: ICMP Buffer overflows on Debian/Unbuntu related recvfrom() calls
--issue: Clear up a few very minor leaks in spine
+-issue#365: Removed Backtrace Support due to lack of OS support
+-issue#366: Prevent polling from stopping when sysDescr OID returns noSuchObject
+-issue#370: Increase buffer sizes to handle large OID numbers
+-issue#373: Spine cannot generate SNMPv3 Ku for SHA-384/SHA-512
+-issue#374: Improve depreciated DES support
+-issue#383: Improve Spine buffer handling #383
+-issue#384: Buffer overflow in ping_icmp() causes Spine crash
+-issue: Clear up some minor memory leaks
+
+1.2.30
+-no changes
 
 1.2.29
 -no changes
