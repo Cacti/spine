@@ -385,6 +385,11 @@ int main(int argc, char *argv[]) {
 
 		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+
+			/* validate host_id_list contains only digits and commas */
+			if (strlen(set.host_id_list) != strspn(set.host_id_list, "0123456789,")) {
+				die("ERROR: --hostlist must contain only numeric host IDs separated by commas");
+			}
 		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
