@@ -236,13 +236,13 @@ AC_DEFUN([MYSQL_LIB_CHK],
 MYSQL_SUB_DIR="include include/mysql include/mariadb mysql";
 for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
   for d in $MYSQL_SUB_DIR; do
-    if [[ -f $i/$d/mysql.h ]]; then
+    if [ -f "$i/$d/mysql.h" ]; then
       MYSQL_INC_DIR=$i/$d
       break;
     fi
   done
 
-  if [[ ! -z $MYSQL_INC_DIR ]]; then
+  if [ -n "$MYSQL_INC_DIR" ]; then
     break;
   fi
 #  test -f $i/include/mysql.h          && MYSQL_INC_DIR=$i/include          && break
