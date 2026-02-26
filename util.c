@@ -1200,11 +1200,12 @@ void die(const char *format, ...) {
 
 char * get_date_format() {
 	char *log_fmt;
+	char log_sep = '/';
+
 	if (!(log_fmt = (char *) malloc(GD_FMT_SIZE))) {
 		die("ERROR: Fatal malloc error: util.c get_date_format!");
 	}
 
-	char log_sep = '/';
 	if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
 		set.log_datetime_separator = GDC_DEFAULT;
 	}
