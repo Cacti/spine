@@ -99,6 +99,11 @@ AC_ARG_ENABLE(warnings,
   AC_MSG_RESULT(no)
 )
 
+# Strip -Werror=declaration-after-statement if inherited from net-snmp-config
+# on FreeBSD. Spine uses C99 mixed declarations; this flag breaks the build.
+# See https://github.com/Cacti/spine/issues/406
+CFLAGS=$(echo "$CFLAGS" | sed 's/-Werror=declaration-after-statement//g')
+
 AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
 AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])
