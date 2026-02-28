@@ -366,7 +366,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
  */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {
+		thread_mutex_lock(LOCK_SNMP);
 		snmp_sess_close(snmp_session);
+		thread_mutex_unlock(LOCK_SNMP);
 	}
 }
 
@@ -387,6 +389,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	size_t anOID_len           = MAX_OID_LEN;
 	oid    anOID[MAX_OID_LEN];
 	int    status;
+	int    snmp_errno = SNMPERR_SUCCESS;
 	char   *result_string;
 	char   temp_result[RESULTS_BUFFER];
 
@@ -429,6 +432,18 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
 			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
+		}
+
+		/* retrieve session-level error code for non-success responses */
+		if (status == STAT_ERROR && current_host->snmp_session != NULL) {
+			int liberr = 0, syserr = 0;
+			char *errstr = NULL;
+
+			snmp_sess_error(current_host->snmp_session, &liberr, &syserr, &errstr);
+			snmp_errno = liberr;
+			SPINE_LOG_DEBUG(("Device[%i] DEBUG: SNMP session error for oid '%s': %s (liberr=%d)",
+				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr));
+			SNMP_FREE(errstr);
 		}
 
 		/* add status to host structure */
@@ -514,7 +529,43 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 		} else if (status == STAT_TIMEOUT) {
 			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 		} else {
-			SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+			/* decode USM-specific errors instead of generic "Unknown error" */
+			switch (snmp_errno) {
+				case SNMPERR_NOT_IN_TIME_WINDOW:
+#ifdef SNMPERR_USM_NOTINTIMEWINDOW
+				case SNMPERR_USM_NOTINTIMEWINDOW:
+#endif
+					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for oid '%s' -- engine time drift (recoverable)",
+						current_host->id, snmp_oid));
+					/* treat as transient — do not mark host down */
+					status = STAT_SUCCESS;
+					SET_UNDEFINED(result_string);
+					break;
+				case SNMPERR_USM_UNKNOWNENGINEID:
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+				case SNMPERR_USM_UNKNOWNSECURITYNAME:
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+				case SNMPERR_USM_AUTHENTICATIONFAILURE:
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+				case SNMPERR_USM_DECRYPTIONERROR:
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+				default:
+					SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
+						snmp_oid, current_host->id, status, snmp_errno));
+					break;
+			}
 		}
 
 		if (response != NULL && status != STAT_DESCRIP_ERROR) {
