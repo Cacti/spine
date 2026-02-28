@@ -1167,13 +1167,13 @@ void die(const char *format, ...) {
 	int old_errno = errno;
 
 	va_start(args, format);
-	vsprintf(logmessage, format, args);
+	vsnprintf(logmessage, BUFSIZE, format, args);
 	va_end(args);
 
 	if (set.log_perror) {
 		char perr[BUFSIZE];
 		snprintf(perr, BUFSIZE, " [%d, %s]", old_errno, strerror(old_errno));
-		strcat(logmessage,perr);
+		strncat(logmessage, perr, BUFSIZE - strlen(logmessage) - 1);
 	}
 
 	if (set.logfile_processed) {

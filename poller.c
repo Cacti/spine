@@ -1098,7 +1098,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									}
 
 									/* set zeros */
-									memset(query3, 0, buf_length);
+									memset(query3, 0, LRG_BUFSIZE);
 								}
 
 								assert_fail = TRUE;
@@ -1124,7 +1124,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									}
 
 									/* set zeros */
-									memset(query3, 0, buf_length);
+									memset(query3, 0, LRG_BUFSIZE);
 								}
 
 								assert_fail = TRUE;
@@ -1152,7 +1152,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 										}
 
 										/* set zeros */
-										memset(query3, 0, buf_length);
+										memset(query3, 0, LRG_BUFSIZE);
 									}
 
 									assert_fail = TRUE;
@@ -1174,7 +1174,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									db_insert(&mysql, LOCAL, query3);
 
 									/* set zeros */
-									memset(query3, 0, buf_length);
+									memset(query3, 0, LRG_BUFSIZE);
 								}
 
 								if ((assert_fail) &&
