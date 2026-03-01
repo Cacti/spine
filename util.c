@@ -343,6 +343,8 @@ void read_config_options() {
 	char       *sqlp = sqlbuf;
 	const char *res;
 	char       spine_capabilities[BUFSIZE];
+	int        authCount;
+	int        privCount;
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
@@ -741,10 +743,10 @@ void read_config_options() {
 		set.snmp_max_get_size = 25;
 	}
 
+	authCount = 0;
+
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
-
-	int authCount = 0;
 
 	strcat(spine_capabilities, "{ authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
@@ -766,7 +768,7 @@ void read_config_options() {
 	#endif
 	strcat(spine_capabilities, "\"");
 
-	int privCount = 0;
+	privCount = 0;
 
 	strcat(spine_capabilities, ", privProtocols: \"");
 
@@ -1200,11 +1202,12 @@ void die(const char *format, ...) {
 
 char * get_date_format() {
 	char *log_fmt;
+	char log_sep = '/';
+
 	if (!(log_fmt = (char *) malloc(GD_FMT_SIZE))) {
 		die("ERROR: Fatal malloc error: util.c get_date_format!");
 	}
 
-	char log_sep = '/';
 	if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
 		set.log_datetime_separator = GDC_DEFAULT;
 	}
@@ -1271,6 +1274,10 @@ int spine_log(const char *format, ...) {
 	char stdoutmessage[LOGSIZE+of]; /* Message for stdout */
 
 	double cur_time;
+	char * log_fmt;
+	int prefix_len;
+	int ulog_len;
+	int flog_len;
 
 	va_start(args, format);
 	vsnprintf(ulogmessage, LOGSIZE - 1, format, args);
@@ -1296,7 +1303,7 @@ int spine_log(const char *format, ...) {
 		return TRUE;
 	}
 
-	char * log_fmt = get_date_format();
+	log_fmt = get_date_format();
 
 	if (strlen(log_fmt) == 0) {
 		#ifdef DISABLE_STDERR
@@ -1314,9 +1321,9 @@ int spine_log(const char *format, ...) {
 		}
 	}
 
-	int prefix_len = strlen(logprefix);
-	int ulog_len   = strlen(ulogmessage);
-	int flog_len   = 0;
+	prefix_len = strlen(logprefix);
+	ulog_len   = strlen(ulogmessage);
+	flog_len   = 0;
 
 	if ((flog_len = strftime(flogmessage, 50, log_fmt, now_ptr)) == (int) 0) {
 		#ifdef DISABLE_STDERR
@@ -1689,10 +1696,10 @@ char *add_slashes(char *string) {
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
 #endif
 char *strncopy(char *dst, const char *src, size_t obuf) {
+	size_t len;
+
 	assert(dst != 0);
 	assert(src != 0);
-
-	size_t len;
 
 	len = (strlen(src) < obuf) ? strlen(src) : obuf;
 	if (len) {
@@ -1989,8 +1996,9 @@ void checkAsRoot() {
 	free(p);
 	#else
 	if (hasCaps() != TRUE) {
+		int ret;
 		SPINE_LOG_DEBUG(("DEBUG: Spine running as %d UID, %d EUID", getuid(), geteuid()));
-		int ret = seteuid(0);
+		ret = seteuid(0);
 		if (ret != 0) {
 			SPINE_LOG_DEBUG(("WARNING: Spine NOT able to set effective UID to 0"));
 		}
@@ -2074,6 +2082,7 @@ char *regex_replace(char *exp, char *value) {
 	regex_t regex;
 	int reti;
 	char msgbuf[100];
+	regmatch_t matches[MAX_MATCHES];
 
 	/* Compile regular expression */
 	reti = regcomp(&regex, exp, 0);
@@ -2083,7 +2092,6 @@ char *regex_replace(char *exp, char *value) {
 	}
 
 	/* Execute regular expression */
-	regmatch_t matches[MAX_MATCHES];
 	reti = regexec(&regex, value, MAX_MATCHES, matches, 0);
 	if (!reti) {
 		// regex matched
