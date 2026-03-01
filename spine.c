@@ -947,6 +947,7 @@ int main(int argc, char *argv[]) {
 					poller_details->host_data_ids,
 					poller_details->complete));
 			} else if (thread_status == EAGAIN) {
+				thread_mutex_unlock(LOCK_HOST_TIME);
 				usleep(10000);
 				goto thread_retry;
 			} else if (thread_status == EINVAL) {
@@ -955,6 +956,7 @@ int main(int argc, char *argv[]) {
 
 			/* Restore thread initialization semaphore if thread creation failed */
 			if (thread_status) {
+				thread_mutex_unlock(LOCK_HOST_TIME);
 				sem_post(&thread_init_sem);
 			}
 		}
