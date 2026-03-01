@@ -2288,13 +2288,13 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 		/* peel the executable from the command */
 		saveptr = proc_command;
-		sprintf(executable, "%s", proc_command);
+		snprintf(executable, BUFSIZE, "%s", proc_command);
 		strtok_r(executable, " ", &saveptr);
 
 		/* cheesy little hack to add /usr/bin/ if its not included */
 		if (strstr(executable, "/") == NULL) {
 			saveptr = proc_command;
-			sprintf(executable, "/usr/bin/%s", proc_command);
+			snprintf(executable, BUFSIZE, "/usr/bin/%s", proc_command);
 			strtok_r(executable, " ", &saveptr);
 		}
 
