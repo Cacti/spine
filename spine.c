@@ -522,7 +522,7 @@ int main(int argc, char *argv[]) {
 		char *token;
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
-		while(token) {
+		while(token && i < 99) {
 			debug_devices[i]   = atoi(token);
 			debug_devices[i+1] = '\0';
 			token = strtok(NULL, ",");
@@ -840,14 +840,14 @@ int main(int argc, char *argv[]) {
 			sem_err = sem_trywait(&available_threads);
 
 			if (sem_err == 0) {
-				// Acquired a thread
+				/* acquired a thread */
 				break;
-			} else if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
+			} else if (errno == EINTR) {
+				/* interrupted by signal handler */
+			} else if (errno == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
+			} else if (errno == EAGAIN) {
+				/* keep trying */
 			}
 
 			loop_count++;

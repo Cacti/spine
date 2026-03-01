@@ -281,7 +281,7 @@ void db_connect(int type, MYSQL *mysql) {
 	wtimeout  = 30;
 	attempts  = 1;
 
-	mysql_init(mysql);
+	mysql = mysql_init(mysql);
 
 	if (mysql == NULL) {
 		printf("FATAL: Database unable to allocate memory and therefore can not connect\n");
