@@ -963,15 +963,19 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 									SPINE_FREE(poll_result);
 
-									// Check the modern snmp engine uptime in seconds
+									/* check the modern snmp engine uptime in seconds */
 									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
 									if (poll_result && is_numeric(poll_result)) {
 										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
 									}
 
-									// Use the primed uptime to repopulate the poll_result
-									// This ensures whichever response was valid gets used
+									SPINE_FREE(poll_result);
+
+									/* allocate and populate with whichever uptime was valid */
+									if (!(poll_result = (char *) malloc(BUFSIZE))) {
+										die("ERROR: Fatal malloc error: poller.c poll_result");
+									}
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 
 									if (is_debug_device(host->id)) {
@@ -1100,7 +1104,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									}
 
 									/* set zeros */
-									memset(query3, 0, buf_length);
+									memset(query3, 0, LRG_BUFSIZE);
 								}
 
 								assert_fail = TRUE;
@@ -1126,7 +1130,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									}
 
 									/* set zeros */
-									memset(query3, 0, buf_length);
+									memset(query3, 0, LRG_BUFSIZE);
 								}
 
 								assert_fail = TRUE;
@@ -1154,7 +1158,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 										}
 
 										/* set zeros */
-										memset(query3, 0, buf_length);
+										memset(query3, 0, LRG_BUFSIZE);
 									}
 
 									assert_fail = TRUE;
@@ -1176,11 +1180,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									db_insert(&mysql, LOCAL, query3);
 
 									/* set zeros */
-									memset(query3, 0, buf_length);
+									memset(query3, 0, LRG_BUFSIZE);
 								}
 
 								if ((assert_fail) &&
-									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") && !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")))) {
+									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") || !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")))) {
 									spike_kill = TRUE;
 
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {

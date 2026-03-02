@@ -205,19 +205,9 @@ int main(int argc, char *argv[]) {
 	int a_threads_value;
 	//struct timespec until_spec;
 
-	start_time = get_time_as_double();
-	total_time = 0;
-
-	#ifdef HAVE_LCAP
-	if (geteuid() == 0) {
-		drop_root(getuid(), getgid());
-	}
-	#endif /* HAVE_LCAP */
-
 	pthread_t* threads = NULL;
 	poller_thread_t* poller_details = NULL;
 	pthread_attr_t attr;
-
 	int* ids = NULL;
 	int mode = REMOTE;
 	MYSQL mysql;
@@ -235,9 +225,18 @@ int main(int argc, char *argv[]) {
 	int threads_final = 0;
 	int threads_missing = -1;
 	int threads_count;
+	struct snmp_session session;
+
+	start_time = get_time_as_double();
+	total_time = 0;
+
+	#ifdef HAVE_LCAP
+	if (geteuid() == 0) {
+		drop_root(getuid(), getgid());
+	}
+	#endif /* HAVE_LCAP */
 
 	/* we must initialize snmp in the main thread */
-	struct snmp_session session;
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
@@ -519,9 +518,10 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		int i = 0;
-		char *token = strtok(set.selective_device_debug, ",");
+		char *token;
+		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
+		token = strtok(set.selective_device_debug, ",");
 		while(token) {
 			debug_devices[i]   = atoi(token);
 			debug_devices[i+1] = '\0';
@@ -732,6 +732,11 @@ int main(int argc, char *argv[]) {
 
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
+		int loop_count = 0;
+		double progress_time = 0;
+		unsigned int sem_err = 0;
+		int spine_timeout = FALSE;
+
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
 			host_id         = atoi(mysql_row[0]);
@@ -826,10 +831,10 @@ int main(int argc, char *argv[]) {
 		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
-		int loop_count = 0;
-		double progress_time = 0;
-		unsigned int sem_err = 0;
-		int spine_timeout = FALSE;
+		loop_count = 0;
+		progress_time = 0;
+		sem_err = 0;
+		spine_timeout = FALSE;
 
 		while (TRUE) {
 			sem_err = sem_trywait(&available_threads);
@@ -942,6 +947,7 @@ int main(int argc, char *argv[]) {
 					poller_details->host_data_ids,
 					poller_details->complete));
 			} else if (thread_status == EAGAIN) {
+				thread_mutex_unlock(LOCK_HOST_TIME);
 				usleep(10000);
 				goto thread_retry;
 			} else if (thread_status == EINVAL) {
@@ -950,6 +956,7 @@ int main(int argc, char *argv[]) {
 
 			/* Restore thread initialization semaphore if thread creation failed */
 			if (thread_status) {
+				thread_mutex_unlock(LOCK_HOST_TIME);
 				sem_post(&thread_init_sem);
 			}
 		}
