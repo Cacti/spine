@@ -227,6 +227,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		} else {
 			SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
 			free(session.peername);
+			free(session.localname);
 			return 0;
 		}
 
