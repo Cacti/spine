@@ -236,6 +236,11 @@ void db_connect(int type, MYSQL *mysql) {
 	char    *socket = NULL;
 	struct  stat socket_stat;
 	static int connections = 0;
+	#ifdef HAS_MYSQL_OPT_SSL_KEY
+	char    *ssl_key  = NULL;
+	char    *ssl_ca   = NULL;
+	char    *ssl_cert = NULL;
+	#endif
 
 	/* see if the hostname variable is a file reference.  If so,
 	 * and if it is a socket file, setup mysql to use it.
@@ -293,10 +298,6 @@ void db_connect(int type, MYSQL *mysql) {
 
 	/* set SSL options if available */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
-	char *ssl_key  = NULL;
-	char *ssl_ca   = NULL;
-	char *ssl_cert = NULL;
-
 	/* if the users has explicitly said to disable SSL, do that now */
 	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
 	if (type == LOCAL) {
@@ -584,15 +585,19 @@ int append_hostrange(char *obuf, const char *colname) {
  *
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
+	char input_trimmed[DBL_BUFSIZE];
+	int  max_escaped_input_size;
+	int  trim_limit;
+
 	if (input == NULL) return;
 
-	char input_trimmed[DBL_BUFSIZE];
-	int  max_escaped_input_size = (strlen(input) * 2) + 1;
+	max_escaped_input_size = (strlen(input) * 2) + 1;
+	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
 
 	if (max_escaped_input_size > max_size) {
-		snprintf(input_trimmed, (max_size / 2) - 1, "%s", input);
+		snprintf(input_trimmed, (trim_limit / 2) - 1, "%s", input);
 	} else {
-		snprintf(input_trimmed, max_size, "%s", input);
+		snprintf(input_trimmed, trim_limit, "%s", input);
 	}
 
 	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));

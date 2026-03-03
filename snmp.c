@@ -122,6 +122,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	void   *sessp = NULL;
 	struct snmp_session session;
 	char   hostnameport[BUFSIZE];
+	size_t len;
 
 	char   *Apsz = NULL;
 	char   *Xpsz = NULL;
@@ -133,7 +134,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	snmp_sess_init(&session);
 
 	/* Bind to snmp_clientaddr if specified */
-	size_t len = strlen(set.snmp_clientaddr);
+	len = strlen(set.snmp_clientaddr);
 	if (len > 0 && len <= SMALL_BUFSIZE) {
 		#if SNMP_LOCALNAME == 1
 		session.localname = strdup(set.snmp_clientaddr);
@@ -217,10 +218,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		}
 
 		/* set the authentication protocol */
-		int auth_type = usm_lookup_auth_type(snmp_auth_protocol);
-		if (auth_type > 0) {
-			const oid *auth_proto;
+		{
+		int auth_type;
+		const oid *auth_proto;
 
+		auth_type = usm_lookup_auth_type(snmp_auth_protocol);
+		if (auth_type > 0) {
             auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
             free(session.securityAuthProto);
             session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
@@ -339,6 +342,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		}
 
 		SPINE_LOG_MEDIUM(("Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol));
+		} /* end auth/priv block */
 	}
 
 	/* open SNMP Session */
