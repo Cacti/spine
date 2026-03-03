@@ -252,6 +252,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
 				free(session.peername);
 				free(session.securityAuthProto);
+				free(session.localname);
 				return 0;
 			}
 
