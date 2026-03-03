@@ -65,7 +65,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 
 				if (error == 2013 || error == 2006) {
 					if (errno != EINTR) {
-						db_reconnect(mysql, error, "db_insert");
+						db_reconnect(mysql, type, error, "db_insert");
 
 						error_count++;
 
@@ -103,7 +103,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
-int db_reconnect(MYSQL *mysql, int error, char *function) {
+int db_reconnect(MYSQL *mysql, int type, int error, char *function) {
 	unsigned long  mysql_thread = 0;
 	char   query[100];
 
@@ -111,7 +111,7 @@ int db_reconnect(MYSQL *mysql, int error, char *function) {
 	mysql_ping(mysql);
 
 	if (mysql_thread_id(mysql) != mysql_thread) {
-		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect successful.", function, error));
+		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect via mysql_ping() successful.", function, error));
 		snprintf(query, 100, "KILL %lu;", mysql_thread);
 		mysql_query(mysql, query);
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
@@ -124,10 +124,21 @@ int db_reconnect(MYSQL *mysql, int error, char *function) {
 		sleep(1);
 
 		return TRUE;
-	} else {
-		SPINE_LOG(("WARNING: Connection Broken with Error %i.  Reconnect failed.", error));
-		return FALSE;
 	}
+
+	/* mysql_ping() did not reconnect; do it explicitly */
+	SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Attempting explicit reconnect.", function, error));
+
+	mysql_close(mysql);
+	db_connect(type, mysql);
+
+	if (mysql_thread_id(mysql) > 0) {
+		SPINE_LOG(("WARNING: Explicit reconnect successful in Function %s.", function));
+		return TRUE;
+	}
+
+	SPINE_LOG(("WARNING: Connection Broken with Error %i.  Reconnect failed.", error));
+	return FALSE;
 }
 
 /*! \fn MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query)
@@ -161,7 +172,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 			if (error == 2013 || error == 2006) {
 				if (errno != EINTR) {
-					db_reconnect(mysql, error, "db_query");
+					db_reconnect(mysql, type, error, "db_query");
 
 					error_count++;
 
@@ -220,7 +231,6 @@ void db_connect(int type, MYSQL *mysql) {
 	int     options_error;
 	int     success;
 	int     error = 0;
-	bool    reconnect;
 	MYSQL   *connect_error;
 	char    *hostname = NULL;
 	char    *socket = NULL;
@@ -269,7 +279,6 @@ void db_connect(int type, MYSQL *mysql) {
 	timeout   = 5;
 	rtimeout  = 30;
 	wtimeout  = 30;
-	reconnect = 1;
 	attempts  = 1;
 
 	mysql_init(mysql);
@@ -282,10 +291,6 @@ void db_connect(int type, MYSQL *mysql) {
 	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (int *)&rtimeout, "read timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (int *)&wtimeout, "write timeout");
 	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (int *)&timeout, "general timeout");
-
-	#if defined(MARIADB_BASE_VERSION) || (MYSQL_VERSION_ID < 80034 && MYSQL_VERSION_ID >= 50013)
-		MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
-	#endif
 
 	#ifdef HAS_MYSQL_OPT_RETRY_COUNT
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
