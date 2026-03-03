@@ -367,6 +367,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	free(session.peername);
 	free(session.securityAuthProto);
 	free(session.securityPrivProto);
+	free(session.localname);
 
 	if (!sessp) {
 		if (is_debug_device(host_id)) {
