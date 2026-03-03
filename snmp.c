@@ -532,10 +532,9 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 		} else {
 			/* decode USM-specific errors instead of generic "Unknown error" */
 			switch (sess_liberr) {
-#ifdef SNMPERR_NOT_IN_TIME_WINDOW
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW)
 				case SNMPERR_NOT_IN_TIME_WINDOW:
-#endif
-#ifdef SNMPERR_USM_NOTINTIMEWINDOW
+#elif defined(SNMPERR_USM_NOTINTIMEWINDOW)
 				case SNMPERR_USM_NOTINTIMEWINDOW:
 #endif
 					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for oid '%s' -- engine time drift (recoverable)",
@@ -544,46 +543,41 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					status = STAT_SUCCESS;
 					SET_UNDEFINED(result_string);
 					break;
-#ifdef SNMPERR_UNKNOWN_ENG_ID
+#if defined(SNMPERR_UNKNOWN_ENG_ID)
 				case SNMPERR_UNKNOWN_ENG_ID:
-#endif
-#ifdef SNMPERR_USM_UNKNOWNENGINEID
+#elif defined(SNMPERR_USM_UNKNOWNENGINEID)
 				case SNMPERR_USM_UNKNOWNENGINEID:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_UNKNOWN_USER_NAME
+#if defined(SNMPERR_UNKNOWN_USER_NAME)
 				case SNMPERR_UNKNOWN_USER_NAME:
-#endif
-#ifdef SNMPERR_USM_UNKNOWNSECURITYNAME
+#elif defined(SNMPERR_USM_UNKNOWNSECURITYNAME)
 				case SNMPERR_USM_UNKNOWNSECURITYNAME:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_AUTHENTICATION_FAILURE
+#if defined(SNMPERR_AUTHENTICATION_FAILURE)
 				case SNMPERR_AUTHENTICATION_FAILURE:
-#endif
-#ifdef SNMPERR_USM_AUTHENTICATIONFAILURE
+#elif defined(SNMPERR_USM_AUTHENTICATIONFAILURE)
 				case SNMPERR_USM_AUTHENTICATIONFAILURE:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_DECRYPTION_ERR
+#if defined(SNMPERR_DECRYPTION_ERR)
 				case SNMPERR_DECRYPTION_ERR:
-#endif
-#ifdef SNMPERR_USM_DECRYPTIONERROR
+#elif defined(SNMPERR_USM_DECRYPTIONERROR)
 				case SNMPERR_USM_DECRYPTIONERROR:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_UNSUPPORTED_SEC_LEVEL
+#if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL)
 				case SNMPERR_UNSUPPORTED_SEC_LEVEL:
-#endif
-#ifdef SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL
+#elif defined(SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL)
 				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for oid '%s'",
@@ -699,10 +693,9 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		} else if (status == STAT_ERROR) {
 			/* decode USM-specific errors instead of generic ignore_host */
 			switch (sess_liberr) {
-#ifdef SNMPERR_NOT_IN_TIME_WINDOW
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW)
 				case SNMPERR_NOT_IN_TIME_WINDOW:
-#endif
-#ifdef SNMPERR_USM_NOTINTIMEWINDOW
+#elif defined(SNMPERR_USM_NOTINTIMEWINDOW)
 				case SNMPERR_USM_NOTINTIMEWINDOW:
 #endif
 					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for getnext oid '%s' -- engine time drift (recoverable)",
@@ -711,46 +704,41 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					status = STAT_SUCCESS;
 					SET_UNDEFINED(result_string);
 					break;
-#ifdef SNMPERR_UNKNOWN_ENG_ID
+#if defined(SNMPERR_UNKNOWN_ENG_ID)
 				case SNMPERR_UNKNOWN_ENG_ID:
-#endif
-#ifdef SNMPERR_USM_UNKNOWNENGINEID
+#elif defined(SNMPERR_USM_UNKNOWNENGINEID)
 				case SNMPERR_USM_UNKNOWNENGINEID:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for getnext oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_UNKNOWN_USER_NAME
+#if defined(SNMPERR_UNKNOWN_USER_NAME)
 				case SNMPERR_UNKNOWN_USER_NAME:
-#endif
-#ifdef SNMPERR_USM_UNKNOWNSECURITYNAME
+#elif defined(SNMPERR_USM_UNKNOWNSECURITYNAME)
 				case SNMPERR_USM_UNKNOWNSECURITYNAME:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for getnext oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_AUTHENTICATION_FAILURE
+#if defined(SNMPERR_AUTHENTICATION_FAILURE)
 				case SNMPERR_AUTHENTICATION_FAILURE:
-#endif
-#ifdef SNMPERR_USM_AUTHENTICATIONFAILURE
+#elif defined(SNMPERR_USM_AUTHENTICATIONFAILURE)
 				case SNMPERR_USM_AUTHENTICATIONFAILURE:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for getnext oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_DECRYPTION_ERR
+#if defined(SNMPERR_DECRYPTION_ERR)
 				case SNMPERR_DECRYPTION_ERR:
-#endif
-#ifdef SNMPERR_USM_DECRYPTIONERROR
+#elif defined(SNMPERR_USM_DECRYPTIONERROR)
 				case SNMPERR_USM_DECRYPTIONERROR:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for getnext oid '%s'",
 						current_host->id, snmp_oid));
 					break;
-#ifdef SNMPERR_UNSUPPORTED_SEC_LEVEL
+#if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL)
 				case SNMPERR_UNSUPPORTED_SEC_LEVEL:
-#endif
-#ifdef SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL
+#elif defined(SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL)
 				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
 #endif
 					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for getnext oid '%s'",
