@@ -344,6 +344,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
 					free(Xpsz);
+					if (session.localname) {
+						free(session.localname);
+						session.localname = NULL;
+					}
 					return 0;
 				}
 
