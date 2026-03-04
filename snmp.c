@@ -192,6 +192,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
 	session.peername    = strdup(hostnameport);
+	if (!session.peername) {
+		SPINE_LOG(("Device[%i] ERROR: Failed to allocate peername for '%s'", host_id, hostname));
+		return 0;
+	}
 	session.retries     = set.snmp_retries;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
@@ -314,6 +318,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.securityPrivProto);
 					free(Apsz);
 					free(Xpsz);
+					if (session.localname) {
+						free(session.localname);
+						session.localname = NULL;
+					}
 					return 0;
 				}
 
