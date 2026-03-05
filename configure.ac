@@ -383,6 +383,27 @@ AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session str
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
 
+# ****************** SNMPv3 USM Error Constants Check ***********************
+AC_MSG_CHECKING([for SNMPv3 USM error constants])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <net-snmp/net-snmp-config.h>
+  #include <net-snmp/net-snmp-includes.h>
+]], [[
+  int x;
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW)
+  x = SNMPERR_NOT_IN_TIME_WINDOW;
+#elif defined(SNMPERR_USM_NOTINTIMEWINDOW)
+  x = SNMPERR_USM_NOTINTIMEWINDOW;
+#else
+  #error no USM error constants
+#endif
+  (void)x;
+]])],
+  [AC_MSG_RESULT([yes])
+   AC_DEFINE(HAVE_SNMP_USM_ERRORS, 1, [Net-SNMP provides USM error constants (5.7+)])],
+  [AC_MSG_RESULT([no (USM error decoding disabled)])]
+)
+
 # ****************** Spine Result Buffer Check ***********************
 # Check for the default spine output buffer size
 results_buffer=2048
