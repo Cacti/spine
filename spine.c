@@ -250,7 +250,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* create the array of debug devices */
-	debug_devices = calloc(100, sizeof(int));
+	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -522,7 +522,7 @@ int main(int argc, char *argv[]) {
 		char *token;
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
-		while(token && i < 99) {
+		while(token && i < MAX_DEBUG_DEVICES - 1) {
 			debug_devices[i]   = atoi(token);
 			debug_devices[i+1] = '\0';
 			token = strtok(NULL, ",");
@@ -734,7 +734,7 @@ int main(int argc, char *argv[]) {
 	while (canexit == FALSE && device_counter < num_rows) {
 		int loop_count = 0;
 		double progress_time = 0;
-		unsigned int sem_err = 0;
+		int sem_err = 0;
 		int spine_timeout = FALSE;
 
 		if (change_host) {
