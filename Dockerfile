@@ -18,7 +18,7 @@ COPY . .
 
 RUN autoreconf -fi \
     && ./configure --prefix=/usr/local \
-    && make -j"$(nproc)"
+    && make -j"$(nproc)" spine
 
 FROM debian:bookworm-slim
 
