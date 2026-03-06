@@ -191,7 +191,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
-	session.peername    = hostnameport;
+	session.peername    = strdup(hostnameport);
+	if (!session.peername) {
+		SPINE_LOG(("Device[%i] ERROR: Failed to allocate peername for '%s'", host_id, hostname));
+		return 0;
+	}
 	session.retries     = set.snmp_retries;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
@@ -229,6 +233,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
             session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
 		} else {
 			SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
+			free(session.peername);
+			free(session.localname);
 			return 0;
 		}
 
@@ -251,6 +257,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			if (priv_type < 0) {
 				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
+				free(session.peername);
+				free(session.securityAuthProto);
+				free(session.localname);
 				return 0;
 			}
 
@@ -304,6 +313,15 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					session.securityAuthKey,
 					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
 					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
+					free(session.peername);
+					free(session.securityAuthProto);
+					free(session.securityPrivProto);
+					free(Apsz);
+					free(Xpsz);
+					if (session.localname) {
+						free(session.localname);
+						session.localname = NULL;
+					}
 					return 0;
 				}
 
@@ -333,6 +351,14 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					session.securityPrivKey,
 					&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
 					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
+					free(session.peername);
+					free(session.securityAuthProto);
+					free(session.securityPrivProto);
+					free(Xpsz);
+					if (session.localname) {
+						free(session.localname);
+						session.localname = NULL;
+					}
 					return 0;
 				}
 
@@ -349,6 +375,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
 	thread_mutex_unlock(LOCK_SNMP);
+
+	free(session.peername);
+	free(session.securityAuthProto);
+	free(session.securityPrivProto);
+	free(session.localname);
 
 	if (!sessp) {
 		if (is_debug_device(host_id)) {
@@ -423,6 +454,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
 				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
 				SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+				snmp_free_pdu(pdu);
 				SET_UNDEFINED(result_string);
 				return result_string;
 			} else {
@@ -662,6 +694,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+			snmp_free_pdu(pdu);
 			SET_UNDEFINED(result_string);
 			return result_string;
 		} else {
