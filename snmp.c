@@ -370,7 +370,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
  */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {
+		thread_mutex_lock(LOCK_SNMP);
 		snmp_sess_close(snmp_session);
+		thread_mutex_unlock(LOCK_SNMP);
 	}
 }
 
@@ -391,6 +393,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	size_t anOID_len           = MAX_OID_LEN;
 	oid    anOID[MAX_OID_LEN];
 	int    status;
+	int    sess_liberr = SNMPERR_SUCCESS;
 	char   *result_string;
 	char   temp_result[RESULTS_BUFFER];
 
@@ -435,8 +438,17 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 		}
 
-		/* add status to host structure */
-		current_host->snmp_status = status;
+		/* retrieve session-level error code for non-success responses */
+		if (status == STAT_ERROR && current_host->snmp_session != NULL) {
+			int liberr = 0, syserr = 0;
+			char *errstr = NULL;
+
+			snmp_sess_error(current_host->snmp_session, &liberr, &syserr, &errstr);
+			sess_liberr = liberr;
+			SPINE_LOG_DEBUG(("Device[%i] DEBUG: SNMP session error for oid '%s': %s (liberr=%d)",
+				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr));
+			SNMP_FREE(errstr);
+		}
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_DESCRIP_ERROR) {
@@ -518,8 +530,84 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 		} else if (status == STAT_TIMEOUT) {
 			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 		} else {
-			SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+			/* decode USM-specific errors instead of generic "Unknown error"
+			 * New constant names (SNMPERR_NOT_IN_TIME_WINDOW etc.) added in Net-SNMP 5.8.
+			 * Old names (SNMPERR_USM_NOTINTIMEWINDOW etc.) added in Net-SNMP 5.7.
+			 * On older versions, all USM errors fall through to the default case.
+			 */
+			switch (sess_liberr) {
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW) || defined(SNMPERR_USM_NOTINTIMEWINDOW)
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW)
+				case SNMPERR_NOT_IN_TIME_WINDOW:
+#else
+				case SNMPERR_USM_NOTINTIMEWINDOW:
+#endif
+					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for oid '%s' -- engine time drift (recoverable)",
+						current_host->id, snmp_oid));
+					/* treat as transient, do not mark host down */
+					status = STAT_SUCCESS;
+					SET_UNDEFINED(result_string);
+					break;
+#endif
+#if defined(SNMPERR_UNKNOWN_ENG_ID) || defined(SNMPERR_USM_UNKNOWNENGINEID)
+#if defined(SNMPERR_UNKNOWN_ENG_ID)
+				case SNMPERR_UNKNOWN_ENG_ID:
+#else
+				case SNMPERR_USM_UNKNOWNENGINEID:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_UNKNOWN_USER_NAME) || defined(SNMPERR_USM_UNKNOWNSECURITYNAME)
+#if defined(SNMPERR_UNKNOWN_USER_NAME)
+				case SNMPERR_UNKNOWN_USER_NAME:
+#else
+				case SNMPERR_USM_UNKNOWNSECURITYNAME:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_AUTHENTICATION_FAILURE) || defined(SNMPERR_USM_AUTHENTICATIONFAILURE)
+#if defined(SNMPERR_AUTHENTICATION_FAILURE)
+				case SNMPERR_AUTHENTICATION_FAILURE:
+#else
+				case SNMPERR_USM_AUTHENTICATIONFAILURE:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_DECRYPTION_ERR) || defined(SNMPERR_USM_DECRYPTIONERROR)
+#if defined(SNMPERR_DECRYPTION_ERR)
+				case SNMPERR_DECRYPTION_ERR:
+#else
+				case SNMPERR_USM_DECRYPTIONERROR:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL) || defined(SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL)
+#if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL)
+				case SNMPERR_UNSUPPORTED_SEC_LEVEL:
+#else
+				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+				default:
+					SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
+						snmp_oid, current_host->id, status, sess_liberr));
+					break;
+			}
 		}
+
+		/* update host status after all adjustments */
+		current_host->snmp_status = status;
 
 		if (response != NULL && status != STAT_DESCRIP_ERROR) {
 			snmp_free_pdu(response);
@@ -557,6 +645,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 	size_t anOID_len           = MAX_OID_LEN;
 	oid    anOID[MAX_OID_LEN];
 	int    status;
+	int    sess_liberr = SNMPERR_SUCCESS;
 	char   *result_string;
 	char   temp_result[RESULTS_BUFFER];
 
@@ -582,13 +671,22 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		/* poll host */
 		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 
-		/* add status to host structure */
-		current_host->snmp_status = status;
+		/* retrieve session-level error code for non-success responses */
+		if (status == STAT_ERROR && current_host->snmp_session != NULL) {
+			int liberr = 0, syserr = 0;
+			char *errstr = NULL;
+
+			snmp_sess_error(current_host->snmp_session, &liberr, &syserr, &errstr);
+			sess_liberr = liberr;
+			SPINE_LOG_DEBUG(("Device[%i] DEBUG: SNMP getnext session error for oid '%s': %s (liberr=%d)",
+				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr));
+			SNMP_FREE(errstr);
+		}
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get"));
+				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_getnext"));
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -606,7 +704,85 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					}
 				}
 			}
+		} else if (status == STAT_TIMEOUT) {
+			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", snmp_oid, current_host->id, status));
+		} else if (status == STAT_ERROR) {
+			/* decode USM-specific errors instead of generic ignore_host
+			 * See version notes in snmp_get_base above.
+			 */
+			switch (sess_liberr) {
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW) || defined(SNMPERR_USM_NOTINTIMEWINDOW)
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW)
+				case SNMPERR_NOT_IN_TIME_WINDOW:
+#else
+				case SNMPERR_USM_NOTINTIMEWINDOW:
+#endif
+					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for getnext oid '%s' -- engine time drift (recoverable)",
+						current_host->id, snmp_oid));
+					/* treat as transient, do not mark host down */
+					status = STAT_SUCCESS;
+					SET_UNDEFINED(result_string);
+					break;
+#endif
+#if defined(SNMPERR_UNKNOWN_ENG_ID) || defined(SNMPERR_USM_UNKNOWNENGINEID)
+#if defined(SNMPERR_UNKNOWN_ENG_ID)
+				case SNMPERR_UNKNOWN_ENG_ID:
+#else
+				case SNMPERR_USM_UNKNOWNENGINEID:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for getnext oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_UNKNOWN_USER_NAME) || defined(SNMPERR_USM_UNKNOWNSECURITYNAME)
+#if defined(SNMPERR_UNKNOWN_USER_NAME)
+				case SNMPERR_UNKNOWN_USER_NAME:
+#else
+				case SNMPERR_USM_UNKNOWNSECURITYNAME:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for getnext oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_AUTHENTICATION_FAILURE) || defined(SNMPERR_USM_AUTHENTICATIONFAILURE)
+#if defined(SNMPERR_AUTHENTICATION_FAILURE)
+				case SNMPERR_AUTHENTICATION_FAILURE:
+#else
+				case SNMPERR_USM_AUTHENTICATIONFAILURE:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for getnext oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_DECRYPTION_ERR) || defined(SNMPERR_USM_DECRYPTIONERROR)
+#if defined(SNMPERR_DECRYPTION_ERR)
+				case SNMPERR_DECRYPTION_ERR:
+#else
+				case SNMPERR_USM_DECRYPTIONERROR:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for getnext oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+#if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL) || defined(SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL)
+#if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL)
+				case SNMPERR_UNSUPPORTED_SEC_LEVEL:
+#else
+				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
+#endif
+					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for getnext oid '%s'",
+						current_host->id, snmp_oid));
+					break;
+#endif
+				default:
+					SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
+						snmp_oid, current_host->id, status, sess_liberr));
+					break;
+			}
 		}
+
+		/* update host status after all adjustments */
+		current_host->snmp_status = status;
 
 		if (response) {
 			snmp_free_pdu(response);
