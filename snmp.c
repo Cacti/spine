@@ -740,7 +740,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		} else if (status == STAT_TIMEOUT) {
 			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", snmp_oid, current_host->id, status));
 		} else if (status == STAT_ERROR) {
-			/* decode USM-specific errors instead of generic ignore_host
+			/* decode USM-specific errors instead of generic "Unknown error"
 			 * See version notes in snmp_get_base above.
 			 */
 			switch (sess_liberr) {
