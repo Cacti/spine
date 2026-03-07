@@ -130,6 +130,7 @@
 
 /* general constants */
 #define MAX_THREADS 100
+#define MAX_DEBUG_DEVICES 100
 #define TINY_BUFSIZE 16
 #define SMALL_BUFSIZE 256
 #define MEDIUM_BUFSIZE 512

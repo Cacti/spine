@@ -896,12 +896,12 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 							ok = 0;
 							continue;
 						}
-						count++;
-
 						/* END OF MIB or NO SUCH OBJECT or NO SUCH INSTANCE */
 						if ((vars->type != SNMP_ENDOFMIBVIEW) &&
 							(vars->type	!= SNMP_NOSUCHOBJECT) &&
 							(vars->type	!= SNMP_NOSUCHINSTANCE)) {
+							/* count only real entries, not the walk terminator */
+							count++;
 							/* valid data, so perform a compare  */
 							if (snmp_oid_compare(anOID, anOID_len, vars->name, vars->name_length) >= 0) {
 								SPINE_LOG(("ERROR: OID not increasing"));
