@@ -399,8 +399,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #endif
   (void)x;
 ]])],
-  [AC_MSG_RESULT([yes])
-   AC_DEFINE(HAVE_SNMP_USM_ERRORS, 1, [Net-SNMP provides USM error constants (5.7+)])],
+  [AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no (USM error decoding disabled)])]
 )
 
