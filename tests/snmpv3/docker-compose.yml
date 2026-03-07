@@ -1,0 +1,46 @@
+services:
+
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: cacti
+      MARIADB_USER: spine
+      MARIADB_PASSWORD: spine
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  snmpd:
+    build: ./snmpd
+    cap_add:
+      - SYS_TIME   # allows date -s inside container for clock-skew test
+    ports:
+      - "127.0.0.1:10161:1161/udp"
+    healthcheck:
+      test: ["CMD", "snmpget", "-v3", "-u", "testuser", "-l", "authPriv",
+             "-a", "SHA-256", "-A", "authpass1234",
+             "-x", "AES", "-X", "privpass1234",
+             "localhost:1161", ".1.3.6.1.2.1.1.3.0"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  spine:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      snmpd:
+        condition: service_healthy
+    volumes:
+      - ./spine/spine.conf:/etc/spine/spine.conf:ro
+    entrypoint: ["/usr/local/bin/spine", "--conf=/etc/spine/spine.conf"]
+    command: ["1", "1"]   # poll host_id 1
+    # SPINE_LOG_LEVEL is not read by spine; verbosity is set via Log_Level in spine.conf

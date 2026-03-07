@@ -1,0 +1,10 @@
+# Test fixtures and CI scripts -- not needed for the spine build
+tests/
+.git/
+*.md
+config/
+m4/
+autom4te.cache/
+.omc/
+*.conf.dist
+*.log
