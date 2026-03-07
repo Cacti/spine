@@ -1040,7 +1040,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 							poll_result[0] = '\0';
 
-							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"), '\n'));
+							{
+								char *ep_result = exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ");
+								snprintf(poll_result, BUFSIZE, "%d", char_count(ep_result, '\n'));
+								free(ep_result);
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1057,7 +1061,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							php_process = php_get_process();
 
-							sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
+							{
+								char *php_result = php_cmd(reindex->arg1, php_process);
+								snprintf(poll_result, BUFSIZE, "%d", char_count(php_result, '\n'));
+								free(php_result);
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
