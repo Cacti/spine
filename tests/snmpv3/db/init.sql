@@ -181,7 +181,7 @@ INSERT INTO `host` (
 ) VALUES (
   1, 'snmpd', 'public',
   3, 'testuser', 'authpass1234',
-  'SHA256', 'privpass1234', 'AES',
+  'SHA-256', 'privpass1234', 'AES',
   '', '',
   1161, 1000, 10,
   2, 0, 0, 400, 1,
@@ -202,7 +202,7 @@ INSERT INTO `poller_item` (
   1, 1, 0,
   'snmpd', 'public',
   3, 'testuser', 'authpass1234',
-  'SHA256', 'privpass1234', 'AES',
+  'SHA-256', 'privpass1234', 'AES',
   '', '',
   1161, 1000,
   'uptime', '/dev/null', 1, 300,

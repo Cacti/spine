@@ -52,7 +52,7 @@ sleep 1
 echo "  Clock advanced. Polling within the USM window violation..."
 
 # ---------------------------------------------------------------------------
-# 3. Poll during the window violation — should log WARNING not ERROR
+# Poll during window violation (Phase 2, continued) — should log WARNING not ERROR
 # ---------------------------------------------------------------------------
 output=$($COMPOSE run --rm --no-deps spine 2>&1 || true)
 echo "$output"
