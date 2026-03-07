@@ -43,5 +43,4 @@ services:
       - ./spine/spine.conf:/etc/spine/spine.conf:ro
     entrypoint: ["/usr/local/bin/spine", "--conf=/etc/spine/spine.conf"]
     command: ["1", "1"]   # poll host_id 1
-    environment:
-      SPINE_LOG_LEVEL: "5"   # MEDIUM -- shows USM WARNING messages
+    # SPINE_LOG_LEVEL is not read by spine; verbosity is set via Log_Level in spine.conf

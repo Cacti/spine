@@ -39,10 +39,10 @@ echo ""
 echo "=== Phase 2: skew snmpd clock +200s to trigger notInTimeWindow ==="
 
 # Verify snmpd is still healthy before attempting clock skew
-$COMPOSE ps snmpd 2>/dev/null | grep -q healthy \
+$COMPOSE ps snmpd 2>/dev/null | grep -q "(healthy)" \
   || { echo "  SKIP: snmpd not healthy, skipping clock-skew phase"; exit 0; }
 
-$COMPOSE exec snmpd /bin/sh -c \
+$COMPOSE exec -T snmpd /bin/sh -c \
     'date -s "$(date -d "+200 seconds" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || date -v+200S +%Y-%m-%dT%H:%M:%S)" 2>/dev/null' \
   || { echo "  SKIP: SYS_TIME capability not available, skipping clock-skew phase"; exit 0; }
 
@@ -85,12 +85,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Restore clock and verify recovery on next poll
+# 3. Restore clock and verify recovery on next poll
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Phase 3: restore clock and verify recovery ==="
 real_time=$(date '+%Y-%m-%d %H:%M:%S')
-$COMPOSE exec snmpd date -s "$real_time" 2>/dev/null \
+$COMPOSE exec -T snmpd date -s "$real_time" 2>/dev/null \
   || echo "  WARN: clock restore failed, Phase 3 results may be unreliable"
 
 output=$($COMPOSE run --rm --no-deps spine 2>&1 || true)
