@@ -2083,7 +2083,9 @@ char *regex_replace(char *exp, char *value) {
 	int reti;
 	/* Thread-local storage: each polling thread gets its own buffer, so
 	 * concurrent callers do not race.  Callers must consume the result before
-	 * making another call on the same thread (all current call sites do this). */
+	 * making another call on the same thread (all current call sites do this).
+	 * C11 _Thread_local is equivalent; __thread is used here since GCC/Clang
+	 * (the only supported compilers for this codebase) treat them identically. */
 	static __thread char msgbuf[SMALL_BUFSIZE];
 	regmatch_t matches[MAX_MATCHES];
 	size_t match_len;

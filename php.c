@@ -382,15 +382,33 @@ int php_init(int php_process) {
 			posix_spawn_file_actions_t fa;
 			int spawn_err;
 
-			posix_spawn_file_actions_init(&fa);
+			if (posix_spawn_file_actions_init(&fa) != 0) {
+				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions_init failed", i));
+				close(cacti2php_pdes[0]);
+				close(cacti2php_pdes[1]);
+				close(php2cacti_pdes[0]);
+				close(php2cacti_pdes[1]);
+				pthread_setcancelstate(cancel_state, NULL);
+				return FALSE;
+			}
+
 			/* wire cacti->php read end to child stdin, php->cacti write end to child stdout */
-			posix_spawn_file_actions_adddup2(&fa, cacti2php_pdes[0], STDIN_FILENO);
-			posix_spawn_file_actions_adddup2(&fa, php2cacti_pdes[1], STDOUT_FILENO);
-			/* close all four pipe ends in the child after dup2 redirects are in place */
-			posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[0]);
-			posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[1]);
-			posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[0]);
-			posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]);
+			if (posix_spawn_file_actions_adddup2(&fa, cacti2php_pdes[0], STDIN_FILENO) != 0 ||
+			    posix_spawn_file_actions_adddup2(&fa, php2cacti_pdes[1], STDOUT_FILENO) != 0 ||
+			    /* close all four pipe ends in the child after dup2 redirects are in place */
+			    posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[0]) != 0 ||
+			    posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[1]) != 0 ||
+			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[0]) != 0 ||
+			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]) != 0) {
+				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions setup failed", i));
+				posix_spawn_file_actions_destroy(&fa);
+				close(cacti2php_pdes[0]);
+				close(cacti2php_pdes[1]);
+				close(php2cacti_pdes[0]);
+				close(php2cacti_pdes[1]);
+				pthread_setcancelstate(cancel_state, NULL);
+				return FALSE;
+			}
 
 			do {
 				spawn_err = posix_spawn(&pid, argv[0], &fa, NULL, argv, environ);
