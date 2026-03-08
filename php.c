@@ -33,6 +33,9 @@
 
 #include "common.h"
 #include "spine.h"
+#include <spawn.h>
+
+extern char **environ;
 
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
@@ -372,41 +375,44 @@ int php_init(int php_process) {
 			argv[5] = NULL;
 		}
 
-		/* fork a child process */
-		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process", i));
+		/* spawn a child process */
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to spawn Child Process", i));
 
-		retry:
+		{
+			posix_spawn_file_actions_t fa;
+			int spawn_err;
 
-		pid = vfork();
+			posix_spawn_file_actions_init(&fa);
+			/* wire cacti->php read end to child stdin, php->cacti write end to child stdout */
+			posix_spawn_file_actions_adddup2(&fa, cacti2php_pdes[0], STDIN_FILENO);
+			posix_spawn_file_actions_adddup2(&fa, php2cacti_pdes[1], STDOUT_FILENO);
+			/* close all four pipe ends in the child after dup2 redirects are in place */
+			posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[0]);
+			posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[1]);
+			posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[0]);
+			posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]);
 
-		/* check the pid status and process as required */
-		switch (pid) {
-			case -1: /* ERROR: Could not fork() */
-				switch (errno) {
-				case EAGAIN:
-					if (retry_count < 3) {
-						retry_count++;
-						#ifndef SOLAR_THREAD
-						/* take a moment */
-						usleep(50000);
-						#endif
-						goto retry;
-					} else {
-						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Resources", i));
-					}
-				case ENOMEM:
-					if (retry_count < 3) {
-						retry_count++;
-						#ifndef SOLAR_THREAD
-						/* take a moment */
-						usleep(50000);
-						#endif
-						goto retry;
-					} else {
-						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Memory", i));
-					}
-				default:
-					SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Unknown Reason", i));
+			do {
+				spawn_err = posix_spawn(&pid, argv[0], &fa, NULL, argv, environ);
+				if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
+					retry_count++;
+					#ifndef SOLAR_THREAD
+					usleep(50000);
+					#endif
+					continue;
+				}
+				break;
+			} while (1);
+
+			posix_spawn_file_actions_destroy(&fa);
+
+			if (spawn_err != 0) {
+				if (spawn_err == EAGAIN) {
+					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Out of Resources", i));
+				} else if (spawn_err == ENOMEM) {
+					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Out of Memory", i));
+				} else {
+					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Unknown Reason", i));
 				}
 
 				close(php2cacti_pdes[0]);
@@ -414,28 +420,13 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server", i));
+				SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server", i));
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
-				/* NOTREACHED */
-			case 0:	/* SUCCESS: I am now the child */
-				/* set the standard input/output channels of the new process.  */
-				dup2(cacti2php_pdes[0], STDIN_FILENO);
-				dup2(php2cacti_pdes[1], STDOUT_FILENO);
+			}
 
-				/* close unneeded Pipes */
-				(void)close(php2cacti_pdes[0]);
-				(void)close(php2cacti_pdes[1]);
-				(void)close(cacti2php_pdes[0]);
-				(void)close(cacti2php_pdes[1]);
-
-				/* start the php script server process */
-				execv(argv[0], argv);
-				_exit(127);
-				/* NOTREACHED */
-			default: /* I am the parent process */
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child FORK Success", i));
+			SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child spawn Success", i));
 		}
 
 		/* Parent */
