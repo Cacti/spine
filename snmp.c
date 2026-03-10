@@ -1080,6 +1080,15 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 						/* all OID's errored out so exit cleanly */
 						status = STAT_SUCCESS;
 					}
+				} else {
+					/* errindex==0: agent reported a PDU-level error with no specific
+					 * failing OID (RFC 3416 s.4.2). Mark all pending results UNDEFINED
+					 * so callers write "U" to RRD rather than an empty string. */
+					SPINE_LOG_HIGH(("Device[%i] WARNING: snmp_get_multi PDU error (errstat=%ld, errindex=0), all OIDs set undefined",
+						current_host->id, (long)response->errstat));
+					for (i = 0; i < num_oids; i++) {
+						SET_UNDEFINED(snmp_oids[i].result);
+					}
 				}
 			}
 		}

@@ -5,13 +5,13 @@ develop
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
 1.3.0
 -issue#360: If a Remote Data Collector has not devices, spine does not properly register itself
+-issue#425: Mark all OIDs undefined when snmp_get_multi() receives errindex==0 from agent
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
--feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site
+-feature#5090: Enhance number recognition within Spine
 -feature#6001: Extend SYSTEM STATS
 -feature: Make spine work with Stream feature
-
 1.2.31
 -issue#365: Removing Backtrace Support
 -issue#366: Failing to actually a poll device that returns "NoSuchObject"
