@@ -53,7 +53,7 @@ update_copyright() {
 			printf "%60s %s\n" "==============================" "===================="
 			printf "%60s %s\n" "$old_data" "=>"
 			printf "%60s %s\n" "$new_data" ""
-			sed -i -r s/"$old_reg"/"$new_reg"/g $1
+			sed -i -r s/"$old_reg"/"$new_reg"/g "$1"
 			printf "%60s %s\n" "==============================" "===================="
 		fi
 	else

@@ -348,11 +348,11 @@ void db_connect(int type, MYSQL *mysql) {
 				tries++;
 				success = FALSE;
 			} else if (error == 2002) {
-				printf("Database: Connection Failed: Attempt:'%u', Error:'%u', Message:'%s'\n", attempts, mysql_errno(mysql), mysql_error(mysql));
+				printf("Database: Connection Failed: Attempt:'%d', Error:'%u', Message:'%s'\n", attempts, mysql_errno(mysql), mysql_error(mysql));
 				sleep(1);
 				success = FALSE;
 			} else if (error != 1049 && error != 2005 && error != 1045) {
-				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", error, mysql_error(mysql));
+				printf("Database: Connection Failed: Error:'%d', Message:'%s'\n", error, mysql_error(mysql));
 				success = FALSE;
 				usleep(50000);
 			} else {
@@ -406,7 +406,6 @@ void db_disconnect(MYSQL *mysql) {
 		mysql_close(mysql);
 	}
 
-	mysql = NULL;
 }
 
 /*! \fn void db_create_connection_pool(int type)

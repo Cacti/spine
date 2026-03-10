@@ -5,6 +5,7 @@ The Cacti Group | spine
 -issue#441: Update copyright year to 2026 in 12 source files
 -issue#445: Replace vfork/execv with posix_spawn in php_init; fix stack-local return in regex_replace
 -feature#362: Report the number of data collection errors during data collection in host table
+-feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
 -feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
 -feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site

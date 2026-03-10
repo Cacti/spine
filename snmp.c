@@ -187,6 +187,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.securityModel = USM_SEC_MODEL_NUMBER;
 	} else {
 		SPINE_LOG(("Device[%i] ERROR: SNMP Version Error for Device '%s'", host_id, hostname));
+		free(session.localname);
 		return 0;
 	}
 
@@ -413,7 +414,7 @@ void snmp_host_cleanup(void *snmp_session) {
  *	This function will poll a specific snmp OID for a host.  The host snmp
  *  session must already be established.
  *
- *  \return returns the character representaton of the snmp OID, or "U" if
+ *  \return returns the character representation of the snmp OID, or "U" if
  *  unsuccessful.
  *
  */
@@ -666,7 +667,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
  *	This function will poll a specific snmp OID for a host.  The host snmp
  *  session must already be established.
  *
- *  \return returns the character representaton of the snmp OID, or "U" if
+ *  \return returns the character representation of the snmp OID, or "U" if
  *  unsuccessful.
  *
  */
@@ -996,6 +997,10 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 
 	/* load up oids */
 	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
+	if (name == NULL) {
+		SPINE_LOG(("ERROR: Failed to allocate memory for SNMP OID name array"));
+		return;
+	}
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	for (i = 0; i < num_oids; i++) {
 		namep->name_len = MAX_OID_LEN;

@@ -7,7 +7,7 @@ cppcheck --enable=all --std=c11 --error-exitcode=1 \
   --suppress=unusedFunction \
   --suppress=checkersReport \
   --suppress=toomanyconfigs \
-  *.c *.h 2>&1 | tee /tmp/cppcheck.txt
+  -- *.c *.h 2>&1 | tee /tmp/cppcheck.txt
 
 echo ""
 echo "=== scan-build ==="
