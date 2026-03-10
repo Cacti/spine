@@ -1,8 +1,9 @@
 The Cacti Group | spine
 
 develop
--feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
+-feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
+-feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
 1.3.0
 -issue#360: If a Remote Data Collector has not devices, spine does not properly register itself
 -feature#362: Report the number of data collection errors during data collection in host table
