@@ -1691,25 +1691,25 @@ char *add_slashes(char *string) {
  *  \return pointer to destination string
  *
 */
-#pragma GCC diagnostic push
-#if (defined(__GNUC__) && (__GNUC__ > 7)) || (__GNUC__ == 7 && defined(__GNUC_MINOR__) && __GNUC_MINOR__ > 1)
-#pragma GCC diagnostic ignored "-Wstringop-overflow"
-#endif
 char *strncopy(char *dst, const char *src, size_t obuf) {
-	size_t len;
+	size_t copy_len;
 
 	assert(dst != 0);
 	assert(src != 0);
 
-	len = (strlen(src) < obuf) ? strlen(src) : obuf;
-	if (len) {
-		strncpy(dst, src, len);
+	if (obuf == 0) return dst;
+
+	/* Cap the scan at obuf-1: no need to walk past the usable copy capacity,
+	 * and avoids a full strlen when src is large or unterminated near obuf. */
+	copy_len = strnlen(src, obuf - 1);
+
+	if (copy_len) {
+		strncpy(dst, src, copy_len);
 	}
 
-	dst[len] = '\0';
+	dst[copy_len] = '\0';
 	return dst;
 }
-#pragma GCC diagnostic pop
 
 /*! \fn double get_time_as_double()
  *  \brief fetches system time as a double-precision value
