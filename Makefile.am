@@ -33,3 +33,21 @@ man_MANS = spine.1
 
 spine.1: $(bin_PROGRAMS)
 	$(HELP2MAN) --output=$@ --name='Data Collector for Cacti' --no-info --version-option='--version' ./spine
+
+# Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
+.PHONY: docker docker-dev verify cppcheck
+
+docker:
+	docker build -t spine .
+
+docker-dev:
+	docker build -f Dockerfile.dev -t spine-dev .
+
+verify: docker-dev
+	docker run --rm spine-dev
+
+cppcheck: docker-dev
+	docker run --rm spine-dev bash -c \
+		"cppcheck --enable=all --std=c11 --error-exitcode=1 \
+		--suppress=missingIncludeSystem --suppress=unusedFunction \
+		--suppress=checkersReport --suppress=toomanyconfigs $(spine_SOURCES)"

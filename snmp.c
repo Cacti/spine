@@ -414,7 +414,7 @@ void snmp_host_cleanup(void *snmp_session) {
  *	This function will poll a specific snmp OID for a host.  The host snmp
  *  session must already be established.
  *
- *  \return returns the character representaton of the snmp OID, or "U" if
+ *  \return returns the character representation of the snmp OID, or "U" if
  *  unsuccessful.
  *
  */
@@ -667,7 +667,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
  *	This function will poll a specific snmp OID for a host.  The host snmp
  *  session must already be established.
  *
- *  \return returns the character representaton of the snmp OID, or "U" if
+ *  \return returns the character representation of the snmp OID, or "U" if
  *  unsuccessful.
  *
  */
