@@ -41,7 +41,8 @@
  *
  *	Provide the name of the Spine configuration file, which contains
  *	the parameters for connecting to the database. In the absence of
- *	this, it looks [WHERE?]
+ *	this, it searches in order: the current directory, /etc/,
+ *	/etc/cacti/, and ../etc/ for a file named spine.conf.
  *
  * -f | --first=ID
  *
@@ -1149,8 +1150,8 @@ static void display_help(int only_version) {
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
         "In their absence, all hosts are processed.",
 		"",
-		"Without the --conf parameter, spine searches for its spine.conf",
-		"file in the usual places.",
+		"Without the --conf parameter, spine searches in order:",
+		"  current directory, /etc/, /etc/cacti/, ../etc/ for spine.conf.",
 		"",
 		"Verbosity is one of NONE/LOW/MEDIUM/HIGH/DEBUG or 1..5",
 		"",
