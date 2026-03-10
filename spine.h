@@ -266,7 +266,7 @@
 #define GD_MAX 5
 #define GD_DEFAULT 5
 
-/* host availability statics */
+/* host availability statistics */
 #define AVAIL_NONE 0
 #define AVAIL_SNMP_AND_PING 1
 #define AVAIL_SNMP 2
