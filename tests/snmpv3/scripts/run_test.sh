@@ -8,7 +8,7 @@
 # Usage: ./scripts/run_test.sh
 set -euo pipefail
 
-COMPOSE=(docker compose -f $(dirname "$0")/../docker-compose.yml)
+COMPOSE=(docker compose -f "$(dirname "$0")/../docker-compose.yml")
 PASS=0
 FAIL=0
 
