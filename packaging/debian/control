@@ -1,0 +1,26 @@
+Source: cacti-spine
+Section: net
+Priority: optional
+Maintainer: The Cacti Group <developers@cacti.net>
+Build-Depends: debhelper-compat (= 13),
+               autoconf,
+               automake,
+               libtool,
+               dos2unix,
+               help2man,
+               libmariadb-dev | libmysqlclient-dev,
+               libsnmp-dev,
+               libssl-dev,
+               libcap-dev
+Standards-Version: 4.6.2
+Rules-Requires-Root: binary-targets
+Homepage: https://www.cacti.net/
+
+Package: cacti-spine
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcap2-bin
+Description: High-performance SNMP poller for Cacti
+ Spine is a replacement for the cmd.php data collector in Cacti.
+ It uses POSIX threads to poll many devices in parallel via SNMP,
+ ICMP, and TCP, providing substantially higher throughput than the
+ PHP-based poller.
