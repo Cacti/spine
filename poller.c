@@ -1683,9 +1683,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), php_process, poller_items[i].arg1, poller_items[i].result));
 				}
 
-				if (IS_UNDEFINED(poller_items[i].result)) {
+				if (!IS_UNDEFINED(poller_items[i].result)) {
 					/* insert a NaN in place of the actual value if the snmp agent restarts */
-					if ((spike_kill) && (!STRIMATCH(poller_items[i].result,":"))) {
+					if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
 						SET_UNDEFINED(poller_items[i].result);
 					}
 				}
@@ -1946,7 +1946,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	if (errors > 0) {
 		int error_query_len = strlen(error_string) + BUFSIZE;
-		char *error_query = (char *)malloc(error_query_len);
+		char *error_query;
+		if (!(error_query = (char *)malloc(error_query_len))) {
+			die("ERROR: Fatal malloc error: poller.c error_query!");
+		}
 
 		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
 			" VALUES(%i, %i, %i, \"%s\")"
