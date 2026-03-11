@@ -315,8 +315,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				#endif
 
 				return HOST_DOWN;
-
-				break;
 			}
 		} else {
 			break;
@@ -374,10 +372,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			total_time  = 0;
 			begin_time  = get_time_as_double();
 
-			/* initialize file descriptor to review for input/output */
-			FD_ZERO(&socket_fds);
-			FD_SET(icmp_socket,&socket_fds);
-
 			while (1) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
@@ -407,7 +401,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				fromlen = sizeof(fromname);
 
 				/* wait for a response on the socket */
+				/* reinitialize fd_set -- select(2) clears bits in place on return */
 				keep_listening:
+				FD_ZERO(&socket_fds);
+				FD_SET(icmp_socket,&socket_fds);
 				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */

@@ -8,6 +8,7 @@ develop
 -issue#360: If a Remote Data Collector has not devices, spine does not properly register itself
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
+-issue#423: Reinitialize fd_set before each select() call in ping_icmp() to prevent instant retry expiry after first timeout
 -feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site
 -feature#6001: Extend SYSTEM STATS
