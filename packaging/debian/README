@@ -1,0 +1,7 @@
+To build a .deb from source, symlink or copy this directory to the
+source root before running dpkg-buildpackage:
+
+    ln -s packaging/debian debian
+    dpkg-buildpackage -us -uc -b
+
+Or use the provided Docker image (see feat/docker-build PR).
