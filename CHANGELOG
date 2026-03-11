@@ -6,14 +6,14 @@ develop
 -feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
 1.3.0
 -issue#360: If a Remote Data Collector has not devices, spine does not properly register itself
+-issue#423: Reinitialize fd_set before each select() call in ping_icmp() to prevent instant retry expiry after first timeout
+-issue#424: Correct inverted spike_kill condition for PHP script server (IS_UNDEFINED -> !IS_UNDEFINED)
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
--issue#423: Reinitialize fd_set before each select() call in ping_icmp() to prevent instant retry expiry after first timeout
--feature#5090: Enhance number recognition within Spine
 -feature#3740: Ability to disable a site
+-feature#5090: Enhance number recognition within Spine
 -feature#6001: Extend SYSTEM STATS
 -feature: Make spine work with Stream feature
-
 1.2.31
 -issue#365: Removing Backtrace Support
 -issue#366: Failing to actually a poll device that returns "NoSuchObject"
