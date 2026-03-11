@@ -9,6 +9,7 @@ The Cacti Group | spine
 -issue#438: Resolve stale content in spine.c (--help search path), configure.ac (AC_PREREQ, obsolete macros), spine.conf.dist (missing settings), and Copilot instructions
 -issue#441: Update copyright year to 2026 in 12 source files
 -issue#445: Replace vfork/execv with posix_spawn in php_init; fix stack-local return in regex_replace
+-issue#447: Correct off-by-one OOB write in strncopy() when src fills buffer; remove suppressing pragma
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
 -feature#442: Add GitHub Actions CI: build matrix (gcc/clang), cppcheck, flawfinder, CodeQL
