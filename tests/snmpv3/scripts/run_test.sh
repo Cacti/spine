@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# SNMPv3 notInTimeWindow regression test.
+# SNMPv3 regression test suite.
 #
-# Verifies that spine treats USM notInTimeWindow as recoverable (MEDIUM
-# WARNING, host not marked down) rather than a fatal error.
+# Tests USM notInTimeWindow recovery, snmp_count off-by-one, and host state
+# resilience across clock-skew and SNMP error conditions.
 #
 # Requires: docker compose, compose services started and healthy.
 # Usage: ./scripts/run_test.sh

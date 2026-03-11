@@ -1946,7 +1946,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	if (errors > 0) {
 		int error_query_len = strlen(error_string) + BUFSIZE;
-		char *error_query = (char *)malloc(error_query_len);
+		char *error_query;
+		if (!(error_query = (char *)malloc(error_query_len))) {
+			die("ERROR: Fatal malloc error: poller.c error_query!");
+		}
 
 		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
 			" VALUES(%i, %i, %i, \"%s\")"
