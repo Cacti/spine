@@ -39,7 +39,7 @@ echo ""
 echo "=== Phase 2: skew snmpd clock +200s to trigger notInTimeWindow ==="
 
 # Verify snmpd is still healthy before attempting clock skew
-"${COMPOSE[@]}" ps snmpd 2>/dev/null | grep -qw healthy \
+"${COMPOSE[@]}" ps snmpd 2>/dev/null | grep -qw "healthy" \
   || { echo "  SKIP: snmpd not healthy, skipping clock-skew phase"; exit 0; }
 
 "${COMPOSE[@]}" exec -T snmpd /bin/sh -c \
