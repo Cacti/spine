@@ -6,6 +6,7 @@ The Cacti Group | spine
 -issue#424: Correct inverted spike_kill condition for PHP script server (IS_UNDEFINED -> !IS_UNDEFINED)
 -issue#425: Mark all OIDs undefined when snmp_get_multi() receives errindex==0 from agent
 -issue#426: Add NULL check after malloc in host_errors insert path to prevent UB on memory pressure
+-issue#438: Resolve stale content in spine.c (--help search path), configure.ac (AC_PREREQ, obsolete macros), spine.conf.dist (missing settings), and Development instructions
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
 -feature#442: Add GitHub Actions CI: build matrix (gcc/clang), cppcheck, flawfinder, CodeQL
