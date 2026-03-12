@@ -1038,13 +1038,13 @@ void poller_push_data_to_main() {
 	db_disconnect(&mysqlr);
 }
 
-/*! \fn int read_spine_config(char *file)
+/*! \fn int read_spine_config(const char *file)
  *  \brief obtain default startup variables from the spine.conf file.
  *  \param file the spine config file
  *
  *  \return 0 if successful or -1 if the file could not be opened
  */
-int read_spine_config(char *file) {
+int read_spine_config(const char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
