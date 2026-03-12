@@ -46,14 +46,19 @@ extern int db_column_exists(MYSQL *mysql, int type, const char *table, const cha
 
 typedef struct {
 	char   *buffer;
-	char   *ptr;
-	size_t  size;
+	size_t  capacity;
+	size_t  length;
 } sql_buffer_t;
 
-extern void sql_buffer_init(sql_buffer_t *sb, char *buffer, size_t size);
+/* Conservative fail-safe for MariaDB/MySQL max_allowed_packet constraints */
+#define SQL_MAX_BUFFER_CAPACITY (8 * 1024 * 1024)
+
+extern int  sql_buffer_init(sql_buffer_t *sb, size_t initial_capacity);
 extern int  sql_buffer_append(sql_buffer_t *sb, const char *format, ...)
 	__attribute__((format(printf, 2, 3)));
 extern void sql_buffer_reset(sql_buffer_t *sb);
+extern void sql_buffer_truncate(sql_buffer_t *sb, size_t length);
+extern void sql_buffer_free(sql_buffer_t *sb);
 
 extern int append_hostrange(char *obuf, const char *colname);
 
@@ -64,4 +69,3 @@ extern int append_hostrange(char *obuf, const char *colname);
 	        die("FATAL: MySQL options unable to set %s option", desc);\
 	}\
 }\
-
