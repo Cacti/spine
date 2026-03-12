@@ -22,13 +22,20 @@ jobs:
         with:
           languages: c-cpp
 
-      - name: Build
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             mariadb-server libmariadb3 libmariadb-dev libmariadb-dev-compat \
             libsnmp-dev libssl-dev \
             help2man autoconf automake libtool dos2unix
+
+      - name: Search libraries
+        run: |
+          find /usr/include -name mysql.h
+
+      - name: Build Spine
+        run: |
           sudo ./bootstrap
           sudo ./configure --with-mysql=/usr/include/mysql
           sudo make -j
