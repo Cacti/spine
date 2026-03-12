@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-          mariadb-server libmariadb3 libmariadb-dev libmariadb-dev-compat \
+          mysql-server libmysql libmysql-dev libmysql-dev-compat \
           libsnmp-dev libssl-dev \
           help2man autoconf automake libtool dos2unix
 
@@ -36,7 +36,7 @@ jobs:
       - name: Prepare for Spine Build
         run: |
           ./bootstrap
-          ./configure --with-mysql=/usr/include/mariadb
+          ./configure
 
       - name: Check the config.status for paths
         run: |
