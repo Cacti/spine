@@ -30,7 +30,7 @@ jobs:
             libsnmp-dev libssl-dev \
             help2man autoconf automake libtool dos2unix
           sudo ./bootstrap
-          sudo ./configure
+          sudo ./configure --with-mysql=/usr/include/mysql
           sudo make -j
 
       - uses: github/codeql-action/analyze@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1
