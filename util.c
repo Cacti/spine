@@ -52,6 +52,25 @@ static struct {
 	const char *val;
 } opttable[256];
 
+
+static void append_capability(char *buffer, size_t buffer_size, const char *value) {
+	size_t used;
+	int written;
+
+	assert(buffer != NULL);
+	assert(value  != NULL);
+
+	used = strlen(buffer);
+	if (used >= buffer_size - 1) {
+		return;
+	}
+
+	written = snprintf(buffer + used, buffer_size - used, "%s%s", used > 0 ? "," : "", value);
+	if (written < 0) {
+		buffer[used] = '\0';
+	}
+}
+
 /*! \fn void set_option(const char *option, const char *value)
  *  \brief Override spine setting from the Cacti settings table.
  *
@@ -343,6 +362,8 @@ void read_config_options() {
 	char       *sqlp = sqlbuf;
 	const char *res;
 	char       spine_capabilities[BUFSIZE];
+	char       auth_protocols[SMALL_BUFSIZE];
+	char       priv_protocols[SMALL_BUFSIZE];
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
@@ -741,46 +762,51 @@ void read_config_options() {
 		set.snmp_max_get_size = 25;
 	}
 
+	memset(auth_protocols, 0, sizeof(auth_protocols));
+	memset(priv_protocols, 0, sizeof(priv_protocols));
+
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
-	strcat(spine_capabilities, "{ authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
-	strcat(spine_capabilities, "MD5");
+	append_capability(auth_protocols, sizeof(auth_protocols), "MD5");
 	#endif
 
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",SHA":"SHA"));
+	append_capability(auth_protocols, sizeof(auth_protocols), "SHA");
 
 	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
-	strcat(spine_capabilities, ",SHA224,SHA256");
+	append_capability(auth_protocols, sizeof(auth_protocols), "SHA224");
+	append_capability(auth_protocols, sizeof(auth_protocols), "SHA256");
 	#endif
 
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
-	strcat(spine_capabilities, ",SHA384,SHA512");
+	append_capability(auth_protocols, sizeof(auth_protocols), "SHA384");
+	append_capability(auth_protocols, sizeof(auth_protocols), "SHA512");
 	#endif
-	strcat(spine_capabilities, "\"");
-
-	strcat(spine_capabilities, ", privProtocols: \"");
 
 	#ifndef NETSNMP_DISABLE_DES
-	strcat(spine_capabilities, "DES");
+	append_capability(priv_protocols, sizeof(priv_protocols), "DES");
 	#endif
 
 	#ifdef HAVE_AES
-	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES128":"AES128"));
+	append_capability(priv_protocols, sizeof(priv_protocols), "AES128");
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES192":"AES192"));
+	append_capability(priv_protocols, sizeof(priv_protocols), "AES192");
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES256":"AES256"));
+	append_capability(priv_protocols, sizeof(priv_protocols), "AES256");
 	#endif
-	strcat(spine_capabilities, "\" }");
+
+	snprintf(
+		spine_capabilities,
+		sizeof(spine_capabilities),
+		"{ authProtocols: \"%s\", privProtocols: \"%s\" }",
+		auth_protocols,
+		priv_protocols
+	);
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
@@ -1066,7 +1092,9 @@ int read_spine_config(char *file) {
 			chars = fgets(buff, BUFSIZE, fp);
 
 			if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
-				sscanf(buff, "%15s %255s", p1, p2);
+				if (sscanf(buff, "%1023s %1023s", p1, p2) != 2) {
+					continue;
+				}
 
 				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
 				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
