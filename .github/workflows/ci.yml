@@ -40,7 +40,7 @@ jobs:
 
       - name: Check the config.status for paths
         run: |
-          cat config.status
+          grep -i mysql config.status
 
       - name: Build Spine
         run: |
