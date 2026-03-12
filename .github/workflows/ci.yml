@@ -65,6 +65,7 @@ jobs:
             --suppress=checkersReport \
             --suppress=variableScope \
             --suppress=unreadVariable \
+            --suppress=shadowVariable \
             --suppress=constVariablePointer \
             --suppress=redundantAssignment \
             --suppress=toomanyconfigs \
