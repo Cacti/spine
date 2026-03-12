@@ -1,0 +1,81 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config cmake ninja-build
+    gcc clang llvm
+    libsnmp-dev default-libmysqlclient-dev
+
+jobs:
+  analyze:
+    name: Analyze (c-cpp)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure and build (Autotools or CMake)
+        run: |
+          set -euo pipefail
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=gcc CFLAGS='-O2 -g' LDFLAGS='-Wl,-z,relro,-z,now'
+            make -j"$(nproc)"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_C_COMPILER=gcc \
+              -DCMAKE_C_FLAGS='-O2 -g' \
+              -DCMAKE_EXE_LINKER_FLAGS='-Wl,-z,relro,-z,now' \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            cmake --build build --parallel "$(nproc)"
+          else
+            echo 'No supported build system found.' >&2
+            exit 1
+          fi
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3

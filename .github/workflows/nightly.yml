@@ -1,0 +1,223 @@
+name: Nightly Heavy Checks
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config cmake ninja-build
+    gcc clang llvm valgrind
+    libsnmp-dev default-libmysqlclient-dev
+  TSAN_OPTIONS: halt_on_error=1:history_size=7:log_path=tsan
+
+jobs:
+  tsan:
+    name: clang tsan
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure (Autotools or CMake)
+        run: |
+          set -euo pipefail
+          CFLAGS='-O1 -g3 -fno-omit-frame-pointer -fsanitize=thread'
+          LDFLAGS='-fsanitize=thread'
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=clang CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build-tsan -G Ninja \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_C_FLAGS="${CFLAGS}" \
+              -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}" \
+              -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}" \
+              -DCMAKE_BUILD_TYPE=Debug
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo 'No supported build system found.' >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            make -j"$(nproc)"
+          else
+            cmake --build build-tsan --parallel "$(nproc)"
+          fi
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            if make -n check >/dev/null 2>&1; then
+              make check VERBOSE=1
+            elif make -n test >/dev/null 2>&1; then
+              make test VERBOSE=1
+            else
+              echo '::notice::No make check/test target found.'
+            fi
+          else
+            if ctest --test-dir build-tsan -N > ctest-list.txt 2>&1 && grep -Eq 'Total Tests: [1-9]' ctest-list.txt; then
+              ctest --test-dir build-tsan --output-on-failure --parallel "$(nproc)"
+            else
+              echo '::notice::No CTest tests found.'
+            fi
+          fi
+
+      - name: Upload tsan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-tsan-logs
+          path: |
+            tsan*
+            config.log
+            build-tsan/CMakeFiles/CMakeConfigureLog.yaml
+            build-tsan/CMakeFiles/CMakeError.log
+            *.log
+          if-no-files-found: ignore
+
+  valgrind:
+    name: valgrind test pass
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure (Autotools or CMake)
+        run: |
+          set -euo pipefail
+          CFLAGS='-O0 -g3 -fno-omit-frame-pointer'
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=gcc CFLAGS="${CFLAGS}" LDFLAGS=''
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build-valgrind -G Ninja \
+              -DCMAKE_C_COMPILER=gcc \
+              -DCMAKE_C_FLAGS="${CFLAGS}" \
+              -DCMAKE_BUILD_TYPE=Debug
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo 'No supported build system found.' >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            make -j"$(nproc)"
+          else
+            cmake --build build-valgrind --parallel "$(nproc)"
+          fi
+
+      - name: Run tests under valgrind when available
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            if make -n valgrind-check >/dev/null 2>&1; then
+              make valgrind-check
+            elif make -n check >/dev/null 2>&1; then
+              mapfile -t bins < <(find tests -maxdepth 3 -type f -perm -111 ! -name '*.sh' 2>/dev/null || true)
+              if [[ "${#bins[@]}" -gt 0 ]]; then
+                for t in "${bins[@]}"; do
+                  valgrind \
+                    --error-exitcode=1 \
+                    --leak-check=full \
+                    --show-leak-kinds=all \
+                    --track-origins=yes \
+                    --log-file="valgrind.$(basename "${t}").log" \
+                    "${t}"
+                done
+              else
+                echo '::notice::No standalone test binaries found for valgrind; running make check.'
+                make check VERBOSE=1
+              fi
+            else
+              echo '::notice::No make valgrind-check/check target found.'
+            fi
+          else
+            if ctest --test-dir build-valgrind -N > ctest-list.txt 2>&1 && grep -Eq 'Total Tests: [1-9]' ctest-list.txt; then
+              if ! ctest --test-dir build-valgrind -T memcheck --output-on-failure; then
+                echo '::warning::CTest memcheck unavailable or failed; running regular ctest.'
+                ctest --test-dir build-valgrind --output-on-failure
+              fi
+            else
+              echo '::notice::No CTest tests found.'
+            fi
+          fi
+
+      - name: Upload valgrind artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-valgrind-logs
+          path: |
+            valgrind*.log
+            build-valgrind/Testing/Temporary
+            config.log
+            *.log
+          if-no-files-found: ignore
+
+  soak-placeholder:
+    name: soak/integration placeholder
+    runs-on: ubuntu-24.04
+    needs: [tsan, valgrind]
+
+    steps:
+      - name: Placeholder
+        run: |
+          set -euo pipefail
+          echo 'Placeholder for long-running soak/integration checks.'
+          echo 'Add SNMP simulator container and multi-hour stress scenario here.'

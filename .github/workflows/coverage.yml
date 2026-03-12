@@ -1,0 +1,130 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config cmake ninja-build
+    gcc lcov
+    libsnmp-dev default-libmysqlclient-dev
+  CFLAGS_COVERAGE: >-
+    -O0 -g3 --coverage
+  LDFLAGS_COVERAGE: --coverage
+
+jobs:
+  gcc-coverage:
+    name: gcc coverage
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install coverage dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure (Autotools or CMake)
+        run: |
+          set -euo pipefail
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=gcc CFLAGS="${CFLAGS_COVERAGE}" LDFLAGS="${LDFLAGS_COVERAGE}"
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build-coverage -G Ninja \
+              -DCMAKE_C_COMPILER=gcc \
+              -DCMAKE_C_FLAGS="${CFLAGS_COVERAGE}" \
+              -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS_COVERAGE}" \
+              -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS_COVERAGE}" \
+              -DCMAKE_BUILD_TYPE=Debug
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo "No supported build system found." >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            make -j"$(nproc)"
+          else
+            cmake --build build-coverage --parallel "$(nproc)"
+          fi
+
+      - name: Test (make check -> make test -> ctest)
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            if make -n check >/dev/null 2>&1; then
+              make check VERBOSE=1
+            elif make -n test >/dev/null 2>&1; then
+              make test VERBOSE=1
+            else
+              echo "::notice::No make check/test target found."
+            fi
+          else
+            if ctest --test-dir build-coverage -N > ctest-list.txt 2>&1 && grep -Eq "Total Tests: [1-9]" ctest-list.txt; then
+              ctest --test-dir build-coverage --output-on-failure --parallel "$(nproc)"
+            else
+              echo "::notice::No CTest tests found."
+            fi
+          fi
+
+      - name: Generate lcov + genhtml report
+        run: |
+          set -euo pipefail
+          if lcov --capture --directory . --output-file coverage.raw.info --ignore-errors mismatch; then
+            lcov \
+              --remove coverage.raw.info \
+              '/usr/*' \
+              '*/build/*' \
+              '*/tests/*' \
+              '*/test/*' \
+              --output-file coverage.filtered.info \
+              --ignore-errors unused
+            genhtml coverage.filtered.info --output-directory coverage-html
+          else
+            echo "::warning::No coverage data files were found."
+            mkdir -p coverage-html
+            echo "No coverage data generated." > coverage-html/index.html
+            : > coverage.filtered.info
+          fi
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.filtered.info
+            coverage-html
+          if-no-files-found: ignore

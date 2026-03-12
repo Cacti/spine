@@ -1,0 +1,166 @@
+name: Static Analysis
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config cmake ninja-build
+    gcc clang llvm clang-tools cppcheck
+    libsnmp-dev default-libmysqlclient-dev
+  CFLAGS_ANALYZE: >-
+    -O1 -g3 -fno-omit-frame-pointer
+
+jobs:
+  scan-build:
+    name: clang static analyzer (scan-build)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install analysis dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure build system
+        run: |
+          set -euo pipefail
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=clang CFLAGS="${CFLAGS_ANALYZE}"
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build-analyze -G Ninja \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_C_FLAGS="${CFLAGS_ANALYZE}" \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo "No supported build system found." >&2
+            exit 1
+          fi
+
+      - name: Run scan-build
+        run: |
+          set -euo pipefail
+          mkdir -p scan-build-report
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            scan-build --status-bugs --keep-going --plist --output scan-build-report \
+              make -j"$(nproc)"
+          else
+            scan-build --status-bugs --keep-going --plist --output scan-build-report \
+              cmake --build build-analyze --parallel "$(nproc)"
+          fi
+
+      - name: Upload scan-build report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-build-report
+          path: scan-build-report
+          if-no-files-found: ignore
+
+  cppcheck:
+    name: cppcheck
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cppcheck dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure for compile database when possible
+        run: |
+          set -euo pipefail
+          if [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build-cppcheck -G Ninja \
+              -DCMAKE_C_COMPILER=gcc \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DCMAKE_BUILD_TYPE=Debug
+            echo "CPPCHECK_MODE=project" >> "${GITHUB_ENV}"
+          else
+            echo "CPPCHECK_MODE=sources" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Run cppcheck
+        run: |
+          set -euo pipefail
+          if [[ "${CPPCHECK_MODE}" == "project" ]]; then
+            cppcheck \
+              --project=build-cppcheck/compile_commands.json \
+              --enable=warning,style,performance,portability \
+              --std=c11 \
+              --inconclusive \
+              --error-exitcode=1 \
+              --inline-suppr \
+              --suppress=missingIncludeSystem \
+              2> cppcheck-report.txt
+          else
+            mapfile -t sources < <(git ls-files '*.c' '*.h')
+            if [[ "${#sources[@]}" -eq 0 ]]; then
+              echo "No C sources found for cppcheck."
+              exit 0
+            fi
+            cppcheck \
+              --enable=warning,style,performance,portability \
+              --std=c11 \
+              --inconclusive \
+              --error-exitcode=1 \
+              --inline-suppr \
+              --force \
+              --suppress=missingIncludeSystem \
+              "${sources[@]}" \
+              2> cppcheck-report.txt
+          fi
+
+      - name: Upload cppcheck report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-report
+          path: cppcheck-report.txt
+          if-no-files-found: ignore
