@@ -32,6 +32,7 @@ jobs:
       - name: Search libraries
         run: |
           find /usr/include -name mysql.h
+          cat config.status
 
       - name: Build Spine
         run: |
