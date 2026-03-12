@@ -32,13 +32,19 @@ jobs:
       - name: Search libraries
         run: |
           find /usr/include -name mysql.h
+
+      - name: Prepare for Spine Build
+        run: |
+          ./bootstrap
+          ./configure
+
+      - name: Check the config.status for paths
+        run: |
           cat config.status
 
       - name: Build Spine
         run: |
-          ./bootstrap
-          ./configure
-          make -j$(nproc) CFLAGS="-Wall -Wextra"
+          make -j CFLAGS="-Wall -Wextra"
 
   cppcheck:
     runs-on: ubuntu-latest
