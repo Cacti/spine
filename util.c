@@ -793,6 +793,10 @@ void read_config_options() {
 	#endif
 	strcat(spine_capabilities, "\" }");
 
+	if (privCount == 0) {
+		SPINE_LOG_DEBUG(("Warning not advanced snmp protocols found"));
+	}
+
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
 	}
