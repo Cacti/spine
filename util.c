@@ -96,7 +96,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -138,11 +138,11 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 	assert(myvalue   != 0);
 
 	if (set.dbonupdate == 0) {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
 	} else {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') AS rs "
 			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
 	}
@@ -188,7 +188,7 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
 
 	result = db_query(psql, mode, qstring);
 
@@ -282,7 +282,7 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 		}
 	}
 
-	sprintf(qstring, "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -748,50 +748,64 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
-	strcat(spine_capabilities, "{ authProtocols: \"");
+	strncat(spine_capabilities, "{ authProtocols: \"", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 	#ifndef NETSNMP_DISABLE_MD5
-	strcat(spine_capabilities, "MD5");
+	strncat(spine_capabilities, "MD5", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 	authCount++;
 	#endif
 
-	strcat(spine_capabilities, (authCount == 0 ? "SHA":",SHA"));
+	if (authCount > 0) {
+		strncat(spine_capabilities, ",SHA", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	} else {
+		strncat(spine_capabilities, "SHA", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	}
 	authCount++;
 
 	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
-	strcat(spine_capabilities, ",SHA224,SHA256");
-	authCount++;
+	strncat(spine_capabilities, ",SHA224,SHA256", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 	#endif
 
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
-	strcat(spine_capabilities, ",SHA384,SHA512");
-	authCount++;
+	strncat(spine_capabilities, ",SHA384,SHA512", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 	#endif
-	strcat(spine_capabilities, "\"");
+	strncat(spine_capabilities, "\"", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 
 	privCount = 0;
 
-	strcat(spine_capabilities, ", privProtocols: \"");
+	strncat(spine_capabilities, ", privProtocols: \"", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 
 	#ifndef NETSNMP_DISABLE_DES
-	strcat(spine_capabilities, "DES");
+	strncat(spine_capabilities, "DES", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 	privCount++;
 	#endif
 
 	#ifdef HAVE_AES
-	strcat(spine_capabilities, (privCount == 0 ? "AES128":",AES128"));
+	if (privCount > 0) {
+		strncat(spine_capabilities, ",AES128", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	} else {
+		strncat(spine_capabilities, "AES128", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	}
 	privCount++;
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	strcat(spine_capabilities, (privCount == 0 ? "AES192":",AES192"));
+	if (privCount > 0) {
+		strncat(spine_capabilities, ",AES192", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	} else {
+		strncat(spine_capabilities, "AES192", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	}
 	privCount++;
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	strcat(spine_capabilities, (privCount == 0 ? "AES256":",AES256"));
+	if (privCount > 0) {
+		strncat(spine_capabilities, ",AES256", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	} else {
+		strncat(spine_capabilities, "AES256", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
+	}
 	privCount++;
 	#endif
-	strcat(spine_capabilities, "\" }");
+	strncat(spine_capabilities, "\" }", sizeof(spine_capabilities) - strlen(spine_capabilities) - 1);
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
@@ -2042,7 +2056,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 
 	assert(psql != 0);
 
-	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+	snprintf(qstring, sizeof(qstring), "SELECT cacti FROM version LIMIT 1");
 
 	result = db_query(psql, mode, qstring);
 

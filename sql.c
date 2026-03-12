@@ -560,7 +560,7 @@ void db_release_connection(int type, int id) {
  */
 int append_hostrange(char *obuf, const char *colname) {
 	if (HOSTID_DEFINED(set.start_host_id) && HOSTID_DEFINED(set.end_host_id)) {
-		return sprintf(obuf, " AND %s BETWEEN %d AND %d",
+		return snprintf(obuf, BUFSIZE, " AND %s BETWEEN %d AND %d",
 			colname,
 			set.start_host_id,
 			set.end_host_id);

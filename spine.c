@@ -245,13 +245,18 @@ int main(int argc, char *argv[]) {
 	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
-	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
+	if (!(php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t)))) {
+		die("ERROR: Fatal calloc error: spine.c php_processes!");
+	}
+
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
 
 	/* create the array of debug devices */
-	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
+	if (!(debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int)))) {
+		die("ERROR: Fatal calloc error: spine.c debug_devices!");
+	}
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -540,7 +545,10 @@ int main(int argc, char *argv[]) {
 	db_connect(LOCAL, &mysql);
 
 	/* setup local connection pool for hosts */
-	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	if (!(db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t)))) {
+		die("ERROR: Fatal calloc error: spine.c db_pool_local!");
+	}
+
 	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
@@ -548,7 +556,10 @@ int main(int argc, char *argv[]) {
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
-		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		if (!(db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t)))) {
+			die("ERROR: Fatal calloc error: spine.c db_pool_remote!");
+		}
+
 		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;
@@ -626,19 +637,19 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
-	qp += sprintf(qp, " WHERE disabled = ''");
+	qp += snprintf(qp, sizeof(querybuf) - (qp - querybuf), "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+	qp += snprintf(qp, sizeof(querybuf) - (qp - querybuf), " WHERE disabled = ''");
 
-	qp += sprintf(qp, " AND availability_method != %d", AVAIL_STREAM);
+	qp += snprintf(qp, sizeof(querybuf) - (qp - querybuf), " AND availability_method != %d", AVAIL_STREAM);
 
 	if (!strlen(set.host_id_list)) {
 		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
 	} else {
-		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
+		qp += snprintf(qp, sizeof(querybuf) - (qp - querybuf), " AND h.id IN(%s)", set.host_id_list);
 	}
 
-	qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
-	qp += sprintf(qp, " ORDER BY picount DESC");
+	qp += snprintf(qp, sizeof(querybuf) - (qp - querybuf), " AND h.poller_id = %i", set.poller_id);
+	qp += snprintf(qp, sizeof(querybuf) - (qp - querybuf), " ORDER BY picount DESC");
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
 	result = db_query(&mysql, LOCAL, querybuf);
@@ -790,10 +801,10 @@ int main(int argc, char *argv[]) {
 
 				db_free_result(tresult);
 
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
@@ -805,7 +816,7 @@ int main(int argc, char *argv[]) {
 
 			db_free_result(tresult);
 
-			sprintf(host_time, "%lu", (unsigned long) time(NULL));
+			snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 

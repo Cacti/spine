@@ -217,9 +217,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	target_t    *poller_items = NULL;
 	snmp_oids_t *snmp_oids = NULL;
 
-	error_string = malloc(DBL_BUFSIZE);
-	buf_size     = malloc(sizeof(int));
-	buf_errors   = malloc(sizeof(int));
+	if (!(error_string = malloc(DBL_BUFSIZE))) {
+		die("ERROR: Fatal malloc error: poller.c error_string!");
+	}
+
+	if (!(buf_size = malloc(sizeof(int)))) {
+		die("ERROR: Fatal malloc error: poller.c buf_size!");
+	}
+
+	if (!(buf_errors = malloc(sizeof(int)))) {
+		die("ERROR: Fatal malloc error: poller.c buf_errors!");
+	}
 
 	*buf_size     = 0;
 	*buf_errors   = 0;
@@ -1253,7 +1261,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	if (num_rows > 0) {
 		/* retrieve each hosts polling items from poller cache and load into array */
-		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
+		if (!(poller_items = (target_t *) calloc(num_rows, sizeof(target_t)))) {
+			die("ERROR: Fatal calloc error: poller.c poller_items!");
+		}
 
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
@@ -1326,10 +1336,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		db_free_result(result);
 
 		/* create an array for snmp oids */
-		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
-
-		/* initialize all the memory to insure we don't get issues */
-		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
+		if (!(snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t)))) {
+			die("ERROR: Fatal calloc error: poller.c snmp_oids!");
+		}
 
 		/* log an informative message */
 		if (is_debug_device(host_id)) {
