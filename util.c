@@ -343,8 +343,6 @@ void read_config_options() {
 	char       *sqlp = sqlbuf;
 	const char *res;
 	char       spine_capabilities[BUFSIZE];
-	int        authCount;
-	int        privCount;
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
@@ -743,55 +741,44 @@ void read_config_options() {
 		set.snmp_max_get_size = 25;
 	}
 
-	authCount = 0;
-
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
 	strcat(spine_capabilities, "{ authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
 	strcat(spine_capabilities, "MD5");
-	authCount++;
 	#endif
 
-	strcat(spine_capabilities, (authCount == 0 ? "SHA":",SHA"));
-	authCount++;
+	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",SHA":"SHA"));
 
 	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
 	strcat(spine_capabilities, ",SHA224,SHA256");
-	authCount++;
 	#endif
 
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
 	strcat(spine_capabilities, ",SHA384,SHA512");
-	authCount++;
 	#endif
 	strcat(spine_capabilities, "\"");
-
-	privCount = 0;
 
 	strcat(spine_capabilities, ", privProtocols: \"");
 
 	#ifndef NETSNMP_DISABLE_DES
 	strcat(spine_capabilities, "DES");
-	privCount++;
 	#endif
 
 	#ifdef HAVE_AES
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (privCount > 0 ? ",AES128":"AES128"));
-	privCount++;
+	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES128":"AES128"));
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (privCount > 0 ? ",AES192":"AES192"));
-	privCount++;
+	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES192":"AES192"));
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (privCount > 0 ? ",AES256":"AES256"));
+	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES256":"AES256"));
 	#endif
 	strcat(spine_capabilities, "\" }");
 
