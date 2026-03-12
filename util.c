@@ -342,10 +342,14 @@ void read_config_options() {
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
 	const char *res;
+	char       spine_priv[BUFSIZE];
+	char       spine_auth[BUFSIZE];
 	char       spine_capabilities[BUFSIZE];
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
+	memset(spine_priv, 0, sizeof(spine_priv));
+	memset(spine_auth, 0, sizeof(spine_auth));
 
 	db_connect(LOCAL, &mysql);
 
@@ -744,43 +748,40 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
-	strcat(spine_capabilities, "{ authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
-	strcat(spine_capabilities, "MD5");
+	strcat(spine_auth, "MD5");
 	#endif
 
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",SHA":"SHA"));
+	strcat(spine_auth, (strlen(spine_auth) > 0 ? ",SHA":"SHA"));
 
 	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
-	strcat(spine_capabilities, ",SHA224,SHA256");
+	strcat(spine_auth, ",SHA224,SHA256");
 	#endif
 
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
-	strcat(spine_capabilities, ",SHA384,SHA512");
+	strcat(spine_auth, ",SHA384,SHA512");
 	#endif
-	strcat(spine_capabilities, "\"");
-
-	strcat(spine_capabilities, ", privProtocols: \"");
 
 	#ifndef NETSNMP_DISABLE_DES
-	strcat(spine_capabilities, "DES");
+	strcat(spine_priv, "DES");
 	#endif
 
 	#ifdef HAVE_AES
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES128":"AES128"));
+	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES128":"AES128"));
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES192":"AES192"));
+	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES192":"AES192"));
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_capabilities, (strlen(spine_capabilities) > 0 ? ",AES256":"AES256"));
+	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
 	#endif
-	strcat(spine_capabilities, "\" }");
+
+	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
@@ -1035,13 +1036,13 @@ void poller_push_data_to_main() {
 	db_disconnect(&mysqlr);
 }
 
-/*! \fn int read_spine_config(char *file)
+/*! \fn int read_spine_config(const char *file)
  *  \brief obtain default startup variables from the spine.conf file.
  *  \param file the spine config file
  *
  *  \return 0 if successful or -1 if the file could not be opened
  */
-int read_spine_config(char *file) {
+int read_spine_config(const char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];

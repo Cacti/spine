@@ -33,7 +33,7 @@
 
 /* cacti config reading functions */
 extern void read_config_options(void);
-extern int read_spine_config(char *file);
+extern int read_spine_config(const char *file);
 extern void config_defaults(void);
 
 /* cacti logging function */

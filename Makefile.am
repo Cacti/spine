@@ -31,8 +31,7 @@ bin_PROGRAMS = spine
 
 man_MANS = spine.1
 
-spine.1: $(bin_PROGRAMS)
-	$(HELP2MAN) --output=$@ --name='Data Collector for Cacti' --no-info --version-option='--version' ./spine
+EXTRA_DIST = spine.1
 
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
