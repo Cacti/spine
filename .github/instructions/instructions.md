@@ -1,4 +1,4 @@
-# GitHub Development Instructions for spine
+# GitHub Copilot Instructions for spine
 
 spine is the high-performance C poller for Cacti. It is a multi-threaded
 POSIX C99 program using pthreads, net-snmp, and libmariadb, built with

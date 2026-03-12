@@ -6,7 +6,7 @@ The Cacti Group | spine
 -issue#424: Correct inverted spike_kill condition for PHP script server (IS_UNDEFINED -> !IS_UNDEFINED)
 -issue#425: Mark all OIDs undefined when snmp_get_multi() receives errindex==0 from agent
 -issue#426: Add NULL check after malloc in host_errors insert path to prevent UB on memory pressure
--issue#438: Resolve stale content in spine.c (--help search path), configure.ac (AC_PREREQ, obsolete macros), spine.conf.dist (missing settings), and Development instructions
+-issue#438: Resolve stale content in spine.c (--help search path), configure.ac (AC_PREREQ, obsolete macros), spine.conf.dist (missing settings), and Copilot instructions
 -issue#441: Update copyright year to 2026 in 12 source files
 -issue#445: Replace vfork/execv with posix_spawn in php_init; fix stack-local return in regex_replace
 -issue#447: Correct off-by-one OOB write in strncopy() when src fills buffer; remove suppressing pragma
