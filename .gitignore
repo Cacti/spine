@@ -28,6 +28,5 @@ autom4te.cache/
 config/
 libtool
 /spine
-/spine.1
 *.o
 *.m4
