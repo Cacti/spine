@@ -676,8 +676,8 @@ int sql_buffer_append(sql_buffer_t *sb, const char *format, ...) {
 		return -1;
 	}
 
-	if (sb->length > sb->capacity) {
-		SPINE_LOG(("ERROR: sql_buffer_append detected invalid state (length '%zu' > capacity '%zu')",
+	if (sb->length >= sb->capacity) {
+		SPINE_LOG(("ERROR: sql_buffer_append detected invalid state (length '%zu' >= capacity '%zu')",
 			sb->length, sb->capacity));
 		return -1;
 	}
