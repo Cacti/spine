@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: rockylinux/rockylinux:9
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -26,9 +26,9 @@ jobs:
           sudo dnf update -y
           sudo dnf config-manager --enable crb
           sudo dnf install -y
-            mariadb-server mariadb-devel net-snmp net-snmp-devel \
-            openssl-devel \
-            help2man autoconf automake libtool dos2unix
+          mariadb-server mariadb-devel net-snmp net-snmp-devel \
+          openssl-devel \
+          help2man autoconf automake libtool dos2unix
 
       - name: Search libraries
         run: |
@@ -48,14 +48,14 @@ jobs:
           make -j CFLAGS="-Wall -Wextra"
 
   cppcheck:
-    runs-on: rockylinux/rockylinux:9
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Install cppcheck
         run: |
-          sudo dnf -y upgrade 
-          sudo dnf -y install cppcheck
+          sudo apt-get update 
+          sudo apt-get install -y cppcheck
 
       - name: Run cppcheck
         run: |
@@ -75,7 +75,7 @@ jobs:
             *.c *.h
 
   flawfinder:
-    runs-on: rockylinux/rockylinux:9
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
