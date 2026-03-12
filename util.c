@@ -748,7 +748,6 @@ void read_config_options() {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
-	strcat(spine_auth, "authProtocols: \"");
 	#ifndef NETSNMP_DISABLE_MD5
 	strcat(spine_auth, "MD5");
 	#endif
@@ -762,9 +761,6 @@ void read_config_options() {
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
 	strcat(spine_auth, ",SHA384,SHA512");
 	#endif
-	strcat(spine_auth, "\"");
-
-	strcat(spine_priv, "privProtocols: \"");
 
 	#ifndef NETSNMP_DISABLE_DES
 	strcat(spine_priv, "DES");
@@ -772,21 +768,21 @@ void read_config_options() {
 
 	#ifdef HAVE_AES
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 16 ? ",AES128":"AES128"));
+	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES128":"AES128"));
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 16 ? ",AES192":"AES192"));
+	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES192":"AES192"));
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 16 ? ",AES256":"AES256"));
+	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
 	#endif
 	strcat(spine_priv, "\"");
 
-	snprintf(spine_capabilities, BUFSIZE, "{ %s, %s }", spine_auth, spine_priv);
+	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
