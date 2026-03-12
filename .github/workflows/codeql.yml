@@ -29,8 +29,8 @@ jobs:
             mariadb-server libmariadb3 libmariadb-dev libmariadb-dev-compat \
             libsnmp-dev libssl-dev \
             help2man autoconf automake libtool dos2unix
-          ./bootstrap
-          ./configure
-          make -j$(nproc)
+          sudo ./bootstrap
+          sudo ./configure
+          sudo make -j
 
       - uses: github/codeql-action/analyze@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1
