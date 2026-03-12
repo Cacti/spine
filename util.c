@@ -778,24 +778,22 @@ void read_config_options() {
 	#endif
 
 	#ifdef HAVE_AES
+	// cppcheck-suppress knownConditionTrueFalse
 	strcat(spine_capabilities, (privCount > 0 ? ",AES128":"AES128"));
 	privCount++;
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	// cppcheck-suppress knownConditionTrueFalse
 	strcat(spine_capabilities, (privCount > 0 ? ",AES192":"AES192"));
 	privCount++;
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
+	// cppcheck-suppress knownConditionTrueFalse
 	strcat(spine_capabilities, (privCount > 0 ? ",AES256":"AES256"));
-	privCount++;
 	#endif
 	strcat(spine_capabilities, "\" }");
-
-	if (privCount == 0) {
-		SPINE_LOG_DEBUG(("Warning not advanced snmp protocols found"));
-	}
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
