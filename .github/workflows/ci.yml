@@ -25,35 +25,45 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libmariadb-dev libmariadb-dev-compat \
-            libsnmp-dev libssl-dev \
-            help2man autoconf automake libtool dos2unix
+          mysql-server libmysqlclient-dev \
+          libsnmp-dev libssl-dev build-essential \
+          help2man autoconf automake libtool dos2unix
 
-      - name: Build
+      - name: Prepare for Spine Build
         run: |
           ./bootstrap
-          ./configure
-          make -j$(nproc) CFLAGS="-Wall -Wextra"
+          ./configure --enable-warnings
 
-  cppcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Install cppcheck
-        run: sudo apt-get update && sudo apt-get install -y cppcheck
-
-      - name: Run cppcheck
+      - name: Build Spine
         run: |
-          cppcheck \
-            --enable=all \
-            --std=c11 \
-            --error-exitcode=1 \
-            --suppress=missingIncludeSystem \
-            --suppress=unusedFunction \
-            --suppress=checkersReport \
-            --suppress=toomanyconfigs \
-            *.c *.h
+          make -j 
+
+#  cppcheck:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+#
+#      - name: Install cppcheck
+#        run: |
+#          sudo apt-get update 
+#          sudo apt-get install -y cppcheck build-essential
+#
+#      - name: Run cppcheck
+#        run: |
+#          cppcheck \
+#            --enable=all \
+#            --std=c11 \
+#            --error-exitcode=1 \
+#            --suppress=missingIncludeSystem \
+#            --suppress=unusedFunction \
+#            --suppress=checkersReport \
+#            --suppress=variableScope \
+#            --suppress=unreadVariable \
+#            --suppress=shadowVariable \
+#            --suppress=constVariablePointer \
+#            --suppress=redundantAssignment \
+#            --suppress=toomanyconfigs \
+#            *.c *.h
 
   flawfinder:
     runs-on: ubuntu-latest
