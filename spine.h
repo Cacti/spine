@@ -372,9 +372,9 @@ typedef struct config_struct {
 	char   db_user[BUFSIZE];
 	char   db_pass[BUFSIZE];
 	int    db_ssl;
-	char   db_ssl_key[BIG_BUFSIZE];
-	char   db_ssl_cert[BIG_BUFSIZE];
-	char   db_ssl_ca[BIG_BUFSIZE];
+	char   db_ssl_key[BUFSIZE];
+	char   db_ssl_cert[BUFSIZE];
+	char   db_ssl_ca[BUFSIZE];
 	int    d_b;
 	unsigned int db_port;
 	char   dbversion[BUFSIZE];
@@ -426,9 +426,9 @@ typedef struct config_struct {
 	char   rdb_user[BUFSIZE];
 	char   rdb_pass[BUFSIZE];
 	int    rdb_ssl;
-	char   rdb_ssl_key[BIG_BUFSIZE];
-	char   rdb_ssl_cert[BIG_BUFSIZE];
-	char   rdb_ssl_ca[BIG_BUFSIZE];
+	char   rdb_ssl_key[BUFSIZE];
+	char   rdb_ssl_cert[BUFSIZE];
+	char   rdb_ssl_ca[BUFSIZE];
 	unsigned int rdb_port;
 	char   rdbversion[BUFSIZE];
 	int    rdbonupdate;
