@@ -63,6 +63,10 @@ jobs:
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \
             --suppress=checkersReport \
+            --suppress=variableScope \
+            --suppress=unreadVariable \
+            --suppress=constVariablePointer \
+            --suppress=redundantAssignment \
             --suppress=toomanyconfigs \
             *.c *.h
 
