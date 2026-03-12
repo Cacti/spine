@@ -25,7 +25,7 @@ env:
   COMMON_DEPS: >-
     autoconf automake libtool make pkg-config cmake ninja-build
     gcc clang llvm lcov valgrind cppcheck clang-tools
-    libsnmp-dev default-libmysqlclient-dev
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   ASAN_OPTIONS: >-
     detect_leaks=1:abort_on_error=1:strict_string_checks=1:
     check_initialization_order=1:detect_stack_use_after_return=1:
@@ -129,23 +129,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install build dependencies
         run: |
           set -euo pipefail
           sudo apt-get update
-<<<<<<< HEAD
-          sudo apt-get install -y \
-          mysql-server libmysqlclient-dev \
-          libsnmp-dev libssl-dev build-essential \
-          help2man autoconf automake libtool dos2unix
-||||||| parent of c761146 (ci: add modular production workflow pipeline)
-          sudo apt-get install -y \
-            libmariadb-dev libmariadb-dev-compat \
-            libsnmp-dev libssl-dev \
-            help2man autoconf automake libtool dos2unix
-=======
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Export build flags
@@ -185,82 +174,18 @@ jobs:
             echo "No supported build system found (configure/CMakeLists.txt)." >&2
             exit 1
           fi
->>>>>>> c761146 (ci: add modular production workflow pipeline)
 
       - name: Prepare for Spine Build
         run: |
-<<<<<<< HEAD
-          ./bootstrap
-          ./configure --enable-warnings
-||||||| parent of c761146 (ci: add modular production workflow pipeline)
-          ./bootstrap
-          ./configure
-          make -j$(nproc) CFLAGS="-Wall -Wextra"
-=======
           set -euo pipefail
           if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
             make -j"$(nproc)" V=1
           else
             cmake --build build --parallel "$(nproc)"
           fi
->>>>>>> c761146 (ci: add modular production workflow pipeline)
 
-<<<<<<< HEAD
-      - name: Build Spine
-||||||| parent of c761146 (ci: add modular production workflow pipeline)
-  cppcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Install cppcheck
-        run: sudo apt-get update && sudo apt-get install -y cppcheck
-
-      - name: Run cppcheck
-=======
       - name: Test (make check -> make test -> ctest)
->>>>>>> c761146 (ci: add modular production workflow pipeline)
         run: |
-<<<<<<< HEAD
-          make -j 
-
-#  cppcheck:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-#
-#      - name: Install cppcheck
-#        run: |
-#          sudo apt-get update 
-#          sudo apt-get install -y cppcheck build-essential
-#
-#      - name: Run cppcheck
-#        run: |
-#          cppcheck \
-#            --enable=all \
-#            --std=c11 \
-#            --error-exitcode=1 \
-#            --suppress=missingIncludeSystem \
-#            --suppress=unusedFunction \
-#            --suppress=checkersReport \
-#            --suppress=variableScope \
-#            --suppress=unreadVariable \
-#            --suppress=shadowVariable \
-#            --suppress=constVariablePointer \
-#            --suppress=redundantAssignment \
-#            --suppress=toomanyconfigs \
-#            *.c *.h
-||||||| parent of c761146 (ci: add modular production workflow pipeline)
-          cppcheck \
-            --enable=all \
-            --std=c11 \
-            --error-exitcode=1 \
-            --suppress=missingIncludeSystem \
-            --suppress=unusedFunction \
-            --suppress=checkersReport \
-            --suppress=toomanyconfigs \
-            *.c *.h
-=======
           set -euo pipefail
           if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
             if make -n check >/dev/null 2>&1; then
@@ -277,7 +202,6 @@ jobs:
               echo "::notice::No CTest tests found."
             fi
           fi
->>>>>>> c761146 (ci: add modular production workflow pipeline)
 
       - name: Collect failure artifacts
         if: failure()
@@ -308,7 +232,7 @@ jobs:
 
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
           name: ci-failure-${{ matrix.os }}-${{ matrix.name }}
           path: ci-artifacts

@@ -23,7 +23,7 @@ env:
   COMMON_DEPS: >-
     autoconf automake libtool make pkg-config cmake ninja-build
     gcc lcov
-    libsnmp-dev default-libmysqlclient-dev
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_COVERAGE: >-
     -O0 -g3 --coverage
   LDFLAGS_COVERAGE: --coverage
@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install coverage dependencies
         run: |
@@ -121,7 +121,7 @@ jobs:
           fi
 
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
           name: coverage-report
           path: |
