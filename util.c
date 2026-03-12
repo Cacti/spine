@@ -812,15 +812,17 @@ void poller_push_data_to_main() {
 	int        num_rows;
 	int        rows;
 	char       sqlbuf[HUGE_BUFSIZE];
-	char       *sqlp = sqlbuf;
 	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
 	// tmpstr needs to be greater than 2 * the maximum column size being processed below
 	char       tmpstr[DBL_BUFSIZE];
+	sql_buffer_t sb;
 
 	db_connect(LOCAL, &mysql);
 	db_connect(REMOTE, &mysqlr);
+
+	sql_buffer_init(&sb, sqlbuf, sizeof(sqlbuf));
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
@@ -909,56 +911,53 @@ void poller_push_data_to_main() {
 			while ((row = mysql_fetch_row(result))) {
 				if (rows < 500) {
 					if (rows == 0) {
-						sqlp  = sqlbuf;
-						sqlp += sprintf(sqlp, "%s", prefix);
-						sqlp += sprintf(sqlp, " (");
+						sql_buffer_reset(&sb);
+						sql_buffer_append(&sb, "%s (", prefix);
 					} else {
-						sqlp += sprintf(sqlp, ", (");
+						sql_buffer_append(&sb, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%s, ", row[0]); // id mediumint
+					sql_buffer_append(&sb, "%s, ", row[0]); // id mediumint
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID varchar(128)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance bigint
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status tinyint
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count mediumint
+					sql_buffer_append(&sb, "%s, ", row[8]); // status_event_count mediumint
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_fail_date timestamp
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date timestamp
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error varchar(255)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time double
-					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls int
-					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls int
-					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability decimal(8,5)
+					sql_buffer_append(&sb, "%s, ", row[12]); // min_time decimal(10,5)
+					sql_buffer_append(&sb, "%s, ", row[13]); // max_time decimal(10,5)
+					sql_buffer_append(&sb, "%s, ", row[14]); // cur_time decimal(10,5)
+					sql_buffer_append(&sb, "%s, ", row[15]); // avg_time decimal(10,5)
+					sql_buffer_append(&sb, "%s, ", row[16]); // polling_time double
+					sql_buffer_append(&sb, "%s, ", row[17]); // total_polls int
+					sql_buffer_append(&sb, "%s, ", row[18]); // failed_polls int
+					sql_buffer_append(&sb, "%s, ", row[19]); // availability decimal(8,5)
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated timestamp
-					sqlp += sprintf(sqlp, "'%s'", tmpstr);
-
-					sqlp += sprintf(sqlp, ")");
+					sql_buffer_append(&sb, "'%s')", tmpstr);
 
 					rows++;
 				} else {
-					sqlp += sprintf(sqlp, "%s", suffix);
+					sql_buffer_append(&sb, "%s", suffix);
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
@@ -967,7 +966,7 @@ void poller_push_data_to_main() {
 		}
 
 		if (rows > 0) {
-			sqlp += sprintf(sqlp, "%s", suffix);
+			sql_buffer_append(&sb, "%s", suffix);
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 		}
 	}
@@ -1006,27 +1005,26 @@ void poller_push_data_to_main() {
 			while ((row = mysql_fetch_row(result))) {
 				if (rows < 10000) {
 					if (rows == 0) {
-						sqlp = sqlbuf;
-						sqlp += sprintf(sqlp, "%s", prefix);
-						sqlp += sprintf(sqlp, " (");
+						sql_buffer_reset(&sb);
+						sql_buffer_append(&sb, "%s (", prefix);
 					} else {
-						sqlp += sprintf(sqlp, ", (");
+						sql_buffer_append(&sb, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%s, ", row[0]); // local_data_id
-					sqlp += sprintf(sqlp, "%s, ", row[1]); // host_id
+					sql_buffer_append(&sb, "%s, ", row[0]); // local_data_id
+					sql_buffer_append(&sb, "%s, ", row[1]); // host_id
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // rrd_name
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					sql_buffer_append(&sb, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[3]); // rrd_step
-					sqlp += sprintf(sqlp, "%s",   row[4]); // rrd_next_step
+					sql_buffer_append(&sb, "%s, ", row[3]); // rrd_step
+					sql_buffer_append(&sb, "%s",   row[4]); // rrd_next_step
 
-					sqlp += sprintf(sqlp, ")");
+					sql_buffer_append(&sb, ")");
 
 					rows++;
 				} else {
-					sqlp += sprintf(sqlp, "%s", suffix);
+					sql_buffer_append(&sb, "%s", suffix);
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
@@ -1035,7 +1033,7 @@ void poller_push_data_to_main() {
 		}
 
 		if (rows > 0) {
-			sqlp += sprintf(sqlp, "%s", suffix);
+			sql_buffer_append(&sb, "%s", suffix);
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 
 			rows = 0;

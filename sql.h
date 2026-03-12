@@ -44,6 +44,17 @@ extern void db_release_connection(int type, int id);
 extern int  db_reconnect(MYSQL *mysql, int type, int error, char *location);
 extern int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column);
 
+typedef struct {
+	char   *buffer;
+	char   *ptr;
+	size_t  size;
+} sql_buffer_t;
+
+extern void sql_buffer_init(sql_buffer_t *sb, char *buffer, size_t size);
+extern int  sql_buffer_append(sql_buffer_t *sb, const char *format, ...)
+	__attribute__((format(printf, 2, 3)));
+extern void sql_buffer_reset(sql_buffer_t *sb);
+
 extern int append_hostrange(char *obuf, const char *colname);
 
 #define MYSQL_SET_OPTION(opt, value, desc)	\

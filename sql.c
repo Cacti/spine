@@ -626,3 +626,61 @@ int db_column_exists(MYSQL *mysql, int type, const char *table, const char *colu
 	db_free_result(result);
 	return exists;
 }
+
+/**
+ * sql_buffer_init - Initializes a sql_buffer_t structure.
+ * @sb:     The sql_buffer_t structure to initialize.
+ * @buffer: The pre-allocated character buffer to use.
+ * @size:   The total size of the buffer.
+ */
+void sql_buffer_init(sql_buffer_t *sb, char *buffer, size_t size) {
+	sb->buffer = buffer;
+	sb->ptr    = buffer;
+	sb->size   = size;
+	if (sb->size > 0) {
+		sb->buffer[0] = '\0';
+	}
+}
+
+/**
+ * sql_buffer_append - Appends a formatted string to the SQL buffer.
+ * @sb:     The sql_buffer_t structure.
+ * @format: The printf-style format string.
+ * @...:    Arguments for the format string.
+ *
+ * Returns the number of characters written, or -1 on overflow.
+ */
+int sql_buffer_append(sql_buffer_t *sb, const char *format, ...) {
+	va_list args;
+	int     remaining;
+	int     written;
+
+	remaining = (int)sb->size - (int)(sb->ptr - sb->buffer);
+	if (remaining <= 0) {
+		return -1;
+	}
+
+	va_start(args, format);
+	written = vsnprintf(sb->ptr, remaining, format, args);
+	va_end(args);
+
+	if (written < 0 || (size_t)written >= (size_t)remaining) {
+		/* Overflow or error - Ensure string is null-terminated */
+		sb->ptr[0] = '\0';
+		return -1;
+	}
+
+	sb->ptr += written;
+	return written;
+}
+
+/**
+ * sql_buffer_reset - Resets the SQL buffer pointer to the beginning.
+ * @sb: The sql_buffer_t structure.
+ */
+void sql_buffer_reset(sql_buffer_t *sb) {
+	sb->ptr = sb->buffer;
+	if (sb->size > 0) {
+		sb->buffer[0] = '\0';
+	}
+}
