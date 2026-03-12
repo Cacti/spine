@@ -23,11 +23,10 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          sudo dnf update -y
-          sudo dnf config-manager --enable crb
-          sudo dnf install -y
-          mariadb-server mariadb-devel net-snmp net-snmp-devel \
-          openssl-devel \
+          sudo apt-get update
+          sudo apt-get install -y \
+          mariadb-server libmariadb3 libmariadb-dev libmariadb-dev-compat \
+          libsnmp-dev libssl-dev \
           help2man autoconf automake libtool dos2unix
 
       - name: Search libraries
