@@ -780,7 +780,6 @@ void read_config_options() {
 	// cppcheck-suppress knownConditionTrueFalse
 	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
 	#endif
-	strcat(spine_priv, "\"");
 
 	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
 
