@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-          mysql-server libmysql libmysql-dev libmysql-dev-compat \
+          mysql-server libmysqlclient libmysqlclient-dev \
           libsnmp-dev libssl-dev \
           help2man autoconf automake libtool dos2unix
 
