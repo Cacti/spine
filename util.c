@@ -778,17 +778,17 @@ void read_config_options() {
 	#endif
 
 	#ifdef HAVE_AES
-	strcat(spine_capabilities, (privCount == 0 ? "AES128":",AES128"));
+	strcat(spine_capabilities, (privCount > 0 ? ",AES128":"AES128"));
 	privCount++;
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	strcat(spine_capabilities, (privCount == 0 ? "AES192":",AES192"));
+	strcat(spine_capabilities, (privCount > 0 ? ",AES192":"AES192"));
 	privCount++;
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	strcat(spine_capabilities, (privCount == 0 ? "AES256":",AES256"));
+	strcat(spine_capabilities, (privCount > 0 ? ",AES256":"AES256"));
 	privCount++;
 	#endif
 	strcat(spine_capabilities, "\" }");
