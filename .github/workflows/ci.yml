@@ -36,7 +36,7 @@ jobs:
       - name: Prepare for Spine Build
         run: |
           ./bootstrap
-          ./configure
+          ./configure --enable-warnings
 
       - name: Check the config.status for paths
         run: |
@@ -44,7 +44,7 @@ jobs:
 
       - name: Build Spine
         run: |
-          make -j CFLAGS="-Wall -Wextra"
+          make -j 
 
   cppcheck:
     runs-on: ubuntu-22.04
