@@ -1513,6 +1513,30 @@ int spine_log(const char *format, ...) {
 	return TRUE;
 }
 
+/**
+ * log_invalid_response - standardizes the logging of invalid/undefined responses
+ * @host_id:       The device ID being polled
+ * @host_thread:   The thread ID performing the poll
+ * @local_data_id: The data source ID
+ * @format:        The printf-style format string for the type-specific part
+ * @...:           Variadic arguments for the format string
+ */
+void log_invalid_response(int host_id, int host_thread, int local_data_id, const char *format, ...) {
+	va_list args;
+	char    msg[LRG_BUFSIZE];
+	char    prefix[SMALL_BUFSIZE];
+
+	if (set.spine_log_level == 2) {
+		snprintf(prefix, sizeof(prefix), "WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] ", host_id, host_thread, local_data_id);
+
+		va_start(args, format);
+		vsnprintf(msg, sizeof(msg), format, args);
+		va_end(args);
+
+		spine_log("%s%s", prefix, msg);
+	}
+}
+
 /*! \fn int file_exists(const char *filename)
  *  \brief checks for the existence of a file.
  *  \param *filename the name of the file to check for.

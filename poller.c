@@ -1389,12 +1389,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								errors++;
 
-								if (set.spine_log_level == 2) {
-									SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-										host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
-										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-								}
+								log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 
 								/* continue */
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
@@ -1406,12 +1403,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								errors++;
 
-								if (set.spine_log_level == 2) {
-									SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-										host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
-										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-								}
+								log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 
 								/* is valid output, continue */
 							} else {
@@ -1424,13 +1418,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 									errors++;
 
-									if (set.spine_log_level == 2) {
-										SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-											host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
-											host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-											poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-									}
-
+									log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 									SET_UNDEFINED(snmp_oids[j].result);
 								}
 							}
@@ -1490,13 +1480,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							errors++;
 
-							if (set.spine_log_level == 2) {
-								SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-									host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
-									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-							}
-
+							log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+								host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 							/* continue */
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
@@ -1507,13 +1493,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 							errors++;
 
-							if (set.spine_log_level == 2) {
-								SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-									host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
-									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-							}
-
+							log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+								host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 							/* is valid output, continue */
 						} else {
 							/* remove double or single quotes from string */
@@ -1525,12 +1507,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								errors++;
 
-								if (set.spine_log_level == 2) {
-									SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-										host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id,
-										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-								}
+								log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+									host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+									poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 
 								SET_UNDEFINED(snmp_oids[j].result);
 							}
@@ -1575,11 +1554,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 					errors++;
 
-					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-							host_id, host_thread, poller_items[i].local_data_id,
-							poller_items[i].arg1, poller_items[i].result));
-					}
+					log_invalid_response(host_id, host_thread, poller_items[i].local_data_id, "SCRIPT: %s, output: %s",
+						poller_items[i].arg1, poller_items[i].result);
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
@@ -1594,12 +1570,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						errors++;
 
-						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-								host_id, host_thread, poller_items[i].local_data_id,
-								poller_items[i].arg1, poller_items[i].result));
-						}
-
+						log_invalid_response(host_id, host_thread, poller_items[i].local_data_id, "SCRIPT: %s, output: %s",
+							poller_items[i].arg1, poller_items[i].result);
 						SET_UNDEFINED(poller_items[i].result);
 					}
 				}
@@ -1633,11 +1605,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 					errors++;
 
-					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-							host_id, host_thread, poller_items[i].local_data_id,
-							poller_items[i].arg1, poller_items[i].result));
-					}
+					log_invalid_response(host_id, host_thread, poller_items[i].local_data_id, "SCRIPT: %s, output: %s",
+						poller_items[i].arg1, poller_items[i].result);
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
@@ -1652,12 +1621,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						errors++;
 
-						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-								host_id, host_thread, poller_items[i].local_data_id,
-								poller_items[i].arg1, poller_items[i].result));
-						}
-
+						log_invalid_response(host_id, host_thread, poller_items[i].local_data_id, "SCRIPT: %s, output: %s",
+							poller_items[i].arg1, poller_items[i].result);
 						SET_UNDEFINED(poller_items[i].result);
 					}
 				}
@@ -1702,13 +1667,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					errors++;
 
-					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-							host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version,
-							host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-					}
-
+					log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+						host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+						poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 					/* continue */
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
@@ -1719,13 +1680,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 					errors++;
 
-					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-							host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version,
-							host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-					}
-
+					log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+						host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+						poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 					/* is valid output, continue */
 				} else {
 					/* remove double or single quotes from string */
@@ -1737,13 +1694,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 						errors++;
 
-						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
-								host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_version,
-								host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
-								poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result));
-						}
-
+						log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+							host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+							poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
 						SET_UNDEFINED(snmp_oids[j].result);
 					}
 				}

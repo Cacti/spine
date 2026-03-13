@@ -117,3 +117,7 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+/* log an invalid response with standard prefix */
+void log_invalid_response(int host_id, int host_thread, int local_data_id, const char *format, ...)
+	__attribute__((format(printf, 4, 5)));
