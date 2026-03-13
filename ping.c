@@ -170,14 +170,12 @@ int ping_snmp(host_t *host, ping_t *ping) {
 		if (strlen(host->snmp_community) != 0 || host->snmp_version == 3) {
 			/* by default, we look at sysUptime */
 			if (host->availability_method == AVAIL_SNMP_GET_NEXT) {
-				oid = strdup(".1.3");
+				STRDUP_OR_DIE(oid, ".1.3", "ping.c oid next");
 			} else if (host->availability_method == AVAIL_SNMP_GET_SYSDESC) {
-				oid = strdup(".1.3.6.1.2.1.1.1.0");
+				STRDUP_OR_DIE(oid, ".1.3.6.1.2.1.1.1.0", "ping.c oid sysdesc");
 			} else {
-				oid = strdup(".1.3.6.1.2.1.1.3.0");
+				STRDUP_OR_DIE(oid, ".1.3.6.1.2.1.1.3.0", "ping.c oid sysuptime");
 			}
-
-			if (oid == NULL) die("ERROR: malloc(): strdup() oid ping.c failed");
 
 			/* record start time */
 			begin_time = get_time_as_double();

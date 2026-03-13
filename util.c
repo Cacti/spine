@@ -91,12 +91,12 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	for (i=0; i<nopts; i++) {
 		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
-			retval = strdup(opttable[i].val);
+			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getsetting");
 			return retval;
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -105,18 +105,21 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 			mysql_row = mysql_fetch_row(result);
 
 			if (mysql_row != NULL) {
-				retval = strdup(mysql_row[0]);
+				STRDUP_OR_DIE(retval, mysql_row[0], "util.c getsetting");
 				db_free_result(result);
 				return retval;
 			}else{
-				return strdup("");
+				STRDUP_OR_DIE(retval, "", "util.c getsetting");
+				return retval;
 			}
 		}else{
 			db_free_result(result);
-			return strdup("");
+			STRDUP_OR_DIE(retval, "", "util.c getsetting");
+			return retval;
 		}
 	}else{
-		return strdup("");
+		STRDUP_OR_DIE(retval, "", "util.c getsetting");
+		return retval;
 	}
 }
 
@@ -183,12 +186,12 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 	for (i=0; i<nopts; i++) {
 		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
-			retval = strdup(opttable[i].val);
+			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getpsetting");
 			return retval;
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
 
 	result = db_query(psql, mode, qstring);
 
@@ -197,7 +200,7 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 			mysql_row = mysql_fetch_row(result);
 
 			if (mysql_row != NULL) {
-				retval = strdup(mysql_row[0]);
+				STRDUP_OR_DIE(retval, mysql_row[0], "util.c getpsetting");
 				db_free_result(result);
 				return retval;
 			} else {
@@ -278,11 +281,12 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 	for (i=0; i<nopts; i++) {
 		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
-			return opttable[i].val;
+			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getglobalvariable");
+			return retval;
 		}
 	}
 
-	sprintf(qstring, "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -291,7 +295,7 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 			mysql_row = mysql_fetch_row(result);
 
 			if (mysql_row != NULL) {
-				retval = strdup(mysql_row[1]);
+				STRDUP_OR_DIE(retval, mysql_row[1], "util.c getglobalvariable");
 				db_free_result(result);
 				return retval;
 			} else {
@@ -2032,7 +2036,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 
 	assert(psql != 0);
 
-	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+	snprintf(qstring, sizeof(qstring), "SELECT cacti FROM version LIMIT 1");
 
 	result = db_query(psql, mode, qstring);
 
@@ -2041,7 +2045,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 			mysql_row = mysql_fetch_row(result);
 
 			if (mysql_row != NULL) {
-				retval = strdup(mysql_row[0]);
+				STRDUP_OR_DIE(retval, mysql_row[0], "util.c get_cacti_version");
 				db_free_result(result);
 
 				if (STRIMATCH(retval, "new_install")) {

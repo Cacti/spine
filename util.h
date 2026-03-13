@@ -86,6 +86,16 @@ char *regex_replace(char *exp, char *value);
 		die("FATAL: malloc() failed during strdup() for %s", reason);\
 	}\
 
+#define MALLOC_OR_DIE(dst, type, size, reason) \
+	if ((dst = (type *)malloc(size)) == NULL) {\
+		die("FATAL: malloc() failed during allocation of %s", reason);\
+	}\
+
+#define CALLOC_OR_DIE(dst, type, count, size, reason) \
+	if ((dst = (type *)calloc(count, size)) == NULL) {\
+		die("FATAL: calloc() failed during allocation of %s", reason);\
+	}\
+
 
 /* get highres time as double */
 extern double get_time_as_double(void);
