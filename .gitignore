@@ -37,7 +37,7 @@ libtool
 *.m4
 .dirstamp
 
-# Project/IDE specific
+# Project/IDE specific patterns and local worktrees to ensure repository hygiene
 .worktrees/
 .omc/
 .DS_Store
