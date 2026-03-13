@@ -91,7 +91,7 @@
  * rely on the fact that putting parens around something turn multiple params
  * into one:
  *
- *	SPINE_LOG_DEBUG(("n=%d string=%s foo=%f", n, string, foo));
+ *	SPINE_LOG_DEBUG("n=%d string=%s foo=%f", n, string, foo);
  *
  * This macros has *one* parameter:
  *
@@ -121,20 +121,22 @@
  * The (void) prefix is to forestall compiler warnings about expressions
  * not being used.
  */
-#define SPINE_LOG(format_and_args)        (spine_log format_and_args)
-#define SPINE_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && spine_log format_and_args)
-#define SPINE_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && spine_log format_and_args)
-#define SPINE_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && spine_log format_and_args)
-#define SPINE_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && spine_log format_and_args)
-#define SPINE_LOG_DEVDBG(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_DEVDBG && spine_log format_and_args)
+#define SPINE_LOG(...)        (spine_log(__VA_ARGS__))
+#define SPINE_LOG_LOW(...)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && spine_log(__VA_ARGS__))
+#define SPINE_LOG_MEDIUM(...) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && spine_log(__VA_ARGS__))
+#define SPINE_LOG_HIGH(...)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && spine_log(__VA_ARGS__))
+#define SPINE_LOG_DEBUG(...)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && spine_log(__VA_ARGS__))
+#define SPINE_LOG_DEVDBG(...) (void)(set.log_level >= POLLER_VERBOSITY_DEVDBG && spine_log(__VA_ARGS__))
 
 /* automated device-specific logging: elevates to MEDIUM if device debug is enabled */
-#define SPINE_LOG_DEV(host_id, level, format_and_args) \
-	if (is_debug_device(host_id)) { \
-		SPINE_LOG(format_and_args); \
-	} else { \
-		SPINE_LOG_ ## level(format_and_args); \
-	}
+#define SPINE_LOG_DEV(host_id, level, ...) \
+	do { \
+		if (is_debug_device(host_id)) { \
+			SPINE_LOG(__VA_ARGS__); \
+		} else { \
+			SPINE_LOG_ ## level(__VA_ARGS__); \
+		} \
+	} while (0)
 
 /* general constants */
 #define MAX_THREADS 100

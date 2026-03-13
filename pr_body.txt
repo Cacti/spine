@@ -1,0 +1,16 @@
+Fixes #466.
+
+## Summary
+This PR implements SQL-layer hardening for bulk query construction by introducing a bounded SQL buffer helper and refactoring the main bulk insert path to use it.
+
+## What changed
+- Added `sql_buffer_t` in `sql.h`.
+- Added helper functions in `sql.c`:
+  - `sql_buffer_init()`
+  - `sql_buffer_append()`
+  - `sql_buffer_reset()`
+- Refactored `poller_push_data_to_main()` in `util.c` to replace manual pointer arithmetic and repeated `sprintf` construction with bounded append operations.
+- Keeps SQL query construction null-terminated and bounded by design.
+
+## Scope
+Rebuilt from `develop` to include only the SQL-layer hardening change for #466.
