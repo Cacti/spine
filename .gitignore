@@ -19,7 +19,9 @@
 # | http://www.cacti.net/                                                   |
 # +-------------------------------------------------------------------------+
 
+# Build Artifacts
 .deps
+.libs
 Makefile
 Makefile.in
 configure
@@ -28,5 +30,22 @@ autom4te.cache/
 config/
 libtool
 /spine
+/spine-conf
 *.o
+*.lo
+*.la
 *.m4
+.dirstamp
+
+# Project/IDE specific
+.worktrees/
+.omc/
+.DS_Store
+*.swp
+*.log
+*~
+# Sanitizer logs
+asan.*
+ubsan.*
+tsan.*
+valgrind.*
