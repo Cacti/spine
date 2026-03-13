@@ -222,10 +222,72 @@ jobs:
             *.log
           if-no-files-found: ignore
 
+  fuzz-smoke:
+    name: libfuzzer harness smoke
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install fuzz dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Discover fuzz harnesses
+        run: |
+          set -euo pipefail
+          mapfile -t harnesses < <(
+            git ls-files 'fuzz/**/*.c' 'tests/fuzz/**/*.c' '*_fuzz.c' '*fuzz*.c' | sort -u
+          )
+
+          if [[ "${#harnesses[@]}" -eq 0 ]]; then
+            echo '::warning::No C fuzz harnesses found (expected under fuzz/ or tests/fuzz/).'
+            echo 'status=none' > fuzz-status.txt
+            exit 0
+          fi
+
+          printf '%s\n' "${harnesses[@]}" > fuzz-harnesses.txt
+          echo 'status=found' > fuzz-status.txt
+
+      - name: Build and execute fuzz smoke runs
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f fuzz-harnesses.txt ]]; then
+            echo 'No fuzz harnesses discovered; skipping fuzz execution.'
+            exit 0
+          fi
+
+          mkdir -p fuzz-bin fuzz-corpus
+
+          while IFS= read -r harness; do
+            [[ -n "${harness}" ]] || continue
+            bin="fuzz-bin/$(basename "${harness%.*}")"
+
+            clang -O1 -g -fsanitize=fuzzer,address -I. "${harness}" -o "${bin}"
+            "${bin}" -runs=1000 -max_total_time=60 fuzz-corpus
+          done < fuzz-harnesses.txt
+
+      - name: Upload fuzz artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-fuzz-logs
+          path: |
+            fuzz-status.txt
+            fuzz-harnesses.txt
+            fuzz-bin
+            fuzz-corpus
+            *.log
+          if-no-files-found: ignore
+
   soak-placeholder:
     name: soak/integration placeholder
     runs-on: ubuntu-24.04
-    needs: [tsan, valgrind]
+    needs: [tsan, valgrind, fuzz-smoke]
 
     steps:
       - name: Placeholder

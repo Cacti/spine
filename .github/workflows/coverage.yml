@@ -24,6 +24,7 @@ env:
     autoconf automake libtool make pkg-config cmake ninja-build
     gcc lcov
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  COVERAGE_MIN_LINE_PCT: '10.0'
   CFLAGS_COVERAGE: >-
     -O0 -g3 --coverage
   LDFLAGS_COVERAGE: --coverage
@@ -120,7 +121,34 @@ jobs:
             : > coverage.filtered.info
           fi
 
+      - name: Enforce minimum line coverage
+        run: |
+          set -euo pipefail
+
+          if [[ ! -s coverage.filtered.info ]]; then
+            echo "::error::coverage.filtered.info is empty. Coverage gating requires generated coverage data."
+            exit 1
+          fi
+
+          summary="$(lcov --summary coverage.filtered.info)"
+          echo "${summary}"
+
+          line_pct="$(printf '%s\n' "${summary}" | awk '/lines\.*:/ {gsub("%","",$2); print $2; exit}')"
+
+          if [[ -z "${line_pct}" ]]; then
+            echo "::error::Unable to parse line coverage percentage from lcov summary."
+            exit 1
+          fi
+
+          if ! awk -v actual="${line_pct}" -v min="${COVERAGE_MIN_LINE_PCT}" 'BEGIN { exit ((actual + 0) >= (min + 0) ? 0 : 1) }'; then
+            echo "::error::Line coverage ${line_pct}% is below minimum ${COVERAGE_MIN_LINE_PCT}%."
+            exit 1
+          fi
+
+          echo "Coverage gate passed: ${line_pct}% >= ${COVERAGE_MIN_LINE_PCT}%."
+
       - name: Upload coverage artifacts
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
           name: coverage-report

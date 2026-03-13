@@ -22,12 +22,140 @@ env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
     autoconf automake libtool make pkg-config cmake ninja-build
-    gcc clang llvm clang-tools cppcheck
+    gcc clang llvm clang-tools cppcheck shellcheck shfmt golang-go
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_ANALYZE: >-
     -O1 -g3 -fno-omit-frame-pointer
+  CLANG_TIDY_CHECKS: >-
+    clang-analyzer-*,bugprone-*,cert-*
 
 jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install actionlint dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y golang-go shellcheck
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          GOBIN="${PWD}/.local/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "${PWD}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Run actionlint
+        run: |
+          set -euo pipefail
+          "${PWD}/.local/bin/actionlint" -color
+
+  shell-lint:
+    name: shellcheck + shfmt
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install shell lint dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt
+
+      - name: Run shfmt and shellcheck
+        run: |
+          set -euo pipefail
+          mapfile -t shell_files < <(
+            git ls-files | while read -r file; do
+              [[ -f "${file}" ]] || continue
+              case "${file}" in
+                *.sh) echo "${file}"; continue ;;
+              esac
+              if head -n 1 "${file}" | grep -Eq '^#!.*\b(bash|sh)\b'; then
+                echo "${file}"
+              fi
+            done | sort -u
+          )
+
+          if [[ "${#shell_files[@]}" -eq 0 ]]; then
+            echo 'No shell files found for linting.'
+            exit 0
+          fi
+
+          shfmt -d -i 2 -ci "${shell_files[@]}"
+          shellcheck -x "${shell_files[@]}"
+
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install clang-tidy dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure build for compile database when available
+        run: |
+          set -euo pipefail
+          if [[ ! -f CMakeLists.txt ]]; then
+            echo '::notice::Skipping clang-tidy because CMakeLists.txt is not present.'
+            echo "RUN_CLANG_TIDY=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          cmake -S . -B build-tidy -G Ninja \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS="${CFLAGS_ANALYZE}" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+          echo "RUN_CLANG_TIDY=true" >> "${GITHUB_ENV}"
+
+      - name: Run clang-tidy
+        if: env.RUN_CLANG_TIDY == 'true'
+        run: |
+          set -euo pipefail
+          mapfile -t sources < <(git ls-files '*.c')
+          if [[ "${#sources[@]}" -eq 0 ]]; then
+            echo 'No C sources found for clang-tidy.'
+            exit 0
+          fi
+
+          clang-tidy \
+            -checks="${CLANG_TIDY_CHECKS}" \
+            -p build-tidy \
+            "${sources[@]}" \
+            2>&1 | tee clang-tidy-report.txt
+
+      - name: Upload clang-tidy report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: clang-tidy-report
+          path: clang-tidy-report.txt
+          if-no-files-found: ignore
+
   scan-build:
     name: clang static analyzer (scan-build)
     runs-on: ubuntu-24.04
