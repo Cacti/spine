@@ -1227,10 +1227,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		/* close the host snmp session, we will create again momentarily */
-		if (host->snmp_session != NULL) {
-			snmp_host_cleanup(host->snmp_session);
-			host->snmp_session = NULL;
-		}
+		SNMP_FREE(host->snmp_session);
 	}
 
 	/* calculate the number of poller items to poll this cycle */
@@ -1455,10 +1452,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 					}
 
-					if (host->snmp_session != NULL) {
-						snmp_host_cleanup(host->snmp_session);
-						host->snmp_session = NULL;
-					}
+					SNMP_FREE(host->snmp_session);
 
 					host->snmp_session = snmp_host_init(host->id, poller_items[i].hostname,
 						poller_items[i].snmp_version, poller_items[i].snmp_community,
@@ -1861,11 +1855,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		/* cleanup memory and prepare for function exit */
-		if (host->snmp_session != NULL) {
-			snmp_host_cleanup(host->snmp_session);
-			host->snmp_session = NULL;
-		}
-
+		SNMP_FREE(host->snmp_session);
 		SPINE_FREE(query3);
 		if (set.boost_redirect && set.boost_enabled) {
 			SPINE_FREE(query12);
