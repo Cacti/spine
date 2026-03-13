@@ -270,7 +270,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					"snmp_version, snmp_username, snmp_password, "
 					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, "
+					"output_regex "
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND deleted = '' %s", host_id, limits);
@@ -280,7 +281,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					"snmp_version, snmp_username, snmp_password, "
 					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, "
+					"output_regex "
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND deleted = ''"
@@ -406,7 +408,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					"snmp_version, snmp_username, snmp_password, "
 					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, "
+					"output_regex "
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND poller_id=%i %s", host_id, set.poller_id, limits);
@@ -416,7 +419,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					"snmp_version, snmp_username, snmp_password, "
 					"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, "
 					"rrd_num, snmp_port, snmp_timeout, "
-					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
+					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, "
+					"output_regex "
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND poller_id=%i"
@@ -1309,6 +1313,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			if (row[19] != NULL)  snprintf(poller_items[i].snmp_engine_id,
 				sizeof(poller_items[i].snmp_engine_id), "%s", row[19]);
 
+			if (row[20] != NULL)  snprintf(poller_items[i].output_regex,
+				sizeof(poller_items[i].output_regex), "%s", row[20]);
+
 			SET_UNDEFINED(poller_items[i].result);
 
 			if (poller_items[i].action == POLLER_ACTION_SNMP) {
@@ -1433,6 +1440,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 									SET_UNDEFINED(snmp_oids[j].result);
 								}
+							}
+
+							if (strlen(poller_items[snmp_oids[j].array_position].output_regex)) {
+								snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[snmp_oids[j].array_position].output_regex, snmp_oids[j].result));
+								snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%s", temp_result);
 							}
 
 							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
@@ -1588,9 +1600,15 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					/* remove double or single quotes from string */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
+				}
 
-					/* detect erroneous result. can be non-numeric */
-					if (!validate_result(poller_items[i].result)) {
+				if (strlen(poller_items[i].output_regex)) {
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[i].output_regex, poller_items[i].result));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", temp_result);
+				}
+
+				/* detect erroneous result. can be non-numeric */
+				if (!validate_result(poller_items[i].result)) {
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						errors++;
 
@@ -1646,9 +1664,15 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					/* remove double or single quotes from string */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
+				}
 
-					/* detect erroneous result. can be non-numeric */
-					if (!validate_result(poller_items[i].result)) {
+				if (strlen(poller_items[i].output_regex)) {
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[i].output_regex, poller_items[i].result));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", temp_result);
+				}
+
+				/* detect erroneous result. can be non-numeric */
+				if (!validate_result(poller_items[i].result)) {
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						errors++;
 

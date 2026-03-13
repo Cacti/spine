@@ -477,6 +477,7 @@ typedef struct target_struct {
 	char   arg1[1024];
 	char   arg2[255];
 	char   arg3[255];
+	char   output_regex[255];
 } target_t;
 
 /*! SNMP OID's Structure

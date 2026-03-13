@@ -382,6 +382,18 @@ void read_config_options() {
 	/* get the cacti version from the database */
 	set.cacti_version = get_cacti_version(&mysql, LOCAL);
 
+	/* check for version mismatch between Spine and Cacti */
+	{
+		int major = 0, minor = 0, point = 0;
+		int spine_version;
+		sscanf(VERSION, "%d.%d.%d", &major, &minor, &point);
+		spine_version = (major * 1000) + (minor * 100) + (point * 1);
+
+		if (set.cacti_version != spine_version) {
+			SPINE_LOG(("WARNING: Spine Version Mismatch! Spine Version:'%s', Cacti Version:'%d.%d.%d'", VERSION, (set.cacti_version / 1000), (set.cacti_version % 1000) / 100, (set.cacti_version % 100)));
+		}
+	}
+
 	/* log the path_webroot variable */
 	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %d", set.cacti_version));
 
