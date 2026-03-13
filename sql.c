@@ -586,7 +586,14 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	int  max_escaped_input_size;
 	int  trim_limit;
 
-	if (input == NULL) return;
+	if (output == NULL) return;
+
+	/* ensure the output buffer is initialized to an empty string if input is NULL
+	 * to avoid using stale data from previous calls in bulk query buffers */
+	if (input == NULL) {
+		output[0] = '\0';
+		return;
+	}
 
 	max_escaped_input_size = (strlen(input) * 2) + 1;
 	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
@@ -625,4 +632,179 @@ int db_column_exists(MYSQL *mysql, int type, const char *table, const char *colu
 
 	db_free_result(result);
 	return exists;
+}
+
+/**
+ * sql_buffer_init - Initializes a sql_buffer_t structure.
+ * @sb:     The sql_buffer_t structure to initialize.
+ * @initial_capacity: Initial allocation size.
+ */
+int sql_buffer_init(sql_buffer_t *sb, size_t initial_capacity) {
+	if (sb == NULL || initial_capacity == 0 || initial_capacity > SQL_MAX_BUFFER_CAPACITY) {
+		SPINE_LOG(("ERROR: sql_buffer_init invalid capacity request '%zu' (max '%d')",
+			initial_capacity, SQL_MAX_BUFFER_CAPACITY));
+		return -1;
+	}
+
+	sb->buffer = (char *)malloc(initial_capacity);
+	if (sb->buffer == NULL) {
+		SPINE_LOG(("ERROR: sql_buffer_init failed to allocate '%zu' bytes", initial_capacity));
+		sb->capacity = 0;
+		sb->length   = 0;
+		return -1;
+	}
+
+	sb->capacity  = initial_capacity;
+	sb->length    = 0;
+	sb->buffer[0] = '\0';
+
+	return 0;
+}
+
+/**
+ * sql_buffer_append - Appends a formatted string to the SQL buffer.
+ * @sb:     The sql_buffer_t structure.
+ * @format: The printf-style format string.
+ * @...:    Arguments for the format string.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+int sql_buffer_append(sql_buffer_t *sb, const char *format, ...) {
+	va_list args;
+	va_list args_copy;
+	size_t  available;
+	size_t  required_capacity;
+	size_t  new_capacity;
+	char    *new_buffer;
+	int     written;
+
+	/* safety: ensure the buffer is actually initialized before attempting to append */
+	if (sb == NULL || sb->buffer == NULL || format == NULL) {
+		SPINE_LOG(("ERROR: sql_buffer_append called with invalid arguments"));
+		return -1;
+	}
+
+	if (sb->length >= sb->capacity) {
+		SPINE_LOG(("ERROR: sql_buffer_append detected invalid state (length '%zu' >= capacity '%zu')",
+			sb->length, sb->capacity));
+		return -1;
+	}
+
+	available = sb->capacity - sb->length;
+
+	va_start(args, format);
+	va_copy(args_copy, args);
+
+	/* Fast path: attempt to write into existing capacity first. */
+	written = vsnprintf(sb->buffer + sb->length, available, format, args);
+	va_end(args);
+
+	if (written < 0) {
+		sb->buffer[sb->length] = '\0';
+		SPINE_LOG(("ERROR: sql_buffer_append failed during format operation"));
+		va_end(args_copy);
+		return -1;
+	}
+
+	if ((size_t)written >= available) {
+		required_capacity = sb->length + (size_t)written + 1;
+
+		if (required_capacity > SQL_MAX_BUFFER_CAPACITY) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append exceeded SQL_MAX_BUFFER_CAPACITY '%d' (required '%zu')",
+				SQL_MAX_BUFFER_CAPACITY, required_capacity));
+			va_end(args_copy);
+			return -1;
+		}
+
+		new_capacity = sb->capacity;
+		while (new_capacity < required_capacity) {
+			if (new_capacity >= SQL_MAX_BUFFER_CAPACITY / 2) {
+				new_capacity = SQL_MAX_BUFFER_CAPACITY;
+				break;
+			}
+
+			new_capacity *= 2;
+		}
+
+		if (new_capacity < required_capacity) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append could not reach required capacity '%zu' (max '%d')",
+				required_capacity, SQL_MAX_BUFFER_CAPACITY));
+			va_end(args_copy);
+			return -1;
+		}
+
+		new_buffer = (char *)realloc(sb->buffer, new_capacity);
+		if (new_buffer == NULL) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append failed to reallocate buffer to '%zu' bytes", new_capacity));
+			va_end(args_copy);
+			return -1;
+		}
+
+		sb->buffer   = new_buffer;
+		sb->capacity = new_capacity;
+
+		/* Slow path: retry formatting once capacity is guaranteed. */
+		written = vsnprintf(sb->buffer + sb->length, sb->capacity - sb->length, format, args_copy);
+		if (written < 0 || (size_t)written >= (sb->capacity - sb->length)) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append failed after reallocation"));
+			va_end(args_copy);
+			return -1;
+		}
+	}
+	va_end(args_copy);
+
+	sb->length += (size_t)written;
+
+	return 0;
+}
+
+/**
+ * sql_buffer_reset - Resets the SQL buffer pointer to the beginning.
+ * @sb: The sql_buffer_t structure.
+ */
+void sql_buffer_reset(sql_buffer_t *sb) {
+	if (sb == NULL || sb->buffer == NULL) {
+		return;
+	}
+
+	sb->length = 0;
+	if (sb->capacity > 0) {
+		sb->buffer[0] = '\0';
+	}
+}
+
+/**
+ * sql_buffer_truncate - Truncates the SQL buffer to a previous length.
+ * @sb: The sql_buffer_t structure.
+ * @length: Target length.
+ */
+void sql_buffer_truncate(sql_buffer_t *sb, size_t length) {
+	if (sb == NULL || sb->buffer == NULL || length > sb->length) {
+		return;
+	}
+
+	sb->length = length;
+	sb->buffer[length] = '\0';
+}
+
+/**
+ * sql_buffer_free - Releases SQL buffer memory.
+ * @sb: The sql_buffer_t structure.
+ */
+void sql_buffer_free(sql_buffer_t *sb) {
+	if (sb == NULL) {
+		return;
+	}
+
+	if (sb->buffer != NULL) {
+		free(sb->buffer);
+	}
+
+	sb->buffer   = NULL;
+	sb->capacity = 0;
+	sb->length   = 0;
 }
