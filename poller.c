@@ -99,11 +99,7 @@ void *child(void *arg) {
 	/* Allows main thread to proceed with creation of other threads */
 	sem_post(poller_details.thread_init_sem);
 
-	if (is_debug_device(host_id)) {
-		SPINE_LOG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
-	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
-	}
+	SPINE_LOG_DEV(host_id, DEBUG, ("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 
 	poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
 
@@ -1329,11 +1325,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		CALLOC_OR_DIE(snmp_oids, snmp_oids_t, host->max_oids, sizeof(snmp_oids_t), "poller.c snmp_oids");
 
 		/* log an informative message */
-		if (is_debug_device(host_id)) {
-			SPINE_LOG(("Device[%i] HT[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
-		} else {
-			SPINE_LOG_MEDIUM(("Device[%i] HT[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
-		}
+		SPINE_LOG_DEV(host_id, MEDIUM, ("Device[%i] HT[%i] NOTE: There are '%i' Polling Items for this Device", host_id, host_thread, num_rows));
 
 		i = 0; k = 0;
 		while ((i < num_rows) && (!host->ignore_host)) {
