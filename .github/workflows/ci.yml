@@ -6,8 +6,6 @@ on:
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
-  schedule:
-    - cron: '0 8 * * *'
 
 permissions:
   contents: read
@@ -24,7 +22,7 @@ env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
     autoconf automake libtool make pkg-config cmake ninja-build
-    gcc clang llvm lcov valgrind cppcheck clang-tools
+    gcc clang llvm
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   ASAN_OPTIONS: >-
     detect_leaks=1:abort_on_error=1:strict_string_checks=1:

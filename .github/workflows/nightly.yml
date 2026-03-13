@@ -189,9 +189,21 @@ jobs:
             fi
           else
             if ctest --test-dir build-valgrind -N > ctest-list.txt 2>&1 && grep -Eq 'Total Tests: [1-9]' ctest-list.txt; then
-              if ! ctest --test-dir build-valgrind -T memcheck --output-on-failure; then
-                echo '::warning::CTest memcheck unavailable or failed; running regular ctest.'
+              memcheck_log='ctest-memcheck.txt'
+              set +e
+              ctest --test-dir build-valgrind -T memcheck --output-on-failure > "${memcheck_log}" 2>&1
+              memcheck_rc=$?
+              set -e
+              cat "${memcheck_log}"
+
+              if [[ ${memcheck_rc} -eq 0 ]]; then
+                echo '::notice::CTest memcheck completed successfully.'
+              elif grep -Eqi 'memory checker.*not set|cannot find.*memory checker|memorycheckcommand' "${memcheck_log}"; then
+                echo '::warning::CTest memcheck unavailable; running regular ctest.'
                 ctest --test-dir build-valgrind --output-on-failure
+              else
+                echo '::error::CTest memcheck reported failures.' >&2
+                exit "${memcheck_rc}"
               fi
             else
               echo '::notice::No CTest tests found.'

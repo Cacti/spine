@@ -26,9 +26,9 @@ env:
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_RELEASE: >-
     -O2 -g -D_FORTIFY_SOURCE=3
-    -fstack-protector-strong -fstack-clash-protection
+    -fstack-protector-strong -fstack-clash-protection -fPIE
   LDFLAGS_RELEASE: >-
-    -Wl,-z,relro,-z,now
+    -Wl,-z,relro,-z,now -pie
   EXPECT_PIE: '1'
 
 jobs:
