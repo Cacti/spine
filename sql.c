@@ -586,7 +586,12 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	int  max_escaped_input_size;
 	int  trim_limit;
 
-	if (input == NULL) return;
+	if (output == NULL) return;
+
+	if (input == NULL) {
+		output[0] = '\0';
+		return;
+	}
 
 	max_escaped_input_size = (strlen(input) * 2) + 1;
 	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;

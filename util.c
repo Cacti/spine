@@ -829,7 +829,7 @@ static int append_host_status_row(sql_buffer_t *sb, MYSQL *mysql, MYSQL_ROW row,
 		if (sql_buffer_append(sb, "%s (", prefix) != 0) goto fail;
 	}
 
-	if (sql_buffer_append(sb, "%s, ", row[0]) != 0) goto fail; // id mediumint
+	if (sql_buffer_append(sb, "%s, ", row[0] ? row[0] : "0") != 0) goto fail; // id mediumint
 
 	db_escape(mysql, tmpstr, tmpstr_size, row[1]); // snmp_sysDescr varchar(300)
 	if (sql_buffer_append(sb, "'%s', ", tmpstr) != 0) goto fail;
@@ -846,7 +846,7 @@ static int append_host_status_row(sql_buffer_t *sb, MYSQL *mysql, MYSQL_ROW row,
 	db_escape(mysql, tmpstr, tmpstr_size, row[7]); // status tinyint
 	if (sql_buffer_append(sb, "'%s', ", tmpstr) != 0) goto fail;
 
-	if (sql_buffer_append(sb, "%s, ", row[8]) != 0) goto fail; // status_event_count mediumint
+	if (sql_buffer_append(sb, "%s, ", row[8] ? row[8] : "0") != 0) goto fail; // status_event_count mediumint
 
 	db_escape(mysql, tmpstr, tmpstr_size, row[9]);  // status_fail_date timestamp
 	if (sql_buffer_append(sb, "'%s', ", tmpstr) != 0) goto fail;
@@ -855,14 +855,14 @@ static int append_host_status_row(sql_buffer_t *sb, MYSQL *mysql, MYSQL_ROW row,
 	db_escape(mysql, tmpstr, tmpstr_size, row[11]); // status_last_error varchar(255)
 	if (sql_buffer_append(sb, "'%s', ", tmpstr) != 0) goto fail;
 
-	if (sql_buffer_append(sb, "%s, ", row[12]) != 0) goto fail; // min_time decimal(10,5)
-	if (sql_buffer_append(sb, "%s, ", row[13]) != 0) goto fail; // max_time decimal(10,5)
-	if (sql_buffer_append(sb, "%s, ", row[14]) != 0) goto fail; // cur_time decimal(10,5)
-	if (sql_buffer_append(sb, "%s, ", row[15]) != 0) goto fail; // avg_time decimal(10,5)
-	if (sql_buffer_append(sb, "%s, ", row[16]) != 0) goto fail; // polling_time double
-	if (sql_buffer_append(sb, "%s, ", row[17]) != 0) goto fail; // total_polls int
-	if (sql_buffer_append(sb, "%s, ", row[18]) != 0) goto fail; // failed_polls int
-	if (sql_buffer_append(sb, "%s, ", row[19]) != 0) goto fail; // availability decimal(8,5)
+	if (sql_buffer_append(sb, "%s, ", row[12] ? row[12] : "0") != 0) goto fail; // min_time decimal(10,5)
+	if (sql_buffer_append(sb, "%s, ", row[13] ? row[13] : "0") != 0) goto fail; // max_time decimal(10,5)
+	if (sql_buffer_append(sb, "%s, ", row[14] ? row[14] : "0") != 0) goto fail; // cur_time decimal(10,5)
+	if (sql_buffer_append(sb, "%s, ", row[15] ? row[15] : "0") != 0) goto fail; // avg_time decimal(10,5)
+	if (sql_buffer_append(sb, "%s, ", row[16] ? row[16] : "0") != 0) goto fail; // polling_time double
+	if (sql_buffer_append(sb, "%s, ", row[17] ? row[17] : "0") != 0) goto fail; // total_polls int
+	if (sql_buffer_append(sb, "%s, ", row[18] ? row[18] : "0") != 0) goto fail; // failed_polls int
+	if (sql_buffer_append(sb, "%s, ", row[19] ? row[19] : "0") != 0) goto fail; // availability decimal(8,5)
 
 	db_escape(mysql, tmpstr, tmpstr_size, row[20]); // last_updated timestamp
 	if (sql_buffer_append(sb, "'%s')", tmpstr) != 0) goto fail;
@@ -883,14 +883,14 @@ static int append_poller_item_row(sql_buffer_t *sb, MYSQL *mysql, MYSQL_ROW row,
 		if (sql_buffer_append(sb, "%s (", prefix) != 0) goto fail;
 	}
 
-	if (sql_buffer_append(sb, "%s, ", row[0]) != 0) goto fail; // local_data_id
-	if (sql_buffer_append(sb, "%s, ", row[1]) != 0) goto fail; // host_id
+	if (sql_buffer_append(sb, "%s, ", row[0] ? row[0] : "0") != 0) goto fail; // local_data_id
+	if (sql_buffer_append(sb, "%s, ", row[1] ? row[1] : "0") != 0) goto fail; // host_id
 
 	db_escape(mysql, tmpstr, tmpstr_size, row[2]); // rrd_name
 	if (sql_buffer_append(sb, "'%s', ", tmpstr) != 0) goto fail;
 
-	if (sql_buffer_append(sb, "%s, ", row[3]) != 0) goto fail; // rrd_step
-	if (sql_buffer_append(sb, "%s", row[4]) != 0) goto fail;   // rrd_next_step
+	if (sql_buffer_append(sb, "%s, ", row[3] ? row[3] : "0") != 0) goto fail; // rrd_step
+	if (sql_buffer_append(sb, "%s", row[4] ? row[4] : "0") != 0) goto fail;   // rrd_next_step
 
 	if (sql_buffer_append(sb, ")") != 0) goto fail;
 
