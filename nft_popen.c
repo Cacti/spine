@@ -122,12 +122,14 @@ static void	close_cleanup(void *);
  *
  *------------------------------------------------------------------------------
  */
-int nft_popen(const char * command, const char * type) {
+int nft_popen(char * command, const char * type) {
 	struct pid *cur;
 	struct pid *p;
 	int    pdes[2];
 	int    fd, pid, twoway;
 	char   *argv[4];
+	char   shell_cmd[] = "sh";
+	char   shell_flag[] = "-c";
 	int    cancel_state;
 	extern char **environ;
 	int    retry_count = 0;
@@ -159,9 +161,9 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
-	argv[0] = "sh";
-	argv[1] = "-c";
-	argv[2] = (char *)command;
+	argv[0] = shell_cmd;
+	argv[1] = shell_flag;
+	argv[2] = command;
 	argv[3] = NULL;
 
 	/* Lock the list mutex prior to forking, to ensure that
@@ -398,4 +400,3 @@ close_cleanup(void * arg)
 
 	free(cur);
 }
-

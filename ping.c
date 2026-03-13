@@ -47,8 +47,8 @@
 int ping_host(host_t *host, ping_t *ping) {
 	int ping_result;
 	int snmp_result;
-	double start_time;
-	double end_time;
+	double snmp_start_time;
+	double snmp_end_time;
 
 	/* snmp pinging has been selected at a minimum */
 	ping_result = 0;
@@ -104,21 +104,21 @@ int ping_host(host_t *host, ping_t *ping) {
 			snmp_result = HOST_UP;
 			if ((host->availability_method != AVAIL_SNMP_OR_PING) &&
 				((strlen(host->snmp_community) > 0) || (host->snmp_version >= 3))) {
-				start_time = get_time_as_double();
+				snmp_start_time = get_time_as_double();
 				snmp_result = ping_snmp(host, ping);
-				end_time = get_time_as_double();
+				snmp_end_time = get_time_as_double();
 
 				if (snmp_result == HOST_UP) {
 					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] INFO: SNMP Device Alive, Time:%.4f ms", host->id, end_time - start_time));
+						SPINE_LOG(("Device[%i] INFO: SNMP Device Alive, Time:%.4f ms", host->id, snmp_end_time - snmp_start_time));
 					} else {
-						SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device Alive, Time:%.4f ms", host->id, end_time - start_time));
+						SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device Alive, Time:%.4f ms", host->id, snmp_end_time - snmp_start_time));
 					}
 				} else {
 					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] INFO: SNMP Device Down, Time:%.4f ms", host->id, end_time - start_time));
+						SPINE_LOG(("Device[%i] INFO: SNMP Device Down, Time:%.4f ms", host->id, snmp_end_time - snmp_start_time));
 					} else {
-						SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device Down, Time:%.4f ms", host->id, end_time - start_time));
+						SPINE_LOG_MEDIUM(("Device[%i] INFO: SNMP Device Down, Time:%.4f ms", host->id, snmp_end_time - snmp_start_time));
 					}
 				}
 			}
@@ -268,7 +268,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
-	char   *cacti_msg = "cacti-monitoring-system\0";
+	const char *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	socklen_t    fromlen;
 	ssize_t    return_code;

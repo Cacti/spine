@@ -103,7 +103,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
-int db_reconnect(MYSQL *mysql, int type, int error, char *function) {
+int db_reconnect(MYSQL *mysql, int type, int error, const char *function) {
 	unsigned long  mysql_thread = 0;
 	char   query[100];
 
@@ -616,7 +616,7 @@ int db_column_exists(MYSQL *mysql, int type, const char *table, const char *colu
 	/* show the sql query */
 	SPINE_LOG_DEVDBG(("DEVDBG: db_column_exists('%s','%s'): %s", table, column, query_frag));
 
-	result = db_query(mysql, LOCAL, query_frag);
+	result = db_query(mysql, type, query_frag);
 	if (mysql_num_rows(result)) {
 		exists = TRUE;
 	} else {
