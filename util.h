@@ -80,7 +80,9 @@ char *regex_replace(char *exp, char *value);
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))
 #define USTRNCOPY(dst, src) ustrncopy((dst), (src), sizeof(dst))
 
-/* macro to duplicate string and die if fails */
+/* memory allocation macros that enforce a fail-fast strategy: if an allocation
+ * fails, the process terminates immediately with a diagnostic message to prevent
+ * undefined behavior or complex error-path handling in performance-critical loops */
 #define STRDUP_OR_DIE(dst, src, reason)	\
 	if ((dst = strdup(src)) == NULL) {\
 		die("FATAL: malloc() failed during strdup() for %s", reason);\

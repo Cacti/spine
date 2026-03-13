@@ -87,7 +87,8 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* see if it's in the option table */
+	/* check command-line overrides first; use standardized memory safety macros
+	 * to ensure the caller always receives valid (or process-terminating) memory */
 	for (i=0; i<nopts; i++) {
 		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
