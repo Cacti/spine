@@ -33,9 +33,13 @@ env:
   TSAN_OPTIONS: >-
     halt_on_error=1:history_size=7:log_path=tsan
   CFLAGS_COMMON: >-
-    -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion
+    -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion
     -Wpointer-arith -Wcast-qual -Wwrite-strings
     -Wstrict-prototypes -Wmissing-prototypes
+  CFLAGS_WERROR_GUARD: >-
+    -Werror=implicit-function-declaration -Werror=implicit-int
+    -Werror=incompatible-pointer-types -Werror=int-conversion
+    -Werror=return-type -Werror=format-security
 
 jobs:
   build-and-test:
@@ -139,7 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "CC=${{ matrix.cc }}" >> "${GITHUB_ENV}"
-          echo "CFLAGS=${CFLAGS_COMMON} ${{ matrix.cflags }}" >> "${GITHUB_ENV}"
+          echo "CFLAGS=${CFLAGS_COMMON} ${CFLAGS_WERROR_GUARD} ${{ matrix.cflags }}" >> "${GITHUB_ENV}"
           echo "LDFLAGS=${{ matrix.ldflags }}" >> "${GITHUB_ENV}"
           echo "ASAN_SYMBOLIZER_PATH=$(command -v llvm-symbolizer || true)" >> "${GITHUB_ENV}"
 
@@ -235,3 +239,94 @@ jobs:
           name: ci-failure-${{ matrix.os }}-${{ matrix.name }}
           path: ci-artifacts
           if-no-files-found: ignore
+
+  portability-smoke:
+    name: portability smoke | ${{ matrix.os }} | ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            cc: gcc
+            allow_failure: false
+          - os: ubuntu-24.04
+            cc: clang
+            allow_failure: false
+          - os: macos-14
+            cc: clang
+            allow_failure: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool make pkg-config \
+            gcc clang libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          brew update
+          brew install autoconf automake libtool pkg-config net-snmp mysql-client openssl@3 help2man
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          ./bootstrap
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            MYSQL_PREFIX="$(brew --prefix mysql-client)"
+            SNMP_PREFIX="$(brew --prefix net-snmp)"
+            OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+
+            ./configure \
+              --with-mysql="${MYSQL_PREFIX}" \
+              --with-snmp="${SNMP_PREFIX}" \
+              CC="${{ matrix.cc }}" \
+              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security' \
+              CPPFLAGS="-I${OPENSSL_PREFIX}/include -I${MYSQL_PREFIX}/include/mysql" \
+              LDFLAGS="-L${OPENSSL_PREFIX}/lib -L${MYSQL_PREFIX}/lib"
+          else
+            ./configure \
+              CC="${{ matrix.cc }}" \
+              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security'
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+          make -j"${JOBS}" V=1
+
+      - name: Run smoke test
+        run: |
+          set -euo pipefail
+          ./spine --version
+
+  api-safety-guard:
+    name: api safety guard
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Enforce unsafe API addition guard
+        run: |
+          set -euo pipefail
+          bash .github/scripts/check-unsafe-api-additions.sh

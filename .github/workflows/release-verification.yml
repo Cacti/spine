@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,14 +24,15 @@ env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
     autoconf automake libtool make pkg-config cmake ninja-build
-    gcc binutils file
+    gcc binutils file curl
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_RELEASE: >-
-    -O2 -g -D_FORTIFY_SOURCE=3
+    -std=c11 -O2 -g -D_FORTIFY_SOURCE=3
     -fstack-protector-strong -fstack-clash-protection -fPIE
   LDFLAGS_RELEASE: >-
     -Wl,-z,relro,-z,now -pie
   EXPECT_PIE: '1'
+  SOURCE_DATE_EPOCH: '1700000000'
 
 jobs:
   release-verify:
@@ -147,6 +150,24 @@ jobs:
             exit 1
           fi
 
+      - name: Install syft
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b "${HOME}/.local/bin" v1.20.0
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Generate SBOM
+        run: |
+          set -euo pipefail
+          syft "dir:stage" -o spdx-json=sbom.spdx.json
+
+      - name: Package staged release artifact
+        run: |
+          set -euo pipefail
+          tar -czf spine-release-stage.tgz stage
+          sha256sum spine-release-stage.tgz > spine-release-stage.tgz.sha256
+
       - name: Upload release verification artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
@@ -156,5 +177,13 @@ jobs:
             hardening-readelf-program-headers.txt
             hardening-readelf-dynamic.txt
             installed-binary-ldd.txt
+            sbom.spdx.json
+            spine-release-stage.tgz
+            spine-release-stage.tgz.sha256
             stage
           if-no-files-found: ignore
+
+      - name: Attest release artifact provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: spine-release-stage.tgz

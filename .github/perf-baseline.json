@@ -1,0 +1,5 @@
+{
+  "spine_version_median_seconds": 0.35,
+  "allowed_regression_factor": 1.5,
+  "sample_size": 30
+}

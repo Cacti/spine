@@ -32,6 +32,9 @@ GNU autotools.
   bounds.
 - String buffers: declare length constants; do not use magic numbers for
   buffer sizes.
+- Public APIs: prefer `const char *` for input-only string parameters.
+  Document ownership expectations in function comments when transfer is not
+  obvious.
 
 ## SNMP
 
@@ -62,6 +65,8 @@ GNU autotools.
 - Before opening a PR, run `cppcheck --enable=all --std=c11 *.c *.h`
   locally and fix all errors (warnings are informational).
 - flawfinder level-5 hits fail CI; lower levels are informational.
+- CI has a guardrail for newly introduced unsafe C APIs (`sprintf`, `strcpy`,
+  `strcat`, `gets`, `vsprintf`) and fails closed on additions.
 
 ## Commits and PRs
 

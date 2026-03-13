@@ -1,0 +1,93 @@
+name: Performance Regression
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config
+    gcc libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+
+jobs:
+  spine-version-benchmark:
+    name: spine --version benchmark
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install benchmark dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap and build
+        run: |
+          set -euo pipefail
+          ./bootstrap
+          ./configure CC=gcc CFLAGS='-std=c11 -O2 -g' LDFLAGS=''
+          make -j"$(nproc)" V=1
+
+      - name: Run benchmark and compare against baseline
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import statistics
+          import subprocess
+          import time
+
+          baseline = json.loads(pathlib.Path(".github/perf-baseline.json").read_text())
+          samples = int(baseline.get("sample_size", 30))
+
+          durations = []
+          for _ in range(samples):
+            start = time.perf_counter()
+            subprocess.run(["./spine", "--version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            durations.append(time.perf_counter() - start)
+
+          median = statistics.median(durations)
+          p95 = sorted(durations)[max(0, int(len(durations) * 0.95) - 1)]
+
+          result = {
+            "samples": samples,
+            "median_seconds": median,
+            "p95_seconds": p95,
+            "baseline_seconds": baseline["spine_version_median_seconds"],
+            "allowed_regression_factor": baseline["allowed_regression_factor"]
+          }
+          pathlib.Path("perf-result.json").write_text(json.dumps(result, indent=2))
+
+          threshold = baseline["spine_version_median_seconds"] * baseline["allowed_regression_factor"]
+          if median > threshold:
+            raise SystemExit(f"median {median:.6f}s exceeded threshold {threshold:.6f}s")
+
+          print(json.dumps(result, indent=2))
+          PY
+
+      - name: Upload perf artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: perf-regression-results
+          path: perf-result.json
+          if-no-files-found: ignore
