@@ -60,6 +60,8 @@ extern void sql_buffer_reset(sql_buffer_t *sb);
 extern void sql_buffer_truncate(sql_buffer_t *sb, size_t length);
 extern void sql_buffer_free(sql_buffer_t *sb);
 
+extern char *db_fetch_cell_dup(MYSQL_RES *result, int col_index);
+
 extern int append_hostrange(char *obuf, const char *colname);
 
 #define MYSQL_SET_OPTION(opt, value, desc)	\

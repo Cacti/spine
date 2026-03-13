@@ -808,3 +808,34 @@ void sql_buffer_free(sql_buffer_t *sb) {
 	sb->capacity = 0;
 	sb->length   = 0;
 }
+
+/**
+ * db_fetch_cell_dup - fetches the first row's specified column and duplicates it.
+ * @result:       The MYSQL_RES result set to process.
+ * @col_index:    The 0-based column index to fetch.
+ *
+ * This function handles all NULL checks and ensures the result set is freed.
+ * It always returns a valid strdup'd string (or empty string) that the caller must free.
+ */
+char *db_fetch_cell_dup(MYSQL_RES *result, int col_index) {
+	char *retval = NULL;
+	MYSQL_ROW mysql_row;
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
+			if (mysql_row != NULL && mysql_row[col_index] != NULL) {
+				STRDUP_OR_DIE(retval, mysql_row[col_index], "sql.c db_fetch_cell_dup");
+			}
+		}
+		db_free_result(result);
+	}
+
+	if (retval == NULL) {
+		STRDUP_OR_DIE(retval, "", "sql.c db_fetch_cell_dup fallback");
+	}
+
+	return retval;
+}
+
