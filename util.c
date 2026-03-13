@@ -44,13 +44,22 @@ static int nopts = 0;
  * parameter and stored in this table: we *use* them when the config code
  * reads from the DB.
  *
- * It's not an error to set an option which is unknown, but maybe should be.
- *
+ * Using uthash for O(1) lookup performance during high-frequency log operations.
  */
-static struct {
-	const char *opt;
-	const char *val;
-} opttable[256];
+typedef struct {
+	char opt[128];      /* the option name (key) */
+	const char *val;    /* the option value */
+	UT_hash_handle hh;  /* makes this structure hashable */
+} option_t;
+
+static option_t *options = NULL;
+
+typedef struct {
+	int device_id;      /* the device id (key) */
+	UT_hash_handle hh;  /* makes this structure hashable */
+} debug_device_t;
+
+static debug_device_t *debug_devices_hash = NULL;
 
 /*! \fn void set_option(const char *option, const char *value)
  *  \brief Override spine setting from the Cacti settings table.
@@ -60,8 +69,19 @@ static struct {
  *
  */
 void set_option(const char *option, const char *value) {
-	opttable[nopts  ].opt = option;
-	opttable[nopts++].val = value;
+	option_t *s;
+
+	HASH_FIND_STR(options, option, s);
+
+	if (s == NULL) {
+		CALLOC_OR_DIE(s, option_t, 1, sizeof(option_t), "util.c option_t");
+		snprintf(s->opt, sizeof(s->opt), "%s", option);
+		s->val = value;
+		HASH_ADD_STR(options, opt, s);
+		nopts++;
+	} else {
+		s->val = value;
+	}
 }
 
 /*! \fn static const char *getsetting(MYSQL *psql, int mode, const char *setting)
@@ -78,23 +98,19 @@ void set_option(const char *option, const char *value) {
  *
  */
 static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
-	MYSQL_ROW mysql_row;
-	int       i;
+	char      qstring[BUFSIZE];
 
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* check command-line overrides first; use standardized memory safety macros
-	 * to ensure the caller always receives valid (or process-terminating) memory */
-	for (i=0; i<nopts; i++) {
-		if (STRIMATCH(setting, opttable[i].opt)) {
-			/* FOUND IT! */
-			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getsetting");
-			return retval;
-		}
+	/* check command-line overrides first using high-performance hash table */
+	option_t *s;
+	HASH_FIND_STR(options, setting, s);
+	if (s != NULL) {
+		STRDUP_OR_DIE(retval, s->val, "util.c getsetting");
+		return retval;
 	}
 
 	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
@@ -154,22 +170,19 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
  *
  */
 static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
-	MYSQL_ROW mysql_row;
-	int       i;
+	char      qstring[BUFSIZE];
 
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* see if it's in the option table */
-	for (i=0; i<nopts; i++) {
-		if (STRIMATCH(setting, opttable[i].opt)) {
-			/* FOUND IT! */
-			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getpsetting");
-			return retval;
-		}
+	/* check command-line overrides first using high-performance hash table */
+	option_t *s;
+	HASH_FIND_STR(options, setting, s);
+	if (s != NULL) {
+		STRDUP_OR_DIE(retval, s->val, "util.c getpsetting");
+		return retval;
 	}
 
 	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
@@ -239,22 +252,19 @@ static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) 
  *
  */
 static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
-	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
-	MYSQL_ROW mysql_row;
-	int       i;
+	char      qstring[BUFSIZE];
 
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* see if it's in the option table */
-	for (i=0; i<nopts; i++) {
-		if (STRIMATCH(setting, opttable[i].opt)) {
-			/* FOUND IT! */
-			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getglobalvariable");
-			return retval;
-		}
+	/* check command-line overrides first using high-performance hash table */
+	option_t *s;
+	HASH_FIND_STR(options, setting, s);
+	if (s != NULL) {
+		STRDUP_OR_DIE(retval, s->val, "util.c getglobalvariable");
+		return retval;
 	}
 
 	snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
@@ -276,16 +286,14 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
  *
  */
 int is_debug_device(int device_id) {
-	extern int *debug_devices;
-	int i = 0;
+	debug_device_t *d;
 
-	while (i < 100) {
-		if (debug_devices[i] == '\0') break;
-		if (debug_devices[i] == device_id) {
-			return TRUE;
-		}
+	if (device_id <= 0) return FALSE;
 
-		i++;
+	HASH_FIND_INT(debug_devices_hash, &device_id, d);
+
+	if (d != NULL) {
+		return TRUE;
 	}
 
 	return FALSE;
@@ -386,16 +394,6 @@ void read_config_options() {
 	} else {
 		snprintf(set.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
-
-	/* get log separator */
-	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
-		set.log_datetime_separator = atoi(res);
-		free((char *)res);
-
-		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
-			set.log_datetime_separator = GDC_DEFAULT;
-		}
-	}
 
 	/* get log separator */
 	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
@@ -2120,8 +2118,6 @@ void checkAsRoot() {
 int get_cacti_version(MYSQL *psql, int mode) {
 	char      qstring[BUFSIZE];
 	char      *retval;
-	MYSQL_RES *result;
-	MYSQL_ROW mysql_row;
 	int       major, minor, point;
 	int       cacti_version;
 
@@ -2180,17 +2176,17 @@ char *regex_replace(char *exp, char *value) {
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
-	}
+}
 
-	/**
-	* get_jitter_sleep - calculates a sleep duration using truncated exponential
-	* backoff with random jitter.
-	* @retry_count: the current attempt number (0-indexed)
-	* @base_ms:     the base delay in milliseconds
-	*
-	* Returns the calculated sleep time in microseconds (usec).
-	*/
-	unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms) {
+/**
+ * get_jitter_sleep - calculates a sleep duration using truncated exponential
+ * backoff with random jitter.
+ * @retry_count: the current attempt number (0-indexed)
+ * @base_ms:     the base delay in milliseconds
+ *
+ * Returns the calculated sleep time in microseconds (usec).
+ */
+unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms) {
 	unsigned int exponential_backoff;
 	unsigned int jitter;
 	unsigned int max_sleep_ms = 2000; // max 2 seconds
@@ -2199,11 +2195,29 @@ char *regex_replace(char *exp, char *value) {
 	exponential_backoff = base_ms * (1 << (retry_count > 10 ? 10 : retry_count));
 
 	if (exponential_backoff > max_sleep_ms) {
-	exponential_backoff = max_sleep_ms;
+		exponential_backoff = max_sleep_ms;
 	}
 
 	/* add random jitter (0 to 50% of backoff) to spread load and prevent storms */
 	jitter = rand() % (exponential_backoff / 2 + 1);
 
 	return (exponential_backoff + jitter) * 1000;
+}
+
+/**
+ * add_debug_device - adds a device ID to the high-performance debug hash table.
+ * @device_id: The ID of the device to enable debugging for.
+ */
+void add_debug_device(int device_id) {
+	debug_device_t *d;
+
+	if (device_id <= 0) return;
+
+	HASH_FIND_INT(debug_devices_hash, &device_id, d);
+
+	if (d == NULL) {
+		CALLOC_OR_DIE(d, debug_device_t, 1, sizeof(debug_device_t), "util.c debug_device_t");
+		d->device_id = device_id;
+		HASH_ADD_INT(debug_devices_hash, device_id, d);
 	}
+}
