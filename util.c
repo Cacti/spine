@@ -1442,15 +1442,15 @@ int spine_log(const char *format, ...) {
 		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 
 		if ((strstr(flogmessage,"ERROR") || (strstr(flogmessage, "FATAL"))) && (set.log_perror)) {
-			syslog(LOG_CRIT,"%s\n", flogmessage);
+			syslog(LOG_CRIT, "%.1024s", flogmessage);
 		}
 
 		if ((strstr(flogmessage,"WARNING")) && (set.log_pwarn)){
-			syslog(LOG_WARNING,"%s\n", flogmessage);
+			syslog(LOG_WARNING, "%.1024s", flogmessage);
 		}
 
 		if ((strstr(flogmessage,"STATS")) && (set.log_pstats)){
-			syslog(LOG_NOTICE,"%s\n", flogmessage);
+			syslog(LOG_NOTICE, "%.1024s", flogmessage);
 		}
 
 		closelog();
