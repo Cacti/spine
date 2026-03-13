@@ -92,13 +92,16 @@ extern double get_time_as_double(void);
 
 /* function to check to see if program has capability to use raw socket with
    out uid = 0 */
-extern int hasCaps();
+extern int hasCaps(void);
 
 /* see if we can do things as root */
-extern void checkAsRoot();
+extern void checkAsRoot(void);
 
 /* log format */
-extern char *get_date_format();
+extern char *get_date_format(void);
+
+/* remote/main server synchronization */
+extern void poller_push_data_to_main(void);
 
 /* start time for spine */
 extern double start_time;

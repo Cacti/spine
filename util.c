@@ -129,7 +129,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
  *  \return true for successful or false for failed
  *
  */
-int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
+static int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
 	char  qstring[BUFSIZE];
 	int   result = 0;
 
@@ -332,7 +332,7 @@ int is_debug_device(int device_id) {
  *  load default values from the database for poller processing
  *
  */
-void read_config_options() {
+void read_config_options(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
 	MYSQL_RES  *result;
@@ -794,7 +794,7 @@ void read_config_options() {
 	}
 }
 
-void poller_push_data_to_main() {
+void poller_push_data_to_main(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
 	MYSQL_RES  *result;
@@ -1119,7 +1119,7 @@ int read_spine_config(const char *file) {
  *  \param *set global runtime parameters
  *
  */
-void config_defaults() {
+void config_defaults(void) {
 	set.threads = DEFAULT_THREADS;
 
 	/* default server */
@@ -1190,7 +1190,7 @@ void die(const char *format, ...) {
 	exit(set.exit_code);
 }
 
-char * get_date_format() {
+char *get_date_format(void) {
 	char *log_fmt;
 	char log_sep = '/';
 
@@ -1909,7 +1909,7 @@ unsigned long long hex2dec(char *str) {
 	return number;
 }
 
-int hasCaps() {
+int hasCaps(void) {
 	#ifdef HAVE_LCAP
 	cap_t caps;
 	cap_value_t capval;
@@ -1942,7 +1942,7 @@ int hasCaps() {
 	#endif
 }
 
-void checkAsRoot() {
+void checkAsRoot(void) {
 	#ifndef __CYGWIN__
 	#ifdef SOLAR_PRIV
 	priv_set_t *privset;
