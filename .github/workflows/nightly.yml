@@ -23,6 +23,11 @@ env:
     gcc clang llvm valgrind
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   TSAN_OPTIONS: halt_on_error=1:history_size=7:log_path=tsan
+  ASAN_OPTIONS: >-
+    detect_leaks=1:abort_on_error=1:strict_string_checks=1:
+    check_initialization_order=1:detect_stack_use_after_return=1:
+    symbolize=1:log_path=asan
+  UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:log_path=ubsan
 
 jobs:
   tsan:
@@ -108,6 +113,103 @@ jobs:
             config.log
             build-tsan/CMakeFiles/CMakeConfigureLog.yaml
             build-tsan/CMakeFiles/CMakeError.log
+            *.log
+          if-no-files-found: ignore
+
+  asan-soak:
+    name: clang asan/ubsan soak
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure (Autotools or CMake)
+        run: |
+          set -euo pipefail
+          CFLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
+          LDFLAGS='-fsanitize=address,undefined'
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=clang CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build-asan -G Ninja \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_C_FLAGS="${CFLAGS}" \
+              -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}" \
+              -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}" \
+              -DCMAKE_BUILD_TYPE=Debug
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo 'No supported build system found.' >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            make -j"$(nproc)"
+          else
+            cmake --build build-asan --parallel "$(nproc)"
+          fi
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            if make -n check >/dev/null 2>&1; then
+              make check VERBOSE=1
+            elif make -n test >/dev/null 2>&1; then
+              make test VERBOSE=1
+            else
+              echo '::notice::No make check/test target found.'
+            fi
+          else
+            if ctest --test-dir build-asan -N > ctest-list.txt 2>&1 && grep -Eq 'Total Tests: [1-9]' ctest-list.txt; then
+              ctest --test-dir build-asan --output-on-failure --parallel "$(nproc)"
+            else
+              echo '::notice::No CTest tests found.'
+            fi
+          fi
+
+      - name: Enforce asan/ubsan leak trend baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check-leak-trend.py \
+            --mode asan \
+            --baseline .github/nightly-leak-baseline.json \
+            --output nightly-asan-summary.json \
+            --logs 'asan*' 'ubsan*' '*.log'
+
+      - name: Upload asan artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-asan-logs
+          path: |
+            asan*
+            ubsan*
+            nightly-asan-summary.json
+            config.log
+            build-asan/CMakeFiles/CMakeConfigureLog.yaml
+            build-asan/CMakeFiles/CMakeError.log
             *.log
           if-no-files-found: ignore
 
@@ -210,6 +312,15 @@ jobs:
             fi
           fi
 
+      - name: Enforce valgrind leak trend baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check-leak-trend.py \
+            --mode valgrind \
+            --baseline .github/nightly-leak-baseline.json \
+            --output nightly-valgrind-summary.json \
+            --logs 'valgrind*.log' 'build-valgrind/Testing/Temporary/*'
+
       - name: Upload valgrind artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
@@ -217,6 +328,7 @@ jobs:
           name: nightly-valgrind-logs
           path: |
             valgrind*.log
+            nightly-valgrind-summary.json
             build-valgrind/Testing/Temporary
             config.log
             *.log
@@ -287,7 +399,7 @@ jobs:
   soak-placeholder:
     name: soak/integration placeholder
     runs-on: ubuntu-24.04
-    needs: [tsan, valgrind, fuzz-smoke]
+    needs: [tsan, asan-soak, valgrind, fuzz-smoke]
 
     steps:
       - name: Placeholder
