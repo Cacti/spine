@@ -120,3 +120,7 @@ int get_cacti_version(MYSQL *psql, int mode);
 
 /* calculate sleep duration with jitter for retries */
 unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms);
+
+/* log an invalid response with standard prefix */
+void log_invalid_response(int host_id, int host_thread, int local_data_id, const char *format, ...)
+	__attribute__((format(printf, 4, 5)));
