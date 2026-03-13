@@ -2200,4 +2200,30 @@ char *regex_replace(char *exp, char *value) {
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
-}
+	}
+
+	/**
+	* get_jitter_sleep - calculates a sleep duration using truncated exponential
+	* backoff with random jitter.
+	* @retry_count: the current attempt number (0-indexed)
+	* @base_ms:     the base delay in milliseconds
+	*
+	* Returns the calculated sleep time in microseconds (usec).
+	*/
+	unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms) {
+	unsigned int exponential_backoff;
+	unsigned int jitter;
+	unsigned int max_sleep_ms = 2000; // max 2 seconds
+
+	/* truncated exponential backoff: base * 2^retry */
+	exponential_backoff = base_ms * (1 << (retry_count > 10 ? 10 : retry_count));
+
+	if (exponential_backoff > max_sleep_ms) {
+	exponential_backoff = max_sleep_ms;
+	}
+
+	/* add random jitter (0 to 50% of backoff) to spread load and prevent storms */
+	jitter = rand() % (exponential_backoff / 2 + 1);
+
+	return (exponential_backoff + jitter) * 1000;
+	}

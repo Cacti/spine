@@ -117,3 +117,6 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+/* calculate sleep duration with jitter for retries */
+unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms);

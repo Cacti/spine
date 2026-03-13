@@ -75,13 +75,13 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 
 						continue;
 					} else {
-						usleep(50000);
+						usleep(get_jitter_sleep(error_count, 50));
 						continue;
 					}
 				}
 
 				if ((error == 1213) || (error == 1205)) {
-					usleep(50000);
+					usleep(get_jitter_sleep(error_count, 50));
 					error_count++;
 
 					if (error_count > 30) {
@@ -181,16 +181,15 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 					}
 
 					continue;
-				} else {
-					usleep(50000);
+					} else {
+					usleep(get_jitter_sleep(error_count, 50));
 					continue;
-				}
-			}
+					}
+					}
 
-			if (error == 1213 || error == 1205) {
-				usleep(50000);
-				error_count++;
-
+					if (error == 1213 || error == 1205) {
+					usleep(get_jitter_sleep(error_count, 50));
+					error_count++;
 				if (error_count > 30) {
 					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 					exit(1);
@@ -344,7 +343,7 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 
 			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
-				usleep(5000);
+				usleep(get_jitter_sleep(attempts, 5));
 				tries++;
 				success = FALSE;
 			} else if (error == 2002) {
@@ -354,7 +353,7 @@ void db_connect(int type, MYSQL *mysql) {
 			} else if (error != 1049 && error != 2005 && error != 1045) {
 				printf("Database: Connection Failed: Error:'%d', Message:'%s'\n", error, mysql_error(mysql));
 				success = FALSE;
-				usleep(50000);
+				usleep(get_jitter_sleep(attempts, 50));
 			} else {
 				tries   = 0;
 				success = FALSE;

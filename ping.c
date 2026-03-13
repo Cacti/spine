@@ -297,7 +297,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		#endif
 
 		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-			usleep(500000);
+			/* use jittered backoff to spread retry load */
+			usleep(get_jitter_sleep(retry_count, 500));
 			retry_count++;
 
 			if (retry_count > 4) {
@@ -488,7 +489,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				total_time = 0;
 				retry_count++;
 				#ifndef SOLAR_THREAD
-				usleep(1000);
+				usleep(get_jitter_sleep(retry_count, 1));
 				#endif
 			}
 		} else {
@@ -689,7 +690,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				retry_count++;
 				#ifndef SOLAR_THREAD
-				usleep(1000);
+				usleep(get_jitter_sleep(retry_count, 1));
 				#endif
 			}
 		} else {
@@ -908,7 +909,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 						}
 
 						retry_count++;
-						usleep(50000);
+						usleep(get_jitter_sleep(retry_count, 50));
 						continue;
 					} else {
 						SPINE_LOG(("WARNING: Error resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));

@@ -416,7 +416,7 @@ int php_init(int php_process) {
 				if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
 					retry_count++;
 					#ifndef SOLAR_THREAD
-					usleep(50000);
+					usleep(get_jitter_sleep(retry_count, 50));
 					#endif
 					continue;
 				}

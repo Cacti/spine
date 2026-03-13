@@ -241,6 +241,9 @@ int main(int argc, char *argv[]) {
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
+	/* seed the random number generator for retry jitter */
+	srand(time(NULL) ^ getpid());
+
 	/* install the spine signal handler */
 	install_spine_signal_handler();
 
