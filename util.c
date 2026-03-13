@@ -101,27 +101,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 
 	result = db_query(psql, mode, qstring);
 
-	if (result != 0) {
-		if (mysql_num_rows(result) > 0) {
-			mysql_row = mysql_fetch_row(result);
-
-			if (mysql_row != NULL) {
-				STRDUP_OR_DIE(retval, mysql_row[0], "util.c getsetting");
-				db_free_result(result);
-				return retval;
-			}else{
-				STRDUP_OR_DIE(retval, "", "util.c getsetting");
-				return retval;
-			}
-		}else{
-			db_free_result(result);
-			STRDUP_OR_DIE(retval, "", "util.c getsetting");
-			return retval;
-		}
-	}else{
-		STRDUP_OR_DIE(retval, "", "util.c getsetting");
-		return retval;
-	}
+	return db_fetch_cell_dup(result, 0);
 }
 
 /*! \fn int putsetting(MYSQL *psql, const char *setting, const char *value)
@@ -196,24 +176,14 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 
 	result = db_query(psql, mode, qstring);
 
-	if (result != 0) {
-		if (mysql_num_rows(result) > 0) {
-			mysql_row = mysql_fetch_row(result);
+	retval = db_fetch_cell_dup(result, 0);
 
-			if (mysql_row != NULL) {
-				STRDUP_OR_DIE(retval, mysql_row[0], "util.c getpsetting");
-				db_free_result(result);
-				return retval;
-			} else {
-				return 0;
-			}
-		} else {
-			db_free_result(result);
-			return 0;
-		}
-	} else {
+	if (retval != NULL && strlen(retval) == 0) {
+		SPINE_FREE(retval);
 		return 0;
 	}
+
+	return retval;
 }
 
 /*! \fn static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt)
@@ -291,24 +261,14 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 
 	result = db_query(psql, mode, qstring);
 
-	if (result != 0) {
-		if (mysql_num_rows(result) > 0) {
-			mysql_row = mysql_fetch_row(result);
+	retval = db_fetch_cell_dup(result, 1);
 
-			if (mysql_row != NULL) {
-				STRDUP_OR_DIE(retval, mysql_row[1], "util.c getglobalvariable");
-				db_free_result(result);
-				return retval;
-			} else {
-				return 0;
-			}
-		} else {
-			db_free_result(result);
-			return 0;
-		}
-	} else {
+	if (retval != NULL && strlen(retval) == 0) {
+		SPINE_FREE(retval);
 		return 0;
 	}
+
+	return retval;
 }
 
 /*! \fn int is_debug_device(int device_id)
@@ -2171,35 +2131,19 @@ int get_cacti_version(MYSQL *psql, int mode) {
 
 	result = db_query(psql, mode, qstring);
 
-	if (result != 0) {
-		if (mysql_num_rows(result) > 0) {
-			mysql_row = mysql_fetch_row(result);
+	retval = db_fetch_cell_dup(result, 0);
 
-			if (mysql_row != NULL) {
-				STRDUP_OR_DIE(retval, mysql_row[0], "util.c get_cacti_version");
-				db_free_result(result);
+	if (STRIMATCH(retval, "new_install") || strlen(retval) == 0) {
+		SPINE_FREE(retval);
 
-				if (STRIMATCH(retval, "new_install")) {
-					SPINE_FREE(retval);
-
-					return 0;
-				} else {
-					sscanf(retval, "%d.%d.%d", &major, &minor, &point);
-					cacti_version = (major * 1000) + (minor * 100) + (point * 1);
-
-					SPINE_FREE(retval);
-
-					return cacti_version;
-				}
-			}else{
-				return 0;
-			}
-		}else{
-			db_free_result(result);
-			return 0;
-		}
-	}else{
 		return 0;
+	} else {
+		sscanf(retval, "%d.%d.%d", &major, &minor, &point);
+		cacti_version = (major * 1000) + (minor * 100) + (point * 1);
+
+		SPINE_FREE(retval);
+
+		return cacti_version;
 	}
 }
 
