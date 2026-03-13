@@ -117,3 +117,13 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+/* calculate sleep duration with jitter for retries */
+unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms);
+
+/* add a device to the debug hash table */
+void add_debug_device(int device_id);
+
+/* log an invalid response with standard prefix */
+void log_invalid_response(int host_id, int host_thread, int local_data_id, const char *format, ...)
+	__attribute__((format(printf, 4, 5)));

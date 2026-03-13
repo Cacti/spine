@@ -109,7 +109,6 @@ double total_time;
 config_t set;
 php_t	*php_processes = 0;
 char	config_paths[CONFIG_PATHS][BUFSIZE];
-int     *debug_devices;
 
 pool_t  *db_pool_local;
 pool_t  *db_pool_remote;
@@ -249,9 +248,6 @@ int main(int argc, char *argv[]) {
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
-
-	/* create the array of debug devices */
-	CALLOC_OR_DIE(debug_devices, int, MAX_DEBUG_DEVICES, sizeof(int), "spine.c debug_devices");
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -519,18 +515,13 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		int i = 0;
 		char *token;
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
-		while(token && i < MAX_DEBUG_DEVICES - 1) {
-			debug_devices[i]   = atoi(token);
-			debug_devices[i+1] = '\0';
+		while(token) {
+			add_debug_device(atoi(token));
 			token = strtok(NULL, ",");
-			i++;
 		}
-	} else {
-		debug_devices[0] = '\0';
 	}
 
 	/* initialize mysql objects for threads */

@@ -44,13 +44,22 @@ static int nopts = 0;
  * parameter and stored in this table: we *use* them when the config code
  * reads from the DB.
  *
- * It's not an error to set an option which is unknown, but maybe should be.
- *
+ * Using uthash for O(1) lookup performance during high-frequency log operations.
  */
-static struct {
-	const char *opt;
-	const char *val;
-} opttable[256];
+typedef struct {
+	char opt[128];      /* the option name (key) */
+	const char *val;    /* the option value */
+	UT_hash_handle hh;  /* makes this structure hashable */
+} option_t;
+
+static option_t *options = NULL;
+
+typedef struct {
+	int device_id;      /* the device id (key) */
+	UT_hash_handle hh;  /* makes this structure hashable */
+} debug_device_t;
+
+static debug_device_t *debug_devices_hash = NULL;
 
 /*! \fn void set_option(const char *option, const char *value)
  *  \brief Override spine setting from the Cacti settings table.
@@ -60,8 +69,19 @@ static struct {
  *
  */
 void set_option(const char *option, const char *value) {
-	opttable[nopts  ].opt = option;
-	opttable[nopts++].val = value;
+	option_t *s;
+
+	HASH_FIND_STR(options, option, s);
+
+	if (s == NULL) {
+		CALLOC_OR_DIE(s, option_t, 1, sizeof(option_t), "util.c option_t");
+		snprintf(s->opt, sizeof(s->opt), "%s", option);
+		s->val = value;
+		HASH_ADD_STR(options, opt, s);
+		nopts++;
+	} else {
+		s->val = value;
+	}
 }
 
 /*! \fn static const char *getsetting(MYSQL *psql, int mode, const char *setting)
@@ -87,14 +107,12 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* check command-line overrides first; use standardized memory safety macros
-	 * to ensure the caller always receives valid (or process-terminating) memory */
-	for (i=0; i<nopts; i++) {
-		if (STRIMATCH(setting, opttable[i].opt)) {
-			/* FOUND IT! */
-			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getsetting");
-			return retval;
-		}
+	/* check command-line overrides first using high-performance hash table */
+	option_t *s;
+	HASH_FIND_STR(options, setting, s);
+	if (s != NULL) {
+		STRDUP_OR_DIE(retval, s->val, "util.c getsetting");
+		return retval;
 	}
 
 	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
@@ -183,13 +201,12 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* see if it's in the option table */
-	for (i=0; i<nopts; i++) {
-		if (STRIMATCH(setting, opttable[i].opt)) {
-			/* FOUND IT! */
-			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getpsetting");
-			return retval;
-		}
+	/* check command-line overrides first using high-performance hash table */
+	option_t *s;
+	HASH_FIND_STR(options, setting, s);
+	if (s != NULL) {
+		STRDUP_OR_DIE(retval, s->val, "util.c getpsetting");
+		return retval;
 	}
 
 	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
@@ -278,13 +295,12 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 	assert(psql    != 0);
 	assert(setting != 0);
 
-	/* see if it's in the option table */
-	for (i=0; i<nopts; i++) {
-		if (STRIMATCH(setting, opttable[i].opt)) {
-			/* FOUND IT! */
-			STRDUP_OR_DIE(retval, opttable[i].val, "util.c getglobalvariable");
-			return retval;
-		}
+	/* check command-line overrides first using high-performance hash table */
+	option_t *s;
+	HASH_FIND_STR(options, setting, s);
+	if (s != NULL) {
+		STRDUP_OR_DIE(retval, s->val, "util.c getglobalvariable");
+		return retval;
 	}
 
 	snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
@@ -316,16 +332,14 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
  *
  */
 int is_debug_device(int device_id) {
-	extern int *debug_devices;
-	int i = 0;
+	debug_device_t *d;
 
-	while (i < 100) {
-		if (debug_devices[i] == '\0') break;
-		if (debug_devices[i] == device_id) {
-			return TRUE;
-		}
+	if (device_id <= 0) return FALSE;
 
-		i++;
+	HASH_FIND_INT(debug_devices_hash, &device_id, d);
+
+	if (d != NULL) {
+		return TRUE;
 	}
 
 	return FALSE;
@@ -2201,3 +2215,22 @@ char *regex_replace(char *exp, char *value) {
 
 	return (reti) ? value : msgbuf;
 }
+
+/**
+ * add_debug_device - adds a device ID to the high-performance debug hash table.
+ * @device_id: The ID of the device to enable debugging for.
+ */
+void add_debug_device(int device_id) {
+	debug_device_t *d;
+
+	if (device_id <= 0) return;
+
+	HASH_FIND_INT(debug_devices_hash, &device_id, d);
+
+	if (d == NULL) {
+		CALLOC_OR_DIE(d, debug_device_t, 1, sizeof(debug_device_t), "util.c debug_device_t");
+		d->device_id = device_id;
+		HASH_ADD_INT(debug_devices_hash, device_id, d);
+	}
+}
+
