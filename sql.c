@@ -588,6 +588,8 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 
 	if (output == NULL) return;
 
+	/* ensure the output buffer is initialized to an empty string if input is NULL
+	 * to avoid using stale data from previous calls in bulk query buffers */
 	if (input == NULL) {
 		output[0] = '\0';
 		return;
@@ -676,6 +678,7 @@ int sql_buffer_append(sql_buffer_t *sb, const char *format, ...) {
 	char    *new_buffer;
 	int     written;
 
+	/* safety: ensure the buffer is actually initialized before attempting to append */
 	if (sb == NULL || sb->buffer == NULL || format == NULL) {
 		SPINE_LOG(("ERROR: sql_buffer_append called with invalid arguments"));
 		return -1;

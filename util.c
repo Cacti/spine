@@ -829,6 +829,8 @@ static int append_host_status_row(sql_buffer_t *sb, MYSQL *mysql, MYSQL_ROW row,
 		if (sql_buffer_append(sb, "%s (", prefix) != 0) goto fail;
 	}
 
+	/* use explicit NULL checks and safe defaults to prevent vsnprintf from processing
+	 * NULL pointers or appending stale buffer data from previous rows */
 	if (sql_buffer_append(sb, "%s, ", row[0] ? row[0] : "0") != 0) goto fail; // id mediumint
 
 	db_escape(mysql, tmpstr, tmpstr_size, row[1]); // snmp_sysDescr varchar(300)
