@@ -1795,7 +1795,7 @@ char *reverse(char* str) {
  *  \return the position of -1 if not found
  */
 int strpos(const char *haystack, const char *needle) {
-	char *p = strstr(haystack, needle);
+	const char *p = strstr(haystack, needle);
 
 	if (p) {
 		return p - haystack;

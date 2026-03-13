@@ -65,7 +65,7 @@
  *	ENOMEM  malloc() failed.
  *	EAGAIN  fork() failed.
  */
-extern int	nft_popen(char * command, const char * mode);
+extern int	nft_popen(const char * command, const char * mode);
 
 /*!
  *  nft_pchild
