@@ -183,7 +183,7 @@ int nft_popen(const char * command, const char * type) {
 				#endif
 				goto retry;
 			}else{
-				SPINE_LOG(("ERROR: SCRIPT: Could not fork. Out of Resources nft_popen.c"));
+				SPINE_LOG("ERROR: SCRIPT: Could not fork. Out of Resources nft_popen.c");
 			}
 		case ENOMEM:
 			if (retry_count < 3) {
@@ -194,10 +194,10 @@ int nft_popen(const char * command, const char * type) {
 				#endif
 				goto retry;
 			}else{
-				SPINE_LOG(("ERROR: SCRIPT Could not fork. Out of Memory nft_popen.c"));
+				SPINE_LOG("ERROR: SCRIPT Could not fork. Out of Memory nft_popen.c");
 			}
 		default:
-			SPINE_LOG(("ERROR: SCRIPT Could not fork. Unknown Reason nft_popen.c"));
+			SPINE_LOG("ERROR: SCRIPT Could not fork. Unknown Reason nft_popen.c");
 		}
 
 		(void)close(pdes[0]);
@@ -398,4 +398,3 @@ close_cleanup(void * arg)
 
 	free(cur);
 }
-

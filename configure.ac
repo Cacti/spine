@@ -83,10 +83,10 @@ PKG_CHECK_MODULES([NETSNMP], [netsnmp], [
     else
         SNMP_CFLAGS=`$NETSNMP_CONFIG --base-cflags`
         SNMP_LIBS=`$NETSNMP_CONFIG --libs`
-        
+
         # Filter out mangled Apple internal flags and invalid paths
         SNMP_CFLAGS=`echo $SNMP_CFLAGS | sed 's/-i[[^ ]]*withsysroot [[^ ]]*//g' | sed 's/[[^ ]]*~[[^ ]]*//g' | sed 's/[[^ ]]*Internal.sdk[[^ ]]*//g'`
-        
+
         SPINE_CFLAGS="$SPINE_CFLAGS $SNMP_CFLAGS"
         SPINE_LIBS="$SPINE_LIBS $SNMP_LIBS"
     fi

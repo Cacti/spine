@@ -79,17 +79,17 @@ netsnmp_ds_toggle_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_CHECK_RANGE
 
 #if defined(VERIFY_PACKAGE_VERSION) && defined(PACKAGE_VERSION)
 	/* check that the headers we compiled with match the library we linked with */
-	SPINE_LOG_DEBUG(("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION));
-	SPINE_LOG_DEBUG(("DEBUG: SNMP Library Version is %s", netsnmp_get_version()));
+	SPINE_LOG_DEBUG("DEBUG: SNMP Header Version is %s", PACKAGE_VERSION);
+	SPINE_LOG_DEBUG("DEBUG: SNMP Library Version is %s", netsnmp_get_version();
 
 	if (STRMATCH(PACKAGE_VERSION,netsnmp_get_version())) {
 		init_snmp("spine");
 	} else {
 		/* report the error and quit spine */
-		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version());
+		die("ERROR: SNMP Library Version Mismatch (%s vs %s)",PACKAGE_VERSION,netsnmp_get_version();
 	}
 #else
-	SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP."));
+	SPINE_LOG_DEBUG("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP.");
 	init_snmp("spine");
 #endif
 }
@@ -186,7 +186,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		session.version       = SNMP_VERSION_3;
 		session.securityModel = USM_SEC_MODEL_NUMBER;
 	} else {
-		SPINE_LOG(("Device[%i] ERROR: SNMP Version Error for Device '%s'", host_id, hostname));
+		SPINE_LOG("Device[%i] ERROR: SNMP Version Error for Device '%s'", host_id, hostname);
 		free(session.localname);
 		return 0;
 	}
@@ -196,7 +196,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.retries     = set.snmp_retries;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
-	SPINE_LOG_HIGH(("Device[%i] INFO: SNMP Device '%s' has a timeout of %ld (%d), with %d retries", host_id, hostnameport, session.timeout, snmp_timeout, session.retries));
+	SPINE_LOG_HIGH("Device[%i] INFO: SNMP Device '%s' has a timeout of %ld (%d), with %d retries", host_id, hostnameport, session.timeout, snmp_timeout, session.retries);
 
 	if ((snmp_version == 2) || (snmp_version == 1)) {
 		session.community     = (unsigned char*) snmp_community;
@@ -229,7 +229,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
             free(session.securityAuthProto);
             session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
 		} else {
-			SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
+			SPINE_LOG("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol);
 			free(session.peername);
 			free(session.localname);
 			return 0;
@@ -237,7 +237,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 		/* set the privacy protocol to none */
 		if (strcmp(snmp_priv_protocol, "[None]") == 0 || (strlen(snmp_priv_passphrase) == 0)) {
-			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol));
+			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol);
 			session.securityPrivProtoLen = OID_LENGTH(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
@@ -253,7 +253,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			priv_type = usm_lookup_priv_type(snmp_priv_protocol);
 
 			if (priv_type < 0) {
-				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
+				SPINE_LOG("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol);
 				free(session.peername);
 				free(session.securityAuthProto);
 				free(session.localname);
@@ -267,26 +267,26 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			// Auth Protocol Setup
 			if (Apsz && zero_sensitive) {
-				memset(Apsz, 0x0, strlen(Apsz));
+				memset(Apsz, 0x0, strlen(Apsz);
 			}
 
 			free(Apsz);
 			STRDUP_OR_DIE(Apsz, snmp_password, "snmp.c Apsz");
 
 			if (zero_sensitive) {
-	            memset(snmp_password, 0x0, strlen(snmp_password));
+	            memset(snmp_password, 0x0, strlen(snmp_password);
 			}
 
 			// Privacy Protocol Setup
 			if (Xpsz && zero_sensitive) {
-				memset(Xpsz, 0x0, strlen(Xpsz));
+				memset(Xpsz, 0x0, strlen(Xpsz);
 			}
 
 			free(Xpsz);
 			STRDUP_OR_DIE(Xpsz, snmp_priv_passphrase, "snmp.c Xpsz");
 
 			if (zero_sensitive) {
-				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
+				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase);
 			}
 
 			if (Apsz) {
@@ -309,7 +309,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					(u_char *) Apsz, strlen(Apsz),
 					session.securityAuthKey,
 					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
-					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
+					SPINE_LOG("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id);
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
@@ -347,7 +347,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					(u_char *) Xpsz, strlen(Xpsz),
 					session.securityPrivKey,
 					&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
-					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
+					SPINE_LOG("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id);
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
@@ -364,7 +364,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		}
 
-		SPINE_LOG_MEDIUM(("Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol));
+		SPINE_LOG_MEDIUM("Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol);
 		} /* end auth/priv block */
 	}
 
@@ -380,9 +380,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 	if (!sessp) {
 		if (is_debug_device(host_id)) {
-			SPINE_LOG(("ERROR: Device[%i] Problem initializing SNMP session '%s'", host_id, hostname));
+			SPINE_LOG("ERROR: Device[%i] Problem initializing SNMP session '%s'", host_id, hostname);
 		} else {
-			SPINE_LOG_MEDIUM(("ERROR: Device[%i] Problem initializing SNMP session '%s'", host_id, hostname));
+			SPINE_LOG_MEDIUM("ERROR: Device[%i] Problem initializing SNMP session '%s'", host_id, hostname);
 		}
 	}
 
@@ -431,7 +431,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	result_string[0] = '\0';
 
 	if (current_host->ignore_host) {
-		SPINE_LOG_HIGH(("WARNING: Skipped oid '%s' for Device[%i] as host ignore flag is active", snmp_oid, current_host->id));
+		SPINE_LOG_HIGH("WARNING: Skipped oid '%s' for Device[%i] as host ignore flag is active", snmp_oid, current_host->id);
 		SET_UNDEFINED(result_string);
 		return result_string;
 	}
@@ -441,30 +441,30 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	if (current_host->snmp_session != NULL) {
 		anOID_len = MAX_OID_LEN;
 
-		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s)", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_pdu_create(%s)", current_host->id, snmp_oid);
 		pdu = snmp_pdu_create(SNMP_MSG_GET);
-		SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid));
+		SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_pdu_create(%s) [complete]", current_host->id, snmp_oid);
 
 		if (pdu != NULL) {
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_parse_oid(%s)", current_host->id, snmp_oid);
 
 			if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
-				SPINE_LOG(("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+				SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid);
+				SPINE_LOG("Device[%i] ERROR: SNMP Get Problems parsing SNMP OID %s", current_host->id, snmp_oid);
 				snmp_free_pdu(pdu);
 				SET_UNDEFINED(result_string);
 				return result_string;
 			} else {
-				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid));
-				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s)", current_host->id, snmp_oid));
+				SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_parse_oid(%s) [complete]", current_host->id, snmp_oid);
+				SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_add_null_var(%s)", current_host->id, snmp_oid);
 				snmp_add_null_var(pdu, anOID, anOID_len);
-				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid));
+				SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_add_null_var(%s) [complete]", current_host->id, snmp_oid);
 			}
 
 			/* poll host */
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid);
 			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
+			SPINE_LOG_DEVDBG("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid);
 		}
 
 		/* retrieve session-level error code for non-success responses */
@@ -474,21 +474,21 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 			snmp_sess_error(current_host->snmp_session, &liberr, &syserr, &errstr);
 			sess_liberr = liberr;
-			SPINE_LOG_DEBUG(("Device[%i] DEBUG: SNMP session error for oid '%s': %s (liberr=%d)",
-				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr));
-			SNMP_FREE(errstr);
+			SPINE_LOG_DEBUG("Device[%i] DEBUG: SNMP session error for oid '%s': %s (liberr=%d)",
+				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr);
+			SPINE_SNMP_FREE(errstr);
 		}
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_DESCRIP_ERROR) {
-			SPINE_LOG(("ERROR: Unable to create SNMP PDU"));
+			SPINE_LOG("ERROR: Unable to create SNMP PDU");
 
 			SET_UNDEFINED(result_string);
 			status = STAT_ERROR;
 			response = NULL;
 		} else if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get"));
+				SPINE_LOG("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get");
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -502,11 +502,11 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					if (!strstr(snmp_oid, ".1.3.6.1.2.1.1.1.0") && !strstr(snmp_oid, ".1.3.6.1.2.1.1.3.0")) {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
-						SPINE_LOG_DEBUG(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id));
+						SPINE_LOG_DEBUG("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id);
 					} else {
-						SPINE_LOG_HIGH(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id));
+						SPINE_LOG_HIGH("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id);
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-						snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
+						snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result);
 					}
 				} else if (vars->type == SNMP_NOSUCHINSTANCE) {
 					SET_UNDEFINED(result_string);
@@ -514,21 +514,21 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 					// We will ignore the new OID error
 					if (!strstr(snmp_oid, ".1.3.6.1.6.3.10.2.1.3.0")) {
-						SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+						SPINE_LOG_HIGH("WARNING: No such Instance for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 					} else {
-						SPINE_LOG_DEBUG(("NOTE: Legacy SNMP agent found!  No per second Uptime oid found '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+						SPINE_LOG_DEBUG("NOTE: Legacy SNMP agent found!  No per second Uptime oid found '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 					}
 				} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 					SET_UNDEFINED(result_string);
 					status = STAT_ERROR;
-					SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+					SPINE_LOG_HIGH("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 				} else {
 					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
+					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result);
 				}
 			} else {
-				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%i] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
+				SPINE_LOG_HIGH("ERROR: Failed to get oid '%s' for Device[%i] with Response[%ld]",  snmp_oid, current_host->id, response->errstat);
 			}
 		} else if (response != NULL && response->variables != NULL) {
 			vars = response->variables;
@@ -536,28 +536,28 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 			if (vars->type == SNMP_NOSUCHOBJECT) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-				SPINE_LOG_HIGH(("ERROR: No such Object for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+				SPINE_LOG_HIGH("ERROR: No such Object for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 			} else if (vars->type == SNMP_NOSUCHINSTANCE) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
 
 				// We will ignore the new OID error
 				if (!strstr(snmp_oid, ".1.3.6.1.6.3.10.2.1.3.0")) {
-					SPINE_LOG_HIGH(("WARNING: No such Instance for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+					SPINE_LOG_HIGH("WARNING: No such Instance for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 				} else {
-					SPINE_LOG_DEBUG(("NOTE: Per second level uptime oid missing oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+					SPINE_LOG_DEBUG("NOTE: Per second level uptime oid missing oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 				}
 			} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-				SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+				SPINE_LOG_HIGH("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 			} else {
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
-				SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+				SPINE_LOG_HIGH("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 			}
 		} else if (status == STAT_TIMEOUT) {
-			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
+			SPINE_LOG_HIGH("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status);
 		} else {
 			/* decode USM-specific errors instead of generic "Unknown error"
 			 * New constant names (SNMPERR_NOT_IN_TIME_WINDOW etc.) added in Net-SNMP 5.8.
@@ -571,8 +571,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 #else
 				case SNMPERR_USM_NOTINTIMEWINDOW:
 #endif
-					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for oid '%s' -- engine time drift (recoverable)",
-						current_host->id, snmp_oid));
+					SPINE_LOG_MEDIUM("WARNING: Device[%i] USM notInTimeWindow for oid '%s' -- engine time drift (recoverable)",
+						current_host->id, snmp_oid);
 					/* treat as transient, do not mark host down */
 					status = STAT_SUCCESS;
 					SET_UNDEFINED(result_string);
@@ -584,8 +584,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 #else
 				case SNMPERR_USM_UNKNOWNENGINEID:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM unknownEngineID for oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_UNKNOWN_USER_NAME) || defined(SNMPERR_USM_UNKNOWNSECURITYNAME)
@@ -594,8 +594,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 #else
 				case SNMPERR_USM_UNKNOWNSECURITYNAME:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM unknownSecurityName for oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_AUTHENTICATION_FAILURE) || defined(SNMPERR_USM_AUTHENTICATIONFAILURE)
@@ -604,8 +604,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 #else
 				case SNMPERR_USM_AUTHENTICATIONFAILURE:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM authenticationFailure for oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_DECRYPTION_ERR) || defined(SNMPERR_USM_DECRYPTIONERROR)
@@ -614,8 +614,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 #else
 				case SNMPERR_USM_DECRYPTIONERROR:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM decryptionError for oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL) || defined(SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL)
@@ -624,13 +624,13 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 #else
 				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM unsupportedSecurityLevel for oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 				default:
-					SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
-						snmp_oid, current_host->id, status, sess_liberr));
+					SPINE_LOG_HIGH("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
+						snmp_oid, current_host->id, status, sess_liberr);
 					break;
 			}
 		}
@@ -690,7 +690,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		pdu       = snmp_pdu_create(SNMP_MSG_GETNEXT);
 
 		if (!snmp_parse_oid(snmp_oid, anOID, &anOID_len)) {
-			SPINE_LOG(("Device[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+			SPINE_LOG("Device[%i] ERROR: SNMP Getnext Problems parsing SNMP OID %s", current_host->id, snmp_oid);
 			snmp_free_pdu(pdu);
 			SET_UNDEFINED(result_string);
 			return result_string;
@@ -699,7 +699,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		}
 
 		/* poll host */
-		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+		status = snmp_sess_sync_response(current_host->snmp_session, pdu, &response);
 
 		/* retrieve session-level error code for non-success responses */
 		if (status == STAT_ERROR && current_host->snmp_session != NULL) {
@@ -708,15 +708,15 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 
 			snmp_sess_error(current_host->snmp_session, &liberr, &syserr, &errstr);
 			sess_liberr = liberr;
-			SPINE_LOG_DEBUG(("Device[%i] DEBUG: SNMP getnext session error for oid '%s': %s (liberr=%d)",
-				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr));
-			SNMP_FREE(errstr);
+			SPINE_LOG_DEBUG("Device[%i] DEBUG: SNMP getnext session error for oid '%s': %s (liberr=%d)",
+				current_host->id, snmp_oid, errstr ? errstr : "unknown", liberr);
+			SPINE_SNMP_FREE(errstr);
 		}
 
 		/* liftoff, successful poll, process it!! */
 		if (status == STAT_SUCCESS) {
 			if (response == NULL) {
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_getnext"));
+				SPINE_LOG("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_getnext");
 
 				SET_UNDEFINED(result_string);
 				status = STAT_ERROR;
@@ -727,7 +727,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					if (vars != NULL) {
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprint_asciistring(result_string, RESULTS_BUFFER, (unsigned char *)temp_result, strlen(temp_result));
+						snprint_asciistring(result_string, RESULTS_BUFFER, (unsigned char *)temp_result, strlen(temp_result);
 					} else {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
@@ -735,7 +735,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 				}
 			}
 		} else if (status == STAT_TIMEOUT) {
-			SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", snmp_oid, current_host->id, status));
+			SPINE_LOG_HIGH("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", snmp_oid, current_host->id, status);
 		} else if (status == STAT_ERROR) {
 			/* decode USM-specific errors instead of generic "Unknown error"
 			 * See version notes in snmp_get_base above.
@@ -747,8 +747,8 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 #else
 				case SNMPERR_USM_NOTINTIMEWINDOW:
 #endif
-					SPINE_LOG_MEDIUM(("WARNING: Device[%i] USM notInTimeWindow for getnext oid '%s' -- engine time drift (recoverable)",
-						current_host->id, snmp_oid));
+					SPINE_LOG_MEDIUM("WARNING: Device[%i] USM notInTimeWindow for getnext oid '%s' -- engine time drift (recoverable)",
+						current_host->id, snmp_oid);
 					/* treat as transient, do not mark host down */
 					status = STAT_SUCCESS;
 					SET_UNDEFINED(result_string);
@@ -760,8 +760,8 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 #else
 				case SNMPERR_USM_UNKNOWNENGINEID:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownEngineID for getnext oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM unknownEngineID for getnext oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_UNKNOWN_USER_NAME) || defined(SNMPERR_USM_UNKNOWNSECURITYNAME)
@@ -770,8 +770,8 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 #else
 				case SNMPERR_USM_UNKNOWNSECURITYNAME:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unknownSecurityName for getnext oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM unknownSecurityName for getnext oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_AUTHENTICATION_FAILURE) || defined(SNMPERR_USM_AUTHENTICATIONFAILURE)
@@ -780,8 +780,8 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 #else
 				case SNMPERR_USM_AUTHENTICATIONFAILURE:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM authenticationFailure for getnext oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM authenticationFailure for getnext oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_DECRYPTION_ERR) || defined(SNMPERR_USM_DECRYPTIONERROR)
@@ -790,8 +790,8 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 #else
 				case SNMPERR_USM_DECRYPTIONERROR:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM decryptionError for getnext oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM decryptionError for getnext oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 #if defined(SNMPERR_UNSUPPORTED_SEC_LEVEL) || defined(SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL)
@@ -800,13 +800,13 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 #else
 				case SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL:
 #endif
-					SPINE_LOG_HIGH(("ERROR: Device[%i] USM unsupportedSecurityLevel for getnext oid '%s'",
-						current_host->id, snmp_oid));
+					SPINE_LOG_HIGH("ERROR: Device[%i] USM unsupportedSecurityLevel for getnext oid '%s'",
+						current_host->id, snmp_oid);
 					break;
 #endif
 				default:
-					SPINE_LOG_HIGH(("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
-						snmp_oid, current_host->id, status, sess_liberr));
+					SPINE_LOG_HIGH("ERROR: Unknown error getting oid '%s' for Device[%i] with Status[%d] Errno[%d]",
+						snmp_oid, current_host->id, status, sess_liberr);
 					break;
 			}
 		}
@@ -856,19 +856,19 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 	status = STAT_DESCRIP_ERROR;
 
 	if (is_debug_device(current_host->id)) {
-		SPINE_LOG(("DEBUG: walk starts at OID %s", snmp_oid));
+		SPINE_LOG("DEBUG: walk starts at OID %s", snmp_oid);
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: walk starts at OID %s", snmp_oid));
+		SPINE_LOG_DEBUG("DEBUG: walk starts at OID %s", snmp_oid);
 	}
 
 	if (current_host->snmp_session != NULL) {
 		rootlen = MAX_OID_LEN;
 		/* parse input parm to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
-			SPINE_LOG(("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
+			SPINE_LOG("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid);
 			return count;
 		}
-		memmove(anOID, root, rootlen * sizeof(oid));
+		memmove(anOID, root, rootlen * sizeof(oid);
 		anOID_len = rootlen;
 
 		while (ok && !error_occurred) {
@@ -882,7 +882,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 			/* add status to host structure */
 			current_host->snmp_status = status;
 
-			//SPINE_LOG_DEBUG(("TRACE: Status %i Response %i", status, response->errstat));
+			//SPINE_LOG_DEBUG("TRACE: Status %i Response %i", status, response->errstat);
 
 			if (status == STAT_SUCCESS) {
 				if (response->errstat == SNMP_ERR_NOERROR) {
@@ -901,12 +901,12 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 							count++;
 							/* valid data, so perform a compare  */
 							if (snmp_oid_compare(anOID, anOID_len, vars->name, vars->name_length) >= 0) {
-								SPINE_LOG(("ERROR: OID not increasing"));
+								SPINE_LOG("ERROR: OID not increasing");
 								ok = 0;
 								error_occurred = 1;
 							}
 							/* prepare next turn */
-							memmove((char *) anOID, (char *) vars->name, vars->name_length * sizeof(oid));
+							memmove((char *) anOID, (char *) vars->name, vars->name_length * sizeof(oid);
 							anOID_len = vars->name_length;
 						} else {
 							/* abnormal end of loop */
@@ -914,14 +914,14 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 						}
 					}
 				} else {
-					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+					SPINE_LOG("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count");
 				}
 			} else if (status == STAT_TIMEOUT) {
-				SPINE_LOG(("ERROR: Timeout detected in Cacti snmp_count"));
+				SPINE_LOG("ERROR: Timeout detected in Cacti snmp_count");
 				ok = 0;
 				error_occurred = 1;
 			} else { /* status == STAT_ERROR */
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count (STAT_ERROR)"));
+				SPINE_LOG("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count (STAT_ERROR)");
 				ok = 0;
 				error_occurred = 1;
 			}
@@ -995,7 +995,7 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 		namep->name_len = MAX_OID_LEN;
 
 		if (!snmp_parse_oid(snmp_oids[i].oid, namep->name, &namep->name_len)) {
-			SPINE_LOG(("Device[%i] DS[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, poller_items[snmp_oids[i].array_position].local_data_id, snmp_oids[i].oid));
+			SPINE_LOG("Device[%i] DS[%i] ERROR: Problems parsing Multi SNMP OID! (oid: %s), Set MAX_OIDS to 1 for this host to isolate bad OID", current_host->id, poller_items[snmp_oids[i].array_position].local_data_id, snmp_oids[i].oid);
 
 			/* Mark this OID as "bad" */
 			SET_UNDEFINED(snmp_oids[i].result);
@@ -1018,7 +1018,7 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
 		if (response == NULL) {
-			SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi"));
+			SPINE_LOG("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_get_multi");
 			status = STAT_ERROR;
 		} else {
 			if (response->errstat == SNMP_ERR_NOERROR) {
@@ -1028,7 +1028,7 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
-						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
+						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result);
 
 						vars = vars->next_variable;
 					}
@@ -1073,8 +1073,8 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 					/* errindex==0: agent reported a PDU-level error with no specific
 					 * failing OID (RFC 3416 s.4.2). Mark all pending results UNDEFINED
 					 * so callers write "U" to RRD rather than an empty string. */
-					SPINE_LOG_HIGH(("Device[%i] WARNING: snmp_get_multi PDU error (errstat=%ld, errindex=0), all OIDs set undefined",
-						current_host->id, (long)response->errstat));
+					SPINE_LOG_HIGH("Device[%i] WARNING: snmp_get_multi PDU error (errstat=%ld, errindex=0), all OIDs set undefined",
+						current_host->id, (long)response->errstat);
 					for (i = 0; i < num_oids; i++) {
 						SET_UNDEFINED(snmp_oids[i].result);
 					}

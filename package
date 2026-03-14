@@ -78,7 +78,7 @@ mkdir -p ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
 tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' * | (cd ${TMP_DIR}/cacti-spine-${VERSION}; tar -xf -)
 [ $? -gt 0 ] && echo "ERROR: Unable to repository to ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
 
-# Change working directory 
+# Change working directory
 pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
 
 # Get version from source files, warn if different than defined for build
@@ -115,4 +115,3 @@ echo "Package file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz"
 echo ""
 
 exit 0
-

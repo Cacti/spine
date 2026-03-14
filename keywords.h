@@ -39,4 +39,3 @@ extern int parse_logdest(const char *word, int dflt);
 
 extern const char *printable_action(int token);
 extern int parse_action(const char *word, int dflt);
-

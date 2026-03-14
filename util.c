@@ -77,7 +77,7 @@ void set_option(const char *option, const char *value) {
 		CALLOC_OR_DIE(s, option_t, 1, sizeof(option_t), "util.c option_t");
 
 		if (snprintf(s->opt, sizeof(s->opt), "%s", option) >= (int)sizeof(s->opt)) {
-			SPINE_LOG(("WARNING: Option name '%s' truncated to %d bytes", option, (int)sizeof(s->opt) - 1));
+			SPINE_LOG("WARNING: Option name '%s' truncated to %d bytes", option, (int)sizeof(s->opt) - 1);
 		}
 
 		s->val = value;
@@ -142,11 +142,11 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 	assert(myvalue   != 0);
 
 	if (set.dbonupdate == 0) {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
 	} else {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') AS rs "
 			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
 	}
@@ -324,9 +324,9 @@ void read_config_options() {
 	char       spine_capabilities[BUFSIZE];
 
 	/* publish spine snmpv3 capabilities to the database */
-	memset(spine_capabilities, 0, sizeof(spine_capabilities));
-	memset(spine_priv, 0, sizeof(spine_priv));
-	memset(spine_auth, 0, sizeof(spine_auth));
+	memset(spine_capabilities, 0, sizeof(spine_capabilities);
+	memset(spine_priv, 0, sizeof(spine_priv);
+	memset(spine_auth, 0, sizeof(spine_auth);
 
 	db_connect(LOCAL, &mysql);
 
@@ -362,12 +362,12 @@ void read_config_options() {
 		spine_version = (major * 1000) + (minor * 100) + (point * 1);
 
 		if (set.cacti_version != spine_version) {
-			SPINE_LOG(("WARNING: Spine Version Mismatch! Spine Version:'%s', Cacti Version:'%d.%d.%d'", VERSION, (set.cacti_version / 1000), (set.cacti_version % 1000) / 100, (set.cacti_version % 100)));
+			SPINE_LOG("WARNING: Spine Version Mismatch! Spine Version:'%s', Cacti Version:'%d.%d.%d'", VERSION, (set.cacti_version / 1000), (set.cacti_version % 1000) / 100, (set.cacti_version % 100);
 		}
 	}
 
 	/* log the path_webroot variable */
-	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %d", set.cacti_version));
+	SPINE_LOG_DEBUG("DEBUG: The binary Cacti version is %d", set.cacti_version);
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
@@ -418,18 +418,18 @@ void read_config_options() {
 	}
 
 	/* log the path_webroot variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_php_server variable is %s", set.path_php_server));
+	SPINE_LOG_DEBUG("DEBUG: The path_php_server variable is %s", set.path_php_server);
 
 	/* log the path_cactilog variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_cactilog variable is %s", set.path_logfile));
+	SPINE_LOG_DEBUG("DEBUG: The path_cactilog variable is %s", set.path_logfile);
 
 	/* the version variable */
-	SPINE_LOG_DEBUG(("DEBUG: The version variable is %s", set.dbversion));
+	SPINE_LOG_DEBUG("DEBUG: The version variable is %s", set.dbversion);
 
 	/* log the log_destination variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_destination variable is %i (%s)",
+	SPINE_LOG_DEBUG("DEBUG: The log_destination variable is %i (%s)",
 		set.log_destination,
-		printable_logdest(set.log_destination)));
+		printable_logdest(set.log_destination);
 
 	set.logfile_processed = TRUE;
 
@@ -440,7 +440,7 @@ void read_config_options() {
 	}
 
 	/* log the path_php variable */
-	SPINE_LOG_DEBUG(("DEBUG: The path_php variable is %s", set.path_php));
+	SPINE_LOG_DEBUG("DEBUG: The path_php variable is %s", set.path_php);
 
 	/* set availability_method */
 	if ((res = getsetting(&mysql, LOCAL, "availability_method")) != 0) {
@@ -449,7 +449,7 @@ void read_config_options() {
 	}
 
 	/* log the availability_method variable */
-	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i", set.availability_method));
+	SPINE_LOG_DEBUG("DEBUG: The availability_method variable is %i", set.availability_method);
 
 	/* set ping_recovery_count */
 	if ((res = getsetting(&mysql, LOCAL, "ping_recovery_count")) != 0) {
@@ -458,7 +458,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_recovery_count variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i", set.ping_recovery_count));
+	SPINE_LOG_DEBUG("DEBUG: The ping_recovery_count variable is %i", set.ping_recovery_count);
 
 	/* set ping_failure_count */
 	if ((res = getsetting(&mysql, LOCAL, "ping_failure_count")) != 0) {
@@ -467,7 +467,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_failure_count variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i", set.ping_failure_count));
+	SPINE_LOG_DEBUG("DEBUG: The ping_failure_count variable is %i", set.ping_failure_count);
 
 	/* set ping_method */
 	if ((res = getsetting(&mysql, LOCAL, "ping_method")) != 0) {
@@ -476,7 +476,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_method variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i", set.ping_method));
+	SPINE_LOG_DEBUG("DEBUG: The ping_method variable is %i", set.ping_method);
 
 	/* set ping_retries */
 	if ((res = getsetting(&mysql, LOCAL, "ping_retries")) != 0) {
@@ -485,7 +485,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_retries variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i", set.ping_retries));
+	SPINE_LOG_DEBUG("DEBUG: The ping_retries variable is %i", set.ping_retries);
 
 	/* set ping_timeout */
 	if ((res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
@@ -496,7 +496,7 @@ void read_config_options() {
 	}
 
 	/* log the ping_timeout variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
+	SPINE_LOG_DEBUG("DEBUG: The ping_timeout variable is %i", set.ping_timeout);
 
 	/* set snmp_retries */
 	if ((res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
@@ -507,37 +507,37 @@ void read_config_options() {
 	}
 
 	/* log the snmp_retries variable */
-	SPINE_LOG_DEBUG(("DEBUG: The snmp_retries variable is %i", set.snmp_retries));
+	SPINE_LOG_DEBUG("DEBUG: The snmp_retries variable is %i", set.snmp_retries);
 
 	/* set logging option for errors */
 	set.log_perror = getboolsetting(&mysql, LOCAL, "log_perror", FALSE);
 
 	/* log the log_perror variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_perror variable is %i", set.log_perror));
+	SPINE_LOG_DEBUG("DEBUG: The log_perror variable is %i", set.log_perror);
 
 	/* set logging option for errors */
 	set.log_pwarn = getboolsetting(&mysql, LOCAL, "log_pwarn", FALSE);
 
 	/* log the log_pwarn variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i", set.log_pwarn));
+	SPINE_LOG_DEBUG("DEBUG: The log_pwarn variable is %i", set.log_pwarn);
 
 	/* set option to increase insert performance */
 	set.boost_redirect = getboolsetting(&mysql, LOCAL, "boost_redirect", FALSE);
 
 	/* log the boost_redirect variable */
-	SPINE_LOG_DEBUG(("DEBUG: The boost_redirect variable is %i", set.boost_redirect));
+	SPINE_LOG_DEBUG("DEBUG: The boost_redirect variable is %i", set.boost_redirect);
 
 	/* set option for determining if boost is enabled */
 	set.boost_enabled = getboolsetting(&mysql, LOCAL, "boost_rrd_update_enable", FALSE);
 
 	/* log the boost_rrd_update_enable variable */
-	SPINE_LOG_DEBUG(("DEBUG: The boost_rrd_update_enable variable is %i", set.boost_enabled));
+	SPINE_LOG_DEBUG("DEBUG: The boost_rrd_update_enable variable is %i", set.boost_enabled);
 
 	/* set logging option for statistics */
 	set.log_pstats = getboolsetting(&mysql, LOCAL, "log_pstats", FALSE);
 
 	/* log the log_pstats variable */
-	SPINE_LOG_DEBUG(("DEBUG: The log_pstats variable is %i", set.log_pstats));
+	SPINE_LOG_DEBUG("DEBUG: The log_pstats variable is %i", set.log_pstats);
 
 	/* get Cacti defined max threads override spine.conf */
 	if (set.threads_set == FALSE) {
@@ -551,7 +551,7 @@ void read_config_options() {
 	}
 
 	/* log the threads variable */
-	SPINE_LOG_DEBUG(("DEBUG: The threads variable is %i", set.threads));
+	SPINE_LOG_DEBUG("DEBUG: The threads variable is %i", set.threads);
 
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
 	if ((res = getsetting(&mysql, LOCAL, "poller_interval")) != 0) {
@@ -563,9 +563,9 @@ void read_config_options() {
 
 	/* log the poller_interval variable */
 	if (set.poller_interval == 0) {
-		SPINE_LOG_DEBUG(("DEBUG: The polling interval is the system default"));
+		SPINE_LOG_DEBUG("DEBUG: The polling interval is the system default");
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: The polling interval is %i seconds", set.poller_interval));
+		SPINE_LOG_DEBUG("DEBUG: The polling interval is %i seconds", set.poller_interval);
 	}
 
 	/* get the concurrent_processes variable to determine thread sleep values */
@@ -577,7 +577,7 @@ void read_config_options() {
 	}
 
 	/* log the concurrent processes variable */
-	SPINE_LOG_DEBUG(("DEBUG: The number of concurrent processes is %i", set.num_parent_processes));
+	SPINE_LOG_DEBUG("DEBUG: The number of concurrent processes is %i", set.num_parent_processes);
 
 	/* get the script timeout to establish timeouts */
 	if ((res = getsetting(&mysql, LOCAL, "script_timeout")) != 0) {
@@ -591,7 +591,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	SPINE_LOG_DEBUG(("DEBUG: The script timeout is %i", set.script_timeout));
+	SPINE_LOG_DEBUG("DEBUG: The script timeout is %i", set.script_timeout);
 
 	/* get selective_device_debug string */
 	if ((res = getsetting(&mysql, LOCAL, "selective_device_debug")) != 0) {
@@ -600,7 +600,7 @@ void read_config_options() {
 	}
 
 	/* log the selective_device_debug variable */
-	SPINE_LOG_DEBUG(("DEBUG: The selective_device_debug variable is %s", set.selective_device_debug));
+	SPINE_LOG_DEBUG("DEBUG: The selective_device_debug variable is %s", set.selective_device_debug);
 
 	/* get spine_log_level */
 	if ((res = getsetting(&mysql, LOCAL, "spine_log_level")) != 0) {
@@ -609,7 +609,7 @@ void read_config_options() {
 	}
 
 	/* log the spine_log_level variable */
-	SPINE_LOG_DEBUG(("DEBUG: The spine_log_level variable is %i", set.spine_log_level));
+	SPINE_LOG_DEBUG("DEBUG: The spine_log_level variable is %i", set.spine_log_level);
 
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, LOCAL, "php_servers")) != 0) {
@@ -628,7 +628,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	SPINE_LOG_DEBUG(("DEBUG: The number of php script servers to run is %i", set.php_servers));
+	SPINE_LOG_DEBUG("DEBUG: The number of php script servers to run is %i", set.php_servers);
 
 	/* get the number of active profiles on the system run */
 	if ((res = getsetting(&mysql, LOCAL, "active_profiles")) != 0) {
@@ -643,7 +643,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	SPINE_LOG_DEBUG(("DEBUG: The number of active data source profiles is %i", set.active_profiles));
+	SPINE_LOG_DEBUG("DEBUG: The number of active data source profiles is %i", set.active_profiles);
 
 	/* get the number of snmp_ports in use */
 	if ((res = getsetting(&mysql, LOCAL, "total_snmp_ports")) != 0) {
@@ -658,7 +658,7 @@ void read_config_options() {
 	}
 
 	/* log the script timeout value */
-	SPINE_LOG_DEBUG(("DEBUG: The number of snmp ports on the system is %i", set.total_snmp_ports));
+	SPINE_LOG_DEBUG("DEBUG: The number of snmp ports on the system is %i", set.total_snmp_ports);
 
 	/*----------------------------------------------------------------
 	 * determine if the php script server is required by searching for
@@ -684,10 +684,10 @@ void read_config_options() {
 
 		if (num_rows > 0) set.php_required = TRUE;
 
-		SPINE_LOG_DEBUG(("DEBUG: StartDevice='%i', EndDevice='%i', TotalPHPScripts='%i'",
+		SPINE_LOG_DEBUG("DEBUG: StartDevice='%i', EndDevice='%i', TotalPHPScripts='%i'",
 			set.start_host_id,
 			set.end_host_id,
-			num_rows));
+			num_rows);
 	} else {
 		sqlp = sqlbuf;
 		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
@@ -702,15 +702,15 @@ void read_config_options() {
 
 		if (num_rows > 0) set.php_required = TRUE;
 
-		SPINE_LOG_DEBUG(("DEBUG: Device List to be polled='%s', TotalPHPScripts='%i'",
+		SPINE_LOG_DEBUG("DEBUG: Device List to be polled='%s', TotalPHPScripts='%i'",
 			set.host_id_list,
-			num_rows));
+			num_rows);
 	}
 
-	SPINE_LOG_DEBUG(("DEBUG: The PHP Script Server is %sRequired",
+	SPINE_LOG_DEBUG("DEBUG: The PHP Script Server is %sRequired",
 		set.php_required
 		? ""
-		: "Not "));
+		: "Not ");
 
 	/* determine the maximum oid's to obtain in a single get request */
 	if ((res = getsetting(&mysql, LOCAL, "max_get_size")) != 0) {
@@ -725,39 +725,39 @@ void read_config_options() {
 	}
 
 	/* log the snmp_max_get_size variable */
-	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
+	SPINE_LOG_DEBUG("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size);
 
 	#ifndef NETSNMP_DISABLE_MD5
-	strcat(spine_auth, "MD5");
+	strncat(spine_auth, "MD5", SMALL_BUFSIZE - strlen(spine_auth) - 1);
 	#endif
 
-	strcat(spine_auth, (strlen(spine_auth) > 0 ? ",SHA":"SHA"));
+	strncat(spine_auth, (strlen(spine_auth) > 0 ? ",SHA":"SHA"), SMALL_BUFSIZE - strlen(spine_auth) - 1);
 
 	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
-	strcat(spine_auth, ",SHA224,SHA256");
+	strncat(spine_auth, ",SHA224,SHA256", SMALL_BUFSIZE - strlen(spine_auth) - 1);
 	#endif
 
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
-	strcat(spine_auth, ",SHA384,SHA512");
+	strncat(spine_auth, ",SHA384,SHA512", SMALL_BUFSIZE - strlen(spine_auth) - 1);
 	#endif
 
 	#ifndef NETSNMP_DISABLE_DES
-	strcat(spine_priv, "DES");
+	strncat(spine_priv, "DES", SMALL_BUFSIZE - strlen(spine_priv) - 1);
 	#endif
 
 	#ifdef HAVE_AES
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES128":"AES128"));
+	strncat(spine_priv, (strlen(spine_priv) > 0 ? ",AES128":"AES128"), SMALL_BUFSIZE - strlen(spine_priv) - 1);
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES192":"AES192"));
+	strncat(spine_priv, (strlen(spine_priv) > 0 ? ",AES192":"AES192"), SMALL_BUFSIZE - strlen(spine_priv) - 1);
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
 	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
+	strncat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"), SMALL_BUFSIZE - strlen(spine_priv) - 1);
 	#endif
 
 	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
@@ -783,13 +783,13 @@ static int flush_sql_batch(MYSQL *mysqlr, sql_buffer_t *sb, const char *suffix, 
 	}
 
 	if (sql_buffer_append(sb, "%s", suffix) != 0) {
-		SPINE_LOG(("ERROR: Failed to append SQL suffix while flushing '%s' batch", context));
+		SPINE_LOG("ERROR: Failed to append SQL suffix while flushing '%s' batch", context);
 		sql_buffer_reset(sb);
 		return -1;
 	}
 
 	if (db_insert(mysqlr, REMOTE, sb->buffer) == FALSE) {
-		SPINE_LOG(("ERROR: Failed to insert '%s' batch into remote database", context));
+		SPINE_LOG("ERROR: Failed to insert '%s' batch into remote database", context);
 		sql_buffer_reset(sb);
 		return -1;
 	}
@@ -900,7 +900,7 @@ void poller_push_data_to_main() {
 	db_connect(REMOTE, &mysqlr);
 
 	if (sql_buffer_init(&sb, HUGE_BUFSIZE) != 0) {
-		SPINE_LOG(("ERROR: Could not initialize SQL buffer in poller_push_data_to_main"));
+		SPINE_LOG("ERROR: Could not initialize SQL buffer in poller_push_data_to_main");
 		db_disconnect(&mysql);
 		db_disconnect(&mysqlr);
 		return;
@@ -912,7 +912,7 @@ void poller_push_data_to_main() {
 	db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 	db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
 
-	SPINE_LOG_MEDIUM(("Pushing Host Status to Main Server"));
+	SPINE_LOG_MEDIUM("Pushing Host Status to Main Server");
 
 	if (strlen(set.host_id_list)) {
 		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE id, snmp_sysDescr, snmp_sysObjectID, "
@@ -995,18 +995,18 @@ void poller_push_data_to_main() {
 
 				if (rows >= 500) {
 					if (flush_sql_batch(&mysqlr, &sb, suffix, "host-status") != 0) {
-						SPINE_LOG(("ERROR: Failed to flush host-status batch before appending row id '%s'", row_id));
+						SPINE_LOG("ERROR: Failed to flush host-status batch before appending row id '%s'", row_id);
 					}
 
 					rows = 0;
 				}
 
 				if (append_host_status_row(&sb, &mysql, row, tmpstr, sizeof(tmpstr), prefix, rows > 0) != 0) {
-					SPINE_LOG(("WARNING: SQL append failed for host-status row id '%s'; attempting flush+retry", row_id));
+					SPINE_LOG("WARNING: SQL append failed for host-status row id '%s'; attempting flush+retry", row_id);
 
 					if (rows > 0) {
 						if (flush_sql_batch(&mysqlr, &sb, suffix, "host-status-retry") != 0) {
-							SPINE_LOG(("ERROR: Flush during host-status retry failed for row id '%s'", row_id));
+							SPINE_LOG("ERROR: Flush during host-status retry failed for row id '%s'", row_id);
 							rows = 0;
 							continue;
 						}
@@ -1015,7 +1015,7 @@ void poller_push_data_to_main() {
 					}
 
 					if (append_host_status_row(&sb, &mysql, row, tmpstr, sizeof(tmpstr), prefix, 0) != 0) {
-						SPINE_LOG(("ERROR: Fatal host-status append failure after retry for row id '%s'; dropping row", row_id));
+						SPINE_LOG("ERROR: Fatal host-status append failure after retry for row id '%s'; dropping row", row_id);
 						continue;
 					}
 				}
@@ -1026,14 +1026,14 @@ void poller_push_data_to_main() {
 
 		if (rows > 0) {
 			if (flush_sql_batch(&mysqlr, &sb, suffix, "host-status-final") != 0) {
-				SPINE_LOG(("ERROR: Failed to flush final host-status batch"));
+				SPINE_LOG("ERROR: Failed to flush final host-status batch");
 			}
 		}
 	}
 
 	db_free_result(result);
 
-	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
+	SPINE_LOG_MEDIUM("Pushing Poller Item RRD Next Step to Main Server");
 
 	if (strlen(set.host_id_list)) {
 		snprintf(query, MEGA_BUFSIZE, "SELECT SQL_NO_CACHE local_data_id, host_id, rrd_name, rrd_step, rrd_next_step "
@@ -1067,18 +1067,18 @@ void poller_push_data_to_main() {
 
 				if (rows >= 10000) {
 					if (flush_sql_batch(&mysqlr, &sb, suffix, "poller-item") != 0) {
-						SPINE_LOG(("ERROR: Failed to flush poller-item batch before appending row id '%s'", row_id));
+						SPINE_LOG("ERROR: Failed to flush poller-item batch before appending row id '%s'", row_id);
 					}
 
 					rows = 0;
 				}
 
 				if (append_poller_item_row(&sb, &mysql, row, tmpstr, sizeof(tmpstr), prefix, rows > 0) != 0) {
-					SPINE_LOG(("WARNING: SQL append failed for poller-item row id '%s'; attempting flush+retry", row_id));
+					SPINE_LOG("WARNING: SQL append failed for poller-item row id '%s'; attempting flush+retry", row_id);
 
 					if (rows > 0) {
 						if (flush_sql_batch(&mysqlr, &sb, suffix, "poller-item-retry") != 0) {
-							SPINE_LOG(("ERROR: Flush during poller-item retry failed for row id '%s'", row_id));
+							SPINE_LOG("ERROR: Flush during poller-item retry failed for row id '%s'", row_id);
 							rows = 0;
 							continue;
 						}
@@ -1087,7 +1087,7 @@ void poller_push_data_to_main() {
 					}
 
 					if (append_poller_item_row(&sb, &mysql, row, tmpstr, sizeof(tmpstr), prefix, 0) != 0) {
-						SPINE_LOG(("ERROR: Fatal poller-item append failure after retry for row id '%s'; dropping row", row_id));
+						SPINE_LOG("ERROR: Fatal poller-item append failure after retry for row id '%s'; dropping row", row_id);
 						continue;
 					}
 				}
@@ -1098,7 +1098,7 @@ void poller_push_data_to_main() {
 
 		if (rows > 0) {
 			if (flush_sql_batch(&mysqlr, &sb, suffix, "poller-item-final") != 0) {
-				SPINE_LOG(("ERROR: Failed to flush final poller-item batch"));
+				SPINE_LOG("ERROR: Failed to flush final poller-item batch");
 			}
 		}
 	}
@@ -1238,7 +1238,7 @@ void die(const char *format, ...) {
 
 	if (set.log_perror) {
 		char perr[BUFSIZE];
-		snprintf(perr, BUFSIZE, " [%d, %s]", old_errno, strerror(old_errno));
+		snprintf(perr, BUFSIZE, " [%d, %s]", old_errno, strerror(old_errno);
 		strncat(logmessage, perr, BUFSIZE - strlen(logmessage) - 1);
 	}
 
@@ -1351,7 +1351,7 @@ int spine_log(const char *format, ...) {
 
 	/* log message prefix */
 
-	snprintf(logprefix, LOGSIZE, "SPINE: Poller[%i] PID[%i] PT[%lu] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
+	snprintf(logprefix, LOGSIZE, "SPINE: Poller[%i] PID[%i] PT[%lu] ", set.poller_id, getpid(), (unsigned long int)pthread_self();
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
@@ -1437,7 +1437,7 @@ int spine_log(const char *format, ...) {
 
 	/* append a line feed to the log message if needed */
 	if (!strstr(flogmessage, "\n")) {
-		strcat(flogmessage, "\n");
+		strncat(flogmessage, "\n", BUFSIZE - strlen(flogmessage) - 1);
 	}
 
 	if ((IS_LOGGING_TO_FILE() &&
@@ -1587,7 +1587,7 @@ int is_numeric(char *string) {
 	int conv_base=10;
 	int length;
 
-	length = strlen(trim(string));
+	length = strlen(trim(string);
 
 	if (!length) {
 		return FALSE;
@@ -1818,7 +1818,7 @@ double get_time_as_double(void) {
  *  \return the trimmed string.
  */
 char *trim(char *str) {
-	return ltrim(rtrim(str));
+	return ltrim(rtrim(str);
 }
 
 /*! \fn rtrim()
@@ -2015,22 +2015,22 @@ int hasCaps() {
 	/* Recommended caps: cap_net_raw=eip */
 	caps = cap_get_proc();
 	if (caps == NULL) {
-		SPINE_LOG(("ERROR: cap_get_proc failed."));
+		SPINE_LOG("ERROR: cap_get_proc failed.");
 		return FALSE;
 	}
 
     /* check if cap_net_raw is in effective set */
 	if (cap_get_flag(caps, CAP_NET_RAW, CAP_EFFECTIVE, &capflag)) {
-		SPINE_LOG(("ERROR: cap_get_flag for CAP_NET_RAW failed. ICMP ping will not work as non-root user."));
+		SPINE_LOG("ERROR: cap_get_flag for CAP_NET_RAW failed. ICMP ping will not work as non-root user.");
 		return FALSE;
 	}
 
 	if (capflag != CAP_SET) {
-		SPINE_LOG(("ERROR: Capability CAP_NET_RAW is not set. ICMP ping will not work as non-root user."));
+		SPINE_LOG("ERROR: Capability CAP_NET_RAW is not set. ICMP ping will not work as non-root user.");
 		return FALSE;
 	}
 
-	SPINE_LOG_DEBUG(("DEBUG: Capability CAP_NET_RAW is set."));
+	SPINE_LOG_DEBUG("DEBUG: Capability CAP_NET_RAW is set.");
 	cap_free(caps);
 
 	return TRUE;
@@ -2051,12 +2051,12 @@ void checkAsRoot() {
 		die("ERROR: Could not get basic privset from priv_str_to_set().");
 	} else {
 		p = priv_set_to_str(privset, ',', 0);
-		SPINE_LOG_DEBUG(("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown"));
+		SPINE_LOG_DEBUG("DEBUG: Basic privset is: '%s'.", p != NULL ? p : "Unknown");
 	}
 
 	/* Add privilege to send/receive ICMP packets */
 	if (priv_addset(privset, PRIV_NET_ICMPACCESS) < 0) {
-		SPINE_LOG_DEBUG(("WARNING: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG("WARNING: Addition of PRIV_NET_ICMPACCESS to privset failed: '%s'.", strerror(errno);
 	}
 
 	/* Compute the set of privileges that are never needed */
@@ -2065,16 +2065,16 @@ void checkAsRoot() {
 	/* Remove the set of unneeded privs from Permitted (and by
 	 * implication from Effective) */
 	if (setppriv(PRIV_OFF, PRIV_PERMITTED, privset) < 0) {
-		SPINE_LOG_DEBUG(("WARNING: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG("WARNING: Dropping privileges from PRIV_PERMITTED failed: '%s'.", strerror(errno);
 	}
 
 	/* Remove unneeded priv set from Limit to be safe */
 	if (setppriv(PRIV_OFF, PRIV_LIMIT, privset) < 0) {
-		SPINE_LOG_DEBUG(("WARNING: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno)));
+		SPINE_LOG_DEBUG("WARNING: Dropping privileges from PRIV_LIMIT failed: '%s'.", strerror(errno);
 	}
 
 	boolean_t pe = priv_ineffect(PRIV_NET_ICMPACCESS);
-	SPINE_LOG_DEBUG(("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.", pe != 0 ? "Enabled" : "Disabled"));
+	SPINE_LOG_DEBUG("DEBUG: Privilege PRIV_NET_ICMPACCESS is: '%s'.", pe != 0 ? "Enabled" : "Disabled");
 
 	set.icmp_avail = pe;
 
@@ -2084,28 +2084,28 @@ void checkAsRoot() {
 	#else
 	if (hasCaps() != TRUE) {
 		int ret;
-		SPINE_LOG_DEBUG(("DEBUG: Spine running as %d UID, %d EUID", getuid(), geteuid()));
+		SPINE_LOG_DEBUG("DEBUG: Spine running as %d UID, %d EUID", getuid(), geteuid();
 		ret = seteuid(0);
 		if (ret != 0) {
-			SPINE_LOG_DEBUG(("WARNING: Spine NOT able to set effective UID to 0"));
+			SPINE_LOG_DEBUG("WARNING: Spine NOT able to set effective UID to 0");
 		}
 
 		if (geteuid() != 0) {
-			SPINE_LOG_DEBUG(("WARNING: Spine NOT running as root.  This is required if using ICMP.  Please run \"chown root:root spine;chmod u+s spine\" to resolve."));
+			SPINE_LOG_DEBUG("WARNING: Spine NOT running as root.  This is required if using ICMP.  Please run \"chown root:root spine;chmod u+s spine\" to resolve.");
 			set.icmp_avail = FALSE;
 		} else {
-			SPINE_LOG_DEBUG(("DEBUG: Spine is running as root."));
+			SPINE_LOG_DEBUG("DEBUG: Spine is running as root.");
 			set.icmp_avail = TRUE;
 
 			if (seteuid(getuid()) == -1) {
-				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+				SPINE_LOG_DEBUG("WARNING: Spine unable to drop from root to local user.");
 			}
 		}
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));
+		SPINE_LOG_DEBUG("DEBUG: Spine has cap_net_raw capability.");
 		set.icmp_avail = TRUE;
 	}
-	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not "));
+	SPINE_LOG_DEBUG("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not ");
 	#endif
 	#endif
 }
@@ -2200,11 +2200,11 @@ unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms) {
 
 	/* lazy-init per-thread seed to avoid global rand() contention */
 	if (jitter_seed == 0) {
-		jitter_seed = (unsigned int)(time(NULL) ^ getpid() ^ (unsigned long)pthread_self());
+		jitter_seed = (unsigned int)(time(NULL) ^ getpid() ^ (unsigned long)pthread_self();
 	}
 
 	/* truncated exponential backoff: base * 2^retry */
-	exponential_backoff = base_ms * (1 << (retry_count > 10 ? 10 : retry_count));
+	exponential_backoff = base_ms * (1 << (retry_count > 10 ? 10 : retry_count);
 
 	if (exponential_backoff > max_sleep_ms) {
 		exponential_backoff = max_sleep_ms;
