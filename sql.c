@@ -181,15 +181,15 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 					}
 
 					continue;
-					} else {
+				} else {
 					usleep(get_jitter_sleep(error_count, 50));
 					continue;
-					}
-					}
+				}
+			}
 
-					if (error == 1213 || error == 1205) {
-					usleep(get_jitter_sleep(error_count, 50));
-					error_count++;
+			if (error == 1213 || error == 1205) {
+				usleep(get_jitter_sleep(error_count, 50));
+				error_count++;
 				if (error_count > 30) {
 					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 					exit(1);
@@ -837,4 +837,3 @@ char *db_fetch_cell_dup(MYSQL_RES *result, int col_index) {
 
 	return retval;
 }
-

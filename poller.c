@@ -1432,6 +1432,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							if (strlen(poller_items[snmp_oids[j].array_position].output_regex)) {
 								snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[snmp_oids[j].array_position].output_regex, snmp_oids[j].result));
 								snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%s", temp_result);
+
+								/* re-validate after regex transform to match SCRIPT path behavior */
+								if (!validate_result(snmp_oids[j].result)) {
+									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+									errors++;
+
+									log_invalid_response(host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, "SNMP: v%i: %s, dsname: %s, oid: %s, value: %s",
+										host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name,
+										poller_items[snmp_oids[j].array_position].arg1, snmp_oids[j].result);
+									SET_UNDEFINED(snmp_oids[j].result);
+								}
 							}
 
 							snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);

@@ -75,7 +75,11 @@ void set_option(const char *option, const char *value) {
 
 	if (s == NULL) {
 		CALLOC_OR_DIE(s, option_t, 1, sizeof(option_t), "util.c option_t");
-		snprintf(s->opt, sizeof(s->opt), "%s", option);
+
+		if (snprintf(s->opt, sizeof(s->opt), "%s", option) >= (int)sizeof(s->opt)) {
+			SPINE_LOG(("WARNING: Option name '%s' truncated to %d bytes", option, (int)sizeof(s->opt) - 1));
+		}
+
 		s->val = value;
 		HASH_ADD_STR(options, opt, s);
 		nopts++;
@@ -2189,9 +2193,15 @@ char *regex_replace(char *exp, char *value) {
  * Returns the calculated sleep time in microseconds (usec).
  */
 unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms) {
+	static __thread unsigned int jitter_seed = 0;
 	unsigned int exponential_backoff;
 	unsigned int jitter;
-	unsigned int max_sleep_ms = 2000; // max 2 seconds
+	unsigned int max_sleep_ms = 2000; /* max 2 seconds */
+
+	/* lazy-init per-thread seed to avoid global rand() contention */
+	if (jitter_seed == 0) {
+		jitter_seed = (unsigned int)(time(NULL) ^ getpid() ^ (unsigned long)pthread_self());
+	}
 
 	/* truncated exponential backoff: base * 2^retry */
 	exponential_backoff = base_ms * (1 << (retry_count > 10 ? 10 : retry_count));
@@ -2201,7 +2211,7 @@ unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms) {
 	}
 
 	/* add random jitter (0 to 50% of backoff) to spread load and prevent storms */
-	jitter = rand() % (exponential_backoff / 2 + 1);
+	jitter = rand_r(&jitter_seed) % (exponential_backoff / 2 + 1);
 
 	return (exponential_backoff + jitter) * 1000;
 }
@@ -2221,5 +2231,29 @@ void add_debug_device(int device_id) {
 		CALLOC_OR_DIE(d, debug_device_t, 1, sizeof(debug_device_t), "util.c debug_device_t");
 		d->device_id = device_id;
 		HASH_ADD_INT(debug_devices_hash, device_id, d);
+	}
+}
+
+/*! \fn void free_debug_devices(void)
+ *  \brief Free all entries in the debug devices hash table.
+ */
+void free_debug_devices(void) {
+	debug_device_t *d, *tmp;
+
+	HASH_ITER(hh, debug_devices_hash, d, tmp) {
+		HASH_DEL(debug_devices_hash, d);
+		free(d);
+	}
+}
+
+/*! \fn void free_options(void)
+ *  \brief Free all entries in the options hash table.
+ */
+void free_options(void) {
+	option_t *s, *tmp;
+
+	HASH_ITER(hh, options, s, tmp) {
+		HASH_DEL(options, s);
+		free(s);
 	}
 }

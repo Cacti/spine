@@ -1070,6 +1070,8 @@ int main(int argc, char *argv[]) {
 	SPINE_FREE(conf_file);
 	SPINE_FREE(host_time);
 	SPINE_FREE(php_processes);
+	free_debug_devices();
+	free_options();
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 

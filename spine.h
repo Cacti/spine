@@ -130,11 +130,13 @@
 
 /* automated device-specific logging: elevates to MEDIUM if device debug is enabled */
 #define SPINE_LOG_DEV(host_id, level, format_and_args) \
-	if (is_debug_device(host_id)) { \
-		SPINE_LOG(format_and_args); \
-	} else { \
-		SPINE_LOG_ ## level(format_and_args); \
-	}
+	do { \
+		if (is_debug_device(host_id)) { \
+			SPINE_LOG(format_and_args); \
+		} else { \
+			SPINE_LOG_ ## level(format_and_args); \
+		} \
+	} while(0)
 
 /* general constants */
 #define MAX_THREADS 100
