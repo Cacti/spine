@@ -49,3 +49,10 @@ asan.*
 ubsan.*
 tsan.*
 valgrind.*
+config/config.guess
+config/config.sub
+config/install-sh
+config/missing
+config/compile
+config/depcomp
+config/ltmain.sh

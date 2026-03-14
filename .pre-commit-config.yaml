@@ -1,0 +1,46 @@
+# Spine Pre-Commit Guardrails
+# ---------------------------
+# These hooks enforce the "Modernization and Hardening" baseline.
+# They prevent regressions in memory safety, SQL injection protection,
+# and structural logging consistency.
+
+repos:
+  - repo: local
+    hooks:
+      - id: block-unsafe-c-apis
+        name: Block Unsafe C APIs (Hardening)
+        entry: grep -nE '(sprintf|vsprintf|strcpy|strcat|gets|vfork)\s*\('
+        language: system
+        files: '\.(c|h)$'
+        description: "Prevents the addition of hazardous C functions. Use snprintf, sql_buffer_append, or strncopy instead."
+
+      - id: enforce-modern-logging
+        name: Enforce Modern Logging (Variadic)
+        entry: grep -nE 'SPINE_LOG(_[A-Z]+)?\s*\(\('
+        language: system
+        files: '\.(c|h)$'
+        description: "Detects legacy double-parentheses logging. Use the modernized variadic SPINE_LOG macro."
+
+      - id: block-snmp-free-conflict
+        name: Block SNMP_FREE (Net-SNMP Conflict)
+        entry: grep -nE '\bSNMP_FREE\s*\('
+        language: system
+        files: '\.(c|h)$'
+        description: "Prevents usage of the conflicting SNMP_FREE symbol. Use the hardened SPINE_SNMP_FREE macro."
+
+      - id: suggest-fail-fast-memory
+        name: Suggest Fail-Fast Memory Macros
+        entry: grep -nE '\b(malloc|strdup|calloc)\s*\('
+        language: system
+        files: '\.(c|h)$'
+        description: "Identifies raw allocation calls. Consider MALLOC_OR_DIE, STRDUP_OR_DIE, or CALLOC_OR_DIE for architectural consistency."
+        verbose: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml

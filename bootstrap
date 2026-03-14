@@ -78,6 +78,16 @@ automake --add-missing
 autoreconf --force --install
 [ $? -ne 0 ] && echo "ERROR: 'autoreconf' exited with errors" && exit -1
 
+# Leverage autotools-dev if available to ensure latest architecture support
+if [ -d config ]; then
+  for f in config.guess config.sub; do
+    if [ -f "/usr/share/misc/$f" ]; then
+      echo "INFO: Updating config/$f from autotools-dev (/usr/share/misc/)"
+      cp -f "/usr/share/misc/$f" "config/$f"
+    fi
+  done
+fi
+
 
 # Provide some meaningful notes
 echo "INFO: Spine bootstrap process completed"
