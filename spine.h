@@ -86,32 +86,10 @@
  * level, and it relies on a bit of tricky (but entirely portable) preprocessor
  * techniques.
  *
- * Standard C does not support variadic macros (macros with a variable number
- * of parameters), and though GNU C does, it's not at all portable. So we instead
- * rely on the fact that putting parens around something turn multiple params
- * into one:
+ * All C99 compilers support variadic macros (macros with a variable number
+ * of parameters).
  *
- *	SPINE_LOG_DEBUG(("n=%d string=%s foo=%f", n, string, foo));
- *
- * This macros has *one* parameter:
- *
- *		("n=%d string=%s foo=%f", n, string, foo)
- *
- * and the parentheses are part of it. When we call this macro, we pass the
- * "single" parameter unadorned, so that
- *
- *		spine_log args
- *
- * expands to
- *
- *		spine_log ("n=%d string=%s foo=%f", n, string, foo)
- *
- * Voila: it's a normal printf-like call.
- *
- * The second part of this is the conditional test, and the obvious approach
- * of using an "if" statement is exceptionally bad form: there are all kinds
- * of pitfalls which arise in this case. Instead, we should try to use an
- * *expression*, which has none of these problems.
+ *	SPINE_LOG_DEBUG("n=%d string=%s foo=%f", n, string, foo);
  *
  * The conditional tests are modelled after the assert() mechanism, which
  * checks the first parameter, and if it's true, it evaluates the second
@@ -121,20 +99,23 @@
  * The (void) prefix is to forestall compiler warnings about expressions
  * not being used.
  */
-#define SPINE_LOG(format_and_args)        (spine_log format_and_args)
-#define SPINE_LOG_LOW(format_and_args)    (void)(set.log_level >= POLLER_VERBOSITY_LOW && spine_log format_and_args)
-#define SPINE_LOG_MEDIUM(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && spine_log format_and_args)
-#define SPINE_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && spine_log format_and_args)
-#define SPINE_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && spine_log format_and_args)
-#define SPINE_LOG_DEVDBG(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_DEVDBG && spine_log format_and_args)
+/* standard logging macros using C99 variadic arguments for modernized architecture */
+#define SPINE_LOG(format, ...)               (spine_log(format, ##__VA_ARGS__))
+#define SPINE_LOG_LOW(format, ...)           (void)(set.log_level >= POLLER_VERBOSITY_LOW && spine_log(format, ##__VA_ARGS__))
+#define SPINE_LOG_MEDIUM(format, ...)        (void)(set.log_level >= POLLER_VERBOSITY_MEDIUM && spine_log(format, ##__VA_ARGS__))
+#define SPINE_LOG_HIGH(format, ...)          (void)(set.log_level >= POLLER_VERBOSITY_HIGH && spine_log(format, ##__VA_ARGS__))
+#define SPINE_LOG_DEBUG(format, ...)         (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && spine_log(format, ##__VA_ARGS__))
+#define SPINE_LOG_DEVDBG(format, ...)        (void)(set.log_level >= POLLER_VERBOSITY_DEVDBG && spine_log(format, ##__VA_ARGS__))
 
 /* automated device-specific logging: elevates to MEDIUM if device debug is enabled */
-#define SPINE_LOG_DEV(host_id, level, format_and_args) \
-	if (is_debug_device(host_id)) { \
-		SPINE_LOG(format_and_args); \
-	} else { \
-		SPINE_LOG_ ## level(format_and_args); \
-	}
+#define SPINE_LOG_DEV(host_id, level, format, ...) \
+	do { \
+		if (is_debug_device(host_id)) { \
+			SPINE_LOG(format, ##__VA_ARGS__); \
+		} else { \
+			SPINE_LOG_ ## level(format, ##__VA_ARGS__); \
+		} \
+	} while (0)
 
 /* general constants */
 #define MAX_THREADS 100
