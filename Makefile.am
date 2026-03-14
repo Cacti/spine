@@ -11,29 +11,47 @@
 # | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
 # | GNU General Public License for more details.                            |
 # +-------------------------------------------------------------------------+
-# | Cacti: The Complete RRDtool-based Graphing Solution                     |
-# +-------------------------------------------------------------------------+
-# | This code is designed, written, and maintained by the Cacti Group. See  |
-# | about.php and/or the AUTHORS file for specific developer information.   |
-# +-------------------------------------------------------------------------+
-# | http://www.cacti.net/                                                   |
-# +-------------------------------------------------------------------------+
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign 1.15
 ACLOCAL_AMFLAGS = -I m4
 
-spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+# --- Compilation Flags ---
+AM_CPPFLAGS = -I$(srcdir)
+AM_CFLAGS = $(SPINE_CFLAGS)
 
-configdir = $(sysconfdir)
-config_DATA = spine.conf.dist
-
+# --- Primary Binary ---
 bin_PROGRAMS = spine
 
+spine_SOURCES = \
+	sql.c \
+	spine.c \
+	util.c \
+	snmp.c \
+	locks.c \
+	poller.c \
+	nft_popen.c \
+	php.c \
+	ping.c \
+	keywords.c \
+	error.c
+
+spine_LDADD = $(SPINE_LIBS)
+
+# --- Configuration & Data ---
+configdir = $(sysconfdir)
+dist_config_DATA = spine.conf.dist
+
+# --- Documentation ---
+if HAVE_HELP2MAN
 man_MANS = spine.1
+CLEANFILES = spine.1
+spine.1: spine$(EXEEXT)
+	$(HELP2MAN) --output=$@ --name='Data Collector for Cacti' --no-info --version-option='--version' ./spine$(EXEEXT)
+endif
 
-EXTRA_DIST = spine.1
+EXTRA_DIST = spine.1.in spine.conf.dist bootstrap copyright_year.sh
 
-# Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
+# --- Maintenance & Tooling ---
 .PHONY: docker docker-dev verify cppcheck
 
 docker:

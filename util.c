@@ -2118,7 +2118,9 @@ void checkAsRoot() {
 int get_cacti_version(MYSQL *psql, int mode) {
 	char      qstring[BUFSIZE];
 	char      *retval;
+	MYSQL_RES *result;
 	int       major, minor, point;
+
 	int       cacti_version;
 
 	assert(psql != 0);

@@ -1586,7 +1586,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							poller_items[i].arg1, poller_items[i].result);
 						SET_UNDEFINED(poller_items[i].result);
 					}
-				}
 
 				SPINE_FREE(poll_result);
 
@@ -1643,7 +1642,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							poller_items[i].arg1, poller_items[i].result);
 						SET_UNDEFINED(poller_items[i].result);
 					}
-				}
 
 				SPINE_FREE(poll_result);
 

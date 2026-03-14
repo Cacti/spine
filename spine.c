@@ -1068,7 +1068,6 @@ int main(int argc, char *argv[]) {
 	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);
-	SPINE_FREE(debug_devices);
 	SPINE_FREE(host_time);
 	SPINE_FREE(php_processes);
 
