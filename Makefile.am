@@ -49,7 +49,7 @@ spine.1: spine$(EXEEXT)
 	$(HELP2MAN) --output=$@ --name='Data Collector for Cacti' --no-info --version-option='--version' ./spine$(EXEEXT)
 endif
 
-EXTRA_DIST = spine.1.in spine.conf.dist bootstrap copyright_year.sh
+EXTRA_DIST = spine.conf.dist bootstrap copyright_year.sh
 
 # --- Maintenance & Tooling ---
 .PHONY: docker docker-dev verify cppcheck
