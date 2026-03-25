@@ -64,7 +64,7 @@ void set_option(const char *option, const char *value) {
 	opttable[nopts++].val = value;
 }
 
-/*! \fn static const char *getsetting(MYSQL *psql, int mode, const char *setting)
+/*! \fn static char *getsetting(MYSQL *psql, int mode, const char *setting)
  *  \brief Returns a character pointer to a Cacti setting.
  *
  *  Given a pointer to a database and the name of a setting, return the string
@@ -77,7 +77,7 @@ void set_option(const char *option, const char *value) {
  *  \return the database option setting
  *
  */
-static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
+static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
@@ -129,7 +129,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
  *  \return true for successful or false for failed
  *
  */
-int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
+static int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
 	char  qstring[BUFSIZE];
 	int   result = 0;
 
@@ -156,7 +156,7 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 	}
 }
 
-/*! \fn static const char *getpsetting(MYSQL *psql, const char *setting)
+/*! \fn static char *getpsetting(MYSQL *psql, const char *setting)
  *  \brief Returns a character pointer to a Cacti poller setting.
  *
  *  Given a pointer to a database and the name of a setting,
@@ -169,7 +169,7 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
  *  \return the database option setting
  *
  */
-static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
+static char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
@@ -223,7 +223,7 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
  *  \return boolean TRUE or FALSE based upon database setting or the DEFAULT if not found
  */
 static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) {
-	const char *rc;
+	char *rc;
 
 	assert(psql    != 0);
 	assert(setting != 0);
@@ -236,7 +236,7 @@ static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) 
 		STRIMATCH(rc, "yes" ) ||
 		STRIMATCH(rc, "true") ||
 		STRIMATCH(rc, "1"   ) ) {
-		free((char *)rc);
+		free(rc);
 		return TRUE;
 	}
 
@@ -244,17 +244,17 @@ static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) 
 		STRIMATCH(rc, "no"   ) ||
 		STRIMATCH(rc, "false") ||
 		STRIMATCH(rc, "0"    ) ) {
-		free((char *)rc);
+		free(rc);
 		return FALSE;
 	}
 
 	/* doesn't really match one of our keywords: what to do? */
-	free((char *)rc);
+	free(rc);
 
 	return dflt;
 }
 
-/*! \fn static const char *getglobalvariable(MYSQL *psql, const char *setting)
+/*! \fn static char *getglobalvariable(MYSQL *psql, const char *setting)
  *  \brief Returns a character pointer to a MySQL global variable setting.
  *
  *  Given a pointer to a database and the name of a global variable, return the string
@@ -264,7 +264,7 @@ static int getboolsetting(MYSQL *psql, int mode, const char *setting, int dflt) 
  *  \return the database global variable setting
  *
  */
-static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
+static char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 	char      qstring[BUFSIZE];
 	char      *retval;
 	MYSQL_RES *result;
@@ -278,7 +278,8 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 	for (i=0; i<nopts; i++) {
 		if (STRIMATCH(setting, opttable[i].opt)) {
 			/* FOUND IT! */
-			return opttable[i].val;
+			retval = strdup(opttable[i].val);
+			return retval;
 		}
 	}
 
@@ -332,7 +333,7 @@ int is_debug_device(int device_id) {
  *  load default values from the database for poller processing
  *
  */
-void read_config_options() {
+void read_config_options(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
 	MYSQL_RES  *result;
@@ -341,7 +342,7 @@ void read_config_options() {
 	char       web_root[BUFSIZE];
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
-	const char *res;
+	char       *res;
 	char       spine_priv[BUFSIZE];
 	char       spine_auth[BUFSIZE];
 	char       spine_capabilities[BUFSIZE];
@@ -363,7 +364,7 @@ void read_config_options() {
 	/* get the mysql server version */
 	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
 		snprintf(set.dbversion, BUFSIZE, "%s", res);
-		free((char *)res);
+		free(res);
 	}
 
 	if (STRIMATCH(set.dbversion, "mariadb")) {
@@ -383,7 +384,7 @@ void read_config_options() {
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
 		const int n = atoi(res);
-		free((char *)res);
+		free(res);
 		if (n != 0) set.log_level = n;
 	}
 
@@ -391,7 +392,7 @@ void read_config_options() {
 	if ((res = getsetting(&mysql, LOCAL, "path_webroot")) != 0) {
 		snprintf(set.path_php_server, BUFSIZE, "%s/script_server.php", res);
 		snprintf(web_root, BUFSIZE, "%s", res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* determine logfile path */
@@ -405,7 +406,7 @@ void read_config_options() {
 				set.path_logfile[0] ='\0';
 			}
 		}
-		free((char *)res);
+		free(res);
 	} else {
 		snprintf(set.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
  	}
@@ -413,7 +414,7 @@ void read_config_options() {
 	/* get log separator */
 	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
 		set.log_datetime_separator = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
 			set.log_datetime_separator = GDC_DEFAULT;
@@ -423,7 +424,7 @@ void read_config_options() {
 	/* get log separator */
 	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
 		set.log_datetime_separator = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
 			set.log_datetime_separator = GDC_DEFAULT;
@@ -433,7 +434,7 @@ void read_config_options() {
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, LOCAL, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
-		free((char *)res);
+		free(res);
 	} else {
 		set.log_destination = LOGDEST_FILE;
 	}
@@ -457,7 +458,7 @@ void read_config_options() {
 	/* get PHP Path Information for Scripting */
 	if ((res = getsetting(&mysql, LOCAL, "path_php_binary")) != 0) {
 		STRNCOPY(set.path_php, res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the path_php variable */
@@ -466,7 +467,7 @@ void read_config_options() {
 	/* set availability_method */
 	if ((res = getsetting(&mysql, LOCAL, "availability_method")) != 0) {
 		set.availability_method = atoi(res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the availability_method variable */
@@ -475,7 +476,7 @@ void read_config_options() {
 	/* set ping_recovery_count */
 	if ((res = getsetting(&mysql, LOCAL, "ping_recovery_count")) != 0) {
 		set.ping_recovery_count = atoi(res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the ping_recovery_count variable */
@@ -484,7 +485,7 @@ void read_config_options() {
 	/* set ping_failure_count */
 	if ((res = getsetting(&mysql, LOCAL, "ping_failure_count")) != 0) {
 		set.ping_failure_count = atoi(res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the ping_failure_count variable */
@@ -493,7 +494,7 @@ void read_config_options() {
 	/* set ping_method */
 	if ((res = getsetting(&mysql, LOCAL, "ping_method")) != 0) {
 		set.ping_method = atoi(res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the ping_method variable */
@@ -502,7 +503,7 @@ void read_config_options() {
 	/* set ping_retries */
 	if ((res = getsetting(&mysql, LOCAL, "ping_retries")) != 0) {
 		set.ping_retries = atoi(res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the ping_retries variable */
@@ -511,7 +512,7 @@ void read_config_options() {
 	/* set ping_timeout */
 	if ((res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
 		set.ping_timeout = atoi(res);
-		free((char *)res);
+		free(res);
 	} else {
 		set.ping_timeout = 400;
 	}
@@ -522,7 +523,7 @@ void read_config_options() {
 	/* set snmp_retries */
 	if ((res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
 		set.snmp_retries = atoi(res);
-		free((char *)res);
+		free(res);
 	} else {
 		set.snmp_retries = 3;
 	}
@@ -564,7 +565,7 @@ void read_config_options() {
 	if (set.threads_set == FALSE) {
 		if ((res = getpsetting(&mysql, mode, "threads")) != 0) {
 			set.threads = atoi(res);
-			free((char *)res);
+			free(res);
 			if (set.threads > MAX_THREADS) {
 				set.threads = MAX_THREADS;
 			}
@@ -577,7 +578,7 @@ void read_config_options() {
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
 	if ((res = getsetting(&mysql, LOCAL, "poller_interval")) != 0) {
 		set.poller_interval = atoi(res);
-		free((char *)res);
+		free(res);
 	} else {
 		set.poller_interval = 0;
 	}
@@ -592,7 +593,7 @@ void read_config_options() {
 	/* get the concurrent_processes variable to determine thread sleep values */
 	if ((res = getsetting(&mysql, LOCAL, "concurrent_processes")) != 0) {
 		set.num_parent_processes = atoi(res);
-		free((char *)res);
+		free(res);
 	} else {
 		set.num_parent_processes = 1;
 	}
@@ -603,7 +604,7 @@ void read_config_options() {
 	/* get the script timeout to establish timeouts */
 	if ((res = getsetting(&mysql, LOCAL, "script_timeout")) != 0) {
 		set.script_timeout = atoi(res);
-		free((char *)res);
+		free(res);
 		if (set.script_timeout < 5) {
 			set.script_timeout = 5;
 		}
@@ -617,7 +618,7 @@ void read_config_options() {
 	/* get selective_device_debug string */
 	if ((res = getsetting(&mysql, LOCAL, "selective_device_debug")) != 0) {
 		STRNCOPY(set.selective_device_debug, res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the selective_device_debug variable */
@@ -626,7 +627,7 @@ void read_config_options() {
 	/* get spine_log_level */
 	if ((res = getsetting(&mysql, LOCAL, "spine_log_level")) != 0) {
 		set.spine_log_level = atoi(res);
-		free((char *)res);
+		free(res);
 	}
 
 	/* log the spine_log_level variable */
@@ -635,7 +636,7 @@ void read_config_options() {
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, LOCAL, "php_servers")) != 0) {
 		set.php_servers = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.php_servers > MAX_PHP_SERVERS) {
 			set.php_servers = MAX_PHP_SERVERS;
@@ -654,7 +655,7 @@ void read_config_options() {
 	/* get the number of active profiles on the system run */
 	if ((res = getsetting(&mysql, LOCAL, "active_profiles")) != 0) {
 		set.active_profiles = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.active_profiles <= 0) {
 			set.active_profiles = 0;
@@ -669,7 +670,7 @@ void read_config_options() {
 	/* get the number of snmp_ports in use */
 	if ((res = getsetting(&mysql, LOCAL, "total_snmp_ports")) != 0) {
 		set.total_snmp_ports = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.total_snmp_ports <= 0) {
 			set.total_snmp_ports = 0;
@@ -736,7 +737,7 @@ void read_config_options() {
 	/* determine the maximum oid's to obtain in a single get request */
 	if ((res = getsetting(&mysql, LOCAL, "max_get_size")) != 0) {
 		set.snmp_max_get_size = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.snmp_max_get_size > 128) {
 			set.snmp_max_get_size = 128;
@@ -794,7 +795,7 @@ void read_config_options() {
 	}
 }
 
-void poller_push_data_to_main() {
+void poller_push_data_to_main(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
 	MYSQL_RES  *result;
@@ -1119,7 +1120,7 @@ int read_spine_config(const char *file) {
  *  \param *set global runtime parameters
  *
  */
-void config_defaults() {
+void config_defaults(void) {
 	set.threads = DEFAULT_THREADS;
 
 	/* default server */
@@ -1190,7 +1191,7 @@ void die(const char *format, ...) {
 	exit(set.exit_code);
 }
 
-char * get_date_format() {
+char *get_date_format(void) {
 	char *log_fmt;
 	char log_sep = '/';
 
@@ -1732,7 +1733,7 @@ char *trim(char *str) {
  */
 char *rtrim(char *str) {
 	char    *end;
-	char    *trim = " \"\'\\\t\n\r";
+	const char *trim = " \"\'\\\t\n\r";
 
 	if (!str) return NULL;
 
@@ -1754,7 +1755,7 @@ char *rtrim(char *str) {
  *  \return the trimmed string.
  */
 char *ltrim(char *str) {
-	char    *trim = " \"\'\\\t\n\r";
+	const char *trim = " \"\'\\\t\n\r";
 
 	if (!str) return NULL;
 
@@ -1793,8 +1794,8 @@ char *reverse(char* str) {
  *
  *  \return the position of -1 if not found
  */
-int strpos(char *haystack, char *needle) {
-	char *p = strstr(haystack, needle);
+int strpos(const char *haystack, const char *needle) {
+	const char *p = strstr(haystack, needle);
 
 	if (p) {
 		return p - haystack;
@@ -1909,7 +1910,7 @@ unsigned long long hex2dec(char *str) {
 	return number;
 }
 
-int hasCaps() {
+int hasCaps(void) {
 	#ifdef HAVE_LCAP
 	cap_t caps;
 	cap_value_t capval;
@@ -1942,7 +1943,7 @@ int hasCaps() {
 	#endif
 }
 
-void checkAsRoot() {
+void checkAsRoot(void) {
 	#ifndef __CYGWIN__
 	#ifdef SOLAR_PRIV
 	priv_set_t *privset;
@@ -2068,7 +2069,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	}
 }
 
-char *regex_replace(char *exp, char *value) {
+const char *regex_replace(const char *exp, const char *value) {
 	regex_t regex;
 	int reti;
 	/* Thread-local storage: each polling thread gets its own buffer, so

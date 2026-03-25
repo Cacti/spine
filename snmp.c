@@ -408,7 +408,7 @@ void snmp_host_cleanup(void *snmp_session) {
 	}
 }
 
-/*! \fn char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail)
+/*! \fn char *snmp_get_base(host_t *current_host, const char *snmp_oid, bool should_fail)
  *  \brief performs a single snmp_get for a specific snmp OID
  *
  *	This function will poll a specific snmp OID for a host.  The host snmp
@@ -418,7 +418,7 @@ void snmp_host_cleanup(void *snmp_session) {
  *  unsuccessful.
  *
  */
-char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
+char *snmp_get_base(host_t *current_host, const char *snmp_oid, bool should_fail) {
 	struct snmp_pdu *pdu       = NULL;
 	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
@@ -657,11 +657,11 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	return result_string;
 }
 
-char *snmp_get(host_t *current_host, char *snmp_oid) {
+char *snmp_get(host_t *current_host, const char *snmp_oid) {
 	return snmp_get_base(current_host, snmp_oid, true);
 }
 
-/*! \fn char *snmp_getnext(host_t *current_host, char *snmp_oid)
+/*! \fn char *snmp_getnext(host_t *current_host, const char *snmp_oid)
  *  \brief performs a single snmp_getnext for a specific snmp OID
  *
  *	This function will poll a specific snmp OID for a host.  The host snmp
@@ -671,7 +671,7 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
  *  unsuccessful.
  *
  */
-char *snmp_getnext(host_t *current_host, char *snmp_oid) {
+char *snmp_getnext(host_t *current_host, const char *snmp_oid) {
 	struct snmp_pdu *pdu       = NULL;
 	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
@@ -844,7 +844,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
  *  \return returns count of table entries
  *
  */
-int snmp_count(host_t *current_host, char *snmp_oid) {
+int snmp_count(host_t *current_host, const char *snmp_oid) {
 	struct snmp_pdu *pdu       = NULL;
 	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
@@ -957,6 +957,8 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable) {
 	u_char *buf    = NULL;
 	size_t out_len = 0;
+	UNUSED_PARAMETER(objid);
+	UNUSED_PARAMETER(objidlen);
 
 	if (buf_len > 0) {
 		if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {

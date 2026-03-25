@@ -118,7 +118,7 @@ poller_thread_t** details = NULL;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
-void poller_push_data_to_main();
+void poller_push_data_to_main(void);
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -519,15 +519,15 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		int i = 0;
+		int debug_idx = 0;
 		char *token;
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
-		while(token && i < MAX_DEBUG_DEVICES - 1) {
-			debug_devices[i]   = atoi(token);
-			debug_devices[i+1] = '\0';
+		while(token && debug_idx < MAX_DEBUG_DEVICES - 1) {
+			debug_devices[debug_idx]   = atoi(token);
+			debug_devices[debug_idx+1] = '\0';
 			token = strtok(NULL, ",");
-			i++;
+			debug_idx++;
 		}
 	} else {
 		debug_devices[0] = '\0';

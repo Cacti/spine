@@ -65,7 +65,7 @@ extern char *trim(char *str);
 extern char *rtrim(char *str);
 extern char *ltrim(char *str);
 extern char *reverse(char *str);
-extern int strpos(char *haystack, char *needle) ;
+extern int strpos(const char *haystack, const char *needle);
 extern int char_count(const char *str, int chr);
 
 /* custom hex2dec that returns a string instead of a number */
@@ -74,7 +74,7 @@ unsigned long long hex2dec(char *str);
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
 #define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
-char *regex_replace(char *exp, char *value);
+const char *regex_replace(const char *exp, const char *value);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))
@@ -92,13 +92,16 @@ extern double get_time_as_double(void);
 
 /* function to check to see if program has capability to use raw socket with
    out uid = 0 */
-extern int hasCaps();
+extern int hasCaps(void);
 
 /* see if we can do things as root */
-extern void checkAsRoot();
+extern void checkAsRoot(void);
 
 /* log format */
-extern char *get_date_format();
+extern char *get_date_format(void);
+
+/* remote/main server synchronization */
+extern void poller_push_data_to_main(void);
 
 /* start time for spine */
 extern double start_time;
