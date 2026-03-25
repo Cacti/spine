@@ -43,6 +43,7 @@ void child_cleanup(void *arg) {
 }
 
 void child_cleanup_thread(void *arg) {
+	UNUSED_PARAMETER(arg);
 	sem_post(&available_threads);
 
 	int a_threads_value;
@@ -52,6 +53,7 @@ void child_cleanup_thread(void *arg) {
 }
 
 void child_cleanup_script(void *arg) {
+	UNUSED_PARAMETER(arg);
 	sem_post(&available_scripts);
 
 	int a_scripts_value;
@@ -173,7 +175,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int    j = 0;
 	int    k = 0;
 	int    num_oids = 0;
-	int    snmp_poller_items = 0;
 	size_t out_buffer;
 	int    php_process;
 
@@ -1315,10 +1316,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 			SET_UNDEFINED(poller_items[i].result);
 
-			if (poller_items[i].action == POLLER_ACTION_SNMP) {
-				snmp_poller_items++;
-			}
-
 			i++;
 		}
 
@@ -2208,7 +2205,7 @@ int validate_result(char *result) {
 	return FALSE;
 }
 
-/*! \fn char *exec_poll(host_t *current_host, char *command, int id, char *type)
+/*! \fn char *exec_poll(host_t *current_host, char *command, int id, const char *type)
  *  \brief polls a host using a script
  *  \param current_host a pointer to the current host structure
  *  \param command the command to be executed
@@ -2220,7 +2217,7 @@ int validate_result(char *result) {
  *  \return a pointer to a character buffer containing the result.
  *
  */
-char *exec_poll(host_t *current_host, char *command, int id, char *type) {
+char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	int cmd_fd;
 	int pid;
 
@@ -2325,7 +2322,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			}
 			#else
-			cmd_fd = nft_popen((char *)proc_command, "r");
+			cmd_fd = nft_popen(proc_command, "r");
 			if (is_debug_device(current_host->id)) {
 				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			} else {

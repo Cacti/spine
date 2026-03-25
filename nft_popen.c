@@ -128,6 +128,9 @@ int nft_popen(const char * command, const char * type) {
 	int    pdes[2];
 	int    fd, pid, twoway;
 	char   *argv[4];
+	char   *command_copy;
+	char   shell_cmd[] = "sh";
+	char   shell_flag[] = "-c";
 	int    cancel_state;
 	extern char **environ;
 	int    retry_count = 0;
@@ -159,9 +162,17 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
-	argv[0] = "sh";
-	argv[1] = "-c";
-	argv[2] = (char *)command;
+	if ((command_copy = strdup(command)) == NULL) {
+		(void)close(pdes[0]);
+		(void)close(pdes[1]);
+		free(cur);
+		pthread_setcancelstate(cancel_state, NULL);
+		return -1;
+	}
+
+	argv[0] = shell_cmd;
+	argv[1] = shell_flag;
+	argv[2] = command_copy;
 	argv[3] = NULL;
 
 	/* Lock the list mutex prior to forking, to ensure that
@@ -203,6 +214,7 @@ int nft_popen(const char * command, const char * type) {
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
+		free(command_copy);
 		pthread_setcancelstate(cancel_state, NULL);
 
 		return -1;
@@ -269,6 +281,7 @@ int nft_popen(const char * command, const char * type) {
 
 	/* Unlock the mutex, and restore caller's cancellation state. */
 	pthread_mutex_unlock(&ListMutex);
+	free(command_copy);
 	pthread_setcancelstate(cancel_state, NULL);
 
 	return fd;
@@ -398,4 +411,3 @@ close_cleanup(void * arg)
 
 	free(cur);
 }
-

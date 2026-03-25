@@ -72,7 +72,7 @@ DEFINE_SPINE_LOCK(php_proc_14)
 DEFINE_SPINE_LOCK(thdet)
 DEFINE_SPINE_LOCK(host_time)
 
-void init_mutexes() {
+void init_mutexes(void) {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),        init_snmp_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_SETEUID_O),     init_seteuid_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),        init_ghbn_lock);
@@ -97,7 +97,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_HOST_TIME_O),   init_host_time_lock);
 }
 
-const char* get_name(int lock) {
+static const char *get_name(int lock) {
 	switch (lock) {
 		case LOCK_SNMP:        return "snmp";
 		case LOCK_SETEUID:     return "seteuid";
