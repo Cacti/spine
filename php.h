@@ -31,8 +31,11 @@
  +-------------------------------------------------------------------------+
 */
 
-extern char *php_cmd(const char *php_command, int php_process);
-extern char *php_readpipe(int php_process, char *command);
+extern char *php_cmd(const char *php_command, int php_process)
+	SPINE_ATTR_NONNULL(1)
+	SPINE_ATTR_WARN_UNUSED;
+extern char *php_readpipe(int php_process, char *command)
+	SPINE_ATTR_WARN_UNUSED;
 extern int php_init(int php_process);
 extern void php_close(int php_process);
 extern int php_get_process(void);

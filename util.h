@@ -38,20 +38,25 @@ extern void config_defaults(void);
 
 /* cacti logging function */
 extern int spine_log(const char *format, ...)
-	__attribute__((format(printf, 1, 2)));
+	SPINE_ATTR_FORMAT(printf, 1, 2);
 
 extern void die(const char *format, ...)
-	__attribute__((noreturn))
-	__attribute__((format(printf, 1, 2)));
+	SPINE_ATTR_NORETURN
+	SPINE_ATTR_COLD
+	SPINE_ATTR_FORMAT(printf, 1, 2);
 
 /* option processing function */
 extern void set_option(const char *setting, const char *value);
 
 /* number validation functions */
-extern int is_numeric(char *string);
-extern int is_ipaddress(const char *string);
-extern int all_digits(const char *str);
-extern int is_hexadecimal(const char * str, const short ignore_special);
+extern int is_numeric(char *string)
+	SPINE_ATTR_PURE;
+extern int is_ipaddress(const char *string)
+	SPINE_ATTR_PURE;
+extern int all_digits(const char *str)
+	SPINE_ATTR_PURE;
+extern int is_hexadecimal(const char * str, const short ignore_special)
+	SPINE_ATTR_PURE;
 
 /* determine if a device is a debug device */
 extern int is_debug_device(int device_id);
@@ -60,7 +65,8 @@ extern int is_debug_device(int device_id);
 extern char *add_slashes(char *string);
 extern int file_exists(const char *filename);
 extern char *strip_alpha(char *string);
-extern char *strncopy(char *dst, const char *src, size_t n);
+extern char *strncopy(char *dst, const char *src, size_t n)
+	SPINE_ATTR_NONNULL(1, 2);
 extern char *trim(char *str);
 extern char *rtrim(char *str);
 extern char *ltrim(char *str);

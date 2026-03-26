@@ -2003,7 +2003,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	if (host_thread == host_threads && set.active_profiles != 1) {
 		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
 
-		db_query(&mysql, LOCAL, query6);
+		db_free_result(db_query(&mysql, LOCAL, query6));
 	}
 
 	/* record the polling time for the device */
@@ -2023,7 +2023,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		poll_time = get_time_as_double();
 		query1[0] = '\0';
 		snprintf(query1, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
-		db_query(&mysql, LOCAL, query1);
+		db_free_result(db_query(&mysql, LOCAL, query1));
 
 	}
 
@@ -2041,7 +2041,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			" local_data_ids = CONCAT(local_data_ids, \", \", VALUES(local_data_ids))",
 			host_id, set.poller_id, errors, error_string);
 
-		db_query(&mysql, LOCAL, error_query);
+		db_free_result(db_query(&mysql, LOCAL, error_query));
 
 		free(error_query);
 	}

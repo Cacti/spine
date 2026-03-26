@@ -53,6 +53,26 @@
 # define __attribute__(x)  /* NOTHING */
 #endif
 
+/* Function attribute macros for GCC/Clang compile-time checks.
+ * These expand to nothing on non-GCC/Clang compilers.
+ */
+#ifdef __GNUC__
+#define SPINE_ATTR_FORMAT(archetype, string_index, first_to_check) \
+	__attribute__((format(archetype, string_index, first_to_check)))
+#define SPINE_ATTR_NORETURN      __attribute__((noreturn))
+#define SPINE_ATTR_WARN_UNUSED   __attribute__((warn_unused_result))
+#define SPINE_ATTR_NONNULL(...)  __attribute__((nonnull(__VA_ARGS__)))
+#define SPINE_ATTR_PURE          __attribute__((pure))
+#define SPINE_ATTR_COLD          __attribute__((cold))
+#else
+#define SPINE_ATTR_FORMAT(archetype, string_index, first_to_check)
+#define SPINE_ATTR_NORETURN
+#define SPINE_ATTR_WARN_UNUSED
+#define SPINE_ATTR_NONNULL(...)
+#define SPINE_ATTR_PURE
+#define SPINE_ATTR_COLD
+#endif
+
 /* Windows does not support stderr.  Therefore, don't use it. */
 #ifdef __CYGWIN__
 #define DISABLE_STDERR
