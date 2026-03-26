@@ -366,6 +366,7 @@ typedef struct config_struct {
 	int    end_host_id;
 	char   host_id_list[BIG_BUFSIZE];
 	int    has_device_0;
+	int    has_output_regex;
 	/* database connection information */
 	char   db_host[BUFSIZE];
 	char   db_db[BUFSIZE];
@@ -469,6 +470,7 @@ typedef struct target_struct {
 	char   arg1[1024];
 	char   arg2[255];
 	char   arg3[255];
+	char   output_regex[255];
 } target_t;
 
 /*! SNMP OID's Structure
