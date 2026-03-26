@@ -113,6 +113,7 @@ int     *debug_devices;
 
 pool_t  *db_pool_local;
 pool_t  *db_pool_remote;
+int     icmp_socket = -1;
 
 poller_thread_t** details = NULL;
 
@@ -721,6 +722,29 @@ int main(int argc, char *argv[]) {
 
 	/* initialize thread initialization semaphore */
 	sem_init(&thread_init_sem, 0, 1);
+
+	/* Open the ICMP raw socket while still single-threaded and privileged.
+	 * seteuid(0) is process-wide; doing it here avoids the race where
+	 * multiple threads could inherit euid=0 while one holds LOCK_SETEUID. */
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	if (hasCaps() != TRUE) {
+		if (seteuid(0) == -1) {
+			SPINE_LOG(("WARNING: Unable to obtain root privileges for ICMP socket."));
+		}
+	}
+	#endif
+	icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	if (hasCaps() != TRUE) {
+		if (seteuid(getuid()) == -1) {
+			SPINE_LOG(("WARNING: Unable to drop root privileges after ICMP socket open."));
+		}
+	}
+	#endif
+	if (icmp_socket < 0) {
+		SPINE_LOG(("WARNING: Unable to open ICMP raw socket: %s. ICMP ping disabled.", strerror(errno)));
+		set.icmp_avail = FALSE;
+	}
 
 	/* specify the point of timeout for timedwait semaphores */
 	//until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);

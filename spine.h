@@ -634,5 +634,6 @@ extern sem_t  available_threads;
 extern sem_t  available_scripts;
 extern pool_t *db_pool_remote;
 extern pool_t *db_pool_local;
+extern int    icmp_socket;
 
 #endif /* not _SPINE_H_ */
