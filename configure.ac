@@ -29,7 +29,6 @@ AC_CANONICAL_HOST
 AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
-AC_PROG_CC
 
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config/config.h)
@@ -99,6 +98,71 @@ AC_ARG_ENABLE(warnings,
   AC_MSG_RESULT(no)
 )
 
+# Security hardening flags (enabled by default)
+AC_MSG_CHECKING([whether to enable security hardening])
+AC_ARG_ENABLE(hardening,
+  [  --disable-hardening     Disable security hardening compiler flags (default: enabled)],
+  [ ENABLED_HARDENING=$enableval ],
+  [ ENABLED_HARDENING=yes ]
+)
+if test "$ENABLED_HARDENING" = "yes"; then
+  AC_MSG_RESULT([yes])
+
+  # Warning flags that catch real bugs
+  CFLAGS="$CFLAGS -Wall -Wshadow -Wpointer-arith -Wcast-qual -Wwrite-strings"
+  CFLAGS="$CFLAGS -Wstrict-prototypes -Wmissing-prototypes"
+  CFLAGS="$CFLAGS -Wformat=2 -Wformat-security"
+  CFLAGS="$CFLAGS -Wno-unused-parameter"
+
+  # Promote dangerous patterns to errors; catches implicit declarations and
+  # type mismatches that are UB in C99 and silently wrong in practice.
+  CFLAGS="$CFLAGS -Werror=implicit-function-declaration"
+  CFLAGS="$CFLAGS -Werror=implicit-int"
+  CFLAGS="$CFLAGS -Werror=incompatible-pointer-types"
+  CFLAGS="$CFLAGS -Werror=int-conversion"
+  CFLAGS="$CFLAGS -Werror=return-type"
+  CFLAGS="$CFLAGS -Werror=format-security"
+
+  # Runtime protection: buffer overflow detection and stack canaries
+  CFLAGS="$CFLAGS -D_FORTIFY_SOURCE=2"
+  CFLAGS="$CFLAGS -fstack-protector-strong"
+
+  # Stack clash protection (GCC 8+ / Clang 11+); probe pages on large
+  # stack allocations to prevent stack-to-heap collisions.
+  save_CFLAGS="$CFLAGS"
+  CFLAGS="$CFLAGS -fstack-clash-protection -Werror"
+  AC_MSG_CHECKING([whether $CC supports -fstack-clash-protection])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
+    [AC_MSG_RESULT([yes])
+     CFLAGS="$save_CFLAGS -fstack-clash-protection"],
+    [AC_MSG_RESULT([no])
+     CFLAGS="$save_CFLAGS"])
+
+  # Position-independent code for ASLR; hardened distros expect -pie binaries.
+  save_CFLAGS="$CFLAGS"
+  save_LDFLAGS="$LDFLAGS"
+  CFLAGS="$CFLAGS -fPIE -Werror"
+  LDFLAGS="$LDFLAGS -pie"
+  AC_MSG_CHECKING([whether $CC supports -fPIE -pie])
+  AC_LINK_IFELSE([AC_LANG_PROGRAM()],
+    [AC_MSG_RESULT([yes])
+     CFLAGS="$save_CFLAGS -fPIE"
+     LDFLAGS="$save_LDFLAGS -pie"],
+    [AC_MSG_RESULT([no])
+     CFLAGS="$save_CFLAGS"
+     LDFLAGS="$save_LDFLAGS"])
+
+  # Linker hardening: RELRO makes the GOT read-only after startup; BIND_NOW
+  # forces all symbol resolution at load time, closing lazy-binding exploits.
+  case $host_os in
+    linux*)
+      LDFLAGS="$LDFLAGS -Wl,-z,relro,-z,now"
+      ;;
+  esac
+else
+  AC_MSG_RESULT([no])
+fi
+
 AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
 AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])
@@ -140,7 +204,6 @@ AC_CHECK_HEADERS(
 )
 
 # Checks for typedefs, structures, and compiler characteristics.
-AC_HEADER_TIME
 AC_CHECK_TYPES([unsigned long long, long long])
 AC_TYPE_SIZE_T
 
@@ -222,13 +285,13 @@ AC_DEFUN([MYSQL_LIB_CHK],
 MYSQL_SUB_DIR="include include/mysql include/mariadb mysql";
 for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
   for d in $MYSQL_SUB_DIR; do
-    if [[ -f $i/$d/mysql.h ]]; then
+    if test -f "$i/$d/mysql.h"; then
       MYSQL_INC_DIR=$i/$d
       break;
     fi
   done
 
-  if [[ ! -z $MYSQL_INC_DIR ]]; then
+  if test -n "$MYSQL_INC_DIR"; then
     break;
   fi
 #  test -f $i/include/mysql.h          && MYSQL_INC_DIR=$i/include          && break

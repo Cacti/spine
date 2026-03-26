@@ -2,95 +2,473 @@ name: CI
 
 on:
   push:
-    branches: [develop]
+    branches: [main, develop]
   pull_request:
-    branches: [develop]
+    branches: [main, develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config
+    gcc clang llvm
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  ASAN_OPTIONS: "detect_leaks=1:abort_on_error=1:strict_string_checks=1:check_initialization_order=1:detect_stack_use_after_return=1:symbolize=1:log_path=asan"
+  UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1:log_path=ubsan"
+  TSAN_OPTIONS: "halt_on_error=1:history_size=7:log_path=tsan"
+  CFLAGS_COMMON: >-
+    -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion
+    -Wpointer-arith -Wcast-qual -Wwrite-strings
+    -Wstrict-prototypes -Wmissing-prototypes
+  CFLAGS_WERROR_GUARD: >-
+    -Werror=implicit-function-declaration -Werror=implicit-int
+    -Werror=incompatible-pointer-types -Werror=int-conversion
+    -Werror=return-type -Werror=format-security
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-test:
+    name: ${{ matrix.os }} | ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
-        compiler: [gcc, clang]
-    env:
-      CC: ${{ matrix.compiler }}
+        include:
+          - os: ubuntu-22.04
+            name: gcc-release-hardened
+            cc: gcc
+            cflags: >-
+              -O2 -g -D_FORTIFY_SOURCE=3
+              -fstack-protector-strong -fstack-clash-protection
+            ldflags: >-
+              -Wl,-z,relro,-z,now
+            nightly_only: false
+
+          - os: ubuntu-24.04
+            name: gcc-release-hardened
+            cc: gcc
+            cflags: >-
+              -O2 -g -D_FORTIFY_SOURCE=3
+              -fstack-protector-strong -fstack-clash-protection
+            ldflags: >-
+              -Wl,-z,relro,-z,now
+            nightly_only: false
+
+          - os: ubuntu-22.04
+            name: clang-asan-ubsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,undefined
+            ldflags: >-
+              -fsanitize=address,undefined
+            nightly_only: false
+
+          - os: ubuntu-24.04
+            name: clang-asan-ubsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,undefined
+            ldflags: >-
+              -fsanitize=address,undefined
+            nightly_only: false
+
+          - os: ubuntu-22.04
+            name: clang-asan-leak
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,leak
+            ldflags: >-
+              -fsanitize=address,leak
+            nightly_only: false
+
+          - os: ubuntu-24.04
+            name: clang-asan-leak
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,leak
+            ldflags: >-
+              -fsanitize=address,leak
+            nightly_only: false
+
+          - os: ubuntu-22.04
+            name: clang-tsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fsanitize=thread
+            ldflags: >-
+              -fsanitize=thread
+            nightly_only: true
+
+          - os: ubuntu-24.04
+            name: clang-tsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fsanitize=thread
+            ldflags: >-
+              -fsanitize=thread
+            nightly_only: true
+
+          - os: ubuntu-24.04
+            name: cross-arm64
+            cc: aarch64-linux-gnu-gcc
+            cflags: ""
+            ldflags: ""
+            nightly_only: true
+
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Gate nightly-only matrix entries
+        id: gate
+        run: |
+          if [[ "${{ matrix.nightly_only }}" == "false" ]] || \
+             [[ "${{ github.event_name }}" == "schedule" ]] || \
+             [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.should_run == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install build dependencies
+        if: steps.gate.outputs.should_run == 'true'
         run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+          if [[ "${{ matrix.name }}" == "cross-arm64" ]]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+
+      - name: Export build flags
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          {
+            echo "CC=${{ matrix.cc }}"
+            echo "CFLAGS=${CFLAGS_COMMON} ${CFLAGS_WERROR_GUARD} ${{ matrix.cflags }}"
+            echo "LDFLAGS=${{ matrix.ldflags }}"
+            echo "ASAN_SYMBOLIZER_PATH=$(command -v llvm-symbolizer || true)"
+          } >> "${GITHUB_ENV}"
+
+      - name: Bootstrap
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          chmod +x ./configure || true
+          ./configure CC="${CC}" CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+
+      - name: Build
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" V=1
+
+      - name: Test
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          if make -n check >/dev/null 2>&1; then
+            make check VERBOSE=1
+          elif make -n test >/dev/null 2>&1; then
+            make test VERBOSE=1
+          else
+            echo "::notice::No make check/test target found."
+          fi
+
+      - name: Warning count
+        if: always() && steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          make clean
+          make -j"$(nproc)" 2>&1 | grep -c "warning:" > warning-count.txt || echo "0" > warning-count.txt
+          echo "Warnings: $(cat warning-count.txt)"
+
+      - name: Upload warning count
+        if: always() && steps.gate.outputs.should_run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: warnings-${{ matrix.name }}-${{ matrix.os }}
+          path: warning-count.txt
+
+      - name: Binary size
+        if: always() && steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          stat -c%s spine > binary-size.txt
+          echo "Binary size: $(cat binary-size.txt) bytes"
+
+      - name: Upload binary size
+        if: always() && steps.gate.outputs.should_run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: binary-size-${{ matrix.name }}-${{ matrix.os }}
+          path: binary-size.txt
+
+      - name: Collect failure artifacts
+        if: failure() && steps.gate.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+
+          for f in \
+            config.log
+          do
+            if [[ -f "${f}" ]]; then
+              mkdir -p "ci-artifacts/$(dirname "${f}")"
+              cp "${f}" "ci-artifacts/${f}"
+            fi
+          done
+
+          while IFS= read -r -d '' f; do
+            clean="${f#./}"
+            mkdir -p "ci-artifacts/$(dirname "${clean}")"
+            cp "${f}" "ci-artifacts/${clean}"
+          done < <(find . -type f \( \
+            -name 'core*' -o -name '*.core' -o \
+            -name '*.log' -o -name 'asan*' -o -name 'ubsan*' -o -name 'tsan*' \
+            \) -print0)
+
+      - name: Upload failure artifacts
+        if: failure() && steps.gate.outputs.should_run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: ci-failure-${{ matrix.os }}-${{ matrix.name }}
+          path: ci-artifacts
+          if-no-files-found: ignore
+
+  portability-smoke:
+    name: portability smoke | ${{ matrix.os }} | ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            cc: gcc
+            allow_failure: false
+          - os: ubuntu-24.04
+            cc: clang
+            allow_failure: false
+          - os: macos-14
+            cc: clang
+            allow_failure: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-          mysql-server libmysqlclient-dev \
-          libsnmp-dev libssl-dev build-essential \
-          help2man autoconf automake libtool dos2unix
+            autoconf automake libtool make pkg-config \
+            gcc clang libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
 
-      - name: Prepare for Spine Build
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
         run: |
+          set -euo pipefail
+          brew update
+          brew install autoconf automake libtool pkg-config net-snmp mysql-client openssl@3 help2man
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
           ./bootstrap
-          ./configure --enable-warnings
 
-      - name: Build Spine
+      - name: Configure
         run: |
-          make -j 
+          set -euo pipefail
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            MYSQL_PREFIX="$(brew --prefix mysql-client)"
+            SNMP_PREFIX="$(brew --prefix net-snmp)"
+            OPENSSL_PREFIX="$(brew --prefix openssl@3)"
 
-#  cppcheck:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-#
-#      - name: Install cppcheck
-#        run: |
-#          sudo apt-get update 
-#          sudo apt-get install -y cppcheck build-essential
-#
-#      - name: Run cppcheck
-#        run: |
-#          cppcheck \
-#            --enable=all \
-#            --std=c11 \
-#            --error-exitcode=1 \
-#            --suppress=missingIncludeSystem \
-#            --suppress=unusedFunction \
-#            --suppress=checkersReport \
-#            --suppress=variableScope \
-#            --suppress=unreadVariable \
-#            --suppress=shadowVariable \
-#            --suppress=constVariablePointer \
-#            --suppress=redundantAssignment \
-#            --suppress=toomanyconfigs \
-#            *.c *.h
+            ./configure \
+              --with-mysql="${MYSQL_PREFIX}" \
+              --with-snmp="${SNMP_PREFIX}" \
+              CC="${{ matrix.cc }}" \
+              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security' \
+              CPPFLAGS="-I${OPENSSL_PREFIX}/include -I${MYSQL_PREFIX}/include/mysql" \
+              LDFLAGS="-L${OPENSSL_PREFIX}/lib -L${MYSQL_PREFIX}/lib"
+          else
+            ./configure \
+              CC="${{ matrix.cc }}" \
+              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security'
+          fi
 
-  flawfinder:
-    runs-on: ubuntu-latest
+      - name: Build
+        run: |
+          set -euo pipefail
+          JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+          make -j"${JOBS}" V=1
+
+      - name: Run smoke test
+        run: |
+          set -euo pipefail
+          ./spine --version
+
+  api-safety-guard:
+    name: api safety guard
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Enforce unsafe API addition guard
+        run: |
+          set -euo pipefail
+          bash .github/scripts/check-unsafe-api-additions.sh
+
+  build-macos:
+    name: macOS (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.x"
-
-      - name: Install flawfinder
-        run: pip install flawfinder==2.0.19
-
-      # Note: flawfinder will light up like a christmas tree on this codebase.
-      # error-level=5 means only critical hits fail the build — the rest is
-      # informational so we have a baseline to chip away at.
-      - name: Run flawfinder
+      - name: Install dependencies
         run: |
-          flawfinder \
-            --minlevel=3 \
-            --error-level=5 \
-            --columns \
-            --context \
-            . | tee flawfinder-report.txt
+          brew install autoconf automake libtool pkg-config \
+            mysql-client net-snmp openssl@3 cmocka
+      - name: Bootstrap
+        run: autoreconf -fi
+      - name: Configure
+        run: |
+          CFLAGS="-I$(brew --prefix openssl@3)/include" \
+          LDFLAGS="-L$(brew --prefix openssl@3)/lib" \
+          ./configure --prefix=/usr/local \
+            --with-mysql="$(brew --prefix mysql-client)" \
+            --with-snmp="$(brew --prefix net-snmp)"
+      - name: Build
+        run: make -j"$(sysctl -n hw.ncpu)"
+      - name: Verify binary
+        run: |
+          file spine
+          ./spine --version
+      - name: Unit tests
+        run: |
+          cd tests/unit
+          make CMOCKA_INC="$(brew --prefix cmocka)/include" \
+               CMOCKA_LIB="$(brew --prefix cmocka)/lib"
+      - name: Warning audit
+        run: |
+          make clean
+          make -j"$(sysctl -n hw.ncpu)" 2>&1 | tee build.log
+          count=$(grep -c "warning:" build.log || true)
+          echo "Total warnings: $count"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+  build-cygwin:
+    name: Windows (Cygwin)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: C:\cygwin\bin\bash.exe --login -eo pipefail -o igncr '{0}'
+    env:
+      CYGWIN_NOWINPATH: 1
+    steps:
+      - name: Install Cygwin
+        uses: cygwin/cygwin-install-action@006ad0b0946ca6d0a3ea2d4437677fa767392401 # v2
         with:
-          name: flawfinder-report
-          path: flawfinder-report.txt
+          packages: >-
+            gcc-core make autoconf automake libtool pkg-config
+            libmariadb-devel libnetsnmp-devel libssl-devel
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Bootstrap
+        run: autoreconf -fi
+      - name: Configure
+        run: ./configure --prefix=/usr/local
+      - name: Build
+        run: make -j"$(nproc)"
+      - name: Verify binary
+        run: |
+          file spine.exe 2>/dev/null || file spine
+          ./spine.exe --version 2>/dev/null || ./spine --version
+      - name: Warning audit
+        run: |
+          make clean
+          make -j"$(nproc)" 2>&1 | tee build.log
+          count=$(grep -c "warning:" build.log || true)
+          echo "Total warnings: $count"
+
+  warning-summary:
+    name: Warning Regression Gate
+    runs-on: ubuntu-24.04
+    needs: [build-and-test]
+    if: always()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download all warning artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: warnings-*
+          path: warning-artifacts
+
+      - name: Check warning regression
+        run: |
+          set -euo pipefail
+          baseline=0
+          if [[ -f .github/warning-baseline.txt ]]; then
+            baseline=$(cat .github/warning-baseline.txt)
+          fi
+          echo "Baseline warnings: ${baseline}"
+
+          total=0
+          for f in warning-artifacts/*/warning-count.txt; do
+            if [[ -f "$f" ]]; then
+              count=$(cat "$f")
+              dir=$(dirname "$f")
+              name=$(basename "$dir")
+              echo "${name}: ${count} warnings"
+              if [[ "$count" -gt "$total" ]]; then
+                total="$count"
+              fi
+            fi
+          done
+
+          echo "Max warnings across matrix: ${total}"
+          if [[ "$total" -gt "$baseline" ]]; then
+            echo "::error::Warning regression detected: ${total} > baseline ${baseline}"
+            exit 1
+          fi
+          echo "PASS: warnings within baseline"
