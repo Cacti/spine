@@ -159,4 +159,6 @@
 #  include <grp.h>
 #endif
 
+#include "uthash.h"
+
 #endif /* SPINE_COMMON_H */

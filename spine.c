@@ -327,6 +327,7 @@ int main(int argc, char *argv[]) {
 	set.parent_fork       = SPINE_PARENT;
 	set.mode              = REMOTE_ONLINE;
 	set.has_device_0      = FALSE;
+	set.has_output_regex  = FALSE;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -561,6 +562,12 @@ int main(int argc, char *argv[]) {
 		set.has_device_0 = TRUE;
 	}
 	db_free_result(result);
+
+	/* check if poller_item has the output_regex column (added in Cacti 1.3.1) */
+	if (db_column_exists(&mysql, LOCAL, "poller_item", "output_regex")) {
+		set.has_output_regex = TRUE;
+		SPINE_LOG_DEBUG(("DEBUG: poller_item.output_regex column detected"));
+	}
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
@@ -1074,7 +1081,6 @@ int main(int argc, char *argv[]) {
 	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);
-	SPINE_FREE(debug_devices);
 	SPINE_FREE(host_time);
 	SPINE_FREE(php_processes);
 
