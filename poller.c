@@ -775,6 +775,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 				/* update host table */
 				if (host_thread == 1) {
+					char escaped_last_error[BUFSIZE];
+					db_escape(&mysql, escaped_last_error, sizeof(escaped_last_error), host->status_last_error);
+
 					if (!ignore_sysinfo) {
 						if (host->ignore_host != TRUE) {
 							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
@@ -789,7 +792,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								host->status_event_count,
 								host->status_fail_date,
 								host->status_rec_date,
-								host->status_last_error,
+								escaped_last_error,
 								host->min_time,
 								host->max_time,
 								host->cur_time,
@@ -815,7 +818,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								host->status_event_count,
 								host->status_fail_date,
 								host->status_rec_date,
-								host->status_last_error,
+								escaped_last_error,
 								host->min_time,
 								host->max_time,
 								host->cur_time,
@@ -836,7 +839,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							host->status_event_count,
 							host->status_fail_date,
 							host->status_rec_date,
-							host->status_last_error,
+							escaped_last_error,
 							host->min_time,
 							host->max_time,
 							host->cur_time,
@@ -1014,6 +1017,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
+							/* Reject empty script commands that could cause unexpected behavior */
+							if (strlen(reindex->arg1) == 0) {
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] empty script command, skipping",
+									host->id, host_thread, reindex->data_query_id));
+								break;
+							}
+
 							poll_result = trim(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"));
 
 							if (is_debug_device(host->id)) {
@@ -1600,6 +1610,14 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 				break;
 			case POLLER_ACTION_SCRIPT: /* execute script file */
+				/* Reject empty script commands that could cause unexpected behavior */
+				if (strlen(poller_items[i].arg1) == 0) {
+					SPINE_LOG(("WARNING: Device[%i] HT[%i] DS[%i] empty script command, skipping",
+						host_id, host_thread, poller_items[i].local_data_id));
+					SET_UNDEFINED(poller_items[i].result);
+					break;
+				}
+
 				poll_result = exec_poll(host, poller_items[i].arg1, poller_items[i].local_data_id, "DS");
 
 				/* process the result */
@@ -1656,6 +1674,14 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
+				/* Reject empty script commands that could cause unexpected behavior */
+				if (strlen(poller_items[i].arg1) == 0) {
+					SPINE_LOG(("WARNING: Device[%i] HT[%i] DS[%i] empty script server command, skipping",
+						host_id, host_thread, poller_items[i].local_data_id));
+					SET_UNDEFINED(poller_items[i].result);
+					break;
+				}
+
 				php_process = php_get_process();
 
 				poll_result = php_cmd(poller_items[i].arg1, php_process);
@@ -1841,11 +1867,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while (i < rows_processed) {
+			char escaped_result[DBL_BUFSIZE];
+			char escaped_rrd_name[DBL_BUFSIZE];
+
+			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
+			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
+
 			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 				poller_items[i].local_data_id,
-				poller_items[i].rrd_name,
+				escaped_rrd_name,
 				host_time,
-				poller_items[i].result);
+				escaped_result);
 
 			result_length = strlen(result_string);
 
@@ -1974,10 +2006,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
-			" VALUES(%i, %i, %i, \"%s\")"
+			" VALUES(%i, %i, %i, '%s')"
 			" ON DUPLICATE KEY UPDATE"
 			" errors = errors + VALUES(errors),"
-			" local_data_ids = CONCAT(local_data_ids, \", \", VALUES(local_data_ids))",
+			" local_data_ids = CONCAT(local_data_ids, ', ', VALUES(local_data_ids))",
 			host_id, set.poller_id, errors, error_string);
 
 		db_query(&mysql, LOCAL, error_query);
@@ -2044,7 +2076,7 @@ void buffer_output_errors(char *error_string, int *buf_size, int *buf_errors, in
 			*buf_size = snprintf(error_string, DBL_BUFSIZE, "%i", local_data_id);
 		} else {
 			(*buf_errors)++;
-			snprintf(error_string + *buf_size, DBL_BUFSIZE, "%s", tbuffer);
+			snprintf(error_string + *buf_size, DBL_BUFSIZE - *buf_size, "%s", tbuffer);
 			*buf_size += error_len;
 		}
 	}
@@ -2242,6 +2274,9 @@ int validate_result(char *result) {
  *  \return a pointer to a character buffer containing the result.
  *
  */
+/* WARNING: command is passed to /bin/sh -c (via nft_popen) without shell escaping.
+ * The caller MUST ensure command originates from a trusted source
+ * (the Cacti database). Do not pass user-controlled input directly. */
 char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	int cmd_fd;
 	int pid;

@@ -96,7 +96,7 @@ static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -138,11 +138,11 @@ static int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *
 	assert(myvalue   != 0);
 
 	if (set.dbonupdate == 0) {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
 	} else {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') AS rs "
 			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
 	}
@@ -188,7 +188,7 @@ static char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
 
 	result = db_query(psql, mode, qstring);
 
@@ -283,7 +283,7 @@ static char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -804,6 +804,7 @@ void poller_push_data_to_main(void) {
 	int        rows;
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
+	int        remaining;
 	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
@@ -901,55 +902,81 @@ void poller_push_data_to_main(void) {
 				if (rows < 500) {
 					if (rows == 0) {
 						sqlp  = sqlbuf;
-						sqlp += sprintf(sqlp, "%s", prefix);
-						sqlp += sprintf(sqlp, " (");
+						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+						sqlp += snprintf(sqlp, remaining, "%s", prefix);
+						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+						sqlp += snprintf(sqlp, remaining, " (");
 					} else {
-						sqlp += sprintf(sqlp, ", (");
+						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+						sqlp += snprintf(sqlp, remaining, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%s, ", row[0]); // id mediumint
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[0]); // id mediumint
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID varchar(128)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance bigint
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation varchar(300)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status tinyint
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[8]); // status_event_count mediumint
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[8]); // status_event_count mediumint
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_fail_date timestamp
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date timestamp
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error varchar(255)
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[12]); // min_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[13]); // max_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[14]); // cur_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[15]); // avg_time decimal(10,5)
-					sqlp += sprintf(sqlp, "%s, ", row[16]); // polling_time double
-					sqlp += sprintf(sqlp, "%s, ", row[17]); // total_polls int
-					sqlp += sprintf(sqlp, "%s, ", row[18]); // failed_polls int
-					sqlp += sprintf(sqlp, "%s, ", row[19]); // availability decimal(8,5)
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[12]); // min_time decimal(10,5)
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[13]); // max_time decimal(10,5)
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[14]); // cur_time decimal(10,5)
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[15]); // avg_time decimal(10,5)
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[16]); // polling_time double
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[17]); // total_polls int
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[18]); // failed_polls int
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[19]); // availability decimal(8,5)
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated timestamp
-					sqlp += sprintf(sqlp, "'%s'", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s'", tmpstr);
 
-					sqlp += sprintf(sqlp, ")");
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, ")");
 
 					rows++;
 				} else {
-					sqlp += sprintf(sqlp, "%s", suffix);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s", suffix);
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
@@ -958,7 +985,8 @@ void poller_push_data_to_main(void) {
 		}
 
 		if (rows > 0) {
-			sqlp += sprintf(sqlp, "%s", suffix);
+			remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+			sqlp += snprintf(sqlp, remaining, "%s", suffix);
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 		}
 	}
@@ -998,26 +1026,36 @@ void poller_push_data_to_main(void) {
 				if (rows < 10000) {
 					if (rows == 0) {
 						sqlp = sqlbuf;
-						sqlp += sprintf(sqlp, "%s", prefix);
-						sqlp += sprintf(sqlp, " (");
+						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+						sqlp += snprintf(sqlp, remaining, "%s", prefix);
+						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+						sqlp += snprintf(sqlp, remaining, " (");
 					} else {
-						sqlp += sprintf(sqlp, ", (");
+						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+						sqlp += snprintf(sqlp, remaining, ", (");
 					}
 
-					sqlp += sprintf(sqlp, "%s, ", row[0]); // local_data_id
-					sqlp += sprintf(sqlp, "%s, ", row[1]); // host_id
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[0]); // local_data_id
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[1]); // host_id
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // rrd_name
-					sqlp += sprintf(sqlp, "'%s', ", tmpstr);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
 
-					sqlp += sprintf(sqlp, "%s, ", row[3]); // rrd_step
-					sqlp += sprintf(sqlp, "%s",   row[4]); // rrd_next_step
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s, ", row[3]); // rrd_step
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s",   row[4]); // rrd_next_step
 
-					sqlp += sprintf(sqlp, ")");
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, ")");
 
 					rows++;
 				} else {
-					sqlp += sprintf(sqlp, "%s", suffix);
+					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+					sqlp += snprintf(sqlp, remaining, "%s", suffix);
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
@@ -1026,7 +1064,8 @@ void poller_push_data_to_main(void) {
 		}
 
 		if (rows > 0) {
-			sqlp += sprintf(sqlp, "%s", suffix);
+			remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+			sqlp += snprintf(sqlp, remaining, "%s", suffix);
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 
 			rows = 0;
@@ -1634,12 +1673,12 @@ char *add_slashes(char *string) {
 	int new_position;
 	char *return_str;
 
-	if (!(return_str = (char *) malloc(BUFSIZE))) {
+	length       = strlen(string);
+
+	if (!(return_str = (char *) malloc(length * 2 + 1))) {
 		die("ERROR: Fatal malloc error: util.c add_slashes!");
 	}
 	return_str[0] = '\0';
-
-	length       = strlen(string);
 	position     = 0;
 	new_position = 0;
 
@@ -2033,7 +2072,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 
 	assert(psql != 0);
 
-	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+	snprintf(qstring, sizeof(qstring), "SELECT cacti FROM version LIMIT 1");
 
 	result = db_query(psql, mode, qstring);
 

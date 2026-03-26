@@ -252,6 +252,7 @@ void db_connect(int type, MYSQL *mysql) {
 			if (stat(hostname, &socket_stat) == 0) {
 				if (socket_stat.st_mode & S_IFSOCK) {
 					socket = strdup (set.db_host);
+					free(hostname);
 					hostname = NULL;
 				}
 			} else if ((socket = strstr(hostname,":"))) {
@@ -266,6 +267,7 @@ void db_connect(int type, MYSQL *mysql) {
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
 				socket = strdup (set.db_host);
+				free(hostname);
 				hostname = NULL;
 			}
 		} else if ((socket = strstr(hostname,":"))) {
@@ -560,7 +562,7 @@ void db_release_connection(int type, int id) {
  */
 int append_hostrange(char *obuf, const char *colname) {
 	if (HOSTID_DEFINED(set.start_host_id) && HOSTID_DEFINED(set.end_host_id)) {
-		return sprintf(obuf, " AND %s BETWEEN %d AND %d",
+		return snprintf(obuf, BUFSIZE, " AND %s BETWEEN %d AND %d",
 			colname,
 			set.start_host_id,
 			set.end_host_id);
