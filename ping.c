@@ -34,6 +34,11 @@
 #include "common.h"
 #include "spine.h"
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#include <stdatomic.h>
+#define SPINE_ATOMIC_SEQ 1
+#endif
+
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
  *  \param host a pointer to the current host structure
@@ -257,7 +262,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
-	int    icmp_socket;
+	int    icmp_fd;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -274,7 +279,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	ssize_t    return_code;
 	fd_set socket_fds;
 
-	static   unsigned int seq = 0;
+#if defined(SPINE_ATOMIC_SEQ)
+	static _Atomic unsigned int seq = 0;
+#else
+	static volatile unsigned int seq = 0;
+#endif
 	struct   icmp  *icmp;
 	struct   ip    *ip;
 	struct   icmp  *pkt;
@@ -286,49 +295,21 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering ICMP Ping", host->id));
 	}
 
-	/* get ICMP socket */
-	retry_count = 0;
-	while (TRUE) {
-		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (hasCaps() != TRUE) {
-			thread_mutex_lock(LOCK_SETEUID);
-			if (seteuid(0) == -1) {
-				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-			}
-		}
-		#endif
-
-		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-			usleep(500000);
-			retry_count++;
-
-			if (retry_count > 4) {
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
-				snprintf(ping->ping_status, 50, "down");
-				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				if (hasCaps() != TRUE) {
-					if (seteuid(getuid()) == -1) {
-						SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-					}
-					thread_mutex_unlock(LOCK_SETEUID);
-				}
-				#endif
-
-				return HOST_DOWN;
-			}
-		} else {
-			break;
-		}
+	/* Use the pre-opened global ICMP socket (opened single-threaded in main
+	 * before any worker threads start, eliminating the seteuid race).
+	 * dup() gives each thread its own fd so select()/close() don't interfere. */
+	if (icmp_socket < 0) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: raw socket not available");
+		snprintf(ping->ping_status, 50, "down");
+		return HOST_DOWN;
 	}
 
-	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (hasCaps() != TRUE) {
-		if (seteuid(getuid()) == -1) {
-			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-		}
-		thread_mutex_unlock(LOCK_SETEUID);
+	icmp_fd = dup(icmp_socket);
+	if (icmp_fd < 0) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: socket dup failed: %s", strerror(errno));
+		snprintf(ping->ping_status, 50, "down");
+		return HOST_DOWN;
 	}
-	#endif
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -351,17 +332,19 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_code = 0;
 	icmp->icmp_id   = getpid() & 0xFFFF;
 
-	/* lock set/get the sequence and unlock */
-	thread_mutex_lock(LOCK_GHBN);
-	icmp->icmp_seq = seq++;
-	thread_mutex_unlock(LOCK_GHBN);
+	/* atomically increment the sequence counter */
+#if defined(SPINE_ATOMIC_SEQ)
+	icmp->icmp_seq = atomic_fetch_add(&seq, 1);
+#else
+	icmp->icmp_seq = __sync_fetch_and_add(&seq, 1);
+#endif
 
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
+	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -377,7 +360,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(packet);
-					close(icmp_socket);
+					close(icmp_fd);
 					return HOST_DOWN;
 				}
 
@@ -392,11 +375,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
 				/* set the socket send and receive timeout */
-				setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-				setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(icmp_fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(icmp_fd, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 				/* send packet to destination */
-				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
+				return_code = sendto(icmp_fd, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
 
 				fromlen = sizeof(fromname);
 
@@ -404,15 +387,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* reinitialize fd_set -- select(2) clears bits in place on return */
 				keep_listening:
 				FD_ZERO(&socket_fds);
-				if (icmp_socket >= FD_SETSIZE) {
-					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+				if (icmp_fd >= FD_SETSIZE) {
+					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_fd, FD_SETSIZE));
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
-					close(icmp_socket);
+					close(icmp_fd);
 					return HOST_DOWN;
 				}
-				FD_SET(icmp_socket,&socket_fds);
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				FD_SET(icmp_fd,&socket_fds);
+				return_code = select(icmp_fd + 1, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -422,9 +405,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				if (total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+					return_code = recvfrom(icmp_fd, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 					#else
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
+					return_code = recvfrom(icmp_fd, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
 					#endif
 
 					if (return_code < 0) {
@@ -453,24 +436,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(packet);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
-									thread_mutex_lock(LOCK_SETEUID);
-									if (seteuid(0) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-									}
-								}
-								#endif
-								close(icmp_socket);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
-									if (seteuid(getuid()) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-									}
-									thread_mutex_unlock(LOCK_SETEUID);
-								}
-								#endif
-
+								close(icmp_fd);
 								return HOST_UP;
 							} else {
 								/* received a response other than an echo reply */
@@ -504,48 +470,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
 			free(packet);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				thread_mutex_lock(LOCK_SETEUID);
-				if (seteuid(0) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-				}
-			}
-			#endif
-			close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				if (seteuid(getuid()) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-				}
-				thread_mutex_unlock(LOCK_SETEUID);
-			}
-			#endif
+			close(icmp_fd);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
 		free(packet);
-		if (icmp_socket != -1) {
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				thread_mutex_lock(LOCK_SETEUID);
-				if (seteuid(0) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-				}
-			}
-			#endif
-			close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				if (seteuid(getuid()) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-				}
-				thread_mutex_unlock(LOCK_SETEUID);
-			}
-			#endif
-		}
+		close(icmp_fd);
 		return HOST_DOWN;
 	}
 }
@@ -616,6 +548,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			/* initialize file descriptor to review for input/output */
 			FD_ZERO(&socket_fds);
+			if (udp_socket >= FD_SETSIZE) {
+				SPINE_LOG(("ERROR: Device[%i] UDP socket %d exceeds FD_SETSIZE %d", host->id, udp_socket, FD_SETSIZE));
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: fd exceeds FD_SETSIZE");
+				close(udp_socket);
+				return HOST_DOWN;
+			}
 			FD_SET(udp_socket,&socket_fds);
 
 			while (1) {
@@ -650,7 +589,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				wait_more:
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				return_code = select(udp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -997,7 +936,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	}
 
 	memset(stack, '\0', strlen(hostname)+1);
-	strncopy(stack, hostname, strlen(hostname));
+	strncopy(stack, hostname, strlen(hostname) + 1);
 	token = strtok(stack, ":");
 
 	if (token == NULL) {

@@ -53,6 +53,26 @@
 # define __attribute__(x)  /* NOTHING */
 #endif
 
+/* Function attribute macros for GCC/Clang compile-time checks.
+ * These expand to nothing on non-GCC/Clang compilers.
+ */
+#ifdef __GNUC__
+#define SPINE_ATTR_FORMAT(archetype, string_index, first_to_check) \
+	__attribute__((format(archetype, string_index, first_to_check)))
+#define SPINE_ATTR_NORETURN      __attribute__((noreturn))
+#define SPINE_ATTR_WARN_UNUSED   __attribute__((warn_unused_result))
+#define SPINE_ATTR_NONNULL(...)  __attribute__((nonnull(__VA_ARGS__)))
+#define SPINE_ATTR_PURE          __attribute__((pure))
+#define SPINE_ATTR_COLD          __attribute__((cold))
+#else
+#define SPINE_ATTR_FORMAT(archetype, string_index, first_to_check)
+#define SPINE_ATTR_NORETURN
+#define SPINE_ATTR_WARN_UNUSED
+#define SPINE_ATTR_NONNULL(...)
+#define SPINE_ATTR_PURE
+#define SPINE_ATTR_COLD
+#endif
+
 /* Windows does not support stderr.  Therefore, don't use it. */
 #ifdef __CYGWIN__
 #define DISABLE_STDERR
@@ -127,6 +147,19 @@
 #define SPINE_LOG_HIGH(format_and_args)   (void)(set.log_level >= POLLER_VERBOSITY_HIGH && spine_log format_and_args)
 #define SPINE_LOG_DEBUG(format_and_args)  (void)(set.log_level >= POLLER_VERBOSITY_DEBUG && spine_log format_and_args)
 #define SPINE_LOG_DEVDBG(format_and_args) (void)(set.log_level >= POLLER_VERBOSITY_DEVDBG && spine_log format_and_args)
+
+/* automated device-specific logging: enables full logging if device debug is enabled.
+ * Uses the double-paren convention matching SPINE_LOG et al.
+ * Usage: SPINE_LOG_DEV(host_id, DEBUG, ("fmt %d", arg))
+ */
+#define SPINE_LOG_DEV(host_id, level, format_and_args) \
+	do { \
+		if (is_debug_device(host_id)) { \
+			SPINE_LOG(format_and_args); \
+		} else { \
+			SPINE_LOG_ ## level(format_and_args); \
+		} \
+	} while (0)
 
 /* general constants */
 #define MAX_THREADS 100
@@ -634,5 +667,6 @@ extern sem_t  available_threads;
 extern sem_t  available_scripts;
 extern pool_t *db_pool_remote;
 extern pool_t *db_pool_local;
+extern int    icmp_socket;
 
 #endif /* not _SPINE_H_ */

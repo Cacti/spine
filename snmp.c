@@ -128,7 +128,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
 	int    priv_type;
-	int    zero_sensitive = 0;
+	int    zero_sensitive = 1;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
@@ -137,7 +137,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	len = strlen(set.snmp_clientaddr);
 	if (len > 0 && len <= SMALL_BUFSIZE) {
 		#if SNMP_LOCALNAME == 1
-		session.localname = strdup(set.snmp_clientaddr);
+		STRDUP_OR_DIE(session.localname, set.snmp_clientaddr, "snmp.c localname");
 		#endif
 	}
 
@@ -192,11 +192,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
-	session.peername    = strdup(hostnameport);
-	if (!session.peername) {
-		SPINE_LOG(("Device[%i] ERROR: Failed to allocate peername for '%s'", host_id, hostname));
-		return 0;
-	}
+	STRDUP_OR_DIE(session.peername, hostnameport, "snmp.c peername");
 	session.retries     = set.snmp_retries;
 	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
 
@@ -269,28 +265,36 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
 			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
 
-			// Auth Protocol Setup
+			/* Auth Protocol Setup - zero old credential before freeing */
 			if (Apsz && zero_sensitive) {
-				memset(Apsz, 0x0, strlen(Apsz));
+				volatile char *vp = (volatile char *)Apsz;
+				size_t slen = strlen(Apsz);
+				while (slen--) { *vp++ = 0; }
 			}
 
 			free(Apsz);
-			Apsz = strdup(snmp_password);
+			STRDUP_OR_DIE(Apsz, snmp_password, "snmp.c Apsz");
 
 			if (zero_sensitive) {
-	            memset(snmp_password, 0x0, strlen(snmp_password));
+				volatile char *vp = (volatile char *)snmp_password;
+				size_t slen = strlen(snmp_password);
+				while (slen--) { *vp++ = 0; }
 			}
 
-			// Privacy Protocol Setup
+			/* Privacy Protocol Setup - zero old credential before freeing */
 			if (Xpsz && zero_sensitive) {
-				memset(Xpsz, 0x0, strlen(Xpsz));
+				volatile char *vp = (volatile char *)Xpsz;
+				size_t slen = strlen(Xpsz);
+				while (slen--) { *vp++ = 0; }
 			}
 
 			free(Xpsz);
-			Xpsz = strdup(snmp_priv_passphrase);
+			STRDUP_OR_DIE(Xpsz, snmp_priv_passphrase, "snmp.c Xpsz");
 
 			if (zero_sensitive) {
-				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
+				volatile char *vp = (volatile char *)snmp_priv_passphrase;
+				size_t slen = strlen(snmp_priv_passphrase);
+				while (slen--) { *vp++ = 0; }
 			}
 
 			if (Apsz) {
@@ -376,6 +380,15 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
 	thread_mutex_unlock(LOCK_SNMP);
+
+	/* zero sensitive key material now that session has copied it */
+	{
+		volatile char *vp;
+		vp = (volatile char *)session.securityAuthKey;
+		memset((char *)vp, 0, sizeof(session.securityAuthKey));
+		vp = (volatile char *)session.securityPrivKey;
+		memset((char *)vp, 0, sizeof(session.securityPrivKey));
+	}
 
 	free(session.peername);
 	free(session.securityAuthProto);
@@ -961,14 +974,14 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 	UNUSED_PARAMETER(objidlen);
 
 	if (buf_len > 0) {
-		if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
+		buf = (u_char *) calloc(buf_len, 1);
+		if (buf != NULL) {
 			sprint_realloc_by_type(&buf, &buf_len, &out_len, 0, variable, NULL, NULL, NULL);
 			snprintf(obuf, buf_len, "%s", buf);
+			free(buf);
 		} else {
 			SET_UNDEFINED(obuf);
 		}
-
-		free(buf);
 	} else {
 		SET_UNDEFINED(obuf);
 	}
@@ -998,11 +1011,8 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 	} *name, *namep;
 
 	/* load up oids */
-	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
-	if (name == NULL) {
-		SPINE_LOG(("ERROR: Failed to allocate memory for SNMP OID name array"));
-		return;
-	}
+	CALLOC_OR_DIE(name, struct nameStruct, num_oids, sizeof(*name), "snmp.c name array");
+	namep = name;
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	for (i = 0; i < num_oids; i++) {
 		namep->name_len = MAX_OID_LEN;

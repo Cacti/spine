@@ -109,16 +109,16 @@ double total_time;
 config_t set;
 php_t	*php_processes = 0;
 char	config_paths[CONFIG_PATHS][BUFSIZE];
-int     *debug_devices;
 
 pool_t  *db_pool_local;
 pool_t  *db_pool_remote;
+int     icmp_socket = -1;
 
 poller_thread_t** details = NULL;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
-void poller_push_data_to_main(void);
+void poller_push_data_to_main();
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -235,6 +235,9 @@ int main(int argc, char *argv[]) {
 	if (geteuid() == 0) {
 		drop_root(getuid(), getgid());
 	}
+
+	/* disable core dumps to prevent credential leakage */
+	prctl(PR_SET_DUMPABLE, 0);
 	#endif /* HAVE_LCAP */
 
 	/* we must initialize snmp in the main thread */
@@ -245,13 +248,10 @@ int main(int argc, char *argv[]) {
 	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
-	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
+	CALLOC_OR_DIE(php_processes, php_t, MAX_PHP_SERVERS, sizeof(php_t), "spine.c php_processes");
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
-
-	/* create the array of debug devices */
-	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -340,7 +340,7 @@ int main(int argc, char *argv[]) {
 				die("ERROR: %s can only be used once", arg);
 			}
 
-			set.start_host_id = atoi(opt = getarg(opt, &argv));
+			set.start_host_id = (int)strtol(opt = getarg(opt, &argv), NULL, 10);
 
 			if (!HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: '%s=%s' is invalid first-host ID", arg, opt);
@@ -352,7 +352,7 @@ int main(int argc, char *argv[]) {
 				die("ERROR: %s can only be used once", arg);
 			}
 
-			set.end_host_id = atoi(opt = getarg(opt, &argv));
+			set.end_host_id = (int)strtol(opt = getarg(opt, &argv), NULL, 10);
 
 			if (!HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: '%s=%s' is invalid last-host ID", arg, opt);
@@ -360,11 +360,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRIMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
-			set.poller_id = atoi(getarg(opt, &argv));
+			set.poller_id = (int)strtol(getarg(opt, &argv), NULL, 10);
 		}
 
 		else if (STRMATCH(arg, "-t") || STRIMATCH(arg, "--threads")) {
-			set.threads = atoi(getarg(opt, &argv));
+			set.threads = (int)strtol(getarg(opt, &argv), NULL, 10);
 			set.threads_set = TRUE;
 		}
 
@@ -385,18 +385,18 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
-			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+			char *hostlist = getarg(opt, &argv);
+			const char *p = hostlist;
 
-			/* Validate host_id_list contains only digits and commas */
-			{
-				const char *p = set.host_id_list;
-				while (*p) {
-					if (!isdigit((unsigned char)*p) && *p != ',' && *p != ' ') {
-						die("ERROR: --hostlist contains invalid characters. Only digits and commas are allowed.");
-					}
-					p++;
+			/* safety: verify that the hostlist only contains numbers and commas */
+			while (*p) {
+				if (!isdigit(*p) && *p != ',') {
+					die("ERROR: --hostlist must be a comma-separated list of numeric IDs (e.g. 1,2,3)");
 				}
+				p++;
 			}
+
+			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", hostlist);
 		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
@@ -419,10 +419,10 @@ int main(int argc, char *argv[]) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
-			if (*value) {
+			if (value != NULL) {
 				*value++ = '\0';
 			} else {
-				die("ERROR: -O requires setting:value");
+				die("ERROR: -O requires setting:value (e.g. -O log_destination:STDOUT)");
 			}
 
 			set_option(setting, value);
@@ -433,7 +433,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRIMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
-			conf_file = strdup(getarg(opt, &argv));
+			STRDUP_OR_DIE(conf_file, getarg(opt, &argv), "spine.c conf_file");
 		}
 
 		else if (STRIMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
@@ -449,11 +449,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
-			set.start_host_id = atoi(arg);
+			set.start_host_id = (int)strtol(arg, NULL, 10);
 		}
 
 		else if (!HOSTID_DEFINED(set.end_host_id) && all_digits(arg)) {
-			set.end_host_id = atoi(arg);
+			set.end_host_id = (int)strtol(arg, NULL, 10);
 		}
 
 		else {
@@ -531,18 +531,13 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		int debug_idx = 0;
 		char *token;
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
-		while(token && debug_idx < MAX_DEBUG_DEVICES - 1) {
-			debug_devices[debug_idx]   = atoi(token);
-			debug_devices[debug_idx+1] = '\0';
+		while(token) {
+			add_debug_device((int)strtol(token, NULL, 10));
 			token = strtok(NULL, ",");
-			debug_idx++;
 		}
-	} else {
-		debug_devices[0] = '\0';
 	}
 
 	/* initialize mysql objects for threads */
@@ -552,7 +547,7 @@ int main(int argc, char *argv[]) {
 	db_connect(LOCAL, &mysql);
 
 	/* setup local connection pool for hosts */
-	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	CALLOC_OR_DIE(db_pool_local, pool_t, set.threads, sizeof(pool_t), "spine.c db_pool_local");
 	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
@@ -560,7 +555,7 @@ int main(int argc, char *argv[]) {
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
-		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		CALLOC_OR_DIE(db_pool_remote, pool_t, set.threads, sizeof(pool_t), "spine.c db_pool_remote");
 		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;
@@ -644,27 +639,19 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* obtain the list of hosts to poll */
-	{
-		int remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " WHERE disabled = ''");
+	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+	qp += sprintf(qp, " WHERE disabled = ''");
 
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
+	qp += sprintf(qp, " AND availability_method != %d", AVAIL_STREAM);
 
-		if (!strlen(set.host_id_list)) {
-			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
-		} else {
-			remaining = MEGA_BUFSIZE - (qp - querybuf);
-			qp += snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
-		}
-
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " ORDER BY picount DESC");
+	if (!strlen(set.host_id_list)) {
+		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
+	} else {
+		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
 	}
+
+	qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
+	qp += sprintf(qp, " ORDER BY picount DESC");
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
 	result = db_query(&mysql, LOCAL, querybuf);
@@ -727,6 +714,29 @@ int main(int argc, char *argv[]) {
 	/* initialize thread initialization semaphore */
 	sem_init(&thread_init_sem, 0, 1);
 
+	/* Open the ICMP raw socket while still single-threaded and privileged.
+	 * seteuid(0) is process-wide; doing it here avoids the race where
+	 * multiple threads could inherit euid=0 while one holds LOCK_SETEUID. */
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	if (hasCaps() != TRUE) {
+		if (seteuid(0) == -1) {
+			SPINE_LOG(("WARNING: Unable to obtain root privileges for ICMP socket."));
+		}
+	}
+	#endif
+	icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	if (hasCaps() != TRUE) {
+		if (seteuid(getuid()) == -1) {
+			SPINE_LOG(("WARNING: Unable to drop root privileges after ICMP socket open."));
+		}
+	}
+	#endif
+	if (icmp_socket < 0) {
+		SPINE_LOG(("WARNING: Unable to open ICMP raw socket: %s. ICMP ping disabled.", strerror(errno)));
+		set.icmp_avail = FALSE;
+	}
+
 	/* specify the point of timeout for timedwait semaphores */
 	//until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
 	//until_spec.tv_nsec = 0;
@@ -766,8 +776,8 @@ int main(int argc, char *argv[]) {
 
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
-			host_id         = atoi(mysql_row[0]);
-			device_threads  = atoi(mysql_row[1]);
+			host_id         = (int)strtol(mysql_row[0], NULL, 10);
+			device_threads  = (int)strtol(mysql_row[1], NULL, 10);
 			current_thread  = 1;
 
 			if (device_threads < 1) {
@@ -788,7 +798,7 @@ int main(int argc, char *argv[]) {
 			tresult   = db_query(&mysql, LOCAL, querybuf);
 			mysql_row = mysql_fetch_row(tresult);
 
-			total_items = atoi(mysql_row[0]);
+			total_items = (int)strtol(mysql_row[0], NULL, 10);
 			db_free_result(tresult);
 
 			if (total_items && total_items < device_threads) {
@@ -812,14 +822,14 @@ int main(int argc, char *argv[]) {
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
-				items_per_thread = atoi(mysql_row[0]);
+				items_per_thread = (int)strtol(mysql_row[0], NULL, 10);
 
 				db_free_result(tresult);
 
-				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
-				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
+				sprintf(host_time, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
@@ -827,11 +837,11 @@ int main(int argc, char *argv[]) {
 			tresult   = db_query(&mysql, LOCAL, querybuf);
 			mysql_row = mysql_fetch_row(tresult);
 
-			items_per_thread = atoi(mysql_row[0]);
+			items_per_thread = (int)strtol(mysql_row[0], NULL, 10);
 
 			db_free_result(tresult);
 
-			snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
+			sprintf(host_time, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 

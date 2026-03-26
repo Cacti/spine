@@ -86,7 +86,7 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
-		result_string = strdup("U");
+		STRDUP_OR_DIE(result_string, "U", "php.c result_string");
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
 
 		php_close(php_process);
@@ -315,7 +315,8 @@ int php_init(int php_process) {
 	int num_processes;
 	int i;
 	int retry_count = 0;
-	char *command = strdup("INIT");
+	char *command;
+	STRDUP_OR_DIE(command, "INIT", "php.c command");
 
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
@@ -418,7 +419,7 @@ int php_init(int php_process) {
 				if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
 					retry_count++;
 					#ifndef SOLAR_THREAD
-					usleep(50000);
+					usleep(get_jitter_sleep(retry_count, 50));
 					#endif
 					continue;
 				}

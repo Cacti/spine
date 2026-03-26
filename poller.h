@@ -36,8 +36,13 @@ extern void child_cleanup(void *arg);
 extern void child_cleanup_thread(void *arg);
 extern void child_cleanup_script(void *arg);
 extern void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double);
-extern char *exec_poll(host_t *current_host, char *command, int id, const char *type);
-extern void get_system_information(host_t *host, MYSQL *mysql, int system);
-extern int is_multipart_output(char *result);
-extern int validate_result(char *result);
+extern char *exec_poll(host_t *current_host, char *command, int id, const char *type)
+	SPINE_ATTR_NONNULL(1, 2)
+	SPINE_ATTR_WARN_UNUSED;
+extern void get_system_information(host_t *host, MYSQL *mysql, int system)
+	SPINE_ATTR_NONNULL(1, 2);
+extern int is_multipart_output(char *result)
+	SPINE_ATTR_PURE;
+extern int validate_result(char *result)
+	SPINE_ATTR_PURE;
 extern void buffer_output_errors(char * error_string, int * buf_size, int * buf_errors, int device_id, int thread_id, int local_data_id, bool flush);
