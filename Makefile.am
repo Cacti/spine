@@ -31,7 +31,7 @@ bin_PROGRAMS = spine
 
 man_MANS = spine.1
 
-EXTRA_DIST = spine.1 uthash.h
+EXTRA_DIST = spine.1 uthash.h spine_sem.h
 
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
