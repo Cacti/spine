@@ -404,8 +404,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* reinitialize fd_set -- select(2) clears bits in place on return */
 				keep_listening:
 				FD_ZERO(&socket_fds);
+				if (icmp_socket >= FD_SETSIZE) {
+					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+					snprintf(ping->ping_status, 50, "down");
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
+					close(icmp_socket);
+					return HOST_DOWN;
+				}
 				FD_SET(icmp_socket,&socket_fds);
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();

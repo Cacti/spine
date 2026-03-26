@@ -123,6 +123,9 @@ static void	close_cleanup(void *);
  *
  *------------------------------------------------------------------------------
  */
+/* WARNING: command is passed to /bin/sh -c without shell escaping.
+ * The caller MUST ensure command originates from a trusted source
+ * (the Cacti database). Do not pass user-controlled input directly. */
 int nft_popen(const char * command, const char * type) {
 	struct pid *cur;
 	struct pid *p;

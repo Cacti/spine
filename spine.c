@@ -386,6 +386,17 @@ int main(int argc, char *argv[]) {
 
 		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+
+			/* Validate host_id_list contains only digits and commas */
+			{
+				const char *p = set.host_id_list;
+				while (*p) {
+					if (!isdigit((unsigned char)*p) && *p != ',' && *p != ' ') {
+						die("ERROR: --hostlist contains invalid characters. Only digits and commas are allowed.");
+					}
+					p++;
+				}
+			}
 		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
@@ -633,19 +644,27 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
-	qp += sprintf(qp, " WHERE disabled = ''");
+	{
+		int remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " WHERE disabled = ''");
 
-	qp += sprintf(qp, " AND availability_method != %d", AVAIL_STREAM);
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
 
-	if (!strlen(set.host_id_list)) {
-		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
-	} else {
-		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
+		if (!strlen(set.host_id_list)) {
+			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
+		} else {
+			remaining = MEGA_BUFSIZE - (qp - querybuf);
+			qp += snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
+		}
+
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " ORDER BY picount DESC");
 	}
-
-	qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
-	qp += sprintf(qp, " ORDER BY picount DESC");
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
 	result = db_query(&mysql, LOCAL, querybuf);
@@ -797,10 +816,10 @@ int main(int argc, char *argv[]) {
 
 				db_free_result(tresult);
 
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
@@ -812,7 +831,7 @@ int main(int argc, char *argv[]) {
 
 			db_free_result(tresult);
 
-			sprintf(host_time, "%lu", (unsigned long) time(NULL));
+			snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 
@@ -1111,6 +1130,15 @@ int main(int argc, char *argv[]) {
 		if (!set.stdout_notty) {
 			fprintf(stdout, "Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
+	}
+
+	/* zero sensitive credentials before exit */
+	{
+		volatile char *vp;
+		vp = (volatile char *)set.db_pass;
+		memset((char *)vp, 0, sizeof(set.db_pass));
+		vp = (volatile char *)set.rdb_pass;
+		memset((char *)vp, 0, sizeof(set.rdb_pass));
 	}
 
 	/* uninstall the spine signal handler */
