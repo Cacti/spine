@@ -87,7 +87,7 @@
 #include <math.h>
 #include <mysql.h>
 #include <netdb.h>
-#include <semaphore.h>
+#include "spine_sem.h"
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>

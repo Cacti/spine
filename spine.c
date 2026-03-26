@@ -101,8 +101,8 @@
 /* Global Variables */
 int entries = 0;
 int num_hosts = 0;
-sem_t available_threads;
-sem_t available_scripts;
+spine_sem_t available_threads;
+spine_sem_t available_scripts;
 double start_time;
 double total_time;
 
@@ -202,7 +202,7 @@ int main(int argc, char *argv[]) {
 	double host_time_double = 0;
 	int items_per_thread = 0;
 	int device_threads;
-	sem_t thread_init_sem;
+	spine_sem_t thread_init_sem;
 	int a_threads_value;
 	//struct timespec until_spec;
 
@@ -719,19 +719,19 @@ int main(int argc, char *argv[]) {
 	init_mutexes();
 
 	/* initialize available_threads semaphore */
-	sem_init(&available_threads, 0, set.threads);
+	spine_sem_init(&available_threads, set.threads);
 
 	/* initialize available_scripts semaphore */
-	sem_init(&available_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
+	spine_sem_init(&available_scripts, MAX_SIMULTANEOUS_SCRIPTS);
 
 	/* initialize thread initialization semaphore */
-	sem_init(&thread_init_sem, 0, 1);
+	spine_sem_init(&thread_init_sem, 1);
 
 	/* specify the point of timeout for timedwait semaphores */
 	//until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
 	//until_spec.tv_nsec = 0;
 
-	sem_getvalue(&available_threads, &a_threads_value);
+	spine_sem_getvalue(&available_threads, &a_threads_value);
 	SPINE_LOG_HIGH(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
@@ -864,7 +864,7 @@ int main(int argc, char *argv[]) {
 		spine_timeout = FALSE;
 
 		while (TRUE) {
-			sem_err = sem_trywait(&available_threads);
+			sem_err = spine_sem_trywait(&available_threads);
 
 			if (sem_err == 0) {
 				/* acquired a thread */
@@ -906,7 +906,7 @@ int main(int argc, char *argv[]) {
 		loop_count = 0;
 
 		while (!spine_timeout) {
-			sem_err = sem_trywait(&thread_init_sem);
+			sem_err = spine_sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
 				// Acquired a thread
@@ -960,10 +960,10 @@ int main(int argc, char *argv[]) {
 					device_counter++;
 				}
 
-				sem_getvalue(&available_threads, &a_threads_value);
+				spine_sem_getvalue(&available_threads, &a_threads_value);
 				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
 
-				sem_post(&thread_init_sem);
+				spine_sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" host_threads = %d, host_data_ids = %d, complete = %d",
@@ -984,12 +984,12 @@ int main(int argc, char *argv[]) {
 			/* Restore thread initialization semaphore if thread creation failed */
 			if (thread_status) {
 				thread_mutex_unlock(LOCK_HOST_TIME);
-				sem_post(&thread_init_sem);
+				spine_sem_post(&thread_init_sem);
 			}
 		}
 	}
 
-	sem_getvalue(&available_threads, &a_threads_value);
+	spine_sem_getvalue(&available_threads, &a_threads_value);
 
 	/* wait for all threads to 'complete'
  	 * using the mutex here as the semaphore will
@@ -1004,7 +1004,7 @@ int main(int argc, char *argv[]) {
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
 		usleep(500000);
-		sem_getvalue(&available_threads, &a_threads_value);
+		spine_sem_getvalue(&available_threads, &a_threads_value);
 	}
 
 	threads_final = set.threads - a_threads_value;
