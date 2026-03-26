@@ -60,6 +60,13 @@ EXTRA_DIST = \
 
 CLEANFILES = *~
 
+# Unit tests (standalone, no spine build required)
+TESTS = tests/unit/test_sql_buffer
+check_PROGRAMS = tests/unit/test_sql_buffer
+tests_unit_test_sql_buffer_SOURCES = tests/unit/test_sql_buffer.c
+tests_unit_test_sql_buffer_CFLAGS = -I$(top_srcdir) $(CMOCKA_CFLAGS)
+tests_unit_test_sql_buffer_LDADD = $(CMOCKA_LIBS)
+
 # Docker targets
 .PHONY: docker docker-dev verify cppcheck check-unit
 

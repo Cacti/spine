@@ -53,6 +53,28 @@ extern int  db_reconnect(MYSQL *mysql, int type, int error, const char *location
 extern int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column)
 	SPINE_ATTR_NONNULL(1, 3, 4);
 
+typedef struct {
+	char   *buffer;
+	size_t  capacity;
+	size_t  length;
+} sql_buffer_t;
+
+/* Conservative fail-safe for MariaDB/MySQL max_allowed_packet constraints */
+#define SQL_MAX_BUFFER_CAPACITY (8 * 1024 * 1024)
+
+extern int  sql_buffer_init(sql_buffer_t *sb, size_t initial_capacity)
+	SPINE_ATTR_NONNULL(1) SPINE_ATTR_WARN_UNUSED;
+extern int  sql_buffer_append(sql_buffer_t *sb, const char *format, ...)
+	SPINE_ATTR_NONNULL(1, 2) SPINE_ATTR_WARN_UNUSED;
+extern void sql_buffer_reset(sql_buffer_t *sb)
+	SPINE_ATTR_NONNULL(1);
+extern void sql_buffer_truncate(sql_buffer_t *sb, size_t length)
+	SPINE_ATTR_NONNULL(1);
+extern void sql_buffer_free(sql_buffer_t *sb);
+
+extern char *db_fetch_cell_dup(MYSQL_RES *result, int col_index)
+	SPINE_ATTR_WARN_UNUSED;
+
 extern int append_hostrange(char *obuf, const char *colname)
 	SPINE_ATTR_NONNULL(1, 2);
 

@@ -66,22 +66,20 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 				if (error == 2013 || error == 2006) {
 					if (errno != EINTR) {
 						db_reconnect(mysql, type, error, "db_insert");
-
-						error_count++;
-
-						if (error_count > 30) {
-							die("FATAL: Too many Reconnect Attempts!");
-						}
-
-						continue;
-					} else {
-						usleep(50000);
-						continue;
 					}
+
+					error_count++;
+
+					if (error_count > 30) {
+						die("FATAL: Too many Reconnect Attempts!");
+					}
+
+					usleep(get_jitter_sleep(error_count, 50));
+					continue;
 				}
 
 				if ((error == 1213) || (error == 1205)) {
-					usleep(50000);
+					usleep(get_jitter_sleep(error_count, 50));
 					error_count++;
 
 					if (error_count > 30) {
@@ -173,24 +171,21 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			if (error == 2013 || error == 2006) {
 				if (errno != EINTR) {
 					db_reconnect(mysql, type, error, "db_query");
-
-					error_count++;
-
-					if (error_count > 30) {
-						die("FATAL: Too many Reconnect Attempts!");
-					}
-
-					continue;
-				} else {
-					usleep(50000);
-					continue;
 				}
+
+				error_count++;
+
+				if (error_count > 30) {
+					die("FATAL: Too many Reconnect Attempts!");
+				}
+
+				usleep(get_jitter_sleep(error_count, 50));
+				continue;
 			}
 
 			if (error == 1213 || error == 1205) {
-				usleep(50000);
+				usleep(get_jitter_sleep(error_count, 50));
 				error_count++;
-
 				if (error_count > 30) {
 					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
 					exit(1);
@@ -247,7 +242,7 @@ void db_connect(int type, MYSQL *mysql) {
 	 */
 	if (set.poller_id > 1) {
 		if (type == LOCAL) {
-			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
+			STRDUP_OR_DIE(hostname, set.db_host, "db_host");
 
 			if (stat(hostname, &socket_stat) == 0) {
 				if (socket_stat.st_mode & S_IFSOCK) {
@@ -259,10 +254,10 @@ void db_connect(int type, MYSQL *mysql) {
 				*socket++ = 0x0;
 			}
 		} else {
-			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host")
+			STRDUP_OR_DIE(hostname, set.rdb_host, "rdb_host");
 		}
 	} else {
-		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
+		STRDUP_OR_DIE(hostname, set.db_host, "db_host");
 
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
@@ -346,7 +341,7 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 
 			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
-				usleep(5000);
+				usleep(get_jitter_sleep(attempts, 5));
 				tries++;
 				success = FALSE;
 			} else if (error == 2002) {
@@ -356,7 +351,7 @@ void db_connect(int type, MYSQL *mysql) {
 			} else if (error != 1049 && error != 2005 && error != 1045) {
 				printf("Database: Connection Failed: Error:'%d', Message:'%s'\n", error, mysql_error(mysql));
 				success = FALSE;
-				usleep(50000);
+				usleep(get_jitter_sleep(attempts, 50));
 			} else {
 				tries   = 0;
 				success = FALSE;
@@ -585,19 +580,28 @@ int append_hostrange(char *obuf, const char *colname) {
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	char input_trimmed[DBL_BUFSIZE];
-	int  max_escaped_input_size;
-	int  trim_limit;
-	int  input_cap;
+	int    max_escaped_input_size;
+	int    input_cap;
+	size_t trim_limit;
 
-	if (input == NULL) return;
+	if (output == NULL) return;
+
+	/* ensure the output buffer is initialized to an empty string if input is NULL
+	 * to avoid using stale data from previous calls in bulk query buffers */
+	if (input == NULL || max_size < 1) {
+		if (output && max_size > 0) output[0] = '\0';
+		return;
+	}
 
 	max_escaped_input_size = (strlen(input) * 2) + 1;
-	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
 
 	/* always cap input to (max_size / 2) - 1 to prevent output overflow */
-	input_cap = (trim_limit / 2) - 1;
+	trim_limit = (size_t)((max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE);
+	input_cap = (int)(trim_limit / 2) - 1;
 	if (input_cap < 1) input_cap = 1;
 
+	/* mysql_real_escape_string requires up to 2n+1 bytes.
+	 * cap input so the escaped result always fits in max_size. */
 	if (max_escaped_input_size > max_size) {
 		snprintf(input_trimmed, input_cap, "%s", input);
 	} else {
@@ -607,17 +611,37 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
 }
 
+/*! \fn void db_free_result(MYSQL_RES *result)
+ *  \brief safely frees a MySQL result set, handling NULL
+ */
 void db_free_result(MYSQL_RES *result) {
-	mysql_free_result(result);
+	if (result != NULL) {
+		mysql_free_result(result);
+	}
 }
 
+/*! \fn int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column)
+ *  \brief checks whether a column exists in a table using SHOW COLUMNS
+ *  \param mysql the database connection
+ *  \param type  LOCAL or REMOTE database
+ *  \param table the table name (alphanumeric and underscore only)
+ *  \param column the column name to check
+ *  \return TRUE if the column exists, FALSE otherwise
+ */
 int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column) {
 	char       query_frag[BUFSIZE];
 	MYSQL_RES *result;
 	int        exists;
 	const char *p;
 
-	/* validate column name: only alphanumeric and underscore allowed */
+	/* validate identifiers: only alphanumeric and underscore allowed to prevent SQL injection */
+	for (p = table; *p; p++) {
+		if (!isalnum((unsigned char)*p) && *p != '_') {
+			SPINE_LOG(("ERROR: db_column_exists: invalid table name '%s'", table));
+			return FALSE;
+		}
+	}
+
 	for (p = column; *p; p++) {
 		if (!isalnum((unsigned char)*p) && *p != '_') {
 			SPINE_LOG(("ERROR: db_column_exists: invalid column name '%s'", column));
@@ -642,3 +666,210 @@ int db_column_exists(MYSQL *mysql, int type, const char *table, const char *colu
 	db_free_result(result);
 	return exists;
 }
+
+/*! \fn int sql_buffer_init(sql_buffer_t *sb, size_t initial_capacity)
+ *  \brief Initializes a sql_buffer_t structure.
+ * @sb:     The sql_buffer_t structure to initialize.
+ * @initial_capacity: Initial allocation size.
+ */
+int sql_buffer_init(sql_buffer_t *sb, size_t initial_capacity) {
+	if (sb == NULL || initial_capacity == 0 || initial_capacity > SQL_MAX_BUFFER_CAPACITY) {
+		SPINE_LOG(("ERROR: sql_buffer_init invalid capacity request '%zu' (max '%d')",
+			initial_capacity, SQL_MAX_BUFFER_CAPACITY));
+		return -1;
+	}
+
+	sb->buffer = (char *)malloc(initial_capacity);
+	if (sb->buffer == NULL) {
+		SPINE_LOG(("ERROR: sql_buffer_init failed to allocate '%zu' bytes", initial_capacity));
+		sb->capacity = 0;
+		sb->length   = 0;
+		return -1;
+	}
+
+	sb->capacity  = initial_capacity;
+	sb->length    = 0;
+	sb->buffer[0] = '\0';
+
+	return 0;
+}
+
+/*! \fn int sql_buffer_append(sql_buffer_t *sb, const char *format, ...)
+ *  \brief Appends a formatted string to the SQL buffer.
+ * @sb:     The sql_buffer_t structure.
+ * @format: The printf-style format string.
+ * @...:    Arguments for the format string.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+int sql_buffer_append(sql_buffer_t *sb, const char *format, ...) {
+	va_list args;
+	va_list args_copy;
+	size_t  available;
+	size_t  required_capacity;
+	size_t  new_capacity;
+	char    *new_buffer;
+	int     written;
+
+	/* safety: ensure the buffer is actually initialized before attempting to append */
+	if (sb == NULL || sb->buffer == NULL || format == NULL) {
+		SPINE_LOG(("ERROR: sql_buffer_append called with invalid arguments"));
+		return -1;
+	}
+
+	if (sb->length >= sb->capacity) {
+		SPINE_LOG(("ERROR: sql_buffer_append detected invalid state (length '%zu' >= capacity '%zu')",
+			sb->length, sb->capacity));
+		return -1;
+	}
+
+	available = sb->capacity - sb->length;
+
+	va_start(args, format);
+	va_copy(args_copy, args);
+
+	/* Fast path: attempt to write into existing capacity first. */
+	written = vsnprintf(sb->buffer + sb->length, available, format, args);
+	va_end(args);
+
+	if (written < 0) {
+		sb->buffer[sb->length] = '\0';
+		SPINE_LOG(("ERROR: sql_buffer_append failed during format operation"));
+		va_end(args_copy);
+		return -1;
+	}
+
+	if ((size_t)written >= available) {
+		required_capacity = sb->length + (size_t)written + 1;
+
+		if (required_capacity > SQL_MAX_BUFFER_CAPACITY) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append exceeded SQL_MAX_BUFFER_CAPACITY '%d' (required '%zu')",
+				SQL_MAX_BUFFER_CAPACITY, required_capacity));
+			va_end(args_copy);
+			return -1;
+		}
+
+		new_capacity = sb->capacity;
+		if (new_capacity == 0) new_capacity = 1024;
+		while (new_capacity < required_capacity) {
+			if (new_capacity >= SQL_MAX_BUFFER_CAPACITY / 2) {
+				new_capacity = SQL_MAX_BUFFER_CAPACITY;
+				break;
+			}
+
+			new_capacity *= 2;
+		}
+
+		if (new_capacity < required_capacity) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append could not reach required capacity '%zu' (max '%d')",
+				required_capacity, SQL_MAX_BUFFER_CAPACITY));
+			va_end(args_copy);
+			return -1;
+		}
+
+		new_buffer = (char *)realloc(sb->buffer, new_capacity);
+		if (new_buffer == NULL) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append failed to reallocate buffer to '%zu' bytes", new_capacity));
+			va_end(args_copy);
+			return -1;
+		}
+
+		sb->buffer   = new_buffer;
+		sb->capacity = new_capacity;
+
+		/* Slow path: retry formatting once capacity is guaranteed. */
+		written = vsnprintf(sb->buffer + sb->length, sb->capacity - sb->length, format, args_copy);
+		if (written < 0 || (size_t)written >= (sb->capacity - sb->length)) {
+			sb->buffer[sb->length] = '\0';
+			SPINE_LOG(("ERROR: sql_buffer_append failed after reallocation"));
+			va_end(args_copy);
+			return -1;
+		}
+	}
+	va_end(args_copy);
+
+	sb->length += (size_t)written;
+
+	return 0;
+}
+
+/*! \fn void sql_buffer_reset(sql_buffer_t *sb)
+ *  \brief Resets the SQL buffer pointer to the beginning.
+ * @sb: The sql_buffer_t structure.
+ */
+void sql_buffer_reset(sql_buffer_t *sb) {
+	if (sb == NULL || sb->buffer == NULL) {
+		return;
+	}
+
+	sb->length = 0;
+	if (sb->capacity > 0) {
+		sb->buffer[0] = '\0';
+	}
+}
+
+/*! \fn void sql_buffer_truncate(sql_buffer_t *sb, size_t length)
+ *  \brief Truncates the SQL buffer to a previous length.
+ * @sb: The sql_buffer_t structure.
+ * @length: Target length.
+ */
+void sql_buffer_truncate(sql_buffer_t *sb, size_t length) {
+	if (sb == NULL || sb->buffer == NULL || length > sb->length) {
+		return;
+	}
+
+	sb->length = length;
+	sb->buffer[length] = '\0';
+}
+
+/*! \fn void sql_buffer_free(sql_buffer_t *sb)
+ *  \brief Releases SQL buffer memory.
+ * @sb: The sql_buffer_t structure.
+ */
+void sql_buffer_free(sql_buffer_t *sb) {
+	if (sb == NULL) {
+		return;
+	}
+
+	if (sb->buffer != NULL) {
+		free(sb->buffer);
+	}
+
+	sb->buffer   = NULL;
+	sb->capacity = 0;
+	sb->length   = 0;
+}
+
+/*! \fn char *db_fetch_cell_dup(MYSQL_RES *result, int col_index)
+ *  \brief fetches the first row's specified column and duplicates it.
+ * @result:       The MYSQL_RES result set to process.
+ * @col_index:    The 0-based column index to fetch.
+ *
+ * This function handles all NULL checks and ensures the result set is freed.
+ * It always returns a valid strdup'd string (or empty string) that the caller must free.
+ */
+char *db_fetch_cell_dup(MYSQL_RES *result, int col_index) {
+	char *retval = NULL;
+	MYSQL_ROW mysql_row;
+
+	if (result != 0) {
+		if (mysql_num_rows(result) > 0) {
+			mysql_row = mysql_fetch_row(result);
+
+			if (mysql_row != NULL && col_index >= 0 && col_index < (int)mysql_num_fields(result) && mysql_row[col_index] != NULL) {
+				STRDUP_OR_DIE(retval, mysql_row[col_index], "sql.c db_fetch_cell_dup");
+			}
+		}
+		db_free_result(result);
+	}
+
+	if (retval == NULL) {
+		STRDUP_OR_DIE(retval, "", "sql.c db_fetch_cell_dup fallback");
+	}
+
+	return retval;
+}
+

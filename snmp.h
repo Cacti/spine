@@ -51,3 +51,6 @@ extern int snmp_count(host_t *current_host, const char *snmp_oid)
 extern void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids)
 	SPINE_ATTR_NONNULL(1, 2, 3);
 extern void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable);
+
+/* macro to safely cleanup an snmp session and null out the pointer */
+#define SPINE_SNMP_FREE(s) do { if ((s) != NULL) { snmp_host_cleanup(s); (s) = NULL; } } while (0)

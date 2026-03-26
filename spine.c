@@ -109,7 +109,6 @@ double total_time;
 config_t set;
 php_t	*php_processes = 0;
 char	config_paths[CONFIG_PATHS][BUFSIZE];
-int     *debug_devices;
 
 pool_t  *db_pool_local;
 pool_t  *db_pool_remote;
@@ -119,7 +118,7 @@ poller_thread_t** details = NULL;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
-void poller_push_data_to_main(void);
+void poller_push_data_to_main();
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -249,13 +248,10 @@ int main(int argc, char *argv[]) {
 	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
-	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
+	CALLOC_OR_DIE(php_processes, php_t, MAX_PHP_SERVERS, sizeof(php_t), "spine.c php_processes");
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
-
-	/* create the array of debug devices */
-	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -389,18 +385,18 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
-			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+			char *hostlist = getarg(opt, &argv);
+			const char *p = hostlist;
 
-			/* Validate host_id_list contains only digits and commas */
-			{
-				const char *p = set.host_id_list;
-				while (*p) {
-					if (!isdigit((unsigned char)*p) && *p != ',' && *p != ' ') {
-						die("ERROR: --hostlist contains invalid characters. Only digits and commas are allowed.");
-					}
-					p++;
+			/* safety: verify that the hostlist only contains numbers and commas */
+			while (*p) {
+				if (!isdigit(*p) && *p != ',') {
+					die("ERROR: --hostlist must be a comma-separated list of numeric IDs (e.g. 1,2,3)");
 				}
+				p++;
 			}
+
+			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", hostlist);
 		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
@@ -423,10 +419,10 @@ int main(int argc, char *argv[]) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
-			if (*value) {
+			if (value != NULL) {
 				*value++ = '\0';
 			} else {
-				die("ERROR: -O requires setting:value");
+				die("ERROR: -O requires setting:value (e.g. -O log_destination:STDOUT)");
 			}
 
 			set_option(setting, value);
@@ -437,7 +433,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRIMATCH(arg, "-C") || STRMATCH(arg, "--conf")) {
-			conf_file = strdup(getarg(opt, &argv));
+			STRDUP_OR_DIE(conf_file, getarg(opt, &argv), "spine.c conf_file");
 		}
 
 		else if (STRIMATCH(arg, "-S") || STRMATCH(arg, "--stdout")) {
@@ -535,18 +531,13 @@ int main(int argc, char *argv[]) {
 
 	/* tokenize the debug devices */
 	if (strlen(set.selective_device_debug)) {
-		int debug_idx = 0;
 		char *token;
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
-		while(token && debug_idx < MAX_DEBUG_DEVICES - 1) {
-			debug_devices[debug_idx]   = (int)strtol(token, NULL, 10);
-			debug_devices[debug_idx+1] = '\0';
+		while(token) {
+			add_debug_device((int)strtol(token, NULL, 10));
 			token = strtok(NULL, ",");
-			debug_idx++;
 		}
-	} else {
-		debug_devices[0] = '\0';
 	}
 
 	/* initialize mysql objects for threads */
@@ -556,7 +547,7 @@ int main(int argc, char *argv[]) {
 	db_connect(LOCAL, &mysql);
 
 	/* setup local connection pool for hosts */
-	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	CALLOC_OR_DIE(db_pool_local, pool_t, set.threads, sizeof(pool_t), "spine.c db_pool_local");
 	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
@@ -564,7 +555,7 @@ int main(int argc, char *argv[]) {
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
-		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		CALLOC_OR_DIE(db_pool_remote, pool_t, set.threads, sizeof(pool_t), "spine.c db_pool_remote");
 		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;

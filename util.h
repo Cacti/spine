@@ -86,11 +86,29 @@ const char *regex_replace(const char *exp, const char *value);
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))
 #define USTRNCOPY(dst, src) ustrncopy((dst), (src), sizeof(dst))
 
-/* macro to duplicate string and die if fails */
-#define STRDUP_OR_DIE(dst, src, reason)	\
-	if ((dst = strdup(src)) == NULL) {\
-		die("FATAL: malloc() failed during strdup() for %s", reason);\
-	}\
+/* memory allocation macros that enforce a fail-fast strategy: if an allocation
+ * fails, the process terminates immediately with a diagnostic message to prevent
+ * undefined behavior or complex error-path handling in performance-critical loops */
+#define STRDUP_OR_DIE(dst, src, reason) \
+	do { \
+		if (((dst) = strdup(src)) == NULL) { \
+			die("FATAL: malloc() failed during strdup() for %s", reason); \
+		} \
+	} while (0)
+
+#define MALLOC_OR_DIE(dst, type, size, reason) \
+	do { \
+		if (((dst) = (type *)malloc(size)) == NULL) { \
+			die("FATAL: malloc() failed during allocation of %s", reason); \
+		} \
+	} while (0)
+
+#define CALLOC_OR_DIE(dst, type, count, size, reason) \
+	do { \
+		if (((dst) = (type *)calloc(count, size)) == NULL) { \
+			die("FATAL: calloc() failed during allocation of %s", reason); \
+		} \
+	} while (0)
 
 
 /* get highres time as double */
@@ -114,3 +132,14 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+/* calculate sleep duration with jitter for retries */
+unsigned int get_jitter_sleep(int retry_count, unsigned int base_ms)
+	__attribute__((warn_unused_result));
+
+/* add a device to the debug hash table */
+void add_debug_device(int device_id);
+
+/* log an invalid response with standard prefix */
+void log_invalid_response(int host_id, int host_thread, int local_data_id, const char *format, ...)
+	__attribute__((nonnull(4), format(printf, 4, 5)));

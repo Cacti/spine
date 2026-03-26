@@ -936,7 +936,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	}
 
 	memset(stack, '\0', strlen(hostname)+1);
-	strncopy(stack, hostname, strlen(hostname));
+	strncopy(stack, hostname, strlen(hostname) + 1);
 	token = strtok(stack, ":");
 
 	if (token == NULL) {
