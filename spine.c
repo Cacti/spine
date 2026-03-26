@@ -386,6 +386,17 @@ int main(int argc, char *argv[]) {
 
 		else if (STRIMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+
+			/* Validate host_id_list contains only digits and commas */
+			{
+				const char *p = set.host_id_list;
+				while (*p) {
+					if (!isdigit((unsigned char)*p) && *p != ',' && *p != ' ') {
+						die("ERROR: --hostlist contains invalid characters. Only digits and commas are allowed.");
+					}
+					p++;
+				}
+			}
 		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {

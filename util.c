@@ -96,7 +96,7 @@ static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -138,11 +138,11 @@ static int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *
 	assert(myvalue   != 0);
 
 	if (set.dbonupdate == 0) {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
 	} else {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') AS rs "
 			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
 	}
@@ -188,7 +188,7 @@ static char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
+	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller_id);
 
 	result = db_query(psql, mode, qstring);
 
@@ -283,7 +283,7 @@ static char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 		}
 	}
 
-	sprintf(qstring, "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
+	snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
 
@@ -2033,7 +2033,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 
 	assert(psql != 0);
 
-	sprintf(qstring, "SELECT cacti FROM version LIMIT 1");
+	snprintf(qstring, sizeof(qstring), "SELECT cacti FROM version LIMIT 1");
 
 	result = db_query(psql, mode, qstring);
 
