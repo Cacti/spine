@@ -222,6 +222,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	buf_size     = malloc(sizeof(int));
 	buf_errors   = malloc(sizeof(int));
 
+	if (error_string == NULL || buf_size == NULL || buf_errors == NULL) {
+		die("ERROR: Fatal malloc error: poller.c error_string/buf_size/buf_errors");
+	}
+
 	*buf_size     = 0;
 	*buf_errors   = 0;
 
@@ -233,10 +237,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	//db_connect(LOCAL, &mysql);
 	local_cnn = db_get_connection(LOCAL);
+
+	if (local_cnn == NULL) {
+		die("ERROR: No available database connections");
+	}
+
 	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
+
+		if (remote_cnn == NULL) {
+			die("ERROR: No available remote database connections");
+		}
+
 		mysqlr = remote_cnn->mysql;
 	}
 
@@ -653,7 +667,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 				/* populate host structure */
 				host->ignore_host = FALSE;
-				if (row[0]  != NULL) host->id = atoi(row[0]);
+				if (row[0]  != NULL) host->id = (int)strtol(row[0], NULL, 10);
 
 				if (row[1]  != NULL) {
 					name = get_namebyhost(row[1], NULL);
@@ -664,7 +678,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 				if (row[2]  != NULL) STRNCOPY(host->snmp_community,       row[2]);
 
-				if (row[3]  != NULL) host->snmp_version = atoi(row[3]);
+				if (row[3]  != NULL) host->snmp_version = (int)strtol(row[3], NULL, 10);
 
 				if (row[4]  != NULL) STRNCOPY(host->snmp_username,        row[4]);
 				if (row[5]  != NULL) STRNCOPY(host->snmp_password,        row[5]);
@@ -674,18 +688,18 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				if (row[9]  != NULL) STRNCOPY(host->snmp_context,         row[9]);
 				if (row[10]  != NULL) STRNCOPY(host->snmp_engine_id,       row[10]);
 
-				if (row[11] != NULL) host->snmp_port           = atoi(row[11]);
-				if (row[12] != NULL) host->snmp_timeout        = atoi(row[12]);
-				if (row[13] != NULL) host->max_oids            = atoi(row[13]);
+				if (row[11] != NULL) host->snmp_port           = (int)strtol(row[11], NULL, 10);
+				if (row[12] != NULL) host->snmp_timeout        = (int)strtol(row[12], NULL, 10);
+				if (row[13] != NULL) host->max_oids            = (int)strtol(row[13], NULL, 10);
 
-				if (row[14] != NULL) host->availability_method = atoi(row[14]);
-				if (row[15] != NULL) host->ping_method         = atoi(row[15]);
-				if (row[16] != NULL) host->ping_port           = atoi(row[16]);
-				if (row[17] != NULL) host->ping_timeout        = atoi(row[17]);
-				if (row[18] != NULL) host->ping_retries        = atoi(row[18]);
+				if (row[14] != NULL) host->availability_method = (int)strtol(row[14], NULL, 10);
+				if (row[15] != NULL) host->ping_method         = (int)strtol(row[15], NULL, 10);
+				if (row[16] != NULL) host->ping_port           = (int)strtol(row[16], NULL, 10);
+				if (row[17] != NULL) host->ping_timeout        = (int)strtol(row[17], NULL, 10);
+				if (row[18] != NULL) host->ping_retries        = (int)strtol(row[18], NULL, 10);
 
-				if (row[19] != NULL) host->status              = atoi(row[19]);
-				if (row[20] != NULL) host->status_event_count  = atoi(row[20]);
+				if (row[19] != NULL) host->status              = (int)strtol(row[19], NULL, 10);
+				if (row[20] != NULL) host->status_event_count  = (int)strtol(row[20], NULL, 10);
 
 				if (row[21] != NULL) STRNCOPY(host->status_fail_date, row[21]);
 				if (row[22] != NULL) STRNCOPY(host->status_rec_date,  row[22]);
@@ -696,8 +710,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				if (row[25] != NULL) host->max_time     = atof(row[25]);
 				if (row[26] != NULL) host->cur_time     = atof(row[26]);
 				if (row[27] != NULL) host->avg_time     = atof(row[27]);
-				if (row[28] != NULL) host->total_polls  = atoi(row[28]);
-				if (row[29] != NULL) host->failed_polls = atoi(row[29]);
+				if (row[28] != NULL) host->total_polls  = (int)strtol(row[28], NULL, 10);
+				if (row[29] != NULL) host->failed_polls = (int)strtol(row[29], NULL, 10);
 				if (row[30] != NULL) host->availability = atof(row[30]);
 
 				if (row[31] != NULL) host->snmp_sysUpTimeInstance=atoll(row[31]);
@@ -917,8 +931,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					reindex->assert_value[0] = '\0';
 					reindex->arg1[0]         = '\0';
 
-					if (row[0] != NULL) reindex->data_query_id = atoi(row[0]);
-					if (row[1] != NULL) reindex->action        = atoi(row[1]);
+					if (row[0] != NULL) reindex->data_query_id = (int)strtol(row[0], NULL, 10);
+					if (row[1] != NULL) reindex->action        = (int)strtol(row[1], NULL, 10);
 
 					if (row[2] != NULL) snprintf(reindex->op, sizeof(reindex->op), "%s", row[2]);
 
@@ -1278,6 +1292,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		/* retrieve each hosts polling items from poller cache and load into array */
 		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
 
+		if (poller_items == NULL) {
+			die("ERROR: Fatal calloc error: poller.c poller_items");
+		}
+
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
 			/* initialize monitored object */
@@ -1304,12 +1322,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			poller_items[i].rrd_num                  = 0;
 			poller_items[i].output_regex[0]          = '\0';
 
-			if (row[0] != NULL)  poller_items[i].action = atoi(row[0]);
+			if (row[0] != NULL)  poller_items[i].action = (int)strtol(row[0], NULL, 10);
 
 			if (row[1] != NULL)  snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname), "%s", row[1]);
 			if (row[2] != NULL)  snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community), "%s", row[2]);
 
-			if (row[3] != NULL)  poller_items[i].snmp_version = atoi(row[3]);
+			if (row[3] != NULL)  poller_items[i].snmp_version = (int)strtol(row[3], NULL, 10);
 
 			if (row[4] != NULL)  snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username), "%s", row[4]);
 			if (row[5] != NULL)  snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password), "%s", row[5]);
@@ -1320,11 +1338,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			if (row[9]  != NULL) snprintf(poller_items[i].arg2,          sizeof(poller_items[i].arg2),          "%s", row[9]);
 			if (row[10] != NULL) snprintf(poller_items[i].arg3,          sizeof(poller_items[i].arg3),          "%s", row[10]);
 
-			if (row[11] != NULL) poller_items[i].local_data_id = atoi(row[11]);
+			if (row[11] != NULL) poller_items[i].local_data_id = (int)strtol(row[11], NULL, 10);
 
-			if (row[12] != NULL) poller_items[i].rrd_num       = atoi(row[12]);
-			if (row[13] != NULL) poller_items[i].snmp_port     = atoi(row[13]);
-			if (row[14] != NULL) poller_items[i].snmp_timeout  = atoi(row[14]);
+			if (row[12] != NULL) poller_items[i].rrd_num       = (int)strtol(row[12], NULL, 10);
+			if (row[13] != NULL) poller_items[i].snmp_port     = (int)strtol(row[13], NULL, 10);
+			if (row[14] != NULL) poller_items[i].snmp_timeout  = (int)strtol(row[14], NULL, 10);
 
 			if (row[15] != NULL)  snprintf(poller_items[i].snmp_auth_protocol,
 				sizeof(poller_items[i].snmp_auth_protocol), "%s", row[15]);
@@ -1351,6 +1369,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* create an array for snmp oids */
 		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
+
+		if (snmp_oids == NULL) {
+			die("ERROR: Fatal calloc error: poller.c snmp_oids");
+		}
 
 		/* initialize all the memory to insure we don't get issues */
 		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
@@ -2169,7 +2191,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 			if (poll_result && is_numeric(poll_result)) {
 				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
-				snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
+				snprintf(poll_result, RESULTS_BUFFER, "%llu", host->snmp_sysUpTimeInstance);
 			}
 
 			SPINE_FREE(poll_result);
@@ -2224,7 +2246,7 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 
 			if (poll_result && is_numeric(poll_result)) {
 				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
-				snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
+				snprintf(poll_result, RESULTS_BUFFER, "%llu", host->snmp_sysUpTimeInstance);
 			}
 
 			SPINE_FREE(poll_result);
@@ -2388,6 +2410,17 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			#endif
 
 			if (cmd_fd > 0) {
+				if (cmd_fd >= FD_SETSIZE) {
+					SPINE_LOG(("ERROR: Device[%i] file descriptor %d exceeds FD_SETSIZE %d", current_host->id, cmd_fd, FD_SETSIZE));
+					SET_UNDEFINED(result_string);
+					#ifdef USING_TPOPEN
+					pclose(fd);
+					#else
+					nft_pclose(cmd_fd);
+					#endif
+					goto popen_done;
+				}
+
 				retry:
 
 				/* Initialize File Descriptors to Review for Input/Output */
@@ -2395,7 +2428,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				FD_SET(cmd_fd, &fds);
 
 				/* wait x seconds for pipe response */
-				switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+				switch (select(cmd_fd + 1, &fds, NULL, NULL, &timeout)) {
 					case -1:
 						switch (errno) {
 							case EBADF:
@@ -2493,6 +2526,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				#else
 				nft_pclose(cmd_fd);
 				#endif
+				popen_done: ;
 			} else {
 				SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
 				SET_UNDEFINED(result_string);

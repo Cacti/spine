@@ -274,7 +274,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	ssize_t    return_code;
 	fd_set socket_fds;
 
-	static   unsigned int seq = 0;
+	static volatile unsigned int seq = 0;
 	struct   icmp  *icmp;
 	struct   ip    *ip;
 	struct   icmp  *pkt;
@@ -351,10 +351,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_code = 0;
 	icmp->icmp_id   = getpid() & 0xFFFF;
 
-	/* lock set/get the sequence and unlock */
-	thread_mutex_lock(LOCK_GHBN);
-	icmp->icmp_seq = seq++;
-	thread_mutex_unlock(LOCK_GHBN);
+	/* atomically increment the sequence counter */
+	icmp->icmp_seq = __sync_fetch_and_add(&seq, 1);
 
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
@@ -404,8 +402,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* reinitialize fd_set -- select(2) clears bits in place on return */
 				keep_listening:
 				FD_ZERO(&socket_fds);
+				if (icmp_socket >= FD_SETSIZE) {
+					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+					snprintf(ping->ping_status, 50, "down");
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
+					close(icmp_socket);
+					return HOST_DOWN;
+				}
 				FD_SET(icmp_socket,&socket_fds);
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -609,6 +614,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			/* initialize file descriptor to review for input/output */
 			FD_ZERO(&socket_fds);
+			if (udp_socket >= FD_SETSIZE) {
+				SPINE_LOG(("ERROR: Device[%i] UDP socket %d exceeds FD_SETSIZE %d", host->id, udp_socket, FD_SETSIZE));
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: fd exceeds FD_SETSIZE");
+				close(udp_socket);
+				return HOST_DOWN;
+			}
 			FD_SET(udp_socket,&socket_fds);
 
 			while (1) {
@@ -643,7 +655,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				wait_more:
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				return_code = select(udp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();

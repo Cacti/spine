@@ -128,7 +128,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
 	int    priv_type;
-	int    zero_sensitive = 0;
+	int    zero_sensitive = 1;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
@@ -269,28 +269,36 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
 			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
 
-			// Auth Protocol Setup
+			/* Auth Protocol Setup - zero old credential before freeing */
 			if (Apsz && zero_sensitive) {
-				memset(Apsz, 0x0, strlen(Apsz));
+				volatile char *vp = (volatile char *)Apsz;
+				size_t slen = strlen(Apsz);
+				while (slen--) { *vp++ = 0; }
 			}
 
 			free(Apsz);
 			Apsz = strdup(snmp_password);
 
 			if (zero_sensitive) {
-	            memset(snmp_password, 0x0, strlen(snmp_password));
+				volatile char *vp = (volatile char *)snmp_password;
+				size_t slen = strlen(snmp_password);
+				while (slen--) { *vp++ = 0; }
 			}
 
-			// Privacy Protocol Setup
+			/* Privacy Protocol Setup - zero old credential before freeing */
 			if (Xpsz && zero_sensitive) {
-				memset(Xpsz, 0x0, strlen(Xpsz));
+				volatile char *vp = (volatile char *)Xpsz;
+				size_t slen = strlen(Xpsz);
+				while (slen--) { *vp++ = 0; }
 			}
 
 			free(Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
 
 			if (zero_sensitive) {
-				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
+				volatile char *vp = (volatile char *)snmp_priv_passphrase;
+				size_t slen = strlen(snmp_priv_passphrase);
+				while (slen--) { *vp++ = 0; }
 			}
 
 			if (Apsz) {
@@ -376,6 +384,15 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
 	thread_mutex_unlock(LOCK_SNMP);
+
+	/* zero sensitive key material now that session has copied it */
+	{
+		volatile char *vp;
+		vp = (volatile char *)session.securityAuthKey;
+		memset((char *)vp, 0, sizeof(session.securityAuthKey));
+		vp = (volatile char *)session.securityPrivKey;
+		memset((char *)vp, 0, sizeof(session.securityPrivKey));
+	}
 
 	free(session.peername);
 	free(session.securityAuthProto);

@@ -235,6 +235,9 @@ int main(int argc, char *argv[]) {
 	if (geteuid() == 0) {
 		drop_root(getuid(), getgid());
 	}
+
+	/* disable core dumps to prevent credential leakage */
+	prctl(PR_SET_DUMPABLE, 0);
 	#endif /* HAVE_LCAP */
 
 	/* we must initialize snmp in the main thread */
@@ -340,7 +343,7 @@ int main(int argc, char *argv[]) {
 				die("ERROR: %s can only be used once", arg);
 			}
 
-			set.start_host_id = atoi(opt = getarg(opt, &argv));
+			set.start_host_id = (int)strtol(opt = getarg(opt, &argv), NULL, 10);
 
 			if (!HOSTID_DEFINED(set.start_host_id)) {
 				die("ERROR: '%s=%s' is invalid first-host ID", arg, opt);
@@ -352,7 +355,7 @@ int main(int argc, char *argv[]) {
 				die("ERROR: %s can only be used once", arg);
 			}
 
-			set.end_host_id = atoi(opt = getarg(opt, &argv));
+			set.end_host_id = (int)strtol(opt = getarg(opt, &argv), NULL, 10);
 
 			if (!HOSTID_DEFINED(set.end_host_id)) {
 				die("ERROR: '%s=%s' is invalid last-host ID", arg, opt);
@@ -360,11 +363,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRIMATCH(arg, "-p") || STRIMATCH(arg, "--poller")) {
-			set.poller_id = atoi(getarg(opt, &argv));
+			set.poller_id = (int)strtol(getarg(opt, &argv), NULL, 10);
 		}
 
 		else if (STRMATCH(arg, "-t") || STRIMATCH(arg, "--threads")) {
-			set.threads = atoi(getarg(opt, &argv));
+			set.threads = (int)strtol(getarg(opt, &argv), NULL, 10);
 			set.threads_set = TRUE;
 		}
 
@@ -449,11 +452,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
-			set.start_host_id = atoi(arg);
+			set.start_host_id = (int)strtol(arg, NULL, 10);
 		}
 
 		else if (!HOSTID_DEFINED(set.end_host_id) && all_digits(arg)) {
-			set.end_host_id = atoi(arg);
+			set.end_host_id = (int)strtol(arg, NULL, 10);
 		}
 
 		else {
@@ -536,7 +539,7 @@ int main(int argc, char *argv[]) {
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		token = strtok(set.selective_device_debug, ",");
 		while(token && debug_idx < MAX_DEBUG_DEVICES - 1) {
-			debug_devices[debug_idx]   = atoi(token);
+			debug_devices[debug_idx]   = (int)strtol(token, NULL, 10);
 			debug_devices[debug_idx+1] = '\0';
 			token = strtok(NULL, ",");
 			debug_idx++;
@@ -758,8 +761,8 @@ int main(int argc, char *argv[]) {
 
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
-			host_id         = atoi(mysql_row[0]);
-			device_threads  = atoi(mysql_row[1]);
+			host_id         = (int)strtol(mysql_row[0], NULL, 10);
+			device_threads  = (int)strtol(mysql_row[1], NULL, 10);
 			current_thread  = 1;
 
 			if (device_threads < 1) {
@@ -780,7 +783,7 @@ int main(int argc, char *argv[]) {
 			tresult   = db_query(&mysql, LOCAL, querybuf);
 			mysql_row = mysql_fetch_row(tresult);
 
-			total_items = atoi(mysql_row[0]);
+			total_items = (int)strtol(mysql_row[0], NULL, 10);
 			db_free_result(tresult);
 
 			if (total_items && total_items < device_threads) {
@@ -804,7 +807,7 @@ int main(int argc, char *argv[]) {
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
-				items_per_thread = atoi(mysql_row[0]);
+				items_per_thread = (int)strtol(mysql_row[0], NULL, 10);
 
 				db_free_result(tresult);
 
@@ -819,7 +822,7 @@ int main(int argc, char *argv[]) {
 			tresult   = db_query(&mysql, LOCAL, querybuf);
 			mysql_row = mysql_fetch_row(tresult);
 
-			items_per_thread = atoi(mysql_row[0]);
+			items_per_thread = (int)strtol(mysql_row[0], NULL, 10);
 
 			db_free_result(tresult);
 
@@ -1122,6 +1125,15 @@ int main(int argc, char *argv[]) {
 		if (!set.stdout_notty) {
 			fprintf(stdout, "Time: %.4f s, Threads: %i, Devices: %i\n", (end_time - begin_time), set.threads, num_rows);
 		}
+	}
+
+	/* zero sensitive credentials before exit */
+	{
+		volatile char *vp;
+		vp = (volatile char *)set.db_pass;
+		memset((char *)vp, 0, sizeof(set.db_pass));
+		vp = (volatile char *)set.rdb_pass;
+		memset((char *)vp, 0, sizeof(set.rdb_pass));
 	}
 
 	/* uninstall the spine signal handler */

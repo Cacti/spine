@@ -252,6 +252,7 @@ void db_connect(int type, MYSQL *mysql) {
 			if (stat(hostname, &socket_stat) == 0) {
 				if (socket_stat.st_mode & S_IFSOCK) {
 					socket = strdup (set.db_host);
+					free(hostname);
 					hostname = NULL;
 				}
 			} else if ((socket = strstr(hostname,":"))) {
@@ -266,6 +267,7 @@ void db_connect(int type, MYSQL *mysql) {
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
 				socket = strdup (set.db_host);
+				free(hostname);
 				hostname = NULL;
 			}
 		} else if ((socket = strstr(hostname,":"))) {
@@ -585,16 +587,21 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	char input_trimmed[DBL_BUFSIZE];
 	int  max_escaped_input_size;
 	int  trim_limit;
+	int  input_cap;
 
 	if (input == NULL) return;
 
 	max_escaped_input_size = (strlen(input) * 2) + 1;
 	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
 
+	/* always cap input to (max_size / 2) - 1 to prevent output overflow */
+	input_cap = (trim_limit / 2) - 1;
+	if (input_cap < 1) input_cap = 1;
+
 	if (max_escaped_input_size > max_size) {
-		snprintf(input_trimmed, (trim_limit / 2) - 1, "%s", input);
+		snprintf(input_trimmed, input_cap, "%s", input);
 	} else {
-		snprintf(input_trimmed, trim_limit, "%s", input);
+		snprintf(input_trimmed, input_cap, "%s", input);
 	}
 
 	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
@@ -606,8 +613,17 @@ void db_free_result(MYSQL_RES *result) {
 
 int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column) {
 	char       query_frag[BUFSIZE];
-   MYSQL_RES *result;
+	MYSQL_RES *result;
 	int        exists;
+	const char *p;
+
+	/* validate column name: only alphanumeric and underscore allowed */
+	for (p = column; *p; p++) {
+		if (!isalnum((unsigned char)*p) && *p != '_') {
+			SPINE_LOG(("ERROR: db_column_exists: invalid column name '%s'", column));
+			return FALSE;
+		}
+	}
 
 	/* save a fragment just in case */
 	memset(query_frag, 0, BUFSIZE);
