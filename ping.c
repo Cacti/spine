@@ -34,6 +34,11 @@
 #include "common.h"
 #include "spine.h"
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#include <stdatomic.h>
+#define SPINE_ATOMIC_SEQ 1
+#endif
+
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
  *  \param host a pointer to the current host structure
@@ -274,7 +279,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	ssize_t    return_code;
 	fd_set socket_fds;
 
+#if defined(SPINE_ATOMIC_SEQ)
+	static _Atomic unsigned int seq = 0;
+#else
 	static volatile unsigned int seq = 0;
+#endif
 	struct   icmp  *icmp;
 	struct   ip    *ip;
 	struct   icmp  *pkt;
@@ -324,7 +333,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_id   = getpid() & 0xFFFF;
 
 	/* atomically increment the sequence counter */
+#if defined(SPINE_ATOMIC_SEQ)
+	icmp->icmp_seq = atomic_fetch_add(&seq, 1);
+#else
 	icmp->icmp_seq = __sync_fetch_and_add(&seq, 1);
+#endif
 
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));

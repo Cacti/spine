@@ -44,20 +44,20 @@ void child_cleanup(void *arg) {
 
 void child_cleanup_thread(void *arg) {
 	UNUSED_PARAMETER(arg);
-	sem_post(&available_threads);
+	spine_sem_post(&available_threads);
 
 	int a_threads_value;
-	sem_getvalue(&available_threads, &a_threads_value);
+	spine_sem_getvalue(&available_threads, &a_threads_value);
 
 	SPINE_LOG_DEVDBG(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 }
 
 void child_cleanup_script(void *arg) {
 	UNUSED_PARAMETER(arg);
-	sem_post(&available_scripts);
+	spine_sem_post(&available_scripts);
 
 	int a_scripts_value;
-	sem_getvalue(&available_scripts, &a_scripts_value);
+	spine_sem_getvalue(&available_scripts, &a_scripts_value);
 
 	SPINE_LOG_DEVDBG(("DEBUG: Available Scripts is %i (%i outstanding)", a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
 }
@@ -99,7 +99,7 @@ void *child(void *arg) {
 	thread_mutex_unlock(LOCK_HOST_TIME);
 
 	/* Allows main thread to proceed with creation of other threads */
-	sem_post(poller_details.thread_init_sem);
+	spine_sem_post(poller_details.thread_init_sem);
 
 	if (is_debug_device(host_id)) {
 		SPINE_LOG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
@@ -1674,6 +1674,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
+				if (!IS_UNDEFINED(poller_items[i].result) && strlen(poller_items[i].output_regex)) {
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[i].output_regex, poller_items[i].result));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", temp_result);
+				}
+
 				SPINE_FREE(poll_result);
 
 				thread_end = get_time_as_double();
@@ -1738,6 +1743,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 						SET_UNDEFINED(poller_items[i].result);
 					}
+				}
+
+				if (!IS_UNDEFINED(poller_items[i].result) && strlen(poller_items[i].output_regex)) {
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[i].output_regex, poller_items[i].result));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", temp_result);
 				}
 
 				SPINE_FREE(poll_result);
@@ -2349,7 +2359,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 
 	// use the script server timeout value, allow for 50% leeway
 	while (++retries < (set.script_timeout * 15)) {
-		sem_err = sem_trywait(&available_scripts);
+		sem_err = spine_sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
 		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
