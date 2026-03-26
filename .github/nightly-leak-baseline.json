@@ -1,0 +1,12 @@
+{
+  "valgrind": {
+    "max_definitely_lost_bytes": 0,
+    "max_indirectly_lost_bytes": 0,
+    "max_possibly_lost_bytes": 0,
+    "max_error_summary": 0
+  },
+  "asan": {
+    "max_asan_error_events": 0,
+    "max_ubsan_error_events": 0
+  }
+}

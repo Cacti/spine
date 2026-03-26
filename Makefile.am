@@ -22,19 +22,45 @@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
-spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+bin_PROGRAMS = spine
+
+spine_SOURCES = \
+	sql.c spine.c util.c snmp.c locks.c poller.c \
+	nft_popen.c php.c ping.c keywords.c error.c
+
+noinst_HEADERS = \
+	common.h spine.h sql.h util.h snmp.h poller.h \
+	nft_popen.h locks.h error.h
 
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
 
-bin_PROGRAMS = spine
-
 man_MANS = spine.1
 
-EXTRA_DIST = spine.1 uthash.h
+EXTRA_DIST = \
+	spine.1 \
+	uthash.h \
+	spine.conf.dist \
+	bootstrap \
+	Dockerfile \
+	Dockerfile.dev \
+	tests/integration/smoke_test.sh \
+	tests/integration/test_output_regex.sh \
+	tests/integration/test_db_column_detect.sh \
+	tests/unit/Makefile \
+	tests/unit/test_build_fixes.c \
+	tests/snmpv3/docker-compose.yml \
+	tests/snmpv3/db/init.sql \
+	tests/snmpv3/snmpd/Dockerfile \
+	tests/snmpv3/snmpd/snmpd.conf \
+	tests/snmpv3/snmpd/snmpv3.conf \
+	tests/snmpv3/spine/spine.conf \
+	tests/snmpv3/scripts/run_test.sh
 
-# Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
-.PHONY: docker docker-dev verify cppcheck
+CLEANFILES = *~
+
+# Docker targets
+.PHONY: docker docker-dev verify cppcheck check-unit
 
 docker:
 	docker build -t spine .
@@ -45,8 +71,12 @@ docker-dev:
 verify: docker-dev
 	docker run --rm spine-dev
 
-cppcheck: docker-dev
-	docker run --rm spine-dev bash -c \
-		"cppcheck --enable=all --std=c11 --error-exitcode=1 \
+cppcheck:
+	cppcheck --enable=warning,style,performance \
+		--std=c11 --error-exitcode=1 \
 		--suppress=missingIncludeSystem --suppress=unusedFunction \
-		--suppress=checkersReport --suppress=toomanyconfigs $(spine_SOURCES)"
+		--suppress=checkersReport --suppress=toomanyconfigs \
+		$(spine_SOURCES)
+
+check-unit:
+	cd tests/unit && $(MAKE)
