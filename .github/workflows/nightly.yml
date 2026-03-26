@@ -1,0 +1,389 @@
+name: Nightly Heavy Checks
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config
+    gcc clang llvm valgrind
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  TSAN_OPTIONS: halt_on_error=1:history_size=7:log_path=tsan
+  ASAN_OPTIONS: >-
+    detect_leaks=1:abort_on_error=1:strict_string_checks=1:
+    check_initialization_order=1:detect_stack_use_after_return=1:
+    symbolize=1:log_path=asan
+  UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:log_path=ubsan
+
+jobs:
+  tsan:
+    name: clang tsan
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          CFLAGS='-O1 -g3 -fno-omit-frame-pointer -fsanitize=thread'
+          LDFLAGS='-fsanitize=thread'
+          chmod +x ./configure || true
+          ./configure CC=clang CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          if make -n check >/dev/null 2>&1; then
+            make check VERBOSE=1
+          elif make -n test >/dev/null 2>&1; then
+            make test VERBOSE=1
+          else
+            echo '::notice::No make check/test target found.'
+          fi
+
+      - name: Upload tsan artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-tsan-logs
+          path: |
+            tsan*
+            config.log
+            *.log
+          if-no-files-found: ignore
+
+  asan-soak:
+    name: clang asan/ubsan soak
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          CFLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
+          LDFLAGS='-fsanitize=address,undefined'
+          chmod +x ./configure || true
+          ./configure CC=clang CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          if make -n check >/dev/null 2>&1; then
+            make check VERBOSE=1
+          elif make -n test >/dev/null 2>&1; then
+            make test VERBOSE=1
+          else
+            echo '::notice::No make check/test target found.'
+          fi
+
+      - name: Enforce asan/ubsan leak trend baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check-leak-trend.py \
+            --mode asan \
+            --baseline .github/nightly-leak-baseline.json \
+            --output nightly-asan-summary.json \
+            --logs 'asan*' 'ubsan*' '*.log'
+
+      - name: Upload asan artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-asan-logs
+          path: |
+            asan*
+            ubsan*
+            nightly-asan-summary.json
+            config.log
+            *.log
+          if-no-files-found: ignore
+
+  valgrind:
+    name: valgrind test pass
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          CFLAGS='-O0 -g3 -fno-omit-frame-pointer'
+          chmod +x ./configure || true
+          ./configure CC=gcc CFLAGS="${CFLAGS}" LDFLAGS=''
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Run tests under valgrind when available
+        run: |
+          set -euo pipefail
+          if make -n valgrind-check >/dev/null 2>&1; then
+            make valgrind-check
+          elif make -n check >/dev/null 2>&1; then
+            mapfile -t bins < <(find tests -maxdepth 3 -type f -perm -111 ! -name '*.sh' 2>/dev/null || true)
+            if [[ "${#bins[@]}" -gt 0 ]]; then
+              for t in "${bins[@]}"; do
+                valgrind \
+                  --error-exitcode=1 \
+                  --leak-check=full \
+                  --show-leak-kinds=all \
+                  --track-origins=yes \
+                  --log-file="valgrind.$(basename "${t}").log" \
+                  "${t}"
+              done
+            else
+              echo '::notice::No standalone test binaries found for valgrind; running make check.'
+              make check VERBOSE=1
+            fi
+          else
+            echo '::notice::No make valgrind-check/check target found.'
+          fi
+
+      - name: Enforce valgrind leak trend baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check-leak-trend.py \
+            --mode valgrind \
+            --baseline .github/nightly-leak-baseline.json \
+            --output nightly-valgrind-summary.json \
+            --logs 'valgrind*.log'
+
+      - name: Upload valgrind artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-valgrind-logs
+          path: |
+            valgrind*.log
+            nightly-valgrind-summary.json
+            config.log
+            *.log
+          if-no-files-found: ignore
+
+  fuzz-smoke:
+    name: libfuzzer harness smoke
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install fuzz dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Discover fuzz harnesses
+        run: |
+          set -euo pipefail
+          mapfile -t harnesses < <(
+            git ls-files 'fuzz/**/*.c' 'tests/fuzz/**/*.c' '*_fuzz.c' '*fuzz*.c' | sort -u
+          )
+
+          if [[ "${#harnesses[@]}" -eq 0 ]]; then
+            echo '::warning::No C fuzz harnesses found (expected under fuzz/ or tests/fuzz/).'
+            echo 'status=none' > fuzz-status.txt
+            exit 0
+          fi
+
+          printf '%s\n' "${harnesses[@]}" > fuzz-harnesses.txt
+          echo 'status=found' > fuzz-status.txt
+
+      - name: Build and execute fuzz smoke runs
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f fuzz-harnesses.txt ]]; then
+            echo 'No fuzz harnesses discovered; skipping fuzz execution.'
+            exit 0
+          fi
+
+          mkdir -p fuzz-bin fuzz-corpus
+
+          while IFS= read -r harness; do
+            [[ -n "${harness}" ]] || continue
+            bin="fuzz-bin/$(basename "${harness%.*}")"
+
+            clang -O1 -g -fsanitize=fuzzer,address -I. "${harness}" -o "${bin}"
+            "${bin}" -runs=1000 -max_total_time=60 fuzz-corpus
+          done < fuzz-harnesses.txt
+
+      - name: Upload fuzz artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-fuzz-logs
+          path: |
+            fuzz-status.txt
+            fuzz-harnesses.txt
+            fuzz-bin
+            fuzz-corpus
+            *.log
+          if-no-files-found: ignore
+
+  helgrind:
+    name: Valgrind Helgrind (Thread Errors)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make autoconf automake libtool pkg-config \
+            libmariadb-dev libsnmp-dev libssl-dev \
+            valgrind libcmocka-dev
+
+      - name: Build with debug
+        run: |
+          set -euo pipefail
+          autoreconf -fi
+          CFLAGS="-g -O0" ./configure --prefix=/usr/local
+          make -j"$(nproc)"
+
+      - name: Helgrind unit tests
+        run: |
+          set -euo pipefail
+          cd tests/unit
+          CMOCKA_INC=$(pkg-config --variable=includedir cmocka)
+          CMOCKA_LIB=$(pkg-config --variable=libdir cmocka)
+          make CMOCKA_INC="$CMOCKA_INC" CMOCKA_LIB="$CMOCKA_LIB"
+          valgrind --tool=helgrind --error-exitcode=1 ./build/test_build_fixes
+
+      - name: Upload helgrind artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-helgrind-logs
+          path: "*.log"
+          if-no-files-found: ignore
+
+  stack-usage:
+    name: Stack Usage Analysis
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make autoconf automake libtool pkg-config \
+            libmariadb-dev libsnmp-dev libssl-dev
+
+      - name: Build with stack usage
+        run: |
+          set -euo pipefail
+          autoreconf -fi
+          CFLAGS="-fstack-usage -g" ./configure --prefix=/usr/local
+          make -j"$(nproc)"
+
+      - name: Analyze stack usage
+        run: |
+          set -euo pipefail
+          echo "=== Functions using >4KB stack ==="
+          cat ./*.su | awk -F: '{split($NF,a," "); if(a[1]+0 > 4096) print}' | sort -t' ' -k2 -rn | head -20
+
+      - name: Upload stack reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: stack-usage
+          path: "*.su"
+
+  soak-placeholder:
+    name: soak/integration placeholder
+    runs-on: ubuntu-24.04
+    needs: [tsan, asan-soak, valgrind, fuzz-smoke, helgrind, stack-usage]
+
+    steps:
+      - name: Placeholder
+        run: |
+          set -euo pipefail
+          echo 'Placeholder for long-running soak/integration checks.'
+          echo 'Add SNMP simulator container and multi-hour stress scenario here.'

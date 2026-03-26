@@ -1,0 +1,328 @@
+name: Static Analysis
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config
+    gcc clang llvm clang-tools cppcheck codespell shellcheck shfmt golang-go
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  CFLAGS_ANALYZE: >-
+    -std=c11 -O1 -g3 -fno-omit-frame-pointer
+  CLANG_TIDY_CHECKS: >-
+    clang-analyzer-*,bugprone-*,cert-*
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install actionlint dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y golang-go shellcheck
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          mkdir -p "${PWD}/.local/bin"
+          GOBIN="${PWD}/.local/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "${PWD}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Run actionlint
+        run: |
+          set -euo pipefail
+          "${PWD}/.local/bin/actionlint" -color
+
+  shell-lint:
+    name: shellcheck + shfmt
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install shell lint dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt
+
+      - name: Run shfmt and shellcheck
+        run: |
+          set -euo pipefail
+          mapfile -t shell_files < <(
+            git ls-files | while read -r file; do
+              [[ -f "${file}" ]] || continue
+              case "${file}" in
+                *.sh) echo "${file}"; continue ;;
+              esac
+              if head -n 1 "${file}" | grep -Eq '^#!.*\b(bash|sh)\b'; then
+                echo "${file}"
+              fi
+            done | sort -u
+          )
+
+          if [[ "${#shell_files[@]}" -eq 0 ]]; then
+            echo 'No shell files found for linting.'
+            exit 0
+          fi
+
+          shfmt -d -i 2 -ci "${shell_files[@]}"
+          shellcheck -x "${shell_files[@]}"
+
+  codespell:
+    name: codespell
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install spelling dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Run codespell on tracked source/docs
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files '*.c' '*.h' '*.md' '*.txt' '*.yml' '*.yaml' 'Makefile.am' 'configure.ac')
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No eligible files found for codespell."
+            exit 0
+          fi
+
+          codespell \
+            --quiet-level=2 \
+            --ignore-words=.codespell-ignore-words.txt \
+            "${files[@]}" \
+            | tee codespell-report.txt
+
+      - name: Upload codespell report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: codespell-report
+          path: codespell-report.txt
+          if-no-files-found: ignore
+
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install clang-tidy dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure build
+        run: |
+          set -euo pipefail
+          chmod +x ./configure || true
+          ./configure CC=clang CFLAGS="${CFLAGS_ANALYZE}"
+
+      - name: Run clang-tidy
+        run: |
+          set -euo pipefail
+          mapfile -t sources < <(git ls-files '*.c')
+          if [[ "${#sources[@]}" -eq 0 ]]; then
+            echo 'No C sources found for clang-tidy.'
+            exit 0
+          fi
+
+          clang-tidy \
+            -checks="${CLANG_TIDY_CHECKS}" \
+            "${sources[@]}" \
+            -- \
+            -std=c11 -I. -Iconfig -I/usr/include/mysql \
+            2>&1 | tee clang-tidy-report.txt
+
+      - name: Upload clang-tidy report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: clang-tidy-report
+          path: clang-tidy-report.txt
+          if-no-files-found: ignore
+
+      - name: Convert clang-tidy report to SARIF
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/clang_tidy_to_sarif.py clang-tidy-report.txt clang-tidy.sarif
+
+      - name: Upload clang-tidy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        with:
+          sarif_file: clang-tidy.sarif
+          category: clang-tidy
+
+  scan-build:
+    name: clang static analyzer (scan-build)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install analysis dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure build system
+        run: |
+          set -euo pipefail
+          chmod +x ./configure || true
+          ./configure CC=clang CFLAGS="${CFLAGS_ANALYZE}"
+
+      - name: Run scan-build
+        run: |
+          set -euo pipefail
+          mkdir -p scan-build-report
+          scan-build --status-bugs --keep-going --plist --output scan-build-report \
+            make -j"$(nproc)"
+
+      - name: Upload scan-build report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: scan-build-report
+          path: scan-build-report
+          if-no-files-found: ignore
+
+  cppcheck:
+    name: cppcheck
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install cppcheck dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Run cppcheck
+        run: |
+          set -euo pipefail
+          mapfile -t sources < <(git ls-files '*.c' '*.h')
+          if [[ "${#sources[@]}" -eq 0 ]]; then
+            echo "No C sources found for cppcheck."
+            exit 0
+          fi
+          cppcheck \
+            --enable=warning,style,performance,portability \
+            --std=c11 \
+            --inconclusive \
+            --inline-suppr \
+            --force \
+            --suppress=missingIncludeSystem \
+            "${sources[@]}" \
+            2> cppcheck-report.txt
+
+          if [[ ! -f cppcheck-report.txt ]]; then
+            : > cppcheck-report.txt
+          fi
+
+          grep -E '^[^:]+:[0-9]+:' cppcheck-report.txt | sort -u > cppcheck-report.normalized.txt || true
+
+          if [[ -f .github/cppcheck-baseline.txt ]]; then
+            sort -u .github/cppcheck-baseline.txt > cppcheck-baseline.sorted.txt
+          else
+            : > cppcheck-baseline.sorted.txt
+          fi
+
+          comm -23 cppcheck-report.normalized.txt cppcheck-baseline.sorted.txt > cppcheck-regressions.txt || true
+
+          if [[ -s cppcheck-regressions.txt ]]; then
+            echo "New cppcheck findings not in baseline:"
+            cat cppcheck-regressions.txt
+            exit 1
+          fi
+
+      - name: Upload cppcheck report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: cppcheck-report
+          path: |
+            cppcheck-report.txt
+            cppcheck-report.normalized.txt
+            cppcheck-regressions.txt
+          if-no-files-found: ignore
+
+      - name: Convert cppcheck report to SARIF
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/cppcheck_to_sarif.py cppcheck-report.txt cppcheck.sarif
+
+      - name: Upload cppcheck SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        with:
+          sarif_file: cppcheck.sarif
+          category: cppcheck

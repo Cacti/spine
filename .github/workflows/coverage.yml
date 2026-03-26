@@ -1,0 +1,132 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config
+    gcc lcov
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  COVERAGE_MIN_LINE_PCT: '10.0'
+  CFLAGS_COVERAGE: >-
+    -O0 -g3 --coverage
+  LDFLAGS_COVERAGE: --coverage
+
+jobs:
+  gcc-coverage:
+    name: gcc coverage
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install coverage dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          chmod +x ./configure || true
+          ./configure CC=gcc CFLAGS="${CFLAGS_COVERAGE}" LDFLAGS="${LDFLAGS_COVERAGE}"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          if make -n check >/dev/null 2>&1; then
+            make check VERBOSE=1
+          elif make -n test >/dev/null 2>&1; then
+            make test VERBOSE=1
+          else
+            echo "::notice::No make check/test target found."
+          fi
+
+      - name: Generate lcov + genhtml report
+        run: |
+          set -euo pipefail
+          if lcov --capture --directory . --output-file coverage.raw.info --ignore-errors mismatch; then
+            lcov \
+              --remove coverage.raw.info \
+              '/usr/*' \
+              '*/build/*' \
+              '*/tests/*' \
+              '*/test/*' \
+              --output-file coverage.filtered.info \
+              --ignore-errors unused
+            genhtml coverage.filtered.info --output-directory coverage-html
+          else
+            echo "::warning::No coverage data files were found."
+            mkdir -p coverage-html
+            echo "No coverage data generated." > coverage-html/index.html
+            : > coverage.filtered.info
+          fi
+
+      - name: Enforce minimum line coverage
+        run: |
+          set -euo pipefail
+
+          if [[ ! -s coverage.filtered.info ]]; then
+            echo "::error::coverage.filtered.info is empty. Coverage gating requires generated coverage data."
+            exit 1
+          fi
+
+          summary="$(lcov --summary coverage.filtered.info)"
+          echo "${summary}"
+
+          line_pct="$(printf '%s\n' "${summary}" | awk '/lines\.*:/ {gsub("%","",$2); print $2; exit}')"
+
+          if [[ -z "${line_pct}" ]]; then
+            echo "::error::Unable to parse line coverage percentage from lcov summary."
+            exit 1
+          fi
+
+          if ! awk -v actual="${line_pct}" -v min="${COVERAGE_MIN_LINE_PCT}" 'BEGIN { exit ((actual + 0) >= (min + 0) ? 0 : 1) }'; then
+            echo "::error::Line coverage ${line_pct}% is below minimum ${COVERAGE_MIN_LINE_PCT}%."
+            exit 1
+          fi
+
+          echo "Coverage gate passed: ${line_pct}% >= ${COVERAGE_MIN_LINE_PCT}%."
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: coverage-report
+          path: |
+            coverage.filtered.info
+            coverage-html
+          if-no-files-found: ignore

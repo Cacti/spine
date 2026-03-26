@@ -1,0 +1,229 @@
+name: Integration
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config
+    gcc clang llvm mariadb-client
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  DB_HOST: 127.0.0.1
+  DB_PORT: '3306'
+  DB_NAME: cacti
+  DB_USER: cacti
+  DB_PASS: cacti_pw
+
+jobs:
+  db-integration:
+    name: DB integration (${{ matrix.db_name }} ${{ matrix.db_version }})
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - db_name: mariadb
+            db_version: "10.11"
+            db_image: mariadb:10.11
+            health_cmd: "mariadb-admin ping -h 127.0.0.1 -uroot -proot_pw"
+            root_pw_env: MARIADB_ROOT_PASSWORD
+            db_env: MARIADB_DATABASE
+            user_env: MARIADB_USER
+            pass_env: MARIADB_PASSWORD
+          - db_name: mariadb
+            db_version: "11.4"
+            db_image: mariadb:11.4
+            health_cmd: "mariadb-admin ping -h 127.0.0.1 -uroot -proot_pw"
+            root_pw_env: MARIADB_ROOT_PASSWORD
+            db_env: MARIADB_DATABASE
+            user_env: MARIADB_USER
+            pass_env: MARIADB_PASSWORD
+          - db_name: mysql
+            db_version: "8.0"
+            db_image: mysql:8.0
+            health_cmd: "mysqladmin ping -h 127.0.0.1 -uroot -proot_pw"
+            root_pw_env: MYSQL_ROOT_PASSWORD
+            db_env: MYSQL_DATABASE
+            user_env: MYSQL_USER
+            pass_env: MYSQL_PASSWORD
+
+    services:
+      db:
+        image: ${{ matrix.db_image }}
+        env:
+          ${{ matrix.root_pw_env }}: root_pw
+          ${{ matrix.db_env }}: cacti
+          ${{ matrix.user_env }}: cacti
+          ${{ matrix.pass_env }}: cacti_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="${{ matrix.health_cmd }}"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install integration dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "${COMMON_DEPS}"
+
+      - name: Wait for DB health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            if mysqladmin ping -h "${DB_HOST}" -P "${DB_PORT}" -u"${DB_USER}" -p"${DB_PASS}" --silent 2>/dev/null || \
+               mariadb-admin ping -h "${DB_HOST}" -P "${DB_PORT}" -u"${DB_USER}" -p"${DB_PASS}" --silent 2>/dev/null; then
+              echo "${{ matrix.db_name }} ${{ matrix.db_version }} is ready."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Database did not become ready in time." >&2
+          exit 1
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          chmod +x ./configure || true
+          ./configure CC=gcc CFLAGS='-O1 -g3' LDFLAGS=''
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Run integration tests (if available)
+        run: |
+          set -euo pipefail
+          export SPINE_DB_HOST="${DB_HOST}"
+          export SPINE_DB_PORT="${DB_PORT}"
+          export SPINE_DB_NAME="${DB_NAME}"
+          export SPINE_DB_USER="${DB_USER}"
+          export SPINE_DB_PASS="${DB_PASS}"
+
+          if make -n integration-test >/dev/null 2>&1; then
+            make integration-test
+          elif make -n integration >/dev/null 2>&1; then
+            make integration
+          elif make -n check >/dev/null 2>&1; then
+            echo "::notice::No dedicated integration target; running make check with DB env."
+            make check VERBOSE=1
+          else
+            echo "::notice::No integration-compatible make target found."
+          fi
+
+      - name: SNMP simulator placeholder
+        run: |
+          set -euo pipefail
+          echo 'Placeholder: add SNMP simulator service/container and test target wiring.'
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: integration-${{ matrix.db_name }}-${{ matrix.db_version }}-logs
+          path: |
+            config.log
+            *.log
+          if-no-files-found: ignore
+
+  netsnmp-compat:
+    name: net-snmp ${{ matrix.snmp_version }} build
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - snmp_version: "5.9"
+            snmp_image: "ubuntu:22.04"
+          - snmp_version: "5.10"
+            snmp_image: "ubuntu:24.04"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build with net-snmp ${{ matrix.snmp_version }}
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/src" -w /src "${{ matrix.snmp_image }}" bash -c '
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              gcc make autoconf automake libtool pkg-config \
+              libsnmp-dev default-libmysqlclient-dev libssl-dev
+            echo "net-snmp version:"
+            dpkg -l libsnmp-dev | grep libsnmp
+            autoreconf -fi
+            ./configure CC=gcc CFLAGS="-O2 -g -Wall" LDFLAGS=""
+            make -j"$(nproc)"
+            ./spine --version || true
+          '
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: netsnmp-${{ matrix.snmp_version }}-log
+          path: config.log
+          if-no-files-found: ignore
+
+  docker-tests:
+    name: Docker Integration Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Build spine image
+        run: docker compose -f tests/snmpv3/docker-compose.yml build spine
+
+      - name: Smoke test
+        run: ./tests/integration/smoke_test.sh
+
+      - name: Output regex test
+        run: |
+          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
+          ./tests/integration/test_output_regex.sh
+
+      - name: DB column detection test
+        run: |
+          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
+          ./tests/integration/test_db_column_detect.sh
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
