@@ -101,8 +101,8 @@
 /* Global Variables */
 int entries = 0;
 int num_hosts = 0;
-sem_t available_threads;
-sem_t available_scripts;
+spine_sem_t available_threads;
+spine_sem_t available_scripts;
 double start_time;
 double total_time;
 
@@ -202,7 +202,7 @@ int main(int argc, char *argv[]) {
 	double host_time_double = 0;
 	int items_per_thread = 0;
 	int device_threads;
-	sem_t thread_init_sem;
+	spine_sem_t thread_init_sem;
 	int a_threads_value;
 	//struct timespec until_spec;
 
@@ -390,13 +390,14 @@ int main(int argc, char *argv[]) {
 
 			/* safety: verify that the hostlist only contains numbers and commas */
 			while (*p) {
-				if (!isdigit(*p) && *p != ',') {
+				if (!isdigit((unsigned char)*p) && *p != ',') {
 					die("ERROR: --hostlist must be a comma-separated list of numeric IDs (e.g. 1,2,3)");
 				}
 				p++;
 			}
 
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", hostlist);
+		}
 		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
@@ -639,19 +640,27 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
-	qp += sprintf(qp, " WHERE disabled = ''");
+	{
+		int remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " WHERE disabled = ''");
 
-	qp += sprintf(qp, " AND availability_method != %d", AVAIL_STREAM);
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
 
-	if (!strlen(set.host_id_list)) {
-		qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
-	} else {
-		qp += sprintf(qp, " AND h.id IN(%s)", set.host_id_list);
+		if (!strlen(set.host_id_list)) {
+			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
+		} else {
+			remaining = MEGA_BUFSIZE - (qp - querybuf);
+			qp += snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
+		}
+
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
+		remaining = MEGA_BUFSIZE - (qp - querybuf);
+		qp += snprintf(qp, remaining, " ORDER BY picount DESC");
 	}
-
-	qp += sprintf(qp, " AND h.poller_id = %i", set.poller_id);
-	qp += sprintf(qp, " ORDER BY picount DESC");
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
 	result = db_query(&mysql, LOCAL, querybuf);
@@ -706,13 +715,13 @@ int main(int argc, char *argv[]) {
 	init_mutexes();
 
 	/* initialize available_threads semaphore */
-	sem_init(&available_threads, 0, set.threads);
+	spine_sem_init(&available_threads, set.threads);
 
 	/* initialize available_scripts semaphore */
-	sem_init(&available_scripts, 0, MAX_SIMULTANEOUS_SCRIPTS);
+	spine_sem_init(&available_scripts, MAX_SIMULTANEOUS_SCRIPTS);
 
 	/* initialize thread initialization semaphore */
-	sem_init(&thread_init_sem, 0, 1);
+	spine_sem_init(&thread_init_sem, 1);
 
 	/* Open the ICMP raw socket while still single-threaded and privileged.
 	 * seteuid(0) is process-wide; doing it here avoids the race where
@@ -741,7 +750,7 @@ int main(int argc, char *argv[]) {
 	//until_spec.tv_sec = (time_t)(set.poller_interval + begin_time - 0.2);
 	//until_spec.tv_nsec = 0;
 
-	sem_getvalue(&available_threads, &a_threads_value);
+	spine_sem_getvalue(&available_threads, &a_threads_value);
 	SPINE_LOG_HIGH(("DEBUG: Initial Value of Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 
 	/* tell fork processes that they are now active */
@@ -826,10 +835,10 @@ int main(int argc, char *argv[]) {
 
 				db_free_result(tresult);
 
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
+				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}
 		} else {
@@ -841,7 +850,7 @@ int main(int argc, char *argv[]) {
 
 			db_free_result(tresult);
 
-			sprintf(host_time, "%lu", (unsigned long) time(NULL));
+			snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
 		}
 
@@ -874,7 +883,7 @@ int main(int argc, char *argv[]) {
 		spine_timeout = FALSE;
 
 		while (TRUE) {
-			sem_err = sem_trywait(&available_threads);
+			sem_err = spine_sem_trywait(&available_threads);
 
 			if (sem_err == 0) {
 				/* acquired a thread */
@@ -916,7 +925,7 @@ int main(int argc, char *argv[]) {
 		loop_count = 0;
 
 		while (!spine_timeout) {
-			sem_err = sem_trywait(&thread_init_sem);
+			sem_err = spine_sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
 				// Acquired a thread
@@ -970,10 +979,10 @@ int main(int argc, char *argv[]) {
 					device_counter++;
 				}
 
-				sem_getvalue(&available_threads, &a_threads_value);
+				spine_sem_getvalue(&available_threads, &a_threads_value);
 				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
 
-				sem_post(&thread_init_sem);
+				spine_sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" host_threads = %d, host_data_ids = %d, complete = %d",
@@ -994,12 +1003,12 @@ int main(int argc, char *argv[]) {
 			/* Restore thread initialization semaphore if thread creation failed */
 			if (thread_status) {
 				thread_mutex_unlock(LOCK_HOST_TIME);
-				sem_post(&thread_init_sem);
+				spine_sem_post(&thread_init_sem);
 			}
 		}
 	}
 
-	sem_getvalue(&available_threads, &a_threads_value);
+	spine_sem_getvalue(&available_threads, &a_threads_value);
 
 	/* wait for all threads to 'complete'
  	 * using the mutex here as the semaphore will
@@ -1014,7 +1023,7 @@ int main(int argc, char *argv[]) {
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
 		usleep(500000);
-		sem_getvalue(&available_threads, &a_threads_value);
+		spine_sem_getvalue(&available_threads, &a_threads_value);
 	}
 
 	threads_final = set.threads - a_threads_value;

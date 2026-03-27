@@ -532,7 +532,7 @@ typedef struct poller_thread {
 	int complete;
 	char host_time[40];
 	double host_time_double;
-	sem_t *thread_init_sem;
+	spine_sem_t *thread_init_sem;
 } poller_thread_t;
 
 /*! PHP Script Server Structure
@@ -663,8 +663,8 @@ extern config_t set;
 extern php_t  *php_processes;
 extern char   start_datetime[20];
 extern char   config_paths[CONFIG_PATHS][BUFSIZE];
-extern sem_t  available_threads;
-extern sem_t  available_scripts;
+extern spine_sem_t  available_threads;
+extern spine_sem_t  available_scripts;
 extern pool_t *db_pool_remote;
 extern pool_t *db_pool_local;
 extern int    icmp_socket;

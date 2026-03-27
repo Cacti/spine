@@ -44,20 +44,20 @@ void child_cleanup(void *arg) {
 
 void child_cleanup_thread(void *arg) {
 	UNUSED_PARAMETER(arg);
-	sem_post(&available_threads);
+	spine_sem_post(&available_threads);
 
 	int a_threads_value;
-	sem_getvalue(&available_threads, &a_threads_value);
+	spine_sem_getvalue(&available_threads, &a_threads_value);
 
 	SPINE_LOG_DEVDBG(("DEBUG: Available Threads is %i (%i outstanding)", a_threads_value, set.threads - a_threads_value));
 }
 
 void child_cleanup_script(void *arg) {
 	UNUSED_PARAMETER(arg);
-	sem_post(&available_scripts);
+	spine_sem_post(&available_scripts);
 
 	int a_scripts_value;
-	sem_getvalue(&available_scripts, &a_scripts_value);
+	spine_sem_getvalue(&available_scripts, &a_scripts_value);
 
 	SPINE_LOG_DEVDBG(("DEBUG: Available Scripts is %i (%i outstanding)", a_scripts_value, MAX_SIMULTANEOUS_SCRIPTS - a_scripts_value));
 }
@@ -99,7 +99,7 @@ void *child(void *arg) {
 	thread_mutex_unlock(LOCK_HOST_TIME);
 
 	/* Allows main thread to proceed with creation of other threads */
-	sem_post(poller_details.thread_init_sem);
+	spine_sem_post(poller_details.thread_init_sem);
 
 	SPINE_LOG_DEV(host_id, DEBUG, ("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 
@@ -796,6 +796,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 				/* update host table */
 				if (host_thread == 1) {
+					char escaped_last_error[BUFSIZE];
+					db_escape(&mysql, escaped_last_error, sizeof(escaped_last_error), host->status_last_error);
+
 					if (!ignore_sysinfo) {
 						if (host->ignore_host != TRUE) {
 							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
@@ -810,7 +813,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								host->status_event_count,
 								host->status_fail_date,
 								host->status_rec_date,
-								host->status_last_error,
+								escaped_last_error,
 								host->min_time,
 								host->max_time,
 								host->cur_time,
@@ -836,7 +839,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								host->status_event_count,
 								host->status_fail_date,
 								host->status_rec_date,
-								host->status_last_error,
+								escaped_last_error,
 								host->min_time,
 								host->max_time,
 								host->cur_time,
@@ -857,7 +860,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							host->status_event_count,
 							host->status_fail_date,
 							host->status_rec_date,
-							host->status_last_error,
+							escaped_last_error,
 							host->min_time,
 							host->max_time,
 							host->cur_time,
@@ -2023,10 +2026,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		}
 
 		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
-			" VALUES(%i, %i, %i, \"%s\")"
+			" VALUES(%i, %i, %i, '%s')"
 			" ON DUPLICATE KEY UPDATE"
 			" errors = errors + VALUES(errors),"
-			" local_data_ids = CONCAT(local_data_ids, \", \", VALUES(local_data_ids))",
+			" local_data_ids = CONCAT(local_data_ids, ', ', VALUES(local_data_ids))",
 			host_id, set.poller_id, errors, error_string);
 
 		db_free_result(db_query(&mysql, LOCAL, error_query));
@@ -2347,7 +2350,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 
 	// use the script server timeout value, allow for 50% leeway
 	while (++retries < (set.script_timeout * 15)) {
-		sem_err = sem_trywait(&available_scripts);
+		sem_err = spine_sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
 		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {

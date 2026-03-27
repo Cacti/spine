@@ -122,7 +122,6 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		STRDUP_OR_DIE(retval, s->val, "util.c getsetting");
 		return retval;
 	}
-
 	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = db_query(psql, mode, qstring);
@@ -148,11 +147,11 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 	assert(myvalue   != 0);
 
 	if (set.dbonupdate == 0) {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
 	} else {
-		sprintf(qstring, "INSERT INTO settings (name, value) "
+		snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') AS rs "
 			"ON DUPLICATE KEY UPDATE value = rs.value", mysetting, myvalue);
 	}
@@ -916,6 +915,8 @@ void poller_push_data_to_main(void) {
 	MYSQL_ROW  row;
 	int        num_rows;
 	int        rows;
+	char       sqlbuf[HUGE_BUFSIZE];
+	char       *sqlp = sqlbuf;
 	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];/* tmpstr needs to be greater than 2 * the maximum column size being processed below */
@@ -1023,7 +1024,11 @@ void poller_push_data_to_main(void) {
 					if (flush_sql_batch(&mysqlr, &sb, suffix, "host-status") != 0) {
 						SPINE_LOG(("ERROR: Failed to flush host-status batch before appending row id '%s'", row_id));
 					}
+					rows = 0;
+				}
+					}
 
+				/* manual SQL building removed in favor of sql_buffer batching */
 					rows = 0;
 				}
 
@@ -1095,7 +1100,11 @@ void poller_push_data_to_main(void) {
 					if (flush_sql_batch(&mysqlr, &sb, suffix, "poller-item") != 0) {
 						SPINE_LOG(("ERROR: Failed to flush poller-item batch before appending row id '%s'", row_id));
 					}
+					rows = 0;
+				}
+					}
 
+				/* manual SQL building removed in favor of sql_buffer batching */
 					rows = 0;
 				}
 
@@ -1126,6 +1135,8 @@ void poller_push_data_to_main(void) {
 			if (flush_sql_batch(&mysqlr, &sb, suffix, "poller-item-final") != 0) {
 				SPINE_LOG(("ERROR: Failed to flush final poller-item batch"));
 			}
+
+			rows = 0;
 		}
 	}
 
