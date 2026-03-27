@@ -398,7 +398,6 @@ int main(int argc, char *argv[]) {
 
 			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", hostlist);
 		}
-		}
 
 		else if (STRIMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
 			set.mibs = 1;

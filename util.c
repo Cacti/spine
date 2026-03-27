@@ -1026,11 +1026,6 @@ void poller_push_data_to_main(void) {
 					}
 					rows = 0;
 				}
-					}
-
-				/* manual SQL building removed in favor of sql_buffer batching */
-					rows = 0;
-				}
 
 				if (append_host_status_row(&sb, &mysql, row, tmpstr, sizeof(tmpstr), prefix, rows > 0) != 0) {
 					SPINE_LOG(("WARNING: SQL append failed for host-status row id '%s'; attempting flush+retry", row_id));
@@ -1100,11 +1095,6 @@ void poller_push_data_to_main(void) {
 					if (flush_sql_batch(&mysqlr, &sb, suffix, "poller-item") != 0) {
 						SPINE_LOG(("ERROR: Failed to flush poller-item batch before appending row id '%s'", row_id));
 					}
-					rows = 0;
-				}
-					}
-
-				/* manual SQL building removed in favor of sql_buffer batching */
 					rows = 0;
 				}
 
