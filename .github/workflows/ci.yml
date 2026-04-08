@@ -36,7 +36,7 @@ jobs:
 
       - name: Build Spine
         run: |
-          make -j 
+          make -j
 
 #  cppcheck:
 #    runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
 #
 #      - name: Install cppcheck
 #        run: |
-#          sudo apt-get update 
+#          sudo apt-get update
 #          sudo apt-get install -y cppcheck build-essential
 #
 #      - name: Run cppcheck
@@ -94,3 +94,88 @@ jobs:
         with:
           name: flawfinder-report
           path: flawfinder-report.txt
+
+  build-cmake-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config \
+            libmysqlclient-dev libsnmp-dev libssl-dev
+
+      - name: Configure
+        run: |
+          cmake -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -B build
+
+      - name: Build
+        run: cmake --build build
+
+  build-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - uses: msys2/setup-msys2@d44ca8e88d8b43d56cf71b6e8e17253983e8e4f7
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-libmariadbclient
+            mingw-w64-x86_64-net-snmp
+            mingw-w64-x86_64-openssl
+            pkg-config
+
+      - name: Configure
+        run: |
+          mkdir build && cd build
+          cmake -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            ..
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success()
+        with:
+          name: spine-windows-x64
+          path: build/spine.exe
+
+      - name: Configure crash dumps
+        if: always()
+        shell: pwsh
+        run: |
+          $dumpDir = "${{ github.workspace }}\crashdumps"
+          New-Item -ItemType Directory -Path $dumpDir -Force
+          $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\spine.exe"
+          New-Item -Path $regPath -Force
+          Set-ItemProperty -Path $regPath -Name "DumpType" -Value 2 -Type DWord
+          Set-ItemProperty -Path $regPath -Name "DumpFolder" -Value $dumpDir -Type ExpandString
+
+      - name: Upload crash dumps
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: crash-dumps
+          path: crashdumps/
+          if-no-files-found: ignore
