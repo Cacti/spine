@@ -34,6 +34,12 @@
 #ifndef _SPINE_H_
 #define _SPINE_H_
 
+/* spine.h requires common.h to be included first for platform
+ * headers, MySQL types, pthreads, and config.h defines. */
+#ifndef SPINE_COMMON_H
+#error "spine.h must be included after common.h"
+#endif
+
 /* Defines */
 #ifndef FALSE
 #define FALSE 0
