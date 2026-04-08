@@ -377,7 +377,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(packet);
-					close(icmp_socket);
+					CLOSE_SOCKET(icmp_socket);
 					return HOST_DOWN;
 				}
 
@@ -408,7 +408,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
-					close(icmp_socket);
+					CLOSE_SOCKET(icmp_socket);
 					return HOST_DOWN;
 				}
 				FD_SET(icmp_socket,&socket_fds);
@@ -461,7 +461,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 									}
 								}
 								#endif
-								close(icmp_socket);
+								CLOSE_SOCKET(icmp_socket);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 								if (hasCaps() != TRUE) {
 									if (seteuid(getuid()) == -1) {
@@ -512,7 +512,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 			}
 			#endif
-			close(icmp_socket);
+			CLOSE_SOCKET(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				if (seteuid(getuid()) == -1) {
@@ -536,7 +536,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 			}
 			#endif
-			close(icmp_socket);
+			CLOSE_SOCKET(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				if (seteuid(getuid()) == -1) {
@@ -604,7 +604,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, 50, "down");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Cannot connect to host");
-				close(udp_socket);
+				CLOSE_SOCKET(udp_socket);
 				return HOST_DOWN;
 			}
 
@@ -622,7 +622,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					close(udp_socket);
+					CLOSE_SOCKET(udp_socket);
 					return HOST_DOWN;
 				}
 
@@ -661,7 +661,11 @@ int ping_udp(host_t *host, ping_t *ping) {
 				/* check to see which socket talked */
 				if (return_code > 0) {
 					if (FD_ISSET(udp_socket, &socket_fds)) {
+						#ifdef _WIN32
+						return_code = recv(udp_socket, socket_reply, BUFSIZE, 0);
+						#else
 						return_code = read(udp_socket, socket_reply, BUFSIZE);
+						#endif
 
 						if (return_code == -1 && (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED)) {
 							if (is_debug_device(host->id)) {
@@ -671,7 +675,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 							}
 							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
 							snprintf(ping->ping_status, 50, "%.5f", total_time);
-							close(udp_socket);
+							CLOSE_SOCKET(udp_socket);
 							return HOST_UP;
 						}
 					}
@@ -683,7 +687,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 					} else {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						close(udp_socket);
+						CLOSE_SOCKET(udp_socket);
 						return HOST_DOWN;
 					}
 				} else {
@@ -704,13 +708,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			close(udp_socket);
+			CLOSE_SOCKET(udp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		if (udp_socket != -1) close(udp_socket);
+		if (udp_socket != -1) CLOSE_SOCKET(udp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -793,19 +797,19 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					}
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
 					snprintf(ping->ping_status, 50, "%.5f", total_time);
-					close(tcp_socket);
+					CLOSE_SOCKET(tcp_socket);
 					return HOST_UP;
 				} else {
 					#if defined(__CYGWIN__)
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-					close(tcp_socket);
+					CLOSE_SOCKET(tcp_socket);
 					return HOST_DOWN;
 					#else
 					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-						close(tcp_socket);
+						CLOSE_SOCKET(tcp_socket);
 						return HOST_DOWN;
 					} else {
 						retry_count++;
@@ -816,13 +820,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			close(tcp_socket);
+			CLOSE_SOCKET(tcp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		if (tcp_socket != -1) close(tcp_socket);
+		if (tcp_socket != -1) CLOSE_SOCKET(tcp_socket);
 		return HOST_DOWN;
 	}
 }

@@ -77,28 +77,46 @@
 #  include <unistd.h>
 #endif
 
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <iphlpapi.h>
+#include <process.h>
+#include <io.h>
+#else
 #include <sys/socket.h>
 #include <sys/select.h>
+#endif
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
 #include <mysql.h>
+#ifndef _WIN32
 #include <netdb.h>
+#endif
 #include "spine_sem.h"
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
+#ifndef _WIN32
 #include <syslog.h>
+#endif
 #include <stdbool.h>
+#ifndef _WIN32
 #include <arpa/inet.h>
+#endif
 
 #if HAVE_STDINT_H
 #  include <stdint.h>
 #endif
 
+#ifndef _WIN32
 #if HAVE_NETINET_IN_H
 #  include <netinet/in_systm.h>
 #  include <netinet/in.h>
@@ -109,7 +127,11 @@
 #endif
 #  include <netinet/ip_icmp.h>
 #endif
+#endif
 
+#ifdef _WIN32
+#  include <time.h>
+#else
 #if TIME_WITH_SYS_TIME
 #  include <sys/time.h>
 #  include <time.h>
@@ -119,6 +141,7 @@
 #  else
 #    include <time.h>
 #  endif
+#endif
 #endif
 
 #ifndef HAVE_LIBPTHREAD

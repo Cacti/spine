@@ -238,6 +238,50 @@
 
 #define SPINE_FREE(s) do { if (s) { free((void *)s); s = NULL; } } while(0)
 
+/* -----------------------------------------------------------------------
+ * Windows portability shims
+ * -----------------------------------------------------------------------*/
+#ifdef _WIN32
+
+/* POSIX -> Win32 function mappings */
+#define usleep(usec)    Sleep((usec) / 1000)
+#define sleep(sec)      Sleep((sec) * 1000)
+#define getpid()        _getpid()
+#define isatty(fd)      _isatty(fd)
+#define fileno(f)       _fileno(f)
+#define setenv(n,v,o)   _putenv_s((n), (v))
+#define localtime_r(timep, result) localtime_s((result), (timep))
+#define strcasecmp(a,b) _stricmp((a),(b))
+
+/* Socket close: sockets use closesocket(), pipes use _close() */
+#define CLOSE_SOCKET(s) closesocket(s)
+
+/* Type portability */
+typedef int pid_t;
+
+/* Config paths */
+#undef CONFIG_PATHS
+#undef CONFIG_PATH_2
+#undef CONFIG_PATH_3
+#define CONFIG_PATHS 2
+#define CONFIG_PATH_2 "../etc/"
+#define CONFIG_PATH_3 ""
+
+/* Default log file */
+#undef DEFAULT_LOGFILE
+#define DEFAULT_LOGFILE "cacti.log"
+
+/* Disable stderr on Windows (no console in service mode) */
+#ifndef DISABLE_STDERR
+#define DISABLE_STDERR
+#endif
+
+#else /* POSIX */
+
+#define CLOSE_SOCKET(s) close(s)
+
+#endif /* _WIN32 */
+
 /* logging levels */
 #define POLLER_VERBOSITY_NONE 1
 #define POLLER_VERBOSITY_LOW 2

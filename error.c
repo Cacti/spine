@@ -75,18 +75,22 @@ static void spine_signal_handler(int spine_signal) {
 			fprintf(stderr, "%s FATAL: Spine Encountered a Segmentation Fault\n", logtime);
 			exit(1);
 			break;
+#ifndef _WIN32
 		case SIGBUS:
 			fprintf(stderr, "%s FATAL: Spine Encountered a Bus Error\n", logtime);
 			break;
+#endif
 		case SIGFPE:
 			fprintf(stderr, "%s FATAL: Spine Encountered a Floating Point Exception\n", logtime);
 			break;
+#ifndef _WIN32
 		case SIGQUIT:
 			fprintf(stderr, "%s FATAL: Spine Encountered a Keyboard Quit Command\n", logtime);
 			break;
 		case SIGPIPE:
 			fprintf(stderr, "%s FATAL: Spine Encountered a Broken Pipe\n", logtime);
 			break;
+#endif
 		default:
 			fprintf(stderr, "%s FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", logtime, spine_signal);
 			break;
@@ -95,12 +99,18 @@ static void spine_signal_handler(int spine_signal) {
 
 static int spine_fatal_signals[] = {
 	SIGINT,
+#ifndef _WIN32
 	SIGPIPE,
+#endif
 	SIGSEGV,
+#ifndef _WIN32
 	SIGBUS,
+#endif
 	SIGFPE,
+#ifndef _WIN32
 	SIGQUIT,
 	SIGSYS,
+#endif
 	SIGABRT,
 	0
 };
@@ -113,8 +123,10 @@ static int spine_fatal_signals[] = {
 void install_spine_signal_handler(void) {
 	/* Set a handler for any fatal signal not already handled */
 	int i;
-	struct sigaction sa;
 	void (*ohandler)(int);
+
+#ifndef _WIN32
+	struct sigaction sa;
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -125,6 +137,7 @@ void install_spine_signal_handler(void) {
 			sigaction(spine_fatal_signals[i], &sa, NULL);
 		}
 	}
+#endif
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		ohandler = signal(spine_fatal_signals[i], spine_signal_handler);
@@ -143,8 +156,10 @@ void install_spine_signal_handler(void) {
 void uninstall_spine_signal_handler(void) {
 	/* Remove a handler for any fatal signal handled */
 	int i;
-	struct sigaction sa;
 	void (*ohandler)(int);
+
+#ifndef _WIN32
+	struct sigaction sa;
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -153,6 +168,7 @@ void uninstall_spine_signal_handler(void) {
 			sigaction(spine_fatal_signals[i], &sa, NULL);
 		}
 	}
+#endif
 
 	for ( i=0; spine_fatal_signals[i]; ++i ) {
 		ohandler = signal(spine_fatal_signals[i], SIG_DFL);

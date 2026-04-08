@@ -33,7 +33,9 @@
 
 #include "common.h"
 #include "spine.h"
+#ifndef _WIN32
 #include <spawn.h>
+#endif
 
 extern char **environ;
 

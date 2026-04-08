@@ -1384,6 +1384,7 @@ int spine_log(const char *format, ...) {
 	strncat(flogmessage, ulogmessage, ulog_len);
 
 	/* output to syslog/eventlog */
+#ifndef _WIN32
 	if (IS_LOGGING_TO_SYSLOG()) {
 		openlog("Cacti", LOG_NDELAY | LOG_PID, LOG_SYSLOG);
 
@@ -1401,6 +1402,7 @@ int spine_log(const char *format, ...) {
 
 		closelog();
 	}
+#endif
 
 	/* append a line feed to the log message if needed */
 	if (!strstr(flogmessage, "\n")) {
@@ -1747,11 +1749,18 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
  *  \return system time (at microsecond resolution) as a double
  */
 double get_time_as_double(void) {
+#ifdef _WIN32
+	LARGE_INTEGER freq, count;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&count);
+	return (double)count.QuadPart / (double)freq.QuadPart;
+#else
 	struct timeval now;
 
 	gettimeofday(&now, NULL);
 
 	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
+#endif
 }
 
 /*! \fn trim()
