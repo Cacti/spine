@@ -419,7 +419,7 @@ int main(int argc, char *argv[]) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
-			if (*value) {
+			if (value != NULL && *value) {
 				*value++ = '\0';
 			} else {
 				die("ERROR: -O requires setting:value");
