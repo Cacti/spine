@@ -231,12 +231,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	//db_connect(LOCAL, &mysql);
 	local_cnn = db_get_connection(LOCAL);
+	if (local_cnn == NULL) {
+		SPINE_LOG(("FATAL: Device[%i] HT[%i] Unable to acquire local DB connection", host_id, host_thread));
+		return;
+	}
 	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
+		if (remote_cnn == NULL) {
+			SPINE_LOG(("FATAL: Device[%i] HT[%i] Unable to acquire remote DB connection", host_id, host_thread));
+			db_release_connection(LOCAL, local_cnn->id);
+			return;
+		}
 		mysqlr = remote_cnn->mysql;
 	}
 
