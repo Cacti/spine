@@ -373,14 +373,15 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
-			if (STRIMATCH(getarg(opt, &argv), "online")) {
+			const char *mode_arg = getarg(opt, &argv);
+			if (STRIMATCH(mode_arg, "online")) {
 				set.mode = REMOTE_ONLINE;
-			} else if (STRIMATCH(getarg(opt, &argv), "offline")) {
+			} else if (STRIMATCH(mode_arg, "offline")) {
 				set.mode = REMOTE_OFFLINE;
-			} else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
+			} else if (STRIMATCH(mode_arg, "recovery")) {
 				set.mode = REMOTE_RECOVERY;
 			} else {
-				die("ERROR: invalid polling mode '%s' specified", opt);
+				die("ERROR: invalid polling mode '%s' specified", mode_arg);
 			}
 		}
 
