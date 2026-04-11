@@ -62,6 +62,8 @@
 #include <execinfo.h>
 #endif
 
+#include "platform_process.h"
+
 /* if a host is legal, return TRUE */
 #define HOSTID_DEFINED(x)	((x) >= 0)
 
@@ -510,7 +512,7 @@ typedef struct poller_thread {
  */
 typedef struct php_processes {
 	int    php_state;
-	pid_t  php_pid;
+	spine_pid_t  php_pid;
 	int    php_write_fd;
 	int    php_read_fd;
 } php_t;

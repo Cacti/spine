@@ -95,7 +95,7 @@ static struct pid
 {
     struct pid *next;
     int		fd;
-    pid_t	pid;
+    spine_pid_t	pid;
 } * PidList;
 
 /* Serialize access to PidList. */
@@ -133,7 +133,7 @@ int nft_popen(const char * command, const char * type) {
 	struct pid *p;
 	int    pdes[2];
 	int    fd, twoway;
-	pid_t  pid;
+	spine_pid_t  pid;
 	char   *argv[4];
 	char   *command_copy;
 	char   shell_cmd[] = "sh";
@@ -282,7 +282,7 @@ int nft_popen(const char * command, const char * type) {
  */
 int nft_pchild(int fd) {
 	struct pid *cur;
-	pid_t	pid = 0;
+	spine_pid_t	pid = 0;
 
 	/* Find the appropriate file descriptor. */
 	pthread_mutex_lock(&ListMutex);
@@ -323,7 +323,7 @@ nft_pclose(int fd)
 {
 	struct pid *cur;
 	int		pstat;
-	pid_t	pid;
+	spine_pid_t	pid;
 
 	/* Find the appropriate file descriptor. */
 	pthread_mutex_lock(&ListMutex);

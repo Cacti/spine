@@ -17,7 +17,7 @@ static void test_platform_pipe_helpers(void) {
 }
 
 static void test_platform_spawn_and_wait(void) {
-	pid_t pid;
+	spine_pid_t pid;
 	int status;
 #ifdef _WIN32
 	char cmd_path[] = "C:\\Windows\\System32\\cmd.exe";
@@ -37,7 +37,7 @@ static void test_platform_spawn_and_wait(void) {
 }
 
 static void test_platform_spawn_and_terminate(void) {
-	pid_t pid;
+	spine_pid_t pid;
 	int status;
 #ifdef _WIN32
 	char cmd_path[] = "C:\\Windows\\System32\\cmd.exe";

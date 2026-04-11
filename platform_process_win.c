@@ -20,14 +20,14 @@ int spine_process_close_fd(int fd) {
 	return _close(fd);
 }
 
-int spine_process_wait(pid_t pid, int *status) {
+int spine_process_wait(spine_pid_t pid, int *status) {
 	HANDLE process_handle;
 	DWORD wait_result;
 	DWORD exit_code;
 
-	process_handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD) pid);
-	if (process_handle == NULL) {
-		errno = ECHILD;
+	process_handle = (HANDLE) pid;
+	if (process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) {
+		errno = ESRCH;
 		return -1;
 	}
 
@@ -52,18 +52,17 @@ int spine_process_wait(pid_t pid, int *status) {
 	return 0;
 }
 
-int spine_process_terminate(pid_t pid) {
+int spine_process_terminate(spine_pid_t pid) {
 	HANDLE process_handle;
 	BOOL terminate_result;
 
-	process_handle = OpenProcess(PROCESS_TERMINATE, FALSE, (DWORD) pid);
-	if (process_handle == NULL) {
+	process_handle = (HANDLE) pid;
+	if (process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) {
 		errno = ESRCH;
 		return -1;
 	}
 
 	terminate_result = TerminateProcess(process_handle, 1);
-	CloseHandle(process_handle);
 
 	if (terminate_result == 0) {
 		errno = ESRCH;
@@ -74,7 +73,7 @@ int spine_process_terminate(pid_t pid) {
 }
 
 int spine_process_spawn_retry(
-	pid_t *pid,
+	spine_pid_t *pid,
 	const char *path,
 	void *file_actions,
 	char *const argv[],
@@ -95,7 +94,7 @@ int spine_process_spawn_retry(
 	do {
 		spawn_result = _spawnve(_P_NOWAIT, path, (const char * const *) argv, (const char * const *) spawn_envp);
 		if (spawn_result != -1) {
-			*pid = (pid_t) spawn_result;
+			*pid = (spine_pid_t) spawn_result;
 			return 0;
 		}
 

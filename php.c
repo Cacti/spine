@@ -304,7 +304,7 @@ char *php_readpipe(int php_process, char *command) {
 int php_init(int php_process) {
 	int  cacti2php_pdes[2];
 	int  php2cacti_pdes[2];
-	pid_t  pid;
+	spine_pid_t  pid;
 	char poller_id[TINY_BUFSIZE];
 	char *argv[7];
 	char arg_q[] = "-q";

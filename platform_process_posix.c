@@ -20,7 +20,7 @@ int spine_process_close_fd(int fd) {
 	return close(fd);
 }
 
-int spine_process_wait(pid_t pid, int *status) {
+int spine_process_wait(spine_pid_t pid, int *status) {
 	pid_t wait_result;
 
 	do {
@@ -30,12 +30,12 @@ int spine_process_wait(pid_t pid, int *status) {
 	return wait_result == -1 ? -1 : 0;
 }
 
-int spine_process_terminate(pid_t pid) {
+int spine_process_terminate(spine_pid_t pid) {
 	return kill(pid, SIGTERM);
 }
 
 int spine_process_spawn_retry(
-	pid_t *pid,
+	spine_pid_t *pid,
 	const char *path,
 	posix_spawn_file_actions_t *file_actions,
 	char *const argv[],
@@ -51,11 +51,17 @@ int spine_process_spawn_retry(
 	spawn_envp = envp == NULL ? environ : envp;
 
 	do {
-		spawn_err = posix_spawn(pid, path, file_actions, NULL, argv, spawn_envp);
+		pid_t spawned_pid;
+
+		spawn_err = posix_spawn(&spawned_pid, path, file_actions, NULL, argv, spawn_envp);
 		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < retry_limit) {
 			retry_count++;
 			spine_platform_sleep_us(retry_sleep_us);
 			continue;
+		}
+
+		if (spawn_err == 0) {
+			*pid = spawned_pid;
 		}
 
 		break;
