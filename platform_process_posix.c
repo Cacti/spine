@@ -10,6 +10,8 @@
 
 #include "platform.h"
 
+extern char **environ;
+
 int spine_process_pipe(int pipe_fds[2]) {
 	return pipe(pipe_fds);
 }
@@ -43,11 +45,13 @@ int spine_process_spawn_retry(
 ) {
 	int spawn_err;
 	int retry_count;
+	char *const *spawn_envp;
 
 	retry_count = 0;
+	spawn_envp = envp == NULL ? environ : envp;
 
 	do {
-		spawn_err = posix_spawn(pid, path, file_actions, NULL, argv, envp);
+		spawn_err = posix_spawn(pid, path, file_actions, NULL, argv, spawn_envp);
 		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < retry_limit) {
 			retry_count++;
 			spine_platform_sleep_us(retry_sleep_us);
