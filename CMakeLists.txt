@@ -288,6 +288,8 @@ if(SPINE_BUILD_MAIN)
         platform_common.c
         platform_posix.c
         platform_win.c
+        platform_socket_posix.c
+        platform_socket_win.c
     )
 
     add_executable(spine ${SPINE_SOURCES})
@@ -328,17 +330,25 @@ if(SPINE_BUILD_MAIN)
 endif()
 
 if(BUILD_TESTING)
-    add_executable(test_platform_smoke
-        tests/unit/test_platform_smoke.c
+    set(PLATFORM_TEST_SOURCES
         platform_common.c
         platform_posix.c
         platform_win.c
+        platform_socket_posix.c
+        platform_socket_win.c
     )
-    target_include_directories(test_platform_smoke PRIVATE
-        ${CMAKE_SOURCE_DIR}
-    )
-    if(WIN32)
-        target_link_libraries(test_platform_smoke PRIVATE ws2_32)
-    endif()
-    add_test(NAME platform_smoke COMMAND test_platform_smoke)
+
+    foreach(test_name IN ITEMS env time process socket)
+        add_executable(test_platform_${test_name}
+            tests/unit/test_platform_${test_name}.c
+            ${PLATFORM_TEST_SOURCES}
+        )
+        target_include_directories(test_platform_${test_name} PRIVATE
+            ${CMAKE_SOURCE_DIR}
+        )
+        if(WIN32)
+            target_link_libraries(test_platform_${test_name} PRIVATE ws2_32)
+        endif()
+        add_test(NAME platform_${test_name} COMMAND test_platform_${test_name})
+    endforeach()
 endif()

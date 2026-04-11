@@ -10,22 +10,35 @@ CFLAGS ?= -O2 -Wall -Wextra
 
 SPINE_ROOT := ../..
 BINDIR := build
-TARGET := $(BINDIR)/test_platform_smoke
+PLATFORM_SOURCES := $(SPINE_ROOT)/platform_common.c $(SPINE_ROOT)/platform_posix.c $(SPINE_ROOT)/platform_win.c $(SPINE_ROOT)/platform_socket_posix.c $(SPINE_ROOT)/platform_socket_win.c
+TEST_SOURCES := test_platform_env.c test_platform_time.c test_platform_process.c test_platform_socket.c
+TARGETS := $(patsubst %.c,$(BINDIR)/%,$(TEST_SOURCES))
 
 .PHONY: all compile run clean
 
 all: run
 
-compile: $(TARGET)
+compile: $(TARGETS)
 
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-$(TARGET): test_platform_smoke.c $(SPINE_ROOT)/platform_common.c $(SPINE_ROOT)/platform_posix.c $(SPINE_ROOT)/platform_win.c $(SPINE_ROOT)/platform.h | $(BINDIR)
-	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_smoke.c $(SPINE_ROOT)/platform_common.c $(SPINE_ROOT)/platform_posix.c $(SPINE_ROOT)/platform_win.c -o $@
+$(BINDIR)/test_platform_env: test_platform_env.c $(SPINE_ROOT)/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_env.c $(PLATFORM_SOURCES) -o $@
 
-run: $(TARGET)
-	$(TARGET)
+$(BINDIR)/test_platform_time: test_platform_time.c $(SPINE_ROOT)/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_time.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_process: test_platform_process.c $(SPINE_ROOT)/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_process.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_socket: test_platform_socket.c $(SPINE_ROOT)/platform.h $(SPINE_ROOT)/platform_socket.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_socket.c $(PLATFORM_SOURCES) -o $@
+
+run: $(TARGETS)
+	@for test_binary in $(TARGETS); do \
+		$$test_binary; \
+	done
 
 clean:
 	rm -rf $(BINDIR)

@@ -33,6 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
+#include "platform_socket.h"
 
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
@@ -257,7 +258,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
-	int    icmp_socket;
+	spine_socket_t icmp_socket;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -272,7 +273,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    packet_len;
 	socklen_t    fromlen;
 	ssize_t    return_code;
-	fd_set socket_fds;
 
 	static   unsigned int seq = 0;
 	struct   icmp  *icmp;
@@ -298,7 +298,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 		#endif
 
-		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
+		if (!spine_socket_is_valid(icmp_socket = spine_socket_open(AF_INET, SOCK_RAW, IPPROTO_ICMP))) {
 			spine_platform_sleep_us(500000);
 			retry_count++;
 
@@ -361,7 +361,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
+	if ((strlen(host->hostname) != 0) && spine_socket_is_valid(icmp_socket)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -377,7 +377,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
 					free(packet);
-					close(icmp_socket);
+					spine_socket_close(icmp_socket);
 					return HOST_DOWN;
 				}
 
@@ -392,27 +392,23 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
 				/* set the socket send and receive timeout */
-				setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-				setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+				spine_socket_set_timeout(icmp_socket, &timeout);
 
 				/* send packet to destination */
-				return_code = sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
+				return_code = spine_socket_sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
 
 				fromlen = sizeof(fromname);
 
 				/* wait for a response on the socket */
 				/* reinitialize fd_set -- select(2) clears bits in place on return */
 				keep_listening:
-				FD_ZERO(&socket_fds);
-				if (icmp_socket >= FD_SETSIZE) {
-					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+				if (!spine_socket_is_valid(icmp_socket)) {
 					snprintf(ping->ping_status, 50, "down");
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
-					close(icmp_socket);
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: invalid socket");
+					spine_socket_close(icmp_socket);
 					return HOST_DOWN;
 				}
-				FD_SET(icmp_socket,&socket_fds);
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				return_code = spine_socket_wait_readable(icmp_socket, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -422,13 +418,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				if (total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+					return_code = spine_socket_recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 					#else
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
+					return_code = spine_socket_recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
 					#endif
 
 					if (return_code < 0) {
-						if (errno == EINTR) {
+						if (spine_socket_error_is_interrupted(spine_socket_last_error())) {
 							/* call was interrupted by some system event */
 
 							if (is_debug_device(host->id)) {
@@ -461,7 +457,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 									}
 								}
 								#endif
-								close(icmp_socket);
+								spine_socket_close(icmp_socket);
 								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 								if (hasCaps() != TRUE) {
 									if (seteuid(getuid()) == -1) {
@@ -512,7 +508,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 			}
 			#endif
-			close(icmp_socket);
+			spine_socket_close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				if (seteuid(getuid()) == -1) {
@@ -527,7 +523,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
 		free(packet);
-		if (icmp_socket != -1) {
+		if (spine_socket_is_valid(icmp_socket)) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
@@ -536,7 +532,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 			}
 			#endif
-			close(icmp_socket);
+			spine_socket_close(icmp_socket);
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				if (seteuid(getuid()) == -1) {
@@ -567,14 +563,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
-	int    udp_socket;
+	spine_socket_t udp_socket;
 	struct sockaddr_in servername;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
 	char   request[BUFSIZE];
 	int    request_len;
 	int    return_code;
-	fd_set socket_fds;
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
@@ -591,20 +586,20 @@ int ping_udp(host_t *host, ping_t *ping) {
 	host_timeout = host->ping_timeout;
 
 	/* initialize the socket */
-	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	udp_socket = spine_socket_open(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (udp_socket != -1)) {
+	if ((strlen(host->hostname) != 0) && spine_socket_is_valid(udp_socket)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* get address of hostname */
 		if (init_sockaddr(&servername, host->hostname, host->ping_port)) {
-			if (connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
+			if (spine_socket_connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
 				snprintf(ping->ping_status, 50, "down");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Cannot connect to host");
-				close(udp_socket);
+				spine_socket_close(udp_socket);
 				return HOST_DOWN;
 			}
 
@@ -614,15 +609,11 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			retry_count = 0;
 
-			/* initialize file descriptor to review for input/output */
-			FD_ZERO(&socket_fds);
-			FD_SET(udp_socket,&socket_fds);
-
 			while (1) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					close(udp_socket);
+					spine_socket_close(udp_socket);
 					return HOST_DOWN;
 				}
 
@@ -633,24 +624,22 @@ int ping_udp(host_t *host, ping_t *ping) {
 					timeout.tv_usec = rint((int) host_timeout % 1000) * 1000;
 
 					/* set the socket send and receive timeout */
-					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+					spine_socket_set_timeout(udp_socket, &timeout);
 				} else {
 					/* decrement the timeout value by the total time */
 					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
 					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
 					/* set the socket send and receive timeout */
-					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+					spine_socket_set_timeout(udp_socket, &timeout);
 				}
 
 				/* send packet to destination */
-				send(udp_socket, request, request_len, 0);
+				spine_socket_send(udp_socket, request, request_len, 0);
 
 				/* wait for a response on the socket */
 				wait_more:
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				return_code = spine_socket_wait_readable(udp_socket, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -660,10 +649,12 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* check to see which socket talked */
 				if (return_code > 0) {
-					if (FD_ISSET(udp_socket, &socket_fds)) {
-						return_code = read(udp_socket, socket_reply, BUFSIZE);
+					return_code = spine_socket_recv(udp_socket, socket_reply, BUFSIZE, 0);
 
-						if (return_code == -1 && (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED)) {
+					if (return_code == -1 && (
+						spine_socket_error_is_host_unreachable(spine_socket_last_error()) ||
+						spine_socket_error_is_conn_reset(spine_socket_last_error()) ||
+						spine_socket_error_is_conn_refused(spine_socket_last_error()))) {
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 							} else {
@@ -671,19 +662,18 @@ int ping_udp(host_t *host, ping_t *ping) {
 							}
 							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
 							snprintf(ping->ping_status, 50, "%.5f", total_time);
-							close(udp_socket);
+							spine_socket_close(udp_socket);
 							return HOST_UP;
-						}
 					}
 				} else if (return_code == -1) {
-					if (errno == EINTR) {
+					if (spine_socket_error_is_interrupted(spine_socket_last_error())) {
 						/* interrupted, try again */
 						spine_platform_sleep_us(10000);
 						goto wait_more;
 					} else {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						close(udp_socket);
+						spine_socket_close(udp_socket);
 						return HOST_DOWN;
 					}
 				} else {
@@ -704,13 +694,13 @@ int ping_udp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			close(udp_socket);
+			spine_socket_close(udp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		if (udp_socket != -1) close(udp_socket);
+		if (spine_socket_is_valid(udp_socket)) spine_socket_close(udp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -733,7 +723,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
-	int    tcp_socket;
+	spine_socket_t tcp_socket;
 	struct sockaddr_in servername;
 	int    retry_count;
 	int    return_code;
@@ -748,7 +738,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	host_timeout = host->ping_timeout;
 
 	/* initialize the socket */
-	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	tcp_socket = spine_socket_open(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	/* initialize total time */
 	total_time = 0;
@@ -757,7 +747,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	begin_time = get_time_as_double();
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
+	if ((strlen(host->hostname) != 0) && spine_socket_is_valid(tcp_socket)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -773,11 +763,10 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
 
 				/* set the socket send and receive timeout */
-				setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-				setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+				spine_socket_set_timeout(tcp_socket, &timeout);
 
 				/* make the connection */
-				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
+				return_code = spine_socket_connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -785,7 +774,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				/* calculate total time */
 				total_time = (end_time - begin_time) * one_thousand;
 
-				if ((return_code == -1 && errno == ECONNREFUSED && host->ping_method == PING_TCP_CLOSED) || return_code == 0) {
+				if ((return_code == -1 && spine_socket_error_is_conn_refused(spine_socket_last_error()) && host->ping_method == PING_TCP_CLOSED) || return_code == 0) {
 					if (is_debug_device(host->id)) {
 						SPINE_LOG(("Device[%i] INFO: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 					} else {
@@ -793,19 +782,19 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					}
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
 					snprintf(ping->ping_status, 50, "%.5f", total_time);
-					close(tcp_socket);
+					spine_socket_close(tcp_socket);
 					return HOST_UP;
 				} else {
 					#if defined(__CYGWIN__)
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-					close(tcp_socket);
+					spine_socket_close(tcp_socket);
 					return HOST_DOWN;
 					#else
 					if (retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-						close(tcp_socket);
+						spine_socket_close(tcp_socket);
 						return HOST_DOWN;
 					} else {
 						retry_count++;
@@ -816,13 +805,13 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			close(tcp_socket);
+			spine_socket_close(tcp_socket);
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		if (tcp_socket != -1) close(tcp_socket);
+		if (spine_socket_is_valid(tcp_socket)) spine_socket_close(tcp_socket);
 		return HOST_DOWN;
 	}
 }
