@@ -45,6 +45,10 @@ jobs:
         run: |
           make -j
 
+      - name: Run Unit Smoke Tests
+        run: |
+          make check-unit
+
 #  cppcheck:
 #    runs-on: ubuntu-latest
 #    steps:
@@ -129,6 +133,9 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
   build-windows:
     runs-on: windows-latest
     defaults:
@@ -161,16 +168,23 @@ jobs:
           fi
 
       - name: Configure
-        if: steps.netsnmp.outputs.available == 'true'
         run: |
           mkdir build && cd build
+          if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
+            spine_build_main=ON
+          else
+            spine_build_main=OFF
+          fi
           cmake -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSPINE_BUILD_MAIN=${spine_build_main} \
             ..
 
       - name: Build
-        if: steps.netsnmp.outputs.available == 'true'
         run: cmake --build build
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
 
       - name: Upload binary
         if: steps.netsnmp.outputs.available == 'true' && success()

@@ -233,7 +233,7 @@ int nft_popen(const char * command, const char * type) {
 	if (spawn_err != 0) {
 		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
 			retry_count++;
-			usleep(50000);
+			spine_platform_sleep_us(50000);
 			goto retry;
 		}
 

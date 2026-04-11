@@ -244,6 +244,10 @@ int main(int argc, char *argv[]) {
 	/* install the spine signal handler */
 	install_spine_signal_handler();
 
+	if (spine_platform_init() != 0) {
+		die("ERROR: Failed to initialize platform runtime services.");
+	}
+
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
@@ -261,13 +265,13 @@ int main(int argc, char *argv[]) {
 	set.threads_set = FALSE;
 
 	/* detect and compensate for stdin/stderr ttys */
-	if (!isatty(fileno(stdout))) {
+	if (!spine_platform_stdout_is_terminal()) {
 		set.stdout_notty = TRUE;
 	} else {
 		set.stdout_notty = FALSE;
 	}
 
-	if (!isatty(fileno(stderr))) {
+	if (!spine_platform_stderr_is_terminal()) {
 		set.stderr_notty = TRUE;
 	} else {
 		set.stderr_notty = FALSE;
@@ -467,7 +471,7 @@ int main(int argc, char *argv[]) {
 
 	/* we attempt to support scripts better in cygwin */
 	#if defined(__CYGWIN__)
-	setenv("CYGWIN", "nodosfilewarning", 1);
+	spine_platform_setenv("CYGWIN", "nodosfilewarning", 1);
 	if (file_exists("./sh.exe")) {
 		set.cygwinshloc = 0;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
@@ -699,12 +703,9 @@ int main(int argc, char *argv[]) {
 		memset(host_time, 0, SMALL_BUFSIZE);
 	}
 
-	/* initialize winsock library on Windows */
-	SOCK_STARTUP;
-
 	/* mark the spine process as started */
 	if (!set.ping_only) {
-		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %i, NOW(), '0000-00-00 00:00:00')", set.poller_id, getpid());
+		snprintf(querybuf, BIG_BUFSIZE, "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (%i, %lu, NOW(), '0000-00-00 00:00:00')", set.poller_id, spine_platform_process_id());
 		if (mode == REMOTE) {
 			db_insert(&mysqlr, REMOTE, querybuf);
 		} else {
@@ -891,7 +892,7 @@ int main(int argc, char *argv[]) {
 				loop_count = 0;
 			}
 
-			usleep(10000);
+			spine_platform_sleep_us(10000);
 
 			total_time = get_time_as_double();
 
@@ -933,7 +934,7 @@ int main(int argc, char *argv[]) {
 				loop_count = 0;
 			}
 
-			usleep(10000);
+			spine_platform_sleep_us(10000);
 
 			total_time = get_time_as_double();
 
@@ -975,7 +976,7 @@ int main(int argc, char *argv[]) {
 					poller_details->complete));
 			} else if (thread_status == EAGAIN) {
 				thread_mutex_unlock(LOCK_HOST_TIME);
-				usleep(10000);
+				spine_platform_sleep_us(10000);
 				goto thread_retry;
 			} else if (thread_status == EINVAL) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
@@ -1003,7 +1004,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
-		usleep(500000);
+		spine_platform_sleep_us(500000);
 		spine_sem_getvalue(&available_threads, &a_threads_value);
 	}
 
@@ -1060,7 +1061,7 @@ int main(int argc, char *argv[]) {
 			db_insert(&mysql, LOCAL, "REPLACE INTO settings (name,value) VALUES ('date',NOW())");
 		}
 
-		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
+		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%lu", set.poller_id, spine_platform_process_id());
 
 		if (mode == REMOTE) {
 			db_insert(&mysqlr, REMOTE, querybuf);
@@ -1144,8 +1145,7 @@ int main(int argc, char *argv[]) {
 	/* uninstall the spine signal handler */
 	uninstall_spine_signal_handler();
 
-	/* clueanup winsock library on Windows */
-	SOCK_CLEANUP;
+	spine_platform_cleanup();
 
 	exit(EXIT_SUCCESS);
 }

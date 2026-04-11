@@ -299,7 +299,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		#endif
 
 		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-			usleep(500000);
+			spine_platform_sleep_us(500000);
 			retry_count++;
 
 			if (retry_count > 4) {
@@ -349,7 +349,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	icmp->icmp_type = ICMP_ECHO;
 	icmp->icmp_code = 0;
-	icmp->icmp_id   = getpid() & 0xFFFF;
+	icmp->icmp_id   = spine_platform_process_id() & 0xFFFF;
 
 	/* lock set/get the sequence and unlock */
 	thread_mutex_lock(LOCK_GHBN);
@@ -497,7 +497,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				total_time = 0;
 				retry_count++;
 				#ifndef SOLAR_THREAD
-				usleep(1000);
+				spine_platform_sleep_us(1000);
 				#endif
 			}
 		} else {
@@ -678,7 +678,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 				} else if (return_code == -1) {
 					if (errno == EINTR) {
 						/* interrupted, try again */
-						usleep(10000);
+						spine_platform_sleep_us(10000);
 						goto wait_more;
 					} else {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Down");
@@ -698,7 +698,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				retry_count++;
 				#ifndef SOLAR_THREAD
-				usleep(1000);
+				spine_platform_sleep_us(1000);
 				#endif
 			}
 		} else {
@@ -917,7 +917,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 						}
 
 						retry_count++;
-						usleep(50000);
+						spine_platform_sleep_us(50000);
 						continue;
 					} else {
 						SPINE_LOG(("WARNING: Error resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));

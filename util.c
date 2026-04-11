@@ -1318,12 +1318,12 @@ int spine_log(const char *format, ...) {
 
 	/* log message prefix */
 
-	snprintf(logprefix, LOGSIZE, "SPINE: Poller[%i] PID[%i] PT[%lu] ", set.poller_id, getpid(), (unsigned long int)pthread_self());
+	snprintf(logprefix, LOGSIZE, "SPINE: Poller[%i] PID[%lu] PT[%lu] ", set.poller_id, spine_platform_process_id(), (unsigned long int)pthread_self());
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
 
-	localtime_r(&nowbin,&now_time);
+	spine_platform_localtime(&nowbin, &now_time);
 	now_ptr = &now_time;
 
 	if (IS_LOGGING_TO_STDOUT()) {

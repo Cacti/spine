@@ -203,7 +203,7 @@ char *php_readpipe(int php_process, char *command) {
 			case EINTR:
 				#ifndef SOLAR_THREAD
 				/* take a moment */
-				usleep(2000);
+				spine_platform_sleep_us(2000);
 				#endif
 
 				/* record end time */
@@ -418,7 +418,7 @@ int php_init(int php_process) {
 				if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
 					retry_count++;
 					#ifndef SOLAR_THREAD
-					usleep(50000);
+					spine_platform_sleep_us(50000);
 					#endif
 					continue;
 				}
@@ -560,7 +560,7 @@ void php_close(int php_process) {
 
 			/* wait before killing php */
 			#ifndef SOLAR_THREAD
-			usleep(50000);			/* 50 msec */
+			spine_platform_sleep_us(50000);			/* 50 msec */
 			#endif
 		}
 

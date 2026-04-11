@@ -75,13 +75,13 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 
 						continue;
 					} else {
-						usleep(50000);
+						spine_platform_sleep_us(50000);
 						continue;
 					}
 				}
 
 				if ((error == 1213) || (error == 1205)) {
-					usleep(50000);
+					spine_platform_sleep_us(50000);
 					error_count++;
 
 					if (error_count > 30) {
@@ -121,7 +121,7 @@ int db_reconnect(MYSQL *mysql, int type, int error, const char *function) {
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
 		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
 
-		sleep(1);
+		spine_platform_sleep_s(1);
 
 		return TRUE;
 	}
@@ -182,13 +182,13 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 					continue;
 				} else {
-					usleep(50000);
+					spine_platform_sleep_us(50000);
 					continue;
 				}
 			}
 
 			if (error == 1213 || error == 1205) {
-				usleep(50000);
+				spine_platform_sleep_us(50000);
 				error_count++;
 
 				if (error_count > 30) {
@@ -346,17 +346,17 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 
 			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
-				usleep(5000);
+				spine_platform_sleep_us(5000);
 				tries++;
 				success = FALSE;
 			} else if (error == 2002) {
 				printf("Database: Connection Failed: Attempt:'%d', Error:'%u', Message:'%s'\n", attempts, mysql_errno(mysql), mysql_error(mysql));
-				sleep(1);
+				spine_platform_sleep_s(1);
 				success = FALSE;
 			} else if (error != 1049 && error != 2005 && error != 1045) {
 				printf("Database: Connection Failed: Error:'%d', Message:'%s'\n", error, mysql_error(mysql));
 				success = FALSE;
-				usleep(50000);
+				spine_platform_sleep_us(50000);
 			} else {
 				tries   = 0;
 				success = FALSE;

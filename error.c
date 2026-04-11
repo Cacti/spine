@@ -56,7 +56,7 @@ static void spine_signal_handler(int spine_signal) {
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
 
-	localtime_r(&nowbin,&now_time);
+	spine_platform_localtime(&nowbin, &now_time);
 	now_ptr = &now_time;
 
 	char *log_fmt = get_date_format();

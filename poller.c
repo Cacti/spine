@@ -2346,7 +2346,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			}
 		}
-		usleep(10000);
+		spine_platform_sleep_us(10000);
 	}
 
 	if (sem_err) {
@@ -2413,7 +2413,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 							case EINTR:
 								#ifndef SOLAR_THREAD
 								/* take a moment */
-								usleep(2000);
+								spine_platform_sleep_us(2000);
 								#endif
 
 								/* record end time */
