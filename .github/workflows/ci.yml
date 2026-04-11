@@ -1,8 +1,15 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [develop]
+    branches:
+      - develop
+      - feat/**
+      - fix/**
+      - issue-**
+      - ci/**
+      - refactor/**
   pull_request:
     branches: [develop]
 
