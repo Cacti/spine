@@ -289,14 +289,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	/* get ICMP socket */
 	retry_count = 0;
 	while (TRUE) {
-		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (hasCaps() != TRUE) {
+		if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
 			}
 		}
-		#endif
 
 		if (!spine_socket_is_valid(icmp_socket = spine_socket_open(AF_INET, SOCK_RAW, IPPROTO_ICMP))) {
 			spine_platform_sleep_us(500000);
@@ -305,14 +303,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			if (retry_count > 4) {
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
 				snprintf(ping->ping_status, 50, "down");
-				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				if (hasCaps() != TRUE) {
+				if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 					if (seteuid(getuid()) == -1) {
 						SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 					}
 					thread_mutex_unlock(LOCK_SETEUID);
 				}
-				#endif
 
 				return HOST_DOWN;
 			}
@@ -321,14 +317,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 	}
 
-	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (hasCaps() != TRUE) {
+	if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 		if (seteuid(getuid()) == -1) {
 			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 		}
 		thread_mutex_unlock(LOCK_SETEUID);
 	}
-	#endif
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -417,11 +411,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				total_time = (end_time - begin_time) * one_thousand;
 
 				if (total_time < host_timeout) {
-					#if !(defined(__CYGWIN__))
-					return_code = spine_socket_recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
-					#else
-					return_code = spine_socket_recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
-					#endif
+					return_code = spine_socket_recvfrom(icmp_socket, socket_reply, BUFSIZE, spine_socket_ping_icmp_recv_flags(), (struct sockaddr *) &recvname, &fromlen);
 
 					if (return_code < 0) {
 						if (spine_socket_error_is_interrupted(spine_socket_last_error())) {
@@ -449,23 +439,19 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
 								free(packet);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
+								if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 									thread_mutex_lock(LOCK_SETEUID);
 									if (seteuid(0) == -1) {
 										SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
 									}
 								}
-								#endif
 								spine_socket_close(icmp_socket);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
+								if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 									if (seteuid(getuid()) == -1) {
 										SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 									}
 									thread_mutex_unlock(LOCK_SETEUID);
 								}
-								#endif
 
 								return HOST_UP;
 							} else {
@@ -500,23 +486,19 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
 			free(packet);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
+			if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
 				if (seteuid(0) == -1) {
 					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
 				}
 			}
-			#endif
 			spine_socket_close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
+			if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 				if (seteuid(getuid()) == -1) {
 					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 				}
 				thread_mutex_unlock(LOCK_SETEUID);
 			}
-			#endif
 			return HOST_DOWN;
 		}
 	} else {
@@ -524,23 +506,19 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_status, 50, "down");
 		free(packet);
 		if (spine_socket_is_valid(icmp_socket)) {
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
+			if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
 				if (seteuid(0) == -1) {
 					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
 				}
 			}
-			#endif
 			spine_socket_close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
+			if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 				if (seteuid(getuid()) == -1) {
 					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 				}
 				thread_mutex_unlock(LOCK_SETEUID);
 			}
-			#endif
 		}
 		return HOST_DOWN;
 	}
@@ -785,13 +763,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					spine_socket_close(tcp_socket);
 					return HOST_UP;
 				} else {
-					#if defined(__CYGWIN__)
-					snprintf(ping->ping_status, 50, "down");
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-					spine_socket_close(tcp_socket);
-					return HOST_DOWN;
-					#else
-					if (retry_count > host->ping_retries) {
+					if (!spine_socket_ping_tcp_supports_retries() || retry_count > host->ping_retries) {
 						snprintf(ping->ping_status, 50, "down");
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
 						spine_socket_close(tcp_socket);
@@ -799,7 +771,6 @@ int ping_tcp(host_t *host, ping_t *ping) {
 					} else {
 						retry_count++;
 					}
-					#endif
 				}
 			}
 		} else {

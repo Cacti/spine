@@ -91,4 +91,16 @@ int spine_socket_error_is_host_unreachable(int error_code) {
 	return error_code == WSAEHOSTUNREACH;
 }
 
+int spine_socket_ping_icmp_recv_flags(void) {
+	return 0;
+}
+
+int spine_socket_ping_tcp_supports_retries(void) {
+	return 1;
+}
+
+int spine_socket_raw_icmp_needs_privileged_open(void) {
+	return 0;
+}
+
 #endif
