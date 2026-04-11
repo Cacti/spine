@@ -45,7 +45,7 @@
 #undef __WIN32__
 #define HAVE_ERRNO_AS_DEFINE
 
-/* Cygwin supports only 64 open file descriptors, let's increase it a bit. */
+/* Older Cygwin defaults are low enough to starve script pipes on larger polls. */
 #define FD_SETSIZE 512
 #endif /* __CYGWIN__ */
 

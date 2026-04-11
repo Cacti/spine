@@ -223,7 +223,7 @@ int nft_popen(const char * command, const char * type) {
 
 	/* Spawn the child process with retry on EAGAIN/ENOMEM. */
 	#if defined(__CYGWIN__)
-	const char *spawn_shell = (set.cygwinshloc == 0) ? "sh.exe" : "/bin/sh";
+	const char *spawn_shell = set.shell_in_cwd ? "sh.exe" : "/bin/sh";
 	#else
 	const char *spawn_shell = "/bin/sh";
 	#endif

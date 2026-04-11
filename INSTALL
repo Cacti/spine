@@ -22,9 +22,8 @@ the same on every platform:
 * Linux: full build and runtime support. This is the primary production target.
 * macOS: full build support and CI-backed CMake validation. Linux still has the
   broadest runtime and integration coverage.
-* Windows: native platform smoke coverage exists, but full runtime support still
-  depends on a complete Windows Net-SNMP toolchain path. The documented install
-  path below therefore remains Cygwin-based for now.
+* Windows: MSYS2/MinGW-native platform smoke coverage exists, but full runtime
+  support still depends on a complete Windows Net-SNMP toolchain path.
 
 -----------------------------------------------------------------------------
 
@@ -62,86 +61,58 @@ To compile and install Spine using MySQL versions previous to 5.5 please add
 the additional --with-reentrant option to the ./configure command above but
 please be aware that Cacti no longer officially supports MySQL prior to 5.5.
 
-Windows Installation
-====================
+Windows Development
+===================
 
-Windows development now has native platform-layer coverage in CI, but the
-documented end-to-end install path remains Cygwin until the Windows-native
-dependency/toolchain path is fully settled.
+Windows development should target an MSYS2/MinGW-native toolchain first.
+Cygwin remains a legacy compatibility path, not the preferred Windows build
+story for this repository.
 
-CYGWIN Prerequisite
--------------------
+Preferred Toolchain: MSYS2/MinGW
+--------------------------------
 
-1. Download Cygwin for Window from https://www.cygwin.com/
+1. Install MSYS2 from https://www.msys2.org/
 
-2. Install Cygwin by executing the downloaded setup program
+2. Open the `MSYS2 MinGW 64-bit` shell.
 
-3. Select _Install from Internet_
+3. Install the native build dependencies:
 
-4. Select Root Directory:  _C:\cygwin_
+   pacman -S --needed \
+      mingw-w64-x86_64-gcc \
+      mingw-w64-x86_64-cmake \
+      mingw-w64-x86_64-ninja \
+      mingw-w64-x86_64-libmariadbclient \
+      mingw-w64-x86_64-openssl \
+      pkgconf
 
-5. Select a mirror which is close to your location
+4. If your MSYS2 mirror publishes Net-SNMP for MinGW, install it as well:
 
-6. Once on the package selection section make sure to select the following (TIP: use the search!):
+   pacman -S --needed mingw-w64-x86_64-net-snmp
 
-      * autoconf
-      * automake
-      * dos2unix
-      * gcc-core
-      * gcc-debuginfo
-      * gzip
-      * help2man
-      * libmysqlclient
-      * libmariadb-devel
-      * libtool
-      * m4
-      * make
-      * net-snmp-devel
-      * libssl-devel
-      * wget
+5. Configure and build the native Windows binary:
 
-7. Wait for installation to complete, coffee time!
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-8. Move the cygwin setup to the C:\cygwin\ folder for future usage.
+6. If Net-SNMP is not currently available in your Windows package source, you
+   can still validate the native platform layer and focused test coverage with:
 
-Compile Spine
--------------
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=OFF
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-1. Open Cygwin shell prompt (C:\Cygwin\cygwin.bat) and brace yourself to use unix commands on Windows.
+Legacy Compatibility Path: Cygwin
+---------------------------------
 
-2. Download the Spine source to the current directory:
-	http://www.cacti.net/spine_download.php
-
-3. Extract Spine into C:\Cygwin\usr\src\<spineversion>:
-	tar xzvf cacti-spine-*.tar.gz
-
-4. Change into the Spine directory:
-	cd /usr/src/cacti-spine-*
-
-5. Run bootstrap to prepare Spine for compilation:
-	./bootstrap
-
-6. Follow the instruction which bootstrap outputs.
-
-7. Update the spine.conf file for your installation of Cacti. You can optionally
-   move it to a better location if you choose to do so, make sure to copy the
-   spine.conf as well.
-
-8. Ensure that Spine runs well by running with:
-	/usr/local/spine/spine -R -S -V 3
-
-9. Update Cacti 'Paths' Setting to point to the Spine binary and update the
-   'Poller Type' to Spine. For the spine binary on Windows x64, and using default
-   locations, that would be:
-	C:\cygwin64\usr\local\spine\bin\spine.exe
-
-10. If all is good Spine will be run from the poller in place of cmd.php.
+Use Cygwin only if you specifically need the historical Windows install path
+while the native dependency/toolchain path is still catching up.
 
 --------------------------------------------------------------------------------------
 
 Known Issues
 ============
-1. On Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
+1. On native Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
    if you are using TCP ping on Windows, spine will not perform a second or subsequent
    retries to connect and the host will be assumed down on the first failure.
 

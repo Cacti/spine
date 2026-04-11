@@ -469,16 +469,16 @@ int main(int argc, char *argv[]) {
 		set.mibs = 0;
 	}
 
-	/* we attempt to support scripts better in cygwin */
+	/* Preserve the legacy Cygwin shell lookup without making it the Windows model. */
 	#if defined(__CYGWIN__)
 	spine_platform_setenv("CYGWIN", "nodosfilewarning", 1);
 	if (file_exists("./sh.exe")) {
-		set.cygwinshloc = 0;
+		set.shell_in_cwd = 1;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("The Shell Command Exists in the current directory\n");
 		}
 	} else {
-		set.cygwinshloc = 1;
+		set.shell_in_cwd = 0;
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("The Shell Command Exists in the /bin directory\n");
 		}

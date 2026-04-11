@@ -359,7 +359,7 @@ typedef struct config_struct {
 	int    logfile_processed;
 	int    boost_enabled;
 	int    boost_redirect;
-	int    cygwinshloc;
+	int    shell_in_cwd;
 	/* debugging options */
 	int    snmponly;
 	int    SQL_readonly;
