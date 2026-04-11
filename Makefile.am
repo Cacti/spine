@@ -71,12 +71,13 @@ docker-dev:
 verify: docker-dev
 	docker run --rm spine-dev
 
-cppcheck:
-	cppcheck --enable=warning,style,performance \
+cppcheck: docker-dev
+	docker run --rm spine-dev bash -c \
+		"cppcheck --enable=warning,style,performance \
 		--std=c11 --error-exitcode=1 \
 		--suppress=missingIncludeSystem --suppress=unusedFunction \
 		--suppress=checkersReport --suppress=toomanyconfigs \
-		$(spine_SOURCES)
+		$(spine_SOURCES)"
 
 check-unit:
 	cd tests/unit && $(MAKE)
