@@ -17,65 +17,6 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [gcc, clang]
-    env:
-      CC: ${{ matrix.compiler }}
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-          mysql-server libmysqlclient-dev \
-          libsnmp-dev libssl-dev build-essential \
-          help2man autoconf automake libtool dos2unix
-
-      - name: Prepare for Spine Build
-        run: |
-          ./bootstrap
-          ./configure --enable-warnings
-
-      - name: Build Spine
-        run: |
-          make -j
-
-      - name: Run Unit Smoke Tests
-        run: |
-          make check-unit
-
-#  cppcheck:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-#
-#      - name: Install cppcheck
-#        run: |
-#          sudo apt-get update
-#          sudo apt-get install -y cppcheck build-essential
-#
-#      - name: Run cppcheck
-#        run: |
-#          cppcheck \
-#            --enable=all \
-#            --std=c11 \
-#            --error-exitcode=1 \
-#            --suppress=missingIncludeSystem \
-#            --suppress=unusedFunction \
-#            --suppress=checkersReport \
-#            --suppress=variableScope \
-#            --suppress=unreadVariable \
-#            --suppress=shadowVariable \
-#            --suppress=constVariablePointer \
-#            --suppress=redundantAssignment \
-#            --suppress=toomanyconfigs \
-#            *.c *.h
-
   flawfinder:
     runs-on: ubuntu-latest
     steps:

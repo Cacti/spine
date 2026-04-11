@@ -3,10 +3,8 @@ FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
-        make \
-        autoconf \
-        automake \
-        libtool \
+        cmake \
+        ninja-build \
         pkg-config \
         libmariadb-dev \
         libsnmp-dev \
@@ -16,9 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 COPY . .
 
-RUN autoreconf -fi \
-    && ./configure --prefix=/usr/local \
-    && make -j"$(nproc)" spine
+RUN cmake -G Ninja -S . -B build \
+        -DSPINE_BUILD_MAIN=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+    && cmake --build build \
+    && cmake --install build
 
 FROM debian:bookworm-slim
 
@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/spine /usr/local/bin/spine
+COPY --from=builder /usr/local/bin/spine /usr/local/bin/spine
 
 RUN mkdir -p /etc/spine
 

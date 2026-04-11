@@ -1336,11 +1336,7 @@ int spine_log(const char *format, ...) {
 	log_fmt = get_date_format();
 
 	if (strlen(log_fmt) == 0) {
-		#ifdef DISABLE_STDERR
-		fp = stdout;
-		#else
 		fp = stderr;
-		#endif
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */
@@ -1356,11 +1352,7 @@ int spine_log(const char *format, ...) {
 	flog_len   = 0;
 
 	if ((flog_len = strftime(flogmessage, 50, log_fmt, now_ptr)) == (int) 0) {
-		#ifdef DISABLE_STDERR
-		fp = stdout;
-		#else
 		fp = stderr;
-		#endif
 
 		if ((set.stderr_notty) && (fp == stderr)) {
 			/* do nothing stderr does not exist */
@@ -1433,11 +1425,7 @@ int spine_log(const char *format, ...) {
 		if ((strstr(flogmessage,"ERROR"))   ||
 			(strstr(flogmessage,"WARNING")) ||
 			(strstr(flogmessage,"FATAL"))) {
-			#ifdef DISABLE_STDERR
-			fp = stdout;
-			#else
 			fp = stderr;
-			#endif
 		}
 
 		if ((set.stderr_notty) && (fp == stderr)) {
@@ -1658,50 +1646,6 @@ char *strip_alpha(char *string) {
 	string = &string[j];
 
 	return string;
-}
-
-/*! \fn char *add_slashes(char *string)
- *  \brief add escaping to back slashes on for Windows type commands.
- *  \param string the string to replace slashes
- *
- *  \return a pointer to the modified string. Variable must be freed by parent.
- *
- */
-char *add_slashes(char *string) {
-	int length;
-	int position;
-	int new_position;
-	char *return_str;
-
-	length       = strlen(string);
-
-	if (!(return_str = (char *) malloc(length * 2 + 1))) {
-		die("ERROR: Fatal malloc error: util.c add_slashes!");
-	}
-	return_str[0] = '\0';
-	position     = 0;
-	new_position = 0;
-
-	/* simply return on blank string */
-	if (!length) {
-		return return_str;
-	}
-
-	while (position < length) {
-		/* backslash detected, change to forward slash */
-		if (string[position] == '\\') {
-			return_str[new_position] = '\\';
-			new_position++;
-			return_str[new_position] = '\\';
-		} else {
-			return_str[new_position] = string[position];
-		}
-		new_position++;
-		position++;
-	}
-	return_str[new_position] = '\0';
-
-	return(return_str);
 }
 
 /*! \fn char *strncopy(char *dst, const char *src, size_t obuf)
@@ -1983,7 +1927,6 @@ int hasCaps(void) {
 }
 
 void checkAsRoot(void) {
-	#ifndef __CYGWIN__
 	#ifdef SOLAR_PRIV
 	priv_set_t *privset;
 	char *p;
@@ -2049,7 +1992,6 @@ void checkAsRoot(void) {
 		set.icmp_avail = TRUE;
 	}
 	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not "));
-	#endif
 	#endif
 }
 

@@ -11,14 +11,17 @@ cppcheck --enable=all --std=c11 --error-exitcode=1 \
 
 echo ""
 echo "=== scan-build ==="
-make clean
-scan-build -o /tmp/scan-results --status-bugs make -j"$(nproc)" 2>&1
+rm -rf build
+scan-build -o /tmp/scan-results --status-bugs \
+  cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON 2>&1
+scan-build -o /tmp/scan-results --status-bugs \
+  cmake --build build 2>&1
 
 echo ""
 echo "=== smoke tests ==="
-./spine --help > /dev/null 2>&1
+./build/spine --help > /dev/null 2>&1
 echo "spine --help: OK"
-./spine --version > /dev/null 2>&1
+./build/spine --version > /dev/null 2>&1
 echo "spine --version: OK"
 
 echo ""

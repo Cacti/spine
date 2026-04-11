@@ -5,8 +5,8 @@ compatible with the legacy cmd.php processor and provides much more flexibility,
 speed and concurrency than `cmd.php`.
 
 Make sure that you have the proper development environment to compile Spine.
-This includes compilers, header files and things such as libtool. If you have
-questions please consult the forums and/or online documentation.
+This includes a C compiler, CMake, Ninja, and the required dependency headers.
+If you have questions please consult the forums and/or online documentation.
 
 -----------------------------------------------------------------------------
 
@@ -17,7 +17,7 @@ identical on every platform.
 
 | Platform | Build Status | Runtime Status | Notes |
 | --- | --- | --- | --- |
-| Linux | Full | Full | Primary production target. Autotools and CMake are both exercised in CI. |
+| Linux | Full | Full | Primary production target. Native CMake builds and tests are exercised in CI. |
 | macOS | Full | Full | CMake main-build coverage is exercised in CI. Linux still has broader ecosystem and integration coverage. |
 | Windows | Partial | Partial | MSYS2/MinGW-native smoke coverage is exercised in CI. Full binary/runtime support still depends on a complete Windows Net-SNMP toolchain path. |
 
@@ -27,35 +27,24 @@ These instructions assume the default install location for spine of
 `/usr/local/spine`. If you choose to use another prefix, make sure you update
 the commands as required for that new path.
 
-To compile and install Spine using MySQL versions 5.5 or higher please do the
-following:
+To compile and install Spine with the default options:
 
 ```shell
-./bootstrap
-./configure
-make
-make install
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+cmake --install build
 chown root:root /usr/local/spine/bin/spine
 chmod u+s /usr/local/spine/bin/spine
 ```
 
-To compile and install Spine using MySQL versions previous to 5.5 please do the
-following:
-
-```shell
-./bootstrap
-./configure --with-reentrant
-make
-make install
-chown root:root /usr/local/spine/bin/spine
-chmod +s /usr/local/spine/bin/spine
-```
+To install under a non-default prefix, pass
+`-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
 
 ## Windows Development
 
-Windows development should target a native MSYS2/MinGW toolchain first. Cygwin
-is retained only as a legacy compatibility path while the full Windows Net-SNMP
-dependency story catches up.
+Windows development targets a native MSYS2/MinGW toolchain. Cygwin is no longer
+part of the supported build story for this repository.
 
 ### Preferred Toolchain: MSYS2/MinGW
 
@@ -98,12 +87,6 @@ dependency story catches up.
    ctest --test-dir build --output-on-failure
    ```
 
-### Legacy Compatibility Path: Cygwin
-
-Use Cygwin only if you specifically need the historical install path while the
-native Windows dependency story is still incomplete. It is no longer the
-preferred development target for Windows work on this repository.
-
 ## Known Issues
 
 1. On native Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
@@ -122,10 +105,6 @@ preferred development target for Windows work on this repository.
    servers each your spine will take approximately:
 
    `total connections = 4 * ( 1 + 10 + 5 ) = 64`
-
-3. On older MySQL versions, different libraries had to be used to make MySQL
-   thread safe. MySQL versions 5.0 and 5.1 require this flag. If you are using
-   these version of MySQL, you must use the --with-reentrant configure flag.
 
 -----------------------------------------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.

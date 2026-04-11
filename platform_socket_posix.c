@@ -83,27 +83,15 @@ int spine_socket_error_is_host_unreachable(int error_code) {
 }
 
 int spine_socket_ping_icmp_recv_flags(void) {
-#if defined(__CYGWIN__)
-	return MSG_PEEK;
-#else
 	return MSG_WAITALL;
-#endif
 }
 
 int spine_socket_ping_tcp_supports_retries(void) {
-#if defined(__CYGWIN__)
-	return 0;
-#else
 	return 1;
-#endif
 }
 
 int spine_socket_raw_icmp_needs_privileged_open(void) {
-#if defined(__CYGWIN__) && !defined(SOLAR_PRIV)
-	return 0;
-#else
 	return 1;
-#endif
 }
 
 #endif

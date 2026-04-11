@@ -222,11 +222,7 @@ int nft_popen(const char * command, const char * type) {
 		posix_spawn_file_actions_addclose(&fa, p->fd);
 
 	/* Spawn the child process with retry on EAGAIN/ENOMEM. */
-	#if defined(__CYGWIN__)
-	const char *spawn_shell = set.shell_in_cwd ? "sh.exe" : "/bin/sh";
-	#else
 	const char *spawn_shell = "/bin/sh";
-	#endif
 
 	int spawn_err;
 	spawn_err = spine_process_spawn_retry(&pid, spawn_shell, &fa, argv, environ, 3, 50000);

@@ -160,7 +160,6 @@ typedef struct {
 	int logfile_processed;
 	int boost_enabled;
 	int boost_redirect;
-	int shell_in_cwd;
 	int snmponly;
 	int SQL_readonly;
 	int start_host_id;

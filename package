@@ -39,7 +39,7 @@ display_help () {
 }
 
 # Sanity checks
-[ ! -e configure.ac ] && echo "ERROR: Your current working directory must be the SVN check out of Spine" && exit -1
+[ ! -e CMakeLists.txt ] && echo "ERROR: Your current working directory must be a Spine source checkout" && exit -1
 
 if [ "${1}x" = "--helpx" -o "${1}x" = "-hx" ]; then
   display_help
@@ -82,16 +82,17 @@ tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' * | (cd $
 pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
 
 # Get version from source files, warn if different than defined for build
-SRC_VERSION=`cat configure.ac | grep AC_INIT | awk -F, '{print $2}' | sed 's/ //g'`
+SRC_VERSION=`sed -n 's/^project(spine VERSION \\([^ ]*\\).*/\\1/p' CMakeLists.txt | head -n1`
 if [ "${SRC_VERSION}" != "${VERSION}" ]; then
   echo "WARNING: Build version and source version are not the same";
   echo "WARNING:    Build Version: ${VERSION}"
   echo "WARNING:   Source Version: ${SRC_VERSION}"
 fi
 
-# Call bootstrap
-echo "INFO: call bootstrap..."
-./bootstrap
+# Validate the release tree against the canonical CMake configure path
+echo "INFO: configure release tree with CMake..."
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON > /dev/null
+[ $? -gt 0 ] && echo "ERROR: Unable to configure release tree with CMake" && exit -1
 
 # Check working directory
 cd ${TMP_DIR}/
@@ -115,4 +116,3 @@ echo "Package file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz"
 echo ""
 
 exit 0
-

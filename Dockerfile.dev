@@ -9,11 +9,9 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    autoconf \
-    automake \
-    libtool \
-    dos2unix \
-    help2man \
+    cmake \
+    ninja-build \
+    pkg-config \
     libmariadb-dev \
     libsnmp-dev \
     libssl-dev \
@@ -30,10 +28,12 @@ COPY . .
 
 # ASan build: catches heap/stack overflows and use-after-free at runtime.
 # -fno-omit-frame-pointer gives usable stack traces under valgrind/gdb.
-RUN ./bootstrap \
-  && CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
-     ./configure --enable-warnings \
-  && make -j"$(nproc)"
+RUN CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
+    cmake -G Ninja -S . -B build \
+      -DSPINE_BUILD_MAIN=ON \
+      -DENABLE_WARNINGS=ON \
+      -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
+  && cmake --build build
 
 COPY scripts/verify.sh /usr/local/bin/verify.sh
 RUN chmod +x /usr/local/bin/verify.sh

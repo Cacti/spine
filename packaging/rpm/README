@@ -9,3 +9,5 @@ Or install the spec to your rpmbuild tree:
     cp packaging/rpm/spine.spec ~/rpmbuild/SPECS/
     spectool -g -R packaging/rpm/spine.spec
     rpmbuild -ba ~/rpmbuild/SPECS/spine.spec
+
+The RPM spec uses the native CMake + Ninja build path.

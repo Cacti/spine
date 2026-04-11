@@ -3,11 +3,8 @@ Section: net
 Priority: optional
 Maintainer: The Cacti Group <developers@cacti.net>
 Build-Depends: debhelper-compat (= 13),
-               autoconf,
-               automake,
-               libtool,
-               dos2unix,
-               help2man,
+               cmake,
+               ninja-build,
                libmariadb-dev | libmysqlclient-dev,
                libsnmp-dev,
                libssl-dev,

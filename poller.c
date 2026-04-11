@@ -2296,12 +2296,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	char *proc_command;
 	char *result_string;
 
-	/* compensate for back slashes in arguments */
-	#if defined(__CYGWIN__)
-	proc_command = add_slashes(command);
-	#else
 	proc_command = command;
-	#endif
 
 	if (!(result_string = (char *) malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: poller.c exec_poll!");
@@ -2501,9 +2496,6 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			SET_UNDEFINED(result_string);
 		}
 
-		#if defined(__CYGWIN__)
-		SPINE_FREE(proc_command);
-		#endif
 	}
 
 	/* reduce the active script count */

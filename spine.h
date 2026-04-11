@@ -53,11 +53,6 @@
 # define __attribute__(x)  /* NOTHING */
 #endif
 
-/* Windows does not support stderr.  Therefore, don't use it. */
-#ifdef __CYGWIN__
-#define DISABLE_STDERR
-#endif
-
 #ifdef HAS_EXECINFO_H
 #include <execinfo.h>
 #endif
@@ -359,7 +354,6 @@ typedef struct config_struct {
 	int    logfile_processed;
 	int    boost_enabled;
 	int    boost_redirect;
-	int    shell_in_cwd;
 	/* debugging options */
 	int    snmponly;
 	int    SQL_readonly;

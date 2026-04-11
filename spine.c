@@ -469,22 +469,6 @@ int main(int argc, char *argv[]) {
 		set.mibs = 0;
 	}
 
-	/* Preserve the legacy Cygwin shell lookup without making it the Windows model. */
-	#if defined(__CYGWIN__)
-	spine_platform_setenv("CYGWIN", "nodosfilewarning", 1);
-	if (file_exists("./sh.exe")) {
-		set.shell_in_cwd = 1;
-		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("The Shell Command Exists in the current directory\n");
-		}
-	} else {
-		set.shell_in_cwd = 0;
-		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
-			printf("The Shell Command Exists in the /bin directory\n");
-		}
-	}
-	#endif
-
 	/* we require either both the first and last hosts, or neither host */
 	if ((HOSTID_DEFINED(set.start_host_id) != HOSTID_DEFINED(set.end_host_id)) &&
 		(!strlen(set.host_id_list))) {
