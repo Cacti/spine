@@ -126,12 +126,10 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -B build
+          cmake --preset ci-main
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build --preset ci-main
 
       - name: Run CTest
         run: ctest --test-dir build --output-on-failure
@@ -169,22 +167,27 @@ jobs:
 
       - name: Configure
         run: |
-          mkdir build && cd build
           if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
-            spine_build_main=ON
+            cmake --preset ci-main
           else
-            spine_build_main=OFF
+            cmake --preset ci-smoke
           fi
-          cmake -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DSPINE_BUILD_MAIN=${spine_build_main} \
-            ..
 
       - name: Build
-        run: cmake --build build
+        run: |
+          if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
+            cmake --build --preset ci-main
+          else
+            cmake --build --preset ci-smoke
+          fi
 
       - name: Run CTest
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
+            ctest --test-dir build --output-on-failure
+          else
+            ctest --test-dir build --output-on-failure
+          fi
 
       - name: Upload binary
         if: steps.netsnmp.outputs.available == 'true' && success()
@@ -235,14 +238,10 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DSPINE_BUILD_MAIN=ON \
-            -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3" \
-            -B build
+          cmake --preset ci-main -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3"
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build --preset ci-main
 
       - name: Run CTest
         run: ctest --test-dir build --output-on-failure
