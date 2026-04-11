@@ -261,9 +261,11 @@
 
 /* Socket close: sockets use closesocket(), pipes use _close() */
 #define CLOSE_SOCKET(s) closesocket(s)
+#define SPINE_INVALID_SOCKET INVALID_SOCKET
 
 /* Type portability */
 typedef int pid_t;
+typedef SOCKET spine_socket_t;
 
 /* Config paths */
 #undef CONFIG_PATHS
@@ -285,6 +287,8 @@ typedef int pid_t;
 #else /* POSIX */
 
 #define CLOSE_SOCKET(s) close(s)
+#define SPINE_INVALID_SOCKET (-1)
+typedef int spine_socket_t;
 
 #endif /* _WIN32 */
 

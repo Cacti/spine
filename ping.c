@@ -257,7 +257,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
-	int    icmp_socket;
+	spine_socket_t icmp_socket;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -298,7 +298,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 		#endif
 
-		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
+		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == SPINE_INVALID_SOCKET) {
 			usleep(500000);
 			retry_count++;
 
@@ -361,7 +361,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
+	if ((strlen(host->hostname) != 0) && (icmp_socket != SPINE_INVALID_SOCKET)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -404,15 +404,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				/* reinitialize fd_set -- select(2) clears bits in place on return */
 				keep_listening:
 				FD_ZERO(&socket_fds);
-				if (icmp_socket >= FD_SETSIZE) {
-					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+				if ((int) icmp_socket >= FD_SETSIZE) {
+					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, (int) icmp_socket, FD_SETSIZE));
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
 					CLOSE_SOCKET(icmp_socket);
 					return HOST_DOWN;
 				}
 				FD_SET(icmp_socket,&socket_fds);
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				return_code = select((int) icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -527,7 +527,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
 		free(packet);
-		if (icmp_socket != -1) {
+		if (icmp_socket != SPINE_INVALID_SOCKET) {
 			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 			if (hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
@@ -567,7 +567,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
-	int    udp_socket;
+	spine_socket_t udp_socket;
 	struct sockaddr_in servername;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
@@ -594,7 +594,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (udp_socket != -1)) {
+	if ((strlen(host->hostname) != 0) && (udp_socket != SPINE_INVALID_SOCKET)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -714,7 +714,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		if (udp_socket != -1) CLOSE_SOCKET(udp_socket);
+		if (udp_socket != SPINE_INVALID_SOCKET) CLOSE_SOCKET(udp_socket);
 		return HOST_DOWN;
 	}
 }
@@ -737,7 +737,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
-	int    tcp_socket;
+	spine_socket_t tcp_socket;
 	struct sockaddr_in servername;
 	int    retry_count;
 	int    return_code;
@@ -761,7 +761,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	begin_time = get_time_as_double();
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
+	if ((strlen(host->hostname) != 0) && (tcp_socket != SPINE_INVALID_SOCKET)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -826,7 +826,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
 		snprintf(ping->ping_status, 50, "down");
-		if (tcp_socket != -1) CLOSE_SOCKET(tcp_socket);
+		if (tcp_socket != SPINE_INVALID_SOCKET) CLOSE_SOCKET(tcp_socket);
 		return HOST_DOWN;
 	}
 }
