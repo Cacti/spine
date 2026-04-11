@@ -35,6 +35,82 @@
 #include "spine.h"
 #include "platform_socket.h"
 
+static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address_len, int family, const char *hostname, unsigned short int port) {
+	struct addrinfo hints, *hostinfo;
+	char service[16];
+	int rv, retry_count;
+
+	memset(&hints, 0, sizeof(hints));
+	memset(address, 0, sizeof(*address));
+
+	hints.ai_family = family;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
+
+	snprintf(service, sizeof(service), "%u", port);
+
+	retry_count = 0;
+	hostinfo = NULL;
+
+	while (TRUE) {
+		rv = getaddrinfo(hostname, service, &hints, &hostinfo);
+
+		if (rv == 0) {
+			break;
+		}
+
+		switch (rv) {
+			case EAI_AGAIN:
+				if (retry_count < 3) {
+					SPINE_LOG(("WARNING: EAGAIN received resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
+					if (hostinfo != NULL) {
+						freeaddrinfo(hostinfo);
+						hostinfo = NULL;
+					}
+
+					retry_count++;
+					spine_platform_sleep_us(50000);
+					continue;
+				} else {
+					SPINE_LOG(("WARNING: Error resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
+					if (hostinfo != NULL) {
+						freeaddrinfo(hostinfo);
+					}
+					return FALSE;
+				}
+			case EAI_FAIL:
+				SPINE_LOG(("WARNING: DNS Server reported permanent error for host %s (%s)", hostname, gai_strerror(rv)));
+				if (hostinfo != NULL) {
+					freeaddrinfo(hostinfo);
+				}
+				return FALSE;
+			case EAI_MEMORY:
+				SPINE_LOG(("WARNING: Out of memory trying to resolve host %s (%s)", hostname, gai_strerror(rv)));
+				if (hostinfo != NULL) {
+					freeaddrinfo(hostinfo);
+				}
+				return FALSE;
+			default:
+				SPINE_LOG(("WARNING: Unknown error while resolving host %s (%s)", hostname, gai_strerror(rv)));
+				if (hostinfo != NULL) {
+					freeaddrinfo(hostinfo);
+				}
+				return FALSE;
+		}
+	}
+
+	if (hostinfo == NULL) {
+		SPINE_LOG(("WARNING: Unknown host %s", hostname));
+		return FALSE;
+	}
+
+	memcpy(address, hostinfo->ai_addr, hostinfo->ai_addrlen);
+	*address_len = (socklen_t) hostinfo->ai_addrlen;
+
+	freeaddrinfo(hostinfo);
+	return TRUE;
+}
+
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
  *  \param host a pointer to the current host structure
@@ -68,9 +144,17 @@ int ping_host(host_t *host, ping_t *ping) {
 		}
 
 		if (!strstr(host->hostname, "localhost")) {
-			if (get_address_type(host) == 1) {
+			int address_type = get_address_type(host);
+
+			if (address_type == SPINE_IPV4 || address_type == SPINE_IPV6) {
 				if (host->ping_method == PING_ICMP) {
-					ping_result = ping_icmp(host, ping);
+					if (address_type == SPINE_IPV4) {
+						ping_result = ping_icmp(host, ping);
+					} else {
+						snprintf(ping->ping_status, 50, "0.000");
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: ICMPv6 is not yet supported. Use UDP, TCP, or SNMP availability.");
+						ping_result = HOST_DOWN;
+					}
 				} else if (host->ping_method == PING_UDP) {
 					ping_result = ping_udp(host, ping);
 				} else if (host->ping_method == PING_TCP || host->ping_method == PING_TCP_CLOSED) {
@@ -78,7 +162,7 @@ int ping_host(host_t *host, ping_t *ping) {
 				}
 			} else if (host->availability_method == AVAIL_PING) {
 				snprintf(ping->ping_status, 50, "0.000");
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is Unknown or is IPV6.  Please use the SNMP ping options only.");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device address is unknown. Please use the SNMP ping options only.");
 				ping_result = HOST_DOWN;
 			}
 		} else {
@@ -542,7 +626,8 @@ int ping_udp(host_t *host, ping_t *ping) {
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 	spine_socket_t udp_socket;
-	struct sockaddr_in servername;
+	struct sockaddr_storage servername;
+	socklen_t servername_len;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
 	char   request[BUFSIZE];
@@ -564,7 +649,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	host_timeout = host->ping_timeout;
 
 	/* initialize the socket */
-	udp_socket = spine_socket_open(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	udp_socket = SPINE_INVALID_SOCKET_HANDLE;
 
 	/* hostname must be nonblank */
 	if ((strlen(host->hostname) != 0) && spine_socket_is_valid(udp_socket)) {
@@ -573,8 +658,15 @@ int ping_udp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, host->hostname, host->ping_port)) {
-			if (spine_socket_connect(udp_socket, (struct sockaddr *) &servername, sizeof(servername)) < 0) {
+		if (resolve_sockaddr(&servername, &servername_len, AF_UNSPEC, host->hostname, host->ping_port)) {
+			udp_socket = spine_socket_open(((struct sockaddr *) &servername)->sa_family, SOCK_DGRAM, IPPROTO_UDP);
+			if (!spine_socket_is_valid(udp_socket)) {
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Unable to create socket");
+				return HOST_DOWN;
+			}
+
+			if (spine_socket_connect(udp_socket, (struct sockaddr *) &servername, servername_len) < 0) {
 				snprintf(ping->ping_status, 50, "down");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Cannot connect to host");
 				spine_socket_close(udp_socket);
@@ -702,7 +794,8 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	double one_thousand = 1000.00;
 	struct timeval timeout;
 	spine_socket_t tcp_socket;
-	struct sockaddr_in servername;
+	struct sockaddr_storage servername;
+	socklen_t servername_len;
 	int    retry_count;
 	int    return_code;
 
@@ -716,7 +809,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	host_timeout = host->ping_timeout;
 
 	/* initialize the socket */
-	tcp_socket = spine_socket_open(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	tcp_socket = SPINE_INVALID_SOCKET_HANDLE;
 
 	/* initialize total time */
 	total_time = 0;
@@ -731,7 +824,14 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
 
 		/* get address of hostname */
-		if (init_sockaddr(&servername, host->hostname, host->ping_port)) {
+		if (resolve_sockaddr(&servername, &servername_len, AF_UNSPEC, host->hostname, host->ping_port)) {
+			tcp_socket = spine_socket_open(((struct sockaddr *) &servername)->sa_family, SOCK_STREAM, IPPROTO_TCP);
+			if (!spine_socket_is_valid(tcp_socket)) {
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Unable to create socket");
+				return HOST_DOWN;
+			}
+
 			/* first attempt a connect */
 			retry_count = 0;
 
@@ -744,7 +844,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 				spine_socket_set_timeout(tcp_socket, &timeout);
 
 				/* make the connection */
-				return_code = spine_socket_connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
+				return_code = spine_socket_connect(tcp_socket, (struct sockaddr *) &servername, servername_len);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -811,8 +911,6 @@ int get_address_type(host_t *host) {
 	}
 
 	for (res = res_list; res != NULL; res = res->ai_next) {
-		inet_ntop(res->ai_family, res->ai_addr->sa_data, addrstr, 100);
-
 		switch(res->ai_family) {
 			case AF_INET:
 				ptr = &((struct sockaddr_in *) res->ai_addr)->sin_addr;
@@ -851,84 +949,19 @@ int get_address_type(host_t *host) {
  *
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
-	struct addrinfo hints, *hostinfo;
-	int rv, retry_count;
+	struct sockaddr_storage address;
+	socklen_t address_len;
 
-	// Initialize the hints structure
-	memset(&hints, 0, sizeof hints);
-
-	hints.ai_family = AF_INET;
-	hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
-	retry_count = 0;
-	rv = 0;
-
-	while (TRUE) {
-		rv = getaddrinfo(hostname, NULL, &hints, &hostinfo);
-
-		if (rv == 0) {
-			break;
-		} else {
-			switch (rv) {
-				case EAI_AGAIN:
-					if (retry_count < 3) {
-						SPINE_LOG(("WARNING: EAGAIN received resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
-						if (hostinfo != NULL) {
-							freeaddrinfo(hostinfo);
-						}
-
-						retry_count++;
-						spine_platform_sleep_us(50000);
-						continue;
-					} else {
-						SPINE_LOG(("WARNING: Error resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
-						if (hostinfo != NULL) {
-							freeaddrinfo(hostinfo);
-						}
-						return FALSE;
-					}
-
-					break;
-				case EAI_FAIL:
-					SPINE_LOG(("WARNING: DNS Server reported permanent error for host %s (%s)", hostname, gai_strerror(rv)));
-					if (hostinfo != NULL) {
-						freeaddrinfo(hostinfo);
-					}
-					return FALSE;
-
-					break;
-				case EAI_MEMORY:
-					SPINE_LOG(("WARNING: Out of memory trying to resolve host %s (%s)", hostname, gai_strerror(rv)));
-					if (hostinfo != NULL) {
-						freeaddrinfo(hostinfo);
-					}
-					return FALSE;
-
-					break;
-				default:
-					SPINE_LOG(("WARNING: Unknown error while resolving host %s (%s)", hostname, gai_strerror(rv)));
-					if (hostinfo != NULL) {
-						freeaddrinfo(hostinfo);
-					}
-					return FALSE;
-
-					break;
-			}
-		}
-	}
-
-	if (hostinfo == NULL) {
-		SPINE_LOG(("WARNING: Unknown host %s", hostname));
+	if (!resolve_sockaddr(&address, &address_len, AF_INET, hostname, port)) {
 		return FALSE;
-	} else {
-		// Copy socket details
-		name->sin_family = hostinfo->ai_family;
-		name->sin_addr = ((struct sockaddr_in *)hostinfo->ai_addr)->sin_addr;
-		name->sin_port = htons(port);
-
-		// Free results var
-		freeaddrinfo(hostinfo);
-		return TRUE;
 	}
+
+	if (address_len < sizeof(struct sockaddr_in)) {
+		return FALSE;
+	}
+
+	memcpy(name, &address, sizeof(struct sockaddr_in));
+	return TRUE;
 }
 
 /*! \fn name_t *get_namebyhost(char *hostname, name_t *name)
