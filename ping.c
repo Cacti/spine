@@ -111,6 +111,168 @@ static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address
 	return TRUE;
 }
 
+static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
+	spine_socket_t icmp_socket;
+	double begin_time, end_time, total_time;
+	double host_timeout;
+	double one_thousand = 1000.00;
+	struct timeval timeout;
+	struct sockaddr_in6 recvname;
+	struct sockaddr_in6 fromname;
+	char socket_reply[BUFSIZE];
+	int retry_count;
+	const char *cacti_msg = "cacti-monitoring-system\0";
+	int packet_len;
+	socklen_t fromlen;
+	ssize_t return_code;
+	static unsigned int seq = 0;
+	struct icmp6_hdr *icmp6;
+	struct icmp6_hdr *reply;
+	unsigned char *packet;
+
+	retry_count = 0;
+	while (TRUE) {
+		if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
+			thread_mutex_lock(LOCK_SETEUID);
+			if (seteuid(0) == -1) {
+				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+			}
+		}
+
+		icmp_socket = spine_socket_open(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+		if (!spine_socket_is_valid(icmp_socket)) {
+			spine_platform_sleep_us(500000);
+			retry_count++;
+
+			if (retry_count > 4) {
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping unable to create ICMP Socket");
+				snprintf(ping->ping_status, 50, "down");
+				if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
+					if (seteuid(getuid()) == -1) {
+						SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+					}
+					thread_mutex_unlock(LOCK_SETEUID);
+				}
+
+				return HOST_DOWN;
+			}
+		} else {
+			break;
+		}
+	}
+
+	if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
+		if (seteuid(getuid()) == -1) {
+			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+		}
+		thread_mutex_unlock(LOCK_SETEUID);
+	}
+
+	host_timeout = host->ping_timeout;
+	packet_len = (int) sizeof(struct icmp6_hdr) + (int) strlen(cacti_msg);
+
+	if (!(packet = malloc(packet_len))) {
+		die("ERROR: Fatal malloc error: ping.c ping_icmp_ipv6!");
+	}
+	memset(packet, 0, packet_len);
+	memset(&fromname, 0, sizeof(fromname));
+	memset(&recvname, 0, sizeof(recvname));
+
+	icmp6 = (struct icmp6_hdr *) packet;
+	icmp6->icmp6_type = ICMP6_ECHO_REQUEST;
+	icmp6->icmp6_code = 0;
+	icmp6->icmp6_id   = htons(spine_platform_process_id() & 0xFFFF);
+
+	thread_mutex_lock(LOCK_GHBN);
+	icmp6->icmp6_seq = htons(seq++);
+	thread_mutex_unlock(LOCK_GHBN);
+
+	memcpy(packet + sizeof(struct icmp6_hdr), cacti_msg, strlen(cacti_msg));
+
+	if ((strlen(host->hostname) == 0) || !resolve_sockaddr((struct sockaddr_storage *) &fromname, &fromlen, AF_INET6, host->hostname, 7)) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Destination hostname invalid");
+		snprintf(ping->ping_status, 50, "down");
+		free(packet);
+		spine_socket_close(icmp_socket);
+		return HOST_DOWN;
+	}
+
+	snprintf(ping->ping_status, 50, "down");
+	snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
+
+	retry_count = 0;
+	total_time  = 0;
+	begin_time  = get_time_as_double();
+
+	while (1) {
+		if (retry_count > host->ping_retries) {
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping timed out");
+			snprintf(ping->ping_status, 50, "down");
+			free(packet);
+			spine_socket_close(icmp_socket);
+			return HOST_DOWN;
+		}
+
+		timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+		timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
+		spine_socket_set_timeout(icmp_socket, &timeout);
+
+		return_code = spine_socket_sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, fromlen);
+		(void) return_code;
+
+keep_listening_ipv6:
+		if (!spine_socket_is_valid(icmp_socket)) {
+			snprintf(ping->ping_status, 50, "down");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: invalid socket");
+			spine_socket_close(icmp_socket);
+			free(packet);
+			return HOST_DOWN;
+		}
+
+		return_code = spine_socket_wait_readable(icmp_socket, &timeout);
+		end_time = get_time_as_double();
+		total_time = (end_time - begin_time) * one_thousand;
+
+		if (return_code > 0 && total_time < host_timeout) {
+			fromlen = sizeof(recvname);
+			return_code = spine_socket_recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &recvname, &fromlen);
+
+			if (return_code < 0) {
+				if (spine_socket_error_is_interrupted(spine_socket_last_error())) {
+					goto keep_listening_ipv6;
+				}
+			} else if (return_code >= (ssize_t) sizeof(struct icmp6_hdr)) {
+				reply = (struct icmp6_hdr *) socket_reply;
+
+				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) == 0) {
+					if (reply->icmp6_type == ICMP6_ECHO_REPLY && reply->icmp6_id == htons(spine_platform_process_id() & 0xFFFF)) {
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
+						free(packet);
+						spine_socket_close(icmp_socket);
+						return HOST_UP;
+					}
+
+					if (total_time > host_timeout) {
+						retry_count++;
+						total_time = 0;
+					}
+
+					continue;
+				}
+
+				goto keep_listening_ipv6;
+			}
+		}
+
+		total_time = 0;
+		retry_count++;
+#ifndef SOLAR_THREAD
+		spine_platform_sleep_us(1000);
+#endif
+	}
+}
+
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
  *  \param host a pointer to the current host structure
@@ -148,13 +310,7 @@ int ping_host(host_t *host, ping_t *ping) {
 
 			if (address_type == SPINE_IPV4 || address_type == SPINE_IPV6) {
 				if (host->ping_method == PING_ICMP) {
-					if (address_type == SPINE_IPV4) {
-						ping_result = ping_icmp(host, ping);
-					} else {
-						snprintf(ping->ping_status, 50, "0.000");
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: ICMPv6 is not yet supported. Use UDP, TCP, or SNMP availability.");
-						ping_result = HOST_DOWN;
-					}
+					ping_result = ping_icmp(host, ping);
 				} else if (host->ping_method == PING_UDP) {
 					ping_result = ping_udp(host, ping);
 				} else if (host->ping_method == PING_TCP || host->ping_method == PING_TCP_CLOSED) {
@@ -363,6 +519,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct   ip    *ip;
 	struct   icmp  *pkt;
 	unsigned char  *packet;
+
+	if (get_address_type(host) == SPINE_IPV6) {
+		return ping_icmp_ipv6(host, ping);
+	}
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
