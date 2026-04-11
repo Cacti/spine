@@ -56,7 +56,28 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
+	char *redacted_query = NULL;
+	if (set.log_level >= POLLER_VERBOSITY_DEVDBG) {
+		redacted_query = strdup(query_frag);
+		if (redacted_query) {
+			char *p;
+			const char *sensitive[] = {"snmp_community", "snmp_password", "snmp_priv_passphrase", "password"};
+			int j;
+			for (j=0; j<4; j++) {
+				if ((p = strstr(redacted_query, sensitive[j]))) {
+					char *val = strchr(p, '=');
+					if (val) {
+						val++;
+						while (*val && *val != ',' && *val != ' ' && *val != ')') {
+							*val++ = '*';
+						}
+					}
+				}
+			}
+			SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", redacted_query));
+			free(redacted_query);
+		}
+	}
 
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
@@ -153,7 +174,28 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
+	char *redacted_query = NULL;
+	if (set.log_level >= POLLER_VERBOSITY_DEVDBG) {
+		redacted_query = strdup(query_frag);
+		if (redacted_query) {
+			char *p;
+			const char *sensitive[] = {"snmp_community", "snmp_password", "snmp_priv_passphrase", "password"};
+			int j;
+			for (j=0; j<4; j++) {
+				if ((p = strstr(redacted_query, sensitive[j]))) {
+					char *val = strchr(p, '=');
+					if (val) {
+						val++;
+						while (*val && *val != ',' && *val != ' ' && *val != ')') {
+							*val++ = '*';
+						}
+					}
+				}
+			}
+			SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", redacted_query));
+			free(redacted_query);
+		}
+	}
 
 	while (1) {
 		if (mysql_query(mysql, query)) {
