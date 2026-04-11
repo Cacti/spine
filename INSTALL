@@ -13,6 +13,21 @@ DEVELOP branch should generally be considered UNSTABLE, use with caution!
 
 -----------------------------------------------------------------------------
 
+Platform Support
+================
+
+Spine is tested across Linux, macOS, and Windows, but the support level is not
+the same on every platform:
+
+* Linux: full build and runtime support. This is the primary production target.
+* macOS: full build support and CI-backed CMake validation. Linux still has the
+  broadest runtime and integration coverage.
+* Windows: native platform smoke coverage exists, but full runtime support still
+  depends on a complete Windows Net-SNMP toolchain path. The documented install
+  path below therefore remains Cygwin-based for now.
+
+-----------------------------------------------------------------------------
+
 Unix Installation
 =================
 
@@ -49,6 +64,10 @@ please be aware that Cacti no longer officially supports MySQL prior to 5.5.
 
 Windows Installation
 ====================
+
+Windows development now has native platform-layer coverage in CI, but the
+documented end-to-end install path remains Cygwin until the Windows-native
+dependency/toolchain path is fully settled.
 
 CYGWIN Prerequisite
 -------------------

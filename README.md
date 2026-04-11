@@ -10,6 +10,17 @@ questions please consult the forums and/or online documentation.
 
 -----------------------------------------------------------------------------
 
+## Platform Support
+
+Spine is tested across Linux, macOS, and Windows, but the support level is not
+identical on every platform.
+
+| Platform | Build Status | Runtime Status | Notes |
+| --- | --- | --- | --- |
+| Linux | Full | Full | Primary production target. Autotools and CMake are both exercised in CI. |
+| macOS | Full | Full | CMake main-build coverage is exercised in CI. Linux still has broader ecosystem and integration coverage. |
+| Windows | Partial | Partial | Native platform smoke coverage is exercised in CI. Full binary/runtime support still depends on a complete Windows Net-SNMP toolchain path. |
+
 ## Unix Installation
 
 These instructions assume the default install location for spine of
@@ -41,6 +52,10 @@ chmod +s /usr/local/spine/bin/spine
 ```
 
 ## Windows Installation
+
+Windows development now has native platform-layer coverage in CI, but the
+historical Cygwin path remains the documented end-to-end install path until the
+Windows-native dependency story is fully settled.
 
 ### CYGWIN Prerequisite
 

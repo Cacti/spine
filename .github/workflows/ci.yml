@@ -223,17 +223,25 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: Install CMake and Ninja
-        run: brew install cmake ninja
+      - name: Install build dependencies
+        run: |
+          brew install \
+            cmake \
+            ninja \
+            pkg-config \
+            mysql-client \
+            net-snmp \
+            openssl@3
 
-      - name: Configure Smoke Build
+      - name: Configure
         run: |
           cmake -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DSPINE_BUILD_MAIN=OFF \
+            -DSPINE_BUILD_MAIN=ON \
+            -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3" \
             -B build
 
-      - name: Build Smoke Tests
+      - name: Build
         run: cmake --build build
 
       - name: Run CTest
