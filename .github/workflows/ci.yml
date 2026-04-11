@@ -96,7 +96,7 @@ jobs:
             --context \
             . | tee flawfinder-report.txt
 
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
           name: flawfinder-report
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload binary
         if: steps.netsnmp.outputs.available == 'true' && success()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: spine-windows-x64
           path: build/spine.exe
@@ -191,7 +191,7 @@ jobs:
           Set-ItemProperty -Path $regPath -Name "DumpFolder" -Value $dumpDir -Type ExpandString
 
       - name: Upload crash dumps
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: failure()
         with:
           name: crash-dumps
