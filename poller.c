@@ -33,6 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
+#include "platform_fd.h"
 
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
@@ -2287,7 +2288,6 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	#endif
 
 	int bytes_read;
-	fd_set fds;
 	double begin_time = 0;
 	double end_time = 0;
 	double script_timeout;
@@ -2393,14 +2393,10 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			if (cmd_fd > 0) {
 				retry:
 
-				/* Initialize File Descriptors to Review for Input/Output */
-				FD_ZERO(&fds);
-				FD_SET(cmd_fd, &fds);
-
 				/* wait x seconds for pipe response */
-				switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+				switch (spine_fd_wait_readable(cmd_fd, &timeout)) {
 					case -1:
-						switch (errno) {
+						switch (spine_fd_last_error()) {
 							case EBADF:
 								SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
 								SET_UNDEFINED(result_string);
@@ -2442,14 +2438,14 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 								}
 								break;
 							case EINVAL:
-								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
+								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in pipe wait statement.", current_host->id));
 								SET_UNDEFINED(result_string);
 								#ifdef USING_TPOPEN
 								close_fd = FALSE;
 								#endif
 								break;
 							default:
-								SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
+								SPINE_LOG(("Device[%i] ERROR: The script/command wait failed", current_host->id));
 								SET_UNDEFINED(result_string);
 								#ifdef USING_TPOPEN
 								close_fd = FALSE;
@@ -2474,7 +2470,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 					break;
 				default:
 					/* get only one line of output, we will ignore the rest */
-					bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
+					bytes_read = spine_fd_read(cmd_fd, result_string, RESULTS_BUFFER-1);
 					if (bytes_read > 0) {
 						result_string[bytes_read] = '\0';
 					} else {

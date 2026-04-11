@@ -34,6 +34,7 @@
 #include "common.h"
 #include "spine.h"
 #include "platform_error.h"
+#include "platform_fd.h"
 #include "platform_process.h"
 #include <spawn.h>
 
@@ -84,7 +85,7 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* send command to the script server */
 	retry:
-	bytes = write(php_processes[php_process].php_write_fd, command, strlen(command));
+	bytes = spine_fd_write(php_processes[php_process].php_write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
@@ -165,7 +166,6 @@ int php_get_process(void) {
  *  \return a string pointer to the PHP Script Server response
  */
 char *php_readpipe(int php_process, char *command) {
-	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
@@ -192,13 +192,9 @@ char *php_readpipe(int php_process, char *command) {
 	 * should only be the READ pipe */
 	retry:
 
-	/* initialize file descriptors to review for input/output */
-	FD_ZERO(&fds);
-	FD_SET(php_processes[php_process].php_read_fd,&fds);
-
-	switch (select(php_processes[php_process].php_read_fd+1, &fds, NULL, NULL, &timeout)) {
+	switch (spine_fd_wait_readable(php_processes[php_process].php_read_fd, &timeout)) {
 	case -1:
-		switch (errno) {
+		switch (spine_fd_last_error()) {
 			case EBADF:
 				SPINE_LOG(("ERROR: SS[%i] An invalid file descriptor was given in one of the sets.", php_process));
 				break;
@@ -235,7 +231,7 @@ char *php_readpipe(int php_process, char *command) {
 				SPINE_LOG(("ERROR: SS[%i] Select was unable to allocate memory for internal tables.", php_process));
 				break;
 			default:
-				SPINE_LOG(("ERROR: SS[%i] Unknown fatal select() error", php_process));
+				SPINE_LOG(("ERROR: SS[%i] Unknown fatal wait error", php_process));
 				break;
 		}
 
@@ -256,32 +252,27 @@ char *php_readpipe(int php_process, char *command) {
 		php_init(php_process);
 		break;
 	default:
-		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
-			bptr = result_string;
+		bptr = result_string;
 
-			while (1) {
-				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
+		while (1) {
+			i = spine_fd_read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
 
-				if (i <= 0) {
-					SET_UNDEFINED(result_string);
-					break;
-				}
-
-				bptr += i;
-				*bptr = '\0';	/* make what we've got into a string */
-
-				if ((cp = strstr(result_string,"\n")) != 0) {
-					break;
-				}
-
-				if (bptr >= result_string+BUFSIZE) {
-					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-					SET_UNDEFINED(result_string);
-				}
+			if (i <= 0) {
+				SET_UNDEFINED(result_string);
+				break;
 			}
-		} else {
-			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
-			SET_UNDEFINED(result_string);
+
+			bptr += i;
+			*bptr = '\0';	/* make what we've got into a string */
+
+			if ((cp = strstr(result_string,"\n")) != 0) {
+				break;
+			}
+
+			if (bptr >= result_string+BUFSIZE) {
+				SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+				SET_UNDEFINED(result_string);
+			}
 		}
 
 		php_processes[php_process].php_state = PHP_READY;
@@ -534,7 +525,7 @@ void php_close(int php_process) {
 		if (phpp->php_write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
 
-			len = write(phpp->php_write_fd, quit, strlen(quit));
+			len = spine_fd_write(phpp->php_write_fd, quit, strlen(quit));
 
 			if (len >= 0) {
 				spine_process_close_fd(phpp->php_write_fd);
