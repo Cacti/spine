@@ -1,0 +1,63 @@
+#include "platform_process.h"
+
+#ifndef _WIN32
+
+#include <errno.h>
+#include <signal.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "platform.h"
+
+int spine_process_pipe(int pipe_fds[2]) {
+	return pipe(pipe_fds);
+}
+
+int spine_process_close_fd(int fd) {
+	return close(fd);
+}
+
+int spine_process_wait(pid_t pid, int *status) {
+	pid_t wait_result;
+
+	do {
+		wait_result = waitpid(pid, status, 0);
+	} while (wait_result == -1 && errno == EINTR);
+
+	return wait_result == -1 ? -1 : 0;
+}
+
+int spine_process_terminate(pid_t pid) {
+	return kill(pid, SIGTERM);
+}
+
+int spine_process_spawn_retry(
+	pid_t *pid,
+	const char *path,
+	posix_spawn_file_actions_t *file_actions,
+	char *const argv[],
+	char *const envp[],
+	int retry_limit,
+	unsigned int retry_sleep_us
+) {
+	int spawn_err;
+	int retry_count;
+
+	retry_count = 0;
+
+	do {
+		spawn_err = posix_spawn(pid, path, file_actions, NULL, argv, envp);
+		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < retry_limit) {
+			retry_count++;
+			spine_platform_sleep_us(retry_sleep_us);
+			continue;
+		}
+
+		break;
+	} while (1);
+
+	return spawn_err;
+}
+
+#endif

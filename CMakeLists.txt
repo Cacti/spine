@@ -290,6 +290,10 @@ if(SPINE_BUILD_MAIN)
         platform_win.c
         platform_socket_posix.c
         platform_socket_win.c
+        platform_error_posix.c
+        platform_error_win.c
+        platform_process_posix.c
+        platform_process_win.c
     )
 
     add_executable(spine ${SPINE_SOURCES})
@@ -336,9 +340,13 @@ if(BUILD_TESTING)
         platform_win.c
         platform_socket_posix.c
         platform_socket_win.c
+        platform_error_posix.c
+        platform_error_win.c
+        platform_process_posix.c
+        platform_process_win.c
     )
 
-    foreach(test_name IN ITEMS env time process socket)
+    foreach(test_name IN ITEMS env time process socket error)
         add_executable(test_platform_${test_name}
             tests/unit/test_platform_${test_name}.c
             ${PLATFORM_TEST_SOURCES}

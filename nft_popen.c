@@ -86,6 +86,8 @@
 
 #include "common.h"
 #include "spine.h"
+#include "platform_error.h"
+#include "platform_process.h"
 #include <spawn.h>
 
 /* An instance of this struct is created for each popen() fd. */
@@ -138,7 +140,7 @@ int nft_popen(const char * command, const char * type) {
 	char   shell_flag[] = "-c";
 	int    cancel_state;
 	extern char **environ;
-	int    retry_count = 0;
+	char   error_buffer[256];
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -154,22 +156,22 @@ int nft_popen(const char * command, const char * type) {
 		}
 	}
 
-	if (pipe(pdes) < 0)
+	if (spine_process_pipe(pdes) < 0)
 		return -1;
 
 	/* Disable thread cancellation from this point forward. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 	if ((cur = malloc(sizeof(struct pid))) == NULL) {
-		(void)close(pdes[0]);
-		(void)close(pdes[1]);
+		(void)spine_process_close_fd(pdes[0]);
+		(void)spine_process_close_fd(pdes[1]);
 		pthread_setcancelstate(cancel_state, NULL);
 		return -1;
 	}
 
 	if ((command_copy = strdup(command)) == NULL) {
-		(void)close(pdes[0]);
-		(void)close(pdes[1]);
+		(void)spine_process_close_fd(pdes[0]);
+		(void)spine_process_close_fd(pdes[1]);
 		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
 		return -1;
@@ -189,8 +191,8 @@ int nft_popen(const char * command, const char * type) {
 	posix_spawn_file_actions_t fa;
 	if (posix_spawn_file_actions_init(&fa) != 0) {
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn_file_actions_init failed"));
-		(void)close(pdes[0]);
-		(void)close(pdes[1]);
+		(void)spine_process_close_fd(pdes[0]);
+		(void)spine_process_close_fd(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
 		free(command_copy);
 		pthread_setcancelstate(cancel_state, NULL);
@@ -227,20 +229,13 @@ int nft_popen(const char * command, const char * type) {
 	#endif
 
 	int spawn_err;
-	retry:
-	spawn_err = posix_spawn(&pid, spawn_shell, &fa, NULL, argv, environ);
+	spawn_err = spine_process_spawn_retry(&pid, spawn_shell, &fa, argv, environ, 3, 50000);
 
 	if (spawn_err != 0) {
-		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
-			retry_count++;
-			spine_platform_sleep_us(50000);
-			goto retry;
-		}
-
-		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", strerror(spawn_err)));
+		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer))));
 		posix_spawn_file_actions_destroy(&fa);
-		(void)close(pdes[0]);
-		(void)close(pdes[1]);
+		(void)spine_process_close_fd(pdes[0]);
+		(void)spine_process_close_fd(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
 		free(command_copy);
 		pthread_setcancelstate(cancel_state, NULL);
@@ -252,10 +247,10 @@ int nft_popen(const char * command, const char * type) {
 	/* Parent. */
 	if (*type == 'r') {
 		fd = pdes[0];
-		(void)close(pdes[1]);
+		(void)spine_process_close_fd(pdes[1]);
 	}else {
 		fd = pdes[1];
-		(void)close(pdes[0]);
+		(void)spine_process_close_fd(pdes[0]);
 	}
 
 	/* Link into list of file descriptors. */
@@ -350,12 +345,15 @@ nft_pclose(int fd)
 	pthread_cleanup_push(close_cleanup, cur);
 
 	/* end the process nicely and then forcefully */
-	(void)close(fd);
+	(void)spine_process_close_fd(fd);
 
 	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-	do { pid = waitpid(cur->pid, &pstat, 0);
-	} while (pid == -1 && errno == EINTR);
+	if (spine_process_wait(cur->pid, &pstat) != 0) {
+		pid = -1;
+	} else {
+		pid = cur->pid;
+	}
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 
@@ -374,7 +372,7 @@ close_cleanup(void * arg)
 
 	/* Close the pipe fd if necessary. */
 	if (cur->fd >= 0) {
-		(void)close(cur->fd);
+		(void)spine_process_close_fd(cur->fd);
 	}
 
 	/* Remove the entry from the linked list. */

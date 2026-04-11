@@ -33,6 +33,8 @@
 
 #include "common.h"
 #include "spine.h"
+#include "platform_error.h"
+#include "platform_process.h"
 #include <spawn.h>
 
 extern char **environ;
@@ -314,8 +316,8 @@ int php_init(int php_process) {
 	char *result_string = 0;
 	int num_processes;
 	int i;
-	int retry_count = 0;
 	char *command = strdup("INIT");
+	char error_buffer[256];
 
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
@@ -328,13 +330,13 @@ int php_init(int php_process) {
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", i));
 
 		/* create the output pipes from Spine to php*/
-		if (pipe(cacti2php_pdes) < 0) {
+		if (spine_process_pipe(cacti2php_pdes) < 0) {
 			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
 			return FALSE;
 		}
 
 		/* create the input pipes from php to Spine */
-		if (pipe(php2cacti_pdes) < 0) {
+		if (spine_process_pipe(php2cacti_pdes) < 0) {
 			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
 			return FALSE;
 		}
@@ -387,10 +389,10 @@ int php_init(int php_process) {
 
 			if (posix_spawn_file_actions_init(&fa) != 0) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions_init failed", i));
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
+				spine_process_close_fd(cacti2php_pdes[0]);
+				spine_process_close_fd(cacti2php_pdes[1]);
+				spine_process_close_fd(php2cacti_pdes[0]);
+				spine_process_close_fd(php2cacti_pdes[1]);
 				pthread_setcancelstate(cancel_state, NULL);
 				return FALSE;
 			}
@@ -405,43 +407,24 @@ int php_init(int php_process) {
 			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]) != 0) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions setup failed", i));
 				posix_spawn_file_actions_destroy(&fa);
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
+				spine_process_close_fd(cacti2php_pdes[0]);
+				spine_process_close_fd(cacti2php_pdes[1]);
+				spine_process_close_fd(php2cacti_pdes[0]);
+				spine_process_close_fd(php2cacti_pdes[1]);
 				pthread_setcancelstate(cancel_state, NULL);
 				return FALSE;
 			}
 
-			do {
-				spawn_err = posix_spawn(&pid, argv[0], &fa, NULL, argv, environ);
-				if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
-					retry_count++;
-					#ifndef SOLAR_THREAD
-					spine_platform_sleep_us(50000);
-					#endif
-					continue;
-				}
-				break;
-			} while (1);
+			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, argv, environ, 3, 50000);
 
 			posix_spawn_file_actions_destroy(&fa);
 
 			if (spawn_err != 0) {
-				if (spawn_err == EAGAIN) {
-					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Out of Resources", i));
-				} else if (spawn_err == ENOMEM) {
-					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Out of Memory", i));
-				} else {
-					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Unknown Reason", i));
-				}
-
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-
-				SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server", i));
+				SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server: %s", i, spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer))));
+				spine_process_close_fd(php2cacti_pdes[0]);
+				spine_process_close_fd(php2cacti_pdes[1]);
+				spine_process_close_fd(cacti2php_pdes[0]);
+				spine_process_close_fd(cacti2php_pdes[1]);
 				pthread_setcancelstate(cancel_state, NULL);
 
 				return FALSE;
@@ -452,8 +435,8 @@ int php_init(int php_process) {
 
 		/* Parent */
 		/* close unneeded pipes */
-		close(cacti2php_pdes[0]);
-		close(php2cacti_pdes[1]);
+		spine_process_close_fd(cacti2php_pdes[0]);
+		spine_process_close_fd(php2cacti_pdes[1]);
 
 		if (php_process == PHP_INIT) {
 			php_processes[i].php_pid = pid;
@@ -554,7 +537,7 @@ void php_close(int php_process) {
 			len = write(phpp->php_write_fd, quit, strlen(quit));
 
 			if (len >= 0) {
-				close(phpp->php_write_fd);
+				spine_process_close_fd(phpp->php_write_fd);
 				phpp->php_write_fd = -1;
 			}
 
@@ -570,13 +553,13 @@ void php_close(int php_process) {
 	  	 */
 		if (phpp->php_pid > 1) {
 			/* end the php script server process */
-			kill(phpp->php_pid, SIGTERM);
+			spine_process_terminate(phpp->php_pid);
 
 			/* reset this PID variable? */
 		}
 
 		/* close file descriptors */
-		close(phpp->php_read_fd);
+		spine_process_close_fd(phpp->php_read_fd);
 		phpp->php_read_fd  = -1;
 	}
 }

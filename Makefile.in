@@ -137,7 +137,10 @@ am_spine_OBJECTS = sql.$(OBJEXT) spine.$(OBJEXT) util.$(OBJEXT) \
 	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
 	keywords.$(OBJEXT) error.$(OBJEXT) platform_common.$(OBJEXT) \
 	platform_posix.$(OBJEXT) platform_win.$(OBJEXT) \
-	platform_socket_posix.$(OBJEXT) platform_socket_win.$(OBJEXT)
+	platform_socket_posix.$(OBJEXT) platform_socket_win.$(OBJEXT) \
+	platform_error_posix.$(OBJEXT) platform_error_win.$(OBJEXT) \
+	platform_process_posix.$(OBJEXT) \
+	platform_process_win.$(OBJEXT)
 spine_OBJECTS = $(am_spine_OBJECTS)
 spine_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -162,7 +165,12 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/error.Po ./$(DEPDIR)/keywords.Po \
 	./$(DEPDIR)/locks.Po ./$(DEPDIR)/nft_popen.Po \
 	./$(DEPDIR)/php.Po ./$(DEPDIR)/ping.Po \
-	./$(DEPDIR)/platform_common.Po ./$(DEPDIR)/platform_posix.Po \
+	./$(DEPDIR)/platform_common.Po \
+	./$(DEPDIR)/platform_error_posix.Po \
+	./$(DEPDIR)/platform_error_win.Po \
+	./$(DEPDIR)/platform_posix.Po \
+	./$(DEPDIR)/platform_process_posix.Po \
+	./$(DEPDIR)/platform_process_win.Po \
 	./$(DEPDIR)/platform_socket_posix.Po \
 	./$(DEPDIR)/platform_socket_win.Po ./$(DEPDIR)/platform_win.Po \
 	./$(DEPDIR)/poller.Po ./$(DEPDIR)/snmp.Po ./$(DEPDIR)/spine.Po \
@@ -396,11 +404,11 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
-spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c platform_common.c platform_posix.c platform_win.c platform_socket_posix.c platform_socket_win.c
+spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c platform_common.c platform_posix.c platform_win.c platform_socket_posix.c platform_socket_win.c platform_error_posix.c platform_error_win.c platform_process_posix.c platform_process_win.c
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
 man_MANS = spine.1
-EXTRA_DIST = spine.1 uthash.h spine_sem.h platform.h platform_socket.h platform_common.c platform_posix.c platform_win.c platform_socket_posix.c platform_socket_win.c tests/unit/Makefile tests/unit/test_platform_helpers.h tests/unit/test_platform_env.c tests/unit/test_platform_time.c tests/unit/test_platform_process.c tests/unit/test_platform_socket.c
+EXTRA_DIST = spine.1 uthash.h spine_sem.h platform.h platform_socket.h platform_error.h platform_process.h platform_common.c platform_posix.c platform_win.c platform_socket_posix.c platform_socket_win.c platform_error_posix.c platform_error_win.c platform_process_posix.c platform_process_win.c tests/unit/Makefile tests/unit/test_platform_helpers.h tests/unit/test_platform_env.c tests/unit/test_platform_time.c tests/unit/test_platform_process.c tests/unit/test_platform_socket.c tests/unit/test_platform_error.c
 all: all-am
 
 .SUFFIXES:
@@ -515,7 +523,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/php.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ping.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_common.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_error_posix.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_error_win.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_posix.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_process_posix.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_process_win.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_socket_posix.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_socket_win.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/platform_win.Po@am__quote@ # am--include-marker
@@ -912,7 +924,11 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/php.Po
 	-rm -f ./$(DEPDIR)/ping.Po
 	-rm -f ./$(DEPDIR)/platform_common.Po
+	-rm -f ./$(DEPDIR)/platform_error_posix.Po
+	-rm -f ./$(DEPDIR)/platform_error_win.Po
 	-rm -f ./$(DEPDIR)/platform_posix.Po
+	-rm -f ./$(DEPDIR)/platform_process_posix.Po
+	-rm -f ./$(DEPDIR)/platform_process_win.Po
 	-rm -f ./$(DEPDIR)/platform_socket_posix.Po
 	-rm -f ./$(DEPDIR)/platform_socket_win.Po
 	-rm -f ./$(DEPDIR)/platform_win.Po
@@ -975,7 +991,11 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/php.Po
 	-rm -f ./$(DEPDIR)/ping.Po
 	-rm -f ./$(DEPDIR)/platform_common.Po
+	-rm -f ./$(DEPDIR)/platform_error_posix.Po
+	-rm -f ./$(DEPDIR)/platform_error_win.Po
 	-rm -f ./$(DEPDIR)/platform_posix.Po
+	-rm -f ./$(DEPDIR)/platform_process_posix.Po
+	-rm -f ./$(DEPDIR)/platform_process_win.Po
 	-rm -f ./$(DEPDIR)/platform_socket_posix.Po
 	-rm -f ./$(DEPDIR)/platform_socket_win.Po
 	-rm -f ./$(DEPDIR)/platform_win.Po
