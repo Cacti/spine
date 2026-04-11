@@ -146,11 +146,22 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-libmariadbclient
-            mingw-w64-x86_64-net-snmp
             mingw-w64-x86_64-openssl
             pkg-config
 
+      - name: Check Net-SNMP availability
+        id: netsnmp
+        run: |
+          if pacman -Ss '^mingw-w64-x86_64-net-snmp$' >/dev/null 2>&1; then
+            pacman --noconfirm -S --needed mingw-w64-x86_64-net-snmp
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::MSYS2 does not currently publish mingw-w64-x86_64-net-snmp; skipping the Windows compile on this runner."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure
+        if: steps.netsnmp.outputs.available == 'true'
         run: |
           mkdir build && cd build
           cmake -G Ninja \
@@ -158,11 +169,12 @@ jobs:
             ..
 
       - name: Build
+        if: steps.netsnmp.outputs.available == 'true'
         run: cmake --build build
 
       - name: Upload binary
+        if: steps.netsnmp.outputs.available == 'true' && success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: success()
         with:
           name: spine-windows-x64
           path: build/spine.exe
