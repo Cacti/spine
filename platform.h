@@ -6,6 +6,10 @@
 int spine_platform_init(void);
 void spine_platform_cleanup(void);
 
+/* Internal one-time hooks implemented by the active platform backend. */
+int spine_platform_init_once(void);
+void spine_platform_cleanup_once(void);
+
 int spine_platform_setenv(const char *name, const char *value, int overwrite);
 int spine_platform_localtime(const time_t *when, struct tm *out);
 

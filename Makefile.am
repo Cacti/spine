@@ -22,7 +22,7 @@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
-spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c platform.c
+spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c platform_common.c platform_posix.c platform_win.c
 
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
@@ -31,7 +31,7 @@ bin_PROGRAMS = spine
 
 man_MANS = spine.1
 
-EXTRA_DIST = spine.1 uthash.h spine_sem.h platform.h tests/unit/Makefile tests/unit/test_platform_smoke.c
+EXTRA_DIST = spine.1 uthash.h spine_sem.h platform.h platform_common.c platform_posix.c platform_win.c tests/unit/Makefile tests/unit/test_platform_smoke.c
 
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck check-unit

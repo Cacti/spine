@@ -21,8 +21,8 @@ compile: $(TARGET)
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-$(TARGET): test_platform_smoke.c $(SPINE_ROOT)/platform.c $(SPINE_ROOT)/platform.h | $(BINDIR)
-	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_smoke.c $(SPINE_ROOT)/platform.c -o $@
+$(TARGET): test_platform_smoke.c $(SPINE_ROOT)/platform_common.c $(SPINE_ROOT)/platform_posix.c $(SPINE_ROOT)/platform_win.c $(SPINE_ROOT)/platform.h | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) test_platform_smoke.c $(SPINE_ROOT)/platform_common.c $(SPINE_ROOT)/platform_posix.c $(SPINE_ROOT)/platform_win.c -o $@
 
 run: $(TARGET)
 	$(TARGET)

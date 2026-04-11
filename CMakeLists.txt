@@ -285,7 +285,9 @@ if(SPINE_BUILD_MAIN)
         ping.c
         keywords.c
         error.c
-        platform.c
+        platform_common.c
+        platform_posix.c
+        platform_win.c
     )
 
     add_executable(spine ${SPINE_SOURCES})
@@ -328,7 +330,9 @@ endif()
 if(BUILD_TESTING)
     add_executable(test_platform_smoke
         tests/unit/test_platform_smoke.c
-        platform.c
+        platform_common.c
+        platform_posix.c
+        platform_win.c
     )
     target_include_directories(test_platform_smoke PRIVATE
         ${CMAKE_SOURCE_DIR}
