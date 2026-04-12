@@ -812,7 +812,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 	udp_socket = SPINE_INVALID_SOCKET_HANDLE;
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && spine_socket_is_valid(udp_socket)) {
+	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -924,7 +924,9 @@ int ping_udp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			spine_socket_close(udp_socket);
+			if (spine_socket_is_valid(udp_socket)) {
+				spine_socket_close(udp_socket);
+			}
 			return HOST_DOWN;
 		}
 	} else {
@@ -978,7 +980,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 	begin_time = get_time_as_double();
 
 	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && spine_socket_is_valid(tcp_socket)) {
+	if (strlen(host->hostname) != 0) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
@@ -1036,7 +1038,9 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			spine_socket_close(tcp_socket);
+			if (spine_socket_is_valid(tcp_socket)) {
+				spine_socket_close(tcp_socket);
+			}
 			return HOST_DOWN;
 		}
 	} else {
