@@ -1,0 +1,16 @@
+name: Install apt dependencies
+description: Update apt cache and install a whitespace-delimited package list.
+inputs:
+  packages:
+    description: Whitespace-delimited package names to install.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        # Intentionally unquoted to split package tokens.
+        sudo apt-get install -y ${{ inputs.packages }}

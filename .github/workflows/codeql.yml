@@ -44,10 +44,9 @@ jobs:
           languages: c-cpp
 
       - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y "${COMMON_DEPS}"
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
 
       - name: Bootstrap
         run: |
