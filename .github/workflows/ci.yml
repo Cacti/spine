@@ -151,7 +151,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y "${COMMON_DEPS}"
+          sudo apt-get install -y ${COMMON_DEPS}
           if [[ "${{ matrix.name }}" == "cross-arm64" ]]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu
           fi
