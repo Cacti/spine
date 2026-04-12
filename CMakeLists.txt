@@ -66,7 +66,7 @@ set(SPINE_CORE_SOURCES
     error.c
 )
 
-set(SPINE_TEST_NAMES env time process socket error fd)
+set(SPINE_TEST_NAMES env time process socket error fd dns)
 
 if(ENABLE_WARNINGS)
     add_library(spine_build_options INTERFACE)
@@ -160,6 +160,12 @@ function(spine_require_mysql)
                 /usr/include/mariadb
                 /usr/local/include/mysql
                 /usr/local/include/mariadb
+                /opt/homebrew/include/mysql
+                /opt/homebrew/include/mariadb
+                /usr/local/opt/mysql-client/include/mysql
+                /opt/homebrew/opt/mysql-client/include/mysql
+                /usr/local/opt/mariadb-connector-c/include/mariadb
+                /opt/homebrew/opt/mariadb-connector-c/include/mariadb
                 /opt/mysql/include
                 /usr/pkg/include/mysql
                 ${MINGW_PREFIX}/include/mariadb
@@ -173,6 +179,11 @@ function(spine_require_mysql)
                 /usr/lib/x86_64-linux-gnu
                 /usr/local/lib
                 /usr/local/lib/mysql
+                /opt/homebrew/lib
+                /usr/local/opt/mysql-client/lib
+                /opt/homebrew/opt/mysql-client/lib
+                /usr/local/opt/mariadb-connector-c/lib
+                /opt/homebrew/opt/mariadb-connector-c/lib
                 /opt/mysql/lib
                 /usr/pkg/lib
                 ${MINGW_PREFIX}/lib
@@ -188,7 +199,8 @@ function(spine_require_mysql)
     if(NOT _mysql_found)
         message(FATAL_ERROR
             "Cannot find MySQL/MariaDB client library. "
-            "Install libmysqlclient-dev or libmariadb-dev, "
+            "Install libmysqlclient-dev or libmariadb-dev "
+            "(FreeBSD: mysql80-client or mariadb-connector-c), "
             "or set CMAKE_PREFIX_PATH to the install location.")
     endif()
 
@@ -259,6 +271,9 @@ function(spine_require_netsnmp)
                 PATHS
                     /usr/include
                     /usr/local/include
+                    /opt/homebrew/include
+                    /usr/local/opt/net-snmp/include
+                    /opt/homebrew/opt/net-snmp/include
                     /usr/pkg/include
                     /opt/net-snmp/include
                     ${MINGW_PREFIX}/include
@@ -269,6 +284,9 @@ function(spine_require_netsnmp)
                     /usr/lib
                     /usr/lib64
                     /usr/local/lib
+                    /opt/homebrew/lib
+                    /usr/local/opt/net-snmp/lib
+                    /opt/homebrew/opt/net-snmp/lib
                     /usr/pkg/lib
                     /opt/net-snmp/lib
                     ${MINGW_PREFIX}/lib
@@ -284,7 +302,8 @@ function(spine_require_netsnmp)
     if(NOT _netsnmp_found)
         message(FATAL_ERROR
             "Cannot find Net-SNMP library. "
-            "Install libsnmp-dev or net-snmp-devel, "
+            "Install libsnmp-dev or net-snmp-devel "
+            "(FreeBSD: net-snmp), "
             "or set CMAKE_PREFIX_PATH to the install location.")
     endif()
 

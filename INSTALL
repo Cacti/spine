@@ -22,6 +22,7 @@ the same on every platform:
 * Linux: full build and runtime support. This is the primary production target.
 * macOS: full build support and CI-backed CMake validation. Linux still has the
   broadest runtime and integration coverage.
+* FreeBSD: full build support with CI-backed VM build and CTest smoke coverage.
 * Windows: MSYS2/MinGW-native platform smoke coverage exists, but full runtime
   support still depends on a complete Windows Net-SNMP toolchain path.
 
@@ -58,6 +59,19 @@ To compile and install Spine with the default options:
 
 To install under a non-default prefix, pass
 `-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
+
+FreeBSD Development
+===================
+
+1. Install dependencies:
+
+   pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+
+2. Configure, build, and test:
+
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
 Windows Development
 ===================
@@ -121,6 +135,11 @@ Known Issues
    your spine will take approximately:
 
    total connections = 4 * ( 1 + 10 + 5 ) = 64
+
+3. ICMP privilege model differs by platform:
+
+   * Linux/FreeBSD/macOS commonly need raw-socket privilege (setuid/capabilities).
+   * Windows uses native ICMP APIs and does not use the raw-socket privilege path.
 
 -----------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.

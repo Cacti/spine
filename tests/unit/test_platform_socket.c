@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <string.h>
 
 #include "../../platform.h"
@@ -314,10 +315,19 @@ static void test_ping_socket_platform_policy(void) {
 	ASSERT_INT_EQ(spine_socket_ping_icmp_recv_flags(), 0);
 	ASSERT_INT_EQ(spine_socket_ping_tcp_supports_retries(), 1);
 	ASSERT_INT_EQ(spine_socket_raw_icmp_needs_privileged_open(), 0);
+	ASSERT_TRUE(spine_socket_error_is_host_unreachable(WSAEHOSTUNREACH));
+	ASSERT_TRUE(spine_socket_error_is_host_unreachable(WSAENETUNREACH));
 #else
 	ASSERT_INT_EQ(spine_socket_ping_icmp_recv_flags(), MSG_WAITALL);
 	ASSERT_INT_EQ(spine_socket_ping_tcp_supports_retries(), 1);
 	ASSERT_INT_EQ(spine_socket_raw_icmp_needs_privileged_open(), 1);
+	ASSERT_TRUE(spine_socket_error_is_host_unreachable(EHOSTUNREACH));
+#ifdef ENETUNREACH
+	ASSERT_TRUE(spine_socket_error_is_host_unreachable(ENETUNREACH));
+#endif
+#ifdef EHOSTDOWN
+	ASSERT_TRUE(spine_socket_error_is_host_unreachable(EHOSTDOWN));
+#endif
 #endif
 }
 

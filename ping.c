@@ -34,6 +34,9 @@
 #include "common.h"
 #include "spine.h"
 #include "platform_socket.h"
+#ifdef _WIN32
+#include <icmpapi.h>
+#endif
 
 static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address_len, int family, const char *hostname, unsigned short int port) {
 	struct addrinfo hints, *hostinfo;
@@ -111,6 +114,167 @@ static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address
 	return TRUE;
 }
 
+#ifdef _WIN32
+static int ping_icmp_windows(host_t *host, ping_t *ping, int family) {
+	struct sockaddr_storage destination;
+	socklen_t destination_len;
+	int retry_count;
+	DWORD timeout_ms;
+	static const char payload[] = "cacti-monitoring-system";
+
+	if (strlen(host->hostname) == 0) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
+		snprintf(ping->ping_status, 50, "down");
+		return HOST_DOWN;
+	}
+
+	if (!resolve_sockaddr(&destination, &destination_len, family, host->hostname, 0)) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, family == AF_INET6 ? "ICMPv6: Destination hostname invalid" : "ICMP: Destination hostname invalid");
+		snprintf(ping->ping_status, 50, "down");
+		return HOST_DOWN;
+	}
+
+	timeout_ms = host->ping_timeout > 0 ? (DWORD) host->ping_timeout : 1000;
+	if (timeout_ms == 0) {
+		timeout_ms = 1000;
+	}
+
+	for (retry_count = 0; retry_count <= host->ping_retries; retry_count++) {
+		double begin_time;
+		double end_time;
+		double total_time;
+		DWORD status = IP_REQ_TIMED_OUT;
+		DWORD round_trip_time = 0;
+		HANDLE icmp_handle;
+		void *reply_buffer = NULL;
+		DWORD reply_size = 0;
+		DWORD replies = 0;
+
+		begin_time = get_time_as_double();
+
+		if (family == AF_INET6) {
+			struct sockaddr_in6 source_address;
+			struct sockaddr_in6 *target_address;
+			PICMPV6_ECHO_REPLY reply;
+
+			icmp_handle = Icmp6CreateFile();
+			if (icmp_handle == INVALID_HANDLE_VALUE) {
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping handle open failed");
+				snprintf(ping->ping_status, 50, "down");
+				return HOST_DOWN;
+			}
+
+			memset(&source_address, 0, sizeof(source_address));
+			source_address.sin6_family = AF_INET6;
+
+			target_address = (struct sockaddr_in6 *) &destination;
+			reply_size = (DWORD) (sizeof(ICMPV6_ECHO_REPLY) + sizeof(payload) + 32U);
+			reply_buffer = calloc(1, reply_size);
+
+			if (reply_buffer == NULL) {
+				IcmpCloseHandle(icmp_handle);
+				die("ERROR: Fatal calloc error: ping.c ping_icmp_windows reply_buffer");
+			}
+
+			replies = Icmp6SendEcho2(
+				icmp_handle,
+				NULL,
+				NULL,
+				NULL,
+				&source_address,
+				target_address,
+				payload,
+				(WORD) strlen(payload),
+				NULL,
+				reply_buffer,
+				reply_size,
+				timeout_ms
+			);
+
+			if (replies > 0) {
+				reply = (PICMPV6_ECHO_REPLY) reply_buffer;
+				status = reply->Status;
+				round_trip_time = reply->RoundTripTime;
+			} else {
+				status = GetLastError();
+			}
+
+			free(reply_buffer);
+			IcmpCloseHandle(icmp_handle);
+		} else {
+			struct sockaddr_in *target_address;
+			PICMP_ECHO_REPLY reply;
+
+			icmp_handle = IcmpCreateFile();
+			if (icmp_handle == INVALID_HANDLE_VALUE) {
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping handle open failed");
+				snprintf(ping->ping_status, 50, "down");
+				return HOST_DOWN;
+			}
+
+			target_address = (struct sockaddr_in *) &destination;
+			reply_size = (DWORD) (sizeof(ICMP_ECHO_REPLY) + sizeof(payload) + 32U);
+			reply_buffer = calloc(1, reply_size);
+
+			if (reply_buffer == NULL) {
+				IcmpCloseHandle(icmp_handle);
+				die("ERROR: Fatal calloc error: ping.c ping_icmp_windows reply_buffer");
+			}
+
+			replies = IcmpSendEcho(
+				icmp_handle,
+				target_address->sin_addr.s_addr,
+				payload,
+				(WORD) strlen(payload),
+				NULL,
+				reply_buffer,
+				reply_size,
+				timeout_ms
+			);
+
+			if (replies > 0) {
+				reply = (PICMP_ECHO_REPLY) reply_buffer;
+				status = reply->Status;
+				round_trip_time = reply->RoundTripTime;
+			} else {
+				status = GetLastError();
+			}
+
+			free(reply_buffer);
+			IcmpCloseHandle(icmp_handle);
+		}
+
+		end_time = get_time_as_double();
+		total_time = (end_time - begin_time) * 1000.00;
+
+		if (replies > 0 && status == IP_SUCCESS) {
+			if (is_debug_device(host->id)) {
+				SPINE_LOG(("Device[%i] INFO: %s Device Alive, Try Count:%i, Time:%.4f ms", host->id, family == AF_INET6 ? "ICMPv6" : "ICMP", retry_count + 1, round_trip_time > 0 ? (double) round_trip_time : total_time));
+			} else {
+				SPINE_LOG_MEDIUM(("Device[%i] INFO: %s Device Alive, Try Count:%i, Time:%.4f ms", host->id, family == AF_INET6 ? "ICMPv6" : "ICMP", retry_count + 1, round_trip_time > 0 ? (double) round_trip_time : total_time));
+			}
+
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "%s: Device is Alive", family == AF_INET6 ? "ICMPv6" : "ICMP");
+			snprintf(ping->ping_status, 50, "%.5f", round_trip_time > 0 ? (double) round_trip_time : total_time);
+			return HOST_UP;
+		}
+
+		if (status != IP_REQ_TIMED_OUT && status != IP_DEST_HOST_UNREACHABLE && status != IP_DEST_NET_UNREACHABLE) {
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "%s: Ping failed with status %lu", family == AF_INET6 ? "ICMPv6" : "ICMP", (unsigned long) status);
+			snprintf(ping->ping_status, 50, "down");
+			return HOST_DOWN;
+		}
+
+		#ifndef SOLAR_THREAD
+		spine_platform_sleep_us(1000);
+		#endif
+	}
+
+	snprintf(ping->ping_response, SMALL_BUFSIZE, "%s: Ping timed out", family == AF_INET6 ? "ICMPv6" : "ICMP");
+	snprintf(ping->ping_status, 50, "down");
+	return HOST_DOWN;
+}
+#else
 static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	spine_socket_t icmp_socket;
 	double begin_time, end_time, total_time;
@@ -272,6 +436,7 @@ keep_listening_ipv6:
 #endif
 	}
 }
+#endif
 
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
@@ -498,6 +663,13 @@ int ping_snmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
+#ifdef _WIN32
+	if (get_address_type(host) == SPINE_IPV6) {
+		return ping_icmp_windows(host, ping, AF_INET6);
+	}
+
+	return ping_icmp_windows(host, ping, AF_INET);
+#else
 	spine_socket_t icmp_socket;
 
 	double begin_time, end_time, total_time;
@@ -766,6 +938,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 		return HOST_DOWN;
 	}
+#endif
 }
 
 /*! \fn int ping_udp(host_t *host, ping_t *ping)

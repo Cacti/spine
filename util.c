@@ -1694,6 +1694,20 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
  *  \return system time (at microsecond resolution) as a double
  */
 double get_time_as_double(void) {
+#if defined(CLOCK_MONOTONIC_FAST)
+	struct timespec now;
+
+	if (clock_gettime(CLOCK_MONOTONIC_FAST, &now) == 0) {
+		return (double) now.tv_sec + ((double) now.tv_nsec / 1000000000.0);
+	}
+#elif defined(CLOCK_MONOTONIC)
+	struct timespec now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+		return (double) now.tv_sec + ((double) now.tv_nsec / 1000000000.0);
+	}
+#endif
+
 	struct timeval now;
 
 	gettimeofday(&now, NULL);

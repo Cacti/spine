@@ -79,7 +79,14 @@ int spine_socket_error_is_conn_reset(int error_code) {
 }
 
 int spine_socket_error_is_host_unreachable(int error_code) {
-	return error_code == EHOSTUNREACH;
+	return error_code == EHOSTUNREACH
+#ifdef ENETUNREACH
+		|| error_code == ENETUNREACH
+#endif
+#ifdef EHOSTDOWN
+		|| error_code == EHOSTDOWN
+#endif
+		;
 }
 
 int spine_socket_ping_icmp_recv_flags(void) {

@@ -19,6 +19,7 @@ identical on every platform.
 | --- | --- | --- | --- |
 | Linux | Full | Full | Primary production target. Native CMake builds and tests are exercised in CI. |
 | macOS | Full | Full | CMake main-build coverage is exercised in CI. Linux still has broader ecosystem and integration coverage. |
+| FreeBSD | Full | Full | CMake build and CTest smoke coverage are exercised via CI VM runs. |
 | Windows | Partial | Partial | MSYS2/MinGW-native smoke coverage is exercised in CI. Full binary/runtime support still depends on a complete Windows Net-SNMP toolchain path. |
 
 ## Unix Installation
@@ -40,6 +41,22 @@ chmod u+s /usr/local/spine/bin/spine
 
 To install under a non-default prefix, pass
 `-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
+
+## FreeBSD Development
+
+1. Install dependencies:
+
+   ```shell
+   pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+   ```
+
+2. Configure/build/test:
+
+   ```shell
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+   cmake --build build
+   ctest --test-dir build --output-on-failure
+   ```
 
 ## Windows Development
 
@@ -105,6 +122,12 @@ part of the supported build story for this repository.
    servers each your spine will take approximately:
 
    `total connections = 4 * ( 1 + 10 + 5 ) = 64`
+
+3. Raw ICMP privilege model is platform-specific:
+
+   - Linux/FreeBSD/macOS usually require elevated/raw-socket privileges.
+   - Windows uses native ICMP APIs and does not require setuid/capabilities for
+     the same code path.
 
 -----------------------------------------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.
