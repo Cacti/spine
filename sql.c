@@ -34,6 +34,101 @@
 #include "common.h"
 #include "spine.h"
 
+static int is_identifier_char(unsigned char c) {
+	return (isalnum(c) || c == '_');
+}
+
+static void redact_sql_value_for_key(char *query, const char *key) {
+	char *match;
+	size_t key_len;
+
+	key_len = strlen(key);
+	match = query;
+
+	while ((match = strstr(match, key)) != NULL) {
+		char *cursor;
+		char quote = '\0';
+
+		if (match > query && is_identifier_char((unsigned char) *(match - 1))) {
+			match += key_len;
+			continue;
+		}
+
+		if (is_identifier_char((unsigned char) match[key_len])) {
+			match += key_len;
+			continue;
+		}
+
+		cursor = match + key_len;
+		while (*cursor && isspace((unsigned char) *cursor)) {
+			cursor++;
+		}
+
+		if (*cursor != '=') {
+			match += key_len;
+			continue;
+		}
+
+		cursor++;
+		while (*cursor && isspace((unsigned char) *cursor)) {
+			cursor++;
+		}
+
+		if (*cursor == '\'' || *cursor == '\"') {
+			quote = *cursor;
+			cursor++;
+		}
+
+		while (*cursor) {
+			if (quote) {
+				if (*cursor == quote) {
+					break;
+				}
+
+				*cursor = '*';
+				cursor++;
+				continue;
+			}
+
+			if (*cursor == ',' || *cursor == ')' || isspace((unsigned char) *cursor)) {
+				break;
+			}
+
+			*cursor = '*';
+			cursor++;
+		}
+
+		match = cursor;
+	}
+}
+
+static void log_redacted_sql_query(const char *query_frag) {
+	char *redacted_query;
+	int j;
+	static const char *sensitive_keys[] = {
+		"snmp_community",
+		"snmp_password",
+		"snmp_priv_passphrase",
+		"password"
+	};
+
+	if (set.log_level < POLLER_VERBOSITY_DEVDBG) {
+		return;
+	}
+
+	redacted_query = strdup(query_frag);
+	if (redacted_query == NULL) {
+		return;
+	}
+
+	for (j = 0; j < (int) (sizeof(sensitive_keys) / sizeof(sensitive_keys[0])); j++) {
+		redact_sql_value_for_key(redacted_query, sensitive_keys[j]);
+	}
+
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", redacted_query));
+	free(redacted_query);
+}
+
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
@@ -56,28 +151,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	char *redacted_query = NULL;
-	if (set.log_level >= POLLER_VERBOSITY_DEVDBG) {
-		redacted_query = strdup(query_frag);
-		if (redacted_query) {
-			char *p;
-			const char *sensitive[] = {"snmp_community", "snmp_password", "snmp_priv_passphrase", "password"};
-			int j;
-			for (j=0; j<4; j++) {
-				if ((p = strstr(redacted_query, sensitive[j]))) {
-					char *val = strchr(p, '=');
-					if (val) {
-						val++;
-						while (*val && *val != ',' && *val != ' ' && *val != ')') {
-							*val++ = '*';
-						}
-					}
-				}
-			}
-			SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", redacted_query));
-			free(redacted_query);
-		}
-	}
+	log_redacted_sql_query(query_frag);
 
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
@@ -174,28 +248,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	char *redacted_query = NULL;
-	if (set.log_level >= POLLER_VERBOSITY_DEVDBG) {
-		redacted_query = strdup(query_frag);
-		if (redacted_query) {
-			char *p;
-			const char *sensitive[] = {"snmp_community", "snmp_password", "snmp_priv_passphrase", "password"};
-			int j;
-			for (j=0; j<4; j++) {
-				if ((p = strstr(redacted_query, sensitive[j]))) {
-					char *val = strchr(p, '=');
-					if (val) {
-						val++;
-						while (*val && *val != ',' && *val != ' ' && *val != ')') {
-							*val++ = '*';
-						}
-					}
-				}
-			}
-			SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", redacted_query));
-			free(redacted_query);
-		}
-	}
+	log_redacted_sql_query(query_frag);
 
 	while (1) {
 		if (mysql_query(mysql, query)) {
