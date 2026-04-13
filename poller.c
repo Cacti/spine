@@ -231,12 +231,21 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	//db_connect(LOCAL, &mysql);
+	/* db_get_connection can return NULL after a connection pool error */
 	local_cnn = db_get_connection(LOCAL);
+	if (local_cnn == NULL) {
+		SPINE_LOG(("FATAL: Unable to obtain local database connection in poller"));
+		return;
+	}
 	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
+		if (remote_cnn == NULL) {
+			SPINE_LOG(("FATAL: Unable to obtain remote database connection in poller"));
+			db_release_connection(LOCAL, local_cnn);
+			return;
+		}
 		mysqlr = remote_cnn->mysql;
 	}
 
