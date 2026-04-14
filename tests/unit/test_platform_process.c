@@ -2,6 +2,11 @@
 #include "../../platform_process.h"
 #include "test_platform_helpers.h"
 
+#ifdef _WIN32
+#include <stdio.h>
+#include <windows.h>
+#endif
+
 static void test_platform_misc_helpers(void) {
 	ASSERT_TRUE(spine_platform_process_id() > 0);
 	ASSERT_TRUE(spine_platform_stdout_is_terminal() == 0 || spine_platform_stdout_is_terminal() == 1);
@@ -57,10 +62,62 @@ static void test_platform_spawn_and_terminate(void) {
 	ASSERT_TRUE(status != 0);
 }
 
+#ifdef _WIN32
+static void test_platform_spawn_utf8_path_argument(void) {
+	wchar_t temp_dir[MAX_PATH];
+	wchar_t script_path[MAX_PATH];
+	HANDLE script_handle;
+	DWORD bytes_written;
+	const char script_body[] = "@echo off\r\nexit /b 0\r\n";
+	int utf8_len;
+	char utf8_script_path[MAX_PATH * 4];
+	spine_pid_t pid;
+	int status;
+	char cmd_path[] = "C:\\Windows\\System32\\cmd.exe";
+	char cmd_flag[] = "/c";
+	char *argv[] = { cmd_path, cmd_flag, utf8_script_path, NULL };
+
+	ASSERT_TRUE(GetTempPathW(MAX_PATH, temp_dir) > 0);
+	if (swprintf(script_path, MAX_PATH, L"%ls%ls", temp_dir, L"spine-utf8-\x03A9.cmd") < 0) {
+		ASSERT_TRUE(0);
+		return;
+	}
+
+	script_handle = CreateFileW(
+		script_path,
+		GENERIC_WRITE,
+		0,
+		NULL,
+		CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL
+	);
+	ASSERT_TRUE(script_handle != INVALID_HANDLE_VALUE);
+	if (script_handle == INVALID_HANDLE_VALUE) {
+		return;
+	}
+
+	ASSERT_TRUE(WriteFile(script_handle, script_body, (DWORD) (sizeof(script_body) - 1), &bytes_written, NULL) != 0);
+	CloseHandle(script_handle);
+
+	utf8_len = WideCharToMultiByte(CP_UTF8, 0, script_path, -1, utf8_script_path, (int) sizeof(utf8_script_path), NULL, NULL);
+	ASSERT_TRUE(utf8_len > 0);
+
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, argv, NULL, 1, 1000), 0);
+	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
+	ASSERT_INT_EQ(status, 0);
+
+	DeleteFileW(script_path);
+}
+#endif
+
 int main(void) {
 	test_platform_misc_helpers();
 	test_platform_pipe_helpers();
 	test_platform_spawn_and_wait();
 	test_platform_spawn_and_terminate();
+#ifdef _WIN32
+	test_platform_spawn_utf8_path_argument();
+#endif
 	return finish_tests("platform process tests");
 }

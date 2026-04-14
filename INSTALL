@@ -25,6 +25,10 @@ the same on every platform:
 * FreeBSD: full build support with CI-backed VM build and CTest smoke coverage.
 * Windows: MSYS2/MinGW-native platform smoke coverage exists, but full runtime
   support still depends on a complete Windows Net-SNMP toolchain path.
+* Solaris: best-effort CMake portability profile is maintained, but no hosted
+  CI lane currently exists.
+* AIX: best-effort CMake portability profile is maintained, but no hosted CI
+  lane currently exists.
 
 Support Tiers
 -------------
@@ -38,7 +42,7 @@ The support policy uses three tiers:
 Current mapping:
 
 * Guaranteed: Linux
-* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW)
+* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW), Solaris, AIX
 * Unsupported: Cygwin build/runtime path
 
 Build System Roadmap
@@ -93,6 +97,42 @@ FreeBSD Development
 2. Configure, build, and test:
 
    cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+   cmake --build build
+   ctest --test-dir build --output-on-failure
+
+macOS Development
+=================
+
+Homebrew (recommended):
+
+   brew install cmake ninja pkg-config mysql-client net-snmp openssl@3
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON \
+      -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
+
+MacPorts (best effort):
+
+   sudo port install cmake ninja pkgconfig mysql8 net-snmp openssl
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/local"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
+
+Solaris and AIX Development (Best Effort)
+=========================================
+
+These platforms currently do not have hosted CI lanes, but CMake portability
+profiles are maintained.
+
+Solaris (example with OpenCSW-style prefix):
+
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/csw;/usr"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
+
+AIX (example with /opt/freeware prefix):
+
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/freeware;/usr"
    cmake --build build
    ctest --test-dir build --output-on-failure
 

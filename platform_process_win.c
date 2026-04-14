@@ -7,14 +7,45 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
+#include <wchar.h>
 #include <windows.h>
 
 #include "platform.h"
 
-static size_t spine_windows_quoted_arg_length(const char *arg) {
+static wchar_t *spine_windows_utf8_to_wide(const char *input) {
+	int required_chars;
+	wchar_t *output;
+
+	if (input == NULL) {
+		return NULL;
+	}
+
+	required_chars = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, input, -1, NULL, 0);
+	if (required_chars <= 0) {
+		required_chars = MultiByteToWideChar(CP_ACP, 0, input, -1, NULL, 0);
+		if (required_chars <= 0) {
+			return NULL;
+		}
+	}
+
+	output = (wchar_t *) malloc((size_t) required_chars * sizeof(wchar_t));
+	if (output == NULL) {
+		return NULL;
+	}
+
+	if (MultiByteToWideChar(CP_UTF8, 0, input, -1, output, required_chars) <= 0) {
+		if (MultiByteToWideChar(CP_ACP, 0, input, -1, output, required_chars) <= 0) {
+			free(output);
+			return NULL;
+		}
+	}
+
+	return output;
+}
+
+static size_t spine_windows_quoted_arg_length(const wchar_t *arg) {
 	size_t extra;
-	const char *cursor;
+	const wchar_t *cursor;
 
 	extra = 2; /* opening and closing quotes */
 	for (cursor = arg; *cursor != '\0'; cursor++) {
@@ -27,22 +58,28 @@ static size_t spine_windows_quoted_arg_length(const char *arg) {
 	return extra;
 }
 
-static char *spine_windows_build_command_line(char *const argv[]) {
+static wchar_t *spine_windows_build_command_line(char *const argv[]) {
 	size_t total_len;
 	size_t arg_count;
 	size_t arg_index;
-	char *command_line;
-	char *output;
-	const char *input;
+	wchar_t *command_line;
+	wchar_t *output;
+	const wchar_t *input;
+	wchar_t *wide_arg;
 
 	total_len = 1; /* trailing NUL */
 	arg_count = 0;
 	while (argv[arg_count] != NULL) {
-		total_len += spine_windows_quoted_arg_length(argv[arg_count]) + 1;
+		wide_arg = spine_windows_utf8_to_wide(argv[arg_count]);
+		if (wide_arg == NULL) {
+			return NULL;
+		}
+		total_len += spine_windows_quoted_arg_length(wide_arg) + 1;
+		free(wide_arg);
 		arg_count++;
 	}
 
-	command_line = (char *) malloc(total_len);
+	command_line = (wchar_t *) malloc(total_len * sizeof(wchar_t));
 	if (command_line == NULL) {
 		return NULL;
 	}
@@ -50,19 +87,26 @@ static char *spine_windows_build_command_line(char *const argv[]) {
 	output = command_line;
 	for (arg_index = 0; arg_index < arg_count; arg_index++) {
 		if (arg_index > 0) {
-			*output++ = ' ';
+			*output++ = L' ';
 		}
 
-		*output++ = '"';
-		for (input = argv[arg_index]; *input != '\0'; input++) {
-			if (*input == '"' || *input == '\\') {
-				*output++ = '\\';
+		wide_arg = spine_windows_utf8_to_wide(argv[arg_index]);
+		if (wide_arg == NULL) {
+			free(command_line);
+			return NULL;
+		}
+
+		*output++ = L'"';
+		for (input = wide_arg; *input != L'\0'; input++) {
+			if (*input == L'"' || *input == L'\\') {
+				*output++ = L'\\';
 			}
 			*output++ = *input;
 		}
-		*output++ = '"';
+		*output++ = L'"';
+		free(wide_arg);
 	}
-	*output = '\0';
+	*output = L'\0';
 
 	return command_line;
 }
@@ -164,11 +208,9 @@ int spine_process_terminate(spine_pid_t pid) {
 		} else {
 			errno = ESRCH;
 		}
-		CloseHandle(process_handle);
 		return -1;
 	}
 
-	CloseHandle(process_handle);
 	return 0;
 }
 
@@ -181,10 +223,11 @@ int spine_process_spawn_retry(
 	int retry_limit,
 	unsigned int retry_sleep_us
 ) {
-	STARTUPINFOA startup_info;
+	STARTUPINFOW startup_info;
 	PROCESS_INFORMATION process_info;
-	char *command_line_template;
-	char *command_line;
+	wchar_t *command_line_template;
+	wchar_t *command_line;
+	wchar_t *wide_path;
 	BOOL create_result;
 	int retry_count;
 	int spawn_error;
@@ -196,8 +239,11 @@ int spine_process_spawn_retry(
 
 	retry_count = 0;
 	creation_flags = CREATE_NO_WINDOW;
+	wide_path = spine_windows_utf8_to_wide(path);
 	command_line_template = spine_windows_build_command_line(argv);
-	if (command_line_template == NULL) {
+	if (wide_path == NULL || command_line_template == NULL) {
+		free(wide_path);
+		free(command_line_template);
 		return ENOMEM;
 	}
 
@@ -206,14 +252,15 @@ int spine_process_spawn_retry(
 	memset(&process_info, 0, sizeof(process_info));
 
 	do {
-		command_line = _strdup(command_line_template);
+		command_line = _wcsdup(command_line_template);
 		if (command_line == NULL) {
+			free(wide_path);
 			free(command_line_template);
 			return ENOMEM;
 		}
 
-		create_result = CreateProcessA(
-			path,
+		create_result = CreateProcessW(
+			wide_path,
 			command_line,
 			NULL,
 			NULL,
@@ -228,6 +275,7 @@ int spine_process_spawn_retry(
 		if (create_result != 0) {
 			CloseHandle(process_info.hThread);
 			*pid = (spine_pid_t) process_info.hProcess;
+			free(wide_path);
 			free(command_line_template);
 			return 0;
 		}
@@ -240,6 +288,7 @@ int spine_process_spawn_retry(
 			continue;
 		}
 
+		free(wide_path);
 		free(command_line_template);
 		errno = spawn_error;
 		return spawn_error;

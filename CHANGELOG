@@ -16,6 +16,8 @@ The Cacti Group | spine
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
 -feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
 -note: Cygwin is no longer a supported build/runtime target; Windows support is MSYS2/MinGW-native
+-note: CMake portability profiles expanded for Solaris/AIX and C17-oriented toolchain defaults
+-issue: extend IPv4/IPv6 DNS regression coverage (mapped-address, family-forcing, scoped IPv6 parse)
 -feature#3740: Ability to disable a site
 -feature#5090: Enhance number recognition within Spine
 -feature#6001: Extend SYSTEM STATS

@@ -21,6 +21,8 @@ identical on every platform.
 | macOS | Full | Full | CMake main-build coverage is exercised in CI. Linux still has broader ecosystem and integration coverage. |
 | FreeBSD | Full | Full | CMake build and CTest smoke coverage are exercised via CI VM runs. |
 | Windows | Partial | Partial | MSYS2/MinGW-native smoke coverage is exercised in CI. Full binary/runtime support still depends on a complete Windows Net-SNMP toolchain path. |
+| Solaris | Partial | Partial | Best-effort CMake portability profile is maintained, but there is no hosted CI lane today. |
+| AIX | Partial | Partial | Best-effort CMake portability profile is maintained, but there is no hosted CI lane today. |
 
 ### Support Tiers
 
@@ -33,7 +35,7 @@ The platform support policy uses three tiers:
 Current mapping:
 
 * Guaranteed: Linux
-* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW)
+* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW), Solaris, AIX
 * Unsupported: Cygwin build/runtime path
 
 ### Build System Roadmap
@@ -78,6 +80,48 @@ To install under a non-default prefix, pass
    cmake --build build
    ctest --test-dir build --output-on-failure
    ```
+
+## macOS Development
+
+Homebrew (recommended):
+
+```shell
+brew install cmake ninja pkg-config mysql-client net-snmp openssl@3
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON \
+  -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+MacPorts (best effort):
+
+```shell
+sudo port install cmake ninja pkgconfig mysql8 net-snmp openssl
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/local"
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+## Solaris and AIX Development (Best Effort)
+
+These platforms currently do not have hosted CI lanes, but CMake portability
+profiles are maintained.
+
+Solaris (example with OpenCSW-style prefix):
+
+```shell
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/csw;/usr"
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+AIX (example with /opt/freeware prefix):
+
+```shell
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/freeware;/usr"
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
 
 ## Windows Development
 

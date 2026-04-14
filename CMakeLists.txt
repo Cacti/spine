@@ -168,12 +168,19 @@ function(spine_require_mysql)
                 /usr/include/mariadb
                 /usr/local/include/mysql
                 /usr/local/include/mariadb
+                /usr/local/mysql/include
+                /opt/local/include/mysql
+                /opt/local/include/mariadb
                 /opt/homebrew/include/mysql
                 /opt/homebrew/include/mariadb
                 /usr/local/opt/mysql-client/include/mysql
                 /opt/homebrew/opt/mysql-client/include/mysql
                 /usr/local/opt/mariadb-connector-c/include/mariadb
                 /opt/homebrew/opt/mariadb-connector-c/include/mariadb
+                /opt/csw/include/mysql
+                /opt/csw/include/mariadb
+                /opt/freeware/include/mysql
+                /opt/freeware/include/mariadb
                 /opt/mysql/include
                 /usr/pkg/include/mysql
                 ${MINGW_PREFIX}/include/mariadb
@@ -187,11 +194,15 @@ function(spine_require_mysql)
                 /usr/lib/x86_64-linux-gnu
                 /usr/local/lib
                 /usr/local/lib/mysql
+                /usr/local/mysql/lib
+                /opt/local/lib
                 /opt/homebrew/lib
                 /usr/local/opt/mysql-client/lib
                 /opt/homebrew/opt/mysql-client/lib
                 /usr/local/opt/mariadb-connector-c/lib
                 /opt/homebrew/opt/mariadb-connector-c/lib
+                /opt/csw/lib
+                /opt/freeware/lib
                 /opt/mysql/lib
                 /usr/pkg/lib
                 ${MINGW_PREFIX}/lib
@@ -279,9 +290,12 @@ function(spine_require_netsnmp)
                 PATHS
                     /usr/include
                     /usr/local/include
+                    /opt/local/include
                     /opt/homebrew/include
                     /usr/local/opt/net-snmp/include
                     /opt/homebrew/opt/net-snmp/include
+                    /opt/csw/include
+                    /opt/freeware/include
                     /usr/pkg/include
                     /opt/net-snmp/include
                     ${MINGW_PREFIX}/include
@@ -292,9 +306,12 @@ function(spine_require_netsnmp)
                     /usr/lib
                     /usr/lib64
                     /usr/local/lib
+                    /opt/local/lib
                     /opt/homebrew/lib
                     /usr/local/opt/net-snmp/lib
                     /opt/homebrew/opt/net-snmp/lib
+                    /opt/csw/lib
+                    /opt/freeware/lib
                     /usr/pkg/lib
                     /opt/net-snmp/lib
                     ${MINGW_PREFIX}/lib
@@ -358,6 +375,13 @@ if(WIN32)
     target_link_libraries(spine_platform PUBLIC ws2_32 iphlpapi advapi32)
 else()
     target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        target_compile_definitions(spine_platform PUBLIC _DARWIN_C_SOURCE=1)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+        target_compile_definitions(spine_platform PUBLIC _POSIX_PTHREAD_SEMANTICS=1 _XOPEN_SOURCE=700 __EXTENSIONS__=1)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "AIX")
+        target_compile_definitions(spine_platform PUBLIC _ALL_SOURCE=1 _XOPEN_SOURCE=700)
+    endif()
     target_link_libraries(spine_platform PUBLIC m ${CMAKE_DL_LIBS})
     if(CAP_LIBRARY)
         target_link_libraries(spine_platform PUBLIC ${CAP_LIBRARY})
