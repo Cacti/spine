@@ -3,6 +3,7 @@
 #ifndef _WIN32
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -13,7 +14,25 @@
 extern char **environ;
 
 int spine_process_pipe(int pipe_fds[2]) {
-	return pipe(pipe_fds);
+	/* CLOEXEC on both ends keeps the pipe from leaking into unrelated
+	 * concurrent spawns. posix_spawn_file_actions_adddup2 clears CLOEXEC
+	 * on the duped fds, so the intended child still inherits stdin/stdout. */
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+	return pipe2(pipe_fds, O_CLOEXEC);
+#else
+	int rc = pipe(pipe_fds);
+	if (rc == 0) {
+		if (fcntl(pipe_fds[0], F_SETFD, FD_CLOEXEC) == -1 ||
+			fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) == -1) {
+			int saved_errno = errno;
+			close(pipe_fds[0]);
+			close(pipe_fds[1]);
+			errno = saved_errno;
+			return -1;
+		}
+	}
+	return rc;
+#endif
 }
 
 int spine_process_close_fd(int fd) {
