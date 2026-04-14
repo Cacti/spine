@@ -8,6 +8,12 @@
  * once and is cached for the process lifetime.
  */
 #include "platform_icmp.h"
+#include "ping_wire.h"
+
+/* Local free-and-NULL helper. spine.h exposes SPINE_FREE() but pulls
+ * in the full runtime; this TU has no business including that, so we
+ * inline the same contract here. */
+#define SPINE_ICMP_FREE(p) do { if ((p) != NULL) { free((void *)(p)); (p) = NULL; } } while (0)
 
 #ifndef _WIN32
 /* On POSIX this translation unit is not built; a stub keeps the
@@ -106,15 +112,8 @@ static void load_iphlpapi(void) {
 
 /* Default payload used when the caller passes NULL. Mirrors the POSIX
  * behaviour so callers can rely on the facade owning payload
- * composition. Must stay byte-compatible with spine_ping_payload_t
- * in ping.c. */
-#define SPINE_PING_MAGIC 0x53504E50494E4721ULL
-typedef struct {
-    uint64_t magic;
-    uint32_t pid_mask;
-    uint32_t timestamp_us;
-} spine_ping_payload_t;
-
+ * composition. Wire format comes from the single source of truth in
+ * ping_wire.h. */
 static void win_default_payload(spine_ping_payload_t *p) {
     p->magic = SPINE_PING_MAGIC;
     p->pid_mask = (uint32_t) GetCurrentProcessId();
@@ -219,7 +218,7 @@ int spine_icmp_echo_v4(const char *ip, uint32_t timeout_ms,
         result->system_errno = (int) err;
     }
 
-    free(reply_buf);
+    SPINE_ICMP_FREE(reply_buf);
     p_IcmpCloseHandle(h);
     return 0;
 }
@@ -307,7 +306,7 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
         result->system_errno = (int) err;
     }
 
-    free(reply_buf);
+    SPINE_ICMP_FREE(reply_buf);
     p_IcmpCloseHandle(h);
     return 0;
 }

@@ -56,19 +56,7 @@
 #  include <sys/capability.h>
 #endif
 
-/* Payload signature used to cross-check received ICMP echo replies.
- * A packet may arrive out of order, from an unrelated flow, or from a
- * malicious sender spoofing our identifier; matching id + seq is not
- * enough. The magic rejects unrelated traffic and the pid_mask rejects
- * cross-thread / cross-run leakage. Keep the struct POD, fixed-size,
- * and endian-independent on the wire for future debugging. */
-#define SPINE_PING_MAGIC 0x53504E50494E4721ULL  /* "SPNPING!" */
-
-typedef struct {
-	uint64_t magic;
-	uint32_t pid_mask;     /* the per-process random from icmp_id_mask */
-	uint32_t timestamp_us; /* low 32 bits of tv_sec, advisory */
-} spine_ping_payload_t;
+#include "ping_wire.h"
 
 /* XORed into every ICMP echo id so a same-PID spine restart does not
  * reuse the previous run's identifiers. Set once at program start. */
@@ -1021,7 +1009,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					free(packet);
+					SPINE_FREE(packet);
 					spine_socket_close(icmp_socket);
 					return HOST_DOWN;
 				}
@@ -1146,7 +1134,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						}
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						free(packet);
+						SPINE_FREE(packet);
 						if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 							thread_mutex_lock(LOCK_SETEUID);
 							if (seteuid(0) == -1) {
@@ -1180,7 +1168,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			free(packet);
+			SPINE_FREE(packet);
 			if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
 				if (seteuid(0) == -1) {
@@ -1199,7 +1187,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
-		free(packet);
+		SPINE_FREE(packet);
 		if (spine_socket_is_valid(icmp_socket)) {
 			if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 				thread_mutex_lock(LOCK_SETEUID);
@@ -2006,6 +1994,7 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 	int ret = -1;
 	double t0 = 0.0;
 	double t1 = 0.0;
+	int sig_payload = (payload == NULL);  /* we built the signature, so we own reply validation */
 
 	if (result == NULL) return -1;
 	result->status = SPINE_ICMP_ERROR;
@@ -2112,6 +2101,18 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 			    || pkt->icmp_seq != htons(our_seq)) {
 				continue;
 			}
+			/* When we own payload composition, a LAN attacker who
+			 * observed our probe cannot forge a matching reply
+			 * without also reproducing the signed payload. */
+			if (sig_payload) {
+				size_t payload_off = iphl + ICMP_HDR_SIZE;
+				if ((size_t) n < payload_off + sizeof(spine_ping_payload_t)) continue;
+				if (!spine_ping_validate_payload(recvbuf + payload_off,
+				                                  (size_t) n - payload_off,
+				                                  (uint32_t) icmp_id_mask)) {
+					continue;
+				}
+			}
 			t1 = get_time_as_double();
 			result->status = SPINE_ICMP_OK;
 			result->rtt_us = (uint32_t)((t1 - t0) * 1000000.0);
@@ -2147,6 +2148,7 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 	int ret = -1;
 	double t0 = 0.0;
 	double t1 = 0.0;
+	int sig_payload = (payload == NULL);  /* we built the signature, so we own reply validation */
 
 	if (result == NULL) return -1;
 	result->status = SPINE_ICMP_ERROR;
@@ -2262,6 +2264,15 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 			    || r->icmp6_id != htons(our_id)
 			    || r->icmp6_seq != htons(our_seq)) {
 				continue;
+			}
+			if (sig_payload) {
+				size_t payload_off = sizeof(struct icmp6_hdr);
+				if ((size_t) n < payload_off + sizeof(spine_ping_payload_t)) continue;
+				if (!spine_ping_validate_payload(recvbuf + payload_off,
+				                                  (size_t) n - payload_off,
+				                                  (uint32_t) icmp_id_mask)) {
+					continue;
+				}
 			}
 			t1 = get_time_as_double();
 			result->status = SPINE_ICMP_OK;

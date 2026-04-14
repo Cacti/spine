@@ -8,21 +8,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "ping_wire.h"
 #include "test_platform_helpers.h"
 
-/* Re-declare minimally from ping.c so the test TU compiles without
- * pulling in the full spine dependency chain. Must stay byte-identical
- * with the real definition. */
-#define SPINE_PING_MAGIC 0x53504E50494E4721ULL
-
-typedef struct {
-	uint64_t magic;
-	uint32_t pid_mask;
-	uint32_t timestamp_us;
-} spine_ping_payload_t;
-
-int spine_ping_validate_payload(const void *buf, size_t len,
-                                uint32_t expect_pid_mask);
+static void test_wire_format_size(void) {
+	/* Defensive runtime check in addition to ping_wire.h's _Static_assert,
+	 * for toolchains that silently skip the _Static_assert. */
+	ASSERT_INT_EQ((int) sizeof(spine_ping_payload_t), 16);
+}
 
 static void test_accepts_well_formed(void) {
 	spine_ping_payload_t p;
@@ -69,6 +62,7 @@ static void test_accepts_extra_trailing(void) {
 }
 
 int main(void) {
+	test_wire_format_size();
 	test_accepts_well_formed();
 	test_rejects_wrong_magic();
 	test_rejects_wrong_pid_mask();

@@ -3,20 +3,11 @@
  *
  * Extracted into its own translation unit so unit tests can link just
  * this object without pulling in the full spine runtime (mysql,
- * net-snmp, the poller, etc). The validator is called from the raw
- * receive paths in ping.c and must stay byte-identical with the
- * on-wire signature built by build_ping_payload().
+ * net-snmp, the poller, etc). Wire layout is defined once in
+ * ping_wire.h; this TU implements the validation contract declared
+ * there.
  */
-#include <stddef.h>
-#include <stdint.h>
-
-#define SPINE_PING_MAGIC 0x53504E50494E4721ULL  /* "SPNPING!" */
-
-typedef struct {
-	uint64_t magic;
-	uint32_t pid_mask;
-	uint32_t timestamp_us;
-} spine_ping_payload_t;
+#include "ping_wire.h"
 
 int spine_ping_validate_payload(const void *buf, size_t len,
                                 uint32_t expect_pid_mask) {
