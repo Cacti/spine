@@ -75,7 +75,7 @@ else
   fail "output_regex column unexpectedly present"
 fi
 
-output1=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output1=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output1" | grep -qi "segfault\|SIGSEGV\|Aborted\|Unknown column"; then
@@ -122,7 +122,7 @@ fi
 TRUNCATE poller_output;
 " 2>/dev/null
 
-output2=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output2=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output2" | grep -q "poller_item.output_regex column detected"; then
@@ -163,7 +163,7 @@ UPDATE poller_item SET output_regex = '([0-9]+)' WHERE local_data_id = 1;
 TRUNCATE poller_output;
 " 2>/dev/null
 
-output3=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output3=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output3" | grep -qi "segfault\|SIGSEGV\|Aborted"; then
@@ -191,7 +191,7 @@ ALTER TABLE poller_item DROP COLUMN output_regex;
 TRUNCATE poller_output;
 " 2>/dev/null
 
-output4=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output4=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output4" | grep -qi "segfault\|SIGSEGV\|Aborted\|Unknown column"; then

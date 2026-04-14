@@ -31,6 +31,7 @@ COPY . .
 RUN CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
     cmake -G Ninja -S . -B build \
       -DSPINE_BUILD_MAIN=ON \
+      -DBUILD_TESTING=OFF \
       -DENABLE_WARNINGS=ON \
       -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
   && cmake --build build

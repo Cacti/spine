@@ -16,6 +16,7 @@ COPY . .
 
 RUN cmake -G Ninja -S . -B build \
         -DSPINE_BUILD_MAIN=ON \
+        -DBUILD_TESTING=OFF \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
     && cmake --build build \
     && cmake --install build

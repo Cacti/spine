@@ -123,7 +123,7 @@ else
 fi
 
 # Run spine against the test fixture
-poll_output=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+poll_output=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S -M 2>&1 || true)
 echo "$poll_output"
 
@@ -226,7 +226,7 @@ INSERT IGNORE INTO poller_item (
 );
 " 2>/dev/null
 
-v2c_output=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+v2c_output=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 2 -l 2 -S 2>&1 || true)
 echo "$v2c_output"
 
@@ -267,7 +267,7 @@ echo "=== Phase 5: runtime fix validation ==="
 
 # Poll both devices simultaneously; exercises the poller.c switch statement
 # across two concurrent threads to confirm multi-device dispatch is intact.
-multi_output=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+multi_output=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 2 -S 2>&1 || true)
 echo "$multi_output"
 

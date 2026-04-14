@@ -97,7 +97,7 @@ fi
 
 reset_between_runs
 
-output1=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output1=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 # No SQL errors or crashes
@@ -157,7 +157,7 @@ fi
 
 reset_between_runs
 
-output2=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output2=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 # Detection log must appear (log_verbosity=5 / POLLER_VERBOSITY_DEBUG in seed)
@@ -216,7 +216,7 @@ fi
 
 reset_between_runs
 
-output3=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output3=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 # Must not crash or produce a SQL error referencing the dropped column

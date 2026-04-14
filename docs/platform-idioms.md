@@ -50,4 +50,6 @@ across supported operating systems.
 - Avoid shell execution for untrusted command text.
 - If shell is unavoidable for compatibility, apply strict validation and reject
   metacharacter-bearing command strings by policy.
+- The script command guard rejects these characters: `;`, `|`, `&`, `` ` ``,
+  `$`, `>`, `<`, newline, and carriage return.
 - Keep process-spawn APIs and argument handling deterministic and test-covered.

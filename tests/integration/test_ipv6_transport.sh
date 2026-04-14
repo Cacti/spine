@@ -47,7 +47,10 @@ wait_for_db() {
 
 echo ""
 echo "=== Setup: build and start infrastructure ==="
-"${COMPOSE[@]}" build spine 2>&1 | tail -1
+if ! "${COMPOSE[@]}" build spine; then
+  fail "spine image build failed"
+  exit 1
+fi
 "${COMPOSE[@]}" up -d db snmpd 2>&1
 wait_for_db || {
   fail "database did not start"
@@ -84,7 +87,7 @@ pass "IPv6 test host and poller_item configured"
 
 echo ""
 echo "=== Run IPv6-targeted poll ==="
-output=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
+output=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 3 -l 3 -S 2>&1 || true)
 echo "$output"
 

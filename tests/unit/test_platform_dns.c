@@ -156,6 +156,40 @@ static void test_dns_ipv6_numeric_scope_id_parse_best_effort(void) {
 	}
 }
 
+static void test_dns_numeric_dual_stack_family_resolution(void) {
+	struct addrinfo hints;
+	struct addrinfo *result = NULL;
+	int rc;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_NUMERICHOST;
+
+	rc = getaddrinfo("127.0.0.1", "80", &hints, &result);
+	ASSERT_INT_EQ(rc, 0);
+	if (rc == 0 && result != NULL) {
+		ASSERT_INT_EQ(result->ai_family, AF_INET);
+		freeaddrinfo(result);
+		result = NULL;
+	}
+
+	rc = getaddrinfo("::1", "80", &hints, &result);
+	if (rc == EAI_FAMILY
+#ifdef EAI_ADDRFAMILY
+		|| rc == EAI_ADDRFAMILY
+#endif
+		) {
+		return;
+	}
+
+	ASSERT_INT_EQ(rc, 0);
+	if (rc == 0 && result != NULL) {
+		ASSERT_INT_EQ(result->ai_family, AF_INET6);
+		freeaddrinfo(result);
+	}
+}
+
 int main(void) {
 #ifdef _WIN32
 	WSADATA wsa_data;
@@ -171,6 +205,7 @@ int main(void) {
 	test_dns_reject_ipv4_literal_when_forced_ipv6();
 	test_dns_ipv4_mapped_ipv6_if_supported();
 	test_dns_ipv6_numeric_scope_id_parse_best_effort();
+	test_dns_numeric_dual_stack_family_resolution();
 
 #ifdef _WIN32
 	WSACleanup();
