@@ -81,10 +81,11 @@ set(SPINE_PLATFORM_SOURCES
 # implementation forwards into ping.c helpers, which drag in the full
 # spine dependency chain (mysql, net-snmp, the poller). Unit tests
 # that link only the platform layer must stay free of that chain.
-set(SPINE_ICMP_SOURCES
-    src/platform/platform_icmp_posix.c
-    src/platform/platform_icmp_win.c
-)
+if(WIN32)
+    set(SPINE_ICMP_SOURCES src/platform/platform_icmp_win.c)
+else()
+    set(SPINE_ICMP_SOURCES src/platform/platform_icmp_posix.c)
+endif()
 
 set(SPINE_CORE_SOURCES
     src/sql.c

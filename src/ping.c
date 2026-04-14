@@ -659,9 +659,7 @@ keep_listening_ipv6:
 	}
 
 cleanup:
-	if (packet != NULL) {
-		free(packet);
-	}
+	SPINE_FREE(packet);
 	if (spine_socket_is_valid(icmp_socket)) {
 		spine_socket_close(icmp_socket);
 	}
@@ -2064,15 +2062,25 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 		goto cleanup;
 	}
 
-	tv.tv_sec  = (long)(timeout_ms / 1000U);
-	tv.tv_usec = (long)((timeout_ms % 1000U) * 1000U);
-	FD_ZERO(&rfds);
-	FD_SET(sock, &rfds);
-
 	for (;;) {
-		int sel = select(sock + 1, &rfds, NULL, NULL, &tv);
+		/* Recompute remaining timeout on every iteration so a flood
+		 * of mismatched replies (wrong id/seq, spoofed source) cannot
+		 * make us wait indefinitely. */
+		double elapsed_ms = (get_time_as_double() - t0) * 1000.0;
+		double remaining_ms = (double) timeout_ms - elapsed_ms;
+		int sel;
+		if (remaining_ms <= 0.0) {
+			result->status = SPINE_ICMP_TIMEOUT;
+			ret = 0;
+			goto cleanup;
+		}
+		tv.tv_sec  = (long)(remaining_ms / 1000.0);
+		tv.tv_usec = (long)((remaining_ms - (double) tv.tv_sec * 1000.0) * 1000.0);
+		FD_ZERO(&rfds);
+		FD_SET(sock, &rfds);
+		sel = select(sock + 1, &rfds, NULL, NULL, &tv);
 		if (sel < 0) {
-			if (errno == EINTR) { FD_ZERO(&rfds); FD_SET(sock, &rfds); continue; }
+			if (errno == EINTR) continue;
 			result->system_errno = errno;
 			goto cleanup;
 		}
@@ -2084,34 +2092,24 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 		recvlen = sizeof(recvname);
 		n = recvfrom(sock, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *) &recvname, &recvlen);
 		if (n < 0) {
+			if (errno == EINTR) continue;
 			result->system_errno = errno;
 			goto cleanup;
 		}
 		if ((size_t) n < sizeof(struct ip) + ICMP_HDR_SIZE) {
-			FD_ZERO(&rfds); FD_SET(sock, &rfds);
 			continue;
 		}
 		{
 			struct ip *iph = (struct ip *) recvbuf;
 			size_t iphl = (size_t) iph->ip_hl * 4U;
 			struct icmp *pkt;
-			if (iphl < sizeof(struct ip) || iphl > (size_t) n) {
-				FD_ZERO(&rfds); FD_SET(sock, &rfds);
-				continue;
-			}
-			if ((size_t) n < iphl + ICMP_HDR_SIZE) {
-				FD_ZERO(&rfds); FD_SET(sock, &rfds);
-				continue;
-			}
-			if (dst.sin_addr.s_addr != recvname.sin_addr.s_addr) {
-				FD_ZERO(&rfds); FD_SET(sock, &rfds);
-				continue;
-			}
+			if (iphl < sizeof(struct ip) || iphl > (size_t) n) continue;
+			if ((size_t) n < iphl + ICMP_HDR_SIZE) continue;
+			if (dst.sin_addr.s_addr != recvname.sin_addr.s_addr) continue;
 			pkt = (struct icmp *) (recvbuf + iphl);
 			if (pkt->icmp_type != ICMP_ECHOREPLY
 			    || pkt->icmp_id != htons(our_id)
 			    || pkt->icmp_seq != htons(our_seq)) {
-				FD_ZERO(&rfds); FD_SET(sock, &rfds);
 				continue;
 			}
 			t1 = get_time_as_double();
@@ -2123,7 +2121,7 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 	}
 
 cleanup:
-	if (packet != NULL) free(packet);
+	SPINE_FREE(packet);
 	if (sock >= 0) close(sock);
 	return ret;
 }
@@ -2222,15 +2220,25 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 		goto cleanup;
 	}
 
-	tv.tv_sec  = (long)(timeout_ms / 1000U);
-	tv.tv_usec = (long)((timeout_ms % 1000U) * 1000U);
-	FD_ZERO(&rfds);
-	FD_SET(sock, &rfds);
-
 	for (;;) {
-		int sel = select(sock + 1, &rfds, NULL, NULL, &tv);
+		/* Same remaining-timeout computation as the v4 helper: a
+		 * flood of unrelated ICMPv6 traffic must not extend our
+		 * deadline. */
+		double elapsed_ms = (get_time_as_double() - t0) * 1000.0;
+		double remaining_ms = (double) timeout_ms - elapsed_ms;
+		int sel;
+		if (remaining_ms <= 0.0) {
+			result->status = SPINE_ICMP_TIMEOUT;
+			ret = 0;
+			goto cleanup;
+		}
+		tv.tv_sec  = (long)(remaining_ms / 1000.0);
+		tv.tv_usec = (long)((remaining_ms - (double) tv.tv_sec * 1000.0) * 1000.0);
+		FD_ZERO(&rfds);
+		FD_SET(sock, &rfds);
+		sel = select(sock + 1, &rfds, NULL, NULL, &tv);
 		if (sel < 0) {
-			if (errno == EINTR) { FD_ZERO(&rfds); FD_SET(sock, &rfds); continue; }
+			if (errno == EINTR) continue;
 			result->system_errno = errno;
 			goto cleanup;
 		}
@@ -2242,23 +2250,17 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 		recvlen = sizeof(recvname);
 		n = recvfrom(sock, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *) &recvname, &recvlen);
 		if (n < 0) {
+			if (errno == EINTR) continue;
 			result->system_errno = errno;
 			goto cleanup;
 		}
-		if ((size_t) n < sizeof(struct icmp6_hdr)) {
-			FD_ZERO(&rfds); FD_SET(sock, &rfds);
-			continue;
-		}
-		if (memcmp(&dst.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) {
-			FD_ZERO(&rfds); FD_SET(sock, &rfds);
-			continue;
-		}
+		if ((size_t) n < sizeof(struct icmp6_hdr)) continue;
+		if (memcmp(&dst.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) continue;
 		{
 			struct icmp6_hdr *r = (struct icmp6_hdr *) recvbuf;
 			if (r->icmp6_type != ICMP6_ECHO_REPLY
 			    || r->icmp6_id != htons(our_id)
 			    || r->icmp6_seq != htons(our_seq)) {
-				FD_ZERO(&rfds); FD_SET(sock, &rfds);
 				continue;
 			}
 			t1 = get_time_as_double();
@@ -2270,7 +2272,7 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 	}
 
 cleanup:
-	if (packet != NULL) free(packet);
+	SPINE_FREE(packet);
 	if (sock >= 0) close(sock);
 	return ret;
 }

@@ -62,14 +62,18 @@ static pfn_IcmpSendEcho2Ex  p_IcmpSendEcho2Ex  = NULL;
 static pfn_Icmp6CreateFile  p_Icmp6CreateFile  = NULL;
 static pfn_Icmp6SendEcho2   p_Icmp6SendEcho2   = NULL;
 static volatile LONG g_init_once = 0;
-static int g_load_ok = 0;
+static volatile LONG g_load_ok = 0;   /* 0 = pending, 1 = ok, -1 = failed */
 
+/* One-time loader. The first thread to enter runs the load; losers
+ * spin on g_load_ok only. Critical: all function-pointer stores must
+ * be globally visible BEFORE g_load_ok is published. MemoryBarrier()
+ * before InterlockedExchange() guarantees that on every ISA Windows
+ * runs on (x86, x64, ARM64). Waiters read g_load_ok through a
+ * volatile with the matching acquire semantics from the barrier
+ * paired with Sleep(0)'s memory visibility. */
 static void load_iphlpapi(void) {
-    /* Windows has no stdatomic guarantees pre-VS2019 for MSVC, and
-     * this is called from many threads. InterlockedCompareExchange
-     * gives us a single-winner load with a full barrier. */
     if (InterlockedCompareExchange(&g_init_once, 1, 0) != 0) {
-        while (g_load_ok == 0 && g_iphlpapi == NULL) {
+        while (g_load_ok == 0) {
             Sleep(0);  /* another thread is loading */
         }
         return;
@@ -77,7 +81,8 @@ static void load_iphlpapi(void) {
 
     g_iphlpapi = LoadLibraryW(L"iphlpapi.dll");
     if (g_iphlpapi == NULL) {
-        g_load_ok = -1;
+        MemoryBarrier();
+        InterlockedExchange(&g_load_ok, -1);
         return;
     }
 
@@ -87,12 +92,33 @@ static void load_iphlpapi(void) {
     p_Icmp6CreateFile = (pfn_Icmp6CreateFile) GetProcAddress(g_iphlpapi, "Icmp6CreateFile");
     p_Icmp6SendEcho2  = (pfn_Icmp6SendEcho2)  GetProcAddress(g_iphlpapi, "Icmp6SendEcho2");
 
+    /* Publish all pointer stores ahead of g_load_ok so a concurrent
+     * reader cannot observe a ready flag while pointers are still NULL. */
+    MemoryBarrier();
+
     if (p_IcmpCreateFile && p_IcmpCloseHandle && p_IcmpSendEcho2Ex
         && p_Icmp6CreateFile && p_Icmp6SendEcho2) {
-        g_load_ok = 1;
+        InterlockedExchange(&g_load_ok, 1);
     } else {
-        g_load_ok = -1;
+        InterlockedExchange(&g_load_ok, -1);
     }
+}
+
+/* Default payload used when the caller passes NULL. Mirrors the POSIX
+ * behaviour so callers can rely on the facade owning payload
+ * composition. Must stay byte-compatible with spine_ping_payload_t
+ * in ping.c. */
+#define SPINE_PING_MAGIC 0x53504E50494E4721ULL
+typedef struct {
+    uint64_t magic;
+    uint32_t pid_mask;
+    uint32_t timestamp_us;
+} spine_ping_payload_t;
+
+static void win_default_payload(spine_ping_payload_t *p) {
+    p->magic = SPINE_PING_MAGIC;
+    p->pid_mask = (uint32_t) GetCurrentProcessId();
+    p->timestamp_us = (uint32_t) GetTickCount();
 }
 
 static spine_icmp_status_t map_status(DWORD st) {
@@ -118,6 +144,9 @@ int spine_icmp_echo_v4(const char *ip, uint32_t timeout_ms,
     DWORD reply_size;
     void *reply_buf;
     DWORD replies;
+    spine_ping_payload_t default_payload;
+    const void *send_payload;
+    size_t send_len;
 
     if (result == NULL) {
         return -1;
@@ -129,6 +158,22 @@ int spine_icmp_echo_v4(const char *ip, uint32_t timeout_ms,
     if (ip == NULL || payload_len > 0xFF00U) {
         result->system_errno = ERROR_INVALID_PARAMETER;
         return -1;
+    }
+
+    /* Own payload composition when the caller did not provide one.
+     * Forwarding NULL with payload_len>0 into IP Helper access-violates
+     * inside iphlpapi.dll, so reject that case explicitly. */
+    if (payload == NULL && payload_len > 0) {
+        result->system_errno = ERROR_INVALID_PARAMETER;
+        return -1;
+    }
+    if (payload == NULL) {
+        win_default_payload(&default_payload);
+        send_payload = &default_payload;
+        send_len = sizeof(default_payload);
+    } else {
+        send_payload = payload;
+        send_len = payload_len;
     }
 
     load_iphlpapi();
@@ -151,7 +196,7 @@ int spine_icmp_echo_v4(const char *ip, uint32_t timeout_ms,
 
     /* Windows requires at least sizeof(ICMP_ECHO_REPLY) + payload + 8
      * to accommodate the returned options/padding. */
-    reply_size = (DWORD)(sizeof(ICMP_ECHO_REPLY) + payload_len + 8);
+    reply_size = (DWORD)(sizeof(ICMP_ECHO_REPLY) + send_len + 8);
     reply_buf = calloc(1, reply_size);
     if (reply_buf == NULL) {
         p_IcmpCloseHandle(h);
@@ -161,7 +206,7 @@ int spine_icmp_echo_v4(const char *ip, uint32_t timeout_ms,
 
     replies = p_IcmpSendEcho2Ex(h, NULL, NULL, NULL,
                                 0 /* srcaddr: any */, dst_addr,
-                                (LPVOID) payload, (WORD) payload_len,
+                                (LPVOID) send_payload, (WORD) send_len,
                                 NULL, reply_buf, reply_size, timeout_ms);
 
     if (replies > 0) {
@@ -188,6 +233,9 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
     DWORD reply_size;
     void *reply_buf;
     DWORD replies;
+    spine_ping_payload_t default_payload;
+    const void *send_payload;
+    size_t send_len;
 
     if (result == NULL) {
         return -1;
@@ -199,6 +247,19 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
     if (ip == NULL || payload_len > 0xFF00U) {
         result->system_errno = ERROR_INVALID_PARAMETER;
         return -1;
+    }
+
+    if (payload == NULL && payload_len > 0) {
+        result->system_errno = ERROR_INVALID_PARAMETER;
+        return -1;
+    }
+    if (payload == NULL) {
+        win_default_payload(&default_payload);
+        send_payload = &default_payload;
+        send_len = sizeof(default_payload);
+    } else {
+        send_payload = payload;
+        send_len = payload_len;
     }
 
     load_iphlpapi();
@@ -223,7 +284,7 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
         return -1;
     }
 
-    reply_size = (DWORD)(sizeof(ICMPV6_ECHO_REPLY) + payload_len + 8);
+    reply_size = (DWORD)(sizeof(ICMPV6_ECHO_REPLY) + send_len + 8);
     reply_buf = calloc(1, reply_size);
     if (reply_buf == NULL) {
         p_IcmpCloseHandle(h);
@@ -233,7 +294,7 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
 
     replies = p_Icmp6SendEcho2(h, NULL, NULL, NULL,
                                &src, &dst,
-                               (LPVOID) payload, (WORD) payload_len,
+                               (LPVOID) send_payload, (WORD) send_len,
                                NULL, reply_buf, reply_size, timeout_ms);
 
     if (replies > 0) {
