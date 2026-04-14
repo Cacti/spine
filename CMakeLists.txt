@@ -524,9 +524,16 @@ else()
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         target_compile_definitions(spine_platform PUBLIC _DARWIN_C_SOURCE=1)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+        # Solaris / illumos hides socket and BSD-flavoured APIs behind these.
+        # libsocket and libnsl carry getaddrinfo, socket(2), inet_ntop, etc.
         target_compile_definitions(spine_platform PUBLIC _POSIX_PTHREAD_SEMANTICS=1 _XOPEN_SOURCE=700 __EXTENSIONS__=1)
+        target_link_libraries(spine_platform PUBLIC socket nsl)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "AIX")
+        # AIX shared objects need runtime linking to resolve cross-library
+        # symbols the same way ELF platforms do; without -brtl the loader
+        # rejects unresolved refs at exec time.
         target_compile_definitions(spine_platform PUBLIC _ALL_SOURCE=1 _XOPEN_SOURCE=700)
+        target_link_options(spine_platform PUBLIC -Wl,-brtl)
     endif()
     target_link_libraries(spine_platform PUBLIC m ${CMAKE_DL_LIBS})
     if(CAP_LIBRARY)

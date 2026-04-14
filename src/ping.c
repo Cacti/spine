@@ -78,7 +78,8 @@ static uint16_t icmp_id_mask = 0;
 #endif
 
 void ping_init(void) {
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__sun) || defined(__sun__)
+	/* arc4random is in libc on the BSDs, macOS, and illumos/Solaris 11.4+. */
 	icmp_id_mask = (uint16_t)(arc4random() & 0xFFFF);
 #elif defined(__linux__)
 	unsigned int seed = 0;
@@ -87,6 +88,19 @@ void ping_init(void) {
 	}
 	icmp_id_mask = (uint16_t)(seed & 0xFFFF);
 #else
+	/* AIX and other Unixes without arc4random: try /dev/urandom, fall back
+	 * to time^pid. The id only needs to be hard to guess across spine
+	 * restarts, not cryptographically random. */
+	unsigned int seed = 0;
+	FILE *urand = fopen("/dev/urandom", "rb");
+	if (urand != NULL) {
+		size_t n = fread(&seed, sizeof(seed), 1, urand);
+		fclose(urand);
+		if (n == 1) {
+			icmp_id_mask = (uint16_t)(seed & 0xFFFF);
+			return;
+		}
+	}
 	icmp_id_mask = (uint16_t)(((unsigned int)time(NULL) ^ (unsigned int)getpid()) & 0xFFFF);
 #endif
 }
