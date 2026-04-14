@@ -485,9 +485,14 @@ void db_close_connection_pool(int type) {
 }
 
 /*! \fn pool_t db_get_connection(int type)
- *  \brief returns a free mysql connection from the pool
+ *  \brief returns a free mysql connection from the pool, or NULL on exhaustion
  *  \param type the connection type, LOCAL or REMOTE
  *
+ *  Contract: may return NULL when the pool is exhausted (all entries marked
+ *  busy). Callers MUST check the return value and clean up any previously
+ *  acquired connections before returning. The pool is sized to set.threads,
+ *  so exhaustion is a bug (more acquirers than threads) and the NULL return
+ *  is the signal to bail out of the current poll cycle rather than die.
  */
 pool_t *db_get_connection(int type) {
 	int id;
