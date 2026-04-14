@@ -27,6 +27,29 @@ Build output and logs land in `build-reports/<distro>.log`.
 | openSUSE Leap 15 | `zypper install cmake gcc13 make net-snmp-devel libmariadb-devel libopenssl-devel pkg-config systemd-devel` (default `gcc` is 7.x and does not support C17; set `CC=gcc-13` or run `update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-13 100`) |
 | Alpine 3.20 | `apk add bash cmake gcc make musl-dev net-snmp-dev mariadb-connector-c-dev openssl-dev pkgconfig linux-headers` |
 
+### Red Hat Enterprise Linux 9
+
+RHEL 9 is not in the CI matrix directly because the image requires a
+subscription. The Rocky Linux 9 and AlmaLinux 9 lanes are bug-for-bug
+compatible rebuilds of RHEL 9 sources and cover ~99% of RHEL 9 behaviour.
+
+Options for testing on RHEL 9:
+
+1. **Rocky 9 / Alma 9** — already covered; use these for day-to-day work.
+2. **UBI 9** (Universal Base Image, free, no subscription) — advisory CI
+   lane via `registry.access.redhat.com/ubi9/ubi`. Package set is
+   restricted; `mariadb-connector-c-devel` may not be reachable without
+   paid repos, so this lane is `continue-on-error: true`.
+3. **Red Hat Developer Subscription** — free for individual developers at
+   <https://developers.redhat.com/>, grants full RHEL 9 ISO and repo
+   access. Use in a local VM when a RHEL-specific regression is reported.
+
+Local reproduction via Docker (advisory):
+
+```sh
+bash scripts/test-distros.sh registry.access.redhat.com/ubi9/ubi
+```
+
 Build from a clean checkout:
 
 ```sh

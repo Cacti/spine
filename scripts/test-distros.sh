@@ -55,6 +55,12 @@ for distro in "${DISTROS[@]}"; do
         alpine*)
             PKG='apk add --no-cache bash cmake gcc make musl-dev net-snmp-dev mariadb-connector-c-dev openssl-dev pkgconfig linux-headers'
             ;;
+        *ubi9*|*ubi:9*|*redhat.com/ubi9*)
+            # Advisory: UBI 9 ships a restricted package set.
+            # mariadb-connector-c-devel typically requires subscription repos.
+            # Run with: bash scripts/test-distros.sh registry.access.redhat.com/ubi9/ubi
+            PKG='dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || true; dnf install -y cmake gcc make openssl-devel pkgconfig systemd-devel; dnf install -y net-snmp-devel || echo "net-snmp-devel unavailable"; dnf install -y mariadb-connector-c-devel || echo "mariadb-connector-c-devel unavailable"'
+            ;;
         *)
             echo "unknown distro pattern: $distro" | tee -a "$logfile"
             RESULTS[$distro]=SKIP
