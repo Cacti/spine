@@ -20,29 +20,40 @@ static wchar_t *spine_windows_utf8_to_wide(const char *input) {
 		return NULL;
 	}
 
+	/* Strict UTF-8 only: a CP_ACP fallback would silently mojibake the active
+	 * code page into UTF-16 and pass it to CreateProcessW, which is unsafe for
+	 * argv carrying paths or shell metacharacters. Callers must supply UTF-8. */
 	required_chars = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, input, -1, NULL, 0);
 	if (required_chars <= 0) {
-		required_chars = MultiByteToWideChar(CP_ACP, 0, input, -1, NULL, 0);
-		if (required_chars <= 0) {
-			return NULL;
-		}
+		errno = EILSEQ;
+		return NULL;
 	}
 
 	output = (wchar_t *) malloc((size_t) required_chars * sizeof(wchar_t));
 	if (output == NULL) {
+		errno = ENOMEM;
 		return NULL;
 	}
 
-	if (MultiByteToWideChar(CP_UTF8, 0, input, -1, output, required_chars) <= 0) {
-		if (MultiByteToWideChar(CP_ACP, 0, input, -1, output, required_chars) <= 0) {
-			free(output);
-			return NULL;
-		}
+	if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, input, -1, output, required_chars) <= 0) {
+		free(output);
+		errno = EILSEQ;
+		return NULL;
 	}
 
 	return output;
 }
 
+/* The sizer and emitter below MUST stay byte-for-byte equivalent. They follow
+ * the Microsoft CommandLineToArgvW reverse rules: inside double quotes a literal
+ * `"` requires a preceding `\`, and any run of backslashes immediately before a
+ * `"` (including the closing one) must be doubled. Verified by hand for:
+ *   "a\"b"  -> "a\\\"b"   (bs+quote pair)
+ *   "a "    -> "a "       (no quote needed -> trailing chars unchanged)
+ *   "a \\"  -> "a \\\\"   (trailing backslash inside quotes -> doubled)
+ *   "\\\""  -> "\\\\\\\"" (3-bs-quote canonical form)
+ * Edits to one function MUST be mirrored in the other, or CreateProcessW will
+ * receive an argv that no longer round-trips through CommandLineToArgvW. */
 static size_t spine_windows_quoted_arg_length(const wchar_t *arg) {
 	size_t extra;
 	size_t backslash_count;
