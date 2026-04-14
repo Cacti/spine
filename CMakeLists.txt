@@ -17,7 +17,30 @@
 # +-------------------------------------------------------------------------+
 
 cmake_minimum_required(VERSION 3.15)
-project(spine VERSION 1.3.0 LANGUAGES C)
+
+# Source of truth for the project version is the VERSION file at the repo root.
+# git describe is consulted opportunistically so CI artifacts carry a meaningful
+# tag-based version without requiring a VERSION bump for every release candidate.
+file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" _spine_version_file LIMIT_COUNT 1)
+string(STRIP "${_spine_version_file}" _spine_version_file)
+set(_spine_version "${_spine_version_file}")
+
+find_package(Git QUIET)
+if(Git_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _spine_git_describe
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE _spine_git_rc
+    )
+    if(_spine_git_rc EQUAL 0 AND _spine_git_describe MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)")
+        set(_spine_version "${CMAKE_MATCH_1}")
+    endif()
+endif()
+
+project(spine VERSION ${_spine_version} LANGUAGES C)
 
 include(CTest)
 include(GNUInstallDirs)
