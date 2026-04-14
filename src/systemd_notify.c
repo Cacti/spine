@@ -90,10 +90,12 @@ void spine_sd_reloading(void) {
                    "MONOTONIC_USEC=%" PRIu64 "\n",
                    monotonic_us);
     } else {
-        /* Intentional fprintf: this TU stays decoupled from spine.h so it can
-         * run from signal handlers and before set.log_level is initialized.
-         * Under Type=notify systemd captures stderr into the journal, so this
-         * still reaches operators without the SPINE_LOG plumbing. */
+        /* Intentional fprintf: this TU stays decoupled from spine.h so it
+         * works before set.log_level is initialized. Callers run on the main
+         * thread (SIGHUP is handled via signalfd/self-pipe, not from a raw
+         * signal handler), so stdio buffering is safe. Under Type=notify,
+         * systemd captures stderr into the journal, so this still reaches
+         * operators without the SPINE_LOG plumbing. */
         int saved_errno = errno;
         sd_notify(0, "RELOADING=1\n");
         fprintf(stderr,
