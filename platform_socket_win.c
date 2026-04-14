@@ -2,6 +2,23 @@
 
 #ifdef _WIN32
 
+#include <limits.h>
+
+static int spine_windows_size_to_int(size_t value, int *out_value) {
+	if (out_value == NULL) {
+		WSASetLastError(WSAEINVAL);
+		return -1;
+	}
+
+	if (value > (size_t) INT_MAX) {
+		WSASetLastError(WSAEMSGSIZE);
+		return -1;
+	}
+
+	*out_value = (int) value;
+	return 0;
+}
+
 spine_socket_t spine_socket_open(int domain, int type, int protocol) {
 	return socket(domain, type, protocol);
 }
@@ -15,23 +32,51 @@ int spine_socket_connect(spine_socket_t socket_fd, const struct sockaddr *addres
 }
 
 int spine_socket_send(spine_socket_t socket_fd, const void *buffer, size_t buffer_len, int flags) {
-	return send(socket_fd, (const char *) buffer, (int) buffer_len, flags);
+	int send_len;
+
+	if (spine_windows_size_to_int(buffer_len, &send_len) != 0) {
+		return -1;
+	}
+
+	return send(socket_fd, (const char *) buffer, send_len, flags);
 }
 
 int spine_socket_sendto(spine_socket_t socket_fd, const void *buffer, size_t buffer_len, int flags, const struct sockaddr *address, socklen_t address_len) {
-	return sendto(socket_fd, (const char *) buffer, (int) buffer_len, flags, address, address_len);
+	int send_len;
+
+	if (spine_windows_size_to_int(buffer_len, &send_len) != 0) {
+		return -1;
+	}
+
+	return sendto(socket_fd, (const char *) buffer, send_len, flags, address, address_len);
 }
 
 int spine_socket_recv(spine_socket_t socket_fd, void *buffer, size_t buffer_len, int flags) {
-	return recv(socket_fd, (char *) buffer, (int) buffer_len, flags);
+	int recv_len;
+
+	if (spine_windows_size_to_int(buffer_len, &recv_len) != 0) {
+		return -1;
+	}
+
+	return recv(socket_fd, (char *) buffer, recv_len, flags);
 }
 
 int spine_socket_recvfrom(spine_socket_t socket_fd, void *buffer, size_t buffer_len, int flags, struct sockaddr *address, socklen_t *address_len) {
 	int actual_len;
+	int recv_len;
 	int recv_result;
 
+	if (address_len == NULL) {
+		WSASetLastError(WSAEINVAL);
+		return -1;
+	}
+
+	if (spine_windows_size_to_int(buffer_len, &recv_len) != 0) {
+		return -1;
+	}
+
 	actual_len = (int) *address_len;
-	recv_result = recvfrom(socket_fd, (char *) buffer, (int) buffer_len, flags, address, &actual_len);
+	recv_result = recvfrom(socket_fd, (char *) buffer, recv_len, flags, address, &actual_len);
 	*address_len = (socklen_t) actual_len;
 
 	return recv_result;
@@ -39,6 +84,11 @@ int spine_socket_recvfrom(spine_socket_t socket_fd, void *buffer, size_t buffer_
 
 int spine_socket_set_timeout(spine_socket_t socket_fd, const struct timeval *timeout) {
 	DWORD timeout_ms;
+
+	if (timeout == NULL || timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
+		WSASetLastError(WSAEINVAL);
+		return -1;
+	}
 
 	timeout_ms = (DWORD) (timeout->tv_sec * 1000U + timeout->tv_usec / 1000U);
 
@@ -58,6 +108,10 @@ int spine_socket_wait_readable(spine_socket_t socket_fd, struct timeval *timeout
 
 	if (socket_fd == INVALID_SOCKET) {
 		WSASetLastError(WSAENOTSOCK);
+		return -1;
+	}
+	if (timeout == NULL || timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
+		WSASetLastError(WSAEINVAL);
 		return -1;
 	}
 

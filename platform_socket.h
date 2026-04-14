@@ -20,10 +20,12 @@ typedef int spine_socket_t;
 spine_socket_t spine_socket_open(int domain, int type, int protocol);
 int spine_socket_close(spine_socket_t socket_fd);
 int spine_socket_connect(spine_socket_t socket_fd, const struct sockaddr *address, socklen_t address_len);
+/* send/recv wrappers return -1 on error and set errno (POSIX) or WSAGetLastError (Windows). */
 int spine_socket_send(spine_socket_t socket_fd, const void *buffer, size_t buffer_len, int flags);
 int spine_socket_sendto(spine_socket_t socket_fd, const void *buffer, size_t buffer_len, int flags, const struct sockaddr *address, socklen_t address_len);
 int spine_socket_recv(spine_socket_t socket_fd, void *buffer, size_t buffer_len, int flags);
 int spine_socket_recvfrom(spine_socket_t socket_fd, void *buffer, size_t buffer_len, int flags, struct sockaddr *address, socklen_t *address_len);
+/* timeout pointer must be non-NULL and normalized: tv_sec >= 0 and 0 <= tv_usec < 1000000. */
 int spine_socket_set_timeout(spine_socket_t socket_fd, const struct timeval *timeout);
 int spine_socket_wait_readable(spine_socket_t socket_fd, struct timeval *timeout);
 int spine_socket_last_error(void);

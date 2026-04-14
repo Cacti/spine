@@ -15,6 +15,7 @@ The Cacti Group | spine
 -feature#442: Add GitHub Actions CI: build matrix (gcc/clang), cppcheck, flawfinder, CodeQL
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
 -feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
+-note: Cygwin is no longer a supported build/runtime target; Windows support is MSYS2/MinGW-native
 -feature#3740: Ability to disable a site
 -feature#5090: Enhance number recognition within Spine
 -feature#6001: Extend SYSTEM STATS

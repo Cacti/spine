@@ -17,6 +17,11 @@ ssize_t spine_fd_write(int fd, const void *buffer, size_t buffer_len) {
 int spine_fd_wait_readable(int fd, struct timeval *timeout) {
 	fd_set read_fds;
 
+	if (timeout == NULL || timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	if (fd < 0 || fd >= FD_SETSIZE) {
 		errno = EINVAL;
 		return -1;

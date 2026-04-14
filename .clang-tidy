@@ -1,0 +1,10 @@
+---
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  cert-*,
+  -cert-err58-cpp
+WarningsAsErrors: ""
+HeaderFilterRegex: ".*"
+FormatStyle: none
+...

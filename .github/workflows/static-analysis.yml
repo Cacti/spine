@@ -26,7 +26,7 @@ env:
     gcc clang llvm clang-tools cppcheck codespell shellcheck shfmt golang-go
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_ANALYZE: >-
-    -std=c11 -O1 -g3 -fno-omit-frame-pointer
+    -std=c17 -O1 -g3 -fno-omit-frame-pointer
   CLANG_TIDY_CHECKS: >-
     clang-analyzer-*,bugprone-*,cert-*
 
@@ -162,7 +162,13 @@ jobs:
       - name: Run clang-tidy
         run: |
           set -euo pipefail
-          mapfile -t sources < <(git ls-files '*.c')
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            mapfile -t sources < <(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- '*.c')
+          else
+            mapfile -t sources < <(git ls-files '*.c')
+          fi
+
           if [[ "${#sources[@]}" -eq 0 ]]; then
             echo 'No C sources found for clang-tidy.'
             exit 0
@@ -172,7 +178,7 @@ jobs:
             -checks="${CLANG_TIDY_CHECKS}" \
             "${sources[@]}" \
             -- \
-            -std=c11 -I. -Iconfig -I/usr/include/mysql \
+            -std=c17 -I. -Iconfig -I/usr/include/mysql \
             2>&1 | tee clang-tidy-report.txt
 
       - name: Upload clang-tidy report
@@ -271,7 +277,7 @@ jobs:
           fi
           cppcheck \
             --enable=warning,style,performance,portability \
-            --std=c11 \
+            --std=c17 \
             --inconclusive \
             --inline-suppr \
             --force \

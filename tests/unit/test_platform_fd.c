@@ -32,7 +32,17 @@ static void test_fd_pipe_roundtrip(void) {
 	ASSERT_INT_EQ(spine_process_close_fd(pipe_fds[1]), 0);
 }
 
+static void test_fd_timeout_argument_validation(void) {
+	int pipe_fds[2];
+
+	ASSERT_INT_EQ(spine_process_pipe(pipe_fds), 0);
+	ASSERT_INT_EQ(spine_fd_wait_readable(pipe_fds[0], NULL), -1);
+	ASSERT_INT_EQ(spine_process_close_fd(pipe_fds[0]), 0);
+	ASSERT_INT_EQ(spine_process_close_fd(pipe_fds[1]), 0);
+}
+
 int main(void) {
 	test_fd_pipe_roundtrip();
+	test_fd_timeout_argument_validation();
 	return finish_tests("platform fd tests");
 }

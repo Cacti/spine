@@ -26,7 +26,7 @@ include(CheckFunctionExists)
 include(CheckIncludeFile)
 include(CheckTypeSize)
 
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
@@ -71,7 +71,15 @@ set(SPINE_TEST_NAMES env time process socket error fd dns)
 if(ENABLE_WARNINGS)
     add_library(spine_build_options INTERFACE)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(spine_build_options INTERFACE -Wall)
+        target_compile_options(spine_build_options INTERFACE
+            -Wall
+            -Wextra
+            -Wformat
+            -Werror=implicit-function-declaration
+            -Werror=incompatible-pointer-types
+            -Wvla
+            -Wshadow
+        )
     elseif(MSVC)
         target_compile_options(spine_build_options INTERFACE /W3)
     endif()
@@ -349,6 +357,7 @@ endif()
 if(WIN32)
     target_link_libraries(spine_platform PUBLIC ws2_32 iphlpapi advapi32)
 else()
+    target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
     target_link_libraries(spine_platform PUBLIC m ${CMAKE_DL_LIBS})
     if(CAP_LIBRARY)
         target_link_libraries(spine_platform PUBLIC ${CAP_LIBRARY})

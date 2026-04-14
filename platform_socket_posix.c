@@ -33,6 +33,11 @@ int spine_socket_recvfrom(spine_socket_t socket_fd, void *buffer, size_t buffer_
 }
 
 int spine_socket_set_timeout(spine_socket_t socket_fd, const struct timeval *timeout) {
+	if (timeout == NULL || timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const void *) timeout, sizeof(*timeout)) != 0) {
 		return -1;
 	}
@@ -46,6 +51,11 @@ int spine_socket_set_timeout(spine_socket_t socket_fd, const struct timeval *tim
 
 int spine_socket_wait_readable(spine_socket_t socket_fd, struct timeval *timeout) {
 	fd_set socket_fds;
+
+	if (timeout == NULL || timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
+		errno = EINVAL;
+		return -1;
+	}
 
 	if (socket_fd < 0 || socket_fd >= FD_SETSIZE) {
 		errno = EINVAL;

@@ -84,6 +84,40 @@ jobs:
           make -C tests/unit clean
           make -C tests/unit run
 
+  build-cmake-linux-sanitizers:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+      LDFLAGS: -fsanitize=address,undefined
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install sanitizer dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config clang \
+            libmysqlclient-dev libsnmp-dev libssl-dev
+
+      - name: Configure (sanitizers)
+        run: |
+          set -euo pipefail
+          cmake --preset ci-main
+
+      - name: Build (sanitizers)
+        run: |
+          set -euo pipefail
+          cmake --build --preset ci-main
+
+      - name: Run CTest (sanitizers)
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --output-on-failure
+
   build-windows:
     runs-on: windows-latest
     defaults:

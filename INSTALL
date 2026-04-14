@@ -26,6 +26,29 @@ the same on every platform:
 * Windows: MSYS2/MinGW-native platform smoke coverage exists, but full runtime
   support still depends on a complete Windows Net-SNMP toolchain path.
 
+Support Tiers
+-------------
+
+The support policy uses three tiers:
+
+1. Guaranteed: regularly validated in CI and intended for production operation.
+2. Best Effort: CI coverage exists, but ecosystem/runtime variability may require local adaptation.
+3. Unsupported: not part of active validation, no compatibility commitment.
+
+Current mapping:
+
+* Guaranteed: Linux
+* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW)
+* Unsupported: Cygwin build/runtime path
+
+Build System Roadmap
+--------------------
+
+CMake is the canonical build system for this repository.
+
+Autotools files remain only for transition compatibility and are planned for
+removal after 2026-12-31.
+
 -----------------------------------------------------------------------------
 
 Unix Installation

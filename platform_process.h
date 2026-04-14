@@ -9,6 +9,7 @@
 typedef pid_t spine_pid_t;
 #else
 typedef intptr_t spine_pid_t;
+_Static_assert(sizeof(spine_pid_t) >= sizeof(void *), "spine_pid_t must hold Windows HANDLE values");
 #endif
 
 int spine_process_pipe(int pipe_fds[2]);

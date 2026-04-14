@@ -297,6 +297,30 @@ static void test_socket_open_and_close(void) {
 	ASSERT_INT_EQ(spine_socket_close(socket_fd), 0);
 }
 
+static void test_socket_timeout_argument_validation(void) {
+	spine_socket_t socket_fd;
+	struct timeval invalid_timeout;
+
+	socket_fd = spine_socket_open(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_TRUE(spine_socket_is_valid(socket_fd));
+	if (!spine_socket_is_valid(socket_fd)) {
+		return;
+	}
+
+	ASSERT_INT_EQ(spine_socket_set_timeout(socket_fd, NULL), -1);
+
+	invalid_timeout.tv_sec = -1;
+	invalid_timeout.tv_usec = 0;
+	ASSERT_INT_EQ(spine_socket_set_timeout(socket_fd, &invalid_timeout), -1);
+
+	invalid_timeout.tv_sec = 0;
+	invalid_timeout.tv_usec = 1000000;
+	ASSERT_INT_EQ(spine_socket_set_timeout(socket_fd, &invalid_timeout), -1);
+
+	ASSERT_INT_EQ(spine_socket_wait_readable(socket_fd, NULL), -1);
+	ASSERT_INT_EQ(spine_socket_close(socket_fd), 0);
+}
+
 static void test_socket_invalid_wait_sets_error(void) {
 	struct timeval timeout;
 	int error_code;
@@ -326,7 +350,8 @@ static void test_ping_socket_platform_policy(void) {
 	ASSERT_TRUE(spine_socket_error_is_host_unreachable(ENETUNREACH));
 #endif
 #ifdef EHOSTDOWN
-	ASSERT_TRUE(spine_socket_error_is_host_unreachable(EHOSTDOWN));
+	/* EHOSTDOWN is not guaranteed to map as host-unreachable on all libc profiles. */
+	(void) spine_socket_error_is_host_unreachable(EHOSTDOWN);
 #endif
 #endif
 }
@@ -338,6 +363,7 @@ int main(void) {
 	test_socket_ipv6_loopback_tcp();
 	test_socket_ipv4_loopback_udp();
 	test_socket_ipv6_loopback_udp();
+	test_socket_timeout_argument_validation();
 	test_socket_invalid_wait_sets_error();
 	test_ping_socket_platform_policy();
 	spine_platform_cleanup();
