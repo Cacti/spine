@@ -75,6 +75,16 @@ int main(void) {
     int under = spine_sd_under_systemd();
     ASSERT(under == 0 || under == 1);
 
+    {
+        /* C1: status string truncation: 1024-byte payload must not crash */
+        char big[1024];
+        memset(big, 'A', sizeof(big) - 1);
+        big[sizeof(big) - 1] = '\0';
+        spine_sd_status("%s", big);
+        /* No assertion: success is "did not crash". A crash would terminate
+         * the test process before reaching the next line. */
+    }
+
     printf("systemd_notify idempotency tests: %s\n",
            failures == 0 ? "PASS" : "FAIL");
     return failures == 0 ? 0 : 1;
