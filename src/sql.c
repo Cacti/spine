@@ -193,6 +193,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 				if (error_count > 30) {
 					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+					SPINE_LOG(("INFO: Daemon exit triggered by non-retryable SQL error; consider filing issue"));
 					exit(1);
 				}
 
@@ -200,6 +201,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			} else {
 				SPINE_LOG(("FATAL: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
 				SPINE_LOG(("ERROR: The Query Was:'%s'", query));
+				SPINE_LOG(("INFO: Daemon exit triggered by non-retryable SQL error; consider filing issue"));
 				exit(1);
 			}
 		} else {
@@ -326,6 +328,23 @@ void db_connect(int type, MYSQL *mysql) {
 	if (strlen(ssl_key)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY, ssl_key,  "ssl key");
 	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
 	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
+
+	/* When the operator opts into SSL, require the server identity to verify.
+	 * MYSQL_OPT_SSL_MODE=SSL_MODE_VERIFY_IDENTITY is the modern path; older
+	 * connectors only expose MYSQL_OPT_SSL_VERIFY_SERVER_CERT which is the
+	 * closest equivalent. */
+	if ((type == LOCAL && set.db_ssl) || (type == REMOTE && set.rdb_ssl)) {
+		#ifdef MYSQL_OPT_SSL_MODE
+		unsigned int ssl_mode = SSL_MODE_VERIFY_IDENTITY;
+		MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
+		#endif
+		#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+		{
+			bool ssl_verify = 1;
+			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify, "ssl verify");
+		}
+		#endif
+	}
 
 	#endif
 
@@ -590,8 +609,8 @@ int append_hostrange(char *obuf, const char *colname) {
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	char input_trimmed[DBL_BUFSIZE];
-	int  max_escaped_input_size;
-	int  trim_limit;
+	size_t in_len;
+	int    trim_limit;
 
 	if (input == NULL) return;
 
@@ -599,7 +618,7 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	 * still leaves a NUL-terminated buffer for strlen() and mysql_real_escape_string. */
 	memset(input_trimmed, 0, sizeof(input_trimmed));
 
-	max_escaped_input_size = (strlen(input) * 2) + 1;
+	in_len     = strlen(input);
 	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
 
 	/* Guard against snprintf size values that cannot preserve any input byte.
@@ -610,7 +629,10 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 		return;
 	}
 
-	if (max_escaped_input_size > max_size) {
+	/* Compare against max_size in size_t space: the old (strlen * 2) + 1 math
+	 * overflowed int for inputs near INT_MAX/2. Checking in_len against
+	 * (max_size / 2) - 1 is equivalent and overflow-free. */
+	if (max_size > 0 && in_len > (size_t)((max_size / 2) - 1)) {
 		snprintf(input_trimmed, (trim_limit / 2) - 1, "%s", input);
 	} else {
 		snprintf(input_trimmed, trim_limit, "%s", input);
