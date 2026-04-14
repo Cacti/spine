@@ -1708,11 +1708,11 @@ double get_time_as_double(void) {
 	}
 #endif
 
-	struct timeval now;
+	struct timeval fallback_now;
 
-	gettimeofday(&now, NULL);
+	gettimeofday(&fallback_now, NULL);
 
-	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
+	return (fallback_now).tv_sec + ((double) (fallback_now).tv_usec / 1000000);
 }
 
 /*! \fn trim()

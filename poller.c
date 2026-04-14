@@ -159,7 +159,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int posuffix_len = 0;
 
 	char sysUptime[BUFSIZE];
-	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
+	char result_string[(DBL_BUFSIZE * 2) + SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
 	int  errors = 0;
@@ -1882,7 +1882,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
 			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
 
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
+				snprintf(result_string, sizeof(result_string), " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 				poller_items[i].local_data_id,
 				escaped_rrd_name,
 				host_time,

@@ -19,9 +19,9 @@ scan-build -o /tmp/scan-results --status-bugs \
 
 echo ""
 echo "=== smoke tests ==="
-./build/spine --help > /dev/null 2>&1
+./build/spine --help >/dev/null 2>&1
 echo "spine --help: OK"
-./build/spine --version > /dev/null 2>&1
+./build/spine --version >/dev/null 2>&1
 echo "spine --version: OK"
 
 echo ""

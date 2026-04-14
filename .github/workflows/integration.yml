@@ -215,11 +215,13 @@ jobs:
 
       - name: Output regex test
         run: |
+          set -euo pipefail
           docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
           ./tests/integration/test_output_regex.sh
 
       - name: DB column detection test
         run: |
+          set -euo pipefail
           docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
           ./tests/integration/test_db_column_detect.sh
 

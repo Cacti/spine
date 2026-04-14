@@ -5,12 +5,11 @@
 #include <fcntl.h>
 #include <io.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <process.h>
 #include <windows.h>
 
 #include "platform.h"
-
-extern char **_environ;
 
 int spine_process_pipe(int pipe_fds[2]) {
 	return _pipe(pipe_fds, 4096, _O_BINARY);

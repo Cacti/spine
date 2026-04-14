@@ -34,6 +34,7 @@ jobs:
       # informational so we have a baseline to chip away at.
       - name: Run flawfinder
         run: |
+          set -euo pipefail
           flawfinder \
             --minlevel=3 \
             --error-level=5 \
@@ -60,6 +61,7 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build pkg-config \
@@ -67,6 +69,7 @@ jobs:
 
       - name: Configure
         run: |
+          set -euo pipefail
           cmake --preset ci-main
 
       - name: Build
@@ -77,6 +80,7 @@ jobs:
 
       - name: Run platform smoke tests
         run: |
+          set -euo pipefail
           make -C tests/unit clean
           make -C tests/unit run
 
@@ -103,6 +107,7 @@ jobs:
       - name: Check Net-SNMP availability
         id: netsnmp
         run: |
+          set -euo pipefail
           if pacman -Ss '^mingw-w64-x86_64-net-snmp$' >/dev/null 2>&1; then
             pacman --noconfirm -S --needed mingw-w64-x86_64-net-snmp
             echo "available=true" >> "$GITHUB_OUTPUT"
@@ -113,6 +118,7 @@ jobs:
 
       - name: Configure
         run: |
+          set -euo pipefail
           if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
             cmake --preset ci-main
           else
@@ -121,6 +127,7 @@ jobs:
 
       - name: Build
         run: |
+          set -euo pipefail
           if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
             cmake --build --preset ci-main
           else
@@ -129,6 +136,7 @@ jobs:
 
       - name: Run CTest
         run: |
+          set -euo pipefail
           if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
             ctest --test-dir build --output-on-failure
           else
@@ -145,13 +153,7 @@ jobs:
       - name: Configure crash dumps
         if: always()
         shell: pwsh
-        run: |
-          $dumpDir = "${{ github.workspace }}\crashdumps"
-          New-Item -ItemType Directory -Path $dumpDir -Force
-          $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\spine.exe"
-          New-Item -Path $regPath -Force
-          Set-ItemProperty -Path $regPath -Name "DumpType" -Value 2 -Type DWord
-          Set-ItemProperty -Path $regPath -Name "DumpFolder" -Value $dumpDir -Type ExpandString
+        run: $ErrorActionPreference='Stop'; $dumpDir='${{ github.workspace }}\crashdumps'; New-Item -ItemType Directory -Path $dumpDir -Force; $regPath='HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\spine.exe'; New-Item -Path $regPath -Force; Set-ItemProperty -Path $regPath -Name 'DumpType' -Value 2 -Type DWord; Set-ItemProperty -Path $regPath -Name 'DumpFolder' -Value $dumpDir -Type ExpandString
 
       - name: Upload crash dumps
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -174,6 +176,7 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          set -euo pipefail
           brew install \
             cmake \
             ninja \
@@ -184,6 +187,7 @@ jobs:
 
       - name: Configure
         run: |
+          set -euo pipefail
           cmake --preset ci-main -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
 
       - name: Build
@@ -194,6 +198,7 @@ jobs:
 
       - name: Run platform smoke tests
         run: |
+          set -euo pipefail
           make -C tests/unit clean
           make -C tests/unit run
 
@@ -203,7 +208,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
       - name: Build and test on FreeBSD VM
-        uses: vmactions/freebsd-vm@v1
+        uses: vmactions/freebsd-vm@7ca82f79fe3078fecded6d3a2bff094995447bbd # v1
         with:
           release: 14.1
           usesh: true

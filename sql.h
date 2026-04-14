@@ -50,6 +50,6 @@ extern int append_hostrange(char *obuf, const char *colname);
 {\
 	options_error = mysql_options(mysql, opt, value); \
 	if (options_error < 0) {\
-	        die("FATAL: MySQL options unable to set %s option", desc);\
+		        die("FATAL: MySQL options unable to set %s option", desc);\
 	}\
-}\
+}

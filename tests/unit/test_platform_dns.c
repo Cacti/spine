@@ -1,5 +1,11 @@
-#include <netdb.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <netdb.h>
+#endif
 
 #include "test_platform_helpers.h"
 
@@ -77,8 +83,21 @@ static void test_dns_lookup_numeric_ipv6_loopback(void) {
 }
 
 int main(void) {
+#ifdef _WIN32
+	WSADATA wsa_data;
+	int wsa_rc;
+
+	wsa_rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+	ASSERT_INT_EQ(wsa_rc, 0);
+#endif
+
 	test_dns_lookup_localhost_unspec();
 	test_dns_lookup_numeric_ipv4_loopback();
 	test_dns_lookup_numeric_ipv6_loopback();
+
+#ifdef _WIN32
+	WSACleanup();
+#endif
+
 	return finish_tests("platform dns tests");
 }
