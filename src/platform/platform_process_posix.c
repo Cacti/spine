@@ -38,6 +38,7 @@ int spine_process_spawn_retry(
 	spine_pid_t *pid,
 	const char *path,
 	posix_spawn_file_actions_t *file_actions,
+	posix_spawnattr_t *spawn_attr,
 	char *const argv[],
 	char *const envp[],
 	int retry_limit,
@@ -53,7 +54,7 @@ int spine_process_spawn_retry(
 	do {
 		pid_t spawned_pid;
 
-		spawn_err = posix_spawn(&spawned_pid, path, file_actions, NULL, argv, spawn_envp);
+		spawn_err = posix_spawn(&spawned_pid, path, file_actions, spawn_attr, argv, spawn_envp);
 		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < retry_limit) {
 			retry_count++;
 			spine_platform_sleep_us(retry_sleep_us);

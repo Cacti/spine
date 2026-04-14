@@ -406,7 +406,7 @@ int php_init(int php_process) {
 				return FALSE;
 			}
 
-			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, argv, environ, 3, 50000);
+			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, NULL, argv, environ, 3, 50000);
 
 			posix_spawn_file_actions_destroy(&fa);
 

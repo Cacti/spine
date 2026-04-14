@@ -88,7 +88,20 @@
 #include "spine.h"
 #include "platform/platform_error.h"
 #include "platform/platform_process.h"
+#include <signal.h>
 #include <spawn.h>
+
+/* A minimal, deterministic environment for scripts spawned by spine.
+ * spine trusts its command strings (they come from the Cacti database), but
+ * the child inherits the caller's environ by default. That exposes PATH
+ * manipulation, LD_PRELOAD injection, and IFS quoting tricks to anyone who
+ * can influence the parent process environment. Override with a fixed PATH
+ * and a safe IFS. */
+static char *const spine_safe_env[] = {
+	"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+	"IFS= \t\n",
+	NULL
+};
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
@@ -139,8 +152,11 @@ int nft_popen(const char * command, const char * type) {
 	char   shell_cmd[] = "sh";
 	char   shell_flag[] = "-c";
 	int    cancel_state;
-	extern char **environ;
 	char   error_buffer[256];
+	posix_spawnattr_t attr;
+	int    attr_initialized = 0;
+	sigset_t default_sigs;
+	sigset_t empty_mask;
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -199,6 +215,18 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
+	/* Reset signal dispositions in the child so spine's ignores/handlers do
+	 * not leak into the script. Without this, SIGPIPE-ignoring spine
+	 * propagates to a child /bin/sh that silently swallows broken pipes. */
+	if (posix_spawnattr_init(&attr) == 0) {
+		attr_initialized = 1;
+		sigfillset(&default_sigs);
+		posix_spawnattr_setsigdefault(&attr, &default_sigs);
+		sigemptyset(&empty_mask);
+		posix_spawnattr_setsigmask(&attr, &empty_mask);
+		posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
+	}
+
 	if (*type == 'r') {
 		posix_spawn_file_actions_addclose(&fa, pdes[0]);
 		if (pdes[1] != STDOUT_FILENO) {
@@ -225,11 +253,16 @@ int nft_popen(const char * command, const char * type) {
 	const char *spawn_shell = "/bin/sh";
 
 	int spawn_err;
-	spawn_err = spine_process_spawn_retry(&pid, spawn_shell, &fa, argv, environ, 3, 50000);
+	spawn_err = spine_process_spawn_retry(&pid, spawn_shell, &fa,
+		attr_initialized ? &attr : NULL,
+		argv, spine_safe_env, 3, 50000);
 
 	if (spawn_err != 0) {
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer))));
 		posix_spawn_file_actions_destroy(&fa);
+		if (attr_initialized) {
+			posix_spawnattr_destroy(&attr);
+		}
 		(void)spine_process_close_fd(pdes[0]);
 		(void)spine_process_close_fd(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
@@ -239,6 +272,9 @@ int nft_popen(const char * command, const char * type) {
 	}
 
 	posix_spawn_file_actions_destroy(&fa);
+	if (attr_initialized) {
+		posix_spawnattr_destroy(&attr);
+	}
 
 	/* Parent. */
 	if (*type == 'r') {

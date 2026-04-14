@@ -36,7 +36,7 @@ static void test_platform_spawn_and_wait(void) {
 	char *argv[] = { shell_path, shell_flag, shell_body, NULL };
 #endif
 
-	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, argv, NULL, 1, 1000), 0);
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, NULL, 1, 1000), 0);
 	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
 	ASSERT_INT_EQ(status, 0);
 }
@@ -56,7 +56,7 @@ static void test_platform_spawn_and_terminate(void) {
 	char *argv[] = { shell_path, shell_flag, shell_body, NULL };
 #endif
 
-	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, argv, NULL, 1, 1000), 0);
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, NULL, 1, 1000), 0);
 	ASSERT_INT_EQ(spine_process_terminate(pid), 0);
 	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
 	ASSERT_TRUE(status != 0);
@@ -103,7 +103,7 @@ static void test_platform_spawn_utf8_path_argument(void) {
 	utf8_len = WideCharToMultiByte(CP_UTF8, 0, script_path, -1, utf8_script_path, (int) sizeof(utf8_script_path), NULL, NULL);
 	ASSERT_TRUE(utf8_len > 0);
 
-	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, argv, NULL, 1, 1000), 0);
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, NULL, 1, 1000), 0);
 	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
 	ASSERT_INT_EQ(status, 0);
 
@@ -118,7 +118,7 @@ static void test_platform_spawn_custom_env_not_supported(void) {
 	char *argv[] = { cmd_path, cmd_flag, cmd_body, NULL };
 	char *envp[] = { "SPINE_TEST_ENV=1", NULL };
 
-	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, argv, envp, 1, 1000), ENOTSUP);
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, envp, 1, 1000), ENOTSUP);
 }
 #endif
 

@@ -285,6 +285,7 @@ int spine_process_spawn_retry(
 	spine_pid_t *pid,
 	const char *path,
 	void *file_actions,
+	void *spawn_attr,
 	char *const argv[],
 	char *const envp[],
 	int retry_limit,
@@ -302,6 +303,7 @@ int spine_process_spawn_retry(
 	DWORD creation_flags;
 
 	(void) file_actions;
+	(void) spawn_attr;
 
 	retry_count = 0;
 	creation_flags = CREATE_NO_WINDOW;

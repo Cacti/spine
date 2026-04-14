@@ -21,8 +21,10 @@ int spine_process_spawn_retry(
 	const char *path,
 #ifndef _WIN32
 	posix_spawn_file_actions_t *file_actions,
+	posix_spawnattr_t *spawn_attr,
 #else
 	void *file_actions,
+	void *spawn_attr,
 #endif
 	char *const argv[],
 	char *const envp[],
