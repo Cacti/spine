@@ -160,6 +160,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int posuffix_len = 0;
 
 	char sysUptime[BUFSIZE];
+	/* result_string holds " (%i, '<escaped_result>', FROM_UNIXTIME(%s), '<escaped_rrd_name>')".
+	 * db_escape can double the length of the input on worst-case input (e.g. all quotes),
+	 * so a RESULTS_BUFFER-sized result can expand to 2*RESULTS_BUFFER = DBL_BUFSIZE*2.
+	 * SMALL_BUFSIZE covers the fixed SQL scaffolding and rrd_name. 4352 bytes on stack
+	 * is safe for spine's worker threads (default 2MB stack, worst case 256KB ulimit). */
 	char result_string[(DBL_BUFSIZE * 2) + SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
