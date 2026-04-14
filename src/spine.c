@@ -248,6 +248,9 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Failed to initialize platform runtime services.");
 	}
 
+	/* Seed ICMP echo id randomization before any poll thread can fire. */
+	ping_init();
+
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {

@@ -38,6 +38,28 @@
 #include <icmpapi.h>
 #endif
 
+#if defined(__linux__)
+#  include <sys/random.h>
+#endif
+
+/* XORed into every ICMP echo id so a same-PID spine restart does not
+ * reuse the previous run's identifiers. Set once at program start. */
+static uint16_t icmp_id_mask = 0;
+
+void ping_init(void) {
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+	icmp_id_mask = (uint16_t)(arc4random() & 0xFFFF);
+#elif defined(__linux__)
+	unsigned int seed = 0;
+	if (getrandom(&seed, sizeof(seed), 0) != (ssize_t)sizeof(seed)) {
+		seed = (unsigned int)time(NULL) ^ (unsigned int)getpid();
+	}
+	icmp_id_mask = (uint16_t)(seed & 0xFFFF);
+#else
+	icmp_id_mask = (uint16_t)(((unsigned int)time(NULL) ^ (unsigned int)getpid()) & 0xFFFF);
+#endif
+}
+
 static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address_len, int family, const char *hostname, unsigned short int port) {
 	struct addrinfo hints, *hostinfo;
 	char service[16];
@@ -345,11 +367,9 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	icmp6 = (struct icmp6_hdr *) packet;
 	icmp6->icmp6_type = ICMP6_ECHO_REQUEST;
 	icmp6->icmp6_code = 0;
-	icmp6->icmp6_id   = htons(spine_platform_process_id() & 0xFFFF);
+	icmp6->icmp6_id   = htons((uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask));
 
-	thread_mutex_lock(LOCK_GHBN);
-	icmp6->icmp6_seq = htons(seq++);
-	thread_mutex_unlock(LOCK_GHBN);
+	icmp6->icmp6_seq = htons((uint16_t)__atomic_fetch_add(&seq, 1, __ATOMIC_RELAXED));
 
 	memcpy(packet + sizeof(struct icmp6_hdr), cacti_msg, strlen(cacti_msg));
 
@@ -409,7 +429,7 @@ keep_listening_ipv6:
 				reply = (struct icmp6_hdr *) socket_reply;
 
 				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) == 0) {
-					if (reply->icmp6_type == ICMP6_ECHO_REPLY && reply->icmp6_id == htons(spine_platform_process_id() & 0xFFFF)) {
+					if (reply->icmp6_type == ICMP6_ECHO_REPLY && reply->icmp6_id == htons((uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask))) {
 						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
 						snprintf(ping->ping_status, 50, "%.5f", total_time);
 						free(packet);
@@ -759,12 +779,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	icmp->icmp_type = ICMP_ECHO;
 	icmp->icmp_code = 0;
-	icmp->icmp_id   = spine_platform_process_id() & 0xFFFF;
+	icmp->icmp_id   = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
 
-	/* lock set/get the sequence and unlock */
-	thread_mutex_lock(LOCK_GHBN);
-	icmp->icmp_seq = seq++;
-	thread_mutex_unlock(LOCK_GHBN);
+	icmp->icmp_seq = (unsigned short)__atomic_fetch_add(&seq, 1, __ATOMIC_RELAXED);
 
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));

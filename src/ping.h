@@ -39,6 +39,9 @@
 #define MSG_WAITALL 0x100
 #endif
 
+/* Initialize ICMP ID/seq randomization. Call once at process start. */
+extern void ping_init(void);
+
 /* Host availability functions */
 extern int ping_host(host_t *host, ping_t *ping);
 extern int ping_snmp(host_t *host, ping_t *ping);
