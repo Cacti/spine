@@ -58,6 +58,7 @@ set(CMAKE_C_EXTENSIONS ON)
 option(SPINE_BUILD_MAIN "Build the spine executable" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_LCAP "Enable Linux capability checks" ON)
+option(WITH_SYSTEMD "Enable systemd sd_notify integration (Linux only)" ON)
 
 set(RESULTS_BUFFER 2048 CACHE STRING "Size of the spine results buffer")
 set(MAX_SIMULTANEOUS_SCRIPTS 20 CACHE STRING "Maximum simultaneous spine scripts")
@@ -101,6 +102,7 @@ set(SPINE_CORE_SOURCES
     src/ping_ipv6_scope.c
     src/keywords.c
     src/error.c
+    src/systemd_notify.c
 )
 
 set(SPINE_TEST_NAMES env time process socket error fd dns)
@@ -209,6 +211,26 @@ if(ENABLE_LCAP AND NOT WIN32)
 endif()
 
 find_package(PkgConfig QUIET)
+
+# libsystemd: Linux only, opt-in via WITH_SYSTEMD (default ON). Missing lib is
+# not an error; spine falls back to no-op sd_notify stubs so macOS, Windows,
+# and minimal Linux images build unchanged.
+set(SPINE_HAVE_LIBSYSTEMD FALSE)
+set(SPINE_SYSTEMD_UNIT_DIR "")
+if(WITH_SYSTEMD AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(PkgConfig_FOUND)
+        pkg_check_modules(SYSTEMD QUIET libsystemd)
+        if(SYSTEMD_FOUND)
+            set(SPINE_HAVE_LIBSYSTEMD TRUE)
+            pkg_get_variable(SPINE_SYSTEMD_UNIT_DIR systemd systemdsystemunitdir)
+            message(STATUS "libsystemd: ${SYSTEMD_VERSION} (unit dir: ${SPINE_SYSTEMD_UNIT_DIR})")
+        else()
+            message(STATUS "libsystemd not found; spine will build without sd_notify")
+        endif()
+    else()
+        message(STATUS "pkg-config not found; skipping libsystemd detection")
+    endif()
+endif()
 
 function(spine_require_mysql)
     if(TARGET spine_mysql)
@@ -569,9 +591,31 @@ if(SPINE_BUILD_MAIN)
     if(OpenSSL_FOUND)
         target_link_libraries(spine PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     endif()
+    if(SPINE_HAVE_LIBSYSTEMD)
+        target_compile_definitions(spine PRIVATE HAVE_LIBSYSTEMD=1)
+        target_include_directories(spine SYSTEM PRIVATE ${SYSTEMD_INCLUDE_DIRS})
+        target_link_libraries(spine PRIVATE ${SYSTEMD_LIBRARIES})
+        if(SYSTEMD_LDFLAGS_OTHER)
+            target_link_options(spine PRIVATE ${SYSTEMD_LDFLAGS_OTHER})
+        endif()
+    endif()
 
     install(TARGETS spine RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES etc/spine.conf.dist DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
+
+    # Install unit + timer into the distro-provided systemd unit directory.
+    # Falls back to /lib/systemd/system when pkg-config cannot resolve the
+    # variable (older systemd on some long-term-support distros).
+    if(WITH_SYSTEMD AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        if(NOT SPINE_SYSTEMD_UNIT_DIR)
+            set(SPINE_SYSTEMD_UNIT_DIR "/lib/systemd/system")
+        endif()
+        install(FILES
+                    etc/systemd/spine.service
+                    etc/systemd/spine.timer
+                DESTINATION ${SPINE_SYSTEMD_UNIT_DIR}
+                COMPONENT systemd)
+    endif()
 endif()
 
 if(BUILD_TESTING)

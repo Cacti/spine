@@ -1,0 +1,15 @@
+[Unit]
+Description=Cacti Spine poll cycle (periodic)
+Documentation=https://www.cacti.net/spine.php
+
+[Timer]
+# Cacti's default polling interval is 5 minutes. Adjust in lock-step with the
+# "cron_interval" setting in the Cacti UI. AccuracySec keeps spine firing at a
+# consistent cadence instead of being batched with other timers.
+OnCalendar=*:0/5
+AccuracySec=1s
+Persistent=true
+Unit=spine.service
+
+[Install]
+WantedBy=timers.target

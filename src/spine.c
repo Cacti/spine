@@ -97,6 +97,45 @@
 
 #include "common.h"
 #include "spine.h"
+#include "systemd_notify.h"
+
+#include <signal.h>
+
+/* SIGHUP-triggered reload flag. Spine is a batch poller: an in-flight config
+ * reload would race with worker threads already mid-poll. On HUP we therefore
+ * notify systemd of a RELOADING/READY pair and let the current cycle finish;
+ * the next invocation picks up the refreshed spine.conf.
+ *
+ * SIGTERM sets a graceful stop flag. The main loop checks it between devices
+ * and exits cleanly so poller_output rows flush and the DB disconnects.
+ *
+ * volatile sig_atomic_t is the only type async-signal-safe for set/read
+ * across the signal-handler boundary. */
+static volatile sig_atomic_t spine_reload_requested = 0;
+static volatile sig_atomic_t spine_stop_requested   = 0;
+
+static void spine_sighup_handler(int signo) {
+    (void)signo;
+    spine_reload_requested = 1;
+}
+
+static void spine_sigterm_handler(int signo) {
+    (void)signo;
+    spine_stop_requested = 1;
+}
+
+static void spine_install_reload_handler(void) {
+    struct sigaction sa;
+    sa.sa_handler = spine_sighup_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGHUP, &sa, NULL);
+
+    sa.sa_handler = spine_sigterm_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGTERM, &sa, NULL);
+}
 
 /* Global Variables */
 int entries = 0;
@@ -243,6 +282,11 @@ int main(int argc, char *argv[]) {
 
 	/* install the spine signal handler */
 	install_spine_signal_handler();
+
+	/* install SIGHUP (reload) and SIGTERM (graceful stop) handlers.
+	 * Keep this separate from install_spine_signal_handler(), which covers
+	 * fatal signals only and shares state with the die() path. */
+	spine_install_reload_handler();
 
 	if (spine_platform_init() != 0) {
 		die("ERROR: Failed to initialize platform runtime services.");
@@ -746,8 +790,40 @@ int main(int argc, char *argv[]) {
      */
 	snmp_sess_init(&session);
 
+	/* Notify systemd that spine is fully initialised. Safe no-op when not
+	 * running under systemd or when libsystemd was not linked. */
+	spine_sd_ready();
+	spine_sd_status("Polling %d device%s with %d thread%s",
+	                num_rows, num_rows == 1 ? "" : "s",
+	                set.threads, set.threads == 1 ? "" : "s");
+
 	/* loop through devices until done */
 	while (canexit == FALSE && device_counter < num_rows) {
+		/* Systemd watchdog ping. sd_notify() short-circuits when
+		 * NOTIFY_SOCKET is unset so this stays cheap on cron/non-systemd
+		 * invocations. */
+		spine_sd_watchdog();
+
+		/* Graceful stop requested (SIGTERM from systemd or operator).
+		 * Break out between devices so in-flight threads can drain. */
+		if (spine_stop_requested) {
+			SPINE_LOG(("NOTE: SIGTERM received, stopping after current device"));
+			spine_sd_stopping("SIGTERM received");
+			canexit = TRUE;
+			break;
+		}
+
+		/* Config reload requested (SIGHUP). Spine's per-cycle design means
+		 * we cannot safely re-read spine.conf mid-poll, but systemd still
+		 * gets a RELOADING/READY pair so `systemctl reload` reports success.
+		 * The refreshed config is picked up on the next spine invocation. */
+		if (spine_reload_requested) {
+			spine_reload_requested = 0;
+			SPINE_LOG(("NOTE: SIGHUP received; config will refresh on next cycle"));
+			spine_sd_reloading();
+			spine_sd_ready();
+		}
+
 		int loop_count = 0;
 		double progress_time = 0;
 		int sem_err = 0;
@@ -1129,6 +1205,10 @@ int main(int argc, char *argv[]) {
 		vp = (volatile char *)set.rdb_pass;
 		memset((char *)vp, 0, sizeof(set.rdb_pass));
 	}
+
+	/* Tell systemd we are stopping. Sent before the final cleanup so the
+	 * unit never sits in "stopping" state waiting for STOPPING=1. */
+	spine_sd_stopping("Poll cycle complete");
 
 	/* uninstall the spine signal handler */
 	uninstall_spine_signal_handler();

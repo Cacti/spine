@@ -74,6 +74,14 @@ chmod u+s /usr/local/spine/bin/spine
 To install under a non-default prefix, pass
 `-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
 
+### Systemd integration (Linux)
+
+On Linux with `libsystemd` available, the build links `sd_notify(3)` and
+installs `spine.service` plus `spine.timer` into the distro's systemd unit
+directory. See [docs/systemd.md](docs/systemd.md) for unit installation,
+journal logging, reload behaviour, and watchdog tuning. Disable with
+`-DWITH_SYSTEMD=OFF` at configure time.
+
 ## Installing on Debian and Derivatives
 
 Install build dependencies:

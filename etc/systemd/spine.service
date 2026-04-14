@@ -1,0 +1,74 @@
+[Unit]
+Description=Cacti Spine Poller
+Documentation=https://www.cacti.net/spine.php
+Documentation=https://github.com/Cacti/spine
+After=network-online.target mariadb.service mysql.service
+Wants=network-online.target
+Requires=network-online.target
+
+[Service]
+# spine exits once a poll cycle completes, but Type=notify still works:
+# sd_notify(READY=1) is sent after all subsystems initialise and STOPPING=1
+# just before exit. For the scheduled-invocation model use spine.timer; for
+# continuous-run deployments behind a wrapper, Restart=on-failure catches
+# abnormal exits.
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/local/spine/bin/spine
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+# Watchdog is advisory. Spine pings it once per outer poll iteration. Tune
+# WatchdogSec to (longest expected poll cycle) * 2. 120s suits most deployments.
+WatchdogSec=120
+
+# Dedicated service account. Create with:
+#   useradd --system --home-dir /var/lib/spine --shell /usr/sbin/nologin spine
+# The "cacti" group is often preferred so spine can share log/rrd directories
+# with the Cacti web UI; adjust to match local site policy.
+User=spine
+Group=spine
+
+# Raw ICMP without setuid root. Requires kernel >= 3.10 on Linux.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+# Sandbox hardening. See systemd.exec(5).
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# Writable paths for log and pid files. Adjust to match spine.conf:
+#   Logfile  = /var/log/cacti/cacti.log
+#   PID file = /var/run/spine/spine.pid
+ReadWritePaths=/var/log/cacti /var/run/spine
+
+# File and process limits sized for large pollers.
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Journal capture. Spine also auto-detects INVOCATION_ID and emits
+# syslog-level prefixes ("<3>", "<6>", ...) that journald maps to PRIORITY.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
