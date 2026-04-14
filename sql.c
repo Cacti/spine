@@ -595,8 +595,20 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 
 	if (input == NULL) return;
 
+	/* Zero before snprintf so that a partial write or an undersized trim_limit
+	 * still leaves a NUL-terminated buffer for strlen() and mysql_real_escape_string. */
+	memset(input_trimmed, 0, sizeof(input_trimmed));
+
 	max_escaped_input_size = (strlen(input) * 2) + 1;
 	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
+
+	/* Guard against snprintf size values that cannot preserve any input byte.
+	 * The (trim_limit / 2) - 1 path writes only a NUL for trim_limit in {4,5};
+	 * require >= 6 so at least one input byte plus NUL survives truncation. */
+	if (trim_limit < 6) {
+		output[0] = '\0';
+		return;
+	}
 
 	if (max_escaped_input_size > max_size) {
 		snprintf(input_trimmed, (trim_limit / 2) - 1, "%s", input);
