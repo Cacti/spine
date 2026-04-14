@@ -17,9 +17,13 @@
 
 #include "systemd_notify.h"
 
+#include <errno.h>
+#include <inttypes.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #ifdef HAVE_LIBSYSTEMD
@@ -70,17 +74,26 @@ void spine_sd_status(const char *fmt, ...) {
 
 void spine_sd_reloading(void) {
 #ifdef HAVE_LIBSYSTEMD
-    /* systemd wants MONOTONIC_USEC so it can compute reload duration. */
+    /* systemd wants MONOTONIC_USEC so it can compute reload duration.
+     * If clock_gettime fails (vDSO issues, sandbox), send RELOADING=1 without
+     * the timestamp; systemd handles that gracefully (uses time of receipt).
+     * Silently defaulting to 0 would be interpreted as a pre-boot timestamp. */
     struct timespec ts;
-    unsigned long long usec = 0;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
-        usec = (unsigned long long)ts.tv_sec * 1000000ULL
-             + (unsigned long long)ts.tv_nsec / 1000ULL;
+        uint64_t monotonic_us = (uint64_t)ts.tv_sec * 1000000ULL
+                              + (uint64_t)ts.tv_nsec / 1000ULL;
+        sd_notifyf(0,
+                   "RELOADING=1\n"
+                   "MONOTONIC_USEC=%" PRIu64 "\n",
+                   monotonic_us);
+    } else {
+        int saved_errno = errno;
+        sd_notify(0, "RELOADING=1\n");
+        fprintf(stderr,
+                "WARNING: clock_gettime(CLOCK_MONOTONIC) failed: %s; "
+                "sd_notify reload sent without timestamp\n",
+                strerror(saved_errno));
     }
-    sd_notifyf(0,
-               "RELOADING=1\n"
-               "MONOTONIC_USEC=%llu\n",
-               usec);
 #endif
 }
 
