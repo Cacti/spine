@@ -36,14 +36,34 @@ void spine_platform_sleep_ms(unsigned int milliseconds) {
 }
 
 void spine_platform_sleep_us(unsigned int microseconds) {
-	unsigned int rounded_ms;
+	LARGE_INTEGER freq;
+	LARGE_INTEGER start;
+	LARGE_INTEGER now;
+	LONGLONG target_ticks;
 
-	rounded_ms = microseconds / 1000U;
-	if (rounded_ms == 0 && microseconds > 0) {
-		rounded_ms = 1;
+	if (microseconds == 0) {
+		return;
 	}
 
-	Sleep(rounded_ms);
+	/* Sleep() has millisecond granularity; for >= 1 ms just defer to the scheduler. */
+	if (microseconds >= 1000U) {
+		Sleep((DWORD)(microseconds / 1000U));
+		return;
+	}
+
+	/* Sub-millisecond busy-wait via QPC. Spine retries tight SNMP/PHP loops with
+	 * 1..999 us waits; rounding up to 1 ms (Sleep's minimum) stretches those loops
+	 * by 500x or more and visibly slows polling under load. */
+	if (!QueryPerformanceFrequency(&freq) || freq.QuadPart == 0) {
+		Sleep(1);
+		return;
+	}
+
+	QueryPerformanceCounter(&start);
+	target_ticks = start.QuadPart + (LONGLONG)(((LONGLONG)microseconds * freq.QuadPart) / 1000000LL);
+	do {
+		QueryPerformanceCounter(&now);
+	} while (now.QuadPart < target_ticks);
 }
 
 void spine_platform_sleep_s(unsigned int seconds) {
