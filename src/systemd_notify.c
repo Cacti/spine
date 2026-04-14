@@ -61,6 +61,9 @@ void spine_sd_watchdog(void) {
 
 void spine_sd_status(const char *fmt, ...) {
 #ifdef HAVE_LIBSYSTEMD
+    if (fmt == NULL) {
+        return;  /* NULL status is a no-op; vsnprintf(NULL) is UB. */
+    }
     char buf[512];
     va_list ap;
     va_start(ap, fmt);
@@ -87,6 +90,10 @@ void spine_sd_reloading(void) {
                    "MONOTONIC_USEC=%" PRIu64 "\n",
                    monotonic_us);
     } else {
+        /* Intentional fprintf: this TU stays decoupled from spine.h so it can
+         * run from signal handlers and before set.log_level is initialized.
+         * Under Type=notify systemd captures stderr into the journal, so this
+         * still reaches operators without the SPINE_LOG plumbing. */
         int saved_errno = errno;
         sd_notify(0, "RELOADING=1\n");
         fprintf(stderr,

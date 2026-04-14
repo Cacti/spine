@@ -40,9 +40,23 @@ int main(void) {
     spine_sd_ready();
     spine_sd_ready();
 
-    /* STATUS: NULL must not crash; format arg with no varargs must work. */
+    /* STATUS: literal, formatted, and NULL (wrapper treats NULL fmt as no-op).
+     * The NULL call deliberately bypasses the format(printf) attribute; silence
+     * -Wformat-security around it since this is a contract-robustness test. */
     spine_sd_status("polling 1234 hosts");
     spine_sd_status("%s", "polling 0 hosts");
+#if defined(__GNUC__) || defined(__clang__)
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wformat-security"
+# if defined(__clang__)
+#  pragma GCC diagnostic ignored "-Wformat-nonliteral"
+# endif
+#endif
+    const char *null_fmt = NULL;
+    spine_sd_status(null_fmt);
+#if defined(__GNUC__) || defined(__clang__)
+# pragma GCC diagnostic pop
+#endif
 
     /* WATCHDOG: cheap, safe to call repeatedly whether or not WATCHDOG_USEC set. */
     spine_sd_watchdog();
