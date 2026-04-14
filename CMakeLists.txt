@@ -652,6 +652,31 @@ if(BUILD_TESTING)
     endif()
     target_link_libraries(test_ping_ipv6_scope PRIVATE spine_hardening)
     add_test(NAME ping_ipv6_scope COMMAND test_ping_ipv6_scope)
+
+    # systemd_notify: idempotency + null-safety. Builds against the wrapper TU
+    # with or without libsystemd; when libsystemd is linked, sd_notify no-ops
+    # because NOTIFY_SOCKET is unset in the test harness.
+    add_executable(test_systemd_notify
+        tests/unit/test_systemd_notify.c
+        src/systemd_notify.c
+    )
+    target_include_directories(test_systemd_notify PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_systemd_notify PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_systemd_notify PRIVATE spine_hardening)
+    if(SPINE_HAVE_LIBSYSTEMD)
+        target_compile_definitions(test_systemd_notify PRIVATE HAVE_LIBSYSTEMD=1)
+        target_include_directories(test_systemd_notify SYSTEM PRIVATE ${SYSTEMD_INCLUDE_DIRS})
+        target_link_libraries(test_systemd_notify PRIVATE ${SYSTEMD_LIBRARIES})
+        if(SYSTEMD_LDFLAGS_OTHER)
+            target_link_options(test_systemd_notify PRIVATE ${SYSTEMD_LDFLAGS_OTHER})
+        endif()
+    endif()
+    add_test(NAME systemd_notify COMMAND test_systemd_notify)
 endif()
 
 configure_file(
