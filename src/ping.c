@@ -46,6 +46,21 @@
  * reuse the previous run's identifiers. Set once at program start. */
 static uint16_t icmp_id_mask = 0;
 
+/* ICMP sequence counters need 16-bit wraparound semantics (the on-wire
+ * field is 16 bits) and lock-free concurrent increment across poller
+ * threads. Prefer C11 _Atomic with memory_order_relaxed; fall back to
+ * the GCC/Clang __atomic builtin on unsigned int when <stdatomic.h>
+ * isn't available. The fallback keeps the old wider counter and relies
+ * on the existing uint16_t cast at the call sites. */
+#if !defined(__STDC_NO_ATOMICS__) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#  include <stdatomic.h>
+#  define SPINE_PING_SEQ_T   _Atomic uint16_t
+#  define SPINE_PING_SEQ_NEXT(s) atomic_fetch_add_explicit(&(s), (uint16_t)1, memory_order_relaxed)
+#else
+#  define SPINE_PING_SEQ_T   unsigned int
+#  define SPINE_PING_SEQ_NEXT(s) ((uint16_t)__atomic_fetch_add(&(s), 1, __ATOMIC_RELAXED))
+#endif
+
 void ping_init(void) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	icmp_id_mask = (uint16_t)(arc4random() & 0xFFFF);
@@ -311,7 +326,7 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	int packet_len;
 	socklen_t fromlen;
 	ssize_t return_code;
-	static unsigned int seq = 0;
+	static SPINE_PING_SEQ_T seq = 0;
 	struct icmp6_hdr *icmp6;
 	struct icmp6_hdr *reply;
 	unsigned char *packet;
@@ -369,7 +384,7 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	icmp6->icmp6_code = 0;
 	icmp6->icmp6_id   = htons((uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask));
 
-	icmp6->icmp6_seq = htons((uint16_t)__atomic_fetch_add(&seq, 1, __ATOMIC_RELAXED));
+	icmp6->icmp6_seq = htons(SPINE_PING_SEQ_NEXT(seq));
 
 	memcpy(packet + sizeof(struct icmp6_hdr), cacti_msg, strlen(cacti_msg));
 
@@ -706,7 +721,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	socklen_t    fromlen;
 	ssize_t    return_code;
 
-	static   unsigned int seq = 0;
+	static SPINE_PING_SEQ_T seq = 0;
 	struct   icmp  *icmp;
 	struct   ip    *ip;
 	struct   icmp  *pkt;
@@ -781,7 +796,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_code = 0;
 	icmp->icmp_id   = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
 
-	icmp->icmp_seq = (unsigned short)__atomic_fetch_add(&seq, 1, __ATOMIC_RELAXED);
+	icmp->icmp_seq = (unsigned short)SPINE_PING_SEQ_NEXT(seq);
 
 	icmp->icmp_cksum = 0;
 	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
