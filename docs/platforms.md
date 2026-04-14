@@ -24,7 +24,7 @@ Build output and logs land in `build-reports/<distro>.log`.
 | Fedora (latest) | `dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel` |
 | Debian 12 (bookworm) / trixie | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
 | Ubuntu 22.04 / 24.04 | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
-| openSUSE Leap 15 | `zypper install cmake gcc make net-snmp-devel libmariadb-devel libopenssl-devel pkg-config systemd-devel` |
+| openSUSE Leap 15 | `zypper install cmake gcc13 make net-snmp-devel libmariadb-devel libopenssl-devel pkg-config systemd-devel` (default `gcc` is 7.x and does not support C17; set `CC=gcc-13` or run `update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-13 100`) |
 | Alpine 3.20 | `apk add bash cmake gcc make musl-dev net-snmp-dev mariadb-connector-c-dev openssl-dev pkgconfig linux-headers` |
 
 Build from a clean checkout:

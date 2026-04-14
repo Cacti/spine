@@ -87,8 +87,11 @@ jobs:
       - name: Install prerequisites (suse)
         if: matrix.family == 'suse'
         run: |
+          # Leap 15 ships GCC 7 by default; spine requires C17 so pull the
+          # newer gcc13 from the default repos. The configure step sets
+          # CC=gcc-13 explicitly so CMake picks the newer compiler.
           zypper --non-interactive install \
-            cmake gcc make git \
+            cmake gcc13 make git \
             net-snmp-devel libmariadb-devel libopenssl-devel \
             pkg-config systemd-devel
 
@@ -102,6 +105,8 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
       - name: Configure
+        env:
+          CC: ${{ matrix.family == 'suse' && 'gcc-13' || '' }}
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
