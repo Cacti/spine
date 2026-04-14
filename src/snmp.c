@@ -128,10 +128,18 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
 	int    priv_type;
-	int    zero_sensitive = 0;
+	/* Zero credential buffers after we are done with them so short-lived
+	 * string copies of passphrases do not linger on the heap or in the
+	 * caller's stack. */
+	int    zero_sensitive = 1;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
+	/* snmp_sess_init memsets the session to zero, but be explicit so a
+	 * later conditional free sees NULL rather than whatever was on the
+	 * stack when an early return path fires. */
+	session.securityAuthProto = NULL;
+	session.securityPrivProto = NULL;
 
 	/* Bind to snmp_clientaddr if specified */
 	len = strlen(set.snmp_clientaddr);
