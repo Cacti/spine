@@ -2283,38 +2283,9 @@ int validate_result(char *result) {
  *  \return a pointer to a character buffer containing the result.
  *
  */
-/* WARNING: command is passed to /bin/sh -c (via nft_popen). To reduce shell
- * injection risk we reject command strings containing shell metacharacters that
- * alter control flow or redirection. */
-static int script_command_is_safe(const char *command, char *reason, size_t reason_size) {
-	const unsigned char *cursor;
-
-	if (command == NULL || *command == '\0') {
-		strncopy(reason, "empty command", reason_size);
-		return FALSE;
-	}
-
-	for (cursor = (const unsigned char *) command; *cursor != '\0'; cursor++) {
-		switch (*cursor) {
-		case ';':
-		case '|':
-		case '&':
-		case '`':
-		case '$':
-		case '>':
-		case '<':
-		case '\n':
-		case '\r':
-			strncopy(reason, "contains blocked shell metacharacter", reason_size);
-			return FALSE;
-		default:
-			break;
-		}
-	}
-
-	return TRUE;
-}
-
+/* WARNING: command is passed to /bin/sh -c (via nft_popen) without shell escaping.
+ * The caller MUST ensure command originates from a trusted source
+ * (the Cacti database). Do not pass user-controlled input directly. */
 char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	int cmd_fd;
 	int pid;
@@ -2348,21 +2319,6 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	/* establish timeout of 25 seconds for pipe response */
 	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
-
-	{
-		char reject_reason[SMALL_BUFSIZE];
-
-		memset(reject_reason, 0, sizeof(reject_reason));
-		if (!script_command_is_safe(proc_command, reject_reason, sizeof(reject_reason))) {
-			SPINE_LOG(("Device[%i] ERROR: Refusing unsafe script command for %s[%i]: %s",
-				current_host->id,
-				type != NULL ? type : "item",
-				id,
-				reject_reason));
-			SET_UNDEFINED(result_string);
-			return result_string;
-		}
-	}
 
 	/* don't run too many scripts, operating systems do not like that. */
 	int retries = 0;
