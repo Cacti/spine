@@ -281,7 +281,9 @@ function(spine_require_mysql)
     endif()
 
     add_library(spine_mysql INTERFACE)
-    target_include_directories(spine_mysql INTERFACE ${_mysql_include_dirs})
+    # SYSTEM silences -Wall/-Wextra noise from mysql client headers we do not
+    # own and cannot patch.
+    target_include_directories(spine_mysql SYSTEM INTERFACE ${_mysql_include_dirs})
     target_link_libraries(spine_mysql INTERFACE ${_mysql_libraries})
     if(_mysql_link_options)
         target_link_options(spine_mysql INTERFACE ${_mysql_link_options})
@@ -306,12 +308,31 @@ function(spine_require_netsnmp)
             set(_netsnmp_found TRUE)
             set(_netsnmp_include_dirs "${NETSNMP_INCLUDE_DIRS}")
             set(_netsnmp_libraries "${NETSNMP_LIBRARIES}")
-            set(_netsnmp_link_options "${NETSNMP_LDFLAGS}")
+            # NETSNMP_LDFLAGS contains the same -l entries already captured in
+            # NETSNMP_LIBRARIES; feeding both to the linker produces duplicate
+            # library warnings on macOS. Keep only -L directives from LDFLAGS.
+            set(_netsnmp_link_options "")
+            foreach(_flag IN LISTS NETSNMP_LDFLAGS)
+                if(_flag MATCHES "^-L")
+                    list(APPEND _netsnmp_link_options "${_flag}")
+                endif()
+            endforeach()
         endif()
     endif()
 
     if(NOT _netsnmp_found)
-        find_program(NETSNMP_CONFIG net-snmp-config)
+        # Prefer Homebrew's net-snmp-config over the ancient Apple-shipped
+        # /usr/bin/net-snmp-config, whose headers lack sc_get_auth_oid and
+        # other modern symbols. Users can override by setting NETSNMP_CONFIG.
+        find_program(NETSNMP_CONFIG net-snmp-config
+            HINTS
+                /opt/homebrew/opt/net-snmp/bin
+                /usr/local/opt/net-snmp/bin
+            NO_DEFAULT_PATH
+        )
+        if(NOT NETSNMP_CONFIG)
+            find_program(NETSNMP_CONFIG net-snmp-config)
+        endif()
         if(NETSNMP_CONFIG)
             execute_process(
                 COMMAND ${NETSNMP_CONFIG} --cflags
@@ -341,8 +362,24 @@ function(spine_require_netsnmp)
             endforeach()
 
             separate_arguments(_snmp_libs_list UNIX_COMMAND "${NETSNMP_LIBS_RAW}")
+            set(_expect_framework 0)
             foreach(_flag IN LISTS _snmp_libs_list)
-                if(_flag MATCHES "^-l(.+)")
+                if(_expect_framework)
+                    # Translate "-framework Foo" pairs into the absolute path
+                    # of the Foo.framework. target_link_options deduplicates
+                    # repeated "-framework" tokens when passed through an
+                    # INTERFACE target, so a resolved path is the most reliable
+                    # form for linking multiple frameworks.
+                    if(APPLE)
+                        find_library(_fw_${_flag} ${_flag})
+                        if(_fw_${_flag})
+                            list(APPEND _netsnmp_libraries "${_fw_${_flag}}")
+                        endif()
+                    endif()
+                    set(_expect_framework 0)
+                elseif(_flag STREQUAL "-framework")
+                    set(_expect_framework 1)
+                elseif(_flag MATCHES "^-l(.+)")
                     list(APPEND _netsnmp_libraries "${CMAKE_MATCH_1}")
                 elseif(_flag MATCHES "^-L(.+)")
                     list(APPEND _netsnmp_link_options "${_flag}")
@@ -398,7 +435,9 @@ function(spine_require_netsnmp)
     endif()
 
     add_library(spine_netsnmp INTERFACE)
-    target_include_directories(spine_netsnmp INTERFACE ${_netsnmp_include_dirs})
+    # SYSTEM silences -Wall/-Wextra noise from net-snmp headers (unused
+    # parameter 'token', etc.) that upstream has not cleaned up.
+    target_include_directories(spine_netsnmp SYSTEM INTERFACE ${_netsnmp_include_dirs})
     target_link_libraries(spine_netsnmp INTERFACE ${_netsnmp_libraries})
     if(_netsnmp_link_options)
         target_link_options(spine_netsnmp INTERFACE ${_netsnmp_link_options})
