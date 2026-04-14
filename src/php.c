@@ -36,6 +36,7 @@
 #include "platform/platform_error.h"
 #include "platform/platform_fd.h"
 #include "platform/platform_process.h"
+#include "nft_popen.h"
 #include <spawn.h>
 
 extern char **environ;
@@ -377,6 +378,7 @@ int php_init(int php_process) {
 		{
 			posix_spawn_file_actions_t fa;
 			int spawn_err;
+			char **child_env;
 
 			if (posix_spawn_file_actions_init(&fa) != 0) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions_init failed", i));
@@ -406,9 +408,17 @@ int php_init(int php_process) {
 				return FALSE;
 			}
 
-			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, NULL, argv, environ, 3, 50000);
+			/* Strip LD_ and DYLD_ prefixes plus BASH_ENV/ENV so a tampered
+			 * parent env cannot hijack the PHP interpreter via the dynamic
+			 * linker or shell startup. Fall back to raw environ if allocation
+			 * fails so the poller still runs (degraded security but
+			 * functional). */
+			child_env = spine_build_child_env();
+			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, NULL, argv,
+				child_env ? child_env : environ, 3, 50000);
 
 			posix_spawn_file_actions_destroy(&fa);
+			free(child_env);
 
 			if (spawn_err != 0) {
 				SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server: %s", i, spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer))));

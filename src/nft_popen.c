@@ -120,8 +120,11 @@ static const char spine_default_ifs[]  = "IFS= \t\n";
 
 /* Build a filtered copy of environ for a child. Returned array's strings are
  * borrowed from environ (do not free the entries), but the array itself is
- * heap-allocated and must be freed by the caller. */
-static char **spine_build_child_env(void) {
+ * heap-allocated and must be freed by the caller.
+ *
+ * Exposed (non-static) so the PHP Script Server spawn path in php.c can share
+ * the same dynamic-linker hijack filter instead of passing raw environ. */
+char **spine_build_child_env(void) {
 	size_t n = 0;
 	while (environ && environ[n]) n++;
 

@@ -91,3 +91,16 @@ extern int	nft_pchild(int fd);
  *	ECHILD	waitpid() failed.
  */
 extern int	nft_pclose(int fd);
+
+/*!
+ *  spine_build_child_env
+ *
+ *  Build a filtered copy of environ for a spawned child. Drops dynamic-linker
+ *  hijack vectors (LD_*, DYLD_*) and shell-startup injection variables
+ *  (BASH_ENV, ENV); injects a narrow default PATH and safe IFS if absent.
+ *
+ *  Returned array's strings are borrowed from environ (do not free entries).
+ *  The array itself is heap-allocated; the caller frees it with free().
+ *  Returns NULL on allocation failure.
+ */
+extern char **spine_build_child_env(void);
