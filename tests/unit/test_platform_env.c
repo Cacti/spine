@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../../platform.h"
+#include "../../platform/platform.h"
 #include "test_platform_helpers.h"
 
 static void test_platform_setenv_respects_overwrite(void) {

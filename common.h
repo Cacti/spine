@@ -143,6 +143,6 @@
 #endif
 
 #include "uthash.h"
-#include "platform.h"
+#include "platform/platform.h"
 
 #endif /* SPINE_COMMON_H */

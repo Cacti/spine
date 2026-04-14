@@ -33,9 +33,9 @@
 
 #include "common.h"
 #include "spine.h"
-#include "platform_error.h"
-#include "platform_fd.h"
-#include "platform_process.h"
+#include "platform/platform_error.h"
+#include "platform/platform_fd.h"
+#include "platform/platform_process.h"
 #include <spawn.h>
 
 extern char **environ;

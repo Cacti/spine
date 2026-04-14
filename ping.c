@@ -33,7 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
-#include "platform_socket.h"
+#include "platform/platform_socket.h"
 #ifdef _WIN32
 #include <icmpapi.h>
 #endif

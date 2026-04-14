@@ -33,7 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
-#include "platform_fd.h"
+#include "platform/platform_fd.h"
 
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;

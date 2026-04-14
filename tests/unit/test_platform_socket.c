@@ -1,8 +1,8 @@
 #include <errno.h>
 #include <string.h>
 
-#include "../../platform.h"
-#include "../../platform_socket.h"
+#include "../../platform/platform.h"
+#include "../../platform/platform_socket.h"
 #include "test_platform_helpers.h"
 
 static int bind_loopback_ipv4(spine_socket_t socket_fd, struct sockaddr_in *address, socklen_t *address_len) {

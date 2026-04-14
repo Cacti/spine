@@ -1,5 +1,5 @@
-#include "../../platform.h"
-#include "../../platform_process.h"
+#include "../../platform/platform.h"
+#include "../../platform/platform_process.h"
 #include "test_platform_helpers.h"
 
 #ifdef _WIN32

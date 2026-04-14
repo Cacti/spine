@@ -63,7 +63,7 @@
 #include <execinfo.h>
 #endif
 
-#include "platform_process.h"
+#include "platform/platform_process.h"
 
 /* if a host is legal, return TRUE */
 #define HOSTID_DEFINED(x)	((x) >= 0)

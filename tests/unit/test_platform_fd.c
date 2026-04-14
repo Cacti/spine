@@ -1,7 +1,7 @@
 #include <string.h>
 
-#include "../../platform_fd.h"
-#include "../../platform_process.h"
+#include "../../platform/platform_fd.h"
+#include "../../platform/platform_process.h"
 #include "test_platform_helpers.h"
 
 static void test_fd_pipe_roundtrip(void) {

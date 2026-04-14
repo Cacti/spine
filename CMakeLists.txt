@@ -62,17 +62,17 @@ set(MAX_SIMULTANEOUS_SCRIPTS 20 CACHE STRING "Maximum simultaneous spine scripts
 set(MAX_MYSQL_BUF_SIZE 131072 CACHE STRING "Maximum MySQL insert buffer size")
 
 set(SPINE_PLATFORM_SOURCES
-    platform_common.c
-    platform_posix.c
-    platform_win.c
-    platform_socket_posix.c
-    platform_socket_win.c
-    platform_error_posix.c
-    platform_error_win.c
-    platform_process_posix.c
-    platform_process_win.c
-    platform_fd_posix.c
-    platform_fd_win.c
+    platform/platform_common.c
+    platform/platform_posix.c
+    platform/platform_win.c
+    platform/platform_socket_posix.c
+    platform/platform_socket_win.c
+    platform/platform_error_posix.c
+    platform/platform_error_win.c
+    platform/platform_process_posix.c
+    platform/platform_process_win.c
+    platform/platform_fd_posix.c
+    platform/platform_fd_win.c
 )
 
 set(SPINE_CORE_SOURCES
