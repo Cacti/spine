@@ -35,6 +35,8 @@
 #include "spine.h"
 #include "regex.h"
 
+#include <fcntl.h>
+
 static int nopts = 0;
 
 /*! Override Options Structure
@@ -1095,6 +1097,23 @@ int read_spine_config(const char *file) {
 		}
 		return -1;
 	} else {
+		/* spine.conf carries DB credentials; refuse to read it if other users
+		 * on the host could. 0600 and owned by the running user is the only
+		 * safe combination. Soft-fail on fstat errors (unusual filesystems). */
+		struct stat conf_stat;
+		if (fstat(fileno(fp), &conf_stat) == 0) {
+			if ((conf_stat.st_mode & (S_IRWXG | S_IRWXO)) != 0 ||
+				conf_stat.st_uid != geteuid()) {
+				if (!set.stderr_notty) {
+					fprintf(stderr,
+						"FATAL: spine config [%s] must be mode 0600 and owned by the spine user; refusing to start\n",
+						file);
+				}
+				fclose(fp);
+				return -1;
+			}
+		}
+
 		if (!set.stdout_notty) {
 			fprintf(stdout, "SPINE: Using spine config file [%s]\n", file);
 		}
@@ -1405,10 +1424,20 @@ int spine_log(const char *format, ...) {
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
-			if (!file_exists(set.path_logfile)) {
-				log_file = fopen(set.path_logfile, "w");
+			/* Refuse to follow symlinks: an attacker with write access to the
+			 * log directory could otherwise redirect spine's appends into a
+			 * sensitive file. O_NOFOLLOW fails the open if the final component
+			 * is a symlink; O_APPEND|O_CREAT handles first-write creation. */
+			int log_fd = open(set.path_logfile,
+				O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW,
+				S_IRUSR | S_IWUSR | S_IRGRP);
+			if (log_fd >= 0) {
+				log_file = fdopen(log_fd, "a");
+				if (log_file == NULL) {
+					close(log_fd);
+				}
 			} else {
-				log_file = fopen(set.path_logfile, "a");
+				log_file = NULL;
 			}
 
 			if (log_file) {
