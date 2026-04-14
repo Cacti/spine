@@ -34,13 +34,41 @@
 #include "common.h"
 #include "spine.h"
 #include "platform/platform_socket.h"
+#include "platform/platform_icmp.h"
 #ifdef _WIN32
 #include <icmpapi.h>
+#else
+#  include <ifaddrs.h>
+#  include <net/if.h>
+#  include <netdb.h>
+#  include <netinet/in.h>
+#  include <netinet/ip.h>
+#  include <netinet/ip_icmp.h>
+#  include <netinet/icmp6.h>
+#  include <stddef.h>
 #endif
 
 #if defined(__linux__)
 #  include <sys/random.h>
 #endif
+
+#if defined(__linux__) && defined(HAVE_LIBCAP)
+#  include <sys/capability.h>
+#endif
+
+/* Payload signature used to cross-check received ICMP echo replies.
+ * A packet may arrive out of order, from an unrelated flow, or from a
+ * malicious sender spoofing our identifier; matching id + seq is not
+ * enough. The magic rejects unrelated traffic and the pid_mask rejects
+ * cross-thread / cross-run leakage. Keep the struct POD, fixed-size,
+ * and endian-independent on the wire for future debugging. */
+#define SPINE_PING_MAGIC 0x53504E50494E4721ULL  /* "SPNPING!" */
+
+typedef struct {
+	uint64_t magic;
+	uint32_t pid_mask;     /* the per-process random from icmp_id_mask */
+	uint32_t timestamp_us; /* low 32 bits of tv_sec, advisory */
+} spine_ping_payload_t;
 
 /* XORed into every ICMP echo id so a same-PID spine restart does not
  * reuse the previous run's identifiers. Set once at program start. */
@@ -75,6 +103,86 @@ void ping_init(void) {
 #endif
 }
 
+/* Populate the payload signature that rides inside every echo we send.
+ * Made public-ish so unit tests can compose identical packets without
+ * threading concerns. */
+static void build_ping_payload(spine_ping_payload_t *p) {
+	struct timeval tv;
+	p->magic = SPINE_PING_MAGIC;
+	p->pid_mask = (uint32_t) icmp_id_mask;
+	if (gettimeofday(&tv, NULL) == 0) {
+		p->timestamp_us = (uint32_t) tv.tv_sec;
+	} else {
+		p->timestamp_us = 0;
+	}
+}
+
+/* Validator lives in src/ping_validate.c so unit tests can link just
+ * that object without the full spine runtime dependency chain. */
+extern int spine_ping_validate_payload(const void *buf, size_t len,
+                                       uint32_t expect_pid_mask);
+
+#ifndef _WIN32
+/* Implemented in src/ping_ipv6_scope.c so the unit test can link
+ * against it without the full spine runtime. */
+extern int spine_apply_ipv6_scope_id(struct sockaddr_in6 *sin6, const char *ifname);
+#endif
+
+/* Drop Linux capabilities after we have opened the raw sockets we
+ * need. With libcap this shrinks the blast radius of a later exploit;
+ * without libcap (or on non-Linux) it is a no-op. NOTE: spine opens
+ * its raw sockets on demand per ping, so the current invocation is
+ * guarded by a one-shot flag and logs only. A future refactor that
+ * opens sockets once at startup should call this unconditionally. */
+#if defined(__GNUC__) || defined(__clang__)
+#  define SPINE_MAYBE_UNUSED __attribute__((unused))
+#else
+#  define SPINE_MAYBE_UNUSED
+#endif
+
+#if defined(__linux__) && defined(HAVE_LIBCAP)
+SPINE_MAYBE_UNUSED static void spine_drop_caps_once(void) {
+	static int dropped = 0;
+	cap_t empty;
+	if (dropped) return;
+	dropped = 1;
+	empty = cap_init();
+	if (empty == NULL) return;
+	if (cap_set_proc(empty) == 0) {
+		SPINE_LOG_DEBUG(("DEBUG: Dropped all capabilities after raw socket open"));
+	}
+	cap_free(empty);
+}
+#else
+SPINE_MAYBE_UNUSED static void spine_drop_caps_once(void) {
+	/* no-op: libcap not available, non-Linux, or spine uses per-call
+	 * socket lifetime and cannot drop CAP_NET_RAW without breaking
+	 * subsequent pings. Kept as a stable hook for a future refactor
+	 * that opens a single persistent raw socket at startup. */
+}
+#endif
+
+/* Heuristic: host string is a numeric IP literal if it contains ':'
+ * (IPv6) or is made up entirely of digits and dots (IPv4). We pass
+ * AI_NUMERICHOST when this is the case so getaddrinfo() cannot be
+ * steered into DNS lookups by a hostile hostname that looks numeric.
+ * Conservative -- if in doubt, do not set the flag. */
+static int hostname_is_numeric(const char *hostname) {
+	if (hostname == NULL || hostname[0] == '\0') {
+		return 0;
+	}
+	if (strchr(hostname, ':') != NULL) {
+		return 1;
+	}
+	{
+		size_t n = strlen(hostname);
+		if (strspn(hostname, "0123456789.") == n && strchr(hostname, '.') != NULL) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address_len, int family, const char *hostname, unsigned short int port) {
 	struct addrinfo hints, *hostinfo;
 	char service[16];
@@ -86,6 +194,13 @@ static int resolve_sockaddr(struct sockaddr_storage *address, socklen_t *address
 	hints.ai_family = family;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
+
+	/* Skip the DNS resolver path entirely for numeric literals. Saves
+	 * an unbounded wait on a misconfigured resolv.conf and prevents a
+	 * crafted hostname that parses as an address from triggering DNS. */
+	if (hostname_is_numeric(hostname)) {
+		hints.ai_flags |= AI_NUMERICHOST;
+	}
 
 	snprintf(service, sizeof(service), "%u", port);
 
@@ -322,7 +437,6 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	struct sockaddr_in6 fromname;
 	char socket_reply[BUFSIZE];
 	int retry_count;
-	const char *cacti_msg = "cacti-monitoring-system\0";
 	int packet_len;
 	socklen_t fromlen;
 	ssize_t return_code;
@@ -330,8 +444,12 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	struct icmp6_hdr *icmp6;
 	struct icmp6_hdr *reply;
 	unsigned char *packet;
+	uint16_t our_id;
+	uint16_t our_seq;
+	int ret = HOST_DOWN;
 
 	retry_count = 0;
+	icmp_socket = (spine_socket_t)-1;
 	while (TRUE) {
 		if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
@@ -369,8 +487,40 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		thread_mutex_unlock(LOCK_SETEUID);
 	}
 
+	/* RFC 3542 / RFC 4443 hardening on the raw ICMPv6 socket.
+	 * Each sockopt is best-effort -- failure is logged but not fatal,
+	 * because older kernels and non-root sandboxes may reject them. */
+	{
+#ifdef ICMP6_FILTER
+		struct icmp6_filter filter;
+		ICMP6_FILTER_SETBLOCKALL(&filter);
+		ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &filter);
+		if (setsockopt(icmp_socket, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter)) < 0) {
+			SPINE_LOG_DEBUG(("DEBUG: ICMP6_FILTER not supported: %s", strerror(errno)));
+		}
+#endif
+#ifdef IPV6_CHECKSUM
+		{
+			/* Kernel computes the ICMPv6 checksum at this offset on
+			 * raw sockets. Required by RFC 3542 for correct delivery. */
+			int cksum_offset = (int) offsetof(struct icmp6_hdr, icmp6_cksum);
+			if (setsockopt(icmp_socket, IPPROTO_IPV6, IPV6_CHECKSUM, &cksum_offset, sizeof(cksum_offset)) < 0) {
+				SPINE_LOG_DEBUG(("DEBUG: IPV6_CHECKSUM not supported: %s", strerror(errno)));
+			}
+		}
+#endif
+#ifdef IPV6_UNICAST_HOPS
+		{
+			int hops = 64;
+			if (setsockopt(icmp_socket, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &hops, sizeof(hops)) < 0) {
+				SPINE_LOG_DEBUG(("DEBUG: IPV6_UNICAST_HOPS not supported: %s", strerror(errno)));
+			}
+		}
+#endif
+	}
+
 	host_timeout = host->ping_timeout;
-	packet_len = (int) sizeof(struct icmp6_hdr) + (int) strlen(cacti_msg);
+	packet_len = (int) sizeof(struct icmp6_hdr) + (int) sizeof(spine_ping_payload_t);
 
 	if (!(packet = malloc(packet_len))) {
 		die("ERROR: Fatal malloc error: ping.c ping_icmp_ipv6!");
@@ -379,21 +529,36 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	memset(&fromname, 0, sizeof(fromname));
 	memset(&recvname, 0, sizeof(recvname));
 
+	our_id = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
+	our_seq = (uint16_t) SPINE_PING_SEQ_NEXT(seq);
+
 	icmp6 = (struct icmp6_hdr *) packet;
 	icmp6->icmp6_type = ICMP6_ECHO_REQUEST;
 	icmp6->icmp6_code = 0;
-	icmp6->icmp6_id   = htons((uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask));
+	icmp6->icmp6_id   = htons(our_id);
+	icmp6->icmp6_seq  = htons(our_seq);
 
-	icmp6->icmp6_seq = htons(SPINE_PING_SEQ_NEXT(seq));
-
-	memcpy(packet + sizeof(struct icmp6_hdr), cacti_msg, strlen(cacti_msg));
+	{
+		spine_ping_payload_t sig;
+		build_ping_payload(&sig);
+		memcpy(packet + sizeof(struct icmp6_hdr), &sig, sizeof(sig));
+	}
 
 	if ((strlen(host->hostname) == 0) || !resolve_sockaddr((struct sockaddr_storage *) &fromname, &fromlen, AF_INET6, host->hostname, 7)) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Destination hostname invalid");
 		snprintf(ping->ping_status, 50, "down");
-		free(packet);
-		spine_socket_close(icmp_socket);
-		return HOST_DOWN;
+		ret = HOST_DOWN;
+		goto cleanup;
+	}
+
+	/* Link-local destinations need a scope_id. Auto-detect when the
+	 * kernel did not set one (it does not for numeric literals without
+	 * a %zone suffix). Non-fatal if resolution fails -- caller gets
+	 * the usual kernel error. */
+	if (IN6_IS_ADDR_LINKLOCAL(&fromname.sin6_addr) && fromname.sin6_scope_id == 0) {
+		if (spine_apply_ipv6_scope_id(&fromname, NULL) != 0) {
+			SPINE_LOG_DEBUG(("DEBUG: Could not resolve IPv6 scope_id for link-local target"));
+		}
 	}
 
 	snprintf(ping->ping_status, 50, "down");
@@ -407,9 +572,8 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		if (retry_count > host->ping_retries) {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping timed out");
 			snprintf(ping->ping_status, 50, "down");
-			free(packet);
-			spine_socket_close(icmp_socket);
-			return HOST_DOWN;
+			ret = HOST_DOWN;
+			goto cleanup;
 		}
 
 		timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
@@ -423,9 +587,8 @@ keep_listening_ipv6:
 		if (!spine_socket_is_valid(icmp_socket)) {
 			snprintf(ping->ping_status, 50, "down");
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: invalid socket");
-			spine_socket_close(icmp_socket);
-			free(packet);
-			return HOST_DOWN;
+			ret = HOST_DOWN;
+			goto cleanup;
 		}
 
 		return_code = spine_socket_wait_readable(icmp_socket, &timeout);
@@ -440,27 +603,51 @@ keep_listening_ipv6:
 				if (spine_socket_error_is_interrupted(spine_socket_last_error())) {
 					goto keep_listening_ipv6;
 				}
-			} else if (return_code >= (ssize_t) sizeof(struct icmp6_hdr)) {
-				reply = (struct icmp6_hdr *) socket_reply;
-
-				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) == 0) {
-					if (reply->icmp6_type == ICMP6_ECHO_REPLY && reply->icmp6_id == htons((uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask))) {
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
-						snprintf(ping->ping_status, 50, "%.5f", total_time);
-						free(packet);
-						spine_socket_close(icmp_socket);
-						return HOST_UP;
-					}
-
-					if (total_time > host_timeout) {
-						retry_count++;
-						total_time = 0;
-					}
-
-					continue;
+			} else {
+				/* Bounds-check before casting to struct. An undersized
+				 * raw recv cannot legally be an ICMPv6 echo reply, but
+				 * a hostile sender (or a kernel bug) could deliver one;
+				 * treat it as noise and keep listening. */
+				if ((size_t) return_code < sizeof(struct icmp6_hdr) + sizeof(spine_ping_payload_t)) {
+					SPINE_LOG_DEBUG(("DEBUG: Discarding undersized ICMPv6 reply: %zd bytes", return_code));
+					goto keep_listening_ipv6;
 				}
 
-				goto keep_listening_ipv6;
+				reply = (struct icmp6_hdr *) socket_reply;
+
+				/* 1. Source must match the target we probed. The kernel
+				 * does not verify this on AF_INET6 raw sockets. */
+				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) {
+					SPINE_LOG_DEBUG(("DEBUG: Dropping ICMPv6 reply from unexpected source"));
+					goto keep_listening_ipv6;
+				}
+
+				/* 2. Must be an echo reply with our id and seq. */
+				if (reply->icmp6_type != ICMP6_ECHO_REPLY) {
+					goto keep_listening_ipv6;
+				}
+				if (reply->icmp6_id != htons(our_id)) {
+					SPINE_LOG_DEBUG(("DEBUG: Dropping ICMPv6 reply with foreign id"));
+					goto keep_listening_ipv6;
+				}
+				if (reply->icmp6_seq != htons(our_seq)) {
+					SPINE_LOG_DEBUG(("DEBUG: Dropping ICMPv6 reply with stale seq"));
+					goto keep_listening_ipv6;
+				}
+
+				/* 3. Payload signature check (rejects unrelated traffic
+				 * and cross-run leakage that happens to match id+seq). */
+				if (!spine_ping_validate_payload(socket_reply + sizeof(struct icmp6_hdr),
+				                                 (size_t) return_code - sizeof(struct icmp6_hdr),
+				                                 (uint32_t) icmp_id_mask)) {
+					SPINE_LOG_DEBUG(("DEBUG: Dropping ICMPv6 reply with invalid payload signature"));
+					goto keep_listening_ipv6;
+				}
+
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
+				snprintf(ping->ping_status, 50, "%.5f", total_time);
+				ret = HOST_UP;
+				goto cleanup;
 			}
 		}
 
@@ -470,6 +657,15 @@ keep_listening_ipv6:
 		spine_platform_sleep_us(1000);
 #endif
 	}
+
+cleanup:
+	if (packet != NULL) {
+		free(packet);
+	}
+	if (spine_socket_is_valid(icmp_socket)) {
+		spine_socket_close(icmp_socket);
+	}
+	return ret;
 }
 #endif
 
@@ -716,7 +912,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
-	const char *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	socklen_t    fromlen;
 	ssize_t    return_code;
@@ -726,6 +921,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct   ip    *ip;
 	struct   icmp  *pkt;
 	unsigned char  *packet;
+	uint16_t our_id;
+	uint16_t our_seq;
 
 	if (get_address_type(host) == SPINE_IPV6) {
 		return ping_icmp_ipv6(host, ping);
@@ -779,7 +976,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	host_timeout = host->ping_timeout;
 
 	/* allocate the packet in memory */
-	packet_len = ICMP_HDR_SIZE + strlen(cacti_msg);
+	packet_len = ICMP_HDR_SIZE + (int) sizeof(spine_ping_payload_t);
 
 	if (!(packet = malloc(packet_len))) {
 		die("ERROR: Fatal malloc error: ping.c ping_icmp!");
@@ -790,16 +987,24 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	memset(&fromname, 0, sizeof(struct sockaddr_in));
 	memset(&recvname, 0, sizeof(struct sockaddr_in));
 
+	our_id  = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
+	our_seq = (uint16_t) SPINE_PING_SEQ_NEXT(seq);
+
 	icmp = (struct icmp*) packet;
 
 	icmp->icmp_type = ICMP_ECHO;
 	icmp->icmp_code = 0;
-	icmp->icmp_id   = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
+	icmp->icmp_id   = htons(our_id);
+	icmp->icmp_seq  = htons(our_seq);
 
-	icmp->icmp_seq = (unsigned short)SPINE_PING_SEQ_NEXT(seq);
-
+	{
+		/* Carry a magic + pid_mask signature so a stray reply that
+		 * happens to collide on id+seq can still be dropped. */
+		spine_ping_payload_t sig;
+		build_ping_payload(&sig);
+		memcpy(packet + ICMP_HDR_SIZE, &sig, sizeof(sig));
+	}
 	icmp->icmp_cksum = 0;
-	memcpy(packet+ICMP_HDR_SIZE, cacti_msg, strlen(cacti_msg));
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
@@ -824,9 +1029,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, (int) our_seq, retry_count, host->ping_retries));
 				} else {
-					SPINE_LOG_DEBUG(("DEBUG: Device[%i] Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
+					SPINE_LOG_DEBUG(("DEBUG: Device[%i] Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, (int) our_seq, retry_count, host->ping_retries));
 				}
 
 				/* decrement the timeout value by the total time */
@@ -874,47 +1079,91 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
-						ip  = (struct ip *) socket_reply;
-						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
+						size_t ip_hl;
+						/* Bounds check: raw AF_INET recv includes the IP header.
+						 * Refuse anything too small to plausibly contain one. */
+						if ((size_t) return_code < sizeof(struct ip)) {
+							SPINE_LOG_DEBUG(("DEBUG: Discarding undersized IPv4 reply: %zd bytes", return_code));
+							goto keep_listening;
+						}
+						ip = (struct ip *) socket_reply;
+						ip_hl = (size_t)(ip->ip_hl) * 4U;
+						if (ip_hl < sizeof(struct ip) || ip_hl > (size_t) return_code) {
+							SPINE_LOG_DEBUG(("DEBUG: Invalid IPv4 header length in reply"));
+							goto keep_listening;
+						}
+						if ((size_t) return_code < ip_hl + ICMP_HDR_SIZE) {
+							SPINE_LOG_DEBUG(("DEBUG: Reply too short to contain ICMP header"));
+							goto keep_listening;
+						}
+						pkt = (struct icmp *) (socket_reply + ip_hl);
 
-						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-							if (pkt->icmp_type == ICMP_ECHOREPLY) {
-								if (is_debug_device(host->id)) {
-									SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-								} else {
-									SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-								}
-								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
-								snprintf(ping->ping_status, 50, "%.5f", total_time);
-								free(packet);
-								if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
-									thread_mutex_lock(LOCK_SETEUID);
-									if (seteuid(0) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-									}
-								}
-								spine_socket_close(icmp_socket);
-								if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
-									if (seteuid(getuid()) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-									}
-									thread_mutex_unlock(LOCK_SETEUID);
-								}
-
-								return HOST_UP;
-							} else {
-								/* received a response other than an echo reply */
-								if (total_time > host_timeout) {
-									retry_count++;
-									total_time = 0;
-								}
-
-								continue;
-							}
-						} else {
+						if (fromname.sin_addr.s_addr != recvname.sin_addr.s_addr) {
 							/* another host responded */
 							goto keep_listening;
 						}
+
+						if (pkt->icmp_type != ICMP_ECHOREPLY) {
+							/* received a response other than an echo reply */
+							if (total_time > host_timeout) {
+								retry_count++;
+								total_time = 0;
+							}
+							continue;
+						}
+
+						/* id/seq sanity: the kernel copies our outbound
+						 * id back into the reply. ntohs()-compare to be
+						 * byte-order independent on the wire. */
+						if (pkt->icmp_id != htons(our_id)) {
+							SPINE_LOG_DEBUG(("DEBUG: Dropping ICMP reply with foreign id"));
+							goto keep_listening;
+						}
+						if (pkt->icmp_seq != htons(our_seq)) {
+							SPINE_LOG_DEBUG(("DEBUG: Dropping ICMP reply with stale seq"));
+							goto keep_listening;
+						}
+
+						/* Payload signature cross-check. Require the
+						 * received ICMP payload to fit at least our
+						 * signature struct. */
+						{
+							size_t payload_off = ip_hl + ICMP_HDR_SIZE;
+							if ((size_t) return_code < payload_off + sizeof(spine_ping_payload_t)) {
+								SPINE_LOG_DEBUG(("DEBUG: ICMP reply payload too short for signature"));
+								goto keep_listening;
+							}
+							if (!spine_ping_validate_payload(socket_reply + payload_off,
+							                                 (size_t) return_code - payload_off,
+							                                 (uint32_t) icmp_id_mask)) {
+								SPINE_LOG_DEBUG(("DEBUG: Dropping ICMP reply with invalid payload signature"));
+								goto keep_listening;
+							}
+						}
+
+						if (is_debug_device(host->id)) {
+							SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						} else {
+							SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						}
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
+						free(packet);
+						if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
+							thread_mutex_lock(LOCK_SETEUID);
+							if (seteuid(0) == -1) {
+								SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+							}
+						}
+						spine_socket_close(icmp_socket);
+						if (spine_socket_raw_icmp_needs_privileged_open() && hasCaps() != TRUE) {
+							if (seteuid(getuid()) == -1) {
+								SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+							}
+							thread_mutex_unlock(LOCK_SETEUID);
+						}
+
+						return HOST_UP;
 					}
 				} else {
 					if (is_debug_device(host->id)) {
@@ -1732,3 +1981,297 @@ void update_host_status(int status, host_t *host, ping_t *ping, int availability
 		}
 	}
 }
+
+#ifndef _WIN32
+/* Minimal numeric-address ICMPv4 oneshot used by the platform_icmp
+ * facade. Opens a raw socket, sends one echo, waits once, validates.
+ * Does not do the capability dance in ping_icmp() because callers of
+ * the facade are expected to have already acquired CAP_NET_RAW (or
+ * setuid-root). Returns 0 on call success; status in result->status. */
+int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
+                               const void *payload, size_t payload_len,
+                               spine_icmp_result_t *result) {
+	int sock = -1;
+	unsigned char *packet = NULL;
+	size_t pkt_len;
+	struct sockaddr_in dst;
+	struct sockaddr_in recvname;
+	socklen_t recvlen;
+	char recvbuf[BUFSIZE];
+	struct timeval tv;
+	fd_set rfds;
+	ssize_t n;
+	struct icmp *icp;
+	uint16_t our_id;
+	uint16_t our_seq;
+	static SPINE_PING_SEQ_T facade_seq = 0;
+	int ret = -1;
+	double t0 = 0.0;
+	double t1 = 0.0;
+
+	if (result == NULL) return -1;
+	result->status = SPINE_ICMP_ERROR;
+	result->rtt_us = 0;
+	result->system_errno = 0;
+
+	if (ip == NULL) {
+		result->system_errno = EINVAL;
+		return -1;
+	}
+
+	memset(&dst, 0, sizeof(dst));
+	dst.sin_family = AF_INET;
+	if (inet_pton(AF_INET, ip, &dst.sin_addr) != 1) {
+		result->system_errno = EINVAL;
+		return -1;
+	}
+
+	sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+	if (sock < 0) {
+		result->system_errno = errno;
+		return -1;
+	}
+
+	pkt_len = (size_t) ICMP_HDR_SIZE + (payload_len > 0 ? payload_len : sizeof(spine_ping_payload_t));
+	packet = calloc(1, pkt_len);
+	if (packet == NULL) {
+		result->system_errno = ENOMEM;
+		goto cleanup;
+	}
+
+	our_id  = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
+	our_seq = (uint16_t) SPINE_PING_SEQ_NEXT(facade_seq);
+
+	icp = (struct icmp *) packet;
+	icp->icmp_type = ICMP_ECHO;
+	icp->icmp_code = 0;
+	icp->icmp_id   = htons(our_id);
+	icp->icmp_seq  = htons(our_seq);
+
+	if (payload != NULL && payload_len > 0) {
+		memcpy(packet + ICMP_HDR_SIZE, payload, payload_len);
+	} else {
+		spine_ping_payload_t sig;
+		build_ping_payload(&sig);
+		memcpy(packet + ICMP_HDR_SIZE, &sig, sizeof(sig));
+	}
+	icp->icmp_cksum = 0;
+	icp->icmp_cksum = get_checksum(packet, (int) pkt_len);
+
+	t0 = get_time_as_double();
+	if (sendto(sock, packet, pkt_len, 0, (struct sockaddr *) &dst, sizeof(dst)) < 0) {
+		result->system_errno = errno;
+		goto cleanup;
+	}
+
+	tv.tv_sec  = (long)(timeout_ms / 1000U);
+	tv.tv_usec = (long)((timeout_ms % 1000U) * 1000U);
+	FD_ZERO(&rfds);
+	FD_SET(sock, &rfds);
+
+	for (;;) {
+		int sel = select(sock + 1, &rfds, NULL, NULL, &tv);
+		if (sel < 0) {
+			if (errno == EINTR) { FD_ZERO(&rfds); FD_SET(sock, &rfds); continue; }
+			result->system_errno = errno;
+			goto cleanup;
+		}
+		if (sel == 0) {
+			result->status = SPINE_ICMP_TIMEOUT;
+			ret = 0;
+			goto cleanup;
+		}
+		recvlen = sizeof(recvname);
+		n = recvfrom(sock, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *) &recvname, &recvlen);
+		if (n < 0) {
+			result->system_errno = errno;
+			goto cleanup;
+		}
+		if ((size_t) n < sizeof(struct ip) + ICMP_HDR_SIZE) {
+			FD_ZERO(&rfds); FD_SET(sock, &rfds);
+			continue;
+		}
+		{
+			struct ip *iph = (struct ip *) recvbuf;
+			size_t iphl = (size_t) iph->ip_hl * 4U;
+			struct icmp *pkt;
+			if (iphl < sizeof(struct ip) || iphl > (size_t) n) {
+				FD_ZERO(&rfds); FD_SET(sock, &rfds);
+				continue;
+			}
+			if ((size_t) n < iphl + ICMP_HDR_SIZE) {
+				FD_ZERO(&rfds); FD_SET(sock, &rfds);
+				continue;
+			}
+			if (dst.sin_addr.s_addr != recvname.sin_addr.s_addr) {
+				FD_ZERO(&rfds); FD_SET(sock, &rfds);
+				continue;
+			}
+			pkt = (struct icmp *) (recvbuf + iphl);
+			if (pkt->icmp_type != ICMP_ECHOREPLY
+			    || pkt->icmp_id != htons(our_id)
+			    || pkt->icmp_seq != htons(our_seq)) {
+				FD_ZERO(&rfds); FD_SET(sock, &rfds);
+				continue;
+			}
+			t1 = get_time_as_double();
+			result->status = SPINE_ICMP_OK;
+			result->rtt_us = (uint32_t)((t1 - t0) * 1000000.0);
+			ret = 0;
+			goto cleanup;
+		}
+	}
+
+cleanup:
+	if (packet != NULL) free(packet);
+	if (sock >= 0) close(sock);
+	return ret;
+}
+
+/* IPv6 counterpart. Same contract as v4. */
+int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
+                               const void *payload, size_t payload_len,
+                               spine_icmp_result_t *result) {
+	int sock = -1;
+	unsigned char *packet = NULL;
+	size_t pkt_len;
+	struct sockaddr_in6 dst;
+	struct sockaddr_in6 recvname;
+	socklen_t recvlen;
+	char recvbuf[BUFSIZE];
+	struct timeval tv;
+	fd_set rfds;
+	ssize_t n;
+	struct icmp6_hdr *icp;
+	uint16_t our_id;
+	uint16_t our_seq;
+	static SPINE_PING_SEQ_T facade_seq6 = 0;
+	int ret = -1;
+	double t0 = 0.0;
+	double t1 = 0.0;
+
+	if (result == NULL) return -1;
+	result->status = SPINE_ICMP_ERROR;
+	result->rtt_us = 0;
+	result->system_errno = 0;
+
+	if (ip == NULL) {
+		result->system_errno = EINVAL;
+		return -1;
+	}
+
+	memset(&dst, 0, sizeof(dst));
+	dst.sin6_family = AF_INET6;
+	if (inet_pton(AF_INET6, ip, &dst.sin6_addr) != 1) {
+		result->system_errno = EINVAL;
+		return -1;
+	}
+
+	if (IN6_IS_ADDR_LINKLOCAL(&dst.sin6_addr) && dst.sin6_scope_id == 0) {
+		(void) spine_apply_ipv6_scope_id(&dst, NULL);
+	}
+
+	sock = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+	if (sock < 0) {
+		result->system_errno = errno;
+		return -1;
+	}
+
+#ifdef ICMP6_FILTER
+	{
+		struct icmp6_filter filter;
+		ICMP6_FILTER_SETBLOCKALL(&filter);
+		ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &filter);
+		(void) setsockopt(sock, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
+	}
+#endif
+#ifdef IPV6_CHECKSUM
+	{
+		int cksum_offset = (int) offsetof(struct icmp6_hdr, icmp6_cksum);
+		(void) setsockopt(sock, IPPROTO_IPV6, IPV6_CHECKSUM, &cksum_offset, sizeof(cksum_offset));
+	}
+#endif
+
+	pkt_len = sizeof(struct icmp6_hdr) + (payload_len > 0 ? payload_len : sizeof(spine_ping_payload_t));
+	packet = calloc(1, pkt_len);
+	if (packet == NULL) {
+		result->system_errno = ENOMEM;
+		goto cleanup;
+	}
+
+	our_id  = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
+	our_seq = (uint16_t) SPINE_PING_SEQ_NEXT(facade_seq6);
+
+	icp = (struct icmp6_hdr *) packet;
+	icp->icmp6_type = ICMP6_ECHO_REQUEST;
+	icp->icmp6_code = 0;
+	icp->icmp6_id   = htons(our_id);
+	icp->icmp6_seq  = htons(our_seq);
+
+	if (payload != NULL && payload_len > 0) {
+		memcpy(packet + sizeof(struct icmp6_hdr), payload, payload_len);
+	} else {
+		spine_ping_payload_t sig;
+		build_ping_payload(&sig);
+		memcpy(packet + sizeof(struct icmp6_hdr), &sig, sizeof(sig));
+	}
+
+	t0 = get_time_as_double();
+	if (sendto(sock, packet, pkt_len, 0, (struct sockaddr *) &dst, sizeof(dst)) < 0) {
+		result->system_errno = errno;
+		goto cleanup;
+	}
+
+	tv.tv_sec  = (long)(timeout_ms / 1000U);
+	tv.tv_usec = (long)((timeout_ms % 1000U) * 1000U);
+	FD_ZERO(&rfds);
+	FD_SET(sock, &rfds);
+
+	for (;;) {
+		int sel = select(sock + 1, &rfds, NULL, NULL, &tv);
+		if (sel < 0) {
+			if (errno == EINTR) { FD_ZERO(&rfds); FD_SET(sock, &rfds); continue; }
+			result->system_errno = errno;
+			goto cleanup;
+		}
+		if (sel == 0) {
+			result->status = SPINE_ICMP_TIMEOUT;
+			ret = 0;
+			goto cleanup;
+		}
+		recvlen = sizeof(recvname);
+		n = recvfrom(sock, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *) &recvname, &recvlen);
+		if (n < 0) {
+			result->system_errno = errno;
+			goto cleanup;
+		}
+		if ((size_t) n < sizeof(struct icmp6_hdr)) {
+			FD_ZERO(&rfds); FD_SET(sock, &rfds);
+			continue;
+		}
+		if (memcmp(&dst.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) {
+			FD_ZERO(&rfds); FD_SET(sock, &rfds);
+			continue;
+		}
+		{
+			struct icmp6_hdr *r = (struct icmp6_hdr *) recvbuf;
+			if (r->icmp6_type != ICMP6_ECHO_REPLY
+			    || r->icmp6_id != htons(our_id)
+			    || r->icmp6_seq != htons(our_seq)) {
+				FD_ZERO(&rfds); FD_SET(sock, &rfds);
+				continue;
+			}
+			t1 = get_time_as_double();
+			result->status = SPINE_ICMP_OK;
+			result->rtt_us = (uint32_t)((t1 - t0) * 1000000.0);
+			ret = 0;
+			goto cleanup;
+		}
+	}
+
+cleanup:
+	if (packet != NULL) free(packet);
+	if (sock >= 0) close(sock);
+	return ret;
+}
+#endif /* !_WIN32 */

@@ -77,6 +77,15 @@ set(SPINE_PLATFORM_SOURCES
     src/platform/platform_fd_win.c
 )
 
+# Kept out of the shared spine_platform object because the POSIX
+# implementation forwards into ping.c helpers, which drag in the full
+# spine dependency chain (mysql, net-snmp, the poller). Unit tests
+# that link only the platform layer must stay free of that chain.
+set(SPINE_ICMP_SOURCES
+    src/platform/platform_icmp_posix.c
+    src/platform/platform_icmp_win.c
+)
+
 set(SPINE_CORE_SOURCES
     src/sql.c
     src/spine.c
@@ -87,6 +96,8 @@ set(SPINE_CORE_SOURCES
     src/nft_popen.c
     src/php.c
     src/ping.c
+    src/ping_validate.c
+    src/ping_ipv6_scope.c
     src/keywords.c
     src/error.c
 )
@@ -189,6 +200,10 @@ if(ENABLE_LCAP AND NOT WIN32)
     find_library(CAP_LIBRARY NAMES cap)
     if(CAP_LIBRARY)
         set(HAVE_LCAP 1)
+        # Linux-only capability drop helper in ping.c needs sys/capability.h.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            set(HAVE_LIBCAP 1)
+        endif()
     endif()
 endif()
 
@@ -527,6 +542,7 @@ if(SPINE_BUILD_MAIN)
 
     add_executable(spine
         ${SPINE_CORE_SOURCES}
+        ${SPINE_ICMP_SOURCES}
         $<TARGET_OBJECTS:spine_platform>
     )
     target_include_directories(spine PRIVATE
@@ -546,6 +562,9 @@ if(SPINE_BUILD_MAIN)
         target_link_libraries(spine PRIVATE spine_build_options)
     endif()
     target_link_libraries(spine PRIVATE spine_hardening)
+    if(HAVE_LIBCAP)
+        target_compile_definitions(spine PRIVATE HAVE_LIBCAP=1)
+    endif()
     if(OpenSSL_FOUND)
         target_link_libraries(spine PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     endif()
@@ -558,6 +577,36 @@ if(BUILD_TESTING)
     foreach(test_name IN LISTS SPINE_TEST_NAMES)
         spine_add_platform_test(${test_name})
     endforeach()
+
+    # Ping validation: links against the standalone validator TU only.
+    add_executable(test_ping_reply_validation
+        tests/unit/test_ping_reply_validation.c
+        src/ping_validate.c
+    )
+    target_include_directories(test_ping_reply_validation PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_ping_reply_validation PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_ping_reply_validation PRIVATE spine_hardening)
+    add_test(NAME ping_reply_validation COMMAND test_ping_reply_validation)
+
+    # IPv6 scope resolver: POSIX only (Windows build compiles a no-op main).
+    add_executable(test_ping_ipv6_scope
+        tests/unit/test_ping_ipv6_scope.c
+        src/ping_ipv6_scope.c
+    )
+    target_include_directories(test_ping_ipv6_scope PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_ping_ipv6_scope PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_ping_ipv6_scope PRIVATE spine_hardening)
+    add_test(NAME ping_ipv6_scope COMMAND test_ping_ipv6_scope)
 endif()
 
 configure_file(
