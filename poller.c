@@ -255,23 +255,48 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		mysqlr = remote_cnn->mysql;
 	}
 
-	/* allocate host and ping structures with appropriate values */
+	/* allocate host and ping structures with appropriate values.
+	 * On OOM, release DB connections and return rather than die(): a single
+	 * poller thread failure must not take down the entire spine process. */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
-		die("ERROR: Fatal malloc error: poller.c host struct!");
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] malloc failed for host struct", host_id, host_thread));
+		db_release_connection(LOCAL, local_cnn->id);
+		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && remote_cnn != NULL) {
+			db_release_connection(REMOTE, remote_cnn->id);
+		}
+		SPINE_FREE(error_string);
+		SPINE_FREE(buf_size);
+		SPINE_FREE(buf_errors);
+		return;
 	}
-
-	/* set zeros */
 	memset(host, 0, sizeof(host_t));
 
 	if (!(ping = (ping_t *) malloc(sizeof(ping_t)))) {
-		die("ERROR: Fatal malloc error: poller.c ping struct!");
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] malloc failed for ping struct", host_id, host_thread));
+		SPINE_FREE(host);
+		db_release_connection(LOCAL, local_cnn->id);
+		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && remote_cnn != NULL) {
+			db_release_connection(REMOTE, remote_cnn->id);
+		}
+		SPINE_FREE(error_string);
+		SPINE_FREE(buf_size);
+		SPINE_FREE(buf_errors);
+		return;
 	}
-
-	/* set zeros */
 	memset(ping, 0, sizeof(ping_t));
 
 	if (!(reindex = (reindex_t *) malloc(sizeof(reindex_t)))) {
-		die("ERROR: Fatal malloc error: poller.c reindex poll!");
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] malloc failed for reindex struct", host_id, host_thread));
+		SPINE_FREE(host);
+		SPINE_FREE(ping);
+		db_release_connection(LOCAL, local_cnn->id);
+		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && remote_cnn != NULL) {
+			db_release_connection(REMOTE, remote_cnn->id);
+		}
+		SPINE_FREE(error_string);
+		SPINE_FREE(buf_size);
+		SPINE_FREE(buf_errors);
+		return;
 	}
 	memset(reindex, 0, sizeof(reindex_t));
 
