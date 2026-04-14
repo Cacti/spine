@@ -74,6 +74,40 @@ chmod u+s /usr/local/spine/bin/spine
 To install under a non-default prefix, pass
 `-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
 
+## Installing on Debian and Derivatives
+
+Install build dependencies:
+
+```shell
+apt-get install cmake ninja-build build-essential libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config
+```
+
+Build and install:
+
+```shell
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+sudo cmake --install build
+```
+
+## Installing on EL and Derivatives
+
+Install build dependencies:
+
+```shell
+dnf install cmake ninja-build gcc make net-snmp-devel mariadb-devel openssl-devel pkgconfig
+```
+
+Build and install:
+
+```shell
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+sudo cmake --install build
+```
+
 ## FreeBSD Development
 
 1. Install dependencies:
