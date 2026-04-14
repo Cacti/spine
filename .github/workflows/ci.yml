@@ -118,6 +118,16 @@ jobs:
           set -euo pipefail
           ctest --test-dir build --output-on-failure
 
+      - name: Run integration tests (sanitizers)
+        run: |
+          set -euo pipefail
+          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans || true
+          ./tests/integration/smoke_test.sh
+          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans || true
+          ./tests/integration/test_ipv6_transport.sh
+          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans || true
+          ./tests/integration/test_script_command_policy.sh
+
   build-windows:
     runs-on: windows-latest
     defaults:

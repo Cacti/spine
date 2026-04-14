@@ -1300,11 +1300,10 @@ int spine_log(const char *format, ...) {
 	/* keep track of an errored log file */
 	static int log_error = FALSE;
 
-	int  of = 20;
 	char logprefix[LOGSIZE];        /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];      /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];      /* Formatted Log Message */
-	char stdoutmessage[LOGSIZE+of]; /* Message for stdout */
+	char stdoutmessage[LOGSIZE + 20]; /* Message for stdout */
 
 	double cur_time;
 	char * log_fmt;
@@ -1331,7 +1330,7 @@ int spine_log(const char *format, ...) {
 
 	if (IS_LOGGING_TO_STDOUT()) {
 		cur_time = get_time_as_double();
-		snprintf(stdoutmessage, LOGSIZE + of, "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
+		snprintf(stdoutmessage, sizeof(stdoutmessage), "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
 		puts(stdoutmessage);
 		return TRUE;
 	}
@@ -1591,9 +1590,10 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 				delim_found = TRUE;
 				break;
 			case '\t':
-				if (ignore_special) {
-					break;
+				if (!ignore_special) {
+					return FALSE;
 				}
+				break;
 			default:
 				return FALSE;
 		}
