@@ -90,18 +90,67 @@
 #include "platform/platform_process.h"
 #include <signal.h>
 #include <spawn.h>
+#include <stdlib.h>
+#include <string.h>
 
-/* A minimal, deterministic environment for scripts spawned by spine.
- * spine trusts its command strings (they come from the Cacti database), but
- * the child inherits the caller's environ by default. That exposes PATH
- * manipulation, LD_PRELOAD injection, and IFS quoting tricks to anyone who
- * can influence the parent process environment. Override with a fixed PATH
- * and a safe IFS. */
-static char *const spine_safe_env[] = {
-	"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-	"IFS= \t\n",
+extern char **environ;
+
+/* Names a child must not inherit from spine's environment. Dynamic-linker
+ * hijack vectors (LD_*, DYLD_*) and shell-startup injection (BASH_ENV, ENV)
+ * are the attack surface; everything else is the operator's own config
+ * (custom PATH, PERL5LIB, PYTHONPATH for script dependencies) and must pass
+ * through. IFS is forced to a safe value if unset. */
+static const char *const spine_dangerous_env_prefixes[] = {
+	"LD_PRELOAD=",
+	"LD_LIBRARY_PATH=",
+	"LD_AUDIT=",
+	"DYLD_INSERT_LIBRARIES=",
+	"DYLD_LIBRARY_PATH=",
+	"BASH_ENV=",
+	"ENV=",
 	NULL
 };
+
+/* Default PATH injected when the parent environment has none. The hardcoded
+ * PATH is intentionally narrow so a missing PATH cannot cause a child to
+ * resolve tools from a surprising directory. */
+static const char spine_default_path[] =
+	"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+static const char spine_default_ifs[]  = "IFS= \t\n";
+
+/* Build a filtered copy of environ for a child. Returned array's strings are
+ * borrowed from environ (do not free the entries), but the array itself is
+ * heap-allocated and must be freed by the caller. */
+static char **spine_build_child_env(void) {
+	size_t n = 0;
+	while (environ && environ[n]) n++;
+
+	/* +3 for possible PATH, IFS, and NULL terminator. */
+	char **new_env = calloc(n + 3, sizeof(char *));
+	if (!new_env) return NULL;
+
+	int has_path = 0;
+	int has_ifs  = 0;
+	size_t w = 0;
+	for (size_t r = 0; r < n; r++) {
+		int skip = 0;
+		for (size_t d = 0; spine_dangerous_env_prefixes[d]; d++) {
+			size_t plen = strlen(spine_dangerous_env_prefixes[d]);
+			if (strncmp(environ[r], spine_dangerous_env_prefixes[d], plen) == 0) {
+				skip = 1;
+				break;
+			}
+		}
+		if (skip) continue;
+		if (strncmp(environ[r], "PATH=", 5) == 0) has_path = 1;
+		if (strncmp(environ[r], "IFS=",  4) == 0) has_ifs  = 1;
+		new_env[w++] = environ[r];
+	}
+	if (!has_path) new_env[w++] = (char *)spine_default_path;
+	if (!has_ifs)  new_env[w++] = (char *)spine_default_ifs;
+	new_env[w] = NULL;
+	return new_env;
+}
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
@@ -157,6 +206,7 @@ int nft_popen(const char * command, const char * type) {
 	int    attr_initialized = 0;
 	sigset_t default_sigs;
 	sigset_t empty_mask;
+	char **child_env = NULL;
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -252,10 +302,26 @@ int nft_popen(const char * command, const char * type) {
 	/* Spawn the child process with retry on EAGAIN/ENOMEM. */
 	const char *spawn_shell = "/bin/sh";
 
+	child_env = spine_build_child_env();
+	if (child_env == NULL) {
+		SPINE_LOG(("ERROR: SCRIPT: failed to build child env"));
+		posix_spawn_file_actions_destroy(&fa);
+		if (attr_initialized) {
+			posix_spawnattr_destroy(&attr);
+		}
+		(void)spine_process_close_fd(pdes[0]);
+		(void)spine_process_close_fd(pdes[1]);
+		pthread_mutex_unlock(&ListMutex);
+		free(command_copy);
+		free(cur);
+		pthread_setcancelstate(cancel_state, NULL);
+		return -1;
+	}
+
 	int spawn_err;
 	spawn_err = spine_process_spawn_retry(&pid, spawn_shell, &fa,
 		attr_initialized ? &attr : NULL,
-		argv, spine_safe_env, 3, 50000);
+		argv, child_env, 3, 50000);
 
 	if (spawn_err != 0) {
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer))));
@@ -263,6 +329,7 @@ int nft_popen(const char * command, const char * type) {
 		if (attr_initialized) {
 			posix_spawnattr_destroy(&attr);
 		}
+		free(child_env);
 		(void)spine_process_close_fd(pdes[0]);
 		(void)spine_process_close_fd(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
@@ -275,6 +342,9 @@ int nft_popen(const char * command, const char * type) {
 	if (attr_initialized) {
 		posix_spawnattr_destroy(&attr);
 	}
+	/* child_env points into environ for the borrowed strings, so free only
+	 * the outer array. posix_spawn has already copied the env into the child. */
+	free(child_env);
 
 	/* Parent. */
 	if (*type == 'r') {
