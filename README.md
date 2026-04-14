@@ -38,6 +38,9 @@ Current mapping:
 * Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW), Solaris, AIX
 * Unsupported: Cygwin build/runtime path
 
+Platform implementation rules are centralized in
+`docs/platform-idioms.md`.
+
 ### Build System Roadmap
 
 CMake is the canonical build system for this repository.
