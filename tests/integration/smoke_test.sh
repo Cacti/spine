@@ -56,7 +56,7 @@ wait_for_snmpd() {
   echo "  Waiting for snmpd to become healthy (up to ${max_wait}s)..."
   while [[ $elapsed -lt $max_wait ]]; do
     if "${COMPOSE[@]}" exec -T snmpd snmpget -v3 -u testuser -l authPriv \
-      -a SHA-256 -A authpass1234 -x AES -X privpass1234 \
+      -a SHA -A authpass1234 -x AES -X privpass1234 \
       localhost:1161 .1.3.6.1.2.1.1.3.0 >/dev/null 2>&1; then
       echo "  snmpd ready after ${elapsed}s"
       return 0

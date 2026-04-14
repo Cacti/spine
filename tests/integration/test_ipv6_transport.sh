@@ -66,7 +66,7 @@ INSERT IGNORE INTO host (
   snmp_priv_passphrase, snmp_priv_protocol, snmp_version, snmp_port, snmp_timeout,
   max_oids, availability_method, ping_method, status, poller_id, device_threads, deleted
 ) VALUES (
-  3, '::1', '', 'testuser', 'authpass1234', 'SHA-256',
+  3, '::1', '', 'testuser', 'authpass1234', 'SHA',
   'privpass1234', 'AES', 3, 1161, 1000,
   10, 2, 0, 3, 1, 1, ''
 );
@@ -78,7 +78,7 @@ INSERT IGNORE INTO poller_item (
   rrd_name, rrd_path, rrd_num, rrd_step, arg1, deleted, poller_id
 ) VALUES (
   3, 3, 0, '::1', '', 'testuser', 'authpass1234',
-  'SHA-256', 'privpass1234', 'AES',
+  'SHA', 'privpass1234', 'AES',
   3, 1161, 1000,
   'uptime_ipv6', '/dev/null', 1, 300, '.1.3.6.1.2.1.1.3.0', '', 1
 );

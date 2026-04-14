@@ -1327,7 +1327,23 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	}
 
 	memset(stack, '\0', strlen(hostname)+1);
-	strncopy(stack, hostname, strlen(hostname));
+	strncopy(stack, hostname, strlen(hostname) + 1);
+
+	/* Preserve raw IPv6 literals like "::1". They contain ':' but are not
+	 * method-prefixed host:port strings, and tokenizing them would lose data. */
+	if (hostname[0] != '[' &&
+		strncasecmp(hostname, "TCP:", 4) != 0 &&
+		strncasecmp(hostname, "UDP:", 4) != 0 &&
+		strncasecmp(hostname, "TCP6:", 5) != 0 &&
+		strncasecmp(hostname, "UDP6:", 5) != 0 &&
+		strchr(hostname, ':') != NULL &&
+		strchr(strchr(hostname, ':') + 1, ':') != NULL) {
+		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - IPv6 literal detected, preserving hostname", hostname));
+		strncopy(name->hostname, hostname, sizeof(name->hostname));
+		free(stack);
+		return name;
+	}
+
 	token = strtok(stack, ":");
 
 	if (token == NULL) {
