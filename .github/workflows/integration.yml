@@ -231,12 +231,6 @@ jobs:
           docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
           ./tests/integration/test_ipv6_transport.sh
 
-      - name: Script command policy test
-        run: |
-          set -euo pipefail
-          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
-          ./tests/integration/test_script_command_policy.sh
-
       - name: Cleanup
         if: always()
         run: docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans

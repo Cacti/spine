@@ -76,7 +76,6 @@ set(SPINE_PLATFORM_SOURCES
 )
 
 set(SPINE_CORE_SOURCES
-    command_policy.c
     sql.c
     spine.c
     util.c
@@ -467,19 +466,6 @@ if(BUILD_TESTING)
     foreach(test_name IN LISTS SPINE_TEST_NAMES)
         spine_add_platform_test(${test_name})
     endforeach()
-
-    add_executable(test_command_policy
-        tests/unit/test_command_policy.c
-        command_policy.c
-    )
-    target_include_directories(test_command_policy PRIVATE
-        ${CMAKE_BINARY_DIR}
-        ${CMAKE_SOURCE_DIR}
-    )
-    if(TARGET spine_build_options)
-        target_link_libraries(test_command_policy PRIVATE spine_build_options)
-    endif()
-    add_test(NAME command_policy COMMAND test_command_policy)
 endif()
 
 configure_file(

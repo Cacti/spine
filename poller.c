@@ -33,7 +33,6 @@
 
 #include "common.h"
 #include "spine.h"
-#include "command_policy.h"
 #include "platform_fd.h"
 
 void child_cleanup(void *arg) {
@@ -2351,20 +2350,6 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	timeout.tv_sec = set.script_timeout;
 	timeout.tv_usec = 0;
 
-	{
-		char reject_reason[SMALL_BUFSIZE];
-
-		memset(reject_reason, 0, sizeof(reject_reason));
-		if (!spine_script_command_is_safe(proc_command, reject_reason, sizeof(reject_reason))) {
-			SPINE_LOG(("Device[%i] ERROR: Refusing unsafe script command for %s[%i]: %s",
-				current_host->id,
-				type != NULL ? type : "item",
-				id,
-				reject_reason));
-			SET_UNDEFINED(result_string);
-			return result_string;
-		}
-	}
 	/* don't run too many scripts, operating systems do not like that. */
 	int retries = 0;
 	int sem_err = 0;
