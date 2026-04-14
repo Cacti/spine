@@ -150,10 +150,17 @@ int spine_process_wait(spine_pid_t pid, int *status) {
 	DWORD wait_result;
 	DWORD exit_code;
 	DWORD last_error;
+	DWORD process_id;
 
-	process_handle = (HANDLE) pid;
-	if (process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) {
+	process_id = (DWORD) pid;
+	if (process_id == 0) {
 		errno = ESRCH;
+		return -1;
+	}
+	process_handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id);
+	if (process_handle == NULL) {
+		last_error = GetLastError();
+		errno = last_error != 0 ? spine_windows_map_error_to_errno(last_error) : ESRCH;
 		return -1;
 	}
 
@@ -192,10 +199,17 @@ int spine_process_terminate(spine_pid_t pid) {
 	HANDLE process_handle;
 	BOOL terminate_result;
 	DWORD last_error;
+	DWORD process_id;
 
-	process_handle = (HANDLE) pid;
-	if (process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) {
+	process_id = (DWORD) pid;
+	if (process_id == 0) {
 		errno = ESRCH;
+		return -1;
+	}
+	process_handle = OpenProcess(PROCESS_TERMINATE, FALSE, process_id);
+	if (process_handle == NULL) {
+		last_error = GetLastError();
+		errno = last_error != 0 ? spine_windows_map_error_to_errno(last_error) : ESRCH;
 		return -1;
 	}
 
@@ -274,7 +288,8 @@ int spine_process_spawn_retry(
 		free(command_line);
 		if (create_result != 0) {
 			CloseHandle(process_info.hThread);
-			*pid = (spine_pid_t) process_info.hProcess;
+			*pid = (spine_pid_t) process_info.dwProcessId;
+			CloseHandle(process_info.hProcess);
 			free(wide_path);
 			free(command_line_template);
 			return 0;
