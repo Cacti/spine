@@ -27,7 +27,7 @@ int spine_process_pipe(int pipe_fds[2]) {
 	/* CLOEXEC on both ends keeps the pipe from leaking into unrelated
 	 * concurrent spawns. posix_spawn_file_actions_adddup2 clears CLOEXEC
 	 * on the duped fds, so the intended child still inherits stdin/stdout. */
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
 	return pipe2(pipe_fds, O_CLOEXEC);
 #else
 	int rc = pipe(pipe_fds);

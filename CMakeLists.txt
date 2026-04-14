@@ -534,6 +534,16 @@ else()
         # rejects unresolved refs at exec time.
         target_compile_definitions(spine_platform PUBLIC _ALL_SOURCE=1 _XOPEN_SOURCE=700)
         target_link_options(spine_platform PUBLIC -Wl,-brtl)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR
+           CMAKE_SYSTEM_NAME STREQUAL "NetBSD" OR
+           CMAKE_SYSTEM_NAME STREQUAL "OpenBSD" OR
+           CMAKE_SYSTEM_NAME STREQUAL "DragonFly")
+        # The BSDs ship pipe2(2), arc4random(3), getifaddrs(3), and full
+        # POSIX sockets in libc. _POSIX_C_SOURCE=200809L plus _DEFAULT_SOURCE
+        # (set above for all non-Darwin POSIX targets) is enough to expose
+        # what spine needs. No extra defines or libraries required.
+        # FreeBSD 14 is the Tier 2 reference; NetBSD 10, OpenBSD 7.x, and
+        # DragonFly 6.x are Tier 3 (advisory CI, see docs/platforms.md).
     endif()
     target_link_libraries(spine_platform PUBLIC m ${CMAKE_DL_LIBS})
     if(CAP_LIBRARY)

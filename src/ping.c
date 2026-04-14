@@ -78,8 +78,9 @@ static uint16_t icmp_id_mask = 0;
 #endif
 
 void ping_init(void) {
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__sun) || defined(__sun__)
-	/* arc4random is in libc on the BSDs, macOS, and illumos/Solaris 11.4+. */
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__) || defined(__sun) || defined(__sun__)
+	/* arc4random is in libc on the BSDs (Free/Open/Net/DragonFly), macOS,
+	 * and illumos/Solaris 11.4+. */
 	icmp_id_mask = (uint16_t)(arc4random() & 0xFFFF);
 #elif defined(__linux__)
 	unsigned int seed = 0;

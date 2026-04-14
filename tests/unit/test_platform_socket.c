@@ -8,7 +8,7 @@
 static int bind_loopback_ipv4(spine_socket_t socket_fd, struct sockaddr_in *address, socklen_t *address_len) {
 	memset(address, 0, sizeof(*address));
 	address->sin_family = AF_INET;
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 	address->sin_len = (uint8_t) sizeof(*address);
 #endif
 	address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -25,7 +25,7 @@ static int bind_loopback_ipv4(spine_socket_t socket_fd, struct sockaddr_in *addr
 static int bind_loopback_ipv6(spine_socket_t socket_fd, struct sockaddr_in6 *address, socklen_t *address_len) {
 	memset(address, 0, sizeof(*address));
 	address->sin6_family = AF_INET6;
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 	address->sin6_len = (uint8_t) sizeof(*address);
 #endif
 	address->sin6_addr = in6addr_loopback;
