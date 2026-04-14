@@ -1,0 +1,188 @@
+name: Distro Matrix
+
+# Cross-distro compile check for spine. Linux distros run in their native
+# container images so we catch glibc/musl, CMake, Net-SNMP, and MariaDB
+# connector differences at PR time rather than after release. macOS, Windows,
+# and FreeBSD rides along so "it builds on my Rocky 9 box" extends to every
+# platform we claim to support.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+      - feat/**
+      - fix/**
+      - ci/**
+  pull_request:
+    branches: [develop]
+  schedule:
+    # Weekly drift check against upstream distro package updates.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distro-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: rockylinux:9
+            family: rhel
+          - distro: rockylinux:8
+            family: rhel
+          - distro: almalinux:9
+            family: rhel
+          - distro: fedora:latest
+            family: fedora
+          - distro: debian:12
+            family: debian
+          - distro: debian:trixie
+            family: debian
+          - distro: ubuntu:22.04
+            family: debian
+          - distro: ubuntu:24.04
+            family: debian
+          - distro: opensuse/leap:15
+            family: suse
+          - distro: alpine:3.20
+            family: alpine
+    container:
+      image: ${{ matrix.distro }}
+    steps:
+      - name: Install prerequisites (rhel)
+        if: matrix.family == 'rhel'
+        run: |
+          dnf install -y epel-release
+          dnf install -y cmake gcc make git \
+            net-snmp-devel mariadb-connector-c-devel openssl-devel \
+            pkgconfig systemd-devel
+
+      - name: Install prerequisites (fedora)
+        if: matrix.family == 'fedora'
+        run: |
+          dnf install -y cmake gcc make git \
+            net-snmp-devel mariadb-connector-c-devel openssl-devel \
+            pkgconfig systemd-devel
+
+      - name: Install prerequisites (debian)
+        if: matrix.family == 'debian'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            cmake gcc make git ca-certificates \
+            libsnmp-dev libmariadb-dev-compat libssl-dev \
+            pkg-config libsystemd-dev
+
+      - name: Install prerequisites (suse)
+        if: matrix.family == 'suse'
+        run: |
+          zypper --non-interactive install \
+            cmake gcc make git \
+            net-snmp-devel libmariadb-devel libopenssl-devel \
+            pkg-config systemd-devel
+
+      - name: Install prerequisites (alpine)
+        if: matrix.family == 'alpine'
+        run: |
+          apk add --no-cache bash cmake gcc make musl-dev \
+            net-snmp-dev mariadb-connector-c-dev openssl-dev \
+            pkgconfig linux-headers git
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Smoke test binary
+        run: ./build/spine --help | head -3
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install cmake ninja pkg-config mysql-client net-snmp openssl@3
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Smoke test binary
+        run: ./build/spine --help | head -3
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    runs-on: windows-latest
+    # Windows support is still hardening; treat failures as advisory until the
+    # platform_win code paths and MSYS2 Net-SNMP availability stabilize.
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - uses: msys2/setup-msys2@cafece8e6baf9247cf9b1bf95097b0b983cc558d
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-libmariadbclient
+            mingw-w64-x86_64-openssl
+            pkg-config
+
+      - name: Configure
+        run: cmake --preset ci-smoke
+
+      - name: Build
+        run: cmake --build --preset ci-smoke
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Build on FreeBSD 14
+        uses: cross-platform-actions/action@fe0167d8082ac584754ef3ffb567fded22642c7d # v0.24.0
+        with:
+          operating_system: freebsd
+          version: '14.1'
+          shell: sh
+          run: |
+            sudo pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+            cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+            cmake --build build
+            ctest --test-dir build --output-on-failure
