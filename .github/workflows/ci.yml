@@ -84,6 +84,39 @@ jobs:
           make -C tests/unit clean
           make -C tests/unit run
 
+  # Verify the libsystemd-absent code path builds and links on Linux. macOS and
+  # Windows already exercise this implicitly (libsystemd is Linux-only), but
+  # pinning it here guards against regressions where WITH_SYSTEMD=OFF stops
+  # compiling on the primary CI platform.
+  build-no-systemd:
+    name: Build without libsystemd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install build dependencies (no libsystemd-dev)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config \
+            libmysqlclient-dev libsnmp-dev libssl-dev
+
+      - name: Configure with WITH_SYSTEMD=OFF
+        run: |
+          set -euo pipefail
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
+            -DSPINE_BUILD_MAIN=ON -DWITH_SYSTEMD=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Verify spine binary
+        run: ./build/spine --help | head -3
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
   build-cmake-linux-sanitizers:
     runs-on: ubuntu-latest
     env:
