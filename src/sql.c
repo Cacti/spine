@@ -298,18 +298,30 @@ void db_connect(int type, MYSQL *mysql) {
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 	#endif
 
+	/* MYSQL_OPT_SSL_VERIFY_SERVER_CERT expects a pointer to the connector's
+	 * boolean type. MariaDB's C connector and MySQL <8.0 typedef my_bool to
+	 * char; MySQL 8.0+ removed my_bool and uses plain bool. Pick the matching
+	 * type so we do not pass a 4-byte int into an API that reads 1 byte. */
+	#if defined(MARIADB_BASE_VERSION) || defined(MARIADB_VERSION_ID)
+	#  define SPINE_SSL_VERIFY_T my_bool
+	#elif defined(MYSQL_VERSION_ID) && MYSQL_VERSION_ID >= 80000
+	#  define SPINE_SSL_VERIFY_T bool
+	#else
+	#  define SPINE_SSL_VERIFY_T my_bool
+	#endif
+
 	/* set SSL options if available */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
 	/* if the users has explicitly said to disable SSL, do that now */
 	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
 	if (type == LOCAL) {
 		if (set.db_ssl == 0) {
-			bool ssl_enforce = 0;
+			SPINE_SSL_VERIFY_T ssl_enforce = 0;
 			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
 		}
 	} else {
 		if (set.rdb_ssl == 0) {
-			bool ssl_enforce = 0;
+			SPINE_SSL_VERIFY_T ssl_enforce = 0;
 			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
 		}
 	}
@@ -340,7 +352,7 @@ void db_connect(int type, MYSQL *mysql) {
 		#endif
 		#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
 		{
-			bool ssl_verify = 1;
+			SPINE_SSL_VERIFY_T ssl_verify = 1;
 			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify, "ssl verify");
 		}
 		#endif
