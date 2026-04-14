@@ -93,7 +93,7 @@ set(SPINE_TEST_NAMES env time process socket error fd dns)
 
 if(ENABLE_WARNINGS)
     add_library(spine_build_options INTERFACE)
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
         target_compile_options(spine_build_options INTERFACE
             -Wall
             -Wextra
@@ -283,27 +283,35 @@ function(spine_require_netsnmp)
             execute_process(
                 COMMAND ${NETSNMP_CONFIG} --cflags
                 OUTPUT_VARIABLE NETSNMP_CFLAGS_RAW
+                RESULT_VARIABLE _netsnmp_cflags_rc
                 OUTPUT_STRIP_TRAILING_WHITESPACE
             )
+            if(NOT _netsnmp_cflags_rc EQUAL 0)
+                message(FATAL_ERROR "net-snmp-config --cflags failed with code ${_netsnmp_cflags_rc}")
+            endif()
             execute_process(
                 COMMAND ${NETSNMP_CONFIG} --libs
                 OUTPUT_VARIABLE NETSNMP_LIBS_RAW
+                RESULT_VARIABLE _netsnmp_libs_rc
                 OUTPUT_STRIP_TRAILING_WHITESPACE
             )
+            if(NOT _netsnmp_libs_rc EQUAL 0)
+                message(FATAL_ERROR "net-snmp-config --libs failed with code ${_netsnmp_libs_rc}")
+            endif()
 
             set(_netsnmp_found TRUE)
-            string(REPLACE " " ";" _snmp_cflags_list "${NETSNMP_CFLAGS_RAW}")
-            foreach(_flag ${_snmp_cflags_list})
+            separate_arguments(_snmp_cflags_list UNIX_COMMAND "${NETSNMP_CFLAGS_RAW}")
+            foreach(_flag IN LISTS _snmp_cflags_list)
                 if(_flag MATCHES "^-I(.*)")
                     list(APPEND _netsnmp_include_dirs "${CMAKE_MATCH_1}")
                 endif()
             endforeach()
 
             separate_arguments(_snmp_libs_list UNIX_COMMAND "${NETSNMP_LIBS_RAW}")
-            foreach(_flag ${_snmp_libs_list})
-                if(_flag MATCHES "^-l(.*)")
+            foreach(_flag IN LISTS _snmp_libs_list)
+                if(_flag MATCHES "^-l(.+)")
                     list(APPEND _netsnmp_libraries "${CMAKE_MATCH_1}")
-                elseif(_flag MATCHES "^-L(.*)")
+                elseif(_flag MATCHES "^-L(.+)")
                     list(APPEND _netsnmp_link_options "${_flag}")
                 else()
                     list(APPEND _netsnmp_link_options "${_flag}")
