@@ -112,6 +112,9 @@ endif()
 
 # Hardening flags. Applied to spine and every platform test target. Kept
 # behind CheckCCompilerFlag because older toolchains reject some options.
+# clang on macOS accepts -fstack-clash-protection silently in the flag probe
+# but then emits "-Wunused-command-line-argument" at compile time, so the
+# probe runs with -Werror to force a hard failure on unsupported flags.
 add_library(spine_hardening INTERFACE)
 if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
     target_compile_options(spine_hardening INTERFACE
@@ -120,11 +123,19 @@ if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
         -Wformat-security
         -fPIE
     )
+    set(_spine_prev_required_flags "${CMAKE_REQUIRED_FLAGS}")
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror=unused-command-line-argument")
     check_c_compiler_flag(-fstack-clash-protection SPINE_HAS_STACK_CLASH)
+    set(CMAKE_REQUIRED_FLAGS "${_spine_prev_required_flags}")
     if(SPINE_HAS_STACK_CLASH)
         target_compile_options(spine_hardening INTERFACE -fstack-clash-protection)
     endif()
-    target_link_options(spine_hardening INTERFACE -pie)
+    # AppleClang enables PIE by default and warns that -pie is unused, so
+    # skip it on macOS. On Linux and other ELF platforms we still request it
+    # explicitly to avoid depending on distro default config.
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        target_link_options(spine_hardening INTERFACE -pie)
+    endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         target_link_options(spine_hardening INTERFACE -Wl,-z,relro -Wl,-z,now)
     endif()
