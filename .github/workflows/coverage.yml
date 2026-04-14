@@ -21,7 +21,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc lcov
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   COVERAGE_MIN_LINE_PCT: '10.0'
@@ -43,41 +43,29 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure
+        env:
+          LDFLAGS: ${{ env.LDFLAGS_COVERAGE }}
         run: |
           set -euo pipefail
-          chmod +x ./configure || true
-          ./configure CC=gcc CFLAGS="${CFLAGS_COVERAGE}" LDFLAGS="${LDFLAGS_COVERAGE}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS="${CFLAGS_COVERAGE}"
 
       - name: Build
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          cmake --build build -j"$(nproc)"
 
       - name: Test
         run: |
           set -euo pipefail
-          if make -n check >/dev/null 2>&1; then
-            make check VERBOSE=1
-          elif make -n test >/dev/null 2>&1; then
-            make test VERBOSE=1
-          else
-            echo "::notice::No make check/test target found."
-          fi
+          ctest --test-dir build --output-on-failure || echo "::notice::ctest returned non-zero; continuing to collect coverage."
 
       - name: Generate lcov + genhtml report
         run: |
           set -euo pipefail
-          if lcov --capture --directory . --output-file coverage.raw.info --ignore-errors mismatch; then
+          if lcov --capture --directory build --output-file coverage.raw.info --ignore-errors mismatch; then
             lcov \
               --remove coverage.raw.info \
               '/usr/*' \

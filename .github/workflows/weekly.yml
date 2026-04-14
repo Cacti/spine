@@ -33,19 +33,18 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc make autoconf automake libtool pkg-config \
+            gcc make cmake pkg-config \
             libmariadb-dev libsnmp-dev libssl-dev
 
       - name: Build twice and compare
         run: |
           set -euo pipefail
-          autoreconf -fi
-          ./configure --prefix=/usr/local
-          make -j"$(nproc)"
-          cp spine spine-build1
-          make clean
-          make -j"$(nproc)"
-          cp spine spine-build2
+          cmake -B build1 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build1 -j"$(nproc)"
+          cp build1/spine spine-build1
+          cmake -B build2 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build2 -j"$(nproc)"
+          cp build2/spine spine-build2
           if diff spine-build1 spine-build2; then
             echo "PASS: Reproducible build"
           else
@@ -66,16 +65,15 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc make autoconf automake libtool pkg-config \
+            gcc make cmake pkg-config \
             libmariadb-dev libsnmp-dev libssl-dev graphviz
 
       - name: Generate include graph
         run: |
           set -euo pipefail
-          autoreconf -fi
-          ./configure --prefix=/usr/local
-          for f in *.c; do
-            gcc -MM -I. -I./config \
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          for f in src/*.c; do
+            gcc -MM -I. -Isrc -Isrc/platform -Ithird_party \
               -I/usr/include/net-snmp -I/usr/include/mariadb \
               "$f" 2>/dev/null
           done > include-deps.txt
@@ -100,12 +98,12 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for f in *.c *.h; do
+          while IFS= read -r f; do
             if ! head -5 "$f" | grep -q "Copyright"; then
               echo "MISSING: $f"
               missing=$((missing + 1))
             fi
-          done
+          done < <(git ls-files 'src/*.c' 'src/*.h' 'src/**/*.c' 'src/**/*.h')
           if [ "$missing" -gt 0 ]; then
             echo "::warning::$missing file(s) missing license header"
           else
@@ -126,9 +124,9 @@ jobs:
       - name: Run codespell
         run: |
           set -euo pipefail
-          codespell --skip="*.o,*.a,*.so,*.dylib,config/*,m4/*,uthash.h" \
+          codespell --skip="*.o,*.a,*.so,*.dylib,build*,third_party/*,uthash.h" \
             --ignore-words-list="oid,oids,numer,hte,teh" \
-            ./*.c ./*.h || true
+            src/ || true
 
   # changelog-check: disabled pending CHANGELOG format standardization
   # changelog-check:

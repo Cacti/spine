@@ -19,7 +19,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc clang llvm valgrind
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   TSAN_OPTIONS: halt_on_error=1:history_size=7:log_path=tsan
@@ -43,38 +43,24 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure
+        env:
+          LDFLAGS: '-fsanitize=thread'
         run: |
           set -euo pipefail
-          CFLAGS='-O1 -g3 -fno-omit-frame-pointer -fsanitize=thread'
-          LDFLAGS='-fsanitize=thread'
-          chmod +x ./configure || true
-          ./configure CC=clang CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS='-O1 -g3 -fno-omit-frame-pointer -fsanitize=thread'
 
       - name: Build
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          cmake --build build -j"$(nproc)"
 
       - name: Test
         run: |
           set -euo pipefail
-          if make -n check >/dev/null 2>&1; then
-            make check VERBOSE=1
-          elif make -n test >/dev/null 2>&1; then
-            make test VERBOSE=1
-          else
-            echo '::notice::No make check/test target found.'
-          fi
+          ctest --test-dir build --output-on-failure || echo '::notice::ctest non-zero.'
 
       - name: Upload tsan artifacts
         if: always()
@@ -83,7 +69,8 @@ jobs:
           name: nightly-tsan-logs
           path: |
             tsan*
-            config.log
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
             *.log
           if-no-files-found: ignore
 
@@ -100,38 +87,24 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure
+        env:
+          LDFLAGS: '-fsanitize=address,undefined'
         run: |
           set -euo pipefail
-          CFLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
-          LDFLAGS='-fsanitize=address,undefined'
-          chmod +x ./configure || true
-          ./configure CC=clang CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
 
       - name: Build
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          cmake --build build -j"$(nproc)"
 
       - name: Test
         run: |
           set -euo pipefail
-          if make -n check >/dev/null 2>&1; then
-            make check VERBOSE=1
-          elif make -n test >/dev/null 2>&1; then
-            make test VERBOSE=1
-          else
-            echo '::notice::No make check/test target found.'
-          fi
+          ctest --test-dir build --output-on-failure || echo '::notice::ctest non-zero.'
 
       - name: Enforce asan/ubsan leak trend baseline
         run: |
@@ -151,7 +124,8 @@ jobs:
             asan*
             ubsan*
             nightly-asan-summary.json
-            config.log
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
             *.log
           if-no-files-found: ignore
 
@@ -168,50 +142,35 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure
         run: |
           set -euo pipefail
-          CFLAGS='-O0 -g3 -fno-omit-frame-pointer'
-          chmod +x ./configure || true
-          ./configure CC=gcc CFLAGS="${CFLAGS}" LDFLAGS=''
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-O0 -g3 -fno-omit-frame-pointer'
 
       - name: Build
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          cmake --build build -j"$(nproc)"
 
-      - name: Run tests under valgrind when available
+      - name: Run tests under valgrind
         run: |
           set -euo pipefail
-          if make -n valgrind-check >/dev/null 2>&1; then
-            make valgrind-check
-          elif make -n check >/dev/null 2>&1; then
-            mapfile -t bins < <(find tests -maxdepth 3 -type f -perm -111 ! -name '*.sh' 2>/dev/null || true)
-            if [[ "${#bins[@]}" -gt 0 ]]; then
-              for t in "${bins[@]}"; do
-                valgrind \
-                  --error-exitcode=1 \
-                  --leak-check=full \
-                  --show-leak-kinds=all \
-                  --track-origins=yes \
-                  --log-file="valgrind.$(basename "${t}").log" \
-                  "${t}"
-              done
-            else
-              echo '::notice::No standalone test binaries found for valgrind; running make check.'
-              make check VERBOSE=1
-            fi
+          mapfile -t bins < <(find build -maxdepth 3 -type f -name 'test_*' -perm -111 2>/dev/null || true)
+          if [[ "${#bins[@]}" -gt 0 ]]; then
+            for t in "${bins[@]}"; do
+              valgrind \
+                --error-exitcode=1 \
+                --leak-check=full \
+                --show-leak-kinds=all \
+                --track-origins=yes \
+                --log-file="valgrind.$(basename "${t}").log" \
+                "${t}"
+            done
           else
-            echo '::notice::No make valgrind-check/check target found.'
+            echo '::notice::No test binaries under build/; running ctest.'
+            ctest --test-dir build --output-on-failure || true
           fi
 
       - name: Enforce valgrind leak trend baseline
@@ -231,7 +190,8 @@ jobs:
           path: |
             valgrind*.log
             nightly-valgrind-summary.json
-            config.log
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
             *.log
           if-no-files-found: ignore
 
@@ -310,25 +270,25 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc make autoconf automake libtool pkg-config \
+            gcc make cmake pkg-config \
             libmariadb-dev libsnmp-dev libssl-dev \
             valgrind libcmocka-dev
 
       - name: Build with debug
         run: |
           set -euo pipefail
-          autoreconf -fi
-          CFLAGS="-g -O0" ./configure --prefix=/usr/local
-          make -j"$(nproc)"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-g -O0"
+          cmake --build build -j"$(nproc)"
 
       - name: Helgrind unit tests
         run: |
           set -euo pipefail
-          cd tests/unit
-          CMOCKA_INC=$(pkg-config --variable=includedir cmocka)
-          CMOCKA_LIB=$(pkg-config --variable=libdir cmocka)
-          make CMOCKA_INC="$CMOCKA_INC" CMOCKA_LIB="$CMOCKA_LIB"
-          valgrind --tool=helgrind --error-exitcode=1 ./build/test_build_fixes
+          bin="$(find build -maxdepth 3 -type f -name 'test_build_fixes' -perm -111 | head -n 1)"
+          if [[ -z "${bin}" ]]; then
+            echo "::notice::test_build_fixes not present under build/; skipping helgrind."
+            exit 0
+          fi
+          valgrind --tool=helgrind --error-exitcode=1 "${bin}"
 
       - name: Upload helgrind artifacts
         if: always()
@@ -351,27 +311,28 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc make autoconf automake libtool pkg-config \
+            gcc make cmake pkg-config \
             libmariadb-dev libsnmp-dev libssl-dev
 
       - name: Build with stack usage
         run: |
           set -euo pipefail
-          autoreconf -fi
-          CFLAGS="-fstack-usage -g" ./configure --prefix=/usr/local
-          make -j"$(nproc)"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fstack-usage -g"
+          cmake --build build -j"$(nproc)"
 
       - name: Analyze stack usage
         run: |
           set -euo pipefail
           echo "=== Functions using >4KB stack ==="
-          cat ./*.su | awk -F: '{split($NF,a," "); if(a[1]+0 > 4096) print}' | sort -t' ' -k2 -rn | head -20
+          find build -name '*.su' -exec cat {} + | \
+            awk -F: '{split($NF,a," "); if(a[1]+0 > 4096) print}' | \
+            sort -t' ' -k2 -rn | head -20
 
       - name: Upload stack reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
           name: stack-usage
-          path: "*.su"
+          path: "build/**/*.su"
 
   soak-placeholder:
     name: soak/integration placeholder

@@ -25,7 +25,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc clang llvm
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
 
@@ -48,21 +48,15 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure and build
+        env:
+          LDFLAGS: '-Wl,-z,relro,-z,now'
         run: |
           set -euo pipefail
-          chmod +x ./configure || true
-          ./configure CC=gcc CFLAGS='-O2 -g' LDFLAGS='-Wl,-z,relro,-z,now'
-          make -j"$(nproc)"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-O2 -g'
+          cmake --build build -j"$(nproc)"
 
       - name: Analyze
         uses: github/codeql-action/analyze@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10

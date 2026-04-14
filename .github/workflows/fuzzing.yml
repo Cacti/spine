@@ -21,7 +21,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     clang llvm libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   ASAN_OPTIONS: >-
     detect_leaks=1:abort_on_error=1:strict_string_checks=1:
@@ -44,14 +44,15 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap and build sanitizer binary
+      - name: Build sanitizer binary
+        env:
+          LDFLAGS: '-fsanitize=address,undefined'
         run: |
           set -euo pipefail
-          ./bootstrap
-          ./configure CC=clang \
-            CFLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined' \
-            LDFLAGS='-fsanitize=address,undefined'
-          make -j"$(nproc)" V=1
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
+          cmake --build build -j"$(nproc)" --verbose
 
       - name: Fuzz CLI argument handling with seeded mutations
         run: |
@@ -99,7 +100,7 @@ jobs:
               payload = mutate(seed)
               args = payload.split()
               proc = subprocess.run(
-                  ["timeout", "2s", "./spine", *args],
+                  ["timeout", "2s", "./build/spine", *args],
                   stdout=subprocess.DEVNULL,
                   stderr=subprocess.DEVNULL,
                   text=False

@@ -21,7 +21,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc binutils file curl
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_RELEASE: >-
@@ -50,32 +50,26 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure
+        env:
+          LDFLAGS: ${{ env.LDFLAGS_RELEASE }}
         run: |
           set -euo pipefail
-          chmod +x ./configure || true
-          ./configure CC=gcc CFLAGS="${CFLAGS_RELEASE}" LDFLAGS="${LDFLAGS_RELEASE}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS="${CFLAGS_RELEASE}"
 
       - name: Build release
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          cmake --build build -j"$(nproc)"
 
       - name: Verify ELF hardening
         run: |
           set -euo pipefail
           BIN_PATH=''
-          if [[ -x ./spine ]]; then
-            BIN_PATH='./spine'
+          if [[ -x ./build/spine ]]; then
+            BIN_PATH='./build/spine'
           else
             BIN_PATH="$(find . -maxdepth 4 -type f -name spine -perm -111 | head -n 1 || true)"
           fi
@@ -107,13 +101,13 @@ jobs:
             fi
           fi
 
-      - name: make install DESTDIR smoke test
+      - name: cmake --install DESTDIR smoke test
         run: |
           set -euo pipefail
           rm -rf stage
           mkdir -p stage
 
-          make install DESTDIR="${PWD}/stage"
+          DESTDIR="${PWD}/stage" cmake --install build
 
           INSTALLED_BIN="$(find stage -type f -name spine -perm -111 | head -n 1 || true)"
           if [[ -z "${INSTALLED_BIN}" ]]; then

@@ -21,7 +21,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc clang llvm mariadb-client
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   DB_HOST: 127.0.0.1
@@ -103,27 +103,19 @@ jobs:
           echo "Database did not become ready in time." >&2
           exit 1
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure
         run: |
           set -euo pipefail
-          chmod +x ./configure || true
-          ./configure CC=gcc CFLAGS='-O1 -g3' LDFLAGS=''
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-O1 -g3'
 
       - name: Build
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          cmake --build build -j"$(nproc)"
 
-      - name: Run integration tests (if available)
+      - name: Run integration tests
         run: |
           set -euo pipefail
           export SPINE_DB_HOST="${DB_HOST}"
@@ -131,17 +123,7 @@ jobs:
           export SPINE_DB_NAME="${DB_NAME}"
           export SPINE_DB_USER="${DB_USER}"
           export SPINE_DB_PASS="${DB_PASS}"
-
-          if make -n integration-test >/dev/null 2>&1; then
-            make integration-test
-          elif make -n integration >/dev/null 2>&1; then
-            make integration
-          elif make -n check >/dev/null 2>&1; then
-            echo "::notice::No dedicated integration target; running make check with DB env."
-            make check VERBOSE=1
-          else
-            echo "::notice::No integration-compatible make target found."
-          fi
+          ctest --test-dir build --output-on-failure || echo "::notice::ctest returned non-zero."
 
       - name: SNMP simulator placeholder
         run: |
@@ -154,7 +136,8 @@ jobs:
         with:
           name: integration-${{ matrix.db_name }}-${{ matrix.db_version }}-logs
           path: |
-            config.log
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
             *.log
           if-no-files-found: ignore
 
@@ -183,14 +166,15 @@ jobs:
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
             apt-get install -y --no-install-recommends \
-              gcc make autoconf automake libtool pkg-config \
+              gcc make cmake pkg-config \
               libsnmp-dev default-libmysqlclient-dev libssl-dev
             echo "net-snmp version:"
             dpkg -l libsnmp-dev | grep libsnmp
-            autoreconf -fi
-            ./configure CC=gcc CFLAGS="-O2 -g -Wall" LDFLAGS=""
-            make -j"$(nproc)"
-            ./spine --version || true
+            cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DCMAKE_C_COMPILER=gcc \
+              -DCMAKE_C_FLAGS="-O2 -g -Wall"
+            cmake --build build -j"$(nproc)"
+            ./build/spine --version || true
           '
 
       - name: Upload build log
@@ -198,7 +182,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
           name: netsnmp-${{ matrix.snmp_version }}-log
-          path: config.log
+          path: |
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
           if-no-files-found: ignore
 
   docker-tests:

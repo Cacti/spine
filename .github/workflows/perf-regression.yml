@@ -21,7 +21,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
     hyperfine time snmp snmpd
 
@@ -39,12 +39,15 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap and build
+      - name: Build
         run: |
           set -euo pipefail
-          ./bootstrap
-          ./configure CC=gcc CFLAGS='-std=c11 -O2 -g' LDFLAGS=''
-          make -j"$(nproc)" V=1
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-std=c11 -O2 -g'
+          cmake --build build -j"$(nproc)" --verbose
+          # Keep the legacy "./spine" key stable with the perf baseline JSON.
+          ln -sf build/spine ./spine
 
       - name: Run hyperfine CLI benchmarks
         run: |

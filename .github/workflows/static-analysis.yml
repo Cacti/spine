@@ -22,7 +22,7 @@ defaults:
 env:
   DEBIAN_FRONTEND: noninteractive
   COMMON_DEPS: >-
-    autoconf automake libtool make pkg-config
+    cmake make pkg-config
     gcc clang llvm clang-tools cppcheck codespell shellcheck shfmt golang-go
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_ANALYZE: >-
@@ -110,7 +110,7 @@ jobs:
       - name: Run codespell on tracked source/docs
         run: |
           set -euo pipefail
-          mapfile -t files < <(git ls-files '*.c' '*.h' '*.md' '*.txt' '*.yml' '*.yaml' 'Makefile.am' 'configure.ac')
+          mapfile -t files < <(git ls-files '*.c' '*.h' '*.md' '*.txt' '*.yml' '*.yaml' 'CMakeLists.txt' 'cmake/*.cmake')
           if [[ "${#files[@]}" -eq 0 ]]; then
             echo "No eligible files found for codespell."
             exit 0
@@ -144,20 +144,13 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure build
         run: |
           set -euo pipefail
-          chmod +x ./configure || true
-          ./configure CC=clang CFLAGS="${CFLAGS_ANALYZE}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS="${CFLAGS_ANALYZE}" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Run clang-tidy
         run: |
@@ -175,10 +168,11 @@ jobs:
           fi
 
           clang-tidy \
+            -p build \
             -checks="${CLANG_TIDY_CHECKS}" \
             "${sources[@]}" \
             -- \
-            -std=c17 -I. -Iconfig -I/usr/include/mysql \
+            -std=c17 -I. -Isrc -Isrc/platform -Ithird_party -I/usr/include/mysql \
             2>&1 | tee clang-tidy-report.txt
 
       - name: Upload clang-tidy report
@@ -215,27 +209,19 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Configure build system
         run: |
           set -euo pipefail
-          chmod +x ./configure || true
-          ./configure CC=clang CFLAGS="${CFLAGS_ANALYZE}"
+          scan-build cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS="${CFLAGS_ANALYZE}"
 
       - name: Run scan-build
         run: |
           set -euo pipefail
           mkdir -p scan-build-report
           scan-build --status-bugs --keep-going --plist --output scan-build-report \
-            make -j"$(nproc)"
+            cmake --build build -j"$(nproc)"
 
       - name: Upload scan-build report
         if: always()
@@ -258,15 +244,6 @@ jobs:
         with:
           packages: ${{ env.COMMON_DEPS }}
 
-      - name: Bootstrap
-        run: |
-          set -euo pipefail
-          if [[ -x ./bootstrap ]]; then
-            ./bootstrap
-          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
-            autoreconf -fi
-          fi
-
       - name: Run cppcheck
         run: |
           set -euo pipefail
@@ -282,6 +259,7 @@ jobs:
             --inline-suppr \
             --force \
             --suppress=missingIncludeSystem \
+            -I src -I src/platform -I third_party \
             "${sources[@]}" \
             2> cppcheck-report.txt
 
