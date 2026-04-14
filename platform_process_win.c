@@ -45,14 +45,31 @@ static wchar_t *spine_windows_utf8_to_wide(const char *input) {
 
 static size_t spine_windows_quoted_arg_length(const wchar_t *arg) {
 	size_t extra;
+	size_t backslash_count;
 	const wchar_t *cursor;
+	int needs_quotes;
 
-	extra = 2; /* opening and closing quotes */
+	needs_quotes = (*arg == L'\0' || wcspbrk(arg, L" \t\n\v\"") != NULL);
+	extra = needs_quotes ? 2 : 0;
+	backslash_count = 0;
 	for (cursor = arg; *cursor != '\0'; cursor++) {
-		if (*cursor == '"' || *cursor == '\\') {
+		if (*cursor == L'\\') {
+			backslash_count++;
 			extra++;
+			continue;
 		}
+
+		if (*cursor == L'"') {
+			extra += backslash_count + 1;
+			backslash_count = 0;
+		} else {
+			backslash_count = 0;
+		}
+
 		extra++;
+	}
+	if (needs_quotes) {
+		extra += backslash_count;
 	}
 
 	return extra;
@@ -86,6 +103,9 @@ static wchar_t *spine_windows_build_command_line(char *const argv[]) {
 
 	output = command_line;
 	for (arg_index = 0; arg_index < arg_count; arg_index++) {
+		size_t backslash_count;
+		int needs_quotes;
+
 		if (arg_index > 0) {
 			*output++ = L' ';
 		}
@@ -96,14 +116,36 @@ static wchar_t *spine_windows_build_command_line(char *const argv[]) {
 			return NULL;
 		}
 
-		*output++ = L'"';
+		needs_quotes = (*wide_arg == L'\0' || wcspbrk(wide_arg, L" \t\n\v\"") != NULL);
+		if (needs_quotes) {
+			*output++ = L'"';
+		}
+		backslash_count = 0;
 		for (input = wide_arg; *input != L'\0'; input++) {
-			if (*input == L'"' || *input == L'\\') {
+			if (*input == L'\\') {
+				backslash_count++;
 				*output++ = L'\\';
+				continue;
 			}
+
+			if (*input == L'"') {
+				while (backslash_count-- > 0) {
+					*output++ = L'\\';
+				}
+				backslash_count = 0;
+				*output++ = L'\\';
+			} else {
+				backslash_count = 0;
+			}
+
 			*output++ = *input;
 		}
-		*output++ = L'"';
+		if (needs_quotes) {
+			while (backslash_count-- > 0) {
+				*output++ = L'\\';
+			}
+			*output++ = L'"';
+		}
 		free(wide_arg);
 	}
 	*output = L'\0';
@@ -249,10 +291,13 @@ int spine_process_spawn_retry(
 	DWORD creation_flags;
 
 	(void) file_actions;
-	(void) envp;
 
 	retry_count = 0;
 	creation_flags = CREATE_NO_WINDOW;
+	if (envp != NULL) {
+		errno = ENOTSUP;
+		return ENOTSUP;
+	}
 	wide_path = spine_windows_utf8_to_wide(path);
 	command_line_template = spine_windows_build_command_line(argv);
 	if (wide_path == NULL || command_line_template == NULL) {

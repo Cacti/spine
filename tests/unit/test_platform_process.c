@@ -109,6 +109,17 @@ static void test_platform_spawn_utf8_path_argument(void) {
 
 	DeleteFileW(script_path);
 }
+
+static void test_platform_spawn_custom_env_not_supported(void) {
+	spine_pid_t pid;
+	char cmd_path[] = "C:\\Windows\\System32\\cmd.exe";
+	char cmd_flag[] = "/c";
+	char cmd_body[] = "exit 0";
+	char *argv[] = { cmd_path, cmd_flag, cmd_body, NULL };
+	char *envp[] = { "SPINE_TEST_ENV=1", NULL };
+
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, argv, envp, 1, 1000), ENOTSUP);
+}
 #endif
 
 int main(void) {
@@ -118,6 +129,7 @@ int main(void) {
 	test_platform_spawn_and_terminate();
 #ifdef _WIN32
 	test_platform_spawn_utf8_path_argument();
+	test_platform_spawn_custom_env_not_supported();
 #endif
 	return finish_tests("platform process tests");
 }

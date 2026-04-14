@@ -225,6 +225,12 @@ jobs:
           docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
           ./tests/integration/test_db_column_detect.sh
 
+      - name: IPv6 transport test
+        run: |
+          set -euo pipefail
+          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
+          ./tests/integration/test_ipv6_transport.sh
+
       - name: Cleanup
         if: always()
         run: docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans
