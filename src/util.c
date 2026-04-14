@@ -1097,20 +1097,38 @@ int read_spine_config(const char *file) {
 		}
 		return -1;
 	} else {
-		/* spine.conf carries DB credentials; refuse to read it if other users
-		 * on the host could. 0600 and owned by the running user is the only
-		 * safe combination. Soft-fail on fstat errors (unusual filesystems). */
+		/* spine.conf carries DB credentials. Hard-fail only on the bits that
+		 * actually leak or corrupt them: world-readable (password exfil) or
+		 * group/world-writable (tamper). Soft-warn on owner mismatch because
+		 * many deployments ship spine under a service account distinct from
+		 * the user invoking it, and on fstat errors (unusual filesystems). */
 		struct stat conf_stat;
 		if (fstat(fileno(fp), &conf_stat) == 0) {
-			if ((conf_stat.st_mode & (S_IRWXG | S_IRWXO)) != 0 ||
-				conf_stat.st_uid != geteuid()) {
+			mode_t perms = conf_stat.st_mode & 0777;
+			if (conf_stat.st_mode & S_IROTH) {
 				if (!set.stderr_notty) {
 					fprintf(stderr,
-						"FATAL: spine config [%s] must be mode 0600 and owned by the spine user; refusing to start\n",
-						file);
+						"FATAL: spine config [%s] is world-readable (mode 0%o); refusing to start\n",
+						file, perms);
 				}
 				fclose(fp);
 				return -1;
+			}
+			if (conf_stat.st_mode & (S_IWGRP | S_IWOTH)) {
+				if (!set.stderr_notty) {
+					fprintf(stderr,
+						"FATAL: spine config [%s] is group/world-writable (mode 0%o); refusing to start\n",
+						file, perms);
+				}
+				fclose(fp);
+				return -1;
+			}
+			if (conf_stat.st_uid != geteuid() && geteuid() != 0) {
+				if (!set.stderr_notty) {
+					fprintf(stderr,
+						"WARNING: spine config [%s] owner uid %d differs from effective uid %d\n",
+						file, (int)conf_stat.st_uid, (int)geteuid());
+				}
 			}
 		}
 
