@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <string.h>
 
-#include "../../platform/platform_error.h"
+#include "platform/platform_error.h"
 #include "test_platform_helpers.h"
 
 static void test_error_string_returns_text(void) {

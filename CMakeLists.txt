@@ -62,31 +62,31 @@ set(MAX_SIMULTANEOUS_SCRIPTS 20 CACHE STRING "Maximum simultaneous spine scripts
 set(MAX_MYSQL_BUF_SIZE 131072 CACHE STRING "Maximum MySQL insert buffer size")
 
 set(SPINE_PLATFORM_SOURCES
-    platform/platform_common.c
-    platform/platform_posix.c
-    platform/platform_win.c
-    platform/platform_socket_posix.c
-    platform/platform_socket_win.c
-    platform/platform_error_posix.c
-    platform/platform_error_win.c
-    platform/platform_process_posix.c
-    platform/platform_process_win.c
-    platform/platform_fd_posix.c
-    platform/platform_fd_win.c
+    src/platform/platform_common.c
+    src/platform/platform_posix.c
+    src/platform/platform_win.c
+    src/platform/platform_socket_posix.c
+    src/platform/platform_socket_win.c
+    src/platform/platform_error_posix.c
+    src/platform/platform_error_win.c
+    src/platform/platform_process_posix.c
+    src/platform/platform_process_win.c
+    src/platform/platform_fd_posix.c
+    src/platform/platform_fd_win.c
 )
 
 set(SPINE_CORE_SOURCES
-    sql.c
-    spine.c
-    util.c
-    snmp.c
-    locks.c
-    poller.c
-    nft_popen.c
-    php.c
-    ping.c
-    keywords.c
-    error.c
+    src/sql.c
+    src/spine.c
+    src/util.c
+    src/snmp.c
+    src/locks.c
+    src/poller.c
+    src/nft_popen.c
+    src/php.c
+    src/ping.c
+    src/keywords.c
+    src/error.c
 )
 
 set(SPINE_TEST_NAMES env time process socket error fd dns)
@@ -398,6 +398,9 @@ add_library(spine_platform OBJECT ${SPINE_PLATFORM_SOURCES})
 target_include_directories(spine_platform PUBLIC
     ${CMAKE_BINARY_DIR}
     ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/platform
+    ${CMAKE_SOURCE_DIR}/third_party
 )
 target_link_libraries(spine_platform PUBLIC Threads::Threads)
 if(TARGET spine_build_options)
@@ -428,6 +431,9 @@ function(spine_add_platform_test test_name)
     target_include_directories(test_platform_${test_name} PRIVATE
         ${CMAKE_BINARY_DIR}
         ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/platform
+        ${CMAKE_SOURCE_DIR}/third_party
     )
     target_link_libraries(test_platform_${test_name} PRIVATE Threads::Threads)
     if(TARGET spine_build_options)
@@ -452,6 +458,9 @@ if(SPINE_BUILD_MAIN)
     target_include_directories(spine PRIVATE
         ${CMAKE_BINARY_DIR}
         ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/platform
+        ${CMAKE_SOURCE_DIR}/third_party
     )
     target_link_libraries(spine PRIVATE
         spine_platform
@@ -467,7 +476,7 @@ if(SPINE_BUILD_MAIN)
     endif()
 
     install(TARGETS spine RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    install(FILES spine.conf.dist DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
+    install(FILES etc/spine.conf.dist DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
 endif()
 
 if(BUILD_TESTING)

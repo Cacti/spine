@@ -1,6 +1,6 @@
 #include <time.h>
 
-#include "../../platform/platform.h"
+#include "platform/platform.h"
 #include "test_platform_helpers.h"
 
 static void test_platform_init_and_cleanup(void) {
