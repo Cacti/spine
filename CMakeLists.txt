@@ -562,7 +562,12 @@ else()
         # re-enable BSD types and extensions alongside POSIX.
         # FreeBSD 14 is Tier 1; NetBSD 10, OpenBSD 7.x, and DragonFly 6.x
         # are Tier 3 (advisory CI, see docs/platforms.md).
-        target_compile_definitions(spine_platform PUBLIC __BSD_VISIBLE=1)
+        # __BSD_VISIBLE exposes pipe2, u_char/u_short, S_IFSOCK and other
+        # BSD extensions. _XOPEN_SOURCE=700 adds XSI-level gettimeofday
+        # and realtime clock helpers that strict POSIX.1-2008 hides.
+        target_compile_definitions(spine_platform PUBLIC
+            __BSD_VISIBLE=1
+            _XOPEN_SOURCE=700)
     endif()
     target_link_libraries(spine_platform PUBLIC m ${CMAKE_DL_LIBS})
     if(CAP_LIBRARY)
