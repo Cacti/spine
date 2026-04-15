@@ -438,16 +438,6 @@ void read_config_options(void) {
 		}
 	}
 
-	/* get log separator */
-	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
-		set.log_datetime_separator = atoi(res);
-		free(res);
-
-		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
-			set.log_datetime_separator = GDC_DEFAULT;
-		}
-	}
-
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, LOCAL, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
