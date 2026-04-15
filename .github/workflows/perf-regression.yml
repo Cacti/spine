@@ -160,12 +160,19 @@ jobs:
           snmpd_pid=$!
           trap 'kill "${snmpd_pid}" 2>/dev/null || true' EXIT
 
+          snmpd_ready=0
           for _ in $(seq 1 20); do
             if snmpget -v2c -c public -On 127.0.0.1:1161 1.3.6.1.2.1.1.3.0 >/dev/null 2>&1; then
+              snmpd_ready=1
               break
             fi
             sleep 1
           done
+          if [ "${snmpd_ready}" -ne 1 ]; then
+            echo "ERROR: snmpd did not respond within 20s; dumping log:"
+            cat snmpd.log || true
+            exit 1
+          fi
 
           samples="$(python3 - <<'PY'
           import json

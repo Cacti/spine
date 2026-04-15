@@ -290,8 +290,11 @@ jobs:
           usesh: true
           sync: nfs
           prepare: |
-            pkg update -f
-            pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+            # FreeBSD 14.1 userland plus a catalog that has newer 14.3-tagged
+            # packages (zycore-c and friends). IGNORE_OSVERSION lets pkg
+            # install them without refusing on the osversion mismatch.
+            env IGNORE_OSVERSION=yes pkg update -f
+            env IGNORE_OSVERSION=yes pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
           run: |
             cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
             cmake --build build
