@@ -91,7 +91,7 @@ output=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
   --conf=/etc/spine/spine.conf -f 3 -l 3 -S 2>&1 || true)
 echo "$output"
 
-if echo "$output" | grep -qi "segfault|SIGSEGV|Aborted|core dump|Unknown column"; then
+if echo "$output" | grep -qiE "segfault|SIGSEGV|Aborted|core dump|Unknown column"; then
   fail "spine crashed or hit SQL regression in IPv6 poll path"
 else
   pass "spine handled IPv6 poll path without crash/SQL regression"
