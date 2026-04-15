@@ -58,6 +58,16 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	/* show the sql query */
 	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
 
+	/* --dry-run short-circuits every write so operators can validate config
+	 * and connectivity without touching poller_output or settings. A single
+	 * INFO line per query keeps the log readable while still proving the
+	 * would-be SQL was generated correctly. SQL_readonly is the legacy
+	 * developer-testing flag and retains its existing semantics. */
+	if (set.dry_run) {
+		SPINE_LOG(("DRY-RUN: would SQL: %s", query_frag));
+		return TRUE;
+	}
+
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
 			if (mysql_query(mysql, query)) {

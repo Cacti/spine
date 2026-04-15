@@ -607,6 +607,10 @@ int main(int argc, char *argv[]) {
 		exit(spine_health_check() ? EXIT_SUCCESS : EXIT_FAILURE);
 	}
 
+	if (set.dry_run) {
+		SPINE_LOG(("NOTE: --dry-run active; all SQL writes will be logged, not executed"));
+	}
+
 	/* read settings table from the database to further establish environment */
 	read_config_options();
 
