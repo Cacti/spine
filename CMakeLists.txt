@@ -121,7 +121,7 @@ set(SPINE_CORE_SOURCES
     src/circuit_breaker.c
 )
 
-set(SPINE_TEST_NAMES env time process socket error fd dns)
+set(SPINE_TEST_NAMES env time process socket error fd dns thread_name)
 
 if(ENABLE_WARNINGS)
     add_library(spine_build_options INTERFACE)
@@ -748,6 +748,200 @@ if(BUILD_TESTING)
         endif()
     endif()
     add_test(NAME systemd_notify COMMAND test_systemd_notify)
+
+    # Sandbox: NULL-safe unveil_paths() plus forked restrict() smoke test.
+    # Links the shared platform object so all per-OS sandbox stubs are present.
+    add_executable(test_sandbox
+        tests/unit/test_sandbox.c
+        $<TARGET_OBJECTS:spine_platform>
+    )
+    target_include_directories(test_sandbox PRIVATE
+        ${CMAKE_BINARY_DIR}
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/platform
+        ${CMAKE_SOURCE_DIR}/tests/unit
+        ${CMAKE_SOURCE_DIR}/third_party
+    )
+    target_link_libraries(test_sandbox PRIVATE Threads::Threads)
+    if(TARGET spine_build_options)
+        target_link_libraries(test_sandbox PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_sandbox PRIVATE spine_hardening)
+    if(NOT WIN32)
+        target_link_libraries(test_sandbox PRIVATE m ${CMAKE_DL_LIBS})
+    endif()
+    add_test(NAME sandbox COMMAND test_sandbox)
+
+    # json_log: free-standing JSON escaper. The function has no set/spine_log
+    # dependencies so we recompile it from a tiny helper TU to avoid pulling
+    # the whole util.c + mysql + net-snmp chain just for a pure-string test.
+    add_executable(test_json_log
+        tests/unit/test_json_log.c
+        tests/unit/json_escape_tu.c
+    )
+    target_include_directories(test_json_log PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_json_log PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_json_log PRIVATE spine_hardening)
+    add_test(NAME json_log COMMAND test_json_log)
+
+    # Circuit breaker, dump_config, check_mode, and dry_run all depend on
+    # the spine config struct and/or MySQL. Gate them behind the same main
+    # build so we only wire them when mysql + net-snmp were discovered.
+    if(SPINE_BUILD_MAIN)
+        add_executable(test_circuit_breaker
+            tests/unit/test_circuit_breaker.c
+            src/circuit_breaker.c
+        )
+        target_include_directories(test_circuit_breaker PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_circuit_breaker PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_circuit_breaker PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_circuit_breaker PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_circuit_breaker PRIVATE spine_hardening)
+        add_test(NAME circuit_breaker COMMAND test_circuit_breaker)
+
+        add_executable(test_dump_config
+            tests/unit/test_dump_config.c
+            tests/unit/test_spine_stubs.c
+            src/util.c
+        )
+        target_include_directories(test_dump_config PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_dump_config PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_dump_config PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_dump_config PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_dump_config PRIVATE spine_hardening)
+        add_test(NAME dump_config COMMAND test_dump_config)
+
+        add_executable(test_check_mode
+            tests/unit/test_check_mode.c
+            tests/unit/test_spine_stubs.c
+            src/util.c
+        )
+        target_include_directories(test_check_mode PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_check_mode PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_check_mode PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_check_mode PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_check_mode PRIVATE spine_hardening)
+        add_test(NAME check_mode COMMAND test_check_mode)
+        # 3s connect timeout + a touch of slack so cold CI runners do not
+        # flake when the route takes an extra second to time out.
+        set_tests_properties(check_mode PROPERTIES TIMEOUT 30)
+
+        add_executable(test_dry_run
+            tests/unit/test_dry_run.c
+            tests/unit/test_sql_stubs.c
+            src/sql.c
+        )
+        target_include_directories(test_dry_run PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_dry_run PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_dry_run PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_dry_run PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_dry_run PRIVATE spine_hardening)
+        add_test(NAME dry_run COMMAND test_dry_run)
+    endif()
+
+    # Windows-only Job Object lifecycle test.
+    if(WIN32)
+        add_executable(test_job_object
+            tests/unit/test_job_object.c
+            $<TARGET_OBJECTS:spine_platform>
+        )
+        target_include_directories(test_job_object PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+        )
+        target_link_libraries(test_job_object PRIVATE Threads::Threads ws2_32 iphlpapi advapi32)
+        if(TARGET spine_build_options)
+            target_link_libraries(test_job_object PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_job_object PRIVATE spine_hardening)
+        add_test(NAME job_object COMMAND test_job_object)
+    endif()
+
+    # BSD-only arc4random divergence test.
+    if(CMAKE_SYSTEM_NAME MATCHES "^(FreeBSD|OpenBSD|NetBSD|DragonFly)$")
+        add_executable(test_arc4random tests/unit/test_arc4random.c)
+        target_include_directories(test_arc4random PRIVATE
+            ${CMAKE_SOURCE_DIR}/tests/unit
+        )
+        if(TARGET spine_build_options)
+            target_link_libraries(test_arc4random PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_arc4random PRIVATE spine_hardening)
+        add_test(NAME arc4random COMMAND test_arc4random)
+    endif()
 endif()
 
 configure_file(
