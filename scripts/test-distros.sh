@@ -40,6 +40,12 @@ mkdir -p "$REPO_ROOT/build-reports"
 declare -A RESULTS
 
 for distro in "${DISTROS[@]}"; do
+  # Security: validate distro name to prevent command injection
+  if [[ ! "$distro" =~ ^[a-zA-Z0-9\._/:-]+$ ]]; then
+    echo "ERROR: invalid distro name: $distro" >&2
+    exit 1
+  fi
+
   safe="${distro//[:\/]/-}"
   logfile="$REPO_ROOT/build-reports/${safe}.log"
   echo "=== $distro ===" | tee "$logfile"

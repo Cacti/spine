@@ -46,12 +46,22 @@ case "$cmd" in
       echo "Prefer scripts/test-distros.sh for container builds (faster, no act overhead)."
       exit 1
     fi
+    # Security: validate image name
+    if [[ ! "$1" =~ ^[a-zA-Z0-9\._/:-]+$ ]]; then
+      echo "ERROR: invalid image name: $1" >&2
+      exit 1
+    fi
     bash scripts/test-distros.sh "$1"
     ;;
   help | -h | --help)
     sed -n '2,/^set /p' "$0" | grep -E '^# ' | sed 's/^# \?//'
     ;;
   *)
+    # Security: validate job name
+    if [[ ! "$cmd" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+      echo "ERROR: invalid job name: $cmd" >&2
+      exit 1
+    fi
     # Treat as a job name
     command -v act >/dev/null 2>&1 || {
       echo "ERROR: install act"
