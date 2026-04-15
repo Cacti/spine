@@ -1,9 +1,7 @@
-/* pthread_setname_np on glibc requires _GNU_SOURCE before <pthread.h>.
- * usleep on POSIX-strict hosts requires _XOPEN_SOURCE>=500 or _DEFAULT_SOURCE.
- * Must be defined before any system header include pulls <features.h>. */
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
-#endif
+/* pthread_setname_np (glibc) is gated by _GNU_SOURCE. usleep wants
+ * _XOPEN_SOURCE>=500 or _DEFAULT_SOURCE. Both are supplied centrally by
+ * CMake via spine_posix_features and spine_platform's PUBLIC defines, so
+ * no per-TU macro dance is needed here. */
 
 #include "platform.h"
 

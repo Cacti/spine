@@ -1,12 +1,7 @@
-/* pipe2(2) is a Linux/BSD extension. On glibc it is only declared when
- * _GNU_SOURCE is visible before any libc header is included (features.h
- * latches the exposed symbol set on first inclusion). The project otherwise
- * builds with _POSIX_C_SOURCE=200809L which would hide it. Define the macro
- * before pulling in platform_process.h, which transitively includes
- * <sys/types.h>. */
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE 1
-#endif
+/* pipe2(2) is a Linux/BSD extension. On glibc it is gated by _GNU_SOURCE;
+ * CMake injects the macro through spine_posix_features for every Linux
+ * target (both spine_platform and the test binaries) so this TU inherits
+ * it without a per-file #define. */
 
 #include "platform_process.h"
 

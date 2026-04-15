@@ -554,6 +554,16 @@ else()
         target_compile_definitions(spine_posix_features INTERFACE _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
         target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
     endif()
+    # Linux GNU libc gates pthread_setname_np, pipe2, getrandom, strerror_r's
+    # GNU variant, and similar extensions behind _GNU_SOURCE. Per-TU #defines
+    # only survive as long as every consumer remembers them, and the tests
+    # that pull spine_platform's object files into standalone binaries
+    # bypass any source-level gate. Centralize the macro here so the feature
+    # surface is identical across spine_platform and every test target.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_compile_definitions(spine_posix_features INTERFACE _GNU_SOURCE=1)
+        target_compile_definitions(spine_platform PUBLIC _GNU_SOURCE=1)
+    endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         target_compile_definitions(spine_posix_features INTERFACE _DARWIN_C_SOURCE=1)
         target_compile_definitions(spine_platform PUBLIC _DARWIN_C_SOURCE=1)
