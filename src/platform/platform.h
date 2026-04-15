@@ -21,4 +21,9 @@ unsigned long spine_platform_process_id(void);
 int spine_platform_stdout_is_terminal(void);
 int spine_platform_stderr_is_terminal(void);
 
+/* Best-effort thread naming for debuggers, ps, and perf. Platforms that lack
+ * a thread-name facility return silently. Names longer than the platform's
+ * limit (Linux: 15 bytes + NUL, macOS: 63) are truncated by the OS. */
+void spine_platform_set_thread_name(const char *name);
+
 #endif

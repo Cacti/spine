@@ -109,4 +109,38 @@ int spine_platform_stderr_is_terminal(void) {
 	return _isatty(_fileno(stderr));
 }
 
+void spine_platform_set_thread_name(const char *name) {
+	/* SetThreadDescription arrived in Windows 10 1607. Resolving it through
+	 * GetProcAddress keeps the binary runnable on older SKUs -- older Windows
+	 * just returns silently. */
+	typedef HRESULT (WINAPI *set_thread_description_fn)(HANDLE, PCWSTR);
+	static set_thread_description_fn resolved = NULL;
+	static int resolve_attempted = 0;
+	wchar_t wide_name[64];
+	int converted;
+
+	if (name == NULL) {
+		return;
+	}
+
+	if (!resolve_attempted) {
+		HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+		if (kernel32 != NULL) {
+			resolved = (set_thread_description_fn) GetProcAddress(kernel32, "SetThreadDescription");
+		}
+		resolve_attempted = 1;
+	}
+	if (resolved == NULL) {
+		return;
+	}
+
+	converted = MultiByteToWideChar(CP_UTF8, 0, name, -1, wide_name,
+		(int) (sizeof(wide_name) / sizeof(wide_name[0])));
+	if (converted <= 0) {
+		return;
+	}
+
+	(void) resolved(GetCurrentThread(), wide_name);
+}
+
 #endif

@@ -84,6 +84,12 @@ void *child(void *arg) {
 	double host_time_double;
 	char host_time[SMALL_BUFSIZE];
 
+	/* Name the thread before any real work so that ps -L, top -H, or
+	 * perf report show each poll worker distinctly. Linux truncates at
+	 * 15 bytes + NUL, so the "spine-poll" prefix leaves room for a 4-digit
+	 * host id in the 15-byte budget. */
+	spine_platform_set_thread_name("spine-poll");
+
 	host_errors = 0;
 
 	poller_thread_t poller_details = *(poller_thread_t*) arg;

@@ -292,6 +292,11 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Failed to initialize platform runtime services.");
 	}
 
+	/* Name the main thread so ps(1) / top(1) / perf(1) / Process Explorer
+	 * distinguish it from worker threads. Must stay under 15 bytes to
+	 * survive Linux's pthread_setname_np truncation. */
+	spine_platform_set_thread_name("spine-main");
+
 	/* Seed ICMP echo id randomization before any poll thread can fire. */
 	ping_init();
 
