@@ -768,7 +768,11 @@ if(BUILD_TESTING)
         target_link_libraries(test_sandbox PRIVATE spine_build_options)
     endif()
     target_link_libraries(test_sandbox PRIVATE spine_hardening)
-    if(NOT WIN32)
+    if(WIN32)
+        # spine_platform pulls in WSA* and IP Helper symbols; tests linking it
+        # on MinGW/MSVC need the same import libs the main binary gets.
+        target_link_libraries(test_sandbox PRIVATE iphlpapi ws2_32)
+    else()
         target_link_libraries(test_sandbox PRIVATE m ${CMAKE_DL_LIBS})
     endif()
     add_test(NAME sandbox COMMAND test_sandbox)

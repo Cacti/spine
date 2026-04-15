@@ -1,3 +1,10 @@
+/* pthread_setname_np on glibc requires _GNU_SOURCE before <pthread.h>.
+ * usleep on POSIX-strict hosts requires _XOPEN_SOURCE>=500 or _DEFAULT_SOURCE.
+ * Must be defined before any system header include pulls <features.h>. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 #include "platform.h"
 
 #ifndef _WIN32
@@ -6,6 +13,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+#include <pthread_np.h>
+#endif
 
 int spine_platform_init_once(void) {
 	return 0;
