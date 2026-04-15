@@ -1241,15 +1241,6 @@ void config_defaults(void) {
 	STRNCOPY(set.rdb_user, DEFAULT_DB_USER);
 	STRNCOPY(set.rdb_pass, DEFAULT_DB_PASS);
 
-	/* TLS is opt-in at the MySQL level but opt-out for spine: default to
-	 * preferred mode (MYSQL_OPT_SSL_MODE=SSL_MODE_PREFERRED) so a spine
-	 * binary talking to a TLS-capable server negotiates an encrypted
-	 * channel without administrator action. Plaintext is still available
-	 * via "DB_UseSSL=0" / "RDB_UseSSL=0" in spine.conf. Deployments that
-	 * ship a CA bundle can escalate to "=2" for SSL_MODE_VERIFY_IDENTITY. */
-	set.db_ssl  = 1;
-	set.rdb_ssl = 1;
-
 	STRNCOPY(config_paths[0], CONFIG_PATH_1);
 	STRNCOPY(config_paths[1], CONFIG_PATH_2);
 	STRNCOPY(config_paths[2], CONFIG_PATH_3);
