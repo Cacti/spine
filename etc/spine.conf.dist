@@ -30,6 +30,11 @@
 # | SNMP_Clientaddr Bind SNMP to a specific address for sites that use      |
 # |                 higher security levels                                  |
 # | Cacti_Log       Optional path to the Cacti log file                     |
+# | Script_Policy   Determines how Spine handles shell metacharacters in    |
+# |                 script commands.                                        |
+# |                 0: (Default) No enforcement (backward compatible)       |
+# |                 1: Strict. Blocks scripts containing shell              |
+# |                    metacharacters (; | & > < \ $ ` " ')                 |
 # +-------------------------------------------------------------------------+
 # | Settings for Remote Polling                                             |
 # +-------------------------------------------------------------------------+
@@ -51,6 +56,7 @@ DB_Port       3306
 #DB_SSL_CA
 #SNMP_Clientaddr
 #Cacti_Log     /var/www/html/cacti/log/cacti.log
+#Script_Policy 0
 
 #RDB_Host      localhost
 #RDB_Database  cacti

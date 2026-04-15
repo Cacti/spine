@@ -51,9 +51,14 @@ Platform implementation rules are centralized in
 Security Behavior Change
 ------------------------
 
-Script poll commands now apply a strict shell-metacharacter guard before
-execution. Commands containing `;`, `|`, `&`, `` ` ``, `$`, `>`, `<`, newline,
-or carriage return are rejected and logged as unsafe.
+Script poll commands can now apply a strict shell-metacharacter guard before
+execution. This is disabled by default for backward compatibility. When
+enabled via \`Script_Policy 1\` in \`spine.conf\`, commands containing \`;\`,
+\`|\`, \`&\`, \` \` \`, \`$\`, \`>\`, \`<\`, backslash, single quote, or double
+quote are rejected and logged as unsafe.
+
+Spine also now strictly rejects embedded newlines or carriage returns in
+commands sent to the PHP script server to prevent protocol subversion.
 
 Build System Roadmap
 --------------------

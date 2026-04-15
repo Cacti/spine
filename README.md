@@ -98,9 +98,14 @@ DB_Port       3306
 DB_UseSSL     1
 
 Threads       20
+Script_Policy 1
 ```
 
 Mode `0600` owned by the spine user is recommended. Spine warns on world-readable configs and refuses to start if the file is group- or world-writable.
+
+### Script Safety Policy
+
+Spine includes an opt-in policy to block shell metacharacters in script commands fetched from the database. Set `Script_Policy 1` in `spine.conf` to reject commands containing characters like `; | & > < \ $ ` " '`. This provides defense-in-depth if the Cacti database is compromised.
 
 Validate the config without polling:
 
@@ -133,6 +138,13 @@ Unit source: [etc/systemd/spine.service](etc/systemd/spine.service). Hardening f
 ## Security
 
 Spine trusts the Cacti database. Any principal with write access to `poller_item` can direct spine to execute arbitrary commands as the spine user. See [SECURITY.md](SECURITY.md) for the full trust model, recommended deployment (dedicated user, `CAP_NET_RAW`, `0600` config, TLS to the DB), and private vulnerability reporting instructions.
+
+Key security controls:
+
+- **Script Policy:** Opt-in blocking of shell metacharacters in poller commands via `Script_Policy 1`.
+- **PHP Safety:** Strict rejection of embedded newlines in commands sent to the PHP script server to prevent protocol subversion.
+- **SQL Hardening:** All database lookups, including configuration settings, use `db_escape` to prevent SQL injection.
+- **Credential Protection:** Database and SNMPv3 passwords are zeroed in memory immediately after use and before process exit.
 
 Runtime sandboxing, when available on the target OS:
 

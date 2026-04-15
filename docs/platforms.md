@@ -146,8 +146,9 @@ sockets). Bug reports tagged `platform:bsd` welcome.
 
 Tier 3. CI lane targets OpenBSD 7.5. OpenBSD ships its own libc fork with
 strict POSIX semantics; the same BSD code paths used for FreeBSD apply.
-`pledge(2)` and `unveil(2)` integration is not currently wired into spine
-but is a candidate for community contribution.
+`pledge(2)` and `unveil(2)` integration is fully implemented in
+`src/platform/platform_sandbox_openbsd.c`, providing robust syscall and
+filesystem confinement when running as a non-root user.
 
 ### DragonFly BSD 6.x
 
