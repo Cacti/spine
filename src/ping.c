@@ -1112,11 +1112,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						}
 
 						if (pkt->icmp_type != ICMP_ECHOREPLY) {
-							/* received a response other than an echo reply */
-							if (total_time > host_timeout) {
-								retry_count++;
-								total_time = 0;
-							}
+							/* received a response other than an echo reply; the enclosing
+							 * total_time < host_timeout branch means a retry bump here
+							 * is unreachable. Drop and keep listening. */
 							continue;
 						}
 

@@ -254,6 +254,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	local_cnn = db_get_connection(LOCAL);
 	if (local_cnn == NULL) {
 		SPINE_LOG(("FATAL: Device[%i] HT[%i] Unable to acquire local DB connection", host_id, host_thread));
+		SPINE_FREE(error_string);
+		SPINE_FREE(buf_size);
+		SPINE_FREE(buf_errors);
 		return;
 	}
 	mysql = local_cnn->mysql;
@@ -263,6 +266,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		if (remote_cnn == NULL) {
 			SPINE_LOG(("FATAL: Device[%i] HT[%i] Unable to acquire remote DB connection", host_id, host_thread));
 			db_release_connection(LOCAL, local_cnn->id);
+			SPINE_FREE(error_string);
+			SPINE_FREE(buf_size);
+			SPINE_FREE(buf_errors);
 			return;
 		}
 		mysqlr = remote_cnn->mysql;
