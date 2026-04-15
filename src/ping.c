@@ -42,6 +42,7 @@
 #  include <net/if.h>
 #  include <netdb.h>
 #  include <netinet/in.h>
+#  include <sys/types.h>
 #  include <netinet/ip.h>
 #  include <netinet/ip_icmp.h>
 #  include <netinet/icmp6.h>

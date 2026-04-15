@@ -38,6 +38,9 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
 }
 #else
 
+/* FreeBSD 14.1 <netinet/ip.h> uses u_char/u_short without including
+ * <sys/types.h> itself; include it first so __BSD_VISIBLE=1 defines land. */
+#include <sys/types.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>

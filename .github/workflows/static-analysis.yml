@@ -191,7 +191,7 @@ jobs:
 
       - name: Upload clang-tidy SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/upload-sarif@a65a038433a26f4363cf9f029e3b9ceac831ad5d # v3.28.10
         with:
           sarif_file: clang-tidy.sarif
           category: clang-tidy
@@ -302,7 +302,7 @@ jobs:
 
       - name: Upload cppcheck SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/upload-sarif@a65a038433a26f4363cf9f029e3b9ceac831ad5d # v3.28.10
         with:
           sarif_file: cppcheck.sarif
           category: cppcheck
