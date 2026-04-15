@@ -537,34 +537,43 @@ target_link_libraries(spine_platform PUBLIC spine_hardening)
 if(WIN32)
     target_link_libraries(spine_platform PUBLIC ws2_32 iphlpapi advapi32)
 else()
+    # Feature-test macros must be visible to every translation unit that
+    # includes platform.h, including unit tests that pull spine_platform
+    # via $<TARGET_OBJECTS:>. PUBLIC defs on an OBJECT library only
+    # propagate when the consumer LINKS spine_platform, so factor them
+    # into an INTERFACE library that every test can link without dragging
+    # in the object files.
+    add_library(spine_posix_features INTERFACE)
+    target_compile_definitions(spine_posix_features INTERFACE _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
     target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        target_compile_definitions(spine_posix_features INTERFACE _DARWIN_C_SOURCE=1)
         target_compile_definitions(spine_platform PUBLIC _DARWIN_C_SOURCE=1)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
         # Solaris / illumos hides socket and BSD-flavoured APIs behind these.
         # libsocket and libnsl carry getaddrinfo, socket(2), inet_ntop, etc.
+        target_compile_definitions(spine_posix_features INTERFACE _POSIX_PTHREAD_SEMANTICS=1 _XOPEN_SOURCE=700 __EXTENSIONS__=1)
         target_compile_definitions(spine_platform PUBLIC _POSIX_PTHREAD_SEMANTICS=1 _XOPEN_SOURCE=700 __EXTENSIONS__=1)
         target_link_libraries(spine_platform PUBLIC socket nsl)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "AIX")
         # AIX shared objects need runtime linking to resolve cross-library
         # symbols the same way ELF platforms do; without -brtl the loader
         # rejects unresolved refs at exec time.
+        target_compile_definitions(spine_posix_features INTERFACE _ALL_SOURCE=1 _XOPEN_SOURCE=700)
         target_compile_definitions(spine_platform PUBLIC _ALL_SOURCE=1 _XOPEN_SOURCE=700)
         target_link_options(spine_platform PUBLIC -Wl,-brtl)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR
            CMAKE_SYSTEM_NAME STREQUAL "NetBSD" OR
            CMAKE_SYSTEM_NAME STREQUAL "OpenBSD" OR
            CMAKE_SYSTEM_NAME STREQUAL "DragonFly")
-        # The BSDs ship pipe2(2), arc4random(3), getifaddrs(3), and full
-        # POSIX sockets in libc, but _POSIX_C_SOURCE=200809L implicitly
-        # sets __BSD_VISIBLE=0 which hides u_char/u_short (used in
-        # <netinet/ip.h>) and pipe2 itself. Force __BSD_VISIBLE=1 to
-        # re-enable BSD types and extensions alongside POSIX.
+        # __BSD_VISIBLE exposes pipe2, u_char/u_short, S_IFSOCK and other
+        # BSD extensions that strict _POSIX_C_SOURCE hides. _XOPEN_SOURCE=700
+        # adds XSI-level gettimeofday and realtime clock helpers.
         # FreeBSD 14 is Tier 1; NetBSD 10, OpenBSD 7.x, and DragonFly 6.x
         # are Tier 3 (advisory CI, see docs/platforms.md).
-        # __BSD_VISIBLE exposes pipe2, u_char/u_short, S_IFSOCK and other
-        # BSD extensions. _XOPEN_SOURCE=700 adds XSI-level gettimeofday
-        # and realtime clock helpers that strict POSIX.1-2008 hides.
+        target_compile_definitions(spine_posix_features INTERFACE
+            __BSD_VISIBLE=1
+            _XOPEN_SOURCE=700)
         target_compile_definitions(spine_platform PUBLIC
             __BSD_VISIBLE=1
             _XOPEN_SOURCE=700)
@@ -595,7 +604,7 @@ function(spine_add_platform_test test_name)
     if(WIN32)
         target_link_libraries(test_platform_${test_name} PRIVATE ws2_32 iphlpapi advapi32)
     else()
-        target_link_libraries(test_platform_${test_name} PRIVATE m ${CMAKE_DL_LIBS})
+        target_link_libraries(test_platform_${test_name} PRIVATE m ${CMAKE_DL_LIBS} spine_posix_features)
     endif()
     add_test(NAME platform_${test_name} COMMAND test_platform_${test_name})
 endfunction()
@@ -780,7 +789,7 @@ if(BUILD_TESTING)
         # on MinGW/MSVC need the same import libs the main binary gets.
         target_link_libraries(test_sandbox PRIVATE iphlpapi ws2_32)
     else()
-        target_link_libraries(test_sandbox PRIVATE m ${CMAKE_DL_LIBS})
+        target_link_libraries(test_sandbox PRIVATE m ${CMAKE_DL_LIBS} spine_posix_features)
     endif()
     add_test(NAME sandbox COMMAND test_sandbox)
 
