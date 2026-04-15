@@ -27,6 +27,35 @@ Logs land in `build-reports/<distro>.log`. The same lanes run in CI as `distro-m
 
 For non-Linux targets, see [docs/platforms.md](docs/platforms.md) for FreeBSD, NetBSD, OpenBSD, macOS, and Windows reproduction instructions.
 
+## Testing CI locally
+
+The workflow policy gate (`.github/scripts/check-workflow-policy.py`) and
+most lint-style checks run happily without Docker:
+
+    scripts/test-workflows.sh policy
+
+For the distro build matrix, use the Docker runner that CI uses:
+
+    scripts/test-distros.sh rockylinux:9
+
+This is faster than `act` because it invokes Docker directly and skips
+the GitHub Actions wrapping layer.
+
+For workflows that aren't covered by `scripts/test-distros.sh`, install
+[act](https://github.com/nektos/act) and run:
+
+    brew install act          # macOS
+    scripts/test-workflows.sh list
+    scripts/test-workflows.sh <job>
+
+Limitations of `act`:
+- Matrix jobs with services containers (MariaDB, Redis) often break
+  because `act` uses a simplified container network.
+- `cross-platform-actions/action` lanes (FreeBSD, NetBSD, OpenBSD) do
+  not run under `act`; they need a real GitHub runner.
+- Windows (`windows-latest`) cannot be emulated; those lanes stay
+  CI-only.
+
 ## Report issues
 
 Open issues against [Cacti/spine](https://github.com/Cacti/spine/issues) and tag with a `platform:` label from [docs/platforms.md](docs/platforms.md#reporting-platform-issues):

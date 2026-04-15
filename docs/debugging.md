@@ -4,6 +4,11 @@ Spine runs as a short-lived batch poller when invoked from cron or systemd
 timers and as a long-lived daemon under `spine.service` on modern Cacti
 deployments. The attach model differs in each case.
 
+## Testing CI locally
+
+See CONTRIBUTING.md § "Testing CI locally" for `scripts/test-workflows.sh`
+and `scripts/test-distros.sh` usage.
+
 ## Attach gdbserver to a running spine
 
 On the production host:
