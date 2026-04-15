@@ -41,7 +41,9 @@ static int nopts = 0;
 
 /* Forward declaration so spine_log() can reach the JSON escaper defined
  * further down alongside the other --check / --dump-config helpers. */
-static char *spine_json_escape(char *dst, size_t dst_len, const char *src);
+/* Exposed for the JSON-escape unit test. Treat as internal; do not call
+ * from code outside util.c / the unit test harness. */
+char *spine_json_escape(char *dst, size_t dst_len, const char *src);
 
 /*! Override Options Structure
  *
@@ -2195,7 +2197,7 @@ const char *regex_replace(const char *exp, const char *value) {
 /* JSON-escape src into dst. Writes at most dst_len-1 bytes then NUL. Returns
  * dst. Caller sizes dst to at least 6*strlen(src)+1 to survive worst-case
  * \uXXXX expansion of control characters. */
-static char *spine_json_escape(char *dst, size_t dst_len, const char *src) {
+char *spine_json_escape(char *dst, size_t dst_len, const char *src) {
 	size_t i = 0;
 	if (dst_len == 0) return dst;
 	if (!src) { dst[0] = '\0'; return dst; }
