@@ -124,7 +124,10 @@ static void load_iphlpapi(void) {
 static void win_default_payload(spine_ping_payload_t *p) {
     p->magic = SPINE_PING_MAGIC;
     p->pid_mask = (uint32_t) GetCurrentProcessId();
-    p->timestamp_us = (uint32_t) GetTickCount();
+    /* GetTickCount wraps at 49.7 days. The payload only needs a
+     * per-send low-order marker, but the wider counter sidesteps a
+     * long-uptime host getting a tiny value right after wrap. */
+    p->timestamp_us = (uint32_t)(GetTickCount64() & 0xFFFFFFFFu);
 }
 
 static spine_icmp_status_t map_status(DWORD st) {
