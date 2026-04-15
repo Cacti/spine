@@ -1,9 +1,19 @@
 # Test fixtures and CI scripts -- not needed for the spine build
 tests/
 .git/
+.github/
+.claude/
+.omc/
+.worktrees/
 build/
+build-*/
+build-reports/
 *.md
 m4/
 autom4te.cache/
-.omc/
 *.log
+*.o
+*.a
+*.so
+*.dylib
+.php-cs-fixer.cache

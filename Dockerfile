@@ -28,10 +28,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsnmp40 \
         libssl3 \
         zlib1g \
-    && rm -rf /var/lib/apt/lists/*
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r spine && useradd -r -g spine -s /sbin/nologin spine \
+    && mkdir -p /etc/spine && chown -R spine:spine /etc/spine
 
 COPY --from=builder /usr/local/bin/spine /usr/local/bin/spine
+COPY etc/spine.conf.dist /etc/spine/spine.conf
 
-RUN mkdir -p /etc/spine
-
+USER spine
 ENTRYPOINT ["/usr/local/bin/spine"]
+CMD ["--help"]
+
+LABEL org.opencontainers.image.title="spine" \
+      org.opencontainers.image.description="High-speed poller for Cacti" \
+      org.opencontainers.image.source="https://github.com/Cacti/spine" \
+      org.opencontainers.image.licenses="GPL-2.0-or-later"
