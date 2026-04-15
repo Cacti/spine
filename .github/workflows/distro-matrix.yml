@@ -41,7 +41,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # --- Tier 1: Primary targets ---
+          # --- Tier 1: Primary targets (ordered by Cacti deployment footprint) ---
+          # Red Hat lineage leads: enterprise, telecom, banking, government.
+          # Rocky 9 and Alma 9 are bug-for-bug RHEL 9 rebuilds and are the
+          # authoritative CI proxies for RHEL 9 (the RHEL image itself
+          # requires a paid subscription). UBI 9 is included as a toolchain
+          # smoke test; it cannot reach a full build without subscription
+          # repos, so it stays advisory (see Tier 3 block below).
+          - distro: rockylinux:9
+            family: rhel
+            tier: 1
+          - distro: almalinux:9
+            family: rhel
+            tier: 1
           - distro: ubuntu:24.04
             family: debian
             tier: 1
@@ -51,16 +63,11 @@ jobs:
           - distro: debian:12
             family: debian
             tier: 1
-          - distro: rockylinux:9
-            family: rhel
-            tier: 1
-          - distro: almalinux:9
-            family: rhel
-            tier: 1
           - distro: fedora:latest
             family: fedora
             tier: 1
           # --- Tier 2: Supported ---
+          # RHEL 8 lineage still has significant enterprise deployment.
           - distro: rockylinux:8
             family: rhel
             tier: 2

@@ -31,27 +31,33 @@ Build output and logs land in `build-reports/<distro>.log`.
 
 ## Tier 1 — Primary
 
-Mainstream targets with the largest deployment footprint. CI failures here
-block merge.
+Mainstream targets with the largest Cacti deployment footprint, ordered
+by market share. CI failures here block merge.
 
 | Platform | Install command |
 |---|---|
+| **RHEL 9 / Rocky Linux 9 / AlmaLinux 9 / Oracle Linux 9** | `dnf install -y epel-release && dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel` |
 | **Ubuntu 24.04 LTS** | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
 | **Ubuntu 22.04 LTS** | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
 | **Debian 12 (bookworm)** | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
-| **Rocky Linux 9** | `dnf install -y epel-release && dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel` |
-| **AlmaLinux 9** | `dnf install -y epel-release && dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel` |
 | **Fedora (latest)** | `dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel` |
 | **macOS (arm64 + x86_64)** | `brew install cmake ninja pkg-config mysql-client net-snmp openssl@3` |
 
 ### Notes
 
-- **Ubuntu 22.04/24.04**: most common Cacti host; current LTS releases.
+- **Red Hat Enterprise Linux 9** is the primary deployment target for
+  Cacti in enterprise, telecom, banking, and government environments.
+  Rocky Linux 9 and AlmaLinux 9 are bug-for-bug RHEL 9 source rebuilds;
+  Oracle Linux 9 shares the same upstream. All four behave identically
+  for spine's purposes. The CI matrix runs Rocky 9 and Alma 9 because
+  RHEL itself requires a paid subscription; a Red Hat Developer
+  Subscription (free for individual developers, <https://developers.redhat.com/>)
+  gives access to a real RHEL VM for local reproduction. UBI 9 is
+  exercised as an advisory Tier 3 lane (toolchain smoke test only —
+  `mariadb-connector-c-devel` is gated on subscription repos).
+- **Ubuntu 22.04 / 24.04**: widely deployed for cloud and developer
+  workloads; current LTS releases.
 - **Debian 12**: Cacti's Debian baseline.
-- **Rocky 9 / Alma 9**: bug-for-bug RHEL 9 rebuilds; cover ~99% of RHEL 9
-  behaviour. RHEL 9 itself is not in CI directly because the image requires
-  a paid subscription. See "Tier 3 — UBI 9" below for the unauthenticated
-  Red Hat lane.
 - **Fedora (latest)**: tracks the RHEL upstream toolchain and is the
   earliest signal for breakage on future RHEL releases.
 - **macOS**: developer machines. Tested on macOS 14 (Sonoma) and 15
