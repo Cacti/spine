@@ -9,6 +9,11 @@
  +-------------------------------------------------------------------------+
 */
 
+/* pthread_getname_np on glibc needs _GNU_SOURCE before <pthread.h>. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+
 #include <string.h>
 
 #include "platform/platform.h"
@@ -16,6 +21,9 @@
 
 #if !defined(_WIN32)
 #include <pthread.h>
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+#include <pthread_np.h>
+#endif
 #endif
 
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)

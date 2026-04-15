@@ -13,9 +13,22 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
 #include <pthread_np.h>
 #endif
+
+/* usleep was removed from POSIX.1-2008; under strict _POSIX_C_SOURCE the
+ * declaration is hidden on FreeBSD and others. nanosleep is the portable
+ * POSIX-standard replacement and has always been in the issue-6 specification. */
+static void spine_nanosleep_us(unsigned long microseconds) {
+	struct timespec req;
+	req.tv_sec  = (time_t)(microseconds / 1000000UL);
+	req.tv_nsec = (long)((microseconds % 1000000UL) * 1000UL);
+	while (nanosleep(&req, &req) == -1 && (req.tv_sec > 0 || req.tv_nsec > 0)) {
+		/* Resume after EINTR with remaining time. */
+	}
+}
 
 int spine_platform_init_once(void) {
 	return 0;
@@ -33,15 +46,20 @@ int spine_platform_localtime(const time_t *when, struct tm *out) {
 }
 
 void spine_platform_sleep_ms(unsigned int milliseconds) {
-	usleep(milliseconds * 1000U);
+	spine_nanosleep_us((unsigned long)milliseconds * 1000UL);
 }
 
 void spine_platform_sleep_us(unsigned int microseconds) {
-	usleep(microseconds);
+	spine_nanosleep_us((unsigned long)microseconds);
 }
 
 void spine_platform_sleep_s(unsigned int seconds) {
-	sleep(seconds);
+	struct timespec req;
+	req.tv_sec = (time_t)seconds;
+	req.tv_nsec = 0;
+	while (nanosleep(&req, &req) == -1 && (req.tv_sec > 0 || req.tv_nsec > 0)) {
+		/* Resume after EINTR. */
+	}
 }
 
 unsigned long spine_platform_process_id(void) {
