@@ -86,6 +86,11 @@ void ping_init(void) {
 #elif defined(__linux__)
 	unsigned int seed = 0;
 	if (getrandom(&seed, sizeof(seed), 0) != (ssize_t)sizeof(seed)) {
+		/* Log the degraded path so operators can see when the kernel
+		 * entropy pool is uninitialized (early boot) or getrandom is
+		 * filtered by seccomp. icmp_id_mask is not security-critical,
+		 * but silent weak entropy is a common source of surprise. */
+		SPINE_LOG_DEBUG(("DEBUG: PING: getrandom() failed (errno=%d); using time^pid seed", errno));
 		seed = (unsigned int)time(NULL) ^ (unsigned int)getpid();
 	}
 	icmp_id_mask = (uint16_t)(seed & 0xFFFF);
@@ -103,6 +108,7 @@ void ping_init(void) {
 			return;
 		}
 	}
+	SPINE_LOG_DEBUG(("DEBUG: PING: /dev/urandom unavailable; using time^pid seed"));
 	icmp_id_mask = (uint16_t)(((unsigned int)time(NULL) ^ (unsigned int)getpid()) & 0xFFFF);
 #endif
 }
