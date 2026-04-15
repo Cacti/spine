@@ -30,6 +30,10 @@
 #define PACKAGE_TARNAME "spine"
 #define VERSION "@PROJECT_VERSION@"
 
+/* Reproducible-build epoch. Honours SOURCE_DATE_EPOCH at configure time so
+ * packagers get bit-identical binaries across rebuilds of the same source. */
+#define SPINE_BUILD_EPOCH "@SPINE_BUILD_EPOCH@"
+
 /* Header availability */
 #cmakedefine HAVE_SYS_SOCKET_H 1
 #cmakedefine HAVE_SYS_SELECT_H 1
