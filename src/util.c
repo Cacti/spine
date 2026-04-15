@@ -39,6 +39,10 @@
 
 static int nopts = 0;
 
+/* Forward declaration so spine_log() can reach the JSON escaper defined
+ * further down alongside the other --check / --dump-config helpers. */
+static char *spine_json_escape(char *dst, size_t dst_len, const char *src);
+
 /*! Override Options Structure
  *
  * When we fetch a setting from the database, we allow the user to override
@@ -1482,7 +1486,45 @@ int spine_log(const char *format, ...) {
 		} else if ((set.stdout_notty) && (fp == stdout)) {
 			/* do nothing stdout does not exist */
 		} else {
-			fprintf(fp, "%s", flogmessage);
+			/* Format selection. AUTO resolves to JSON when stderr is not a TTY
+			 * (systemd-journald, docker logs, k8s stdout collection) so log
+			 * collectors get structured fields without regex scraping. TEXT
+			 * and JSON force the mode regardless of TTY state. */
+			int use_json = 0;
+			if (set.log_format == LOGFMT_JSON) {
+				use_json = 1;
+			} else if (set.log_format == LOGFMT_AUTO && set.stderr_notty && fp == stderr) {
+				use_json = 1;
+			}
+
+			if (use_json) {
+				const char *level = "INFO";
+				if      (strstr(ulogmessage, "FATAL"))   level = "FATAL";
+				else if (strstr(ulogmessage, "ERROR"))   level = "ERROR";
+				else if (strstr(ulogmessage, "WARNING")) level = "WARN";
+				else if (strstr(ulogmessage, "DEBUG"))   level = "DEBUG";
+
+				char ts[64];
+				struct tm utc;
+#ifdef _WIN32
+				gmtime_s(&utc, &nowbin);
+#else
+				gmtime_r(&nowbin, &utc);
+#endif
+				strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", &utc);
+
+				char msg_esc[LOGSIZE * 2];
+				spine_json_escape(msg_esc, sizeof(msg_esc), ulogmessage);
+
+				fprintf(fp,
+					"{\"ts\":\"%s\",\"level\":\"%s\",\"poller\":%d,\"pid\":%lu,\"tid\":%lu,\"msg\":\"%s\"}\n",
+					ts, level, set.poller_id,
+					(unsigned long)spine_platform_process_id(),
+					(unsigned long)pthread_self(),
+					msg_esc);
+			} else {
+				fprintf(fp, "%s", flogmessage);
+			}
 		}
 	}
 
