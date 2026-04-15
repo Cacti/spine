@@ -1,3 +1,10 @@
+/* OpenBSD pledge(2) and unveil(2) live in <unistd.h> gated on
+ * __BSD_VISIBLE. Under strict _POSIX_C_SOURCE the macro defaults to 0;
+ * set it here before any system header runs so <unistd.h> declares them. */
+#if defined(__OpenBSD__) && !defined(__BSD_VISIBLE)
+#define __BSD_VISIBLE 1
+#endif
+
 #include "platform_sandbox.h"
 
 #ifdef __OpenBSD__

@@ -543,9 +543,17 @@ else()
     # propagate when the consumer LINKS spine_platform, so factor them
     # into an INTERFACE library that every test can link without dragging
     # in the object files.
+    #
+    # OpenBSD is the one platform where _POSIX_C_SOURCE actively breaks
+    # things: its <sys/cdefs.h> forces __BSD_VISIBLE=0 when POSIX mode is
+    # strict, which then hides u_int (used in <netinet/ip.h>) and pledge
+    # / unveil. Let its libc defaults apply and rely on __BSD_VISIBLE=1
+    # below.
     add_library(spine_posix_features INTERFACE)
-    target_compile_definitions(spine_posix_features INTERFACE _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
-    target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
+        target_compile_definitions(spine_posix_features INTERFACE _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+        target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+    endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         target_compile_definitions(spine_posix_features INTERFACE _DARWIN_C_SOURCE=1)
         target_compile_definitions(spine_platform PUBLIC _DARWIN_C_SOURCE=1)
