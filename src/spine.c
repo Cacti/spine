@@ -102,6 +102,9 @@
 #include "circuit_breaker.h"
 
 #include <signal.h>
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
 
 /* SIGHUP-triggered reload flag. Spine is a batch poller: an in-flight config
  * reload would race with worker threads already mid-poll. On HUP we therefore
@@ -238,6 +241,7 @@ int main(int argc, char *argv[]) {
 	int num_rows = 0;
 	int device_counter = 0;
 	int valid_conf_file = FALSE;
+	int opt_mlock = FALSE;
 	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
 	char *host_time = NULL;
 	double host_time_double = 0;
@@ -298,6 +302,18 @@ int main(int argc, char *argv[]) {
 	if (spine_platform_init() != 0) {
 		die("ERROR: Failed to initialize platform runtime services.");
 	}
+
+#ifdef __linux__
+	/* PR_SET_DUMPABLE=0 immediately after platform init and before any
+	 * secret material (db password, SNMP community strings) lands in the
+	 * heap. It denies ptrace(PTRACE_ATTACH) from non-CAP_SYS_PTRACE callers
+	 * and suppresses core dumps, closing the most common credential-theft
+	 * path on a compromised host. sandbox_restrict() also applies this,
+	 * but repeating it here shrinks the window before sandbox activation. */
+	if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) == -1) {
+		/* Non-fatal: the sandbox path will retry. */
+	}
+#endif
 
 	/* Name the main thread so ps(1) / top(1) / perf(1) / Process Explorer
 	 * distinguish it from worker threads. Must stay under 15 bytes to
@@ -529,6 +545,10 @@ int main(int argc, char *argv[]) {
 			set.dry_run = TRUE;
 		}
 
+		else if (STRMATCH(arg, "--mlock")) {
+			opt_mlock = TRUE;
+		}
+
 		else if (STRMATCH(arg, "--log-format")) {
 			const char *fmt_arg = getarg(opt, &argv);
 			if (STRIMATCH(fmt_arg, "auto")) {
@@ -620,6 +640,25 @@ int main(int argc, char *argv[]) {
 
 	/* read settings table from the database to further establish environment */
 	read_config_options();
+
+	/* Optional page pinning. --mlock keeps credentials and the working set
+	 * out of swap and off any swap-backed hibernation image. mlockall is a
+	 * privileged call on stock Linux (RLIMIT_MEMLOCK); log EPERM as a
+	 * WARNING so operators can raise the limit via systemd
+	 * LimitMEMLOCK=infinity rather than silently running unprotected. */
+	if (opt_mlock) {
+#if defined(MCL_CURRENT) && defined(MCL_FUTURE)
+		if (mlockall(MCL_CURRENT | MCL_FUTURE) == 0) {
+			SPINE_LOG(("NOTE: --mlock active; memory pinned against swap"));
+		} else if (errno == EPERM) {
+			SPINE_LOG(("WARNING: --mlock requested but RLIMIT_MEMLOCK too low (EPERM); raise LimitMEMLOCK in the service unit"));
+		} else {
+			SPINE_LOG(("WARNING: --mlock requested but mlockall failed: %s", strerror(errno)));
+		}
+#else
+		SPINE_LOG(("WARNING: --mlock requested but mlockall unavailable on this platform"));
+#endif
+	}
 
 	spine_cb_init();
 
@@ -1360,6 +1399,7 @@ static void display_help(int only_version) {
 		"  --check            DB + ICMP reachability probe; prints JSON and exits",
 		"  --dump-config      Print effective merged configuration and exit",
 		"  --dry-run          Run one poll cycle with DB and RRD writes skipped",
+		"  --mlock            Pin memory with mlockall to keep credentials out of swap",
 		"  --log-format=F     Log format: auto (default), text, or json",
 		"",
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
