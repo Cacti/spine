@@ -876,14 +876,22 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 
-		/* Config reload requested (SIGHUP). Spine's per-cycle design means
-		 * we cannot safely re-read spine.conf mid-poll, but systemd still
-		 * gets a RELOADING/READY pair so `systemctl reload` reports success.
-		 * The refreshed config is picked up on the next spine invocation. */
+		/* Config reload requested (SIGHUP). We re-read spine.conf between
+		 * devices so log path and SNMP client address changes take effect
+		 * without restarting the daemon. Database credentials are replayed
+		 * into set.db_* but the existing MYSQL handles stay attached until
+		 * the next cycle; reconnecting a busy pool mid-loop would tear down
+		 * worker threads. Operators needing a DB host swap should restart. */
 		if (spine_reload_requested) {
 			spine_reload_requested = 0;
-			SPINE_LOG(("NOTE: SIGHUP received; config will refresh on next cycle"));
 			spine_sd_reloading();
+
+			if (conf_file && read_spine_config(conf_file) >= 0) {
+				SPINE_LOG(("NOTE: SIGHUP received; reloaded spine.conf [%s]", conf_file));
+			} else {
+				SPINE_LOG(("WARNING: SIGHUP received; failed to reload spine.conf"));
+			}
+
 			spine_sd_ready();
 		}
 
