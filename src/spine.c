@@ -385,6 +385,10 @@ int main(int argc, char *argv[]) {
 	set.mode              = REMOTE_ONLINE;
 	set.has_device_0      = FALSE;
 	set.has_output_regex  = FALSE;
+	set.health_check      = FALSE;
+	set.dump_config       = FALSE;
+	set.dry_run           = FALSE;
+	set.log_format        = LOGFMT_AUTO;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -506,6 +510,31 @@ int main(int argc, char *argv[]) {
 			set_option("log_verbosity", getarg(opt, &argv));
 		}
 
+		else if (STRMATCH(arg, "--check")) {
+			set.health_check = TRUE;
+		}
+
+		else if (STRMATCH(arg, "--dump-config")) {
+			set.dump_config = TRUE;
+		}
+
+		else if (STRMATCH(arg, "--dry-run")) {
+			set.dry_run = TRUE;
+		}
+
+		else if (STRMATCH(arg, "--log-format")) {
+			const char *fmt_arg = getarg(opt, &argv);
+			if (STRIMATCH(fmt_arg, "auto")) {
+				set.log_format = LOGFMT_AUTO;
+			} else if (STRIMATCH(fmt_arg, "text")) {
+				set.log_format = LOGFMT_TEXT;
+			} else if (STRIMATCH(fmt_arg, "json")) {
+				set.log_format = LOGFMT_JSON;
+			} else {
+				die("ERROR: --log-format must be one of auto|text|json (got '%s')", fmt_arg);
+			}
+		}
+
 		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
 			set.start_host_id = atoi(arg);
 		}
@@ -559,12 +588,27 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (valid_conf_file) {
-		/* read settings table from the database to further establish environment */
-		read_config_options();
-	} else {
+	if (!valid_conf_file) {
 		die("FATAL: Unable to read configuration file!");
 	}
+
+	/* Operational short-circuits. --dump-config prints what we parsed from
+	 * spine.conf and exits; --check additionally tries to open a MySQL
+	 * connection and a raw ICMP socket, emits JSON, and exits. Both run
+	 * before read_config_options() so operators can probe connectivity
+	 * without a live settings table. */
+	if (set.dump_config) {
+		spine_dump_config();
+		exit(EXIT_SUCCESS);
+	}
+
+	if (set.health_check) {
+		mysql_library_init(0, NULL, NULL);
+		exit(spine_health_check() ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
+
+	/* read settings table from the database to further establish environment */
+	read_config_options();
 
 	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
@@ -1267,6 +1311,10 @@ static void display_help(int only_version) {
 		"  -S/--stdout        Logging is performed to standard output",
 		"  -P/--pingonly      Ping device and update device status only",
 		"  -V/--verbosity=V   Set logging verbosity to <V>",
+		"  --check            DB + ICMP reachability probe; prints JSON and exits",
+		"  --dump-config      Print effective merged configuration and exit",
+		"  --dry-run          Run one poll cycle with DB and RRD writes skipped",
+		"  --log-format=F     Log format: auto (default), text, or json",
 		"",
 		"Either both of --first/--last must be provided, a valid hostlist must be provided.",
         "In their absence, all hosts are processed.",

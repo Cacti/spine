@@ -2148,3 +2148,133 @@ const char *regex_replace(const char *exp, const char *value) {
 
 	return (reti) ? value : msgbuf;
 }
+
+/* JSON-escape src into dst. Writes at most dst_len-1 bytes then NUL. Returns
+ * dst. Caller sizes dst to at least 6*strlen(src)+1 to survive worst-case
+ * \uXXXX expansion of control characters. */
+static char *spine_json_escape(char *dst, size_t dst_len, const char *src) {
+	size_t i = 0;
+	if (dst_len == 0) return dst;
+	if (!src) { dst[0] = '\0'; return dst; }
+
+	while (*src && i + 7 < dst_len) {
+		unsigned char c = (unsigned char)*src++;
+		if (c == '"' || c == '\\') {
+			dst[i++] = '\\';
+			dst[i++] = (char)c;
+		} else if (c == '\n') {
+			dst[i++] = '\\'; dst[i++] = 'n';
+		} else if (c == '\r') {
+			dst[i++] = '\\'; dst[i++] = 'r';
+		} else if (c == '\t') {
+			dst[i++] = '\\'; dst[i++] = 't';
+		} else if (c < 0x20) {
+			i += (size_t)snprintf(dst + i, dst_len - i, "\\u%04x", c);
+		} else {
+			dst[i++] = (char)c;
+		}
+	}
+	dst[i] = '\0';
+	return dst;
+}
+
+/*! \fn int spine_health_check(void)
+ *  \brief Probe DB reachability and raw ICMP availability, print JSON, exit.
+ *
+ *  Returns TRUE (1) on success, FALSE (0) on failure. Caller is responsible
+ *  for translating to exit codes. Intended to back `spine --check`, which
+ *  systemd / k8s / nagios wrappers can parse: success prints
+ *    {"status":"ok","db":"connected","icmp":"available|unavailable"}
+ *  failure prints
+ *    {"status":"failed","error":"..."}
+ *  with a non-empty human-readable error message.
+ */
+int spine_health_check(void) {
+	MYSQL mysql;
+	MYSQL *conn;
+	int   icmp_ok = 0;
+
+	mysql_init(&mysql);
+	/* 3s timeout keeps the probe fast enough for readiness checks. */
+	unsigned int t = 3;
+	mysql_options(&mysql, MYSQL_OPT_CONNECT_TIMEOUT, (const char *)&t);
+
+	conn = mysql_real_connect(&mysql,
+		strlen(set.db_host) ? set.db_host : "localhost",
+		set.db_user,
+		set.db_pass,
+		set.db_db,
+		set.db_port,
+		NULL, 0);
+
+	if (!conn) {
+		char err[512];
+		char esc[2048];
+		snprintf(err, sizeof(err), "db connect: %s", mysql_error(&mysql));
+		spine_json_escape(esc, sizeof(esc), err);
+		printf("{\"status\":\"failed\",\"error\":\"%s\"}\n", esc);
+		mysql_close(&mysql);
+		return 0;
+	}
+
+	/* Raw ICMP socket test. IPPROTO_ICMP on a SOCK_RAW fd needs CAP_NET_RAW
+	 * or uid 0 on Linux, privilege on *BSD, and Administrator on Windows.
+	 * A failure here is informational, not fatal: Cacti deployments that
+	 * only rely on TCP/SNMP availability still want a passing --check. */
+#ifdef _WIN32
+	icmp_ok = 0;
+#else
+	{
+		int s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+		if (s >= 0) {
+			icmp_ok = 1;
+			close(s);
+		}
+	}
+#endif
+
+	printf("{\"status\":\"ok\",\"db\":\"connected\",\"icmp\":\"%s\"}\n",
+		icmp_ok ? "available" : "unavailable");
+
+	mysql_close(&mysql);
+	return 1;
+}
+
+/*! \fn void spine_dump_config(void)
+ *  \brief Print every effective setting read from spine.conf as key=value.
+ *
+ *  Passwords are redacted. Caller is responsible for exiting. Output is
+ *  intentionally plain key=value so operators can pipe through grep, diff
+ *  two hosts, or pin into a golden-config baseline.
+ */
+void spine_dump_config(void) {
+	printf("# spine effective configuration\n");
+	printf("DB_Host = %s\n",     set.db_host);
+	printf("DB_Database = %s\n", set.db_db);
+	printf("DB_User = %s\n",     set.db_user);
+	printf("DB_Pass = %s\n",     strlen(set.db_pass) ? "[REDACTED]" : "");
+	printf("DB_Port = %u\n",     set.db_port);
+	printf("DB_UseSSL = %d\n",   set.db_ssl);
+	printf("DB_SSL_Key = %s\n",  set.db_ssl_key);
+	printf("DB_SSL_Cert = %s\n", set.db_ssl_cert);
+	printf("DB_SSL_CA = %s\n",   set.db_ssl_ca);
+
+	printf("RDB_Host = %s\n",     set.rdb_host);
+	printf("RDB_Database = %s\n", set.rdb_db);
+	printf("RDB_User = %s\n",     set.rdb_user);
+	printf("RDB_Pass = %s\n",     strlen(set.rdb_pass) ? "[REDACTED]" : "");
+	printf("RDB_Port = %u\n",     set.rdb_port);
+	printf("RDB_UseSSL = %d\n",   set.rdb_ssl);
+
+	printf("Poller = %d\n",          set.poller_id);
+	printf("Threads = %d\n",         set.threads);
+	printf("Cacti_Log = %s\n",       set.path_logfile);
+	printf("SNMP_Clientaddr = %s\n", set.snmp_clientaddr);
+	printf("Mode = %d\n",            set.mode);
+	printf("PingMethod = %d\n",      set.ping_method);
+	printf("PingRetries = %d\n",     set.ping_retries);
+	printf("PingTimeout = %d\n",     set.ping_timeout);
+	printf("LogVerbosity = %d\n",    set.log_level);
+	printf("LogFormat = %d\n",       set.log_format);
+	printf("DryRun = %d\n",          set.dry_run);
+}

@@ -107,3 +107,7 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+/* Operational CLI helpers. */
+extern int spine_health_check(void);
+extern void spine_dump_config(void);

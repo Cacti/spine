@@ -235,6 +235,14 @@
 #define LOGDEST_SYSLOG 3
 #define LOGDEST_STDOUT 4
 
+/* Log formats. AUTO resolves at spine_log() time by probing isatty(stderr):
+ * interactive shells get coloured-ish prose; pipes, systemd journal, and k8s
+ * log collectors get single-line JSON so downstream parsers do not have to
+ * regex-scrape timestamps and levels. */
+#define LOGFMT_AUTO 0
+#define LOGFMT_TEXT 1
+#define LOGFMT_JSON 2
+
 #define IS_LOGGING_TO_FILE()   ((set.log_destination) == LOGDEST_FILE   || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_SYSLOG() ((set.log_destination) == LOGDEST_SYSLOG || (set.log_destination) == LOGDEST_BOTH)
 #define IS_LOGGING_TO_STDOUT() ((set.log_destination) == LOGDEST_STDOUT )
@@ -363,6 +371,15 @@ typedef struct config_struct {
 	/* debugging options */
 	int    snmponly;
 	int    SQL_readonly;
+	/* Operational CLI flags. All default OFF; set by top-of-main arg parsing.
+	 * health_check short-circuits into a single DB-reachability probe and
+	 * exits; dump_config prints the effective merged config and exits;
+	 * dry_run runs a full poll cycle with DB/RRD writes stubbed out. */
+	int    health_check;
+	int    dump_config;
+	int    dry_run;
+	/* Log format: 0=auto (TTY-detected), 1=text, 2=json. */
+	int    log_format;
 	/* host range to be poller with this spine process */
 	int    start_host_id;
 	int    end_host_id;
