@@ -71,17 +71,24 @@ static volatile LONG g_init_once = 0;
 static volatile LONG g_load_ok = 0;   /* 0 = pending, 1 = ok, -1 = failed */
 
 /* One-time loader. The first thread to enter runs the load; losers
- * spin on g_load_ok only. Critical: all function-pointer stores must
- * be globally visible BEFORE g_load_ok is published. MemoryBarrier()
- * before InterlockedExchange() guarantees that on every ISA Windows
- * runs on (x86, x64, ARM64). Waiters read g_load_ok through a
- * volatile with the matching acquire semantics from the barrier
- * paired with Sleep(0)'s memory visibility. */
+ * spin until the winner publishes g_load_ok. Critical: all
+ * function-pointer stores must be globally visible BEFORE g_load_ok
+ * is published, and a loser thread that observes the published flag
+ * must then see the initialized pointers, not stale NULLs. On ARM64
+ * a plain `volatile` read is NOT an acquire, so we drive the spin
+ * through InterlockedCompareExchange (a full barrier on every ISA
+ * Windows supports) and close with MemoryBarrier() before the caller
+ * dereferences the function pointers. */
 static void load_iphlpapi(void) {
     if (InterlockedCompareExchange(&g_init_once, 1, 0) != 0) {
-        while (g_load_ok == 0) {
+        /* Acquire-read g_load_ok via an interlocked no-op. A plain
+         * load on ARM64 / weakly ordered hardware can satisfy the
+         * `!= 0` check while the function pointer stores published
+         * before g_load_ok are still invisible to this core. */
+        while (InterlockedCompareExchange(&g_load_ok, 0, 0) == 0) {
             Sleep(0);  /* another thread is loading */
         }
+        MemoryBarrier();
         return;
     }
 
