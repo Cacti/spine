@@ -48,8 +48,12 @@ across supported operating systems.
 ## Security and Execution
 
 - Avoid shell execution for untrusted command text.
-- If shell is unavoidable for compatibility, apply strict validation and reject
-  metacharacter-bearing command strings by policy.
-- The script command guard rejects these characters: `;`, `|`, `&`, `` ` ``,
-  `$`, `>`, `<`, newline, and carriage return.
+- Spine relies on the script-trust model documented in `SECURITY.md`: the
+  Cacti application is the trust boundary, and command strings stored in the
+  database are considered operator-controlled. Spine does not block shell
+  metacharacters at spawn time; that responsibility sits with the Cacti
+  front end where the script is admitted.
+- Child environments are scrubbed of LD_*, DYLD_*, BASH_ENV, and ENV before
+  spawn so a tampered parent environment cannot hijack the dynamic linker or
+  shell startup.
 - Keep process-spawn APIs and argument handling deterministic and test-covered.
