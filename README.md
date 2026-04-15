@@ -1,249 +1,162 @@
-# Spine: a poller for Cacti
+# spine
 
-Spine is a high speed poller replacement for `cmd.php`. It is almost 100%
-compatible with the legacy cmd.php processor and provides much more flexibility,
-speed and concurrency than `cmd.php`.
+Multi-threaded SNMP and script poller for Cacti.
 
-Make sure that you have the proper development environment to compile Spine.
-This includes a C compiler, CMake, Ninja, and the required dependency headers.
-If you have questions please consult the forums and/or online documentation.
+[![distro matrix](https://github.com/Cacti/spine/actions/workflows/distro-matrix.yml/badge.svg)](https://github.com/Cacti/spine/actions/workflows/distro-matrix.yml)
+[![ci](https://github.com/Cacti/spine/actions/workflows/ci.yml/badge.svg)](https://github.com/Cacti/spine/actions/workflows/ci.yml)
+[![license: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
+[![C17](https://img.shields.io/badge/C-17-blue.svg)](CMakeLists.txt)
 
------------------------------------------------------------------------------
+## At a glance
 
-## Platform Support
+- Drop-in replacement for Cacti's `cmd.php` poller, written in C17.
+- Pools SNMP v1/v2c/v3 and script targets across a configurable thread pool; one MySQL/MariaDB connection per worker.
+- Runs as a short cron-driven batch or as a long-lived systemd `Type=notify` daemon with watchdog, SIGHUP reload, and SIGTERM drain.
+- Per-host circuit breaker with exponential backoff; `--dry-run`, `--check`, and `--dump-config` for operator-safe iteration.
+- Structured JSON logging on non-TTY stderr; USDT tracepoints around poll cycles and SNMP operations.
+- Used by enterprise, telecom, MSP, and hosting deployments running tens to hundreds of thousands of data sources.
 
-Spine is tested across Linux, macOS, and Windows, but the support level is not
-identical on every platform.
+## Quick start
 
-| Platform | Build Status | Runtime Status | Notes |
-| --- | --- | --- | --- |
-| Linux | Full | Full | Primary production target. Native CMake builds and tests are exercised in CI. |
-| macOS | Full | Full | CMake main-build coverage is exercised in CI. Linux still has broader ecosystem and integration coverage. |
-| FreeBSD | Full | Full | CMake build and CTest smoke coverage are exercised via CI VM runs. |
-| Windows | Partial | Partial | MSYS2/MinGW-native smoke coverage is exercised in CI. Full binary/runtime support still depends on a complete Windows Net-SNMP toolchain path. |
-| Solaris | Partial | Partial | Best-effort CMake portability profile is maintained, but there is no hosted CI lane today. |
-| AIX | Partial | Partial | Best-effort CMake portability profile is maintained, but there is no hosted CI lane today. |
-
-### Support Tiers
-
-The platform support policy uses three tiers:
-
-1. Guaranteed: regularly validated in CI and intended for production operation.
-2. Best Effort: CI coverage exists, but ecosystem/runtime variability may require local adaptation.
-3. Unsupported: not part of active validation, no compatibility commitment.
-
-Current mapping:
-
-* Guaranteed: Linux
-* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW), Solaris, AIX
-* Unsupported: Cygwin build/runtime path
-
-Platform implementation rules are centralized in
-`docs/platform-idioms.md`.
-
-### Security Behavior Change
-
-Script poll commands now apply a strict shell-metacharacter guard before
-execution. Commands containing `;`, `|`, `&`, `` ` ``, `$`, `>`, `<`, newline,
-or carriage return are rejected and logged as unsafe.
-
-### Build System Roadmap
-
-CMake is the canonical build system for this repository.
-
-Autotools files remain only for transition compatibility and are planned for
-removal after 2026-12-31.
-
-## Unix Installation
-
-These instructions assume the default install location for spine of
-`/usr/local/spine`. If you choose to use another prefix, make sure you update
-the commands as required for that new path.
-
-To compile and install Spine with the default options:
-
-```shell
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
-cmake --install build
-chown root:root /usr/local/spine/bin/spine
-chmod u+s /usr/local/spine/bin/spine
+```sh
+git clone https://github.com/Cacti/spine.git
+cd spine
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/spine --help
 ```
 
-To install under a non-default prefix, pass
-`-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
+## Supported platforms
 
-### Systemd integration (Linux)
+| Tier | Platforms |
+|---|---|
+| Tier 1 (primary, blocking CI) | RHEL / Rocky / Alma 9, Ubuntu 22.04 + 24.04, Debian 12, Fedora, FreeBSD 14, macOS |
+| Tier 2 (supported, blocking CI) | Rocky 8, Debian trixie, openSUSE Leap 15, Alpine 3.20 |
+| Tier 3 (advisory CI) | NetBSD 10, OpenBSD 7.5, DragonFly BSD, Windows MSVC / MSYS2, UBI 9 |
+| Tier 4 (experimental, compile guards only) | AIX, Solaris / illumos |
 
-On Linux with `libsystemd` available, the build links `sd_notify(3)` and
-installs `spine.service` plus `spine.timer` into the distro's systemd unit
-directory. See [docs/systemd.md](docs/systemd.md) for unit installation,
-journal logging, reload behaviour, and watchdog tuning. Disable with
-`-DWITH_SYSTEMD=OFF` at configure time.
+Full matrix, tier policy, install commands, and local reproduction with `scripts/test-distros.sh` are in [docs/platforms.md](docs/platforms.md).
 
-## Installing on Debian and Derivatives
+## Install
 
-Install build dependencies:
+Package dependencies, then build from source. Representative per-distro commands are below; the full list lives in [docs/platforms.md](docs/platforms.md).
 
-```shell
-apt-get install cmake ninja-build build-essential libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config
+### RHEL / Rocky / Alma / Fedora
+
+```sh
+dnf install -y epel-release
+dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel
 ```
 
-Build and install:
+### Debian / Ubuntu
 
-```shell
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-ctest --test-dir build --output-on-failure
-sudo cmake --install build
+```sh
+apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev
 ```
 
-## Installing on EL and Derivatives
+### FreeBSD
 
-Install build dependencies:
-
-```shell
-dnf install cmake ninja-build gcc make net-snmp-devel mariadb-devel openssl-devel pkgconfig
+```sh
+pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
 ```
 
-Build and install:
+### macOS
 
-```shell
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-ctest --test-dir build --output-on-failure
-sudo cmake --install build
-```
-
-## FreeBSD Development
-
-1. Install dependencies:
-
-   ```shell
-   pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
-   ```
-
-2. Configure/build/test:
-
-   ```shell
-   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
-   cmake --build build
-   ctest --test-dir build --output-on-failure
-   ```
-
-## macOS Development
-
-Homebrew (recommended):
-
-```shell
+```sh
 brew install cmake ninja pkg-config mysql-client net-snmp openssl@3
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON \
-  -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
-cmake --build build
-ctest --test-dir build --output-on-failure
 ```
 
-MacPorts (best effort):
+### Build and install
 
-```shell
-sudo port install cmake ninja pkgconfig mysql8 net-snmp openssl
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/local"
-cmake --build build
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DSPINE_BUILD_MAIN=ON
+cmake --build build -j
 ctest --test-dir build --output-on-failure
+sudo cmake --install build
 ```
 
-## Solaris and AIX Development (Best Effort)
+Disable the systemd integration with `-DWITH_SYSTEMD=OFF` on systems without libsystemd (Alpine / musl, BSDs, macOS, Windows).
 
-These platforms currently do not have hosted CI lanes, but CMake portability
-profiles are maintained.
+### Reproducible builds
 
-Solaris (example with OpenCSW-style prefix):
+`SOURCE_DATE_EPOCH` is honoured by the build. Set it to the commit timestamp to produce bit-identical artifacts:
 
-```shell
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/csw;/usr"
-cmake --build build
-ctest --test-dir build --output-on-failure
+```sh
+SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) cmake --build build -j
 ```
 
-AIX (example with /opt/freeware prefix):
+## Configuration
 
-```shell
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/freeware;/usr"
-cmake --build build
-ctest --test-dir build --output-on-failure
+`spine.conf` holds database credentials and poller tuning. A full annotated template ships as [etc/spine.conf.dist](etc/spine.conf.dist). Minimum viable config:
+
+```ini
+DB_Host       localhost
+DB_Database   cacti
+DB_User       cactiuser
+DB_Pass       cactipass
+DB_Port       3306
+DB_UseSSL     1
+
+Threads       20
 ```
 
-## Windows Development
+The file must be mode `0600` and owned by the spine user. Spine refuses to start otherwise.
 
-Windows development targets a native MSYS2/MinGW toolchain. Cygwin is no longer
-part of the supported build story for this repository.
+Validate the config without polling:
 
-### Preferred Toolchain: MSYS2/MinGW
+```sh
+spine --check               # parse and validate spine.conf
+spine --dump-config         # print the effective, redacted config
+spine --dry-run             # run a full poll cycle with no SQL writes
+```
 
-1. Install [MSYS2](https://www.msys2.org/).
+## Running under systemd
 
-2. Open the `MSYS2 MinGW 64-bit` shell.
+The build installs `spine.service` and `spine.timer` into the distro's unit directory. The unit is `Type=notify`, uses `sd_notify(3)` for readiness and watchdog pings, and reloads `spine.conf` on `SIGHUP`.
 
-3. Install the native build dependencies:
+```sh
+systemctl enable --now spine.timer
+systemctl status spine.service
+journalctl -u spine.service -f
+```
 
-   ```shell
-   pacman -S --needed \
-     mingw-w64-x86_64-gcc \
-     mingw-w64-x86_64-cmake \
-     mingw-w64-x86_64-ninja \
-     mingw-w64-x86_64-libmariadbclient \
-     mingw-w64-x86_64-openssl \
-     pkgconf
-   ```
+Unit source: [etc/systemd/spine.service](etc/systemd/spine.service). Hardening flags, watchdog tuning, and override examples are documented in [docs/systemd.md](docs/systemd.md).
 
-4. If your MSYS2 mirror publishes Net-SNMP for MinGW, install it too:
+## Debugging and observability
 
-   ```shell
-   pacman -S --needed mingw-w64-x86_64-net-snmp
-   ```
+- `spine --log-format=json` emits one structured log line per event on stderr, suitable for `journalctl -o json` or a sidecar shipper.
+- `spine --check` and `spine --dump-config` exit without polling; use for config regression checks.
+- `spine --dry-run` runs a complete poll cycle and logs the SQL statements that would be executed.
+- USDT tracepoints are compiled in on Linux and FreeBSD. List them with `bpftrace -l 'usdt:./build/spine:spine:*'`; probes fire at poll cycle start/end, SNMP request/response, and circuit-breaker state changes.
+- Attach gdbserver to a running spine, relax the hardened unit for ptrace, and capture cores per [docs/debugging.md](docs/debugging.md).
 
-5. Configure and build Spine with CMake:
+## Security
 
-   ```shell
-   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
-   cmake --build build
-   ctest --test-dir build --output-on-failure
-   ```
+Spine trusts the Cacti database. Any principal with write access to `poller_item` can direct spine to execute arbitrary commands as the spine user. See [SECURITY.md](SECURITY.md) for the full trust model, recommended deployment (dedicated user, `CAP_NET_RAW`, `0600` config, TLS to the DB), and private vulnerability reporting instructions.
 
-6. If Net-SNMP is not yet available in your Windows package set, you can still
-   validate the native platform layer and unit coverage with:
+Runtime sandboxing, when available on the target OS:
 
-   ```shell
-   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=OFF
-   cmake --build build
-   ctest --test-dir build --output-on-failure
-   ```
+- Linux: `NoNewPrivileges=yes`, seccomp system-call filter on the systemd unit.
+- OpenBSD: `pledge(2)` + `unveil(2)` on the poller worker.
+- FreeBSD: stub in place; `capsicum(4)` integration is a tracked item.
+- Windows: spawned child processes are confined in a Job Object.
 
-## Known Issues
+Poll commands are rejected if they contain `;`, `|`, `&`, backticks, `$`, `>`, `<`, newline, or carriage return.
 
-1. On native Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
-   if you are using TCP ping on Windows, spine will not perform a second or
-   subsequent retries to connect and the host will be assumed down on the first
-   failure.
+## Contributing
 
-   If this is a problem it is suggested to use another Availability/Reachability
-   method, or moving to Linux/UNIX.
+See [CONTRIBUTING.md](CONTRIBUTING.md). All commits must carry a DCO `Signed-off-by` line (`git commit -s`). Run `bash scripts/test-distros.sh` before pushing platform-sensitive changes.
 
-2. Spine takes quite a few MySQL connections. The number of connections is
-   calculated as follows: (1 for main poller + 1 per each thread + 1 per each
-   script server)
+## Documentation
 
-   Therefore, if you have 4 processes, with 10 threads each, and 5 script
-   servers each your spine will take approximately:
+- [docs/platforms.md](docs/platforms.md) - tier policy, install commands, CI coverage
+- [docs/systemd.md](docs/systemd.md) - unit installation, watchdog, hardening
+- [docs/debugging.md](docs/debugging.md) - gdbserver, cores, strace, bpftrace
+- [docs/platform-idioms.md](docs/platform-idioms.md) - portability rules for contributors
+- [SECURITY.md](SECURITY.md) - trust model and disclosure
 
-   `total connections = 4 * ( 1 + 10 + 5 ) = 64`
+## License
 
-3. Raw ICMP privilege model is platform-specific:
+GPL-2.0-or-later. See [LICENSE](LICENSE).
 
-   - Linux/FreeBSD/macOS usually require elevated/raw-socket privileges.
-   - Windows uses native ICMP APIs and does not require setuid/capabilities for
-     the same code path.
-
------------------------------------------------------------------------------
-Copyright (c) 2004-2026 - The Cacti Group, Inc.
+Copyright (c) 2004-2026 The Cacti Group, Inc.
