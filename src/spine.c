@@ -99,6 +99,7 @@
 #include "spine.h"
 #include "systemd_notify.h"
 #include "platform/platform_sandbox.h"
+#include "circuit_breaker.h"
 
 #include <signal.h>
 
@@ -389,6 +390,7 @@ int main(int argc, char *argv[]) {
 	set.dump_config       = FALSE;
 	set.dry_run           = FALSE;
 	set.log_format        = LOGFMT_AUTO;
+	set.circuit_breaker_threshold = 0;
 
 	for (argv++; *argv; argv++) {
 		char	*arg = *argv;
@@ -613,6 +615,8 @@ int main(int argc, char *argv[]) {
 
 	/* read settings table from the database to further establish environment */
 	read_config_options();
+
+	spine_cb_init();
 
 	/* set the poller interval for those who use less than 5 minute intervals */
 	if (set.poller_interval == 0) {
@@ -1303,6 +1307,8 @@ int main(int argc, char *argv[]) {
 		vp = (volatile char *)set.rdb_pass;
 		memset((char *)vp, 0, sizeof(set.rdb_pass));
 	}
+
+	spine_cb_shutdown();
 
 	/* Tell systemd we are stopping. Sent before the final cleanup so the
 	 * unit never sits in "stopping" state waiting for STOPPING=1. */

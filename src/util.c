@@ -1174,6 +1174,7 @@ int read_spine_config(const char *file) {
 					set.logfile_processed = 1;
 					set.log_destination = LOGDEST_BOTH;
 				} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
+				else if (STRIMATCH(p1, "CircuitBreakerThreshold")) set.circuit_breaker_threshold = atoi(p2);
 				else if (!set.stderr_notty) {
 					fprintf(stderr,"WARNING: Unrecognized directive: %s=%s in %s\n", p1, p2, file);
 				}
@@ -2319,4 +2320,5 @@ void spine_dump_config(void) {
 	printf("LogVerbosity = %d\n",    set.log_level);
 	printf("LogFormat = %d\n",       set.log_format);
 	printf("DryRun = %d\n",          set.dry_run);
+	printf("CircuitBreakerThreshold = %d\n", set.circuit_breaker_threshold);
 }

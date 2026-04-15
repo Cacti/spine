@@ -380,6 +380,9 @@ typedef struct config_struct {
 	int    dry_run;
 	/* Log format: 0=auto (TTY-detected), 1=text, 2=json. */
 	int    log_format;
+	/* Per-host circuit breaker. 0 disables; positive N means trip after N
+	 * consecutive failed polls and skip with exponential backoff. */
+	int    circuit_breaker_threshold;
 	/* host range to be poller with this spine process */
 	int    start_host_id;
 	int    end_host_id;

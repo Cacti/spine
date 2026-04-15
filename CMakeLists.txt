@@ -118,6 +118,7 @@ set(SPINE_CORE_SOURCES
     src/keywords.c
     src/error.c
     src/systemd_notify.c
+    src/circuit_breaker.c
 )
 
 set(SPINE_TEST_NAMES env time process socket error fd dns)

@@ -34,6 +34,7 @@
 #include "common.h"
 #include "spine.h"
 #include "spine_probes.h"
+#include "circuit_breaker.h"
 #include "platform/platform_fd.h"
 
 void child_cleanup(void *arg) {
@@ -115,7 +116,12 @@ void *child(void *arg) {
 		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	}
 
-	poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
+	if (spine_cb_should_skip(host_id)) {
+		SPINE_LOG_MEDIUM(("Device[%i] skipped by circuit breaker", host_id));
+	} else {
+		poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
+		spine_cb_record(host_id, host_errors);
+	}
 
 	pthread_cleanup_pop(1);
 
