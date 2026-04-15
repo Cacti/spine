@@ -1,0 +1,85 @@
+# AppArmor profile for the Cacti spine poller.
+#
+# Distributions that install spine to a different prefix should copy this
+# file and adjust both the attach path on the first line and the "/usr/local/
+# spine/bin/spine mr," line. Load with:
+#
+#   apparmor_parser -r -W /etc/apparmor.d/usr.local.spine.bin.spine
+#
+# The profile assumes the accompanying systemd unit (etc/systemd/spine.service)
+# which drops to the "spine" service account and retains CAP_NET_RAW for ICMP.
+
+#include <tunables/global>
+
+/usr/local/spine/bin/spine {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/openssl>
+  #include <abstractions/mysql>
+
+  # CAP_NET_RAW for the ICMP echo socket; DAC_READ_SEARCH so the process
+  # can still read spine.conf when it is mode 0640 root:spine after privdrop.
+  capability net_raw,
+  capability dac_read_search,
+  capability setuid,
+  capability setgid,
+  capability sys_resource,   # mlockall() under --mlock
+
+  network inet  stream,
+  network inet6 stream,
+  network inet  dgram,       # net-snmp v2c/v3
+  network inet6 dgram,
+  network inet  raw,         # ICMP echo
+  network inet6 raw,
+  network unix  stream,      # local MySQL socket
+
+  # Configuration
+  /etc/spine.conf              r,
+  /etc/cacti/spine.conf        r,
+  /usr/local/spine/etc/spine.conf r,
+  /etc/mime.types              r,
+  /etc/nsswitch.conf           r,
+  /etc/resolv.conf             r,
+  /etc/ssl/openssl.cnf         r,
+  /etc/ssl/certs/**            r,
+  /etc/pki/tls/**              r,
+  /etc/snmp/**                 r,
+
+  # Log files. Match etc/systemd/spine.service ReadWritePaths.
+  /var/log/cacti/               rw,
+  /var/log/cacti/**             rwk,
+  /var/run/spine/                rw,
+  /var/run/spine/**              rwk,
+  /run/spine/                    rw,
+  /run/spine/**                  rwk,
+
+  # Cacti scripts and resource trees. rix lets spine execve data gathering
+  # helpers and inherit the same profile (preserve Cacti's tree-wide policy).
+  /usr/local/cacti/scripts/**    rix,
+  /usr/local/cacti/resource/**   r,
+  /usr/share/cacti/scripts/**    rix,
+  /usr/share/cacti/resource/**   r,
+
+  # Program itself (mmap of own text segment for JIT-free reloads).
+  /usr/local/spine/bin/spine    mr,
+  /usr/local/bin/spine          mr,
+
+  # Temporary working area for script output buffering.
+  /tmp/spine.*                  rwk,
+  /tmp/**                       rw,
+
+  # Random / system info the libc and getrandom(2) fallback path touches.
+  /proc/sys/kernel/random/uuid  r,
+  /proc/sys/kernel/random/boot_id r,
+  /proc/sys/net/core/somaxconn  r,
+  /sys/class/net/*/address      r,
+  /sys/class/net/*/type         r,
+  /dev/urandom                  r,
+  /dev/random                   r,
+  /dev/null                     rw,
+
+  # Allow reading own /proc for RSS self-inspection.
+  owner /proc/[0-9]*/stat       r,
+  owner /proc/[0-9]*/status     r,
+  owner /proc/[0-9]*/task/[0-9]*/** r,
+}
