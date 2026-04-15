@@ -36,6 +36,11 @@ extern void read_config_options(void);
 extern int read_spine_config(const char *file);
 extern void config_defaults(void);
 
+/* Capture the effective uid at process startup before any privilege drop.
+ * Used by the spine.conf owner check so a root-owned config stays valid
+ * once spine drops to its service account. */
+extern void spine_capture_startup_euid(void);
+
 /* cacti logging function */
 extern int spine_log(const char *format, ...)
 	__attribute__((format(printf, 1, 2)));

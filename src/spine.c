@@ -272,6 +272,11 @@ int main(int argc, char *argv[]) {
 	start_time = get_time_as_double();
 	total_time = 0;
 
+	/* Record the boot-time euid before any privilege drop. The spine.conf
+	 * owner check in util.c consults this so that a root-owned config
+	 * remains valid after drop_root hands the process to a service uid. */
+	spine_capture_startup_euid();
+
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
 		drop_root(getuid(), getgid());

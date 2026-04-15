@@ -39,6 +39,19 @@
 
 static int nopts = 0;
 
+/* EUID the process booted with, captured before any privilege drop.
+ * Sentinel (uid_t)-1 means "not yet captured"; once populated the value
+ * is read-only for the rest of the process. The spine.conf owner check
+ * consults this so a root-owned config file stays valid after spine
+ * drops to its service account. */
+static uid_t spine_startup_euid = (uid_t)-1;
+
+void spine_capture_startup_euid(void) {
+	if (spine_startup_euid == (uid_t)-1) {
+		spine_startup_euid = geteuid();
+	}
+}
+
 /* Forward declaration so spine_log() can reach the JSON escaper defined
  * further down alongside the other --check / --dump-config helpers. */
 /* Exposed for the JSON-escape unit test. Treat as internal; do not call
@@ -1127,11 +1140,23 @@ int read_spine_config(const char *file) {
 				fclose(fp);
 				return -1;
 			}
-			if (conf_stat.st_uid != geteuid() && geteuid() != 0) {
+			/* Accept the file if it is owned by root, by the euid spine
+			 * booted with (captured before drop_root), by the current
+			 * euid, or by the real uid. Comparing against the live euid
+			 * alone trips once spine hands off to its service account
+			 * on a root-owned /etc/spine.conf. */
+			uid_t cur_euid = geteuid();
+			uid_t cur_ruid = getuid();
+			uid_t owner    = conf_stat.st_uid;
+			int owner_ok   = (owner == 0)
+				|| (owner == cur_euid)
+				|| (owner == cur_ruid)
+				|| (spine_startup_euid != (uid_t)-1 && owner == spine_startup_euid);
+			if (!owner_ok) {
 				if (!set.stderr_notty) {
 					fprintf(stderr,
-						"WARNING: spine config [%s] owner uid %d differs from effective uid %d\n",
-						file, (int)conf_stat.st_uid, (int)geteuid());
+						"WARNING: spine config [%s] owner uid %d is not root, the startup euid, or the running user\n",
+						file, (int)owner);
 				}
 			}
 		}
