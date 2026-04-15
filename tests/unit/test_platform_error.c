@@ -10,7 +10,7 @@ static void test_error_string_returns_text(void) {
 
 	message = spine_platform_error_string(EINVAL, buffer, sizeof(buffer));
 	ASSERT_TRUE(message != NULL);
-	ASSERT_TRUE(strlen(message) > 0);
+	ASSERT_TRUE(message != NULL && strlen(message) > 0);
 }
 
 int main(void) {

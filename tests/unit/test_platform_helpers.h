@@ -13,6 +13,11 @@ static int test_failures = 0;
 	} \
 } while (0)
 
+#define ASSERT_FAIL(msg) do { \
+	fprintf(stderr, "assertion failed: %s:%d: %s\n", __FILE__, __LINE__, (msg)); \
+	test_failures++; \
+} while (0)
+
 #define ASSERT_INT_EQ(actual, expected) do { \
 	int _actual = (actual); \
 	int _expected = (expected); \

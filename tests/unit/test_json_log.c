@@ -23,7 +23,7 @@ static void expect_escape(const char *src, const char *want) {
 	char buf[256];
 	spine_json_escape(buf, sizeof(buf), src);
 	if (strcmp(buf, want) != 0) {
-		ASSERT_TRUE(0 && "json-escape mismatch");
+		ASSERT_FAIL("json-escape mismatch");
 	}
 }
 
