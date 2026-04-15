@@ -100,7 +100,7 @@ static void test_exponential_backoff_capped(void) {
 		while (spine_cb_should_skip(99)) {
 			window++;
 			if (window > 200) {
-				ASSERT_TRUE(!"cooldown did not drain");
+				ASSERT_TRUE(0 && "cooldown did not drain");
 				return;
 			}
 		}
