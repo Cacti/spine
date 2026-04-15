@@ -944,6 +944,14 @@ if(BUILD_TESTING)
     endif()
 endif()
 
+# When SPINE_BUILD_MAIN is OFF we never call spine_require_netsnmp() so the
+# SNMP_LOCALNAME substitution would be empty and produce a malformed
+# "#define SNMP_LOCALNAME " in config.h. Default to 0 so the feature macro
+# always has a well-formed integer value.
+if(NOT DEFINED SNMP_LOCALNAME)
+    set(SNMP_LOCALNAME 0)
+endif()
+
 configure_file(
     ${CMAKE_SOURCE_DIR}/config/config.h.cmake.in
     ${CMAKE_BINARY_DIR}/config/config.h
