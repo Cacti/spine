@@ -98,6 +98,7 @@
 #include "common.h"
 #include "spine.h"
 #include "systemd_notify.h"
+#include "platform/platform_sandbox.h"
 
 #include <signal.h>
 
@@ -682,6 +683,19 @@ int main(int argc, char *argv[]) {
 		php_init(PHP_INIT);
 		set.php_initialized    = TRUE;
 		set.php_current_server = 0;
+	}
+
+	/* Opt-in sandbox activation. DB, SNMP, PHP script servers, and the log
+	 * file are all open at this point, so the remaining syscall/path surface
+	 * is bounded. The gate stays opt-in because a too-narrow allowlist would
+	 * break site-specific poll scripts that exec unexpected binaries. */
+	if (getenv("SPINE_SANDBOX") != NULL) {
+		const char *scripts_dir = NULL;
+#ifdef CACTI_SCRIPTS_PATH
+		scripts_dir = CACTI_SCRIPTS_PATH;
+#endif
+		spine_sandbox_unveil_paths(set.path_logfile, NULL, scripts_dir);
+		spine_sandbox_restrict();
 	}
 
 	/* obtain the list of hosts to poll */

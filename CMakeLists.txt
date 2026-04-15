@@ -42,6 +42,16 @@ endif()
 
 project(spine VERSION ${_spine_version} LANGUAGES C)
 
+# Reproducible-builds epoch. Honour SOURCE_DATE_EPOCH (Debian, Fedora, Nix,
+# Gentoo, Arch all set this when building reproducibly) so generated headers
+# and install-tree metadata don't carry wall-clock stamps. Falls back to the
+# configure-time UTC timestamp when the environment variable is unset.
+if(DEFINED ENV{SOURCE_DATE_EPOCH})
+    set(SPINE_BUILD_EPOCH "$ENV{SOURCE_DATE_EPOCH}")
+else()
+    string(TIMESTAMP SPINE_BUILD_EPOCH "%s" UTC)
+endif()
+
 include(CTest)
 include(GNUInstallDirs)
 include(CheckCCompilerFlag)
@@ -76,6 +86,11 @@ set(SPINE_PLATFORM_SOURCES
     src/platform/platform_process_win.c
     src/platform/platform_fd_posix.c
     src/platform/platform_fd_win.c
+    src/platform/platform_sandbox_posix.c
+    src/platform/platform_sandbox_openbsd.c
+    src/platform/platform_sandbox_linux.c
+    src/platform/platform_sandbox_freebsd.c
+    src/platform/platform_sandbox_win.c
 )
 
 # Kept out of the shared spine_platform object because the POSIX
