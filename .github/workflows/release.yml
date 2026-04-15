@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-and-sign:
+    name: build, SBOM, cosign keyless sign
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # required to attach artifacts to the release
+      id-token: write   # required for cosign keyless (Sigstore OIDC)
+      packages: write   # required for ghcr.io publish (publish-oci job)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake gcc make pkg-config \
+            libsnmp-dev libmariadb-dev-compat libssl-dev libsystemd-dev
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --build build -j"$(nproc)"
+
+      - name: Generate source + binary tarball via CPack
+        working-directory: build
+        run: |
+          set -euo pipefail
+          cpack -G TGZ
+          ls -la *.tar.gz || true
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: Generate SBOM (SPDX + CycloneDX)
+        run: |
+          set -euo pipefail
+          syft dir:. -o spdx-json=spine.spdx.json
+          syft dir:. -o cyclonedx-json=spine.cdx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Sign release artifacts (cosign keyless / Sigstore)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for f in build/*.tar.gz spine.spdx.json spine.cdx.json; do
+            [ -f "$f" ] || continue
+            cosign sign-blob --yes \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.pem" \
+              "$f"
+          done
+
+      - name: Attach artifacts to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          files: |
+            build/*.tar.gz
+            build/*.tar.gz.sig
+            build/*.tar.gz.pem
+            spine.spdx.json
+            spine.spdx.json.sig
+            spine.spdx.json.pem
+            spine.cdx.json
+            spine.cdx.json.sig
+            spine.cdx.json.pem
+          fail_on_unmatched_files: false
+
+      - name: Upload unsigned artifact bundle (workflow_dispatch path)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: release-artifacts
+          path: |
+            build/*.tar.gz
+            build/*.tar.gz.sig
+            build/*.tar.gz.pem
+            spine.spdx.json
+            spine.spdx.json.sig
+            spine.spdx.json.pem
+            spine.cdx.json
+            spine.cdx.json.sig
+            spine.cdx.json.pem
+          if-no-files-found: warn
