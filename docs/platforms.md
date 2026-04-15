@@ -41,6 +41,7 @@ by market share. CI failures here block merge.
 | **Ubuntu 22.04 LTS** | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
 | **Debian 12 (bookworm)** | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
 | **Fedora (latest)** | `dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel` |
+| **FreeBSD 14** | `pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl` |
 | **macOS (arm64 + x86_64)** | `brew install cmake ninja pkg-config mysql-client net-snmp openssl@3` |
 
 ### Notes
@@ -60,8 +61,20 @@ by market share. CI failures here block merge.
 - **Debian 12**: Cacti's Debian baseline.
 - **Fedora (latest)**: tracks the RHEL upstream toolchain and is the
   earliest signal for breakage on future RHEL releases.
+- **FreeBSD 14**: primary BSD target. Significant Cacti deployment in
+  ISPs, network operators, and hosting providers where the BSD licence
+  and ZFS storage matter. CI runs FreeBSD 14.1 via
+  `cross-platform-actions/action`.
 - **macOS**: developer machines. Tested on macOS 14 (Sonoma) and 15
   (Sequoia) with Apple Clang on both Apple Silicon and Intel.
+
+### FreeBSD build
+
+```sh
+pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+cmake -G Ninja -B build -DSPINE_BUILD_MAIN=ON
+cmake --build build
+```
 
 ### macOS build
 
@@ -76,7 +89,7 @@ cmake --build build -j
 
 ## Tier 2 — Supported
 
-Older or non-mainstream Linux distributions and FreeBSD. CI failures here
+Older or non-mainstream Linux distributions. CI failures here
 block merge but may be deferred for urgent fixes.
 
 | Platform | Install command |
@@ -85,7 +98,6 @@ block merge but may be deferred for urgent fixes.
 | **Debian trixie** | `apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev` |
 | **openSUSE Leap 15** | `zypper install cmake gcc13 make net-snmp-devel libmariadb-devel libopenssl-devel pkg-config systemd-devel` |
 | **Alpine 3.20** | `apk add bash cmake gcc make musl-dev net-snmp-dev mariadb-connector-c-dev openssl-dev pkgconfig linux-headers` |
-| **FreeBSD 14** | `pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl` |
 
 ### Notes
 
@@ -98,15 +110,6 @@ block merge but may be deferred for urgent fixes.
 - **Alpine 3.20**: musl-based; primarily for container images.
   `WITH_SYSTEMD=OFF` disables the Type=notify integration on musl systems
   without libsystemd.
-- **FreeBSD 14**: BSD lineage baseline. Tested on FreeBSD 14.1.
-
-### FreeBSD build
-
-```sh
-pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
-cmake -G Ninja -B build -DSPINE_BUILD_MAIN=ON
-cmake --build build
-```
 
 ---
 
@@ -250,10 +253,10 @@ The `distro-matrix` workflow (`.github/workflows/distro-matrix.yml`) runs
 on every push to `feat/`, `fix/`, and `ci/` branches, on PRs targeting
 `develop`, and weekly at 06:17 UTC Monday. It builds spine on:
 
-- **Tier 1 (7 lanes)**: Ubuntu 24.04, Ubuntu 22.04, Debian 12, Rocky 9,
-  Alma 9, Fedora latest, macOS latest.
-- **Tier 2 (5 lanes)**: Rocky 8, Debian trixie, openSUSE Leap 15,
-  Alpine 3.20, FreeBSD 14.1.
+- **Tier 1 (8 lanes)**: Rocky 9, Alma 9, Ubuntu 24.04, Ubuntu 22.04,
+  Debian 12, Fedora latest, FreeBSD 14.1, macOS latest.
+- **Tier 2 (4 lanes)**: Rocky 8, Debian trixie, openSUSE Leap 15,
+  Alpine 3.20.
 - **Tier 3 (4 lanes, advisory)**: NetBSD 10, OpenBSD 7.5, Windows MSYS2,
   UBI 9.
 

@@ -191,7 +191,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   freebsd:
-    name: FreeBSD 14 (Tier 2)
+    name: FreeBSD 14 (Tier 1)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
