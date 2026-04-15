@@ -33,6 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
+#include "spine_probes.h"
 
 /* resolve problems in debian */
 #ifndef NETSNMP_DS_LIB_DONT_PERSIST_STATE
@@ -991,6 +992,7 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
  *
  */
 void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids) {
+	SPINE_PROBE1(snmp_query, current_host->id);
 	struct snmp_pdu *pdu       = NULL;
 	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;

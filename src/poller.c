@@ -33,6 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
+#include "spine_probes.h"
 #include "platform/platform_fd.h"
 
 void child_cleanup(void *arg) {
@@ -147,6 +148,7 @@ void *child(void *arg) {
  *
  */
 void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
+	SPINE_PROBE1(poll_start, host_id);
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
@@ -2095,6 +2097,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	SPINE_FREE(buf_errors);
 
 	*host_errors = errors;
+
+	SPINE_PROBE2(poll_done, host_id, errors);
 }
 
 /*! \fn void buffer_output_errors(local_data_id) {
