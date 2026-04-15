@@ -1129,13 +1129,36 @@ int main(int argc, char *argv[]) {
 
 	/* wait for all threads to 'complete'
  	 * using the mutex here as the semaphore will
-     * show zero before the children are done */
+     * show zero before the children are done.
+     *
+     * SIGTERM shortens the deadline to SPINE_SIGTERM_DRAIN_SECS so systemd's
+     * TimeoutStopSec (90s default) is satisfied with margin. On the normal
+     * path the existing poller_interval deadline still applies. */
+	const int SPINE_SIGTERM_DRAIN_SECS = 30;
+	double drain_deadline = begin_time + set.poller_interval;
+	if (spine_stop_requested) {
+		double sigterm_deadline = get_time_as_double() + SPINE_SIGTERM_DRAIN_SECS;
+		if (sigterm_deadline < drain_deadline) {
+			drain_deadline = sigterm_deadline;
+		}
+	}
+
 	while (a_threads_value < set.threads) {
 		cur_time = get_time_as_double();
 
-		if (cur_time - begin_time > set.poller_interval) {
+		if (cur_time > drain_deadline) {
 			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.threads - a_threads_value));
 			break;
+		}
+
+		/* If SIGTERM arrived while we were inside this loop, tighten the
+		 * deadline now. The check is intentionally one-way: we never extend
+		 * a shorter deadline back out. */
+		if (spine_stop_requested) {
+			double sigterm_deadline = get_time_as_double() + SPINE_SIGTERM_DRAIN_SECS;
+			if (sigterm_deadline < drain_deadline) {
+				drain_deadline = sigterm_deadline;
+			}
 		}
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
