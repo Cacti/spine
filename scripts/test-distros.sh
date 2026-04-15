@@ -9,6 +9,15 @@
 # from one run do not contaminate another. Logs land in build-reports/.
 set -euo pipefail
 
+# Associative arrays (declare -A) require bash 4+. macOS ships GNU bash 3.2 at
+# /bin/bash for licensing reasons; the script must run under a newer bash or
+# it will silently corrupt the RESULTS map.
+if (( BASH_VERSINFO[0] < 4 )); then
+    echo "ERROR: scripts/test-distros.sh requires bash 4+ (found ${BASH_VERSION})." >&2
+    echo "       On macOS: brew install bash && /opt/homebrew/bin/bash scripts/test-distros.sh" >&2
+    exit 1
+fi
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 DISTROS=(
