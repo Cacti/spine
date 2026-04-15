@@ -26,4 +26,14 @@ int spine_platform_stderr_is_terminal(void);
  * limit (Linux: 15 bytes + NUL, macOS: 63) are truncated by the OS. */
 void spine_platform_set_thread_name(const char *name);
 
+#ifdef _WIN32
+/* Windows-only Job Object plumbing. Call spine_win_init_job() once after
+ * WSAStartup; all subsequent CreateProcessW call sites consult
+ * spine_win_job_object() to assign the child before ResumeThread. A NULL
+ * return means the Job Object could not be created -- callers MUST treat
+ * the child as unmanaged rather than fail the spawn. */
+void spine_win_init_job(void);
+void *spine_win_job_object(void);
+#endif
+
 #endif

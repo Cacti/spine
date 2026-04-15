@@ -306,7 +306,11 @@ int spine_process_spawn_retry(
 	(void) spawn_attr;
 
 	retry_count = 0;
-	creation_flags = CREATE_NO_WINDOW;
+	/* CREATE_SUSPENDED + AssignProcessToJobObject + ResumeThread is the
+	 * documented pattern for binding a child to a Job Object before it can
+	 * execute any user code. Without CREATE_SUSPENDED the child may exit or
+	 * spawn grandchildren that escape the job. */
+	creation_flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
 	if (envp != NULL) {
 		errno = ENOTSUP;
 		return ENOTSUP;
@@ -345,6 +349,13 @@ int spine_process_spawn_retry(
 		);
 		free(command_line);
 		if (create_result != 0) {
+			HANDLE job = (HANDLE) spine_win_job_object();
+			if (job != NULL) {
+				/* Failure to assign to the job still lets the child run --
+				 * it just won't be cleaned up on spine exit. Don't abort. */
+				(void) AssignProcessToJobObject(job, process_info.hProcess);
+			}
+			ResumeThread(process_info.hThread);
 			CloseHandle(process_info.hThread);
 			*pid = (spine_pid_t) process_info.dwProcessId;
 			CloseHandle(process_info.hProcess);

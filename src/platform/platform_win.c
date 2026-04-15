@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <limits.h>
 #include <winsock2.h>
 #include <windows.h>
@@ -13,7 +14,14 @@
 int spine_platform_init_once(void) {
 	WSADATA wsa_data;
 
-	return WSAStartup(MAKEWORD(2, 2), &wsa_data) == 0 ? 0 : -1;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
+		return -1;
+	}
+
+	/* Job Object creation is best-effort -- a missing job still lets spine
+	 * run, it just loses KILL_ON_JOB_CLOSE cleanup for orphaned children. */
+	spine_win_init_job();
+	return 0;
 }
 
 void spine_platform_cleanup_once(void) {
@@ -141,6 +149,41 @@ void spine_platform_set_thread_name(const char *name) {
 	}
 
 	(void) resolved(GetCurrentThread(), wide_name);
+}
+
+static HANDLE g_spine_job_object = NULL;
+
+/* Job Object confinement for child processes spawned via CreateProcessW.
+ * KILL_ON_JOB_CLOSE guarantees orphaned poll scripts die with spine;
+ * DIE_ON_UNHANDLED_EXCEPTION suppresses the Windows Error Reporting modal
+ * that would otherwise stall a headless poller. BREAKAWAY_OK leaves an
+ * escape hatch for operator-launched helpers that must outlive spine. */
+void spine_win_init_job(void) {
+	JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
+
+	if (g_spine_job_object != NULL) {
+		return;
+	}
+
+	g_spine_job_object = CreateJobObjectW(NULL, NULL);
+	if (g_spine_job_object == NULL) {
+		return;
+	}
+
+	memset(&limits, 0, sizeof(limits));
+	limits.BasicLimitInformation.LimitFlags =
+		JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+		JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION |
+		JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+	if (!SetInformationJobObject(g_spine_job_object,
+			JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
+		CloseHandle(g_spine_job_object);
+		g_spine_job_object = NULL;
+	}
+}
+
+void *spine_win_job_object(void) {
+	return (void *) g_spine_job_object;
 }
 
 #endif
