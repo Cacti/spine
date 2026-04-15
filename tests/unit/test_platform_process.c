@@ -2,6 +2,8 @@
 #include "platform/platform_process.h"
 #include "test_platform_helpers.h"
 
+#include <errno.h>
+
 #ifdef _WIN32
 #include <stdio.h>
 #include <windows.h>

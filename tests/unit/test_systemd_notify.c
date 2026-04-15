@@ -33,8 +33,14 @@ static int failures = 0;
 } while (0)
 
 int main(void) {
-    /* Ensure NOTIFY_SOCKET is unset so any real sd_notify calls no-op. */
+    /* Ensure NOTIFY_SOCKET is unset so any real sd_notify calls no-op.
+     * MSVC/MinGW lack POSIX unsetenv; clearing to "" is equivalent for our
+     * purposes because sd_notify treats empty NOTIFY_SOCKET as disabled. */
+#ifdef _WIN32
+    _putenv_s("NOTIFY_SOCKET", "");
+#else
     unsetenv("NOTIFY_SOCKET");
+#endif
 
     /* READY: call twice; second call should refresh STATUS without crashing. */
     spine_sd_ready();

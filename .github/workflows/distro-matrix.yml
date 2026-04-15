@@ -95,6 +95,7 @@ jobs:
       - name: Install prerequisites (rhel)
         if: matrix.family == 'rhel'
         run: |
+          set -euo pipefail
           dnf install -y epel-release
           dnf install -y cmake gcc make git \
             net-snmp-devel mariadb-connector-c-devel openssl-devel \
@@ -103,6 +104,7 @@ jobs:
       - name: Install prerequisites (fedora)
         if: matrix.family == 'fedora'
         run: |
+          set -euo pipefail
           dnf install -y cmake gcc make git \
             net-snmp-devel mariadb-connector-c-devel openssl-devel \
             pkgconfig systemd-devel
@@ -112,6 +114,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          set -euo pipefail
           apt-get update
           apt-get install -y --no-install-recommends \
             cmake gcc make git ca-certificates \
@@ -121,6 +124,7 @@ jobs:
       - name: Install prerequisites (suse)
         if: matrix.family == 'suse'
         run: |
+          set -euo pipefail
           # Leap 15 ships GCC 7 by default; spine requires C17 so pull the
           # newer gcc13 from the default repos. The configure step sets
           # CC=gcc-13 explicitly so CMake picks the newer compiler.
@@ -132,6 +136,7 @@ jobs:
       - name: Install prerequisites (ubi)
         if: matrix.family == 'ubi'
         run: |
+          set -euo pipefail
           # UBI 9 has a restricted package set. EPEL provides net-snmp-devel
           # but mariadb-connector-c-devel is not always reachable without a
           # paid subscription. Keep going and let the configure step surface
@@ -144,6 +149,7 @@ jobs:
       - name: Install prerequisites (alpine)
         if: matrix.family == 'alpine'
         run: |
+          set -euo pipefail
           apk add --no-cache bash cmake gcc make musl-dev \
             net-snmp-dev mariadb-connector-c-dev openssl-dev \
             pkgconfig linux-headers git
