@@ -13,7 +13,7 @@ Multi-threaded SNMP and script poller for Cacti.
 - Pools SNMP v1/v2c/v3 and script targets across a configurable thread pool; one MySQL/MariaDB connection per worker.
 - Runs as a short cron-driven batch or as a long-lived systemd `Type=notify` daemon with watchdog, SIGHUP reload, and SIGTERM drain.
 - Per-host circuit breaker with exponential backoff; `--dry-run`, `--check`, and `--dump-config` for operator-safe iteration.
-- Structured JSON logging on non-TTY stderr; USDT tracepoints around poll cycles and SNMP operations.
+- Structured JSON logging on non-TTY stderr; USDT tracepoints around per-host polls and SNMP queries (Linux only).
 - Used by enterprise, telecom, MSP, and hosting deployments running tens to hundreds of thousands of data sources.
 
 ## Quick start
@@ -100,7 +100,7 @@ DB_UseSSL     1
 Threads       20
 ```
 
-The file must be mode `0600` and owned by the spine user. Spine refuses to start otherwise.
+Mode `0600` owned by the spine user is recommended. Spine warns on world-readable configs and refuses to start if the file is group- or world-writable.
 
 Validate the config without polling:
 
@@ -127,7 +127,7 @@ Unit source: [etc/systemd/spine.service](etc/systemd/spine.service). Hardening f
 - `spine --log-format=json` emits one structured log line per event on stderr, suitable for `journalctl -o json` or a sidecar shipper.
 - `spine --check` and `spine --dump-config` exit without polling; use for config regression checks.
 - `spine --dry-run` runs a complete poll cycle and logs the SQL statements that would be executed.
-- USDT tracepoints are compiled in on Linux and FreeBSD. List them with `bpftrace -l 'usdt:./build/spine:spine:*'`; probes fire at poll cycle start/end, SNMP request/response, and circuit-breaker state changes.
+- USDT tracepoints are compiled in on Linux when `<sys/sdt.h>` is present; elsewhere they expand to no-ops. List them with `bpftrace -l 'usdt:./build/spine:spine:*'`. Current probes: `poll_start(host_id)`, `poll_done(host_id, errors)`, `snmp_query(host_id)`.
 - Attach gdbserver to a running spine, relax the hardened unit for ptrace, and capture cores per [docs/debugging.md](docs/debugging.md).
 
 ## Security
@@ -136,12 +136,10 @@ Spine trusts the Cacti database. Any principal with write access to `poller_item
 
 Runtime sandboxing, when available on the target OS:
 
-- Linux: `NoNewPrivileges=yes`, seccomp system-call filter on the systemd unit.
-- OpenBSD: `pledge(2)` + `unveil(2)` on the poller worker.
+- Linux: `NoNewPrivileges=yes` and `SystemCallFilter=@system-service` on the systemd unit; in-process `PR_SET_NO_NEW_PRIVS` under the opt-in `SPINE_SANDBOX` env gate. A full in-process seccomp-bpf allowlist is deferred.
+- OpenBSD: `pledge(2)` + `unveil(2)` applied to the main process after DB, SNMP, and log init, under the opt-in `SPINE_SANDBOX` env gate.
 - FreeBSD: stub in place; `capsicum(4)` integration is a tracked item.
 - Windows: spawned child processes are confined in a Job Object.
-
-Poll commands are rejected if they contain `;`, `|`, `&`, backticks, `$`, `>`, `<`, newline, or carriage return.
 
 ## Contributing
 
