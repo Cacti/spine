@@ -970,6 +970,7 @@ if(BUILD_TESTING)
         add_executable(test_circuit_breaker
             tests/unit/test_circuit_breaker.c
             src/circuit_breaker.c
+            src/spine_audit.c
         )
         target_include_directories(test_circuit_breaker PRIVATE
             ${CMAKE_BINARY_DIR}
@@ -992,6 +993,11 @@ if(BUILD_TESTING)
             target_link_libraries(test_circuit_breaker PRIVATE spine_build_options)
         endif()
         target_link_libraries(test_circuit_breaker PRIVATE spine_hardening)
+        if(SPINE_HAVE_LIBAUDIT)
+            target_compile_definitions(test_circuit_breaker PRIVATE HAVE_LIBAUDIT=1)
+            target_include_directories(test_circuit_breaker SYSTEM PRIVATE ${AUDIT_INCLUDE_DIR})
+            target_link_libraries(test_circuit_breaker PRIVATE ${AUDIT_LIB})
+        endif()
         add_test(NAME circuit_breaker COMMAND test_circuit_breaker)
 
         add_executable(test_dump_config
