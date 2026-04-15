@@ -1114,11 +1114,9 @@ int read_spine_config(const char *file) {
 			if (conf_stat.st_mode & S_IROTH) {
 				if (!set.stderr_notty) {
 					fprintf(stderr,
-						"FATAL: spine config [%s] is world-readable (mode 0%o); refusing to start\n",
+						"WARNING: spine config [%s] is world-readable (mode 0%o); tighten to 0600 to protect DB credentials\n",
 						file, perms);
 				}
-				fclose(fp);
-				return -1;
 			}
 			if (conf_stat.st_mode & (S_IWGRP | S_IWOTH)) {
 				if (!set.stderr_notty) {
