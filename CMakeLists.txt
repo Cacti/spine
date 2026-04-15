@@ -200,7 +200,6 @@ if(HAVE_LONG_LONG)
     set(HAVE_LONG_LONG 1)
 endif()
 
-set(STDC_HEADERS 1)
 if(HAVE_SYS_TIME_H)
     set(TIME_WITH_SYS_TIME 1)
 endif()

@@ -50,12 +50,9 @@
 
 #include "config/config.h"
 
-#if STDC_HEADERS
-#  include <stdlib.h>
-#  include <string.h>
-#elif HAVE_STRINGS_H
-#  include <strings.h>
-#endif /*STDC_HEADERS*/
+/* Spine requires C17; <stdlib.h> and <string.h> are always present. */
+#include <stdlib.h>
+#include <string.h>
 
 #if HAVE_UNISTD_H
 #  include <sys/types.h>
