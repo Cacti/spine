@@ -1,0 +1,18 @@
+# File context for Cacti spine poller.
+#
+# Load with:
+#   semanage fcontext -a -t spine_exec_t '/usr/local/spine/bin/spine'
+#   restorecon -Rv /usr/local/spine /var/log/cacti /var/run/spine
+#
+# Or by installing the compiled module, which re-applies these patterns.
+
+/usr/local/spine/bin/spine      --      gen_context(system_u:object_r:spine_exec_t,s0)
+/usr/local/bin/spine            --      gen_context(system_u:object_r:spine_exec_t,s0)
+
+/etc/spine\.conf                --      gen_context(system_u:object_r:spine_conf_t,s0)
+/etc/cacti/spine\.conf          --      gen_context(system_u:object_r:spine_conf_t,s0)
+/usr/local/spine/etc/spine\.conf --     gen_context(system_u:object_r:spine_conf_t,s0)
+
+/var/log/cacti(/.*)?                    gen_context(system_u:object_r:spine_log_t,s0)
+/var/run/spine(/.*)?                    gen_context(system_u:object_r:spine_var_run_t,s0)
+/run/spine(/.*)?                        gen_context(system_u:object_r:spine_var_run_t,s0)

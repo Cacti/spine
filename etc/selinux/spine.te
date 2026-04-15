@@ -1,0 +1,75 @@
+policy_module(spine, 0.1.0)
+
+########################################
+#
+# Skeleton type enforcement policy for the Cacti spine poller.
+#
+# STATUS: skeleton. This policy declares the spine_t domain, its entry point,
+# and the log/pid file contexts. It does NOT yet enumerate every interface
+# spine needs; loading this module in enforcing mode without the companion
+# audit2allow pass will AVC-deny most real work.
+#
+# The intended production workflow is:
+#   1. Build + load the module in permissive mode.
+#   2. Run spine through a full poll cycle.
+#   3. audit2allow -a -m spine_local > spine_local.te
+#   4. Review, fold the ALLOW rules into this file, and re-compile.
+#
+# See docs/security-selinux.md for the full enablement procedure.
+#
+########################################
+
+########################################
+#
+# Declarations
+#
+
+type spine_t;
+type spine_exec_t;
+type spine_log_t;
+type spine_var_run_t;
+type spine_conf_t;
+
+init_daemon_domain(spine_t, spine_exec_t)
+
+logging_log_file(spine_log_t)
+files_pid_file(spine_var_run_t)
+files_config_file(spine_conf_t)
+
+########################################
+#
+# Spine local policy
+#
+
+allow spine_t self:capability { net_raw dac_read_search setuid setgid sys_resource };
+allow spine_t self:process { signal signull setrlimit };
+allow spine_t self:fifo_file rw_fifo_file_perms;
+allow spine_t self:unix_stream_socket create_stream_socket_perms;
+
+# ICMP echo, SNMP UDP, MySQL TCP.
+allow spine_t self:rawip_socket  { create bind read write setopt getopt };
+allow spine_t self:udp_socket    create_socket_perms;
+allow spine_t self:tcp_socket    create_stream_socket_perms;
+
+# Config
+read_files_pattern(spine_t, spine_conf_t, spine_conf_t)
+
+# Log + pid
+manage_files_pattern(spine_t, spine_log_t, spine_log_t)
+logging_log_filetrans(spine_t, spine_log_t, file)
+
+manage_files_pattern(spine_t, spine_var_run_t, spine_var_run_t)
+files_pid_filetrans(spine_t, spine_var_run_t, file)
+
+# Reach libc / loader / CA bundle.
+miscfiles_read_localization(spine_t)
+miscfiles_read_generic_certs(spine_t)
+sysnet_dns_name_resolve(spine_t)
+
+# MariaDB / MySQL client sockets.
+optional_policy(`
+    mysql_stream_connect(spine_t)
+    mysql_tcp_connect(spine_t)
+')
+
+# Apache/Cacti script tree exec path left for the audit2allow pass.

@@ -751,6 +751,22 @@ if(SPINE_BUILD_MAIN)
                 DESTINATION ${SPINE_SYSTEMD_UNIT_DIR}
                 COMPONENT systemd)
     endif()
+
+    # Packaging helpers for distro-managed MAC enforcement. These are shipped
+    # under ${datadir}/spine so distro packagers can symlink them into
+    # /etc/apparmor.d and /usr/share/selinux/packages respectively. Installing
+    # them directly into /etc would collide with dpkg/rpm file ownership.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        install(FILES etc/apparmor.d/usr.local.spine.bin.spine
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/spine/apparmor
+                COMPONENT apparmor OPTIONAL)
+        install(FILES
+                    etc/selinux/spine.te
+                    etc/selinux/spine.fc
+                    etc/selinux/spine.if
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/spine/selinux
+                COMPONENT selinux OPTIONAL)
+    endif()
 endif()
 
 # CPack: source tarballs plus distro-native packages on Linux. DEB/RPM rely on
