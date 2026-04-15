@@ -220,7 +220,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p scan-build-report
-          scan-build --status-bugs --keep-going --plist --output scan-build-report \
+          scan-build --status-bugs --keep-going --output scan-build-report \
             cmake --build build -j"$(nproc)"
 
       - name: Upload scan-build report

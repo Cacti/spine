@@ -52,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           cpack -G TGZ
-          ls -la *.tar.gz || true
+          ls -la ./*.tar.gz || true
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0

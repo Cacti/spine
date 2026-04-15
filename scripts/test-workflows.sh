@@ -19,35 +19,44 @@ cmd="${1:-help}"
 shift || true
 
 case "$cmd" in
-    policy)
-        if [[ ! -f .github/scripts/check-workflow-policy.py ]]; then
-            echo "ERROR: .github/scripts/check-workflow-policy.py not found"
-            exit 1
-        fi
-        python3 .github/scripts/check-workflow-policy.py
-        ;;
-    list)
-        command -v act >/dev/null 2>&1 || { echo "ERROR: install act (brew install act)"; exit 1; }
-        act -l
-        ;;
-    dry)
-        command -v act >/dev/null 2>&1 || { echo "ERROR: install act"; exit 1; }
-        act -n
-        ;;
-    distro)
-        if [[ $# -lt 1 ]]; then
-            echo "Usage: $0 distro <image>"
-            echo "Prefer scripts/test-distros.sh for container builds (faster, no act overhead)."
-            exit 1
-        fi
-        bash scripts/test-distros.sh "$1"
-        ;;
-    help|-h|--help)
-        sed -n '2,/^set /p' "$0" | grep -E '^# ' | sed 's/^# \?//'
-        ;;
-    *)
-        # Treat as a job name
-        command -v act >/dev/null 2>&1 || { echo "ERROR: install act"; exit 1; }
-        act -j "$cmd" "$@"
-        ;;
+  policy)
+    if [[ ! -f .github/scripts/check-workflow-policy.py ]]; then
+      echo "ERROR: .github/scripts/check-workflow-policy.py not found"
+      exit 1
+    fi
+    python3 .github/scripts/check-workflow-policy.py
+    ;;
+  list)
+    command -v act >/dev/null 2>&1 || {
+      echo "ERROR: install act (brew install act)"
+      exit 1
+    }
+    act -l
+    ;;
+  dry)
+    command -v act >/dev/null 2>&1 || {
+      echo "ERROR: install act"
+      exit 1
+    }
+    act -n
+    ;;
+  distro)
+    if [[ $# -lt 1 ]]; then
+      echo "Usage: $0 distro <image>"
+      echo "Prefer scripts/test-distros.sh for container builds (faster, no act overhead)."
+      exit 1
+    fi
+    bash scripts/test-distros.sh "$1"
+    ;;
+  help | -h | --help)
+    sed -n '2,/^set /p' "$0" | grep -E '^# ' | sed 's/^# \?//'
+    ;;
+  *)
+    # Treat as a job name
+    command -v act >/dev/null 2>&1 || {
+      echo "ERROR: install act"
+      exit 1
+    }
+    act -j "$cmd" "$@"
+    ;;
 esac

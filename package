@@ -25,14 +25,14 @@
 TMP_DIR="/tmp"
 
 # Help Display function
-display_help () {
+display_help() {
   echo "----------------------------------------------------------------------------"
   echo " Spine Package Script"
   echo "   Attempts to package spine from a repository checkout directory of"
   echo "   spine. If all goes well a tar.gz file will be created."
   echo "----------------------------------------------------------------------------"
   echo " Syntax:"
-  echo "  ./`basename $0` <Version>"
+  echo "  ./$(basename $0) <Version>"
   echo ""
   echo "    <Version> - Designated version for build (required)"
   echo ""
@@ -65,33 +65,36 @@ echo "--------------------------------------------------------------------------
 # Clean up previous builds
 if [ -e ${TMP_DIR}/cacti-spine-${VERSION} ]; then
   echo "INFO: Removing previous build ${TMP_DIR}/cacti-spine-${VERSION}..."
-  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
   [ $? -gt 1 ] && echo "ERROR: Unable to remove directory: ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
 fi
 if [ -e ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz ]; then
-  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz > /dev/null 2>&1
+  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz >/dev/null 2>&1
   [ $? -gt 1 ] && echo "ERROR: Unable to remove file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" && exit -1
 fi
 
 # Copy repository
-mkdir -p ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
-tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' * | (cd ${TMP_DIR}/cacti-spine-${VERSION}; tar -xf -)
+mkdir -p ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
+tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' * | (
+  cd ${TMP_DIR}/cacti-spine-${VERSION}
+  tar -xf -
+)
 [ $? -gt 0 ] && echo "ERROR: Unable to repository to ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
 
-# Change working directory 
-pushd ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+# Change working directory
+pushd ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
 
 # Get version from source files, warn if different than defined for build
-SRC_VERSION=`sed -n 's/^project(spine VERSION \\([^ ]*\\).*/\\1/p' CMakeLists.txt | head -n1`
+SRC_VERSION=$(sed -n 's/^project(spine VERSION \([^ ]*\).*/\1/p' CMakeLists.txt | head -n1)
 if [ "${SRC_VERSION}" != "${VERSION}" ]; then
-  echo "WARNING: Build version and source version are not the same";
+  echo "WARNING: Build version and source version are not the same"
   echo "WARNING:    Build Version: ${VERSION}"
   echo "WARNING:   Source Version: ${SRC_VERSION}"
 fi
 
 # Validate the release tree against the canonical CMake configure path
 echo "INFO: configure release tree with CMake..."
-cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON > /dev/null
+cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON >/dev/null
 [ $? -gt 0 ] && echo "ERROR: Unable to configure release tree with CMake" && exit -1
 
 # Check working directory
@@ -103,11 +106,11 @@ tar -zcf cacti-spine-${VERSION}.tar.gz cacti-spine-${VERSION}
 [ $? -gt 1 ] && echo "ERROR: Unable to package" && exit -1
 
 # Change working directory
-popd > /dev/null 2>&1
+popd >/dev/null 2>&1
 
 # Clean up
 echo "INFO: Cleaning up build directory..."
-rm -rf ${TMP_DIR}/cacti-spine-${VERSION} > /dev/null 2>&1
+rm -rf ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
 
 # Display file locations
 echo "INFO: Completed..."
