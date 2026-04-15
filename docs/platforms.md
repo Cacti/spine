@@ -128,6 +128,12 @@ do not block merges (`continue-on-error: true`). Community patches welcome.
 | **Windows MSYS2/MinGW** | `pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-libmariadbclient mingw-w64-x86_64-openssl pkg-config` |
 | **UBI 9 / RHEL 9** | `dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && dnf install -y cmake gcc make net-snmp-devel openssl-devel pkgconfig systemd-devel` |
 
+For local reproduction on a developer workstation, the repo's
+[`Vagrantfile`](../Vagrantfile) defines `freebsd`, `openbsd`, `netbsd`,
+`dragonfly`, and `alpine` VMs. See
+[CONTRIBUTING.md#bsd-and-niche-os-testing](../CONTRIBUTING.md#bsd-and-niche-os-testing)
+and `scripts/test-vagrant.sh`.
+
 ### NetBSD 10
 
 Tier 3. The CI lane uses `cross-platform-actions/action` to build inside a

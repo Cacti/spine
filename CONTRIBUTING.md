@@ -56,6 +56,23 @@ Limitations of `act`:
 - Windows (`windows-latest`) cannot be emulated; those lanes stay
   CI-only.
 
+### BSD and niche-OS testing
+
+For OpenBSD pledge/unveil, FreeBSD capsicum, and other BSD-specific runtime
+behaviour, Docker cannot help. Use Vagrant + VirtualBox:
+
+    brew install --cask vagrant virtualbox
+    scripts/test-vagrant.sh freebsd
+
+The `Vagrantfile` provides `freebsd`, `openbsd`, `netbsd`, `dragonfly`,
+and `alpine` VMs. Each is provisioned once (pulls the base box, installs
+build deps, runs `cmake --build`), then `vagrant ssh <name>` drops you
+into an interactive shell for debugging.
+
+Provider defaults: 4 GB RAM, 4 vCPUs. Adjust in `Vagrantfile` if your
+host is constrained. VMware Desktop is supported via the `vmware_desktop`
+provider block if you already have a licence.
+
 ## Report issues
 
 Open issues against [Cacti/spine](https://github.com/Cacti/spine/issues) and tag with a `platform:` label from [docs/platforms.md](docs/platforms.md#reporting-platform-issues):
