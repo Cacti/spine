@@ -650,6 +650,40 @@ if(SPINE_BUILD_MAIN)
     endif()
 endif()
 
+# CPack: source tarballs plus distro-native packages on Linux. DEB/RPM rely on
+# cpack driving dpkg-deb / rpmbuild at build-tree time; the TGZ fallback covers
+# platforms where neither tool is available (macOS, BSDs, Windows).
+set(CPACK_PACKAGE_NAME "spine")
+set(CPACK_PACKAGE_VENDOR "The Cacti Group")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "High-speed poller for Cacti")
+set(CPACK_PACKAGE_VERSION "${spine_VERSION}")
+set(CPACK_PACKAGE_CONTACT "cacti-users@cacti.net")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://www.cacti.net/spine.php")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+
+set(CPACK_SOURCE_GENERATOR "TGZ")
+set(CPACK_SOURCE_IGNORE_FILES
+    "/build.*/" "/\\\\.git/" "/\\\\.github/" "/build-reports/" "/\\\\.omc/"
+    "/\\\\.claude/" "/\\\\.worktrees/" "\\\\.php-cs-fixer.cache" "\\\\.DS_Store"
+)
+set(CPACK_SOURCE_PACKAGE_FILE_NAME "spine-${spine_VERSION}")
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND CPACK_GENERATOR "TGZ")
+
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "The Cacti Group <cacti-users@cacti.net>")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "net")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    list(APPEND CPACK_GENERATOR "DEB")
+
+    set(CPACK_RPM_PACKAGE_LICENSE "GPL-2.0-or-later")
+    set(CPACK_RPM_PACKAGE_GROUP "Applications/Internet")
+    set(CPACK_RPM_PACKAGE_URL "https://www.cacti.net/spine.php")
+    list(APPEND CPACK_GENERATOR "RPM")
+endif()
+
+include(CPack)
+
 if(BUILD_TESTING)
     foreach(test_name IN LISTS SPINE_TEST_NAMES)
         spine_add_platform_test(${test_name})
