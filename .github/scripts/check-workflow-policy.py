@@ -12,6 +12,10 @@ import yaml
 
 PINNED_REF_RE = re.compile(r"^[0-9a-f]{40}$")
 CURL_PIPE_RE = re.compile(r"curl\b[^\n|]*\|\s*(?:sh|bash)\b")
+# Accept either the strict bash form or the POSIX-sh-compatible 'set -eu'.
+# Container steps on minimal images (alpine uses ash, some Debian fragments
+# run under dash) cannot use 'pipefail' because dash/ash do not implement it.
+ACCEPTED_FIRST_LINES = ("set -euo pipefail", "set -eu")
 STRICT_LINE = "set -euo pipefail"
 WORKFLOW_GLOB = ".github/workflows/*"
 ALLOWLIST_CURL_PIPE = {}
@@ -41,8 +45,8 @@ def check_run(path: str, step_name: str, run_value: str, violations: list[str]) 
 		return
 
 	if len(run_value.splitlines()) > 1:
-		if lines[0] != STRICT_LINE:
-			violations.append(f"{path}:{step_name}: multiline run must start with '{STRICT_LINE}'")
+		if lines[0] not in ACCEPTED_FIRST_LINES:
+			violations.append(f"{path}:{step_name}: multiline run must start with one of {ACCEPTED_FIRST_LINES}")
 
 	for match in CURL_PIPE_RE.finditer(run_value):
 		_ = match

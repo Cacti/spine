@@ -570,15 +570,21 @@ else()
         target_compile_definitions(spine_posix_features INTERFACE _ALL_SOURCE=1 _XOPEN_SOURCE=700)
         target_compile_definitions(spine_platform PUBLIC _ALL_SOURCE=1 _XOPEN_SOURCE=700)
         target_link_options(spine_platform PUBLIC -Wl,-brtl)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
+        # OpenBSD's <sys/cdefs.h> treats any of _POSIX_C_SOURCE /
+        # _XOPEN_SOURCE / _ANSI_SOURCE as a hard signal to force
+        # __BSD_VISIBLE=0. That hides pledge/unveil/u_int even with a
+        # user -D__BSD_VISIBLE=1 override. The cleanest fix is to let
+        # libc defaults apply and only pin __BSD_VISIBLE on the sandbox
+        # TU itself (see platform_sandbox_openbsd.c).
+        target_compile_definitions(spine_posix_features INTERFACE __BSD_VISIBLE=1)
+        target_compile_definitions(spine_platform PUBLIC __BSD_VISIBLE=1)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR
            CMAKE_SYSTEM_NAME STREQUAL "NetBSD" OR
-           CMAKE_SYSTEM_NAME STREQUAL "OpenBSD" OR
            CMAKE_SYSTEM_NAME STREQUAL "DragonFly")
-        # __BSD_VISIBLE exposes pipe2, u_char/u_short, S_IFSOCK and other
-        # BSD extensions that strict _POSIX_C_SOURCE hides. _XOPEN_SOURCE=700
-        # adds XSI-level gettimeofday and realtime clock helpers.
-        # FreeBSD 14 is Tier 1; NetBSD 10, OpenBSD 7.x, and DragonFly 6.x
-        # are Tier 3 (advisory CI, see docs/platforms.md).
+        # FreeBSD / NetBSD / DragonFly honor __BSD_VISIBLE=1 alongside
+        # _POSIX_C_SOURCE and expose XSI helpers under _XOPEN_SOURCE=700.
+        # FreeBSD 14 is Tier 1; NetBSD 10 and DragonFly 6 are Tier 3.
         target_compile_definitions(spine_posix_features INTERFACE
             __BSD_VISIBLE=1
             _XOPEN_SOURCE=700)
