@@ -9,8 +9,19 @@ runs:
   steps:
     - name: Install packages
       shell: bash
+      env:
+        INSTALL_APT_DEPS_PACKAGES: ${{ inputs.packages }}
       run: |
         set -euo pipefail
+        # Reject anything outside the apt-package grammar. Callers pass a
+        # static whitespace-delimited list; this blocks shell metacharacters
+        # even though the input comes from workflow YAML.
+        case "$INSTALL_APT_DEPS_PACKAGES" in
+          *[^A-Za-z0-9._+-\ \t]*)
+            echo "install-apt-deps: rejecting packages string with disallowed characters" >&2
+            exit 2
+            ;;
+        esac
         sudo apt-get update
-        # Intentionally unquoted to split package tokens.
-        sudo apt-get install -y ${{ inputs.packages }}
+        # shellcheck disable=SC2086 # intentional word-splitting of validated list
+        sudo apt-get install -y $INSTALL_APT_DEPS_PACKAGES
