@@ -351,21 +351,39 @@ void db_connect(int type, MYSQL *mysql) {
 	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
 	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
 
-	/* When the operator opts into SSL, require the server identity to verify.
-	 * MYSQL_OPT_SSL_MODE=SSL_MODE_VERIFY_IDENTITY is the modern path; older
-	 * connectors only expose MYSQL_OPT_SSL_VERIFY_SERVER_CERT which is the
-	 * closest equivalent. */
-	if ((type == LOCAL && set.db_ssl) || (type == REMOTE && set.rdb_ssl)) {
-		#ifdef MYSQL_OPT_SSL_MODE
-		unsigned int ssl_mode = SSL_MODE_VERIFY_IDENTITY;
-		MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
-		#endif
-		#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
-		{
-			SPINE_SSL_VERIFY_T ssl_verify = 1;
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify, "ssl verify");
+	/* TLS mode selection. Tri-state:
+	 *   0 = plaintext (operator opt-out)
+	 *   1 = preferred (default since spine 1.3; negotiate TLS if the server
+	 *       offers it, otherwise fall back to plaintext)
+	 *   2 = verify_identity (require TLS and hostname match against CA)
+	 *
+	 * Older connectors without MYSQL_OPT_SSL_MODE only expose
+	 * MYSQL_OPT_SSL_VERIFY_SERVER_CERT; there the strict mode maps to 1
+	 * and the preferred mode maps to 0 (no hard verify). */
+	{
+		int ssl_setting = (type == LOCAL) ? set.db_ssl : set.rdb_ssl;
+
+		if (ssl_setting == 1) {
+			#ifdef MYSQL_OPT_SSL_MODE
+			#  ifdef SSL_MODE_PREFERRED
+			unsigned int ssl_mode = SSL_MODE_PREFERRED;
+			#  else
+			unsigned int ssl_mode = SSL_MODE_REQUIRED;
+			#  endif
+			MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
+			#endif
+		} else if (ssl_setting >= 2) {
+			#ifdef MYSQL_OPT_SSL_MODE
+			unsigned int ssl_mode = SSL_MODE_VERIFY_IDENTITY;
+			MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
+			#endif
+			#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+			{
+				SPINE_SSL_VERIFY_T ssl_verify = 1;
+				MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify, "ssl verify");
+			}
+			#endif
 		}
-		#endif
 	}
 
 	#endif
