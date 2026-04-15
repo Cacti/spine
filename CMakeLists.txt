@@ -833,6 +833,55 @@ if(BUILD_TESTING)
     target_link_libraries(test_json_log PRIVATE spine_hardening)
     add_test(NAME json_log COMMAND test_json_log)
 
+    # icmp_win_loader: race the IP Helper one-shot loader across N threads.
+    # Windows-only: the loader lives in platform_icmp_win.c and the test
+    # body uses CreateThread + WaitForMultipleObjects. A clean run does
+    # not prove the ARM64 acquire fence is correct (weakly ordered hw is
+    # nondeterministic), but a failure proves it is broken.
+    if(WIN32)
+        add_executable(test_icmp_win_loader
+            tests/unit/test_icmp_win_loader.c
+            $<TARGET_OBJECTS:spine_platform>
+        )
+        target_include_directories(test_icmp_win_loader PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_icmp_win_loader PRIVATE Threads::Threads
+            ws2_32 iphlpapi advapi32)
+        if(TARGET spine_build_options)
+            target_link_libraries(test_icmp_win_loader PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_icmp_win_loader PRIVATE spine_hardening)
+        add_test(NAME icmp_win_loader COMMAND test_icmp_win_loader)
+    endif()
+
+    # env_scrub: exercise spine_build_child_env's LD_*/DYLD_*/BASH_ENV scrub
+    # on a poisoned environ. The in-tree function lives behind common.h +
+    # spine.h (mysql + net-snmp), so we compile a stand-alone copy in a
+    # helper TU. Keep the TU in sync with nft_popen.c:spine_build_child_env.
+    # POSIX only: Windows's process environment model differs enough that the
+    # scrub contract does not apply there.
+    if(NOT WIN32)
+        add_executable(test_env_scrub
+            tests/unit/test_env_scrub.c
+            tests/unit/build_child_env_tu.c
+        )
+        target_include_directories(test_env_scrub PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/tests/unit
+        )
+        if(TARGET spine_build_options)
+            target_link_libraries(test_env_scrub PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_env_scrub PRIVATE spine_hardening)
+        add_test(NAME env_scrub COMMAND test_env_scrub)
+    endif()
+
     # Circuit breaker, dump_config, check_mode, and dry_run all depend on
     # the spine config struct and/or MySQL. Gate them behind the same main
     # build so we only wire them when mysql + net-snmp were discovered.
