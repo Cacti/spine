@@ -122,6 +122,7 @@ set(SPINE_CORE_SOURCES
     src/error.c
     src/systemd_notify.c
     src/circuit_breaker.c
+    src/spine_audit.c
 )
 
 set(SPINE_TEST_NAMES env time process socket error fd dns thread_name)
@@ -733,6 +734,11 @@ if(SPINE_BUILD_MAIN)
         if(SYSTEMD_LDFLAGS_OTHER)
             target_link_options(spine PRIVATE ${SYSTEMD_LDFLAGS_OTHER})
         endif()
+    endif()
+    if(SPINE_HAVE_LIBAUDIT)
+        target_compile_definitions(spine PRIVATE HAVE_LIBAUDIT=1)
+        target_include_directories(spine SYSTEM PRIVATE ${AUDIT_INCLUDE_DIR})
+        target_link_libraries(spine PRIVATE ${AUDIT_LIB})
     endif()
 
     install(TARGETS spine RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

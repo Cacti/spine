@@ -100,6 +100,7 @@
 #include "systemd_notify.h"
 #include "platform/platform_sandbox.h"
 #include "circuit_breaker.h"
+#include "spine_audit.h"
 
 #include <signal.h>
 #ifndef _WIN32
@@ -924,6 +925,7 @@ int main(int argc, char *argv[]) {
 		if (spine_stop_requested) {
 			SPINE_LOG(("NOTE: SIGTERM received, stopping after current device"));
 			spine_sd_stopping("SIGTERM received");
+			spine_audit_event("sigterm", "graceful stop", 1);
 			canexit = TRUE;
 			break;
 		}
@@ -940,8 +942,10 @@ int main(int argc, char *argv[]) {
 
 			if (conf_file && read_spine_config(conf_file) >= 0) {
 				SPINE_LOG(("NOTE: SIGHUP received; reloaded spine.conf [%s]", conf_file));
+				spine_audit_event("reload", conf_file, 1);
 			} else {
 				SPINE_LOG(("WARNING: SIGHUP received; failed to reload spine.conf"));
+				spine_audit_event("reload", conf_file ? conf_file : "(null)", 0);
 			}
 
 			spine_sd_ready();

@@ -8,8 +8,10 @@
 #include "common.h"
 #include "spine.h"
 #include "circuit_breaker.h"
+#include "spine_audit.h"
 
 #include <pthread.h>
+#include <stdio.h>
 
 /* Per-host breaker entry. skip_cycles > 0 means the host is in cool-down:
  * every spine_cb_should_skip() returns 1 and decrements skip_cycles until it
@@ -108,10 +110,17 @@ void spine_cb_record(int host_id, int errors) {
 			if (entry->next_cooldown > SPINE_CB_COOLDOWN_MAX) {
 				entry->next_cooldown = SPINE_CB_COOLDOWN_MAX;
 			}
+			int skip_cycles_copy = entry->skip_cycles;
 			entry->consecutive_failures = 0;
 			pthread_mutex_unlock(&spine_cb_lock);
 			SPINE_LOG(("NOTE: circuit breaker tripped for device %d; skipping %d cycles",
-				host_id, entry->skip_cycles));
+				host_id, skip_cycles_copy));
+			{
+				char detail[96];
+				snprintf(detail, sizeof(detail),
+				         "device=%d skip=%d", host_id, skip_cycles_copy);
+				spine_audit_event("cb-trip", detail, 1);
+			}
 			return;
 		}
 	} else {
