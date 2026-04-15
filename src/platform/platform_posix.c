@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
@@ -79,7 +80,18 @@ void spine_platform_set_thread_name(const char *name) {
 		return;
 	}
 #if defined(__linux__)
-	(void) pthread_setname_np(pthread_self(), name);
+	/* Linux caps pthread_setname_np at 15 bytes + NUL; anything longer
+	 * returns ERANGE and leaves the thread name unchanged. Truncate so
+	 * long identifiers still produce a visible prefix in top / ps. */
+	char truncated[16];
+	size_t n = strlen(name);
+	if (n >= sizeof(truncated)) {
+		memcpy(truncated, name, sizeof(truncated) - 1);
+		truncated[sizeof(truncated) - 1] = '\0';
+		(void) pthread_setname_np(pthread_self(), truncated);
+	} else {
+		(void) pthread_setname_np(pthread_self(), name);
+	}
 #elif defined(__APPLE__)
 	/* Darwin's pthread_setname_np sets the calling thread only. */
 	(void) pthread_setname_np(name);

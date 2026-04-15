@@ -556,11 +556,13 @@ else()
            CMAKE_SYSTEM_NAME STREQUAL "OpenBSD" OR
            CMAKE_SYSTEM_NAME STREQUAL "DragonFly")
         # The BSDs ship pipe2(2), arc4random(3), getifaddrs(3), and full
-        # POSIX sockets in libc. _POSIX_C_SOURCE=200809L plus _DEFAULT_SOURCE
-        # (set above for all non-Darwin POSIX targets) is enough to expose
-        # what spine needs. No extra defines or libraries required.
-        # FreeBSD 14 is the Tier 2 reference; NetBSD 10, OpenBSD 7.x, and
-        # DragonFly 6.x are Tier 3 (advisory CI, see docs/platforms.md).
+        # POSIX sockets in libc, but _POSIX_C_SOURCE=200809L implicitly
+        # sets __BSD_VISIBLE=0 which hides u_char/u_short (used in
+        # <netinet/ip.h>) and pipe2 itself. Force __BSD_VISIBLE=1 to
+        # re-enable BSD types and extensions alongside POSIX.
+        # FreeBSD 14 is Tier 1; NetBSD 10, OpenBSD 7.x, and DragonFly 6.x
+        # are Tier 3 (advisory CI, see docs/platforms.md).
+        target_compile_definitions(spine_platform PUBLIC __BSD_VISIBLE=1)
     endif()
     target_link_libraries(spine_platform PUBLIC m ${CMAKE_DL_LIBS})
     if(CAP_LIBRARY)
