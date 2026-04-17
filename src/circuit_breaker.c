@@ -105,22 +105,29 @@ void spine_cb_record(int host_id, int errors) {
 	if (errors > 0) {
 		entry->consecutive_failures++;
 		if (entry->consecutive_failures >= threshold) {
+			int skip_cycles_copy;
+			int host_id_copy;
+			char detail[96];
+
 			entry->skip_cycles   = entry->next_cooldown;
 			entry->next_cooldown = entry->next_cooldown * 2;
 			if (entry->next_cooldown > SPINE_CB_COOLDOWN_MAX) {
 				entry->next_cooldown = SPINE_CB_COOLDOWN_MAX;
 			}
-			int skip_cycles_copy = entry->skip_cycles;
+			/*
+			 * Snapshot state before unlocking. A concurrent reload can
+			 * free entry once the lock is released; logging from a freed
+			 * struct would be a use-after-free.
+			 */
+			skip_cycles_copy = entry->skip_cycles;
+			host_id_copy     = host_id;
 			entry->consecutive_failures = 0;
 			pthread_mutex_unlock(&spine_cb_lock);
 			SPINE_LOG(("NOTE: circuit breaker tripped for device %d; skipping %d cycles",
-				host_id, skip_cycles_copy));
-			{
-				char detail[96];
-				snprintf(detail, sizeof(detail),
-				         "device=%d skip=%d", host_id, skip_cycles_copy);
-				spine_audit_event("cb-trip", detail, 1);
-			}
+				host_id_copy, skip_cycles_copy));
+			snprintf(detail, sizeof(detail),
+			         "device=%d skip=%d", host_id_copy, skip_cycles_copy);
+			spine_audit_event("cb-trip", detail, 1);
 			return;
 		}
 	} else {
