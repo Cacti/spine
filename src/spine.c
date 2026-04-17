@@ -1371,14 +1371,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* zero sensitive credentials before exit */
-	{
-		volatile char *vp;
-		vp = (volatile char *)set.db_pass;
-		memset((char *)vp, 0, sizeof(set.db_pass));
-		vp = (volatile char *)set.rdb_pass;
-		memset((char *)vp, 0, sizeof(set.rdb_pass));
-	}
+	/* Zero sensitive credentials before exit. Centralized in util.c so
+	 * every exit path (main + die) goes through the same code. */
+	spine_scrub_secrets();
 
 	spine_cb_shutdown();
 

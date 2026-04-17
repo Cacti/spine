@@ -52,6 +52,7 @@
 #cmakedefine HAVE_GETTIMEOFDAY 1
 #cmakedefine HAVE_STRERROR 1
 #cmakedefine HAVE_STRTOLL 1
+#cmakedefine HAVE_EXPLICIT_BZERO 1
 
 /* Type sizes */
 #cmakedefine HAVE_UNSIGNED_LONG_LONG 1

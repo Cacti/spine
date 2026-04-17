@@ -1426,6 +1426,35 @@ void config_defaults(void) {
 	set.log_destination = LOGDEST_FILE;
 }
 
+/* Volatile-pointer memset that the compiler is forbidden from optimizing
+ * out. Used as the portable fallback when explicit_bzero is unavailable. */
+static void spine_volatile_bzero(void *p, size_t n) {
+	volatile unsigned char *vp = (volatile unsigned char *)p;
+	while (n--) *vp++ = 0;
+}
+
+/*! \fn void spine_scrub_secrets(void)
+ *  \brief zero credential fields in the `set` struct before process exit.
+ *
+ * Covers DB / RDB passwords and usernames. SSL key paths are filesystem
+ * references, not secret material, so they stay. Signal handlers must
+ * remain async-signal-safe; this helper is therefore only safe to call
+ * from main() and die() on the normal exit path.
+ */
+void spine_scrub_secrets(void) {
+#ifdef HAVE_EXPLICIT_BZERO
+	explicit_bzero(set.db_pass,  sizeof(set.db_pass));
+	explicit_bzero(set.rdb_pass, sizeof(set.rdb_pass));
+	explicit_bzero(set.db_user,  sizeof(set.db_user));
+	explicit_bzero(set.rdb_user, sizeof(set.rdb_user));
+#else
+	spine_volatile_bzero(set.db_pass,  sizeof(set.db_pass));
+	spine_volatile_bzero(set.rdb_pass, sizeof(set.rdb_pass));
+	spine_volatile_bzero(set.db_user,  sizeof(set.db_user));
+	spine_volatile_bzero(set.rdb_user, sizeof(set.rdb_user));
+#endif
+}
+
 /*! \fn void die(const char *format, ...)
  *  \brief a method to end Spine while returning the fatal error to stderr
  *
@@ -1474,6 +1503,10 @@ void die(const char *format, ...) {
 			php_close(PHP_INIT);
 		}
 	}
+
+	/* Scrub credentials before the process image disappears so a core
+	 * dump or last-moment memory scan cannot recover them. */
+	spine_scrub_secrets();
 
 	exit(set.exit_code);
 }

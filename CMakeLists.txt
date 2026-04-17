@@ -193,6 +193,10 @@ check_function_exists(calloc        HAVE_CALLOC)
 check_function_exists(gettimeofday  HAVE_GETTIMEOFDAY)
 check_function_exists(strerror      HAVE_STRERROR)
 check_function_exists(strtoll       HAVE_STRTOLL)
+# explicit_bzero is the portable-ish spelling for a compiler-unoptimizable
+# zero. glibc >= 2.25, musl, FreeBSD 11+, OpenBSD, and NetBSD all provide
+# it; macOS and Windows fall back to the volatile-pointer memset pattern.
+check_function_exists(explicit_bzero HAVE_EXPLICIT_BZERO)
 
 check_type_size("unsigned long long" UNSIGNED_LONG_LONG)
 check_type_size("long long" LONG_LONG)
@@ -1077,6 +1081,34 @@ if(BUILD_TESTING)
         # 3s connect timeout + a touch of slack so cold CI runners do not
         # flake when the route takes an extra second to time out.
         set_tests_properties(check_mode PROPERTIES TIMEOUT 30)
+
+        add_executable(test_scrub_secrets
+            tests/unit/test_scrub_secrets.c
+            tests/unit/test_spine_stubs.c
+            src/util.c
+        )
+        target_include_directories(test_scrub_secrets PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_scrub_secrets PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_scrub_secrets PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_scrub_secrets PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_scrub_secrets PRIVATE spine_hardening)
+        add_test(NAME scrub_secrets COMMAND test_scrub_secrets)
 
         add_executable(test_config_parser
             tests/unit/test_config_parser.c

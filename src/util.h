@@ -36,6 +36,12 @@ extern void read_config_options(void);
 extern int read_spine_config(const char *file);
 extern void config_defaults(void);
 
+/* Zero secret fields in the global `set` struct (DB / RDB passwords and
+ * user names). Called on every non-signal exit path so a core dump or
+ * late-stage memory-scan attack cannot recover DB credentials. Signal
+ * handlers must stay AS-safe and therefore do NOT invoke this. */
+extern void spine_scrub_secrets(void);
+
 /* Capture the effective uid at process startup before any privilege drop.
  * Used by the spine.conf owner check so a root-owned config stays valid
  * once spine drops to its service account. */
