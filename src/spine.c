@@ -123,6 +123,11 @@
 static volatile sig_atomic_t spine_reload_requested = 0;
 static volatile sig_atomic_t spine_stop_requested   = 0;
 
+/* umask at process entry, captured immediately before spine installs its
+ * own 027 mask. Logged at debug once the log subsystem is live so an
+ * operator can see what they inherited from the service manager. */
+static mode_t spine_prev_umask = 0;
+
 static void spine_sighup_handler(int signo) {
     (void)signo;
     spine_reload_requested = 1;
@@ -284,6 +289,15 @@ int main(int argc, char *argv[]) {
 	 * owner check in util.c consults this so that a root-owned config
 	 * remains valid after drop_root hands the process to a service uid. */
 	spine_capture_startup_euid();
+
+	/* Default-deny for any file the poller creates (log, pid, temp).
+	 * 027 masks group-write and all world access, so newly-created files
+	 * land as 0640 (files) / 0750 (dirs) even if the caller inherited a
+	 * permissive 0022 from systemd or a misconfigured shell. The prior
+	 * umask is stashed for a debug log once the log subsystem is live;
+	 * spine is a long-lived poller that should not widen file modes
+	 * mid-run, so the new mask stays in force for the process lifetime. */
+	spine_prev_umask = umask(027);
 
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
@@ -733,6 +747,8 @@ int main(int argc, char *argv[]) {
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("DEBUG: Version %s starting", VERSION));
+		SPINE_LOG_DEBUG(("DEBUG: Prior umask %03o; active umask 027",
+			(unsigned int)(spine_prev_umask & 0777)));
 
 		if (set.poller_id > 1) {
 			if (mode == REMOTE) {

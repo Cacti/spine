@@ -1280,6 +1280,19 @@ if(BUILD_TESTING)
         add_test(NAME signal_handler COMMAND test_signal_handler)
     endif()
 
+    # umask(027) sanity: standalone since the real setter sits inside main().
+    if(NOT WIN32)
+        add_executable(test_startup_umask tests/unit/test_startup_umask.c)
+        target_include_directories(test_startup_umask PRIVATE
+            ${CMAKE_SOURCE_DIR}/tests/unit
+        )
+        if(TARGET spine_build_options)
+            target_link_libraries(test_startup_umask PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_startup_umask PRIVATE spine_hardening)
+        add_test(NAME startup_umask COMMAND test_startup_umask)
+    endif()
+
     # BSD-only arc4random divergence test.
     if(CMAKE_SYSTEM_NAME MATCHES "^(FreeBSD|OpenBSD|NetBSD|DragonFly)$")
         add_executable(test_arc4random tests/unit/test_arc4random.c)
