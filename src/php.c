@@ -273,6 +273,7 @@ char *php_readpipe(int php_process, char *command) {
 				if (bptr >= result_string+RESULTS_BUFFER) {
 					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 					SET_UNDEFINED(result_string);
+					break;
 				}
 		}
 
