@@ -2069,15 +2069,23 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	/* record the total time for the host */
 	thread_mutex_lock(LOCK_THDET);
-	details[device_counter]->threads_complete++;
-	if (details[device_counter]->threads_complete == details[device_counter]->host_threads) {
-		details[device_counter]->complete = TRUE;
+	/*
+	 * details[device_counter] can be NULL if another thread tore down the
+	 * slot (reload, shutdown, or delete). Hold LOCK_THDET while checking
+	 * so the pointer cannot change under us between test and use.
+	 */
+	if (details[device_counter] != NULL) {
+		details[device_counter]->threads_complete++;
+		if (details[device_counter]->threads_complete == details[device_counter]->host_threads) {
+			details[device_counter]->complete = TRUE;
 
-		poll_time = get_time_as_double();
-		query1[0] = '\0';
-		snprintf(query1, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
-		db_query(&mysql, LOCAL, query1);
-
+			poll_time = get_time_as_double();
+			query1[0] = '\0';
+			snprintf(query1, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
+			db_query(&mysql, LOCAL, query1);
+		}
+	} else {
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] details slot NULL at thread completion; skipping accounting.", host_id, host_thread));
 	}
 
 	if (errors > 0) {
