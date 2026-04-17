@@ -641,7 +641,11 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	memset(input_trimmed, 0, sizeof(input_trimmed));
 
 	in_len     = strlen(input);
-	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
+	/* Clamp to the actual buffer size so gcc -Wformat-truncation can prove
+	 * the snprintf destination cannot overflow regardless of max_size. */
+	trim_limit = (max_size < (int)(sizeof(input_trimmed) - 1))
+	             ? max_size
+	             : (int)(sizeof(input_trimmed) - 1);
 
 	/* Guard against snprintf size values that cannot preserve any input byte.
 	 * The (trim_limit / 2) - 1 path writes only a NUL for trim_limit in {4,5};
