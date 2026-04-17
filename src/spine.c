@@ -295,6 +295,11 @@ int main(int argc, char *argv[]) {
 
 	UNUSED_PARAMETER(argc);		/* we operate strictly with argv */
 
+	/* Populate the pre-formatted fatal-signal message table before the
+	 * handler is wired up, so the async-signal-safe write(2) path always
+	 * has a non-empty buffer to emit. */
+	spine_signal_handler_init();
+
 	/* install the spine signal handler */
 	install_spine_signal_handler();
 

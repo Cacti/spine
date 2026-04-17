@@ -1151,6 +1151,38 @@ if(BUILD_TESTING)
         add_test(NAME config_perms COMMAND test_config_perms)
     endif()
 
+    # Fatal-signal handler async-signal-safety regression. Links error.c
+    # directly because spine_signal_handler_init() lives there; the test
+    # only calls the init entry point and never raises a real signal.
+    if(SPINE_BUILD_MAIN AND NOT WIN32)
+        add_executable(test_signal_handler
+            tests/unit/test_signal_handler.c
+            src/error.c
+        )
+        target_include_directories(test_signal_handler PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_signal_handler PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_signal_handler PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_signal_handler PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_signal_handler PRIVATE spine_hardening)
+        add_test(NAME signal_handler COMMAND test_signal_handler)
+    endif()
+
     # BSD-only arc4random divergence test.
     if(CMAKE_SYSTEM_NAME MATCHES "^(FreeBSD|OpenBSD|NetBSD|DragonFly)$")
         add_executable(test_arc4random tests/unit/test_arc4random.c)

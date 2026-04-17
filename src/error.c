@@ -39,63 +39,28 @@
 #include "common.h"
 #include "spine.h"
 
-/*! \fn static void spine_signal_handler(int spine_signal)
- *  \brief interrupts the os default signal handler as appropriate.
- *
- */
-static void spine_signal_handler(int spine_signal) {
-	signal(spine_signal, SIG_DFL);
+#include <unistd.h>
 
-	set.exit_code = spine_signal;
+/* POSIX async-signal-safe writes and _exit need <signal.h>/<unistd.h>;
+ * both are already pulled in via common.h / spine.h. */
 
-	/* variables for time display */
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
+/* Pre-formatted per-signal fatal messages. Building them inside the signal
+ * handler would require calls to sprintf/localtime/strftime, none of which
+ * are async-signal-safe. Populate once at startup via
+ * spine_signal_handler_init() then write(2) the chosen entry from the
+ * handler. Max signal index for the table: SIGSYS on Linux sits at 31,
+ * but BSD uses values up to 32 and older stacks fit in 32. Size for 64
+ * to cover every real-world kernel without heap allocation. */
+#define SPINE_SIG_MSG_MAX 64
+#define SPINE_SIG_MSG_LEN 96
 
-	/* get time for poller_output table */
-	nowbin = time(&nowbin);
-
-	spine_platform_localtime(&nowbin, &now_time);
-	now_ptr = &now_time;
-
-	char *log_fmt = get_date_format();
-	char logtime[50];
-
-	strftime(logtime, 50, log_fmt, now_ptr);
-
-	switch (spine_signal) {
-		case SIGABRT:
-			fprintf(stderr, "%s FATAL: Spine Interrupted by Abort Signal\n", logtime);
-			break;
-		case SIGINT:
-			fprintf(stderr, "%s FATAL: Spine Interrupted by Console Operator\n", logtime);
-			break;
-		case SIGSEGV:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Segmentation Fault\n", logtime);
-			exit(1);
-			break;
-		case SIGBUS:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Bus Error\n", logtime);
-			break;
-		case SIGFPE:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Floating Point Exception\n", logtime);
-			break;
-		case SIGQUIT:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Keyboard Quit Command\n", logtime);
-			break;
-		case SIGPIPE:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Broken Pipe\n", logtime);
-			break;
-		default:
-			fprintf(stderr, "%s FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", logtime, spine_signal);
-			break;
-	}
-}
+static char     spine_sig_msgs[SPINE_SIG_MSG_MAX][SPINE_SIG_MSG_LEN];
+static size_t   spine_sig_lens[SPINE_SIG_MSG_MAX];
+static char     spine_sig_default_msg[SPINE_SIG_MSG_LEN];
+static size_t   spine_sig_default_len;
 
 static int spine_fatal_signals[] = {
 	SIGINT,
-	SIGPIPE,
 	SIGSEGV,
 	SIGBUS,
 	SIGFPE,
@@ -104,6 +69,78 @@ static int spine_fatal_signals[] = {
 	SIGABRT,
 	0
 };
+
+static void spine_sig_set(int signo, const char *text) {
+	if (signo <= 0 || signo >= SPINE_SIG_MSG_MAX) {
+		return;
+	}
+	int n = snprintf(spine_sig_msgs[signo], SPINE_SIG_MSG_LEN, "%s", text);
+	if (n < 0) {
+		spine_sig_lens[signo] = 0;
+		return;
+	}
+	spine_sig_lens[signo] = ((size_t)n < SPINE_SIG_MSG_LEN) ? (size_t)n : (SPINE_SIG_MSG_LEN - 1);
+}
+
+/*! \fn void spine_signal_handler_init(void)
+ *  \brief Pre-format the fatal-signal message table. Call before
+ *         install_spine_signal_handler() so the table is populated before
+ *         any signal delivery.
+ */
+void spine_signal_handler_init(void) {
+	spine_sig_set(SIGABRT, "FATAL: Spine Interrupted by Abort Signal\n");
+	spine_sig_set(SIGINT,  "FATAL: Spine Interrupted by Console Operator\n");
+	spine_sig_set(SIGSEGV, "FATAL: Spine Encountered a Segmentation Fault\n");
+	spine_sig_set(SIGBUS,  "FATAL: Spine Encountered a Bus Error\n");
+	spine_sig_set(SIGFPE,  "FATAL: Spine Encountered a Floating Point Exception\n");
+	spine_sig_set(SIGQUIT, "FATAL: Spine Encountered a Keyboard Quit Command\n");
+	spine_sig_set(SIGSYS,  "FATAL: Spine Encountered an Unhandled System Call\n");
+
+	int n = snprintf(spine_sig_default_msg, SPINE_SIG_MSG_LEN, "FATAL: Spine Encountered an Unhandled Fatal Signal\n");
+	if (n < 0) {
+		spine_sig_default_len = 0;
+	} else {
+		spine_sig_default_len = ((size_t)n < SPINE_SIG_MSG_LEN) ? (size_t)n : (SPINE_SIG_MSG_LEN - 1);
+	}
+}
+
+/*! \fn static void spine_signal_handler(int spine_signal)
+ *  \brief Async-signal-safe fatal handler.
+ *
+ *  Only POSIX-async-signal-safe primitives are used: write(2) to emit a
+ *  pre-formatted message and _exit(2) for the hard-abort path on memory
+ *  faults. stdio, time(3), localtime(3), strftime(3), and exit(3) are all
+ *  unsafe to call from a signal handler.
+ */
+static void spine_signal_handler(int spine_signal) {
+	const char *msg;
+	size_t len;
+
+	if (spine_signal > 0 && spine_signal < SPINE_SIG_MSG_MAX &&
+	    spine_sig_lens[spine_signal] > 0) {
+		msg = spine_sig_msgs[spine_signal];
+		len = spine_sig_lens[spine_signal];
+	} else {
+		msg = spine_sig_default_msg;
+		len = spine_sig_default_len;
+	}
+
+	/* write(2) return value is deliberately ignored: the process is
+	 * already terminating and there is nothing useful to do on EINTR. */
+	if (len > 0) {
+		(void)!write(STDERR_FILENO, msg, len);
+	}
+
+	/* Memory-corruption signals leave the runtime in an undefined state.
+	 * Using exit(3) would run atexit handlers, flush stdio, and hit
+	 * libc allocators that may already be mid-update. _exit(2) is the
+	 * async-signal-safe abort path. 128 + signo is the conventional
+	 * shell exit encoding for signal-terminated processes. */
+	if (spine_signal == SIGSEGV || spine_signal == SIGBUS ||
+	    spine_signal == SIGFPE  || spine_signal == SIGABRT) {
+		_exit(128 + spine_signal);
+	}
+}
 
 /*! \fn void install_spine_signal_handler(void)
  *  \brief installs the spine signal handler to stop certain calls from
@@ -114,22 +151,21 @@ void install_spine_signal_handler(void) {
 	/* Set a handler for any fatal signal not already handled */
 	int i;
 	struct sigaction sa;
-	void (*ohandler)(int);
+
+	/* A poll script closing stdout early used to terminate spine via the
+	 * default SIGPIPE action. Ignore it process-wide: the write(2) call
+	 * simply returns EPIPE and the caller can recover. */
+	signal(SIGPIPE, SIG_IGN);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
 		if (sa.sa_handler == SIG_DFL) {
 			sa.sa_handler = spine_signal_handler;
 			sigemptyset(&sa.sa_mask);
-			sa.sa_flags = SA_RESTART;
+			/* No SA_RESTART: fatal handler should not try to resume
+			 * interrupted syscalls in a half-broken runtime. */
+			sa.sa_flags = 0;
 			sigaction(spine_fatal_signals[i], &sa, NULL);
-		}
-	}
-
-	for (i=0; spine_fatal_signals[i]; ++i) {
-		ohandler = signal(spine_fatal_signals[i], spine_signal_handler);
-		if (ohandler != SIG_DFL) {
-			signal(spine_fatal_signals[i], ohandler);
 		}
 	}
 
@@ -144,20 +180,14 @@ void uninstall_spine_signal_handler(void) {
 	/* Remove a handler for any fatal signal handled */
 	int i;
 	struct sigaction sa;
-	void (*ohandler)(int);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
 		if (sa.sa_handler == spine_signal_handler) {
 			sa.sa_handler = SIG_DFL;
+			sigemptyset(&sa.sa_mask);
+			sa.sa_flags = 0;
 			sigaction(spine_fatal_signals[i], &sa, NULL);
-		}
-	}
-
-	for ( i=0; spine_fatal_signals[i]; ++i ) {
-		ohandler = signal(spine_fatal_signals[i], SIG_DFL);
-		if (ohandler != spine_signal_handler) {
-			signal(spine_fatal_signals[i], ohandler);
 		}
 	}
 }
