@@ -757,38 +757,49 @@ void read_config_options(void) {
 	/* log the snmp_max_get_size variable */
 	SPINE_LOG_DEBUG(("DEBUG: The Maximum SNMP OID Get Size is %i", set.snmp_max_get_size));
 
+	/*
+	 * append_csv_token: bounded append of token to buf, prepending ','
+	 * if buf is non-empty. Silently truncates on overflow rather than
+	 * running off the end of the fixed BUFSIZE array.
+	 */
+	#define APPEND_CSV_TOKEN(buf, tok) do {                                    \
+		size_t _used = strlen(buf);                                            \
+		if (_used < BUFSIZE - 1) {                                             \
+			snprintf((buf) + _used, BUFSIZE - _used, "%s%s",                   \
+				_used > 0 ? "," : "", (tok));                                  \
+		}                                                                      \
+	} while (0)
+
 	#ifndef NETSNMP_DISABLE_MD5
-	strcat(spine_auth, "MD5");
+	APPEND_CSV_TOKEN(spine_auth, "MD5");
 	#endif
 
-	strcat(spine_auth, (strlen(spine_auth) > 0 ? ",SHA":"SHA"));
+	APPEND_CSV_TOKEN(spine_auth, "SHA");
 
 	#if defined(NETSNMP_USMAUTH_HMAC128SHA224)
-	strcat(spine_auth, ",SHA224,SHA256");
+	APPEND_CSV_TOKEN(spine_auth, "SHA224");
+	APPEND_CSV_TOKEN(spine_auth, "SHA256");
 	#endif
 
 	#if defined(NETSNMP_USMAUTH_HMAC192SHA256)
-	strcat(spine_auth, ",SHA384,SHA512");
+	APPEND_CSV_TOKEN(spine_auth, "SHA384");
+	APPEND_CSV_TOKEN(spine_auth, "SHA512");
 	#endif
 
 	#ifndef NETSNMP_DISABLE_DES
-	strcat(spine_priv, "DES");
+	APPEND_CSV_TOKEN(spine_priv, "DES");
 	#endif
 
 	#ifdef HAVE_AES
-	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES128":"AES128"));
+	APPEND_CSV_TOKEN(spine_priv, "AES128");
 	#endif
 
 	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES192":"AES192"));
+	APPEND_CSV_TOKEN(spine_priv, "AES192");
+	APPEND_CSV_TOKEN(spine_priv, "AES256");
 	#endif
 
-	#if defined(NETSNMP_DRAFT_BLUMENTHAL_AES_04)
-	// cppcheck-suppress knownConditionTrueFalse
-	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
-	#endif
+	#undef APPEND_CSV_TOKEN
 
 	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
 
