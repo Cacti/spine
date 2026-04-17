@@ -320,72 +320,107 @@ void db_connect(int type, MYSQL *mysql) {
 	#  define SPINE_SSL_VERIFY_T my_bool
 	#endif
 
-	/* set SSL options if available */
-	#ifdef HAS_MYSQL_OPT_SSL_KEY
-	/* if the users has explicitly said to disable SSL, do that now */
-	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
-	if (type == LOCAL) {
-		if (set.db_ssl == 0) {
-			SPINE_SSL_VERIFY_T ssl_enforce = 0;
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
-		}
-	} else {
-		if (set.rdb_ssl == 0) {
-			SPINE_SSL_VERIFY_T ssl_enforce = 0;
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
-		}
-	}
-	#endif
-
-	if (type == REMOTE) {
-		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
-		STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
-		STRDUP_OR_DIE(ssl_cert, set.rdb_ssl_cert, "rdb_ssl_cert");
-	} else {
-		STRDUP_OR_DIE(ssl_key, set.db_ssl_key, "db_ssl_key");
-		STRDUP_OR_DIE(ssl_ca, set.db_ssl_ca, "db_ssl_ca");
-		STRDUP_OR_DIE(ssl_cert, set.db_ssl_cert, "db_ssl_cert");
-	}
-
-	if (strlen(ssl_key)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY, ssl_key,  "ssl key");
-	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
-	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
-
-	/* TLS mode selection. Tri-state:
+	/* TLS plumbing. Tri-state per-connection setting:
 	 *   0 = plaintext (operator opt-out)
 	 *   1 = preferred (default since spine 1.3; negotiate TLS if the server
 	 *       offers it, otherwise fall back to plaintext)
 	 *   2 = verify_identity (require TLS and hostname match against CA)
 	 *
-	 * Older connectors without MYSQL_OPT_SSL_MODE only expose
-	 * MYSQL_OPT_SSL_VERIFY_SERVER_CERT; there the strict mode maps to 1
-	 * and the preferred mode maps to 0 (no hard verify). */
+	 * H4 fix: on connectors that expose neither MYSQL_OPT_SSL_MODE nor
+	 * MYSQL_OPT_SSL_VERIFY_SERVER_CERT we cannot force server identity
+	 * verification, so ssl_setting >= 1 MUST fail closed instead of
+	 * connecting cleartext. The MYSQL_OPT_SSL_* options are also only set
+	 * when TLS is actually requested so a plaintext config does not pin
+	 * stale cert paths into the client state. */
+	#ifdef HAS_MYSQL_OPT_SSL_KEY
 	{
 		int ssl_setting = (type == LOCAL) ? set.db_ssl : set.rdb_ssl;
 
-		if (ssl_setting == 1) {
-			#ifdef MYSQL_OPT_SSL_MODE
-			#  ifdef SSL_MODE_PREFERRED
-			unsigned int ssl_mode = SSL_MODE_PREFERRED;
-			#  else
-			unsigned int ssl_mode = SSL_MODE_REQUIRED;
-			#  endif
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
-			#endif
-		} else if (ssl_setting >= 2) {
-			#ifdef MYSQL_OPT_SSL_MODE
-			unsigned int ssl_mode = SSL_MODE_VERIFY_IDENTITY;
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
-			#endif
+		if (ssl_setting == 0) {
 			#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+			SPINE_SSL_VERIFY_T ssl_enforce = 0;
+			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
+			#endif
+			#ifdef HAS_MYSQL_OPT_SSL_MODE
 			{
-				SPINE_SSL_VERIFY_T ssl_verify = 1;
-				MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify, "ssl verify");
+				unsigned int ssl_mode = SSL_MODE_DISABLED;
+				MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
 			}
 			#endif
+		} else {
+			/* ssl_setting >= 1 -- TLS requested. Refuse to run on a client
+			 * build that has no way to enforce server identity: without
+			 * MYSQL_OPT_SSL_MODE and without MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+			 * the server can downgrade us to plaintext silently. */
+			#if !defined(HAS_MYSQL_OPT_SSL_MODE) && !defined(HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT)
+			die("FATAL: DB_UseSSL=%d but this libmysqlclient build has no server identity verification option; refusing to connect", ssl_setting);
+			#endif
+
+			if (type == REMOTE) {
+				STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
+				STRDUP_OR_DIE(ssl_ca, set.rdb_ssl_ca, "rdb_ssl_ca");
+				STRDUP_OR_DIE(ssl_cert, set.rdb_ssl_cert, "rdb_ssl_cert");
+			} else {
+				STRDUP_OR_DIE(ssl_key, set.db_ssl_key, "db_ssl_key");
+				STRDUP_OR_DIE(ssl_ca, set.db_ssl_ca, "db_ssl_ca");
+				STRDUP_OR_DIE(ssl_cert, set.db_ssl_cert, "db_ssl_cert");
+			}
+
+			/* mysql_ssl_set() is the only call that flips the connection
+			 * into "negotiate TLS on the wire" on older connectors where
+			 * MYSQL_OPT_SSL_MODE is missing. Passing NULL strings is
+			 * explicitly allowed and means "use the default / no CA pin".
+			 * Without this call a MariaDB 5.x connector would honour
+			 * MYSQL_OPT_SSL_VERIFY_SERVER_CERT but never send CLIENT_SSL,
+			 * and the server would happily speak plaintext. */
+			#ifdef HAS_MYSQL_SSL_SET
+			if (mysql_ssl_set(mysql,
+					strlen(ssl_key)  ? ssl_key  : NULL,
+					strlen(ssl_cert) ? ssl_cert : NULL,
+					strlen(ssl_ca)   ? ssl_ca   : NULL,
+					NULL, NULL) != 0) {
+				die("FATAL: mysql_ssl_set failed: %s", mysql_error(mysql));
+			}
+			#endif
+
+			if (strlen(ssl_key))  MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY,  ssl_key,  "ssl key");
+			if (strlen(ssl_ca))   MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA,   ssl_ca,   "ssl ca");
+			if (strlen(ssl_cert)) MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
+
+			if (ssl_setting == 1) {
+				#ifdef HAS_MYSQL_OPT_SSL_MODE
+				#  ifdef SSL_MODE_PREFERRED
+				unsigned int ssl_mode = SSL_MODE_PREFERRED;
+				#  else
+				unsigned int ssl_mode = SSL_MODE_REQUIRED;
+				#  endif
+				MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
+				#endif
+			} else {
+				#ifdef HAS_MYSQL_OPT_SSL_MODE
+				unsigned int ssl_mode = SSL_MODE_VERIFY_IDENTITY;
+				MYSQL_SET_OPTION(MYSQL_OPT_SSL_MODE, &ssl_mode, "ssl mode");
+				#endif
+				#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+				{
+					SPINE_SSL_VERIFY_T ssl_verify = 1;
+					MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify, "ssl verify");
+				}
+				#endif
+			}
 		}
 	}
-
+	#else
+	/* No MYSQL_OPT_SSL_KEY at all means the connector predates any TLS
+	 * plumbing we can configure. Refuse to run if the operator asked for
+	 * TLS; a silent plaintext connect is the exact failure mode we are
+	 * trying to prevent. */
+	{
+		int ssl_setting = (type == LOCAL) ? set.db_ssl : set.rdb_ssl;
+		if (ssl_setting >= 1) {
+			die("FATAL: DB_UseSSL=%d but this libmysqlclient build has no server identity verification option; refusing to connect", ssl_setting);
+		}
+	}
 	#endif
 
 	while (tries > 0) {
@@ -423,6 +458,27 @@ void db_connect(int type, MYSQL *mysql) {
 		} else {
 			tries   = 0;
 			success = TRUE;
+
+			/* H4 fail-close: after a successful mysql_real_connect, if
+			 * the operator asked for TLS, verify the session actually
+			 * negotiated TLS on the wire. mysql_get_ssl_cipher() returns
+			 * a non-NULL cipher name when the session is encrypted and
+			 * NULL when it is plaintext; on an older libmysqlclient that
+			 * accepted MYSQL_OPT_SSL_VERIFY_SERVER_CERT but did not send
+			 * CLIENT_SSL, the server will have downgraded us silently
+			 * and this is where we catch it. */
+			#ifdef HAS_MYSQL_GET_SSL_CIPHER
+			{
+				int ssl_setting = (type == LOCAL) ? set.db_ssl : set.rdb_ssl;
+				if (ssl_setting >= 1) {
+					const char *cipher = mysql_get_ssl_cipher(mysql);
+					if (cipher == NULL) {
+						die("FATAL: DB_UseSSL=%d but negotiated session is plaintext (no SSL cipher); refusing to continue", ssl_setting);
+					}
+					SPINE_LOG_DEBUG(("DEBUG: %s DB TLS cipher: %s", (type == LOCAL) ? "local" : "remote", cipher));
+				}
+			}
+			#endif
 			break;
 		}
 

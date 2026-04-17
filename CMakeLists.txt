@@ -58,8 +58,11 @@ include(CheckCCompilerFlag)
 include(CheckCSourceCompiles)
 include(CheckFunctionExists)
 include(CheckIncludeFile)
+include(CheckLibraryExists)
 include(CheckLinkerFlag OPTIONAL)
+include(CheckSymbolExists)
 include(CheckTypeSize)
+include(CMakePushCheckState)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -388,6 +391,51 @@ function(spine_require_mysql)
     target_link_libraries(spine_mysql INTERFACE ${_mysql_libraries})
     if(_mysql_link_options)
         target_link_options(spine_mysql INTERFACE ${_mysql_link_options})
+    endif()
+
+    # Probe the discovered libmysqlclient/libmariadb for the SSL surface area
+    # sql.c guards with HAS_* macros. Without these checks every guard is
+    # always false and the entire TLS code path is compiled out, so
+    # DB_UseSSL=1 silently becomes plaintext. The MYSQL_OPT_SSL_* probes
+    # use check_c_source_compiles because those names are enum members of
+    # enum mysql_option rather than preprocessor macros, so
+    # check_symbol_exists cannot see them.
+    cmake_push_check_state(RESET)
+    set(CMAKE_REQUIRED_INCLUDES ${_mysql_include_dirs})
+    set(CMAKE_REQUIRED_LIBRARIES ${_mysql_libraries})
+    check_c_source_compiles([[
+        #include <mysql.h>
+        int main(void) { enum mysql_option o = MYSQL_OPT_SSL_KEY; (void)o; return 0; }
+    ]] SPINE_HAS_MYSQL_OPT_SSL_KEY)
+    check_c_source_compiles([[
+        #include <mysql.h>
+        int main(void) { enum mysql_option o = MYSQL_OPT_SSL_VERIFY_SERVER_CERT; (void)o; return 0; }
+    ]] SPINE_HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT)
+    check_c_source_compiles([[
+        #include <mysql.h>
+        int main(void) { enum mysql_option o = MYSQL_OPT_SSL_MODE; (void)o; return 0; }
+    ]] SPINE_HAS_MYSQL_OPT_SSL_MODE)
+    check_symbol_exists(mysql_ssl_set "mysql.h"
+        SPINE_HAS_MYSQL_SSL_SET)
+    check_symbol_exists(mysql_get_ssl_cipher "mysql.h"
+        SPINE_HAS_MYSQL_GET_SSL_CIPHER)
+    cmake_pop_check_state()
+
+    if(SPINE_HAS_MYSQL_OPT_SSL_KEY)
+        target_compile_definitions(spine_mysql INTERFACE HAS_MYSQL_OPT_SSL_KEY=1)
+    endif()
+    if(SPINE_HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT)
+        target_compile_definitions(spine_mysql INTERFACE
+            HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT=1)
+    endif()
+    if(SPINE_HAS_MYSQL_OPT_SSL_MODE)
+        target_compile_definitions(spine_mysql INTERFACE HAS_MYSQL_OPT_SSL_MODE=1)
+    endif()
+    if(SPINE_HAS_MYSQL_SSL_SET)
+        target_compile_definitions(spine_mysql INTERFACE HAS_MYSQL_SSL_SET=1)
+    endif()
+    if(SPINE_HAS_MYSQL_GET_SSL_CIPHER)
+        target_compile_definitions(spine_mysql INTERFACE HAS_MYSQL_GET_SSL_CIPHER=1)
     endif()
 
     set(HAVE_MYSQL 1 PARENT_SCOPE)
@@ -1086,6 +1134,26 @@ if(BUILD_TESTING)
         endif()
         target_link_libraries(test_dry_run PRIVATE spine_hardening)
         add_test(NAME dry_run COMMAND test_dry_run)
+
+        # H4 TLS fail-close structural guard. Scans src/sql.c for the die()
+        # calls that catch a missing-verify-option build and a plaintext
+        # downgrade after connect. Pure source scan -- no libmysqlclient or
+        # spine_mysql dependency, so it runs on any host that can build the
+        # tests target.
+        add_executable(test_sql_tls_fail_close
+            tests/unit/test_sql_tls_fail_close.c
+        )
+        target_include_directories(test_sql_tls_fail_close PRIVATE
+            ${CMAKE_SOURCE_DIR}/tests/unit
+        )
+        target_compile_definitions(test_sql_tls_fail_close PRIVATE
+            SPINE_SQL_C_PATH="${CMAKE_SOURCE_DIR}/src/sql.c"
+        )
+        if(TARGET spine_build_options)
+            target_link_libraries(test_sql_tls_fail_close PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_sql_tls_fail_close PRIVATE spine_hardening)
+        add_test(NAME sql_tls_fail_close COMMAND test_sql_tls_fail_close)
     endif()
 
     # Windows-only Job Object lifecycle test.
