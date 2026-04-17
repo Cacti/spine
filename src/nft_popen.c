@@ -96,20 +96,35 @@
 extern char **environ;
 
 /* Names a child must not inherit from spine's environment. Dynamic-linker
- * hijack vectors (LD_*, DYLD_*) and shell-startup injection (BASH_ENV, ENV)
- * are the attack surface; everything else is the operator's own config
- * (custom PATH, PERL5LIB, PYTHONPATH for script dependencies) and must pass
- * through. IFS is forced to a safe value if unset. */
-static const char *const spine_dangerous_env_prefixes[] = {
-	"LD_PRELOAD=",
-	"LD_LIBRARY_PATH=",
-	"LD_AUDIT=",
-	"DYLD_INSERT_LIBRARIES=",
-	"DYLD_LIBRARY_PATH=",
+ * hijack vectors (the whole LD_ and DYLD_ namespace) and interpreter-
+ * startup injection (BASH_ENV, ENV, PERL5OPT, PYTHONSTARTUP, PYTHONINSPECT,
+ * RUBYOPT, NODE_OPTIONS) are the attack surface; everything else is the
+ * operator's own config (custom PATH, PERL5LIB, PYTHONPATH for script
+ * dependencies) and must pass through. IFS is forced to a safe value if
+ * unset. The LD_ / DYLD_ check is a prefix match rather than an
+ * enumerated list so a future linker variable (LD_DEBUG, LD_PROFILE,
+ * DYLD_FALLBACK_LIBRARY_PATH, DYLD_VERSIONED_LIBRARY_PATH) is covered
+ * without a code change. */
+static const char *const spine_dangerous_env_exact[] = {
 	"BASH_ENV=",
 	"ENV=",
+	"PERL5OPT=",
+	"PYTHONSTARTUP=",
+	"PYTHONINSPECT=",
+	"RUBYOPT=",
+	"NODE_OPTIONS=",
 	NULL
 };
+
+static int spine_env_is_dangerous(const char *entry) {
+	if (strncmp(entry, "LD_", 3) == 0)   return 1;
+	if (strncmp(entry, "DYLD_", 5) == 0) return 1;
+	for (size_t d = 0; spine_dangerous_env_exact[d]; d++) {
+		size_t plen = strlen(spine_dangerous_env_exact[d]);
+		if (strncmp(entry, spine_dangerous_env_exact[d], plen) == 0) return 1;
+	}
+	return 0;
+}
 
 /* Default PATH injected when the parent environment has none. The hardcoded
  * PATH is intentionally narrow so a missing PATH cannot cause a child to
@@ -136,15 +151,7 @@ char **spine_build_child_env(void) {
 	int has_ifs  = 0;
 	size_t w = 0;
 	for (size_t r = 0; r < n; r++) {
-		int skip = 0;
-		for (size_t d = 0; spine_dangerous_env_prefixes[d]; d++) {
-			size_t plen = strlen(spine_dangerous_env_prefixes[d]);
-			if (strncmp(environ[r], spine_dangerous_env_prefixes[d], plen) == 0) {
-				skip = 1;
-				break;
-			}
-		}
-		if (skip) continue;
+		if (spine_env_is_dangerous(environ[r])) continue;
 		if (strncmp(environ[r], "PATH=", 5) == 0) has_path = 1;
 		if (strncmp(environ[r], "IFS=",  4) == 0) has_ifs  = 1;
 		new_env[w++] = environ[r];
