@@ -500,7 +500,15 @@ close_cleanup(void * arg)
 			break;
 		}
 
-		assert(prev != NULL);	/* Search should not fail */
+		/* A concurrent path may have already unlinked this entry; we
+		 * still own 'cur' via the cancellation stack, so fall through
+		 * to free() rather than abort under a release build. */
+		if (prev == NULL) {
+			pthread_mutex_unlock(&ListMutex);
+			SPINE_LOG_DEBUG(("DEBUG: close_cleanup: pid entry already unlinked"));
+			free(cur);
+			return;
+		}
 	}
 
 	pthread_mutex_unlock(&ListMutex);
