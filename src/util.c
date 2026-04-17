@@ -34,6 +34,7 @@
 #include "common.h"
 #include "spine.h"
 #include "regex.h"
+#include "circuit_breaker.h"
 
 #include <fcntl.h>
 #include <limits.h>

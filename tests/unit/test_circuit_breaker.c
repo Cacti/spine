@@ -150,6 +150,37 @@ static void test_thread_safety(void) {
 	spine_cb_shutdown();
 }
 
+/* Config values outside [1, 1_000_000] must fall back to the default
+ * and flag the caller so the warning path can fire. */
+static void test_clamp_threshold(void) {
+	int warned = 0;
+
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(5, &warned), 5);
+	ASSERT_INT_EQ(warned, 0);
+
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(1, &warned), 1);
+	ASSERT_INT_EQ(warned, 0);
+
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(1000000, &warned), 1000000);
+	ASSERT_INT_EQ(warned, 0);
+
+	warned = 0;
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(0, &warned), SPINE_CB_THRESHOLD_DEFAULT);
+	ASSERT_INT_EQ(warned, 1);
+
+	warned = 0;
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(-42, &warned), SPINE_CB_THRESHOLD_DEFAULT);
+	ASSERT_INT_EQ(warned, 1);
+
+	warned = 0;
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(2000000, &warned), SPINE_CB_THRESHOLD_DEFAULT);
+	ASSERT_INT_EQ(warned, 1);
+
+	/* NULL warned_out must not crash. */
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(10, NULL), 10);
+	ASSERT_INT_EQ(spine_cb_clamp_threshold(-1, NULL), SPINE_CB_THRESHOLD_DEFAULT);
+}
+
 int main(void) {
 	test_disabled_when_threshold_zero();
 	test_trips_on_threshold();
@@ -157,5 +188,6 @@ int main(void) {
 	test_exponential_backoff_capped();
 	test_unknown_host_passes();
 	test_thread_safety();
+	test_clamp_threshold();
 	return finish_tests("circuit breaker tests");
 }

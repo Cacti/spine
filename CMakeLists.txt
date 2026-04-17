@@ -1027,6 +1027,8 @@ if(BUILD_TESTING)
             tests/unit/test_dump_config.c
             tests/unit/test_spine_stubs.c
             src/util.c
+            src/circuit_breaker.c
+            src/spine_audit.c
         )
         target_include_directories(test_dump_config PRIVATE
             ${CMAKE_BINARY_DIR}
@@ -1049,12 +1051,19 @@ if(BUILD_TESTING)
             target_link_libraries(test_dump_config PRIVATE spine_build_options)
         endif()
         target_link_libraries(test_dump_config PRIVATE spine_hardening)
+        if(SPINE_HAVE_LIBAUDIT)
+            target_compile_definitions(test_dump_config PRIVATE HAVE_LIBAUDIT=1)
+            target_include_directories(test_dump_config SYSTEM PRIVATE ${AUDIT_INCLUDE_DIR})
+            target_link_libraries(test_dump_config PRIVATE ${AUDIT_LIB})
+        endif()
         add_test(NAME dump_config COMMAND test_dump_config)
 
         add_executable(test_check_mode
             tests/unit/test_check_mode.c
             tests/unit/test_spine_stubs.c
             src/util.c
+            src/circuit_breaker.c
+            src/spine_audit.c
         )
         target_include_directories(test_check_mode PRIVATE
             ${CMAKE_BINARY_DIR}
@@ -1077,6 +1086,11 @@ if(BUILD_TESTING)
             target_link_libraries(test_check_mode PRIVATE spine_build_options)
         endif()
         target_link_libraries(test_check_mode PRIVATE spine_hardening)
+        if(SPINE_HAVE_LIBAUDIT)
+            target_compile_definitions(test_check_mode PRIVATE HAVE_LIBAUDIT=1)
+            target_include_directories(test_check_mode SYSTEM PRIVATE ${AUDIT_INCLUDE_DIR})
+            target_link_libraries(test_check_mode PRIVATE ${AUDIT_LIB})
+        endif()
         add_test(NAME check_mode COMMAND test_check_mode)
         # 3s connect timeout + a touch of slack so cold CI runners do not
         # flake when the route takes an extra second to time out.

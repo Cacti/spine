@@ -136,3 +136,12 @@ void spine_cb_record(int host_id, int errors) {
 	}
 	pthread_mutex_unlock(&spine_cb_lock);
 }
+
+int spine_cb_clamp_threshold(int raw, int *warned_out) {
+	if (raw < SPINE_CB_THRESHOLD_MIN || raw > SPINE_CB_THRESHOLD_MAX) {
+		if (warned_out) *warned_out = 1;
+		return SPINE_CB_THRESHOLD_DEFAULT;
+	}
+	if (warned_out) *warned_out = 0;
+	return raw;
+}

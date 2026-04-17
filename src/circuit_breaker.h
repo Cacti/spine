@@ -32,4 +32,12 @@ int spine_cb_should_skip(int host_id);
  * the host enters cool-down with exponential backoff. */
 void spine_cb_record(int host_id, int errors);
 
+/* Accept raw from config, return a threshold in [1, 1_000_000]. Out-of-range
+ * input is rejected with a warning and replaced by the default (5). When
+ * warned_out is non-NULL it is set to 1 iff the value was replaced. */
+#define SPINE_CB_THRESHOLD_DEFAULT 5
+#define SPINE_CB_THRESHOLD_MIN     1
+#define SPINE_CB_THRESHOLD_MAX     1000000
+int spine_cb_clamp_threshold(int raw, int *warned_out);
+
 #endif /* SPINE_CIRCUIT_BREAKER_H */
