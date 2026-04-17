@@ -919,6 +919,21 @@ if(BUILD_TESTING)
     target_link_libraries(test_json_log PRIVATE spine_hardening)
     add_test(NAME json_log COMMAND test_json_log)
 
+    # snprintf_guard: pins the guarded accumulator pattern used for SQL
+    # builders in util.c and spine.c. Pure-algorithm, no spine deps.
+    add_executable(test_snprintf_guard
+        tests/unit/test_snprintf_guard.c
+    )
+    target_include_directories(test_snprintf_guard PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_snprintf_guard PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_snprintf_guard PRIVATE spine_hardening)
+    add_test(NAME snprintf_guard COMMAND test_snprintf_guard)
+
     # icmp_win_loader: race the IP Helper one-shot loader across N threads.
     # Windows-only: the loader lives in platform_icmp_win.c and the test
     # body uses CreateThread + WaitForMultipleObjects. A clean run does

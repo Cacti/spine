@@ -819,27 +819,42 @@ int main(int argc, char *argv[]) {
 		spine_sandbox_restrict();
 	}
 
-	/* obtain the list of hosts to poll */
+	/* obtain the list of hosts to poll. The buffer is bounded at MEGA_BUFSIZE;
+	 * any truncation short-circuits with an unmodified accumulator so we do
+	 * not step past the end when a long host_id_list lands late in the build. */
 	{
-		int remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " WHERE disabled = ''");
+		size_t remaining = (size_t)(MEGA_BUFSIZE - (qp - querybuf));
+		int n;
+		do {
+			n = snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+			if (n < 0 || (size_t)n >= remaining) break;
+			qp += n; remaining -= (size_t)n;
 
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
+			n = snprintf(qp, remaining, " WHERE disabled = ''");
+			if (n < 0 || (size_t)n >= remaining) break;
+			qp += n; remaining -= (size_t)n;
 
-		if (!strlen(set.host_id_list)) {
-			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
-		} else {
-			remaining = MEGA_BUFSIZE - (qp - querybuf);
-			qp += snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
-		}
+			n = snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
+			if (n < 0 || (size_t)n >= remaining) break;
+			qp += n; remaining -= (size_t)n;
 
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
-		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " ORDER BY picount DESC");
+			if (!strlen(set.host_id_list)) {
+				qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
+				remaining = (size_t)(MEGA_BUFSIZE - (qp - querybuf));
+			} else {
+				n = snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
+				if (n < 0 || (size_t)n >= remaining) break;
+				qp += n; remaining -= (size_t)n;
+			}
+
+			n = snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
+			if (n < 0 || (size_t)n >= remaining) break;
+			qp += n; remaining -= (size_t)n;
+
+			n = snprintf(qp, remaining, " ORDER BY picount DESC");
+			if (n < 0 || (size_t)n >= remaining) break;
+			qp += n; remaining -= (size_t)n;
+		} while (0);
 	}
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
