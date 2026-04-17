@@ -11,6 +11,7 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sched.h>
 
 #ifdef HAVE_LIBSECCOMP
 #include <seccomp.h>
@@ -341,8 +342,12 @@ static int apply_seccomp(void) {
 		SCMP_SYS(mincore), SCMP_SYS(msync),
 
 		/* Process / threading. spine forks PHP script servers and spawns
-		 * pollers via posix_spawn(), which uses clone/execve underneath. */
-		SCMP_SYS(clone), SCMP_SYS(clone3),
+		 * pollers via posix_spawn(), which uses clone/execve underneath.
+		 * clone3 is intentionally omitted: its flags argument is inside
+		 * a user-space struct the filter cannot inspect, so we deny it
+		 * outright below and rely on glibc falling back to clone() on
+		 * kernels that offer both. */
+		SCMP_SYS(clone),
 		SCMP_SYS(fork), SCMP_SYS(vfork),
 		SCMP_SYS(execve), SCMP_SYS(execveat),
 		SCMP_SYS(exit), SCMP_SYS(exit_group),
@@ -410,6 +415,22 @@ static int apply_seccomp(void) {
 	 * ALLOW rules for the same syscall, so this stays additive. */
 	(void)seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(ioctl), 1,
 	                       SCMP_A1(SCMP_CMP_EQ, (scmp_datum_t)TIOCSTI));
+
+	/* Block clone(CLONE_NEWUSER): user namespaces let an unprivileged
+	 * process acquire CAP_SYS_ADMIN inside the new ns, and spine never
+	 * needs one. The SCMP_CMP_MASKED_EQ check matches any clone() whose
+	 * flags include CLONE_NEWUSER, regardless of other bits set. */
+	(void)seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(clone), 1,
+	                       SCMP_A0(SCMP_CMP_MASKED_EQ,
+	                               (scmp_datum_t)CLONE_NEWUSER,
+	                               (scmp_datum_t)CLONE_NEWUSER));
+
+	/* clone3 takes its flags inside a user-space struct that bpf cannot
+	 * dereference, so we cannot do a masked_eq on CLONE_NEWUSER there.
+	 * Deny the whole syscall: glibc 2.34+ probes for clone3 at runtime
+	 * and falls back to clone on ENOSYS. This is a measurable slowdown
+	 * for processes that clone() in a hot loop; spine does not. */
+	(void)seccomp_rule_add(ctx, SCMP_ACT_ERRNO(ENOSYS), SCMP_SYS(clone3), 0);
 
 	int rc = seccomp_load(ctx);
 	seccomp_release(ctx);
