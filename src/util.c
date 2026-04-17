@@ -127,11 +127,12 @@ static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
 			}else{
+				db_free_result(result);
 				return strdup("");
 			}
 		}else{
@@ -215,11 +216,12 @@ static char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
 			} else {
+				db_free_result(result);
 				return 0;
 			}
 		} else {
@@ -310,11 +312,12 @@ static char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[1] != NULL) {
 				retval = strdup(mysql_row[1]);
 				db_free_result(result);
 				return retval;
 			} else {
+				db_free_result(result);
 				return 0;
 			}
 		} else {
@@ -2389,7 +2392,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 
@@ -2406,6 +2409,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 					return cacti_version;
 				}
 			}else{
+				db_free_result(result);
 				return 0;
 			}
 		}else{
