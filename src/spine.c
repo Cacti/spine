@@ -106,6 +106,9 @@
 #ifndef _WIN32
 #include <sys/mman.h>
 #endif
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 /* SIGHUP-triggered reload flag. Spine is a batch poller: an in-flight config
  * reload would race with worker threads already mid-poll. On HUP we therefore
@@ -282,17 +285,6 @@ int main(int argc, char *argv[]) {
 	 * remains valid after drop_root hands the process to a service uid. */
 	spine_capture_startup_euid();
 
-#ifdef __linux__
-	/* Seal the process against ptrace and credential-exec before any DB,
-	 * config, or SNMP init. A crash on the pre-sandbox path (option parser,
-	 * spine.conf read, MySQL handshake) must not be ptrace-attachable or
-	 * coredump-readable: db password and SNMP community strings land in
-	 * the heap as soon as those paths run. spine_sandbox_restrict() repeats
-	 * both prctls; that is intentional and idempotent. */
-	(void)prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
-	(void)prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-#endif
-
 	#ifdef HAVE_LCAP
 	if (geteuid() == 0) {
 		drop_root(getuid(), getgid());
@@ -314,6 +306,18 @@ int main(int argc, char *argv[]) {
 	if (spine_platform_init() != 0) {
 		die("ERROR: Failed to initialize platform runtime services.");
 	}
+
+#ifdef __linux__
+	/* PR_SET_DUMPABLE=0 immediately after platform init and before any
+	 * secret material (db password, SNMP community strings) lands in the
+	 * heap. It denies ptrace(PTRACE_ATTACH) from non-CAP_SYS_PTRACE callers
+	 * and suppresses core dumps, closing the most common credential-theft
+	 * path on a compromised host. sandbox_restrict() also applies this,
+	 * but repeating it here shrinks the window before sandbox activation. */
+	if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) == -1) {
+		/* Non-fatal: the sandbox path will retry. */
+	}
+#endif
 
 	/* Name the main thread so ps(1) / top(1) / perf(1) / Process Explorer
 	 * distinguish it from worker threads. Must stay under 15 bytes to
