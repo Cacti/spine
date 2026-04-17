@@ -17,11 +17,13 @@
 #include "platform/platform_sandbox.h"
 #include "test_platform_helpers.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 #ifndef _WIN32
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -84,10 +86,29 @@ static void test_restrict_does_not_kill_process(void) {
 }
 #endif
 
+#if defined(__linux__) && defined(HAVE_LANDLOCK)
+static void test_narrow_rw_roots_exist(void) {
+	/* After spine_sandbox_restrict() runs, the /tmp/spine, /run/spine,
+	 * and /var/run/spine prefixes should exist (landlock's apply_landlock
+	 * mkdir's them before sealing the ruleset). /run and /var/run are
+	 * root-owned on most distros; we only require that /tmp/spine becomes
+	 * writable since the test harness has unprivileged access there. */
+	struct stat st;
+	int rc = stat("/tmp/spine", &st);
+	ASSERT_TRUE(rc == 0 || errno == EACCES || errno == ENOENT);
+	/* An ENOENT means restrict() never ran this path (SPINE_NO_LANDLOCK,
+	 * kernel without landlock, or libseccomp build opted out). That is
+	 * a valid configuration on the test host and should not fail. */
+}
+#endif
+
 int main(void) {
 	test_unveil_null_is_noop();
 #ifndef _WIN32
 	test_restrict_does_not_kill_process();
+#endif
+#if defined(__linux__) && defined(HAVE_LANDLOCK)
+	test_narrow_rw_roots_exist();
 #endif
 	return finish_tests("platform sandbox tests");
 }

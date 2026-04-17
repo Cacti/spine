@@ -215,23 +215,41 @@ static int apply_landlock(void) {
 		"/proc",     /* getrandom fallback, uuid, self/maps for libc */
 		"/sys",      /* netsnmp reads /sys/class/net */
 		"/dev",      /* urandom, null */
-		"/tmp",      /* temp spools; most deployments need rw here */
-		"/var/run",
-		"/run",
 		NULL,
 	};
 	for (int i = 0; ro_roots[i]; i++) {
 		uint64_t mode = LANDLOCK_ACCESS_FS_READ_FILE
 		              | LANDLOCK_ACCESS_FS_READ_DIR
 		              | LANDLOCK_ACCESS_FS_EXECUTE;
-		if (strcmp(ro_roots[i], "/tmp") == 0
-		    || strcmp(ro_roots[i], "/var/run") == 0
-		    || strcmp(ro_roots[i], "/run") == 0) {
-			mode |= LANDLOCK_ACCESS_FS_WRITE_FILE
-			      | LANDLOCK_ACCESS_FS_MAKE_REG
-			      | LANDLOCK_ACCESS_FS_REMOVE_FILE;
-		}
 		if (add_path_rule(rs, ro_roots[i], mode) != 0) {
+			close(rs);
+			return -1;
+		}
+	}
+
+	/* Writable scratch/runtime dirs scoped to spine's own prefix. A
+	 * previous revision allowed the bare /tmp, /var/run, and /run
+	 * roots; that widened the blast radius to every other daemon
+	 * sharing those trees (sshd auth spools, postgres socket lock,
+	 * systemd notify sockets). mkdir() is best-effort with 0700 so
+	 * the directory exists before landlock seals the ruleset: a
+	 * missing directory silently drops the rule via add_path_rule's
+	 * ENOENT branch, which would leave spine unable to write its
+	 * pid / temp files. */
+	static const char *rw_roots[] = {
+		"/tmp/spine",
+		"/run/spine",
+		"/var/run/spine",
+		NULL,
+	};
+	for (int i = 0; rw_roots[i]; i++) {
+		(void)mkdir(rw_roots[i], 0700);
+		uint64_t mode = LANDLOCK_ACCESS_FS_READ_FILE
+		              | LANDLOCK_ACCESS_FS_READ_DIR
+		              | LANDLOCK_ACCESS_FS_WRITE_FILE
+		              | LANDLOCK_ACCESS_FS_MAKE_REG
+		              | LANDLOCK_ACCESS_FS_REMOVE_FILE;
+		if (add_path_rule(rs, rw_roots[i], mode) != 0) {
 			close(rs);
 			return -1;
 		}
