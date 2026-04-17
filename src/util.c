@@ -1638,6 +1638,10 @@ int spine_log(const char *format, ...) {
 	ulog_len   = strlen(ulogmessage);
 	flog_len   = 0;
 
+	/* strftime returns 0 on failure and leaves flogmessage unmodified, so
+	 * downstream strncat would read uninitialized stack. */
+	flogmessage[0] = '\0';
+
 	if ((flog_len = strftime(flogmessage, 50, log_fmt, now_ptr)) == (int) 0) {
 		fp = stderr;
 
