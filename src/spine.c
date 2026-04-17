@@ -140,11 +140,17 @@ static void spine_sigterm_handler(int signo) {
 
 static void spine_install_reload_handler(void) {
     struct sigaction sa;
+
+    /* Zero the whole struct first; Linux's sa_restorer and the BSD sa_flags
+     * tail are implementation-defined fields that must not carry stack
+     * garbage into the kernel. */
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = spine_sighup_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGHUP, &sa, NULL);
 
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = spine_sigterm_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
