@@ -1093,118 +1093,138 @@ void poller_push_data_to_main(void) {
  */
 int read_spine_config(const char *file) {
 	FILE *fp;
+	int fd;
 	char buff[BUFSIZE];
 	char p1[BUFSIZE];
 	char p2[BUFSIZE];
 	char *chars;
 
-	if ((fp = fopen(file, "rb")) == NULL) {
+	/* O_NOFOLLOW refuses to traverse a symlink at the final component so an
+	 * attacker who can plant a symlink at /etc/spine.conf cannot redirect
+	 * credential loading to a file they control. O_CLOEXEC keeps the fd
+	 * out of child processes spawned via posix_spawn or nft_popen. */
+	fd = open(file, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0) {
+		int open_errno = errno;
+		if (open_errno == ELOOP) {
+			if (!set.stderr_notty) {
+				fprintf(stderr, "FATAL: spine config [%s] is a symlink; refusing to start\n", file);
+			}
+			return -1;
+		}
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			if (!set.stderr_notty) {
-				fprintf(stderr, "ERROR: Could not open config file [%s]\n", file);
+				fprintf(stderr, "ERROR: Could not open config file [%s]: %s\n", file, strerror(open_errno));
 			}
 		}
 		return -1;
-	} else {
-		/* spine.conf carries DB credentials. Hard-fail only on the bits that
-		 * actually leak or corrupt them: world-readable (password exfil) or
-		 * group/world-writable (tamper). Soft-warn on owner mismatch because
-		 * many deployments ship spine under a service account distinct from
-		 * the user invoking it, and on fstat errors (unusual filesystems). */
-		struct stat conf_stat;
-		if (fstat(fileno(fp), &conf_stat) == 0) {
-			mode_t perms = conf_stat.st_mode & 0777;
-			if (conf_stat.st_mode & S_IROTH) {
-				if (!set.stderr_notty) {
-					fprintf(stderr,
-						"WARNING: spine config [%s] is world-readable (mode 0%o); tighten to 0600 to protect DB credentials\n",
-						file, perms);
-				}
-			}
-			if (conf_stat.st_mode & (S_IWGRP | S_IWOTH)) {
-				if (!set.stderr_notty) {
-					fprintf(stderr,
-						"FATAL: spine config [%s] is group/world-writable (mode 0%o); refusing to start\n",
-						file, perms);
-				}
-				fclose(fp);
-				return -1;
-			}
-			/* Accept the file if it is owned by root, by the euid spine
-			 * booted with (captured before drop_root), by the current
-			 * euid, or by the real uid. Comparing against the live euid
-			 * alone trips once spine hands off to its service account
-			 * on a root-owned /etc/spine.conf. */
-			uid_t cur_euid = geteuid();
-			uid_t cur_ruid = getuid();
-			uid_t owner    = conf_stat.st_uid;
-			int owner_ok   = (owner == 0)
-				|| (owner == cur_euid)
-				|| (owner == cur_ruid)
-				|| (spine_startup_euid != (uid_t)-1 && owner == spine_startup_euid);
-			if (!owner_ok) {
-				if (!set.stderr_notty) {
-					fprintf(stderr,
-						"WARNING: spine config [%s] owner uid %d is not root, the startup euid, or the running user\n",
-						file, (int)owner);
-				}
-			}
-		}
-
-		if (!set.stdout_notty) {
-			fprintf(stdout, "SPINE: Using spine config file [%s]\n", file);
-		}
-
-		while (!feof(fp)) {
-			chars = fgets(buff, BUFSIZE, fp);
-
-			if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
-				sscanf(buff, "%15s %255s", p1, p2);
-
-				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
-				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
-				else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdb_user, p2);
-				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
-				else if (STRIMATCH(p1, "RDB_Port"))         set.rdb_port    = atoi(p2);
-				else if (STRIMATCH(p1, "RDB_UseSSL"))       set.rdb_ssl     = atoi(p2);
-				else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
-				else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
-				else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
-				else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.db_host, p2);
-				else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.db_db, p2);
-				else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.db_user, p2);
-				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
-				else if (STRIMATCH(p1, "DB_Port"))          set.db_port    = atoi(p2);
-				else if (STRIMATCH(p1, "DB_UseSSL"))        set.db_ssl     = atoi(p2);
-				else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
-				else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
-				else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
-				else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
-				else if (STRIMATCH(p1, "DB_PreG")) {
-					if (!set.stderr_notty) {
-						fprintf(stderr,"WARNING: DB_PreG is no longer supported\n");
-					}
-				} else if (STRIMATCH(p1, "Cacti_Log")) {
-					STRNCOPY(set.path_logfile, p2);
-					set.logfile_processed = 1;
-					set.log_destination = LOGDEST_BOTH;
-				} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
-				else if (STRIMATCH(p1, "CircuitBreakerThreshold")) set.circuit_breaker_threshold = atoi(p2);
-				else if (!set.stderr_notty) {
-					fprintf(stderr,"WARNING: Unrecognized directive: %s=%s in %s\n", p1, p2, file);
-				}
-
-				*p1 = '\0';
-				*p2 = '\0';
-			}
-		}
-
-		if (strlen(set.db_pass) == 0) *set.db_pass = '\0';
-
-		fclose(fp);
-
-		return 0;
 	}
+
+	fp = fdopen(fd, "rb");
+	if (fp == NULL) {
+		close(fd);
+		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
+			if (!set.stderr_notty) {
+				fprintf(stderr, "ERROR: Could not fdopen config file [%s]\n", file);
+			}
+		}
+		return -1;
+	}
+
+	/* spine.conf carries DB credentials. SECURITY.md commits to refusing
+	 * startup unless mode is 0600 owned by root or the startup euid, so
+	 * enforce that here: any group/world bit set, or any ownership
+	 * outside the approved set, is fatal. */
+	{
+		struct stat conf_stat;
+		if (fstat(fileno(fp), &conf_stat) != 0) {
+			if (!set.stderr_notty) {
+				fprintf(stderr, "FATAL: fstat failed on config [%s]: %s\n", file, strerror(errno));
+			}
+			fclose(fp);
+			return -1;
+		}
+		if (conf_stat.st_mode & (S_IRGRP | S_IWGRP | S_IXGRP |
+					 S_IROTH | S_IWOTH | S_IXOTH)) {
+			if (!set.stderr_notty) {
+				fprintf(stderr,
+					"FATAL: spine config [%s] mode 0%o exposes credentials to group or world; require 0600\n",
+					file, (unsigned)(conf_stat.st_mode & 0777));
+			}
+			fclose(fp);
+			return -1;
+		}
+		/* Accept the file only if it is owned by root or by the euid
+		 * spine booted with (captured before drop_root). This matches
+		 * the SECURITY.md promise and keeps a root-owned /etc/spine.conf
+		 * valid after spine hands off to its service account. */
+		uid_t owner  = conf_stat.st_uid;
+		int owner_ok = (owner == 0)
+			|| (spine_startup_euid != (uid_t)-1 && owner == spine_startup_euid);
+		if (!owner_ok) {
+			if (!set.stderr_notty) {
+				fprintf(stderr,
+					"FATAL: spine config [%s] owner uid %d is not root or the startup euid; refusing to start\n",
+					file, (int)owner);
+			}
+			fclose(fp);
+			return -1;
+		}
+	}
+
+	if (!set.stdout_notty) {
+		fprintf(stdout, "SPINE: Using spine config file [%s]\n", file);
+	}
+
+	while (!feof(fp)) {
+		chars = fgets(buff, BUFSIZE, fp);
+
+		if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
+			sscanf(buff, "%15s %255s", p1, p2);
+
+			if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
+			else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
+			else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdb_user, p2);
+			else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
+			else if (STRIMATCH(p1, "RDB_Port"))         set.rdb_port    = atoi(p2);
+			else if (STRIMATCH(p1, "RDB_UseSSL"))       set.rdb_ssl     = atoi(p2);
+			else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
+			else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
+			else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
+			else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.db_host, p2);
+			else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.db_db, p2);
+			else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.db_user, p2);
+			else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
+			else if (STRIMATCH(p1, "DB_Port"))          set.db_port    = atoi(p2);
+			else if (STRIMATCH(p1, "DB_UseSSL"))        set.db_ssl     = atoi(p2);
+			else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
+			else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
+			else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
+			else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
+			else if (STRIMATCH(p1, "DB_PreG")) {
+				if (!set.stderr_notty) {
+					fprintf(stderr,"WARNING: DB_PreG is no longer supported\n");
+				}
+			} else if (STRIMATCH(p1, "Cacti_Log")) {
+				STRNCOPY(set.path_logfile, p2);
+				set.logfile_processed = 1;
+				set.log_destination = LOGDEST_BOTH;
+			} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
+			else if (STRIMATCH(p1, "CircuitBreakerThreshold")) set.circuit_breaker_threshold = atoi(p2);
+			else if (!set.stderr_notty) {
+				fprintf(stderr,"WARNING: Unrecognized directive: %s=%s in %s\n", p1, p2, file);
+			}
+
+			*p1 = '\0';
+			*p2 = '\0';
+		}
+	}
+
+	if (strlen(set.db_pass) == 0) *set.db_pass = '\0';
+
+	fclose(fp);
+
+	return 0;
 }
 
 /*! \fn void config_defaults(void)
