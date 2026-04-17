@@ -1,7 +1,13 @@
-/* pipe2(2) is a Linux/BSD extension. On glibc it is gated by _GNU_SOURCE;
- * CMake injects the macro through spine_posix_features for every Linux
- * target (both spine_platform and the test binaries) so this TU inherits
- * it without a per-file #define. */
+/* pipe2(2) is a Linux/BSD extension. On glibc it is gated by _GNU_SOURCE.
+ * CMake injects the macro through spine_posix_features / spine_platform
+ * PUBLIC defines for every Linux target. The explicit define here guards
+ * against header-include order hazards: glibc's <features.h> freezes the
+ * feature bitmap on first inclusion, so the macro must be visible before
+ * any system header reaches it -- including <sys/types.h> pulled in by
+ * platform_process.h. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
 
 #include "platform_process.h"
 

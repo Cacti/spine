@@ -1,7 +1,12 @@
-/* pthread_setname_np (glibc) is gated by _GNU_SOURCE. usleep wants
- * _XOPEN_SOURCE>=500 or _DEFAULT_SOURCE. Both are supplied centrally by
- * CMake via spine_posix_features and spine_platform's PUBLIC defines, so
- * no per-TU macro dance is needed here. */
+/* pthread_setname_np (glibc) and other GNU extensions are gated by
+ * _GNU_SOURCE. CMake injects this via spine_posix_features / spine_platform
+ * PUBLIC defines for every Linux TU. The explicit define here guards against
+ * header-include order hazards: glibc's <features.h> freezes the feature
+ * bitmap on first inclusion, so the macro must be visible before any system
+ * header reaches it -- including those pulled in transitively by platform.h. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
 
 #include "platform.h"
 
