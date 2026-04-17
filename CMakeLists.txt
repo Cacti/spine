@@ -1127,6 +1127,17 @@ if(BUILD_TESTING)
         add_test(NAME job_object COMMAND test_job_object)
     endif()
 
+    # exec_poll pid-guard regression (broadcast-kill via nft_pchild() -> -1).
+    add_executable(test_poller_pid_guard tests/unit/test_poller_pid_guard.c)
+    target_include_directories(test_poller_pid_guard PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_poller_pid_guard PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_poller_pid_guard PRIVATE spine_hardening)
+    add_test(NAME poller_pid_guard COMMAND test_poller_pid_guard)
+
     # BSD-only arc4random divergence test.
     if(CMAKE_SYSTEM_NAME MATCHES "^(FreeBSD|OpenBSD|NetBSD|DragonFly)$")
         add_executable(test_arc4random tests/unit/test_arc4random.c)

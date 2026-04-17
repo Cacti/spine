@@ -2340,7 +2340,7 @@ int validate_result(char *result) {
  * (the Cacti database). Do not pass user-controlled input directly. */
 char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	int cmd_fd;
-	int pid;
+	spine_pid_t pid;
 
 	#ifdef USING_TPOPEN
 	FILE *fd;
@@ -2517,8 +2517,13 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 					#else
 					SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
 
+					/* nft_pchild returns -1 on lookup failure. kill(-1, SIGKILL)
+					 * would wipe every process owned by the spine uid; kill(0, ...)
+					 * signals the whole process group. Guard against both. */
 					pid = nft_pchild(cmd_fd);
-					kill(pid, SIGKILL);
+					if (pid > 1) {
+						kill(pid, SIGKILL);
+					}
 					#endif
 
 					SET_UNDEFINED(result_string);
