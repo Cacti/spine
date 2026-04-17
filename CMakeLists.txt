@@ -963,6 +963,24 @@ if(BUILD_TESTING)
         add_test(NAME env_scrub COMMAND test_env_scrub)
     endif()
 
+    # spine_audit: per-event-type rate-limit tests. HAVE_LIBAUDIT is
+    # deliberately NOT defined for this TU: we test the gate, not the
+    # libaudit write path. The integration test path already covers the
+    # netlink side on Linux-with-audit CI lanes.
+    add_executable(test_spine_audit
+        tests/unit/test_spine_audit.c
+        src/spine_audit.c
+    )
+    target_include_directories(test_spine_audit PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_spine_audit PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_spine_audit PRIVATE spine_hardening)
+    add_test(NAME spine_audit COMMAND test_spine_audit)
+
     # Circuit breaker, dump_config, check_mode, and dry_run all depend on
     # the spine config struct and/or MySQL. Gate them behind the same main
     # build so we only wire them when mysql + net-snmp were discovered.
