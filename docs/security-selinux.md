@@ -1,5 +1,19 @@
 # SELinux enablement
 
+> **WARNING: This policy module is a skeleton.** Do not run in enforcing
+> mode until the `audit2allow` pass described below is complete.
+> Install with
+>
+> ```
+> sudo semodule -i spine.pp
+> sudo semanage permissive -a spine_t
+> ```
+>
+> until further notice. The committed `spine.te` does not yet enumerate
+> the MySQL / net-snmp / Cacti scripts access that a production poll
+> cycle requires; loading it enforcing will deny most real work and
+> stall the service.
+
 Spine ships an SELinux policy module skeleton under `etc/selinux/`. The
 skeleton declares the `spine_t` domain, its entry point, and the log / pid
 file contexts. It is intentionally minimal: enumerating every syscall and
