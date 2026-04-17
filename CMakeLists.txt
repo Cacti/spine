@@ -1078,6 +1078,34 @@ if(BUILD_TESTING)
         # flake when the route takes an extra second to time out.
         set_tests_properties(check_mode PROPERTIES TIMEOUT 30)
 
+        add_executable(test_config_parser
+            tests/unit/test_config_parser.c
+            tests/unit/test_spine_stubs.c
+            src/util.c
+        )
+        target_include_directories(test_config_parser PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_config_parser PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_config_parser PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_config_parser PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_config_parser PRIVATE spine_hardening)
+        add_test(NAME config_parser COMMAND test_config_parser)
+
         add_executable(test_dry_run
             tests/unit/test_dry_run.c
             tests/unit/test_sql_stubs.c

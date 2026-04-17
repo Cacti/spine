@@ -36,6 +36,7 @@
 #include "regex.h"
 
 #include <fcntl.h>
+#include <limits.h>
 
 static int nopts = 0;
 
@@ -1085,6 +1086,133 @@ void poller_push_data_to_main(void) {
 	db_disconnect(&mysqlr);
 }
 
+/* Security-relevant config warnings must surface even when stderr is not a
+ * tty (systemd captures them into the journal). Range errors, truncation,
+ * and unknown directives all indicate either misconfiguration or tampering
+ * and are cheap to emit. */
+static void spine_config_warn(const char *fmt, ...)
+	__attribute__((format(printf, 1, 2)));
+
+static void spine_config_warn(const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+}
+
+/* Parse an unsigned integer directive within [lo, hi]. Returns 1 on success
+ * and writes to *out; returns 0 and leaves *out untouched on range error or
+ * trailing garbage. Accepts leading whitespace only; a leading '-' or '+' is
+ * rejected because spine never uses negative or explicitly-positive values
+ * for these fields. */
+static int spine_parse_bounded_ulong(const char *key, const char *val,
+                                     unsigned long lo, unsigned long hi,
+                                     unsigned long *out) {
+	if (val == NULL || *val == '\0' || *val == '-' || *val == '+') {
+		spine_config_warn("WARNING: %s=%s rejected: not a non-negative integer\n",
+			key, val ? val : "(null)");
+		return 0;
+	}
+	errno = 0;
+	char *end = NULL;
+	unsigned long v = strtoul(val, &end, 10);
+	if (errno != 0 || end == val || (end && *end != '\0')) {
+		spine_config_warn("WARNING: %s=%s rejected: not a valid integer\n", key, val);
+		return 0;
+	}
+	if (v < lo || v > hi) {
+		spine_config_warn("WARNING: %s=%s rejected: out of range [%lu, %lu]\n",
+			key, val, lo, hi);
+		return 0;
+	}
+	*out = v;
+	return 1;
+}
+
+/* Split buff into keyword (p1) and value (p2). Preserves embedded whitespace
+ * in the value so passwords containing spaces round-trip. Returns 1 on a
+ * parseable directive, 0 on blank/comment lines, -1 on a hard parse error
+ * (keyword too long, embedded NUL, overlong line). Trailing CR/LF are
+ * stripped. The caller must zero buff before fgets so this function can
+ * detect embedded NUL bytes: fgets writes through a NUL in the input, so
+ * the buffer tail past strlen stays zero only when no NUL was embedded.
+ * fp is used to drain the rest of an over-length line so the next fgets
+ * starts on the following line. */
+static int spine_config_tokenize(char *buff, size_t buff_len,
+                                 char *p1, size_t p1_cap,
+                                 char *p2, size_t p2_cap,
+                                 const char *file, int lineno, FILE *fp) {
+	size_t read_len = strnlen(buff, buff_len);
+	int has_newline = (read_len > 0 && buff[read_len - 1] == '\n');
+
+	/* Overlong line: fgets filled buff_len-1 without '\n'. */
+	if (!has_newline && read_len == buff_len - 1) {
+		spine_config_warn("WARNING: %s:%d line exceeds %zu bytes; rejected\n",
+			file, lineno, buff_len - 1);
+		int ch;
+		while ((ch = fgetc(fp)) != EOF && ch != '\n') { /* drain */ }
+		return -1;
+	}
+	/* Embedded NUL: the buffer was pre-zeroed, so any non-zero byte beyond
+	 * read_len implies fgets wrote through a NUL byte in the input. */
+	if (read_len < buff_len - 1) {
+		for (size_t i = read_len + 1; i < buff_len; i++) {
+			if (buff[i] != '\0') {
+				spine_config_warn("WARNING: %s:%d embedded NUL byte rejected\n",
+					file, lineno);
+				return -1;
+			}
+		}
+	}
+	size_t len = read_len;
+	/* Strip trailing CR/LF (handles both LF and CRLF line endings). */
+	while (len > 0 && (buff[len - 1] == '\n' || buff[len - 1] == '\r')) {
+		buff[--len] = '\0';
+	}
+	/* Blank line or comment. */
+	if (len == 0 || buff[0] == '#') {
+		return 0;
+	}
+
+	/* Locate the first whitespace run that separates keyword from value. */
+	size_t ks = 0;
+	while (ks < len && (buff[ks] == ' ' || buff[ks] == '\t')) ks++;
+	if (ks == len) return 0;
+	size_t ke = ks;
+	while (ke < len && buff[ke] != ' ' && buff[ke] != '\t') ke++;
+
+	size_t klen = ke - ks;
+	if (klen >= p1_cap) {
+		spine_config_warn("WARNING: %s:%d keyword exceeds %zu bytes; rejected\n",
+			file, lineno, p1_cap - 1);
+		return -1;
+	}
+	memcpy(p1, buff + ks, klen);
+	p1[klen] = '\0';
+
+	/* Skip the whitespace run between keyword and value. */
+	size_t vs = ke;
+	while (vs < len && (buff[vs] == ' ' || buff[vs] == '\t')) vs++;
+
+	/* Value runs to end-of-line; trailing whitespace is trimmed so
+	 * "DB_Port  123   " parses as "123". Interior whitespace is kept
+	 * so passwords with spaces (rare, but valid) survive. */
+	size_t ve = len;
+	while (ve > vs && (buff[ve - 1] == ' ' || buff[ve - 1] == '\t')) ve--;
+
+	size_t vlen = ve - vs;
+	if (vlen >= p2_cap) {
+		spine_config_warn("WARNING: %s:%d value for %s exceeds %zu bytes; rejected\n",
+			file, lineno, p1, p2_cap - 1);
+		return -1;
+	}
+	if (vlen > 0) {
+		memcpy(p2, buff + vs, vlen);
+	}
+	p2[vlen] = '\0';
+	return 1;
+}
+
 /*! \fn int read_spine_config(const char *file)
  *  \brief obtain default startup variables from the spine.conf file.
  *  \param file the spine config file
@@ -1095,9 +1223,13 @@ int read_spine_config(const char *file) {
 	FILE *fp;
 	int fd;
 	char buff[BUFSIZE];
-	char p1[BUFSIZE];
+	/* Keyword cap of 64 bytes accommodates every current directive with
+	 * room for future additions; anything longer is almost certainly a
+	 * malformed or truncated line. Value cap matches the struct member
+	 * sizes in spine.h (BUFSIZE). */
+	char p1[64];
 	char p2[BUFSIZE];
-	char *chars;
+	int  lineno = 0;
 
 	/* O_NOFOLLOW refuses to traverse a symlink at the final component so an
 	 * attacker who can plant a symlink at /etc/spine.conf cannot redirect
@@ -1176,47 +1308,82 @@ int read_spine_config(const char *file) {
 		fprintf(stdout, "SPINE: Using spine config file [%s]\n", file);
 	}
 
-	while (!feof(fp)) {
-		chars = fgets(buff, BUFSIZE, fp);
+	for (;;) {
+		memset(buff, 0, sizeof(buff));
+		if (fgets(buff, BUFSIZE, fp) == NULL) break;
+		lineno++;
+		p1[0] = '\0';
+		p2[0] = '\0';
+		int t = spine_config_tokenize(buff, sizeof(buff),
+		                              p1, sizeof(p1),
+		                              p2, sizeof(p2),
+		                              file, lineno, fp);
+		if (t <= 0) {
+			/* blank, comment, or rejected line; carry on */
+			continue;
+		}
 
-		if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
-			sscanf(buff, "%15s %255s", p1, p2);
-
-			if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
-			else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
-			else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdb_user, p2);
-			else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
-			else if (STRIMATCH(p1, "RDB_Port"))         set.rdb_port    = atoi(p2);
-			else if (STRIMATCH(p1, "RDB_UseSSL"))       set.rdb_ssl     = atoi(p2);
-			else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
-			else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
-			else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
-			else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.db_host, p2);
-			else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.db_db, p2);
-			else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.db_user, p2);
-			else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
-			else if (STRIMATCH(p1, "DB_Port"))          set.db_port    = atoi(p2);
-			else if (STRIMATCH(p1, "DB_UseSSL"))        set.db_ssl     = atoi(p2);
-			else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
-			else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
-			else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
-			else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
-			else if (STRIMATCH(p1, "DB_PreG")) {
-				if (!set.stderr_notty) {
-					fprintf(stderr,"WARNING: DB_PreG is no longer supported\n");
-				}
-			} else if (STRIMATCH(p1, "Cacti_Log")) {
-				STRNCOPY(set.path_logfile, p2);
-				set.logfile_processed = 1;
-				set.log_destination = LOGDEST_BOTH;
-			} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
-			else if (STRIMATCH(p1, "CircuitBreakerThreshold")) set.circuit_breaker_threshold = atoi(p2);
-			else if (!set.stderr_notty) {
-				fprintf(stderr,"WARNING: Unrecognized directive: %s=%s in %s\n", p1, p2, file);
+		if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
+		else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
+		else if (STRIMATCH(p1, "RDB_User"))         STRNCOPY(set.rdb_user, p2);
+		else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
+		else if (STRIMATCH(p1, "RDB_Port")) {
+			unsigned long v;
+			if (spine_parse_bounded_ulong("RDB_Port", p2, 1, 65535, &v)) {
+				set.rdb_port = (int)v;
 			}
-
-			*p1 = '\0';
-			*p2 = '\0';
+		}
+		else if (STRIMATCH(p1, "RDB_UseSSL")) {
+			unsigned long v;
+			if (spine_parse_bounded_ulong("RDB_UseSSL", p2, 0, 1, &v)) {
+				set.rdb_ssl = (int)v;
+			}
+		}
+		else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
+		else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
+		else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
+		else if (STRIMATCH(p1, "DB_Host"))          STRNCOPY(set.db_host, p2);
+		else if (STRIMATCH(p1, "DB_Database"))      STRNCOPY(set.db_db, p2);
+		else if (STRIMATCH(p1, "DB_User"))          STRNCOPY(set.db_user, p2);
+		else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
+		else if (STRIMATCH(p1, "DB_Port")) {
+			unsigned long v;
+			if (spine_parse_bounded_ulong("DB_Port", p2, 1, 65535, &v)) {
+				set.db_port = (int)v;
+			}
+		}
+		else if (STRIMATCH(p1, "DB_UseSSL")) {
+			unsigned long v;
+			if (spine_parse_bounded_ulong("DB_UseSSL", p2, 0, 1, &v)) {
+				set.db_ssl = (int)v;
+			}
+		}
+		else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
+		else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
+		else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
+		else if (STRIMATCH(p1, "Poller")) {
+			unsigned long v;
+			if (spine_parse_bounded_ulong("Poller", p2, 0, INT_MAX, &v)) {
+				set.poller_id = (int)v;
+			}
+		}
+		else if (STRIMATCH(p1, "DB_PreG")) {
+			spine_config_warn("WARNING: DB_PreG is no longer supported\n");
+		} else if (STRIMATCH(p1, "Cacti_Log")) {
+			STRNCOPY(set.path_logfile, p2);
+			set.logfile_processed = 1;
+			set.log_destination = LOGDEST_BOTH;
+		} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
+		else if (STRIMATCH(p1, "CircuitBreakerThreshold")) {
+			unsigned long v;
+			if (spine_parse_bounded_ulong("CircuitBreakerThreshold", p2,
+			                              1, 1000000, &v)) {
+				set.circuit_breaker_threshold = (int)v;
+			}
+		}
+		else {
+			spine_config_warn("WARNING: Unrecognized directive: %s=%s in %s\n",
+				p1, p2, file);
 		}
 	}
 
