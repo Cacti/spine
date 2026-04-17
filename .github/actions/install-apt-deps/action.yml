@@ -16,12 +16,15 @@ runs:
         # Reject anything outside the apt-package grammar. Callers pass a
         # static whitespace-delimited list; this blocks shell metacharacters
         # even though the input comes from workflow YAML.
-        case "$INSTALL_APT_DEPS_PACKAGES" in
-          *[^A-Za-z0-9._+-\ \t]*)
-            echo "install-apt-deps: rejecting packages string with disallowed characters" >&2
-            exit 2
-            ;;
-        esac
+        # tr-d approach: strip allowed chars (alnum, . _ + - space tab);
+        # anything remaining is disallowed. The \- escapes hyphen so it is
+        # not treated as a range specifier by tr.
+        _bad=$(printf '%s' "$INSTALL_APT_DEPS_PACKAGES" | LC_ALL=C tr -d 'A-Za-z0-9._+\- \t')
+        if [ -n "$_bad" ]; then
+          echo "install-apt-deps: rejecting packages string with disallowed characters: $_bad" >&2
+          exit 2
+        fi
+        unset _bad
         sudo apt-get update
         # shellcheck disable=SC2086 # intentional word-splitting of validated list
         sudo apt-get install -y $INSTALL_APT_DEPS_PACKAGES
