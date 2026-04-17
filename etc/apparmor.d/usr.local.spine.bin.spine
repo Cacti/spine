@@ -64,9 +64,16 @@
   /usr/local/spine/bin/spine    mr,
   /usr/local/bin/spine          mr,
 
-  # Temporary working area for script output buffering.
+  # Temporary working area for script output buffering. The profile used
+  # to grant /tmp/** rw; that widened the attack surface to every other
+  # service sharing /tmp. Scope back to spine's own prefix.
   /tmp/spine.*                  rwk,
-  /tmp/**                       rw,
+
+  # Explicit denies harden the profile against future edits that re-add a
+  # /tmp/** or /** rule by accident. AppArmor deny rules win over any
+  # subsequent permit so these stay authoritative.
+  deny /root/**                 rwklx,
+  deny /etc/shadow*             rwklx,
 
   # Random / system info the libc and getrandom(2) fallback path touches.
   /proc/sys/kernel/random/uuid  r,

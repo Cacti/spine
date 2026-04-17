@@ -56,6 +56,20 @@ directly; no `LD_PRELOAD` is required. On Clang builds, adding
 Scudo allocator is tuned for server workloads and is the default on
 Android and on some Fuchsia configurations.
 
+## AppArmor profile scope
+
+`etc/apparmor.d/usr.local.spine.bin.spine` restricts spine's temp write
+scope to `/tmp/spine.*`. A prior `/tmp/** rw` catch-all was removed
+because it let spine read or replace any other service's temp files
+(e.g. PostgreSQL's socket lockfile, sshd's auth temp spools). If a
+Cacti script genuinely needs its own /tmp scratch path, grant the
+narrower prefix it uses rather than widening the profile.
+
+The profile also carries explicit `deny /root/** rwklx,` and
+`deny /etc/shadow* rwklx,` rules. AppArmor deny-on-match wins over any
+later permit, so a future edit that re-adds `/` or `/etc/**` cannot
+silently expose those paths.
+
 ## Coordination with the sandbox
 
 `spine_sandbox_restrict()` applies seccomp-bpf and Landlock after the
