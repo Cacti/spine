@@ -2617,3 +2617,157 @@ void spine_dump_config(void) {
 	printf("DryRun = %d\n",          set.dry_run);
 	printf("CircuitBreakerThreshold = %d\n", set.circuit_breaker_threshold);
 }
+
+/* Flags whose value is credential material. Short flags match a single
+ * character (e.g. "c" matches "-c"), long flags match a whole word
+ * (e.g. "community" matches "--community"). Kept separate so "-community"
+ * does not accidentally redact. */
+static const char *const cred_short_flags[] = {
+	"c", "u", "a", "x", "p", NULL
+};
+
+static const char *const cred_long_flags[] = {
+	"community", "password", "secret", NULL
+};
+
+static int is_space_byte(char c) {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+}
+
+/* Append a single char; silently truncates and keeps out NUL-terminated. */
+static void redact_putc(char *out, size_t outsz, size_t *pos, char c) {
+	if (*pos + 1 < outsz) {
+		out[*pos] = c;
+		(*pos)++;
+	}
+	out[(*pos < outsz) ? *pos : (outsz ? outsz - 1 : 0)] = '\0';
+}
+
+static void redact_puts(char *out, size_t outsz, size_t *pos, const char *s) {
+	while (*s) {
+		redact_putc(out, outsz, pos, *s++);
+	}
+}
+
+/* Emit the mask value. The "=" form keeps the equals sign; the bare form
+ * inserts a single space so the redacted VAL stays tokenised. */
+static void emit_mask(char *out, size_t outsz, size_t *pos) {
+	redact_puts(out, outsz, pos, "***");
+}
+
+static int short_flag_is_cred(const char *flag, size_t flag_len) {
+	int i;
+	if (flag_len != 1) return 0;
+	for (i = 0; cred_short_flags[i] != NULL; i++) {
+		if (flag[0] == cred_short_flags[i][0]) return 1;
+	}
+	return 0;
+}
+
+static int long_flag_is_cred(const char *flag, size_t flag_len) {
+	int i;
+	size_t n;
+	for (i = 0; cred_long_flags[i] != NULL; i++) {
+		n = strlen(cred_long_flags[i]);
+		if (flag_len == n && strncmp(flag, cred_long_flags[i], n) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void spine_redact_args(const char *cmd, char *out, size_t outsz) {
+	size_t pos = 0;
+	const char *p;
+
+	if (out == NULL || outsz == 0) return;
+	out[0] = '\0';
+	if (cmd == NULL) return;
+
+	p = cmd;
+	while (*p) {
+		/* Copy runs of whitespace verbatim. */
+		if (is_space_byte(*p)) {
+			redact_putc(out, outsz, &pos, *p);
+			p++;
+			continue;
+		}
+
+		/* Token starts. Detect flag shape. */
+		if (*p == '-') {
+			int is_long = 0;
+			const char *flag_start;
+			const char *eq;
+			const char *token_start = p;
+			size_t flag_len;
+
+			redact_putc(out, outsz, &pos, *p);
+			p++;
+			if (*p == '-') {
+				is_long = 1;
+				redact_putc(out, outsz, &pos, *p);
+				p++;
+			}
+
+			flag_start = p;
+			while (*p && !is_space_byte(*p) && *p != '=') {
+				p++;
+			}
+			flag_len = (size_t)(p - flag_start);
+			eq = (*p == '=') ? p : NULL;
+
+			/* Copy the flag name verbatim. */
+			{
+				const char *q;
+				for (q = flag_start; q < flag_start + flag_len; q++) {
+					redact_putc(out, outsz, &pos, *q);
+				}
+			}
+
+			int redact = is_long ? long_flag_is_cred(flag_start, flag_len)
+			                     : short_flag_is_cred(flag_start, flag_len);
+
+			if (eq != NULL) {
+				/* --flag=VAL or -c=VAL */
+				redact_putc(out, outsz, &pos, '=');
+				p++;
+				if (redact) {
+					/* Mask to end of token. */
+					while (*p && !is_space_byte(*p)) p++;
+					emit_mask(out, outsz, &pos);
+				} else {
+					while (*p && !is_space_byte(*p)) {
+						redact_putc(out, outsz, &pos, *p);
+						p++;
+					}
+				}
+				continue;
+			}
+
+			if (!redact) {
+				(void)token_start;
+				continue;
+			}
+
+			/* Flag takes next token as value. Preserve spacing, mask value. */
+			while (*p && is_space_byte(*p)) {
+				redact_putc(out, outsz, &pos, *p);
+				p++;
+			}
+			if (*p == '\0') break;
+			while (*p && !is_space_byte(*p)) p++;
+			emit_mask(out, outsz, &pos);
+			continue;
+		}
+
+		/* Non-flag token: copy verbatim. */
+		while (*p && !is_space_byte(*p)) {
+			redact_putc(out, outsz, &pos, *p);
+			p++;
+		}
+	}
+
+	if (outsz > 0) {
+		out[(pos < outsz) ? pos : outsz - 1] = '\0';
+	}
+}

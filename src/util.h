@@ -122,3 +122,10 @@ int get_cacti_version(MYSQL *psql, int mode);
 /* Operational CLI helpers. */
 extern int spine_health_check(void);
 extern void spine_dump_config(void);
+
+/* Redact credential-bearing flag values from a shell-style command string so
+ * the result is safe to write to logs. Recognized flags: -c / --community,
+ * -u, -a, -x, -p / --password, --secret, plus =VAL variants. VAL becomes
+ * three asterisks in the output. Unrecognized input is copied verbatim.
+ * Always NUL-terminates out even on truncation. */
+extern void spine_redact_args(const char *cmd, char *out, size_t outsz);

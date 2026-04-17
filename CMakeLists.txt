@@ -934,6 +934,23 @@ if(BUILD_TESTING)
     target_link_libraries(test_snprintf_guard PRIVATE spine_hardening)
     add_test(NAME snprintf_guard COMMAND test_snprintf_guard)
 
+    # redact_args: SNMP community + auth/priv redaction for command log
+    # lines. Pulls a stand-alone copy of the implementation to avoid the
+    # util.c + mysql + net-snmp chain; the copy must track util.c.
+    add_executable(test_redact_args
+        tests/unit/test_redact_args.c
+        tests/unit/redact_args_tu.c
+    )
+    target_include_directories(test_redact_args PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_redact_args PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_redact_args PRIVATE spine_hardening)
+    add_test(NAME redact_args COMMAND test_redact_args)
+
     # icmp_win_loader: race the IP Helper one-shot loader across N threads.
     # Windows-only: the loader lives in platform_icmp_win.c and the test
     # body uses CreateThread + WaitForMultipleObjects. A clean run does

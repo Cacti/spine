@@ -335,7 +335,9 @@ int nft_popen(const char * command, const char * type) {
 		argv, child_env, 3, 50000);
 
 	if (spawn_err != 0) {
-		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer))));
+		char redacted_cmd[BUFSIZE];
+		spine_redact_args(command, redacted_cmd, sizeof(redacted_cmd));
+		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s (cmd='%s')", spine_platform_error_string(spawn_err, error_buffer, sizeof(error_buffer)), redacted_cmd));
 		posix_spawn_file_actions_destroy(&fa);
 		if (attr_initialized) {
 			posix_spawnattr_destroy(&attr);
