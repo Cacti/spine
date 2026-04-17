@@ -18,6 +18,7 @@
 #ifdef HAVE_LANDLOCK
 #include <linux/landlock.h>
 #include <sys/syscall.h>
+#include <stdint.h>
 #endif
 
 /* Linux confinement layers:

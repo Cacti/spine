@@ -106,6 +106,9 @@
 #ifndef _WIN32
 #include <sys/mman.h>
 #endif
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 /* SIGHUP-triggered reload flag. Spine is a batch poller: an in-flight config
  * reload would race with worker threads already mid-poll. On HUP we therefore
