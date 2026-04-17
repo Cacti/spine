@@ -3,9 +3,30 @@
 #ifndef _WIN32
 
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 spine_socket_t spine_socket_open(int domain, int type, int protocol) {
-	return socket(domain, type, protocol);
+	/* SOCK_CLOEXEC (Linux, FreeBSD, OpenBSD, NetBSD, recent Solaris) sets
+	 * FD_CLOEXEC atomically at socket-creation time, closing the window
+	 * where a concurrent fork+exec could leak the descriptor. macOS and
+	 * older kernels ignore the flag bit; fall back to F_SETFD post-open. */
+#ifdef SOCK_CLOEXEC
+	int s = socket(domain, type | SOCK_CLOEXEC, protocol);
+	if (s >= 0 || errno != EINVAL) {
+		return s;
+	}
+	/* Some kernels return EINVAL if SOCK_CLOEXEC is unsupported for the
+	 * requested type. Retry without the bit and apply FD_CLOEXEC by hand. */
+#endif
+	spine_socket_t s2 = socket(domain, type, protocol);
+	if (s2 >= 0) {
+		int fl = fcntl(s2, F_GETFD);
+		if (fl >= 0) {
+			(void) fcntl(s2, F_SETFD, fl | FD_CLOEXEC);
+		}
+	}
+	return s2;
 }
 
 int spine_socket_close(spine_socket_t socket_fd) {

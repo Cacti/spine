@@ -38,6 +38,7 @@
 #ifdef _WIN32
 #include <icmpapi.h>
 #else
+#  include <fcntl.h>
 #  include <ifaddrs.h>
 #  include <net/if.h>
 #  include <netdb.h>
@@ -47,6 +48,20 @@
 #  include <netinet/ip_icmp.h>
 #  include <netinet/icmp6.h>
 #  include <stddef.h>
+#endif
+
+#ifndef _WIN32
+/* Set FD_CLOEXEC on a raw descriptor. The raw ICMP sockets are
+ * long-lived and occasionally leak into nft_popen'd poll scripts
+ * without this guard; the children should never see a privileged
+ * ICMP fd they did not open. */
+static void spine_fd_set_cloexec(int fd) {
+	if (fd < 0) return;
+	int fl = fcntl(fd, F_GETFD);
+	if (fl >= 0) {
+		(void) fcntl(fd, F_SETFD, fl | FD_CLOEXEC);
+	}
+}
 #endif
 
 #if defined(__linux__)
@@ -2038,6 +2053,7 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 		result->system_errno = errno;
 		return -1;
 	}
+	spine_fd_set_cloexec(sock);
 
 	pkt_len = (size_t) ICMP_HDR_SIZE + (payload_len > 0 ? payload_len : sizeof(spine_ping_payload_t));
 	packet = calloc(1, pkt_len);
@@ -2196,6 +2212,7 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 		result->system_errno = errno;
 		return -1;
 	}
+	spine_fd_set_cloexec(sock);
 
 #ifdef ICMP6_FILTER
 	{

@@ -34,6 +34,29 @@
 #include "common.h"
 #include "spine.h"
 
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
+
+/* Set FD_CLOEXEC on the MySQL client socket. mysql_real_connect opens
+ * the descriptor with no cloexec guarantee; without this guard every
+ * nft_popen'd poll script inherits an authenticated DB connection.
+ * The NET struct's fd member is stable ABI across MySQL and MariaDB
+ * client libraries and avoids the mysql_get_socket feature-probe dance. */
+static void spine_mysql_set_cloexec(MYSQL *mysql) {
+#ifndef _WIN32
+	if (mysql == NULL) return;
+	int fd = (int) mysql->net.fd;
+	if (fd < 0) return;
+	int fl = fcntl(fd, F_GETFD);
+	if (fl >= 0) {
+		(void) fcntl(fd, F_SETFD, fl | FD_CLOEXEC);
+	}
+#else
+	(void) mysql;
+#endif
+}
+
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
@@ -405,6 +428,7 @@ void db_connect(int type, MYSQL *mysql) {
 		} else {
 			tries   = 0;
 			success = TRUE;
+			spine_mysql_set_cloexec(mysql);
 			break;
 		}
 

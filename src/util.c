@@ -1496,7 +1496,7 @@ int spine_log(const char *format, ...) {
 			 * sensitive file. O_NOFOLLOW fails the open if the final component
 			 * is a symlink; O_APPEND|O_CREAT handles first-write creation. */
 			int log_fd = open(set.path_logfile,
-				O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW,
+				O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
 				S_IRUSR | S_IWUSR | S_IRGRP);
 			if (log_fd >= 0) {
 				log_file = fdopen(log_fd, "a");

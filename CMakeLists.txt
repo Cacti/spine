@@ -1151,6 +1151,27 @@ if(BUILD_TESTING)
         add_test(NAME config_perms COMMAND test_config_perms)
     endif()
 
+    # FD_CLOEXEC regression for long-lived descriptors (socket helper,
+    # log file path). POSIX-only because Windows uses SOCKET handles.
+    if(NOT WIN32)
+        add_executable(test_cloexec
+            tests/unit/test_cloexec.c
+        )
+        target_include_directories(test_cloexec PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+        )
+        target_link_libraries(test_cloexec PRIVATE spine_platform Threads::Threads)
+        if(TARGET spine_build_options)
+            target_link_libraries(test_cloexec PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_cloexec PRIVATE spine_hardening)
+        add_test(NAME cloexec COMMAND test_cloexec)
+    endif()
+
     # Fatal-signal handler async-signal-safety regression. Links error.c
     # directly because spine_signal_handler_init() lives there; the test
     # only calls the init entry point and never raises a real signal.
