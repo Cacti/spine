@@ -264,6 +264,21 @@ static int apply_seccomp(void) {
 	scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_ERRNO(EPERM));
 	if (!ctx) return -1;
 
+	/* Apply the filter to every existing thread, not just the caller. By
+	 * the time the sandbox activates spine has already spawned poller
+	 * workers; without TSYNC they would keep running without seccomp. */
+	(void)seccomp_attr_set(ctx, SCMP_FLTATR_CTL_TSYNC, 1);
+
+	/* On x86_64, ia32 and x32 personalities share the kernel syscall entry
+	 * and can reach spine's address space through the vsyscall page and
+	 * 32-bit-aware loaders. Adding both architectures makes the allowlist
+	 * cover those entry points. EEXIST on a system already matching the
+	 * current arch is benign; libseccomp returns -EEXIST in that case. */
+#if defined(__x86_64__)
+	(void)seccomp_arch_add(ctx, SCMP_ARCH_X86);
+	(void)seccomp_arch_add(ctx, SCMP_ARCH_X32);
+#endif
+
 	static const int allow[] = {
 		/* I/O */
 		SCMP_SYS(read), SCMP_SYS(write), SCMP_SYS(pread64), SCMP_SYS(pwrite64),

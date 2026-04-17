@@ -30,6 +30,14 @@
 #include <sys/prctl.h>
 #endif
 
+#if defined(__linux__) && defined(HAVE_LIBSECCOMP)
+#include <seccomp.h>
+/* Compile-time pin: if libseccomp ever drops SCMP_FLTATR_CTL_TSYNC the
+ * sandbox would silently leave worker threads unfiltered. Catch that at
+ * build time rather than in a post-release CVE. */
+_Static_assert(SCMP_FLTATR_CTL_TSYNC >= 0, "libseccomp missing TSYNC attr");
+#endif
+
 static void test_unveil_null_is_noop(void) {
 	spine_sandbox_unveil_paths(NULL, NULL, NULL);
 	spine_sandbox_unveil_paths("/tmp/fake-log", NULL, NULL);
