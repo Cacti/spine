@@ -682,6 +682,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				host->snmp_priv_protocol[0]   = '\0';              // 8
 				host->snmp_context[0]         = '\0';              // 9
 				host->snmp_engine_id[0]       = '\0';              // 10
+				host->snmp_engine_id_bin_len  = 0;                 // -
 				host->snmp_port               = 161;               // 11
 				host->snmp_timeout            = 500;               // 12
 				host->snmp_retries            = set.snmp_retries;  // -
@@ -732,6 +733,14 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				if (row[8]  != NULL) STRNCOPY(host->snmp_priv_protocol,   row[8]);
 				if (row[9]  != NULL) STRNCOPY(host->snmp_context,         row[9]);
 				if (row[10]  != NULL) STRNCOPY(host->snmp_engine_id,       row[10]);
+				/* Decode the hex engine ID to bytes now so the SNMPv3 session
+				 * init can pass an explicit length. strlen() truncates at the
+				 * first embedded 0x00, which any RFC 3411 engine ID is free
+				 * to contain. */
+				host->snmp_engine_id_bin_len = spine_snmp_decode_engine_id(
+					host->snmp_engine_id,
+					host->snmp_engine_id_bin,
+					(int) sizeof(host->snmp_engine_id_bin));
 
 				if (row[11] != NULL) host->snmp_port           = atoi(row[11]);
 				if (row[12] != NULL) host->snmp_timeout        = atoi(row[12]);
@@ -789,6 +798,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						host->snmp_priv_protocol,
 						host->snmp_context,
 						host->snmp_engine_id,
+						host->snmp_engine_id_bin,
+						host->snmp_engine_id_bin_len,
 						host->snmp_port,
 						host->snmp_timeout);
 				} else {
@@ -1355,6 +1366,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			poller_items[i].snmp_priv_protocol[0]    = '\0';
 			poller_items[i].snmp_context[0]          = '\0';
 			poller_items[i].snmp_engine_id[0]        = '\0';
+			poller_items[i].snmp_engine_id_bin_len   = 0;
 			poller_items[i].snmp_port                = 161;
 			poller_items[i].snmp_timeout             = 500;
 			poller_items[i].rrd_name[0]              = '\0';
@@ -1398,6 +1410,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				sizeof(poller_items[i].snmp_context), "%s", row[18]);
 			if (row[19] != NULL)  snprintf(poller_items[i].snmp_engine_id,
 				sizeof(poller_items[i].snmp_engine_id), "%s", row[19]);
+			/* Mirror the host loader: decode the hex engine ID so the
+			 * SNMPv3 session receives explicit length and embedded 0x00
+			 * bytes are not truncated. */
+			poller_items[i].snmp_engine_id_bin_len = spine_snmp_decode_engine_id(
+				poller_items[i].snmp_engine_id,
+				poller_items[i].snmp_engine_id_bin,
+				(int) sizeof(poller_items[i].snmp_engine_id_bin));
 
 			if (set.has_output_regex && row[20] != NULL)
 				snprintf(poller_items[i].output_regex,
@@ -1450,6 +1469,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
 						poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
 						poller_items[i].snmp_engine_id,
+						poller_items[i].snmp_engine_id_bin,
+						poller_items[i].snmp_engine_id_bin_len,
 						poller_items[i].snmp_port, poller_items[i].snmp_timeout);
 
 					k++;
@@ -1561,6 +1582,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						poller_items[i].snmp_auth_protocol, poller_items[i].snmp_priv_passphrase,
 						poller_items[i].snmp_priv_protocol, poller_items[i].snmp_context,
 						poller_items[i].snmp_engine_id,
+						poller_items[i].snmp_engine_id_bin,
+						poller_items[i].snmp_engine_id_bin_len,
 						poller_items[i].snmp_port, poller_items[i].snmp_timeout);
 
 					last_snmp_port    = poller_items[i].snmp_port;

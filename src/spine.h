@@ -479,6 +479,13 @@ typedef struct target_struct {
 	char   snmp_priv_protocol[16];
 	char   snmp_context[65];
 	char   snmp_engine_id[30];
+	/* Binary-decoded engine ID (Cacti stores snmp_engine_id as a hex
+	 * string). The on-wire contextEngineID is arbitrary bytes including
+	 * 0x00, so strlen() would truncate at the first NUL. Populate
+	 * snmp_engine_id_bin / snmp_engine_id_bin_len alongside the hex
+	 * field when the DB row is loaded. */
+	unsigned char snmp_engine_id_bin[32];
+	int    snmp_engine_id_bin_len;
 	int    snmp_port;
 	int    snmp_timeout;
 	int    availability_method;
@@ -555,6 +562,10 @@ typedef struct host_struct {
 	char   snmp_priv_protocol[16];
 	char   snmp_context[65];
 	char   snmp_engine_id[30];
+	/* Binary engine-ID companion; see target_struct for the full
+	 * rationale. Populated by the DB loader in poller.c. */
+	unsigned char snmp_engine_id_bin[32];
+	int    snmp_engine_id_bin_len;
 	int    snmp_port;
 	int    snmp_timeout;
 	int    snmp_retries;

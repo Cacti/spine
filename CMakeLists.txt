@@ -111,6 +111,7 @@ set(SPINE_CORE_SOURCES
     src/spine.c
     src/util.c
     src/snmp.c
+    src/snmp_engine_id.c
     src/locks.c
     src/poller.c
     src/nft_popen.c
@@ -1137,6 +1138,21 @@ if(BUILD_TESTING)
     endif()
     target_link_libraries(test_poller_pid_guard PRIVATE spine_hardening)
     add_test(NAME poller_pid_guard COMMAND test_poller_pid_guard)
+
+    # SNMPv3 engine-id binary decode regression. Links the tiny helper
+    # TU so Net-SNMP does not need to be present for the test to run.
+    add_executable(test_snmp_engine_id
+        tests/unit/test_snmp_engine_id.c
+        src/snmp_engine_id.c
+    )
+    target_include_directories(test_snmp_engine_id PRIVATE
+        ${CMAKE_SOURCE_DIR}/tests/unit
+    )
+    if(TARGET spine_build_options)
+        target_link_libraries(test_snmp_engine_id PRIVATE spine_build_options)
+    endif()
+    target_link_libraries(test_snmp_engine_id PRIVATE spine_hardening)
+    add_test(NAME snmp_engine_id COMMAND test_snmp_engine_id)
 
     # spine.conf 0600 + owner + O_NOFOLLOW regression.
     if(NOT WIN32)

@@ -105,20 +105,30 @@ void snmp_spine_close(void) {
 	snmp_shutdown("spine");
 }
 
+/* spine_snmp_decode_engine_id() now lives in src/snmp_engine_id.c so the
+ * unit tests can exercise it without pulling in Net-SNMP. Declaration
+ * stays in src/snmp.h. */
+
 /*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
  * char *snmp_community, char *snmp_username, char *snmp_password,
  * char *snmp_auth_protocol, char *snmp_priv_passphrase, char *snmp_priv_protocol,
- * char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout)
+ * char *snmp_context, char *snmp_engine_id,
+ * unsigned char *snmp_engine_id_bin, int snmp_engine_id_bin_len,
+ * int snmp_port, int snmp_timeout)
  *  \brief initializes an snmp_session object for a Spine host
  *
  *	This function will initialize NET-SNMP for the Spine host
- *  in question.
- *
+ *  in question. snmp_engine_id_bin / snmp_engine_id_bin_len carry the
+ *  decoded binary engine ID so embedded 0x00 bytes (legal per RFC 3411)
+ *  survive. The hex string argument remains for callers that have not
+ *  yet populated the binary companion.
  */
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
 	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 	char *snmp_priv_passphrase, char *snmp_priv_protocol,
-	char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout) {
+	char *snmp_context, char *snmp_engine_id,
+	unsigned char *snmp_engine_id_bin, int snmp_engine_id_bin_len,
+	int snmp_port, int snmp_timeout) {
 
 	void   *sessp = NULL;
 	struct snmp_session session;
@@ -227,7 +237,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.contextNameLen = strlen(session.contextName);
 		}
 
-		if (snmp_engine_id && strlen(snmp_engine_id)) {
+		/* Prefer the binary engine ID when populated: SNMPv3 engine IDs
+		 * are opaque octet strings (RFC 3411) that routinely include 0x00.
+		 * strlen() against a hex-ish string truncates at the first NUL,
+		 * which in practice means "never for hex text but always for any
+		 * caller that already handed us bytes". Fall back to the hex
+		 * string's strlen as a transitional path. */
+		if (snmp_engine_id_bin != NULL && snmp_engine_id_bin_len > 0) {
+			session.contextEngineID    = snmp_engine_id_bin;
+			session.contextEngineIDLen = (size_t) snmp_engine_id_bin_len;
+		} else if (snmp_engine_id && strlen(snmp_engine_id)) {
 			session.contextEngineID    = (unsigned char*) snmp_engine_id;
 			session.contextEngineIDLen = strlen(snmp_engine_id);
 		}
