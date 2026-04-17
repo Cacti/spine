@@ -1151,6 +1151,38 @@ if(BUILD_TESTING)
         add_test(NAME config_perms COMMAND test_config_perms)
     endif()
 
+    # get_namebyhost() OOB-write regression. Links util.c so the test
+    # exercises the real strncopy() behaviour the fix now relies on.
+    if(SPINE_BUILD_MAIN AND NOT WIN32)
+        add_executable(test_get_namebyhost
+            tests/unit/test_get_namebyhost.c
+            tests/unit/test_spine_stubs.c
+            src/util.c
+        )
+        target_include_directories(test_get_namebyhost PRIVATE
+            ${CMAKE_BINARY_DIR}
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/platform
+            ${CMAKE_SOURCE_DIR}/tests/unit
+            ${CMAKE_SOURCE_DIR}/third_party
+        )
+        target_link_libraries(test_get_namebyhost PRIVATE
+            spine_platform
+            spine_mysql
+            spine_netsnmp
+            Threads::Threads
+        )
+        if(OpenSSL_FOUND)
+            target_link_libraries(test_get_namebyhost PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+        endif()
+        if(TARGET spine_build_options)
+            target_link_libraries(test_get_namebyhost PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_get_namebyhost PRIVATE spine_hardening)
+        add_test(NAME get_namebyhost COMMAND test_get_namebyhost)
+    endif()
+
     # FD_CLOEXEC regression for long-lived descriptors (socket helper,
     # log file path). POSIX-only because Windows uses SOCKET handles.
     if(NOT WIN32)

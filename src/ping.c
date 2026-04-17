@@ -1659,7 +1659,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		if (tokens == 1) {
 			if (strlen(token) && token[0] == '[') {
 				SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
-				strncpy(name->hostname, hostname, sizeof(name->hostname));
+				/* strncopy guarantees NUL termination even on truncation;
+				 * the raw strncpy path used to leave an unterminated buffer
+				 * on hostnames >= sizeof(name->hostname). */
+				strncopy(name->hostname, hostname, sizeof(name->hostname));
 				break;
 			} else if (strlen(token) == 3) {
 				if (strncasecmp(token, "TCP", 3) == 0) {
@@ -1696,8 +1699,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 
 		if (tokens == 2) {
 			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting hostname: %s", hostname, token));
-			strncpy(name->hostname, token, sizeof(name->hostname));
-			name->hostname[strlen(token)] = '\0';
+			/* The previous strncpy + hostname[strlen(token)] = '\0' poke
+			 * wrote past the buffer on tokens >= sizeof(name->hostname).
+			 * strncopy truncates at the buffer bound and always NUL-terminates. */
+			strncopy(name->hostname, token, sizeof(name->hostname));
 		}
 
 		if (tokens == 3 && strlen(token)) {
