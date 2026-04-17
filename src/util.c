@@ -1258,8 +1258,16 @@ void die(const char *format, ...) {
 
 	if (set.log_perror) {
 		char perr[BUFSIZE];
+		size_t msg_len, perr_len, avail;
 		snprintf(perr, BUFSIZE, " [%d, %s]", old_errno, strerror(old_errno));
-		strncat(logmessage, perr, BUFSIZE - strlen(logmessage) - 1);
+		msg_len  = strlen(logmessage);
+		perr_len = strlen(perr);
+		avail    = (BUFSIZE - 1) - msg_len;
+		if (avail > 0) {
+			size_t copy_n = (perr_len < avail) ? perr_len : avail;
+			memcpy(logmessage + msg_len, perr, copy_n);
+			logmessage[msg_len + copy_n] = '\0';
+		}
 	}
 
 	if (set.logfile_processed) {
@@ -1431,8 +1439,9 @@ int spine_log(const char *format, ...) {
 		ulog_len = LOGSIZE - flog_len - prefix_len - 1;
 	}
 
-	strncat(flogmessage, logprefix,   prefix_len);
-	strncat(flogmessage, ulogmessage, ulog_len);
+	memcpy(flogmessage + flog_len,              logprefix,   prefix_len);
+	memcpy(flogmessage + flog_len + prefix_len, ulogmessage, ulog_len);
+	flogmessage[flog_len + prefix_len + ulog_len] = '\0';
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {
@@ -1786,7 +1795,7 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	copy_len = strnlen(src, obuf - 1);
 
 	if (copy_len) {
-		strncpy(dst, src, copy_len);
+		memcpy(dst, src, copy_len);
 	}
 
 	dst[copy_len] = '\0';
