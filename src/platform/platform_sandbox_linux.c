@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 
 #ifdef HAVE_LIBSECCOMP
 #include <seccomp.h>
@@ -400,6 +401,15 @@ static int apply_seccomp(void) {
 			 * whole filter. Keep loading the rest. */
 		}
 	}
+
+	/* Block ioctl(TIOCSTI) regardless of the generic ioctl allow above.
+	 * TIOCSTI lets a process inject keystrokes into its controlling tty,
+	 * a long-standing jailbreak vector if spine ever runs under a shared
+	 * terminal (systemd's TTYPath= or an operator running it under sudo).
+	 * libseccomp evaluates argument-scoped rules ahead of unqualified
+	 * ALLOW rules for the same syscall, so this stays additive. */
+	(void)seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(ioctl), 1,
+	                       SCMP_A1(SCMP_CMP_EQ, (scmp_datum_t)TIOCSTI));
 
 	int rc = seccomp_load(ctx);
 	seccomp_release(ctx);
