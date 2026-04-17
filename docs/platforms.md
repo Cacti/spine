@@ -76,6 +76,15 @@ cmake -G Ninja -B build -DSPINE_BUILD_MAIN=ON
 cmake --build build
 ```
 
+**FreeBSD Capsicum support is a stub.** Spine's fork+execve poll model is
+incompatible with Capsicum's capability mode (`cap_enter` makes `open()`
+illegal globally and every exec would need `fexecve()` with a pre-opened
+directory fd). The `platform_sandbox_freebsd.c` functions are no-ops and
+no confinement is applied on FreeBSD. Landing real Capsicum coverage
+needs per-thread `cap_rights_limit()` on the SNMP/PHP worker fds or a
+post-`fork()` / pre-`execve()` drop in the child-spawn path; both require
+touching `nft_popen.c` and the SNMP session code.
+
 ### macOS build
 
 ```sh
