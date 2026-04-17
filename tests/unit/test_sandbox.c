@@ -55,7 +55,12 @@ static void test_restrict_does_not_kill_process(void) {
 
 #if defined(__linux__)
 		int nnp = prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0);
-		_exit(nnp == 1 ? 0 : 2);
+		int dmp = prctl(PR_GET_DUMPABLE, 0, 0, 0, 0);
+		/* Both prctls are also applied unconditionally at the top of
+		 * main() before DB/SNMP init; restrict() must keep them sealed. */
+		if (nnp != 1) _exit(2);
+		if (dmp != 0) _exit(3);
+		_exit(0);
 #else
 		_exit(0);
 #endif
