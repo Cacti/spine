@@ -210,6 +210,8 @@ jobs:
           shell: sh
           run: |
             sudo pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+            # H1: spine.conf must be 0600; git checks out at 0644.
+            chmod 0600 tests/snmpv3/spine/spine.conf
             cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
             cmake --build build
             ctest --test-dir build --output-on-failure

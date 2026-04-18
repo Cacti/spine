@@ -39,8 +39,15 @@ services:
         condition: service_healthy
       snmpd:
         condition: service_healthy
+    # Run as root so the wrapper can install the conf at 0600 (H1 requires
+    # mode 0600 and owner == root or startup euid).  The wrapper execs spine
+    # after setting permissions; spine itself never needs a privileged uid.
+    user: "0:0"
     volumes:
-      - ./spine/spine.conf:/etc/spine/spine.conf:ro
-    entrypoint: ["/usr/local/bin/spine", "--conf=/etc/spine/spine.conf"]
+      # Mount the fixture conf to a staging path; the entrypoint wrapper copies
+      # it to /tmp/spine.conf with mode 0600 before exec-ing spine.
+      - ./spine/spine.conf:/etc/spine/spine.conf.src:ro
+      - ./scripts/spine-entrypoint.sh:/usr/local/bin/spine-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/spine-entrypoint.sh"]
     command: ["1", "1"]   # poll host_id 1
     # SPINE_LOG_LEVEL is not read by spine; verbosity is set via Log_Level in spine.conf

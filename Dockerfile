@@ -35,6 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /usr/local/bin/spine /usr/local/bin/spine
 COPY etc/spine.conf.dist /etc/spine/spine.conf
+# H1: spine.conf must be 0600; COPY defaults to 0644.  Owner is root here
+# (before USER spine) so root-ownership + 0600 satisfies both H1 checks.
+RUN chmod 0600 /etc/spine/spine.conf
 
 USER spine
 ENTRYPOINT ["/usr/local/bin/spine"]
