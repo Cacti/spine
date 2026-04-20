@@ -161,13 +161,16 @@ static void spine_uv_signal_handler(uv_signal_t *handle, int signo) {
 /* Count of handles force_close had to reap because the pipeline did
  * not close them during normal operation. A non-zero value at shutdown
  * is a resource-leak bug; surface it in the log so the next run's
- * operator files an issue. */
-static int g_spine_uv_leaked_handles = 0;
+ * operator files an issue. Declared atomic so a future refactor that
+ * walks the loop from a worker thread does not lose increments. */
+#include <stdatomic.h>
+static _Atomic int g_spine_uv_leaked_handles = 0;
 
 static void spine_uv_force_close(uv_handle_t *handle, void *arg) {
     (void)arg;
     if (handle != NULL && !uv_is_closing(handle)) {
-        g_spine_uv_leaked_handles++;
+        atomic_fetch_add_explicit(&g_spine_uv_leaked_handles, 1,
+                                  memory_order_relaxed);
         uv_close(handle, NULL);
     }
 }
@@ -1550,10 +1553,14 @@ int main(int argc, char *argv[]) {
 	uv_walk(loop, spine_uv_force_close, NULL);
 	uv_run(loop, UV_RUN_DEFAULT);
 
-	if (g_spine_uv_leaked_handles > 0) {
-		SPINE_LOG(("WARNING: libuv shutdown force-closed %d leaked handles; "
-		           "pipeline has a resource leak, please file a bug",
-		           g_spine_uv_leaked_handles));
+	{
+		int leaked = atomic_load_explicit(&g_spine_uv_leaked_handles,
+		                                  memory_order_relaxed);
+		if (leaked > 0) {
+			SPINE_LOG(("WARNING: libuv shutdown force-closed %d leaked handles; "
+			           "pipeline has a resource leak, please file a bug",
+			           leaked));
+		}
 	}
 
 	uv_loop_close(loop);

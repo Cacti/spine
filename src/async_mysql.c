@@ -24,11 +24,18 @@ static async_mysql_active_t *g_active_mysql = NULL;
 /* Shutdown fence. Once set, new async queries are refused so the MYSQL
  * handles can be safely torn down without a late callback dereferencing
  * freed state. In-flight queries continue through their existing
- * uv_poll callback chain; the uv_run drain flushes them. */
-static volatile int g_async_mysql_shutting_down = 0;
+ * uv_poll callback chain; the uv_run drain flushes them.
+ *
+ * Declared _Atomic with release/acquire ordering so worker threads on
+ * weakly-ordered architectures (ARM, POWER) see the flag promptly; a
+ * plain volatile int is not a sufficient memory barrier across thread
+ * boundaries. */
+#include <stdatomic.h>
+static atomic_int g_async_mysql_shutting_down = 0;
 
 void spine_async_mysql_shutdown_begin(void) {
-    g_async_mysql_shutting_down = 1;
+    atomic_store_explicit(&g_async_mysql_shutting_down, 1,
+                          memory_order_release);
 }
 
 static int async_mysql_mark_active(MYSQL *mysql) {
@@ -110,7 +117,8 @@ int spine_async_mysql_query(uv_loop_t *runtime_loop, MYSQL *mysql, const char *q
     if (!runtime_loop || !mysql || !query || !cb) {
         return -EINVAL;
     }
-    if (g_async_mysql_shutting_down) {
+    if (atomic_load_explicit(&g_async_mysql_shutting_down,
+                             memory_order_acquire)) {
         return -ESHUTDOWN;
     }
 
