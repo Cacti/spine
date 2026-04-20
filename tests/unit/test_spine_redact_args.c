@@ -57,12 +57,20 @@ static void test_snmpv3_auth_and_priv_passphrases(void) {
 	ASSERT_TRUE(contains(out, "oid"));
 }
 
-static void test_snmpv3_short_3p_3x(void) {
+static void test_snmpv3_master_keys(void) {
 	char out[512];
-	spine_redact_args("snmpwalk -3p AUTHPASS -3x PRIVPASS host oid",
+	spine_redact_args("snmpwalk -3m AUTHKEY -3M PRIVKEY host oid",
 	                  out, sizeof(out));
-	ASSERT_TRUE(!contains(out, "AUTHPASS"));
-	ASSERT_TRUE(!contains(out, "PRIVPASS"));
+	ASSERT_TRUE(!contains(out, "AUTHKEY"));
+	ASSERT_TRUE(!contains(out, "PRIVKEY"));
+}
+
+static void test_snmpv3_localized_keys(void) {
+	char out[512];
+	spine_redact_args("snmpwalk -3k LOCALAUTH -3K LOCALPRIV host oid",
+	                  out, sizeof(out));
+	ASSERT_TRUE(!contains(out, "LOCALAUTH"));
+	ASSERT_TRUE(!contains(out, "LOCALPRIV"));
 }
 
 static void test_long_flag_authkey_privkey(void) {
@@ -121,7 +129,8 @@ int main(void) {
 	test_snmpv1_community_space_form();
 	test_snmpv1_community_equals_form();
 	test_snmpv3_auth_and_priv_passphrases();
-	test_snmpv3_short_3p_3x();
+	test_snmpv3_master_keys();
+	test_snmpv3_localized_keys();
 	test_long_flag_authkey_privkey();
 	test_long_flag_community();
 	test_unrecognized_flag_passes_through();

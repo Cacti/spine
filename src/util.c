@@ -2715,21 +2715,24 @@ void spine_dump_config(void) {
  * failed command; both are included here. */
 /* Short flags carrying a credential VALUE in the next token (or in
  * =VAL form). -c is SNMPv1/v2c community. -u is v3 security name.
- * -a is v3 auth protocol (not a secret per se but tokens vary).
- * -x is v3 priv protocol. -p is some client-tool passwords. -A/-X are
- * the v3 auth/priv passphrases. -E/-Z are engine identifiers. -C is
- * net-snmp context file path (leaks path to key material). -3p/-3x
- * appear in older v3 short forms (same semantics as -A/-X). */
+ * -a is v3 auth protocol. -x is v3 priv protocol. -p is some
+ * client-tool passwords. -A/-X are the v3 auth/priv passphrases.
+ * -E/-Z are engine identifiers. -C is the net-snmp context file path
+ * (leaks path to key material). -3m/-3M are master auth/priv keys,
+ * -3k/-3K are localized auth/priv keys (net-snmp snmp.conf(5)).
+ *
+ * If upstream net-snmp adds further short flags that carry key or
+ * passphrase material, add them here; never guess. */
 static const char *const cred_short_flags[] = {
 	"c", "u", "a", "x", "p", "A", "X", "E", "Z", "C",
-	"3p", "3x", NULL
+	"3m", "3M", "3k", "3K",        /* v3 master / localized keys */
+	NULL
 };
 
 static const char *const cred_long_flags[] = {
 	"community", "password", "secret",
 	"authPassphrase", "privPassphrase",
 	"authKey", "privKey",          /* pre-computed v3 keys */
-	"3authPassphrase", "3privPassphrase",
 	NULL
 };
 
