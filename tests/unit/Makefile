@@ -1,62 +1,68 @@
-# Unit test Makefile for spine/tests/unit
-#
-# Compiles test_build_fixes.c as a fully self-contained binary.  No MySQL or
-# SNMP daemon required; the test file inlines the two functions under test to
-# avoid link dependencies on util.o.
+# Lightweight unit/platform smoke test Makefile.
 #
 # Usage:
-#   make          -- build and run
-#   make build    -- build only
-#   make clean    -- remove build artefacts
+#   make        - build and run the portable smoke test
+#   make compile - build only
+#   make clean  - remove build artefacts
 
-CC      := cc
-BINDIR  := build
-
-CMOCKA_INC := /opt/homebrew/Cellar/cmocka/2.0.2/include
-CMOCKA_LIB := /opt/homebrew/Cellar/cmocka/2.0.2/lib
+CC ?= cc
+CFLAGS ?= -O2 -Wall -Wextra
 
 SPINE_ROOT := ../..
+BINDIR := build
+PLATFORM_SOURCES := $(SPINE_ROOT)/src/platform/platform_common.c \
+	$(SPINE_ROOT)/src/platform/platform_posix.c \
+	$(SPINE_ROOT)/src/platform/platform_win.c \
+	$(SPINE_ROOT)/src/platform/platform_socket_posix.c \
+	$(SPINE_ROOT)/src/platform/platform_socket_win.c \
+	$(SPINE_ROOT)/src/platform/platform_error_posix.c \
+	$(SPINE_ROOT)/src/platform/platform_error_win.c \
+	$(SPINE_ROOT)/src/platform/platform_process_posix.c \
+	$(SPINE_ROOT)/src/platform/platform_process_win.c \
+	$(SPINE_ROOT)/src/platform/platform_fd_posix.c \
+	$(SPINE_ROOT)/src/platform/platform_fd_win.c \
+	$(SPINE_ROOT)/src/platform/platform_sandbox_posix.c \
+	$(SPINE_ROOT)/src/platform/platform_sandbox_linux.c \
+	$(SPINE_ROOT)/src/platform/platform_sandbox_openbsd.c \
+	$(SPINE_ROOT)/src/platform/platform_sandbox_freebsd.c \
+	$(SPINE_ROOT)/src/platform/platform_sandbox_win.c
+TEST_SOURCES := test_platform_env.c test_platform_time.c test_platform_process.c test_platform_socket.c test_platform_error.c test_platform_fd.c test_platform_dns.c
+TARGETS := $(patsubst %.c,$(BINDIR)/%,$(TEST_SOURCES))
 
-OPENSSL_INC  := /opt/homebrew/opt/openssl@3/include
-MYSQL_INC    := /opt/homebrew/opt/mysql-client/include/mysql
-NETSNMP_INC  := /opt/homebrew/opt/net-snmp/include/net-snmp
-NETSNMP_INC2 := /opt/homebrew/opt/net-snmp/include/net-snmp/..
-
-CFLAGS := \
-	-std=gnu23 \
-	-DHAVE_CONFIG_H \
-	-I$(CMOCKA_INC) \
-	-I$(SPINE_ROOT) \
-	-I$(SPINE_ROOT)/config \
-	-I$(OPENSSL_INC) \
-	-I$(MYSQL_INC) \
-	-I$(NETSNMP_INC) \
-	-I$(NETSNMP_INC2) \
-	-Wall \
-	-Wextra \
-	-Wno-unused-parameter
-
-LDFLAGS := \
-	-L$(CMOCKA_LIB) \
-	-lcmocka \
-	-Wl,-rpath,$(CMOCKA_LIB)
-
-TARGET := $(BINDIR)/test_build_fixes
-
-.PHONY: all build run clean
+.PHONY: all compile run clean
 
 all: run
 
-build: $(TARGET)
+compile: $(TARGETS)
 
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-$(TARGET): test_build_fixes.c | $(BINDIR)
-	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+$(BINDIR)/test_platform_env: test_platform_env.c $(SPINE_ROOT)/src/platform/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_env.c $(PLATFORM_SOURCES) -o $@
 
-run: $(TARGET)
-	$(TARGET)
+$(BINDIR)/test_platform_time: test_platform_time.c $(SPINE_ROOT)/src/platform/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_time.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_process: test_platform_process.c $(SPINE_ROOT)/src/platform/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_process.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_socket: test_platform_socket.c $(SPINE_ROOT)/src/platform/platform.h $(SPINE_ROOT)/src/platform/platform_socket.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_socket.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_error: test_platform_error.c $(SPINE_ROOT)/src/platform/platform_error.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_error.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_fd: test_platform_fd.c $(SPINE_ROOT)/src/platform/platform_fd.h $(SPINE_ROOT)/src/platform/platform_process.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_fd.c $(PLATFORM_SOURCES) -o $@
+
+$(BINDIR)/test_platform_dns: test_platform_dns.c $(SPINE_ROOT)/src/platform/platform.h $(PLATFORM_SOURCES) | $(BINDIR)
+	$(CC) $(CFLAGS) -I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/src/platform -I$(SPINE_ROOT)/third_party test_platform_dns.c $(PLATFORM_SOURCES) -o $@
+
+run: $(TARGETS)
+	@for test_binary in $(TARGETS); do \
+		$$test_binary; \
+	done
 
 clean:
 	rm -rf $(BINDIR)

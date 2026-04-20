@@ -1,23 +1,22 @@
 # GitHub Copilot Instructions for spine
 
 spine is the high-performance C poller for Cacti. It is a multi-threaded
-POSIX C99 program using pthreads, net-snmp, and libmariadb, built with
-GNU autotools.
+POSIX program using pthreads, net-snmp, libmariadb, and libuv, built with
+CMake.
 
 ## Language and standard
 
-- C99. Mixed declarations and statements are allowed. No VLAs.
+- C17. Mixed declarations and statements are allowed. No VLAs.
 - POSIX.1-2008 is the baseline. Do not use glibc extensions unless they
   already appear in the codebase.
 - All new files must include the LGPL-2.1 header block found in `spine.c`.
 
 ## Build system
 
-- `configure.ac` + `Makefile.am`. Run `./bootstrap` to regenerate.
-- AC_PREREQ is 2.69. Do not add macros deprecated before autoconf 2.69
-  (AC_C_CONST, AC_STRUCT_TM, RETSIGTYPE, etc.). AC_HEADER_TIME is used
-  and must be kept because common.h guards with TIME_WITH_SYS_TIME.
-- `make -j$(nproc) CFLAGS="-Wall -Wextra"` must produce zero warnings.
+- CMake >= 3.15, driven from `CMakeLists.txt` with helpers under `cmake/`.
+- `cmake -S . -B build -G Ninja && cmake --build build` is the canonical
+  build. CMakePresets.json exposes `ci-smoke` and `ci-main`.
+- `cmake --build build` with `-Wall -Wextra` must produce zero warnings.
 
 ## Code conventions
 
@@ -32,6 +31,9 @@ GNU autotools.
   bounds.
 - String buffers: declare length constants; do not use magic numbers for
   buffer sizes.
+- Public APIs: prefer `const char *` for input-only string parameters.
+  Document ownership expectations in function comments when transfer is not
+  obvious.
 
 ## SNMP
 
@@ -62,6 +64,8 @@ GNU autotools.
 - Before opening a PR, run `cppcheck --enable=all --std=c11 *.c *.h`
   locally and fix all errors (warnings are informational).
 - flawfinder level-5 hits fail CI; lower levels are informational.
+- CI has a guardrail for newly introduced unsafe C APIs (`sprintf`, `strcpy`,
+  `strcat`, `gets`, `vsprintf`) and fails closed on additions.
 
 ## Commits and PRs
 

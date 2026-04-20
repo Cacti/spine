@@ -3,14 +3,16 @@
 export DH_VERBOSE = 1
 
 %:
-	dh $@
+	dh $@ --buildsystem=cmake+ninja
 
 override_dh_auto_configure:
-	./bootstrap
 	dh_auto_configure -- \
-		--enable-lcap \
-		--with-results-buffer=2048 \
-		--with-max-scripts=20
+		-DSPINE_BUILD_MAIN=ON \
+		-DENABLE_LCAP=ON \
+		-DRESULTS_BUFFER=2048 \
+		-DMAX_SIMULTANEOUS_SCRIPTS=20 \
+		-DCMAKE_INSTALL_BINDIR=sbin \
+		-DCMAKE_INSTALL_SYSCONFDIR=/etc
 
 override_dh_auto_install:
 	dh_auto_install

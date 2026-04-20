@@ -14,30 +14,36 @@ COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")
 PASS=0
 FAIL=0
 
-pass() { echo "  PASS: $*"; PASS=$((PASS+1)); }
-fail() { echo "  FAIL: $*"; FAIL=$((FAIL+1)); }
+pass() {
+  echo "  PASS: $*"
+  PASS=$((PASS + 1))
+}
+fail() {
+  echo "  FAIL: $*"
+  FAIL=$((FAIL + 1))
+}
 
 cleanup() {
-	echo ""
-	echo "=== Cleanup ==="
-	"${COMPOSE[@]}" down -v --remove-orphans 2>/dev/null || true
+  echo ""
+  echo "=== Cleanup ==="
+  "${COMPOSE[@]}" down -v --remove-orphans 2>/dev/null || true
 }
 trap cleanup EXIT
 
 wait_for_db() {
-	local max_wait=120
-	local elapsed=0
-	while [[ $elapsed -lt $max_wait ]]; do
-		local count
-		count=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-			-N -e "SELECT COUNT(*) FROM host;" 2>/dev/null || echo "0")
-		if [[ "$count" -gt 0 ]]; then
-			return 0
-		fi
-		sleep 3
-		elapsed=$((elapsed + 3))
-	done
-	return 1
+  local max_wait=120
+  local elapsed=0
+  while [[ $elapsed -lt $max_wait ]]; do
+    local count
+    count=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+      -N -e "SELECT COUNT(*) FROM host;" 2>/dev/null || echo "0")
+    if [[ "$count" -gt 0 ]]; then
+      return 0
+    fi
+    sleep 3
+    elapsed=$((elapsed + 3))
+  done
+  return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -48,7 +54,10 @@ echo "=== Setup: build and start infrastructure ==="
 "${COMPOSE[@]}" build spine 2>&1 | tail -1
 "${COMPOSE[@]}" up -d db snmpd 2>&1
 echo "  Waiting for database..."
-wait_for_db || { fail "database did not start"; exit 1; }
+wait_for_db || {
+  fail "database did not start"
+  exit 1
+}
 pass "infrastructure ready"
 
 # ---------------------------------------------------------------------------
@@ -58,35 +67,35 @@ echo ""
 echo "=== Test 1: poll WITHOUT output_regex column ==="
 
 has_col=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-	-N -e "SHOW COLUMNS FROM poller_item LIKE 'output_regex';" 2>/dev/null || echo "")
+  -N -e "SHOW COLUMNS FROM poller_item LIKE 'output_regex';" 2>/dev/null || echo "")
 
 if [[ -z "$has_col" ]]; then
-	pass "output_regex column absent (baseline schema)"
+  pass "output_regex column absent (baseline schema)"
 else
-	fail "output_regex column unexpectedly present"
+  fail "output_regex column unexpectedly present"
 fi
 
-output1=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
-	--conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
+output1=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
+  --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output1" | grep -qi "segfault\|SIGSEGV\|Aborted\|Unknown column"; then
-	fail "spine crashed or SQL error without output_regex column"
+  fail "spine crashed or SQL error without output_regex column"
 else
-	pass "spine ran without output_regex column"
+  pass "spine ran without output_regex column"
 fi
 
 if echo "$output1" | grep -q "Devices: 1"; then
-	pass "device polled without output_regex"
+  pass "device polled without output_regex"
 else
-	fail "device not polled without output_regex"
+  fail "device not polled without output_regex"
 fi
 
 v1_output=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-	-N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
+  -N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
 if [[ -n "$v1_output" ]]; then
-	pass "poller_output written without output_regex (value=$v1_output)"
+  pass "poller_output written without output_regex (value=$v1_output)"
 else
-	fail "poller_output empty without output_regex"
+  fail "poller_output empty without output_regex"
 fi
 
 # ---------------------------------------------------------------------------
@@ -100,12 +109,12 @@ ALTER TABLE poller_item ADD COLUMN output_regex varchar(255) NOT NULL DEFAULT ''
 " 2>/dev/null
 
 has_col=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-	-N -e "SHOW COLUMNS FROM poller_item LIKE 'output_regex';" 2>/dev/null || echo "")
+  -N -e "SHOW COLUMNS FROM poller_item LIKE 'output_regex';" 2>/dev/null || echo "")
 
 if [[ -n "$has_col" ]]; then
-	pass "output_regex column added"
+  pass "output_regex column added"
 else
-	fail "output_regex column not found after ALTER TABLE"
+  fail "output_regex column not found after ALTER TABLE"
 fi
 
 # Clear previous output
@@ -113,33 +122,33 @@ fi
 TRUNCATE poller_output;
 " 2>/dev/null
 
-output2=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
-	--conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
+output2=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
+  --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output2" | grep -q "poller_item.output_regex column detected"; then
-	pass "spine detected output_regex column"
+  pass "spine detected output_regex column"
 else
-	fail "spine did not log output_regex detection"
+  fail "spine did not log output_regex detection"
 fi
 
 if echo "$output2" | grep -qi "segfault\|SIGSEGV\|Aborted\|Unknown column"; then
-	fail "spine crashed or SQL error with output_regex column"
+  fail "spine crashed or SQL error with output_regex column"
 else
-	pass "spine ran with output_regex column"
+  pass "spine ran with output_regex column"
 fi
 
 if echo "$output2" | grep -q "Devices: 1"; then
-	pass "device polled with output_regex"
+  pass "device polled with output_regex"
 else
-	fail "device not polled with output_regex"
+  fail "device not polled with output_regex"
 fi
 
 v2_output=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-	-N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
+  -N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
 if [[ -n "$v2_output" ]]; then
-	pass "poller_output written with output_regex (value=$v2_output)"
+  pass "poller_output written with output_regex (value=$v2_output)"
 else
-	fail "poller_output empty with output_regex"
+  fail "poller_output empty with output_regex"
 fi
 
 # ---------------------------------------------------------------------------
@@ -154,21 +163,21 @@ UPDATE poller_item SET output_regex = '([0-9]+)' WHERE local_data_id = 1;
 TRUNCATE poller_output;
 " 2>/dev/null
 
-output3=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
-	--conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
+output3=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
+  --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output3" | grep -qi "segfault\|SIGSEGV\|Aborted"; then
-	fail "spine crashed with output_regex pattern set"
+  fail "spine crashed with output_regex pattern set"
 else
-	pass "spine ran with output_regex pattern"
+  pass "spine ran with output_regex pattern"
 fi
 
 v3_output=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-	-N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
+  -N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
 if [[ -n "$v3_output" ]]; then
-	pass "poller_output written with regex filtering (value=$v3_output)"
+  pass "poller_output written with regex filtering (value=$v3_output)"
 else
-	fail "poller_output empty with regex filtering"
+  fail "poller_output empty with regex filtering"
 fi
 
 # ---------------------------------------------------------------------------
@@ -182,27 +191,27 @@ ALTER TABLE poller_item DROP COLUMN output_regex;
 TRUNCATE poller_output;
 " 2>/dev/null
 
-output4=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
-	--conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
+output4=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
+  --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 || true)
 
 if echo "$output4" | grep -qi "segfault\|SIGSEGV\|Aborted\|Unknown column"; then
-	fail "spine crashed after output_regex column removed"
+  fail "spine crashed after output_regex column removed"
 else
-	pass "spine gracefully handled column removal"
+  pass "spine gracefully handled column removal"
 fi
 
 if echo "$output4" | grep -q "Devices: 1"; then
-	pass "device polled after column removal"
+  pass "device polled after column removal"
 else
-	fail "device not polled after column removal"
+  fail "device not polled after column removal"
 fi
 
 v4_output=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
-	-N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
+  -N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
 if [[ -n "$v4_output" ]]; then
-	pass "poller_output written after column removal (value=$v4_output)"
+  pass "poller_output written after column removal (value=$v4_output)"
 else
-	fail "poller_output empty after column removal"
+  fail "poller_output empty after column removal"
 fi
 
 # ---------------------------------------------------------------------------

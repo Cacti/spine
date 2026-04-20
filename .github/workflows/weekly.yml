@@ -1,0 +1,144 @@
+name: Weekly Deep Checks
+
+on:
+  schedule:
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  reproducible-build:
+    name: Reproducible Build Check
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make cmake pkg-config \
+            libmariadb-dev libsnmp-dev libssl-dev
+
+      - name: Build twice and compare
+        run: |
+          set -euo pipefail
+          cmake -B build1 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build1 -j"$(nproc)"
+          cp build1/spine spine-build1
+          cmake -B build2 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build2 -j"$(nproc)"
+          cp build2/spine spine-build2
+          if diff spine-build1 spine-build2; then
+            echo "PASS: Reproducible build"
+          else
+            echo "WARN: Non-reproducible build detected"
+            ls -la spine-build1 spine-build2
+          fi
+
+  include-graph:
+    name: Include Graph Analysis
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make cmake pkg-config \
+            libmariadb-dev libsnmp-dev libssl-dev graphviz
+
+      - name: Generate include graph
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          for f in src/*.c; do
+            gcc -MM -I. -Isrc -Isrc/platform -Ithird_party \
+              -I/usr/include/net-snmp -I/usr/include/mariadb \
+              "$f" 2>/dev/null
+          done > include-deps.txt
+          echo "=== Include dependencies ==="
+          cat include-deps.txt
+
+      - name: Upload include graph
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: include-graph
+          path: include-deps.txt
+
+  license-check:
+    name: License Header Check
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check license headers
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r f; do
+            if ! head -5 "$f" | grep -q "Copyright"; then
+              echo "MISSING: $f"
+              missing=$((missing + 1))
+            fi
+          done < <(git ls-files 'src/*.c' 'src/*.h' 'src/**/*.c' 'src/**/*.h')
+          if [ "$missing" -gt 0 ]; then
+            echo "::warning::$missing file(s) missing license header"
+          else
+            echo "All source files have license headers"
+          fi
+
+  spell-check:
+    name: Spell Check
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install codespell
+        run: pip install codespell
+
+      - name: Run codespell
+        run: |
+          set -euo pipefail
+          bash scripts/lint-codespell.sh || true
+
+  # changelog-check: disabled pending CHANGELOG format standardization
+  # changelog-check:
+  #   name: Changelog Enforcement
+  #   runs-on: ubuntu-24.04
+  #   if: github.event_name == 'pull_request'
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  #       with:
+  #         fetch-depth: 0
+  #     - name: Check CHANGELOG updated
+  #       run: |
+  #         if git diff origin/${{ github.base_ref }}...HEAD --name-only | grep -q "CHANGELOG"; then
+  #           echo "CHANGELOG updated"
+  #         else
+  #           echo "::warning::CHANGELOG not updated in this PR"
+  #         fi

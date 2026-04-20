@@ -3,13 +3,67 @@ compatible with the legacy cmd.php processor and provides much more
 flexibility, speed and concurrency than cmd.php.
 
 Make sure that you have the proper development environment to compile Spine.
-This includes compilers, header files and things such as libtool. If you
-have questions please consult the forums and/or online documentation.
+This includes a C compiler, CMake, Ninja, and the required dependency headers.
+If you have questions please consult the forums and/or online documentation.
 
 Development
 ===========
 
 DEVELOP branch should generally be considered UNSTABLE, use with caution!
+
+-----------------------------------------------------------------------------
+
+Platform Support
+================
+
+Spine is tested across Linux, macOS, and Windows, but the support level is not
+the same on every platform:
+
+* Linux: full build and runtime support. This is the primary production target.
+* macOS: full build support and CI-backed CMake validation. Linux still has the
+  broadest runtime and integration coverage.
+* FreeBSD: full build support with CI-backed VM build and CTest smoke coverage.
+* Windows: MSYS2/MinGW-native platform smoke coverage exists, but full runtime
+  support still depends on a complete Windows Net-SNMP toolchain path.
+* Solaris: best-effort CMake portability profile is maintained, but no hosted
+  CI lane currently exists.
+* AIX: best-effort CMake portability profile is maintained, but no hosted CI
+  lane currently exists.
+
+Support Tiers
+-------------
+
+The support policy uses three tiers:
+
+1. Guaranteed: regularly validated in CI and intended for production operation.
+2. Best Effort: CI coverage exists, but ecosystem/runtime variability may require local adaptation.
+3. Unsupported: not part of active validation, no compatibility commitment.
+
+Current mapping:
+
+* Guaranteed: Linux
+* Best Effort: macOS, FreeBSD, Windows (MSYS2/MinGW), Solaris, AIX
+* Unsupported: Cygwin build/runtime path
+
+Platform implementation rules are centralized in
+`docs/platform-idioms.md`.
+
+Security Behavior Change
+------------------------
+
+Script poll commands can now apply a strict shell-metacharacter guard before
+execution. This is disabled by default for backward compatibility. When
+enabled via \`Script_Policy 1\` in \`spine.conf\`, commands containing \`;\`,
+\`|\`, \`&\`, \` \` \`, \`$\`, \`>\`, \`<\`, backslash, single quote, or double
+quote are rejected and logged as unsafe.
+
+Spine also now strictly rejects embedded newlines or carriage returns in
+commands sent to the PHP script server to prevent protocol subversion.
+
+Build System
+------------
+
+CMake is the build system for this repository.
 
 -----------------------------------------------------------------------------
 
@@ -20,109 +74,125 @@ These instructions assume the default install location for spine
 of /usr/local/spine. If you choose to use another prefix, make
 sure you update the commands as required for that new path.
 
-To compile and install Spine using MySQL versions 5.5 or higher
-please do the following:
+To compile and install Spine with the default options:
 
-1. Run the bootstrap process to automatically create the configure script
+1. Configure the build tree
 
-   ./bootstrap
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
 
-2. Run the configure process to detect what is available on the system
+2. Build Spine
 
-   ./configure
+   cmake --build build
 
-3. Build spine
+3. Run the test suite
 
-   make
+   ctest --test-dir build --output-on-failure
 
 4. Optionally, install spine to the default location (/usr/local/spine/bin/)
    but do note that if you manually copy to another folder, change the paths
    below to reflect the correct folder you want spine to run from:
 
-   make install
+   cmake --install build
    chown root:root /usr/local/spine/bin/spine
    chmod u+s /usr/local/spine/bin/spine
 
-To compile and install Spine using MySQL versions previous to 5.5 please add
-the additional --with-reentrant option to the ./configure command above but
-please be aware that Cacti no longer officially supports MySQL prior to 5.5.
+To install under a non-default prefix, pass
+`-DCMAKE_INSTALL_PREFIX=/your/prefix` to the configure step above.
 
-Windows Installation
-====================
+FreeBSD Development
+===================
 
-CYGWIN Prerequisite
--------------------
+1. Install dependencies:
 
-1. Download Cygwin for Window from https://www.cygwin.com/
+   pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
 
-2. Install Cygwin by executing the downloaded setup program
+2. Configure, build, and test:
 
-3. Select _Install from Internet_
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-4. Select Root Directory:  _C:\cygwin_
+macOS Development
+=================
 
-5. Select a mirror which is close to your location
+Homebrew (recommended):
 
-6. Once on the package selection section make sure to select the following (TIP: use the search!):
+   brew install cmake ninja pkg-config mysql-client net-snmp openssl@3
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON \
+      -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-      * autoconf
-      * automake
-      * dos2unix
-      * gcc-core
-      * gcc-debuginfo
-      * gzip
-      * help2man
-      * libmysqlclient
-      * libmariadb-devel
-      * libtool
-      * m4
-      * make
-      * net-snmp-devel
-      * libssl-devel
-      * wget
+MacPorts (best effort):
 
-7. Wait for installation to complete, coffee time!
+   sudo port install cmake ninja pkgconfig mysql8 net-snmp openssl
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/local"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-8. Move the cygwin setup to the C:\cygwin\ folder for future usage.
+Solaris and AIX Development (Best Effort)
+=========================================
 
-Compile Spine
--------------
+These platforms currently do not have hosted CI lanes, but CMake portability
+profiles are maintained.
 
-1. Open Cygwin shell prompt (C:\Cygwin\cygwin.bat) and brace yourself to use unix commands on Windows.
+Solaris (example with OpenCSW-style prefix):
 
-2. Download the Spine source to the current directory:
-	http://www.cacti.net/spine_download.php
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/csw;/usr"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-3. Extract Spine into C:\Cygwin\usr\src\<spineversion>:
-	tar xzvf cacti-spine-*.tar.gz
+AIX (example with /opt/freeware prefix):
 
-4. Change into the Spine directory:
-	cd /usr/src/cacti-spine-*
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON -DCMAKE_PREFIX_PATH="/opt/freeware;/usr"
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
-5. Run bootstrap to prepare Spine for compilation:
-	./bootstrap
+Windows Development
+===================
 
-6. Follow the instruction which bootstrap outputs.
+Windows development targets an MSYS2/MinGW-native toolchain. Cygwin is no
+longer part of the supported build story for this repository.
 
-7. Update the spine.conf file for your installation of Cacti. You can optionally
-   move it to a better location if you choose to do so, make sure to copy the
-   spine.conf as well.
+Preferred Toolchain: MSYS2/MinGW
+--------------------------------
 
-8. Ensure that Spine runs well by running with:
-	/usr/local/spine/spine -R -S -V 3
+1. Install MSYS2 from https://www.msys2.org/
 
-9. Update Cacti 'Paths' Setting to point to the Spine binary and update the
-   'Poller Type' to Spine. For the spine binary on Windows x64, and using default
-   locations, that would be:
-	C:\cygwin64\usr\local\spine\bin\spine.exe
+2. Open the `MSYS2 MinGW 64-bit` shell.
 
-10. If all is good Spine will be run from the poller in place of cmd.php.
+3. Install the native build dependencies:
+
+   pacman -S --needed \
+      mingw-w64-x86_64-gcc \
+      mingw-w64-x86_64-cmake \
+      mingw-w64-x86_64-ninja \
+      mingw-w64-x86_64-libmariadbclient \
+      mingw-w64-x86_64-openssl \
+      pkgconf
+
+4. If your MSYS2 mirror publishes Net-SNMP for MinGW, install it as well:
+
+   pacman -S --needed mingw-w64-x86_64-net-snmp
+
+5. Configure and build the native Windows binary:
+
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+   cmake --build build
+   ctest --test-dir build --output-on-failure
+
+6. If Net-SNMP is not currently available in your Windows package source, you
+   can still validate the native platform layer and focused test coverage with:
+
+   cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=OFF
+   cmake --build build
+   ctest --test-dir build --output-on-failure
 
 --------------------------------------------------------------------------------------
 
 Known Issues
 ============
-1. On Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
+1. On native Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
    if you are using TCP ping on Windows, spine will not perform a second or subsequent
    retries to connect and the host will be assumed down on the first failure.
 
@@ -141,10 +211,10 @@ Known Issues
 
    total connections = 4 * ( 1 + 10 + 5 ) = 64
 
-3. On older MySQL versions, different libraries had to be used to make MySQL thread
-   safe. MySQL versions 5.0 and 5.1 require this flag. If you are using these version
-   of MySQL, you must use the --with-reentrant configure flag.
+3. ICMP privilege model differs by platform:
 
+   * Linux/FreeBSD/macOS commonly need raw-socket privilege (setuid/capabilities).
+   * Windows uses native ICMP APIs and does not use the raw-socket privilege path.
 
 -----------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.

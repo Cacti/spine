@@ -1,0 +1,63 @@
+[Unit]
+Description=Cacti Spine Poller (DynamicUser Profile)
+Documentation=https://www.cacti.net/spine.php
+Documentation=https://github.com/Cacti/spine
+After=network-online.target mariadb.service mysql.service
+Wants=network-online.target
+Requires=network-online.target
+ConditionPathExists=@SPINE_CONF_PATH@
+
+[Service]
+Type=notify
+NotifyAccess=main
+SyslogIdentifier=spine
+ExecStartPre=@SPINE_BIN_PATH@ --check
+ExecStart=@SPINE_BIN_PATH@
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+WatchdogSec=120
+
+DynamicUser=yes
+SupplementaryGroups=spine
+
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+UMask=0027
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+RuntimeDirectory=spine
+StateDirectory=spine
+LogsDirectory=cacti
+
+LimitCORE=0
+LimitNOFILE=65536
+LimitNPROC=4096
+LimitMEMLOCK=infinity
+LimitAS=4G
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

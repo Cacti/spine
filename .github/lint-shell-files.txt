@@ -1,0 +1,10 @@
+debug
+package
+scripts/copyright_year.sh
+scripts/lint-codespell.sh
+scripts/lint-shell.sh
+scripts/preflight.sh
+scripts/test-distros.sh
+scripts/test-vagrant.sh
+scripts/test-workflows.sh
+scripts/verify.sh

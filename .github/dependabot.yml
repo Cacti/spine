@@ -1,0 +1,29 @@
+# +-------------------------------------------------------------------------+
+# | Dependabot: auto-update pinned versions for supply-chain hygiene.       |
+# |                                                                         |
+# | Docker base images are pinned by tag in the Dockerfiles; Dependabot's   |
+# | 'docker' ecosystem rewrites the @sha256 digest when upstream updates,   |
+# | so a new PR lands whenever debian:bookworm-slim or alpine:3.19 change. |
+# |                                                                         |
+# | github-actions coverage matches the repo's pinned-SHA convention; each  |
+# | 'uses:' line in .github/workflows/*.yml gets refreshed automatically.  |
+# +-------------------------------------------------------------------------+
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - docker
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - ci
+      - dependencies

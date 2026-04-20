@@ -9,33 +9,42 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    autoconf \
-    automake \
-    libtool \
-    dos2unix \
-    help2man \
+    cmake \
+    ninja-build \
+    pkg-config \
     libmariadb-dev \
     libsnmp-dev \
     libssl-dev \
     zlib1g-dev \
+    libseccomp-dev \
+    libuv1-dev \
+    libc-ares-dev \
     cppcheck \
     clang-tools \
     valgrind \
     gdb \
+    git \
   && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy only what's needed for the build to avoid polluting with local build dirs
+COPY CMakeLists.txt CMakePresets.json VERSION LICENSE README.md .
+COPY cmake/ ./cmake/
+COPY config/ ./config/
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY third_party/ ./third_party/
+
+# ASan build: catches heap/stack overflows and use-after-free at runtime.
+RUN CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
+    cmake -G Ninja -S . -B /build \
+      -DSPINE_BUILD_MAIN=ON \
+      -DBUILD_TESTING=ON \
+      -DENABLE_WARNINGS=ON \
+      -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
+  && cmake --build /build
 
 WORKDIR /build
 
-COPY . .
-
-# ASan build: catches heap/stack overflows and use-after-free at runtime.
-# -fno-omit-frame-pointer gives usable stack traces under valgrind/gdb.
-RUN ./bootstrap \
-  && CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
-     ./configure --enable-warnings \
-  && make -j"$(nproc)"
-
-COPY scripts/verify.sh /usr/local/bin/verify.sh
-RUN chmod +x /usr/local/bin/verify.sh
-
-CMD ["/usr/local/bin/verify.sh"]
+CMD ["ctest", "--output-on-failure"]

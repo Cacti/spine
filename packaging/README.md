@@ -4,10 +4,12 @@ This directory contains the files and instructions necessary to build native pac
 
 ## Supported Platforms
 
-- **Debian/Ubuntu**: See [debian/README](debian/README) for build instructions using `dpkg-buildpackage`.
-- **RHEL/CentOS/Rocky Linux**: See [rpm/README](rpm/README) for build instructions using `rpmbuild`.
+- **Debian/Ubuntu**: See [debian/README](debian/README) for CMake-based build instructions using `dpkg-buildpackage`.
+- **RHEL/CentOS/Rocky Linux**: See [rpm/README](rpm/README) for CMake-based build instructions using `rpmbuild`.
 - **FreeBSD**: Contains a standard FreeBSD port `Makefile`.
 
 ## Alternative: Docker
 
-For containerized environments or consistent builds regardless of the host OS, refer to the `Dockerfile` and `Dockerfile.dev` in the project root.
+For containerized environments or consistent builds regardless of the host OS,
+refer to the `Dockerfile` and `Dockerfile.dev` in the project root. Both use
+the native CMake build path.

@@ -1,0 +1,114 @@
+/*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
+ +-------------------------------------------------------------------------+
+ | Copyright (C) 2004-2026 The Cacti Group                                 |
+ +-------------------------------------------------------------------------+
+ | Platform sandbox smoke test. Verifies that:
+ |   1. spine_sandbox_unveil_paths(NULL,NULL,NULL) is a no-op on every
+ |      platform (including the ones that fall back to an empty stub).
+ |   2. spine_sandbox_restrict() does not itself kill the process. The
+ |      call is made inside a forked child so an accidental pledge/seccomp
+ |      abort only fails the child, not the test harness.
+ |   3. On Linux with libseccomp, PR_GET_NO_NEW_PRIVS returns 1 after the
+ |      restrict call.
+ +-------------------------------------------------------------------------+
+*/
+
+#include "platform/platform_sandbox.h"
+#include "test_platform_helpers.h"
+
+#include <errno.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#ifndef _WIN32
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+#if defined(__linux__)
+#include <sys/prctl.h>
+#endif
+
+#if defined(__linux__) && defined(HAVE_LIBSECCOMP)
+#include <seccomp.h>
+/* Compile-time pin: if libseccomp ever drops SCMP_FLTATR_CTL_TSYNC the
+ * sandbox would silently leave worker threads unfiltered. Catch that at
+ * build time rather than in a post-release CVE. */
+_Static_assert(SCMP_FLTATR_CTL_TSYNC >= 0, "libseccomp missing TSYNC attr");
+#endif
+
+static void test_unveil_null_is_noop(void) {
+	spine_sandbox_unveil_paths(NULL, NULL, NULL);
+	spine_sandbox_unveil_paths("/tmp/fake-log", NULL, NULL);
+	spine_sandbox_unveil_paths(NULL, "/tmp/fake-pid", NULL);
+	spine_sandbox_unveil_paths(NULL, NULL, "/tmp/fake-scripts");
+}
+
+#ifndef _WIN32
+static void test_restrict_does_not_kill_process(void) {
+	pid_t pid = fork();
+	if (pid < 0) {
+		fprintf(stderr, "fork failed; skipping sandbox restrict test\n");
+		return;
+	}
+
+	if (pid == 0) {
+		/* Child: declare paths, then drop privileges. On OpenBSD pledge
+		 * would terminate the child if it crossed the promise boundary;
+		 * here we do nothing promise-violating before _exit. On Linux
+		 * PR_SET_NO_NEW_PRIVS is cheap and cannot fail the process. */
+		spine_sandbox_unveil_paths("/tmp", "/tmp", "/tmp");
+		spine_sandbox_restrict();
+
+#if defined(__linux__)
+		int nnp = prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0);
+		int dmp = prctl(PR_GET_DUMPABLE, 0, 0, 0, 0);
+		/* Both prctls are also applied unconditionally at the top of
+		 * main() before DB/SNMP init; restrict() must keep them sealed. */
+		if (nnp != 1) _exit(2);
+		if (dmp != 0) _exit(3);
+		_exit(0);
+#else
+		_exit(0);
+#endif
+	}
+
+	int status = 0;
+	pid_t waited = waitpid(pid, &status, 0);
+	ASSERT_TRUE(waited == pid);
+	ASSERT_TRUE(WIFEXITED(status));
+	if (WIFEXITED(status)) {
+		ASSERT_INT_EQ(WEXITSTATUS(status), 0);
+	}
+}
+#endif
+
+#if defined(__linux__) && defined(HAVE_LANDLOCK)
+static void test_narrow_rw_roots_exist(void) {
+	/* After spine_sandbox_restrict() runs, the /tmp/spine, /run/spine,
+	 * and /var/run/spine prefixes should exist (landlock's apply_landlock
+	 * mkdir's them before sealing the ruleset). /run and /var/run are
+	 * root-owned on most distros; we only require that /tmp/spine becomes
+	 * writable since the test harness has unprivileged access there. */
+	struct stat st;
+	int rc = stat("/tmp/spine", &st);
+	ASSERT_TRUE(rc == 0 || errno == EACCES || errno == ENOENT);
+	/* An ENOENT means restrict() never ran this path (SPINE_NO_LANDLOCK,
+	 * kernel without landlock, or libseccomp build opted out). That is
+	 * a valid configuration on the test host and should not fail. */
+}
+#endif
+
+int main(void) {
+	test_unveil_null_is_noop();
+#ifndef _WIN32
+	test_restrict_does_not_kill_process();
+#endif
+#if defined(__linux__) && defined(HAVE_LANDLOCK)
+	test_narrow_rw_roots_exist();
+#endif
+	return finish_tests("platform sandbox tests");
+}

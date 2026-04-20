@@ -75,12 +75,16 @@ static void test_uthash_add_find(void **state) {
 	int key = 1;
 	HASH_FIND_INT(table, &key, found);
 	assert_non_null(found);
-	assert_int_equal(found->id, 1);
+	if (found != NULL) {
+		assert_int_equal(found->id, 1);
+	}
 
 	key = 2;
 	HASH_FIND_INT(table, &key, found);
 	assert_non_null(found);
-	assert_int_equal(found->id, 2);
+	if (found != NULL) {
+		assert_int_equal(found->id, 2);
+	}
 
 	/* Clean up. */
 	HASH_DEL(table, a); free(a);
@@ -160,7 +164,6 @@ typedef struct {
 	int logfile_processed;
 	int boost_enabled;
 	int boost_redirect;
-	int cygwinshloc;
 	int snmponly;
 	int SQL_readonly;
 	int start_host_id;

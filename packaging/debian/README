@@ -4,4 +4,4 @@ source root before running dpkg-buildpackage:
     ln -s packaging/debian debian
     dpkg-buildpackage -us -uc -b
 
-Or use the provided Docker image (see feat/docker-build PR).
+The Debian packaging rules use the native CMake + Ninja build path.

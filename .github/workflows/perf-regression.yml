@@ -1,0 +1,293 @@
+name: Performance Regression
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    cmake make pkg-config
+    gcc libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+    hyperfine time snmp snmpd
+    libseccomp-dev libuv1-dev
+
+jobs:
+  cli-benchmark:
+    name: CLI CPU/RSS benchmark
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install benchmark dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-std=c11 -O2 -g'
+          cmake --build build -j"$(nproc)" --verbose
+          # Keep the legacy "./spine" key stable with the perf baseline JSON.
+          ln -sf build/spine ./spine
+
+      - name: Run hyperfine CLI benchmarks
+        run: |
+          set -euo pipefail
+          samples="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          print(json.loads(Path('.github/perf-baseline.json').read_text())['sample_size'])
+          PY
+          )"
+          hyperfine \
+            --warmup 3 \
+            --runs "${samples}" \
+            --export-json hyperfine-cli.json \
+            "./spine --version" \
+            "./spine --help"
+
+      - name: Capture RSS samples
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v ./spine --version >/dev/null 2> time-version.txt
+          /usr/bin/time -v ./spine --help >/dev/null 2> time-help.txt
+
+      - name: Enforce CLI baseline thresholds
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          baseline = json.loads(Path(".github/perf-baseline.json").read_text())
+          hyperfine = json.loads(Path("hyperfine-cli.json").read_text())
+
+          rss = {}
+          for key, file_name in {
+              "./spine --version": "time-version.txt",
+              "./spine --help": "time-help.txt",
+          }.items():
+              text = Path(file_name).read_text()
+              m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text)
+              rss[key] = int(m.group(1)) if m else 0
+
+          medians = {entry["command"]: float(entry["median"]) for entry in hyperfine["results"]}
+          summary = {}
+          failures = []
+          for command in ("./spine --version", "./spine --help"):
+              cfg = baseline["commands"][command]
+              median = medians.get(command, 0.0)
+              max_allowed = cfg["median_seconds"] * cfg["allowed_regression_factor"]
+              max_rss = int(cfg["max_rss_kb"])
+              rss_kb = rss.get(command, 0)
+              summary[command] = {
+                  "median_seconds": median,
+                  "median_limit_seconds": max_allowed,
+                  "rss_kb": rss_kb,
+                  "rss_limit_kb": max_rss,
+              }
+              if median > max_allowed:
+                  failures.append(f"{command}: median {median:.6f}s > {max_allowed:.6f}s")
+              if rss_kb > max_rss:
+                  failures.append(f"{command}: rss {rss_kb}KB > {max_rss}KB")
+
+          Path("perf-cli-summary.json").write_text(json.dumps(summary, indent=2) + "\\n")
+          if failures:
+              print("CLI performance threshold failures:")
+              for item in failures:
+                  print("-", item)
+              raise SystemExit(1)
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Upload CLI perf artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: perf-cli-results
+          path: |
+            hyperfine-cli.json
+            time-version.txt
+            time-help.txt
+            perf-cli-summary.json
+          if-no-files-found: ignore
+
+  snmp-simulator-benchmark:
+    name: SNMP simulator benchmark
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install SNMP benchmark dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Start local SNMP simulator and benchmark
+        run: |
+          set -euo pipefail
+          export MIBS=""
+
+          cat > snmpd-ci.conf <<'EOF'
+          agentAddress udp:127.0.0.1:1161
+          rocommunity public 127.0.0.1
+          sysLocation "CI"
+          sysContact "ci@example.com"
+          EOF
+
+          snmpd -f -Lo -C -c snmpd-ci.conf > snmpd.log 2>&1 &
+          snmpd_pid=$!
+          trap 'kill "${snmpd_pid}" 2>/dev/null || true' EXIT
+
+          snmpd_ready=0
+          for _ in $(seq 1 20); do
+            if snmpget -v2c -c public -On 127.0.0.1:1161 1.3.6.1.2.1.1.3.0 >/dev/null 2>&1; then
+              snmpd_ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "${snmpd_ready}" -ne 1 ]; then
+            echo "ERROR: snmpd did not respond within 20s; dumping log:"
+            cat snmpd.log || true
+            exit 1
+          fi
+
+          samples="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          print(json.loads(Path('.github/perf-baseline.json').read_text())['sample_size'])
+          PY
+          )"
+
+          hyperfine \
+            --warmup 5 \
+            --runs "${samples}" \
+            --export-json hyperfine-snmp.json \
+            "snmpget -v2c -c public -On 127.0.0.1:1161 1.3.6.1.2.1.1.3.0 >/dev/null"
+
+          /usr/bin/time -v snmpget -v2c -c public -On 127.0.0.1:1161 1.3.6.1.2.1.1.3.0 >/dev/null 2> time-snmpget.txt
+
+      - name: Enforce SNMP baseline thresholds
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          command = "snmpget -v2c -c public -On 127.0.0.1:1161 1.3.6.1.2.1.1.3.0"
+          baseline = json.loads(Path(".github/perf-baseline.json").read_text())["commands"][command]
+          hyperfine = json.loads(Path("hyperfine-snmp.json").read_text())
+          median = float(hyperfine["results"][0]["median"])
+
+          time_text = Path("time-snmpget.txt").read_text()
+          m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", time_text)
+          rss_kb = int(m.group(1)) if m else 0
+
+          max_median = baseline["median_seconds"] * baseline["allowed_regression_factor"]
+          max_rss = int(baseline["max_rss_kb"])
+          summary = {
+              "median_seconds": median,
+              "median_limit_seconds": max_median,
+              "rss_kb": rss_kb,
+              "rss_limit_kb": max_rss,
+          }
+          Path("perf-snmp-summary.json").write_text(json.dumps(summary, indent=2) + "\\n")
+
+          failures = []
+          if median > max_median:
+              failures.append(f"median {median:.6f}s > {max_median:.6f}s")
+          if rss_kb > max_rss:
+              failures.append(f"rss {rss_kb}KB > {max_rss}KB")
+
+          if failures:
+              print("SNMP benchmark threshold failures:")
+              for item in failures:
+                  print("-", item)
+              raise SystemExit(1)
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Upload SNMP perf artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: perf-snmp-results
+          path: |
+            snmpd.log
+            snmpd-ci.conf
+            hyperfine-snmp.json
+            time-snmpget.txt
+            perf-snmp-summary.json
+          if-no-files-found: ignore
+
+  poll-benchmark:
+    name: Poll Timing Benchmark
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build spine and test infrastructure
+        run: |
+          set -euo pipefail
+          docker compose -f tests/snmpv3/docker-compose.yml build spine
+
+      - name: Start infrastructure
+        run: |
+          set -euo pipefail
+          docker compose -f tests/snmpv3/docker-compose.yml up -d db snmpd
+          for _ in $(seq 1 40); do
+            count=$(docker compose -f tests/snmpv3/docker-compose.yml exec -T db \
+              mariadb -uspine -pspine cacti -N -e "SELECT COUNT(*) FROM host;" 2>/dev/null || echo "0")
+            [ "$count" -gt 0 ] && break
+            sleep 3
+          done
+
+      - name: Run poll benchmark (5 iterations)
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 5); do
+            docker compose -f tests/snmpv3/docker-compose.yml run --rm \
+              --entrypoint spine spine --conf=/etc/spine/spine.conf -f 1 -l 1 -S 2>&1 \
+              | grep "Time:" | awk '{print $2}' >> poll-times.txt
+          done
+          echo "=== Poll times ==="
+          cat poll-times.txt
+          awk '{sum+=$1; n++} END {printf "Average: %.4f s\n", sum/n}' poll-times.txt
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: poll-benchmark
+          path: poll-times.txt
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans

@@ -1,0 +1,347 @@
+name: Nightly Heavy Checks
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    cmake make pkg-config
+    gcc clang llvm valgrind
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  TSAN_OPTIONS: halt_on_error=1:history_size=7:log_path=tsan
+  ASAN_OPTIONS: >-
+    detect_leaks=1:abort_on_error=1:strict_string_checks=1:
+    check_initialization_order=1:detect_stack_use_after_return=1:
+    symbolize=1:log_path=asan
+  UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:log_path=ubsan
+
+jobs:
+  tsan:
+    name: clang tsan
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Configure
+        env:
+          LDFLAGS: '-fsanitize=thread'
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS='-O1 -g3 -fno-omit-frame-pointer -fsanitize=thread'
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --output-on-failure || echo '::notice::ctest non-zero.'
+
+      - name: Upload tsan artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-tsan-logs
+          path: |
+            tsan*
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
+            *.log
+          if-no-files-found: ignore
+
+  asan-soak:
+    name: clang asan/ubsan soak
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Configure
+        env:
+          LDFLAGS: '-fsanitize=address,undefined'
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --output-on-failure || echo '::notice::ctest non-zero.'
+
+      - name: Enforce asan/ubsan leak trend baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check-leak-trend.py \
+            --mode asan \
+            --baseline .github/nightly-leak-baseline.json \
+            --output nightly-asan-summary.json \
+            --logs 'asan*' 'ubsan*' '*.log'
+
+      - name: Upload asan artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-asan-logs
+          path: |
+            asan*
+            ubsan*
+            nightly-asan-summary.json
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
+            *.log
+          if-no-files-found: ignore
+
+  valgrind:
+    name: valgrind test pass
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-O0 -g3 -fno-omit-frame-pointer'
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --build build -j"$(nproc)"
+
+      - name: Run tests under valgrind
+        run: |
+          set -euo pipefail
+          mapfile -t bins < <(find build -maxdepth 3 -type f -name 'test_*' -perm -111 2>/dev/null || true)
+          if [[ "${#bins[@]}" -gt 0 ]]; then
+            for t in "${bins[@]}"; do
+              valgrind \
+                --error-exitcode=1 \
+                --leak-check=full \
+                --show-leak-kinds=all \
+                --track-origins=yes \
+                --log-file="valgrind.$(basename "${t}").log" \
+                "${t}"
+            done
+          else
+            echo '::notice::No test binaries under build/; running ctest.'
+            ctest --test-dir build --output-on-failure || true
+          fi
+
+      - name: Enforce valgrind leak trend baseline
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check-leak-trend.py \
+            --mode valgrind \
+            --baseline .github/nightly-leak-baseline.json \
+            --output nightly-valgrind-summary.json \
+            --logs 'valgrind*.log'
+
+      - name: Upload valgrind artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-valgrind-logs
+          path: |
+            valgrind*.log
+            nightly-valgrind-summary.json
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
+            *.log
+          if-no-files-found: ignore
+
+  fuzz-smoke:
+    name: libfuzzer harness smoke
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install fuzz dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Discover fuzz harnesses
+        run: |
+          set -euo pipefail
+          mapfile -t harnesses < <(
+            git ls-files 'fuzz/**/*.c' 'tests/fuzz/**/*.c' '*_fuzz.c' '*fuzz*.c' | sort -u
+          )
+
+          if [[ "${#harnesses[@]}" -eq 0 ]]; then
+            echo '::warning::No C fuzz harnesses found (expected under fuzz/ or tests/fuzz/).'
+            echo 'status=none' > fuzz-status.txt
+            exit 0
+          fi
+
+          printf '%s\n' "${harnesses[@]}" > fuzz-harnesses.txt
+          echo 'status=found' > fuzz-status.txt
+
+      - name: Build and execute fuzz smoke runs
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f fuzz-harnesses.txt ]]; then
+            echo 'No fuzz harnesses discovered; skipping fuzz execution.'
+            exit 0
+          fi
+
+          mkdir -p fuzz-bin fuzz-corpus
+
+          while IFS= read -r harness; do
+            [[ -n "${harness}" ]] || continue
+            bin="fuzz-bin/$(basename "${harness%.*}")"
+
+            clang -O1 -g -fsanitize=fuzzer,address -I. "${harness}" -o "${bin}"
+            "${bin}" -runs=1000 -max_total_time=60 fuzz-corpus
+          done < fuzz-harnesses.txt
+
+      - name: Upload fuzz artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-fuzz-logs
+          path: |
+            fuzz-status.txt
+            fuzz-harnesses.txt
+            fuzz-bin
+            fuzz-corpus
+            *.log
+          if-no-files-found: ignore
+
+  helgrind:
+    name: Valgrind Helgrind (Thread Errors)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make cmake pkg-config \
+            libmariadb-dev libsnmp-dev libssl-dev \
+            valgrind libcmocka-dev
+
+      - name: Build with debug
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-g -O0"
+          cmake --build build -j"$(nproc)"
+
+      - name: Helgrind unit tests
+        run: |
+          set -euo pipefail
+          bin="$(find build -maxdepth 3 -type f -name 'test_build_fixes' -perm -111 | head -n 1)"
+          if [[ -z "${bin}" ]]; then
+            echo "::notice::test_build_fixes not present under build/; skipping helgrind."
+            exit 0
+          fi
+          valgrind --tool=helgrind --error-exitcode=1 "${bin}"
+
+      - name: Upload helgrind artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: nightly-helgrind-logs
+          path: "*.log"
+          if-no-files-found: ignore
+
+  stack-usage:
+    name: Stack Usage Analysis
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make cmake pkg-config \
+            libmariadb-dev libsnmp-dev libssl-dev
+
+      - name: Build with stack usage
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fstack-usage -g"
+          cmake --build build -j"$(nproc)"
+
+      - name: Analyze stack usage
+        run: |
+          set -euo pipefail
+          echo "=== Functions using >4KB stack ==="
+          find build -name '*.su' -exec cat {} + | \
+            awk -F: '{split($NF,a," "); if(a[1]+0 > 4096) print}' | \
+            sort -t' ' -k2 -rn | head -20
+
+      - name: Upload stack reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: stack-usage
+          path: "build/**/*.su"
+
+  soak-placeholder:
+    name: soak/integration placeholder
+    runs-on: ubuntu-24.04
+    needs: [tsan, asan-soak, valgrind, fuzz-smoke, helgrind, stack-usage]
+
+    steps:
+      - name: Placeholder
+        run: |
+          set -euo pipefail
+          echo 'Placeholder for long-running soak/integration checks.'
+          echo 'Add SNMP simulator container and multi-hour stress scenario here.'

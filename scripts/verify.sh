@@ -1,25 +1,34 @@
 #!/usr/bin/env bash
+# Local verification helper.
 set -euo pipefail
 
-echo "=== cppcheck ==="
-cppcheck --enable=all --std=c11 --error-exitcode=1 \
-  --suppress=missingIncludeSystem \
-  --suppress=unusedFunction \
-  --suppress=checkersReport \
-  --suppress=toomanyconfigs \
-  -- *.c *.h 2>&1 | tee /tmp/cppcheck.txt
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT
+readonly BUILD_DIR="${REPO_ROOT}/build-verify"
 
-echo ""
-echo "=== scan-build ==="
-make clean
-scan-build -o /tmp/scan-results --status-bugs make -j"$(nproc)" 2>&1
+main() {
+  cd "${REPO_ROOT}"
 
-echo ""
-echo "=== smoke tests ==="
-./spine --help > /dev/null 2>&1
-echo "spine --help: OK"
-./spine --version > /dev/null 2>&1
-echo "spine --version: OK"
+  echo "=== preflight ==="
+  bash scripts/preflight.sh
 
-echo ""
-echo "=== All checks passed ==="
+  echo
+  echo "=== scan-build ==="
+  rm -rf "${BUILD_DIR}"
+  scan-build -o /tmp/scan-results --status-bugs \
+    cmake -G Ninja -S . -B "${BUILD_DIR}" -DSPINE_BUILD_MAIN=ON
+  scan-build -o /tmp/scan-results --status-bugs \
+    cmake --build "${BUILD_DIR}"
+
+  echo
+  echo "=== smoke tests ==="
+  "${BUILD_DIR}/spine" --help >/dev/null 2>&1
+  echo "spine --help: OK"
+  "${BUILD_DIR}/spine" --version >/dev/null 2>&1
+  echo "spine --version: OK"
+
+  echo
+  echo "=== all checks passed ==="
+}
+
+main "$@"

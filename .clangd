@@ -1,0 +1,12 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - -I./build/config
+    - -I.
+    - -I./src
+    - -I./src/platform
+    - -I./third_party
+Diagnostics:
+  UnusedIncludes: None
+  Suppress:
+    - pp_file_not_found

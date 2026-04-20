@@ -1,10 +1,19 @@
-# Test fixtures and CI scripts -- not needed for the spine build
-tests/
+# Test fixtures and CI scripts -- allowed for test images
+# tests/
 .git/
-*.md
-config/
+.github/
+.claude/
+.omc/
+.worktrees/
+build/
+build-*/
+# build-reports/
+# *.md
 m4/
 autom4te.cache/
-.omc/
-*.conf.dist
 *.log
+*.o
+*.a
+*.so
+*.dylib
+.php-cs-fixer.cache

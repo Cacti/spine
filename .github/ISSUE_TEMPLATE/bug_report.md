@@ -34,7 +34,7 @@ If applicable, add screenshots to help explain your problem.
 **Compiling (please complete the following information):**
 
  - compiler: [e.g. clang or gcc 5.4.0]
- - autoconf: [e.g. autoconf 2.69]
+ - cmake: [e.g. cmake 3.22]
  - glibc: [e.g. 2.23]
  - source: [e.g. release or github]
 

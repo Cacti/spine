@@ -1,0 +1,161 @@
+name: Release Verification
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+      - 'release-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    cmake make pkg-config
+    gcc binutils file curl
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  CFLAGS_RELEASE: >-
+    -std=c11 -O2 -g -D_FORTIFY_SOURCE=3
+    -fstack-protector-strong -fstack-clash-protection -fPIE
+  LDFLAGS_RELEASE: >-
+    -Wl,-z,relro,-z,now -pie
+  EXPECT_PIE: '1'
+  SOURCE_DATE_EPOCH: '1700000000'
+
+jobs:
+  release-verify:
+    name: hardened release verification
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install release dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Configure
+        env:
+          LDFLAGS: ${{ env.LDFLAGS_RELEASE }}
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS="${CFLAGS_RELEASE}"
+
+      - name: Build release
+        run: |
+          set -euo pipefail
+          cmake --build build -j"$(nproc)"
+
+      - name: Verify ELF hardening
+        run: |
+          set -euo pipefail
+          BIN_PATH=''
+          if [[ -x ./build/spine ]]; then
+            BIN_PATH='./build/spine'
+          else
+            BIN_PATH="$(find . -maxdepth 4 -type f -name spine -perm -111 | head -n 1 || true)"
+          fi
+
+          if [[ -z "${BIN_PATH}" ]]; then
+            echo 'Unable to locate built spine binary.' >&2
+            exit 1
+          fi
+
+          echo "BIN_PATH=${BIN_PATH}" >> "${GITHUB_ENV}"
+
+          readelf -W -l "${BIN_PATH}" | tee hardening-readelf-program-headers.txt
+          readelf -W -d "${BIN_PATH}" | tee hardening-readelf-dynamic.txt
+
+          if ! grep -q 'GNU_RELRO' hardening-readelf-program-headers.txt; then
+            echo 'RELRO segment missing.' >&2
+            exit 1
+          fi
+
+          if ! grep -Eq 'BIND_NOW|FLAGS.*NOW' hardening-readelf-dynamic.txt; then
+            echo 'BIND_NOW not present.' >&2
+            exit 1
+          fi
+
+          if [[ "${EXPECT_PIE}" == '1' ]]; then
+            if ! readelf -h "${BIN_PATH}" | grep -Eq 'Type:[[:space:]]+DYN'; then
+              echo 'PIE expected but binary is not ET_DYN.' >&2
+              exit 1
+            fi
+          fi
+
+      - name: cmake --install DESTDIR smoke test
+        run: |
+          set -euo pipefail
+          rm -rf stage
+          mkdir -p stage
+
+          DESTDIR="${PWD}/stage" cmake --install build
+
+          INSTALLED_BIN="$(find stage -type f -name spine -perm -111 | head -n 1 || true)"
+          if [[ -z "${INSTALLED_BIN}" ]]; then
+            echo 'Installed spine binary not found under DESTDIR.' >&2
+            exit 1
+          fi
+
+          echo "INSTALLED_BIN=${INSTALLED_BIN}" >> "${GITHUB_ENV}"
+          ldd "${INSTALLED_BIN}" | tee installed-binary-ldd.txt
+
+          if grep -q 'not found' installed-binary-ldd.txt; then
+            echo 'Installed binary has unresolved shared library dependencies.' >&2
+            exit 1
+          fi
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e11c554e6c84b6b3214a7f12bf6ba4cb91346c7d # v0.18.0
+        with:
+          path: .
+          artifact-name: spine-sbom.spdx.json
+
+      - name: Verify SBOM
+        run: |
+          set -euo pipefail
+          syft "dir:stage" -o spdx-json=sbom.spdx.json
+
+      - name: Package staged release artifact
+        run: |
+          set -euo pipefail
+          tar -czf spine-release-stage.tgz stage
+          sha256sum spine-release-stage.tgz > spine-release-stage.tgz.sha256
+
+      - name: Upload release verification artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: release-verification
+          path: |
+            hardening-readelf-program-headers.txt
+            hardening-readelf-dynamic.txt
+            installed-binary-ldd.txt
+            sbom.spdx.json
+            spine-release-stage.tgz
+            spine-release-stage.tgz.sha256
+            stage
+          if-no-files-found: ignore
+
+      - name: Attest release artifact provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: spine-release-stage.tgz

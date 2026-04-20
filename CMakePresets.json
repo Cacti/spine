@@ -1,0 +1,43 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ci-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "ci-smoke",
+      "inherits": "ci-base",
+      "cacheVariables": {
+        "SPINE_BUILD_MAIN": "OFF"
+      }
+    },
+    {
+      "name": "ci-main",
+      "inherits": "ci-base",
+      "cacheVariables": {
+        "SPINE_BUILD_MAIN": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "ci-smoke",
+      "configurePreset": "ci-smoke"
+    },
+    {
+      "name": "ci-main",
+      "configurePreset": "ci-main"
+    }
+  ]
+}

@@ -23,7 +23,7 @@ services:
       - "127.0.0.1:10161:1161/udp"
     healthcheck:
       test: ["CMD", "snmpget", "-v3", "-u", "testuser", "-l", "authPriv",
-             "-a", "SHA-256", "-A", "authpass1234",
+             "-a", "SHA", "-A", "authpass1234",
              "-x", "AES", "-X", "privpass1234",
              "localhost:1161", ".1.3.6.1.2.1.1.3.0"]
       interval: 5s

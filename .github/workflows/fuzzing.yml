@@ -1,0 +1,129 @@
+name: Fuzzing
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    cmake make pkg-config
+    clang llvm libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+    libseccomp-dev libuv1-dev
+  ASAN_OPTIONS: >-
+    detect_leaks=1:abort_on_error=1:strict_string_checks=1:
+    check_initialization_order=1:detect_stack_use_after_return=1:
+    symbolize=1:log_path=asan
+  UBSAN_OPTIONS: >-
+    print_stacktrace=1:halt_on_error=1:log_path=ubsan
+
+jobs:
+  cli-fuzz-smoke:
+    name: CLI fuzz smoke (asan/ubsan)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install fuzz dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Build sanitizer binary
+        env:
+          LDFLAGS: '-fsanitize=address,undefined'
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
+          cmake --build build -j"$(nproc)" --verbose
+
+      - name: Fuzz CLI argument handling with seeded mutations
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import random
+          import string
+          import subprocess
+          import sys
+
+          seeds = [
+              "--help",
+              "--version",
+              "-R -S -V 5",
+              "--mode=online",
+              "--mode=offline",
+              "--hostlist=1,2,3",
+              "--option=foo:bar",
+              "--poller=1 --threads=1",
+              "--first=1 --last=2",
+              "1 10",
+              "--verbosity=DEBUG",
+          ]
+
+          random.seed(1337)
+
+          def mutate(seed: str) -> str:
+              chars = list(seed)
+              for _ in range(random.randint(1, 6)):
+                  op = random.choice(["insert", "replace", "delete"])
+                  if op == "insert":
+                      pos = random.randint(0, len(chars))
+                      chars.insert(pos, random.choice(string.printable))
+                  elif op == "replace" and chars:
+                      pos = random.randint(0, len(chars) - 1)
+                      chars[pos] = random.choice(string.printable)
+                  elif op == "delete" and chars:
+                      pos = random.randint(0, len(chars) - 1)
+                      del chars[pos]
+              return "".join(chars)
+
+          for i in range(300):
+              seed = random.choice(seeds)
+              payload = mutate(seed)
+              args = payload.split()
+              proc = subprocess.run(
+                  ["timeout", "2s", "./build/spine", *args],
+                  stdout=subprocess.DEVNULL,
+                  stderr=subprocess.DEVNULL,
+                  text=False
+              )
+              code = proc.returncode
+              if code in (124, 125):
+                  continue
+              if code < 0:
+                  raise RuntimeError(f"signal crash for payload={payload!r}, code={code}")
+              if code > 128:
+                  raise RuntimeError(f"fatal exit for payload={payload!r}, code={code}")
+
+          print("CLI fuzz smoke completed without sanitizer-fatal crashes.")
+          PY
+
+      - name: Upload fuzz artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: fuzzing-artifacts
+          path: |
+            asan*
+            ubsan*
+            *.log
+          if-no-files-found: ignore

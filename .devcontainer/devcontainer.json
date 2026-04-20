@@ -1,0 +1,31 @@
+{
+  "name": "spine dev",
+  "image": "mcr.microsoft.com/devcontainers/cpp:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libsnmp-dev libmariadb-dev-compat libssl-dev libsystemd-dev pkg-config cmake ninja-build cppcheck clang-tools && cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON && cmake --build build -j",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "twxs.cmake",
+        "ms-vscode.cmake-tools",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github"
+      ],
+      "settings": {
+        "C_Cpp.intelliSenseEngine": "disabled",
+        "clangd.arguments": [
+          "--background-index",
+          "--compile-commands-dir=build"
+        ]
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}

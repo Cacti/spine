@@ -1,140 +1,194 @@
-# Spine: a poller for Cacti
+# spine
 
-Spine is a high speed poller replacement for `cmd.php`. It is almost 100%
-compatible with the legacy cmd.php processor and provides much more flexibility,
-speed and concurrency than `cmd.php`.
+Multi-threaded SNMP and script poller for Cacti.
 
-Make sure that you have the proper development environment to compile Spine.
-This includes compilers, header files and things such as libtool. If you have
-questions please consult the forums and/or online documentation.
+[![distro matrix](https://github.com/Cacti/spine/actions/workflows/distro-matrix.yml/badge.svg)](https://github.com/Cacti/spine/actions/workflows/distro-matrix.yml)
+[![ci](https://github.com/Cacti/spine/actions/workflows/ci.yml/badge.svg)](https://github.com/Cacti/spine/actions/workflows/ci.yml)
+[![license: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
+[![C17](https://img.shields.io/badge/C-17-blue.svg)](CMakeLists.txt)
 
------------------------------------------------------------------------------
+## At a glance
 
-## Unix Installation
+- Drop-in replacement for Cacti's `cmd.php` poller, written in C17.
+- **Asynchronous Engine:** Powered by `libuv`, featuring a truly non-blocking event loop for extreme concurrency.
+- **High Performance:** Implements smart SQL batching, c-ares based async DNS, and non-blocking SNMPv1/v2c/v3.
+- **IPC:** PHP Script Server communication via `uv_pipe_t` for efficient, backpressure-aware IPC.
+- **Observability:** Real-time metrics via a Telemetry Unix Socket (JSON format).
+- Runs as a short cron-driven batch or as a long-lived systemd `Type=notify` daemon with watchdog, SIGHUP reload, and SIGTERM drain.
+- Per-host circuit breaker with exponential backoff; `--dry-run`, `--check`, and `--dump-config` for operator-safe iteration.
+- Structured JSON logging on non-TTY stderr; USDT tracepoints around per-host polls and SNMP queries (Linux only).
+- Used by enterprise, telecom, MSP, and hosting deployments running tens to hundreds of thousands of data sources.
 
-These instructions assume the default install location for spine of
-`/usr/local/spine`. If you choose to use another prefix, make sure you update
-the commands as required for that new path.
+## Quick start
 
-To compile and install Spine using MySQL versions 5.5 or higher please do the
-following:
-
-```shell
-./bootstrap
-./configure
-make
-make install
-chown root:root /usr/local/spine/bin/spine
-chmod u+s /usr/local/spine/bin/spine
+```sh
+git clone https://github.com/Cacti/spine.git
+cd spine
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/spine --help
 ```
 
-To compile and install Spine using MySQL versions previous to 5.5 please do the
-following:
+## Supported platforms
 
-```shell
-./bootstrap
-./configure --with-reentrant
-make
-make install
-chown root:root /usr/local/spine/bin/spine
-chmod +s /usr/local/spine/bin/spine
+| Tier | Platforms |
+|---|---|
+| Tier 1 (primary, blocking CI) | RHEL / Rocky / Alma 9, Ubuntu 22.04 + 24.04, Debian 12, Fedora, FreeBSD 14, macOS |
+| Tier 2 (supported, blocking CI) | Rocky 8, Debian trixie, openSUSE Leap 15, Alpine 3.20 |
+| Tier 3 (advisory CI) | NetBSD 10, OpenBSD 7.5, DragonFly BSD, Windows MSVC / MSYS2, UBI 9 |
+| Tier 4 (experimental, compile guards only) | AIX, Solaris / illumos |
+
+Full matrix, tier policy, install commands, and local reproduction with `scripts/test-distros.sh` are in [docs/platforms.md](docs/platforms.md).
+
+## Install
+
+Package dependencies, then build from source. Representative per-distro commands are below; the full list lives in [docs/platforms.md](docs/platforms.md).
+
+### RHEL / Rocky / Alma / Fedora
+
+```sh
+dnf install -y epel-release
+dnf install -y cmake gcc make net-snmp-devel mariadb-connector-c-devel openssl-devel pkgconfig systemd-devel libuv-devel libcares-devel
 ```
 
-## Windows Installation
+### Debian / Ubuntu
 
-### CYGWIN Prerequisite
+```sh
+apt-get install -y cmake gcc make libsnmp-dev libmariadb-dev-compat libssl-dev pkg-config libsystemd-dev libuv1-dev libc-ares-dev
+```
 
-1. Download Cygwin for Window from [https://www.cygwin.com/](https://www.cygwin.com/)
+### FreeBSD
 
-2. Install Cygwin by executing the downloaded setup program
+```sh
+pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl libuv c-ares
+```
 
-3. Select _Install from Internet_
+### macOS
 
-4. Select Root Directory:  _C:\cygwin_
+```sh
+brew install cmake ninja pkg-config mysql-client net-snmp openssl@3 libuv c-ares
+```
 
-5. Select a mirror which is close to your location
+### Build and install
 
-6. Once on the package selection section make sure to select the following (TIP:
-   use the search!):
+```sh
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DSPINE_BUILD_MAIN=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+sudo cmake --install build
+```
 
-   * autoconf
-   * automake
-   * dos2unix
-   * gcc-core
-   * gzip
-   * help2man
-   * inetutils-src
-   * libmysqlclient
-   * libmariadb-devel
-   * libssl-devel
-   * libtool
-   * m4
-   * make
-   * net-snmp-devel
-   * openssl-devel
-   * wget
+Disable the systemd integration with `-DWITH_SYSTEMD=OFF` on systems without libsystemd (Alpine / musl, BSDs, macOS, Windows).
 
-7. Wait for installation to complete, coffee time!
+### Reproducible builds
 
-8. Move the cygwin setup to the C:\cygwin\ folder for future usage.
+`SOURCE_DATE_EPOCH` is honoured by the build. Set it to the commit timestamp to produce bit-identical artifacts:
 
-### Compile Spine
+```sh
+SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) cmake --build build -j
+```
 
-1. Open Cygwin shell prompt (C:\Cygwin\cygwin.bat) and brace yourself to use
-   unix commands on Windows.
+## Performance Recommendations
 
-2. Download the Spine source to the current directory:
+For production environments running >50,000 data sources, it is highly recommended to build Spine with a high-performance memory allocator to reduce heap fragmentation and lock contention:
 
-   [http://www.cacti.net/spine_download.php](http://www.cacti.net/spine_download.php)
+- **mimalloc** (Recommended): `apt install libmimalloc-dev` or `brew install mimalloc`
+- **jemalloc**: `apt install libjemalloc-dev` or `brew install jemalloc`
 
-3. Extract Spine into C:\Cygwin\usr\src\<spineversion>:
+Spine will automatically detect and link against these libraries if they are present on your system during the CMake configuration phase.
 
-   `tar xzvf cacti-spine-*.tar.gz`
+### System Tuning
 
-4. Change into the Spine directory:
+When running in asynchronous mode with high concurrency, you must ensure your system file descriptor limit (`ulimit -n`) is sufficiently high:
 
-   `cd /usr/src/cacti-spine-*`
+```sh
+# Example for 100k data sources
+ulimit -n 102400
+```
 
-5. Run bootstrap to prepare Spine for compilation:
+## Configuration
 
-   `./bootstrap`
+`spine.conf` holds database credentials and poller tuning. A full annotated template ships as [etc/spine.conf.dist](etc/spine.conf.dist). Minimum viable config:
 
-6. Follow the instruction which bootstrap outputs.
+```ini
+DB_Host       localhost
+DB_Database   cacti
+DB_User       cactiuser
+DB_Pass       cactipass
+DB_Port       3306
+DB_UseSSL     1
 
-7. Update the spine.conf file for your installation of Cacti. You can optionally
-   move it to a better location if you choose to do so, make sure to copy the
-   spine.conf as well.
+Threads       20
+Script_Policy 1
+```
 
-8. Ensure that Spine runs well by running with `/usr/local/spine/spine -R -S -V 3`
+Mode `0600` owned by the spine user is recommended. Spine warns on world-readable configs and refuses to start if the file is group- or world-writable.
 
-9. Update Cacti `Paths` Setting to point to the Spine binary and update the
-   `Poller Type` to Spine. For the spine binary on Windows x64, and using default
-   locations, that would be `C:\cygwin64\usr\local\spine\bin\spine.exe`
+### Script Safety Policy
 
-10. If all is good Spine will be run from the poller in place of cmd.php.
+Spine includes an opt-in policy to block shell metacharacters in script commands fetched from the database. Set `Script_Policy 1` in `spine.conf` to reject commands containing characters like `; | & > < \ $ ` " '`. This provides defense-in-depth if the Cacti database is compromised.
 
-## Known Issues
+Validate the config without polling:
 
-1. On Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
-   if you are using TCP ping on Windows, spine will not perform a second or
-   subsequent retries to connect and the host will be assumed down on the first
-   failure.
+```sh
+spine --check               # parse and validate spine.conf
+spine --dump-config         # print the effective, redacted config
+spine --dry-run             # run a full poll cycle with no SQL writes
+```
 
-   If this is a problem it is suggested to use another Availability/Reachability
-   method, or moving to Linux/UNIX.
+## Running under systemd
 
-2. Spine takes quite a few MySQL connections. The number of connections is
-   calculated as follows: (1 for main poller + 1 per each thread + 1 per each
-   script server)
+The build installs `spine.service` (notify mode), `spine-batch.service` (oneshot mode), `spine-dynamic.service` (optional DynamicUser profile), and `spine.timer`. The timer targets `spine-batch.service`.
 
-   Therefore, if you have 4 processes, with 10 threads each, and 5 script
-   servers each your spine will take approximately:
+```sh
+systemctl enable --now spine.timer
+systemctl status spine.service
+journalctl -u spine.service -f
+```
 
-   `total connections = 4 * ( 1 + 10 + 5 ) = 64`
+Unit template sources live under `etc/systemd/*.in`. Installation and hardening details are documented in [docs/systemd.md](docs/systemd.md).
 
-3. On older MySQL versions, different libraries had to be used to make MySQL
-   thread safe. MySQL versions 5.0 and 5.1 require this flag. If you are using
-   these version of MySQL, you must use the --with-reentrant configure flag.
+## Debugging and observability
 
------------------------------------------------------------------------------
-Copyright (c) 2004-2026 - The Cacti Group, Inc.
+- `spine --log-format=json` emits one structured log line per event on stderr, suitable for `journalctl -o json` or a sidecar shipper.
+- `spine --check` and `spine --dump-config` exit without polling; use for config regression checks.
+- `spine --dry-run` runs a complete poll cycle and logs the SQL statements that would be executed.
+- USDT tracepoints are compiled in on Linux when `<sys/sdt.h>` is present; elsewhere they expand to no-ops. List them with `bpftrace -l 'usdt:./build/spine:spine:*'`. Current probes: `poll_start(host_id)`, `poll_done(host_id, errors)`, `snmp_query(host_id)`.
+- Attach gdbserver to a running spine, relax the hardened unit for ptrace, and capture cores per [docs/debugging.md](docs/debugging.md).
+
+## Security
+
+Spine trusts the Cacti database. Any principal with write access to `poller_item` can direct spine to execute arbitrary commands as the spine user. See [SECURITY.md](SECURITY.md) for the full trust model, recommended deployment (dedicated user, `CAP_NET_RAW`, `0600` config, TLS to the DB), and private vulnerability reporting instructions.
+
+Key security controls:
+
+- **Script Policy:** Opt-in blocking of shell metacharacters in poller commands via `Script_Policy 1`.
+- **PHP Safety:** Strict rejection of embedded newlines in commands sent to the PHP script server to prevent protocol subversion.
+- **SQL Hardening:** All database lookups, including configuration settings, use `db_escape` to prevent SQL injection.
+- **Credential Protection:** Database and SNMPv3 passwords are zeroed in memory immediately after use and before process exit.
+
+Runtime sandboxing, when available on the target OS:
+
+- Linux: `NoNewPrivileges=yes` and `SystemCallFilter=@system-service` on the systemd unit; in-process `PR_SET_NO_NEW_PRIVS` under the opt-in `SPINE_SANDBOX` env gate. A full in-process seccomp-bpf allowlist is deferred.
+- OpenBSD: `pledge(2)` + `unveil(2)` applied to the main process after DB, SNMP, and log init, under the opt-in `SPINE_SANDBOX` env gate.
+- FreeBSD: stub in place; `capsicum(4)` integration is a tracked item.
+- Windows: spawned child processes are confined in a Job Object.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). All commits must carry a DCO `Signed-off-by` line (`git commit -s`). Run `bash scripts/test-distros.sh` before pushing platform-sensitive changes.
+
+## Documentation
+
+- [docs/advanced-architecture.md](docs/advanced-architecture.md) - new asynchronous engine details
+- [docs/platforms.md](docs/platforms.md) - tier policy, install commands, CI coverage
+- [docs/systemd.md](docs/systemd.md) - unit installation, watchdog, hardening
+- [docs/debugging.md](docs/debugging.md) - gdbserver, cores, strace, bpftrace
+- [docs/platform-idioms.md](docs/platform-idioms.md) - portability rules for contributors
+- [SECURITY.md](SECURITY.md) - trust model and disclosure
+
+## License
+
+GPL-2.0-or-later. See [LICENSE](LICENSE).
+
+Copyright (c) 2004-2026 The Cacti Group, Inc.

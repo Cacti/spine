@@ -1,0 +1,145 @@
+/*
+ ex: set tabstop=4 shiftwidth=4 autoindent:
+ +-------------------------------------------------------------------------+
+ | Copyright (C) 2004-2026 The Cacti Group                                 |
+ |                                                                         |
+ | This program is free software; you can redistribute it and/or           |
+ | modify it under the terms of the GNU Lesser General Public              |
+ | License as published by the Free Software Foundation; either            |
+ | version 2.1 of the License, or (at your option) any later version. 	   |
+ |                                                                         |
+ | This program is distributed in the hope that it will be useful,         |
+ | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
+ | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
+ | GNU Lesser General Public License for more details.                     |
+ |                                                                         |
+ | You should have received a copy of the GNU Lesser General Public        |
+ | License along with this library; if not, write to the Free Software     |
+ | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
+ | 02110-1301, USA                                                         |
+ |                                                                         |
+ +-------------------------------------------------------------------------+
+ | spine: a backend data gatherer for cacti                                |
+ +-------------------------------------------------------------------------+
+ | This poller would not have been possible without:                       |
+ |   - Larry Adams (current development and enhancements)                  |
+ |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
+ |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
+ |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
+ +-------------------------------------------------------------------------+
+ | - Cacti - http://www.cacti.net/                                         |
+ +-------------------------------------------------------------------------+
+*/
+
+#ifndef SPINE_COMMON_H
+#define SPINE_COMMON_H 1
+
+#define _THREAD_SAFE
+#define _PTHREADS
+#define _P __P
+
+#ifndef _REENTRANT
+#define _REENTRANT
+#endif
+
+#ifndef _LIBC_REENTRANT
+#define _LIBC_REENTRANT
+#endif
+
+#define PTHREAD_MUTEXATTR_DEFAULT ((pthread_mutexattr_t *) 0)
+
+#include "config/config.h"
+
+/* Spine requires C17; <stdlib.h> and <string.h> are always present. */
+#include <stdlib.h>
+#include <string.h>
+
+#if HAVE_UNISTD_H
+#  include <sys/types.h>
+#  include <unistd.h>
+#endif
+
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <math.h>
+#include <mysql.h>
+#include <netdb.h>
+#include "spine_sem.h"
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <syslog.h>
+#include <stdbool.h>
+#include <arpa/inet.h>
+
+#if HAVE_STDINT_H
+#  include <stdint.h>
+#endif
+
+#if HAVE_NETINET_IN_H
+#  include <netinet/in_systm.h>
+#  include <netinet/in.h>
+#  include <netinet/ip.h>
+#  include <netinet/ip6.h>
+#  include <netinet/icmp6.h>
+#  include <netinet/ip_icmp.h>
+#endif
+
+#if TIME_WITH_SYS_TIME
+#  include <sys/time.h>
+#  include <time.h>
+#else
+#  if HAVE_SYS_TIME_H
+#    include <sys/time.h>
+#  else
+#    include <time.h>
+#  endif
+#endif
+
+#ifndef HAVE_LIBPTHREAD
+#  define HAVE_LIBPTHREAD 0
+#else
+#  include <pthread.h>
+#endif
+
+#ifdef SOLAR_PRIV
+#  include <priv.h>
+#endif
+
+#undef PACKAGE_NAME
+#undef PACKAGE_VERSION
+#undef PACKAGE_BUGREPORT
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/types.h>
+#include <net-snmp/output_api.h>
+#include <net-snmp/config_api.h>
+#include <net-snmp/library/snmpv3.h>
+#include <net-snmp/library/snmp_parse_args.h>
+//#include <net-snmp/mib_api.h>
+#include <net-snmp/utilities.h>
+
+#include <net-snmp/library/snmp_api.h>
+#include <net-snmp/library/snmp_client.h>
+#include <net-snmp/library/mib.h>
+#include <net-snmp/library/scapi.h>
+#include <net-snmp/library/keytools.h>
+#include <net-snmp/library/transform_oids.h>
+
+#ifdef HAVE_LCAP
+#  include <sys/capability.h>
+#  include <sys/prctl.h>
+#  include <grp.h>
+#endif
+
+#include "uthash.h"
+#include "platform/platform.h"
+
+#endif /* SPINE_COMMON_H */

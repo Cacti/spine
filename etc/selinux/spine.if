@@ -1,0 +1,52 @@
+## <summary>Cacti spine poller.</summary>
+
+########################################
+## <summary>
+##   Execute spine in the spine domain.
+## </summary>
+## <param name="domain">
+##   <summary>Domain allowed to transition.</summary>
+## </param>
+#
+interface(`spine_domtrans',`
+    gen_require(`
+        type spine_t, spine_exec_t;
+    ')
+
+    corecmd_search_bin($1)
+    domtrans_pattern($1, spine_exec_t, spine_t)
+')
+
+########################################
+## <summary>
+##   Read spine log files.
+## </summary>
+## <param name="domain">
+##   <summary>Domain allowed access.</summary>
+## </param>
+#
+interface(`spine_read_log',`
+    gen_require(`
+        type spine_log_t;
+    ')
+
+    logging_search_logs($1)
+    read_files_pattern($1, spine_log_t, spine_log_t)
+')
+
+########################################
+## <summary>
+##   Manage spine pid files.
+## </summary>
+## <param name="domain">
+##   <summary>Domain allowed access.</summary>
+## </param>
+#
+interface(`spine_manage_pid',`
+    gen_require(`
+        type spine_var_run_t;
+    ')
+
+    files_search_pids($1)
+    manage_files_pattern($1, spine_var_run_t, spine_var_run_t)
+')

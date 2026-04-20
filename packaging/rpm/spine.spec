@@ -16,11 +16,8 @@ License:        GPL-2.0-or-later
 URL:            https://www.cacti.net/
 Source0:        https://github.com/Cacti/spine/archive/refs/tags/%{version}.tar.gz#/cacti-spine-%{version}.tar.gz
 
-BuildRequires:  autoconf
-BuildRequires:  automake
-BuildRequires:  libtool
-BuildRequires:  dos2unix
-BuildRequires:  help2man
+BuildRequires:  cmake
+BuildRequires:  ninja-build
 BuildRequires:  mariadb-devel
 BuildRequires:  net-snmp-devel
 BuildRequires:  openssl-devel
@@ -46,17 +43,17 @@ sockets for ICMP availability checking without running setuid-root.
 %autosetup -n spine-%{version}
 
 %build
-./bootstrap
-%configure \
-    --enable-lcap \
-    --bindir=%{_sbindir} \
-    --sysconfdir=%{_sysconfdir} \
-    --with-results-buffer=2048 \
-    --with-max-scripts=20
-%make_build
+%cmake -G Ninja \
+    -DSPINE_BUILD_MAIN=ON \
+    -DENABLE_LCAP=ON \
+    -DRESULTS_BUFFER=2048 \
+    -DMAX_SIMULTANEOUS_SCRIPTS=20 \
+    -DCMAKE_INSTALL_BINDIR=%{_sbindir} \
+    -DCMAKE_INSTALL_SYSCONFDIR=%{_sysconfdir}
+%cmake_build
 
 %install
-%make_install
+%cmake_install
 install -D -m 0640 spine.conf.dist %{buildroot}%{_sysconfdir}/spine.conf.dist
 
 # Install man page (generated during build); upstream installs into man1

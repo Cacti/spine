@@ -1,0 +1,58 @@
+# --- Build Stage ---
+FROM alpine:3.19 AS builder
+
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    ninja \
+    pkgconfig \
+    mariadb-dev \
+    net-snmp-dev \
+    openssl-dev \
+    libuv-dev \
+    pcre2-dev \
+    c-ares-dev \
+    libseccomp-dev \
+    git
+
+WORKDIR /src
+COPY . .
+
+# Build Spine
+RUN cmake -G Ninja -S . -B /build \
+    -DSPINE_BUILD_MAIN=ON \
+    -DBUILD_TESTING=OFF \
+    -DENABLE_WARNINGS=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build
+
+# --- Production Stage ---
+FROM alpine:3.19
+
+# Install runtime dependencies and tini
+RUN apk add --no-cache \
+    tini \
+    mariadb-connector-c \
+    net-snmp-libs \
+    libuv \
+    c-ares \
+    libseccomp \
+    pcre2 \
+    socat \
+    ca-certificates
+
+# Copy only the binary
+COPY --from=builder /build/spine /usr/local/bin/spine
+
+# Create runtime directories
+RUN mkdir -p /var/run/spine && chown -R 1000:1000 /var/run/spine
+
+# Health check using Telemetry Socket
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD socat - UNIX-CONNECT:/var/run/spine/telemetry.sock || exit 1
+
+USER 1000:1000
+
+# ENTRYPOINT with tini for signal handling and zombie reaping
+ENTRYPOINT ["/sbin/tini", "--", "spine"]
+CMD ["--stdout", "--no-syslog"]

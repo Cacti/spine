@@ -1,0 +1,62 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    cmake make pkg-config
+    gcc clang llvm
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+
+jobs:
+  analyze:
+    name: Analyze (c-cpp)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@a65a038433a26f4363cf9f029e3b9ceac831ad5d # v3.28.10
+        with:
+          languages: c-cpp
+
+      - name: Install build dependencies
+        uses: ./.github/actions/install-apt-deps
+        with:
+          packages: ${{ env.COMMON_DEPS }}
+
+      - name: Configure and build
+        env:
+          LDFLAGS: '-Wl,-z,relro,-z,now'
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_FLAGS='-O2 -g'
+          cmake --build build -j"$(nproc)"
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@a65a038433a26f4363cf9f029e3b9ceac831ad5d # v3.28.10

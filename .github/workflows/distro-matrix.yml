@@ -1,0 +1,289 @@
+name: Distro Matrix
+
+# Cross-distro compile check for spine. Linux distros run in their native
+# container images so we catch glibc/musl, CMake, Net-SNMP, and MariaDB
+# connector differences at PR time rather than after release. macOS, Windows,
+# and the BSDs ride along so "it builds on my Rocky 9 box" extends to every
+# platform we claim to support.
+#
+# Lanes are classified by tier (see docs/platforms.md):
+#   Tier 1: Primary targets. Failures block merge.
+#   Tier 2: Supported. Failures block merge.
+#   Tier 3: Advisory. Failures noted, do not block (continue-on-error).
+#   Tier 4: Experimental. No CI lane; compile guards only.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+      - feat/**
+      - fix/**
+      - ci/**
+  pull_request:
+    branches: [develop]
+  schedule:
+    # Weekly drift check against upstream distro package updates.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distro-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.distro }} (Tier ${{ matrix.tier }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- Tier 1: Primary targets (ordered by Cacti deployment footprint) ---
+          # Red Hat lineage leads: enterprise, telecom, banking, government.
+          # Rocky 9 and Alma 9 are bug-for-bug RHEL 9 rebuilds and are the
+          # authoritative CI proxies for RHEL 9 (the RHEL image itself
+          # requires a paid subscription). UBI 9 is included as a toolchain
+          # smoke test; it cannot reach a full build without subscription
+          # repos, so it stays advisory (see Tier 3 block below).
+          - distro: rockylinux:9
+            family: rhel
+            tier: 1
+          - distro: almalinux:9
+            family: rhel
+            tier: 1
+          - distro: ubuntu:24.04
+            family: debian
+            tier: 1
+          - distro: ubuntu:22.04
+            family: debian
+            tier: 1
+          - distro: debian:12
+            family: debian
+            tier: 1
+          - distro: fedora:latest
+            family: fedora
+            tier: 1
+          # --- Tier 2: Supported ---
+          # RHEL 8 lineage still has significant enterprise deployment.
+          - distro: rockylinux:8
+            family: rhel
+            tier: 2
+          - distro: debian:trixie
+            family: debian
+            tier: 2
+          - distro: opensuse/leap:15
+            family: suse
+            tier: 2
+          - distro: alpine:3.20
+            family: alpine
+            tier: 2
+          # --- Tier 3: Advisory ---
+          # UBI 9 ships a restricted package set. mariadb-connector-c-devel
+          # and net-snmp-devel are not guaranteed available without paid
+          # subscription repos; this lane exercises the RHEL 9 toolchain
+          # path but may not reach a full build.
+          - distro: registry.access.redhat.com/ubi9/ubi
+            family: ubi
+            tier: 3
+    continue-on-error: ${{ matrix.tier >= 3 }}
+    container:
+      image: ${{ matrix.distro }}
+    steps:
+      - name: Install prerequisites (rhel)
+        if: matrix.family == 'rhel'
+        run: |
+          set -eu
+          dnf install -y epel-release
+          dnf install -y cmake gcc make git \
+            net-snmp-devel mariadb-connector-c-devel openssl-devel \
+            pkgconfig systemd-devel libseccomp-devel libuv-devel
+
+      - name: Install prerequisites (fedora)
+        if: matrix.family == 'fedora'
+        run: |
+          set -eu
+          dnf install -y cmake gcc make git \
+            net-snmp-devel mariadb-connector-c-devel openssl-devel \
+            pkgconfig systemd-devel libseccomp-devel libuv-devel
+
+      - name: Install prerequisites (debian)
+        if: matrix.family == 'debian'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -eu
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            cmake gcc make git ca-certificates \
+            libsnmp-dev libmariadb-dev-compat libssl-dev \
+            pkg-config libsystemd-dev libseccomp-dev libuv1-dev
+
+      - name: Install prerequisites (suse)
+        if: matrix.family == 'suse'
+        run: |
+          set -eu
+          # Leap 15 ships GCC 7 by default; spine requires C17 so pull the
+          # newer gcc13 from the default repos. The configure step sets
+          # CC=gcc-13 explicitly so CMake picks the newer compiler.
+          zypper --non-interactive install \
+            cmake gcc13 make git \
+            net-snmp-devel libmariadb-devel libopenssl-devel \
+            pkg-config systemd-devel libseccomp-devel libuv-devel
+
+      - name: Install prerequisites (ubi)
+        if: matrix.family == 'ubi'
+        run: |
+          set -eu
+          # UBI 9 has a restricted package set. EPEL provides net-snmp-devel
+          # but mariadb-connector-c-devel is not always reachable without a
+          # paid subscription. Keep going and let the configure step surface
+          # what's missing. This lane is advisory (Tier 3, continue-on-error).
+          dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || true
+          dnf install -y cmake gcc make git openssl-devel pkgconfig systemd-devel libseccomp-devel libuv-devel || true
+          dnf install -y net-snmp-devel || echo "net-snmp-devel not available on UBI+EPEL"
+          dnf install -y mariadb-connector-c-devel || echo "mariadb-connector-c-devel requires subscription repos"
+
+      - name: Install prerequisites (alpine)
+        if: matrix.family == 'alpine'
+        run: |
+          set -eu
+          apk add --no-cache bash cmake gcc make musl-dev \
+            net-snmp-dev mariadb-connector-c-dev openssl-dev \
+            pkgconfig linux-headers git libseccomp-dev libuv-dev
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.family == 'suse' && 'gcc-13' || '' }}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Smoke test binary
+        run: ./build/spine --help | head -3
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+  macos:
+    name: macOS (Tier 1)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install cmake ninja pkg-config mysql-client net-snmp openssl@3
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Smoke test binary
+        run: ./build/spine --help | head -3
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
+
+  freebsd:
+    name: FreeBSD 14 (Tier 1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Build on FreeBSD 14
+        uses: cross-platform-actions/action@fe0167d8082ac584754ef3ffb567fded22642c7d # v0.24.0
+        with:
+          operating_system: freebsd
+          version: '14.1'
+          shell: sh
+          run: |
+            sudo pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
+            cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
+            cmake --build build
+            ctest --test-dir build --output-on-failure
+
+  netbsd:
+    name: NetBSD 10 (Tier 3)
+    runs-on: ubuntu-latest
+    # Tier 3 advisory: NetBSD has no dedicated runner. Failures here are
+    # noted but do not block merges.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Build on NetBSD 10
+        uses: cross-platform-actions/action@fe0167d8082ac584754ef3ffb567fded22642c7d # v0.24.0
+        with:
+          operating_system: netbsd
+          version: '10.0'
+          shell: sh
+          run: |
+            sudo pkgin -y install cmake ninja-build pkg-config mariadb-connector-c net-snmp openssl
+            cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON || cmake -S . -B build -DSPINE_BUILD_MAIN=ON
+            cmake --build build
+            ./build/spine --help | head -3 || true
+
+  openbsd:
+    name: OpenBSD 7.5 (Tier 3)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Build on OpenBSD 7.5
+        uses: cross-platform-actions/action@fe0167d8082ac584754ef3ffb567fded22642c7d # v0.24.0
+        with:
+          operating_system: openbsd
+          version: '7.5'
+          shell: sh
+          run: |
+            sudo pkg_add cmake ninja mariadb-client net-snmp
+            cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON || cmake -S . -B build -DSPINE_BUILD_MAIN=ON
+            cmake --build build
+            ./build/spine --help | head -3 || true
+
+  windows:
+    name: Windows MSYS2/MinGW (Tier 3)
+    runs-on: windows-latest
+    # Tier 3 advisory: Windows port exists but full polling is unverified.
+    # Net-SNMP is not packaged for MINGW64, so we use the ci-smoke preset
+    # which exercises the platform abstraction without the SNMP stack.
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - uses: msys2/setup-msys2@cafece8e6baf9247cf9b1bf95097b0b983cc558d
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-libmariadbclient
+            mingw-w64-x86_64-openssl
+            pkg-config
+
+      - name: Configure
+        run: cmake --preset ci-smoke
+
+      - name: Build
+        run: cmake --build --preset ci-smoke
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure

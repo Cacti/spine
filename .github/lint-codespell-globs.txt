@@ -1,0 +1,8 @@
+*.c
+*.h
+*.md
+*.txt
+*.yml
+*.yaml
+CMakeLists.txt
+cmake/*.cmake
