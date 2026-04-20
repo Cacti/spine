@@ -21,6 +21,16 @@ typedef struct async_mysql_active {
 
 static async_mysql_active_t *g_active_mysql = NULL;
 
+/* Shutdown fence. Once set, new async queries are refused so the MYSQL
+ * handles can be safely torn down without a late callback dereferencing
+ * freed state. In-flight queries continue through their existing
+ * uv_poll callback chain; the uv_run drain flushes them. */
+static volatile int g_async_mysql_shutting_down = 0;
+
+void spine_async_mysql_shutdown_begin(void) {
+    g_async_mysql_shutting_down = 1;
+}
+
 static int async_mysql_mark_active(MYSQL *mysql) {
     async_mysql_active_t *node;
     async_mysql_active_t *cursor = g_active_mysql;
@@ -100,6 +110,9 @@ int spine_async_mysql_query(uv_loop_t *runtime_loop, MYSQL *mysql, const char *q
     if (!runtime_loop || !mysql || !query || !cb) {
         return -EINVAL;
     }
+    if (g_async_mysql_shutting_down) {
+        return -ESHUTDOWN;
+    }
 
     async_mysql_ctx_t *ctx = calloc(1, sizeof(async_mysql_ctx_t));
     if (ctx == NULL) {
@@ -157,6 +170,11 @@ int spine_async_mysql_query(uv_loop_t *runtime_loop, MYSQL *mysql, const char *q
     /* Avoid silently blocking the event loop when async C API support
      * is unavailable in the linked client library. */
     return -ENOTSUP;
+}
+
+/* Shutdown fence is a no-op when the async path is compiled out; the
+ * symbol exists so spine.c can call it unconditionally. */
+void spine_async_mysql_shutdown_begin(void) {
 }
 
 #endif

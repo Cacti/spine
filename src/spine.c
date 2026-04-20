@@ -106,6 +106,7 @@
 #ifdef HAVE_LIBUV
 #include "async_batch.h"
 #include "async_dns.h"
+#include "async_mysql.h"
 #include "async_php.h"
 #include "telemetry.h"
 #endif
@@ -1521,6 +1522,14 @@ int main(int argc, char *argv[]) {
 	 * the walk visits every live handle and requests async close. The
 	 * second uv_run flushes the close callbacks; then uv_loop_close is
 	 * safe. */
+	/* Close the async-mysql submission gate before flushing. Any new
+	 * spine_async_mysql_query call from a still-running worker now
+	 * returns -ESHUTDOWN; in-flight queries keep their uv_poll chain
+	 * and complete via the uv_run drain below. This prevents a late
+	 * callback from dereferencing a MYSQL handle we are about to
+	 * db_disconnect. */
+	spine_async_mysql_shutdown_begin();
+
 	/* Commit any pending async writes before tearing down the loop. The
 	 * cycle-end dummy flush that used to sit in stage_flush was test
 	 * scaffolding; the real flush belongs here, at pipeline tear-down,
