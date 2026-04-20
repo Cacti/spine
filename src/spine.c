@@ -466,7 +466,16 @@ int main(int argc, char *argv[]) {
 #ifndef _WIN32
 	{
 		struct rlimit rl = { 0, 0 };
-		(void)setrlimit(RLIMIT_CORE, &rl);
+		if (setrlimit(RLIMIT_CORE, &rl) != 0) {
+			/* This is rare but not impossible: some systems enforce a
+			 * non-zero hard minimum via /etc/security/limits.conf or
+			 * equivalent. Log so an operator can diagnose why cores
+			 * may still appear after a crash. */
+			fprintf(stderr,
+			    "WARNING: setrlimit(RLIMIT_CORE, 0) failed: %s -- "
+			    "crashes may write credentials to a core file\n",
+			    strerror(errno));
+		}
 	}
 #endif
 
