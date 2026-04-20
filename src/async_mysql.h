@@ -14,4 +14,9 @@ int spine_async_mysql_query(uv_loop_t *runtime_loop, MYSQL *mysql, const char *q
  * the uv_run drain can flush them before the MYSQL handle is closed. */
 void spine_async_mysql_shutdown_begin(void);
 
+/* Cumulative count of queries refused after the shutdown fence was
+ * set. Non-zero at process exit indicates worker-thread coordination
+ * lag; operators read this via spine_dump_config or telemetry. */
+unsigned long spine_async_mysql_shutdown_refused_count(void);
+
 #endif

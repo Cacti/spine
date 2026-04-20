@@ -51,6 +51,23 @@ static pthread_mutex_t   spine_cb_lock  = PTHREAD_MUTEX_INITIALIZER;
 static int               spine_cb_initialized = 0;
 static time_t            spine_cb_last_reap   = 0;
 
+/* Operator-visible counters. Read under the table lock. */
+static unsigned long     spine_cb_stat_reaped_total = 0;
+static unsigned long     spine_cb_stat_trips_total  = 0;
+
+void spine_cb_get_stats(unsigned long *entries_out,
+                        unsigned long *reaped_total_out,
+                        unsigned long *trips_total_out) {
+	pthread_mutex_lock(&spine_cb_lock);
+	if (entries_out) {
+		unsigned int n = HASH_COUNT(spine_cb_table);
+		*entries_out = (unsigned long)n;
+	}
+	if (reaped_total_out) *reaped_total_out = spine_cb_stat_reaped_total;
+	if (trips_total_out)  *trips_total_out  = spine_cb_stat_trips_total;
+	pthread_mutex_unlock(&spine_cb_lock);
+}
+
 /* Test seam: tests inject a mock clock so the reap deadline and
  * last_activity math are deterministic. Production uses time(2). */
 static time_t spine_cb_default_clock(void) { return time(NULL); }
@@ -83,6 +100,7 @@ static void spine_cb_reap_locked(time_t now) {
 		if (now - entry->last_activity > SPINE_CB_IDLE_SECS) {
 			HASH_DEL(spine_cb_table, entry);
 			free(entry);
+			spine_cb_stat_reaped_total++;
 		}
 	}
 }
@@ -193,6 +211,7 @@ void spine_cb_record(int host_id, int errors) {
 			}
 			int skip_cycles_copy = entry->skip_cycles;
 			entry->consecutive_failures = 0;
+			spine_cb_stat_trips_total++;
 			pthread_mutex_unlock(&spine_cb_lock);
 			SPINE_LOG(("NOTE: circuit breaker tripped for device %d; skipping %d cycles",
 				host_id, skip_cycles_copy));

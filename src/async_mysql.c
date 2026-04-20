@@ -33,9 +33,19 @@ static async_mysql_active_t *g_active_mysql = NULL;
 #include <stdatomic.h>
 static atomic_int g_async_mysql_shutting_down = 0;
 
+/* Count of submissions refused after the shutdown fence flipped. Read
+ * via spine_async_mysql_shutdown_refused_count(); operators use this to
+ * detect worker-thread coordination lag at shutdown. */
+static atomic_ulong g_async_mysql_refused_after_shutdown = 0;
+
 void spine_async_mysql_shutdown_begin(void) {
     atomic_store_explicit(&g_async_mysql_shutting_down, 1,
                           memory_order_release);
+}
+
+unsigned long spine_async_mysql_shutdown_refused_count(void) {
+    return atomic_load_explicit(&g_async_mysql_refused_after_shutdown,
+                                memory_order_relaxed);
 }
 
 static int async_mysql_mark_active(MYSQL *mysql) {
@@ -119,6 +129,8 @@ int spine_async_mysql_query(uv_loop_t *runtime_loop, MYSQL *mysql, const char *q
     }
     if (atomic_load_explicit(&g_async_mysql_shutting_down,
                              memory_order_acquire)) {
+        atomic_fetch_add_explicit(&g_async_mysql_refused_after_shutdown,
+                                  1, memory_order_relaxed);
         return -ESHUTDOWN;
     }
 
@@ -183,6 +195,10 @@ int spine_async_mysql_query(uv_loop_t *runtime_loop, MYSQL *mysql, const char *q
 /* Shutdown fence is a no-op when the async path is compiled out; the
  * symbol exists so spine.c can call it unconditionally. */
 void spine_async_mysql_shutdown_begin(void) {
+}
+
+unsigned long spine_async_mysql_shutdown_refused_count(void) {
+    return 0;
 }
 
 #endif

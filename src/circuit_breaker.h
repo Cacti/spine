@@ -37,4 +37,13 @@ void spine_cb_record(int host_id, int errors);
 #include <time.h>
 void spine_cb_set_clock_for_test(time_t (*fn)(void));
 
+/* Operator metrics.
+ *   *entries_out        — current hash table size
+ *   *reaped_total_out   — cumulative count of age-reaped entries
+ *   *trips_total_out    — cumulative count of cooldown trips
+ * Any out pointer may be NULL. */
+void spine_cb_get_stats(unsigned long *entries_out,
+                        unsigned long *reaped_total_out,
+                        unsigned long *trips_total_out);
+
 #endif /* SPINE_CIRCUIT_BREAKER_H */
