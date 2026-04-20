@@ -48,6 +48,16 @@ unsigned long spine_async_mysql_shutdown_refused_count(void) {
                                 memory_order_relaxed);
 }
 
+/* Test-only: clear the shutdown fence and the refused counter so unit
+ * tests can drive the fence more than once. Production code must not
+ * call this - the production fence is a one-way latch. */
+void spine_async_mysql_shutdown_reset_for_test(void) {
+    atomic_store_explicit(&g_async_mysql_shutting_down, 0,
+                          memory_order_release);
+    atomic_store_explicit(&g_async_mysql_refused_after_shutdown, 0,
+                          memory_order_relaxed);
+}
+
 static int async_mysql_mark_active(MYSQL *mysql) {
     async_mysql_active_t *node;
     async_mysql_active_t *cursor = g_active_mysql;
@@ -199,6 +209,10 @@ void spine_async_mysql_shutdown_begin(void) {
 
 unsigned long spine_async_mysql_shutdown_refused_count(void) {
     return 0;
+}
+
+void spine_async_mysql_shutdown_reset_for_test(void) {
+    /* No-op: the fallback path has no real fence state. */
 }
 
 #endif

@@ -329,4 +329,57 @@ function(spine_add_tests)
   endif()
   add_test(NAME scheduler COMMAND test_scheduler)
 
+  # spine_redact_args: flag allowlist, truncation, null-safety coverage.
+  add_executable(test_spine_redact_args tests/unit/test_spine_redact_args.c
+                 src/util.c tests/unit/test_spine_stubs.c)
+  target_include_directories(test_spine_redact_args PRIVATE
+      ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests/unit)
+  if(TARGET spine_build_options)
+    target_link_libraries(test_spine_redact_args PRIVATE spine_build_options)
+  endif()
+  target_link_libraries(test_spine_redact_args PRIVATE spine_hardening)
+  add_test(NAME spine_redact_args COMMAND test_spine_redact_args)
+
+  # CB age-reap: mock-clock driven. test_spine_stubs provides config_t set
+  # and the spine_audit stubs required by circuit_breaker.c.
+  add_executable(test_spine_cb_reap tests/unit/test_spine_cb_reap.c
+                 src/circuit_breaker.c src/spine_audit.c
+                 tests/unit/test_spine_stubs.c)
+  target_include_directories(test_spine_cb_reap PRIVATE
+      ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests/unit)
+  if(TARGET spine_build_options)
+    target_link_libraries(test_spine_cb_reap PRIVATE spine_build_options)
+  endif()
+  target_link_libraries(test_spine_cb_reap PRIVATE spine_hardening)
+  add_test(NAME spine_cb_reap COMMAND test_spine_cb_reap)
+
+  # async_mysql shutdown fence: API-only, no real uv/mysql handle opened.
+  add_executable(test_async_mysql_shutdown tests/unit/test_async_mysql_shutdown.c
+                 src/async_mysql.c tests/unit/test_spine_stubs.c)
+  target_include_directories(test_async_mysql_shutdown PRIVATE
+      ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests/unit)
+  if(TARGET spine_build_options)
+    target_link_libraries(test_async_mysql_shutdown PRIVATE spine_build_options)
+  endif()
+  target_link_libraries(test_async_mysql_shutdown PRIVATE spine_hardening)
+  if(LIBUV_FOUND)
+    target_link_libraries(test_async_mysql_shutdown PRIVATE ${LIBUV_LIBRARIES})
+  endif()
+  add_test(NAME async_mysql_shutdown COMMAND test_async_mysql_shutdown)
+
+  # async_exec + spine.c invariants: source-scan asserts that the argv
+  # tokenizer stays out and the flush-before-fence shutdown order holds.
+  # SPINE_SOURCE_ROOT pins the file paths at configure time so the test
+  # works from any ctest CWD.
+  add_executable(test_async_exec_shell tests/unit/test_async_exec_shell.c)
+  target_compile_definitions(test_async_exec_shell PRIVATE
+      SPINE_SOURCE_ROOT="${CMAKE_SOURCE_DIR}")
+  target_include_directories(test_async_exec_shell PRIVATE
+      ${CMAKE_SOURCE_DIR}/tests/unit)
+  if(TARGET spine_build_options)
+    target_link_libraries(test_async_exec_shell PRIVATE spine_build_options)
+  endif()
+  target_link_libraries(test_async_exec_shell PRIVATE spine_hardening)
+  add_test(NAME async_exec_shell COMMAND test_async_exec_shell)
+
 endfunction()

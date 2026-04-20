@@ -19,4 +19,8 @@ void spine_async_mysql_shutdown_begin(void);
  * lag; operators read this via spine_dump_config or telemetry. */
 unsigned long spine_async_mysql_shutdown_refused_count(void);
 
+/* Test-only: clear the fence and refused counter. Production code
+ * must never call this - the production fence is a one-way latch. */
+void spine_async_mysql_shutdown_reset_for_test(void);
+
 #endif

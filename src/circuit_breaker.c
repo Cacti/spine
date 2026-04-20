@@ -108,6 +108,11 @@ static void spine_cb_reap_locked(time_t now) {
 void spine_cb_init(void) {
 	pthread_mutex_lock(&spine_cb_lock);
 	spine_cb_initialized = 1;
+	/* Reset the reap cadence timer too. A test that cycles init /
+	 * shutdown / init with a mock clock reset would otherwise carry
+	 * forward the last_reap value and the first post-init reap would
+	 * silently skip. */
+	spine_cb_last_reap = 0;
 	pthread_mutex_unlock(&spine_cb_lock);
 }
 

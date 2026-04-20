@@ -24,8 +24,7 @@ static void noop_cb(MYSQL *m, int status, void *data) {
 }
 
 static void test_refused_count_starts_at_zero(void) {
-	/* We cannot reset the fence between tests (it is a one-way latch),
-	 * so this test must run FIRST. */
+	spine_async_mysql_shutdown_reset_for_test();
 	ASSERT_INT_EQ((int)spine_async_mysql_shutdown_refused_count(), 0);
 }
 
@@ -36,32 +35,39 @@ static void test_submission_refused_after_shutdown(void) {
 	uv_loop_t *fake_loop  = (uv_loop_t *)1;
 	MYSQL     *fake_mysql = (MYSQL *)2;
 
-	/* Flip the fence. */
+	spine_async_mysql_shutdown_reset_for_test();
 	spine_async_mysql_shutdown_begin();
 
+	unsigned long before = spine_async_mysql_shutdown_refused_count();
 	int rc = spine_async_mysql_query(fake_loop, fake_mysql,
 	                                 "SELECT 1", noop_cb, NULL);
+	unsigned long after = spine_async_mysql_shutdown_refused_count();
 
-	/* Both the HAVE_MYSQL_ASYNC and the fallback path must observe the
-	 * fence: HAVE_MYSQL_ASYNC returns -ESHUTDOWN explicitly; the
-	 * fallback returns -ENOTSUP because the async path is disabled but
-	 * also increments nothing since the fence is async-only. Accept
-	 * either as long as no query was actually submitted. */
 	ASSERT_TRUE(rc < 0);
+
+#ifdef HAVE_MYSQL_ASYNC
+	/* Async build: the fence path specifically bumps the counter. */
+	ASSERT_INT_EQ((int)(after - before), 1);
+#else
+	/* Fallback build: the function returns -ENOTSUP before reaching the
+	 * fence. Counter must be unchanged. */
+	ASSERT_INT_EQ((int)(after - before), 0);
+#endif
 }
 
-static void test_refused_counter_bumped(void) {
-	/* Only meaningful on HAVE_MYSQL_ASYNC builds; the fallback always
-	 * returns -ENOTSUP without touching the counter. Accept both
-	 * outcomes so the test passes on either build. */
-	unsigned long count = spine_async_mysql_shutdown_refused_count();
-	/* At least zero (fallback) or at least one (async). */
-	ASSERT_TRUE(count >= 0);
+static void test_reset_clears_counter_for_tests(void) {
+	spine_async_mysql_shutdown_reset_for_test();
+	spine_async_mysql_shutdown_begin();
+	(void)spine_async_mysql_query((uv_loop_t *)1, (MYSQL *)2,
+	                              "X", noop_cb, NULL);
+	/* Reset must zero both the fence and the counter. */
+	spine_async_mysql_shutdown_reset_for_test();
+	ASSERT_INT_EQ((int)spine_async_mysql_shutdown_refused_count(), 0);
 }
 
 int main(void) {
 	test_refused_count_starts_at_zero();
 	test_submission_refused_after_shutdown();
-	test_refused_counter_bumped();
+	test_reset_clears_counter_for_tests();
 	return finish_tests("async_mysql_shutdown");
 }
