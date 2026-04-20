@@ -23,6 +23,12 @@
 
 #include "test_platform_helpers.h"
 
+/* PATH_MAX is optional in POSIX; some AIX/HP-UX headers leave it
+ * undefined. 4096 covers every sensible build-tree layout. */
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 /* CMake pins this to ${CMAKE_SOURCE_DIR}. Fallback is the relative
  * path - useful when running the binary manually from the project
  * root but not trusted in CI. */

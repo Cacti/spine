@@ -1,6 +1,7 @@
 #include "common.h"
 #include "spine.h"
 #include "async_dns.h"
+#include "spine_shutdown.h"
 
 #ifdef HAVE_CARES
 #include <ares.h>
@@ -488,11 +489,10 @@ void spine_async_dns_runtime_destroy(spine_async_dns_runtime_t *runtime) {
 	}
 
 	/* Bounded wall-clock wait for outstanding uv_getaddrinfo requests.
-	 * Matches SPINE_SHUTDOWN_DRAIN_SECS in spine.c so every shutdown
-	 * phase shares the same per-phase budget. UV_RUN_ONCE blocks until
-	 * one event fires or the loop has no work, so the deadline is real
-	 * wall-clock time rather than a spin count. */
-	time_t deadline = time(NULL) + 3;
+	 * Shares SPINE_SHUTDOWN_DRAIN_SECS with spine.c so bumping the
+	 * budget in one place updates every subsystem. UV_RUN_ONCE blocks
+	 * until one event fires or the loop has no work. */
+	time_t deadline = time(NULL) + SPINE_SHUTDOWN_DRAIN_SECS;
 	while (runtime->inflight > 0 && time(NULL) < deadline) {
 		if (uv_run(runtime->loop, UV_RUN_ONCE) == 0) {
 			/* No more events to process - either the requests are

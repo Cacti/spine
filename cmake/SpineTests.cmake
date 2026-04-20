@@ -330,6 +330,11 @@ function(spine_add_tests)
   add_test(NAME scheduler COMMAND test_scheduler)
 
   # spine_redact_args: flag allowlist, truncation, null-safety coverage.
+  # util.c pulls in mysql.h and net-snmp.h transitively via spine.h, so
+  # the test needs those INTERFACE targets even though the code under
+  # test never touches a real handle.
+  spine_require_mysql()
+  spine_require_netsnmp()
   add_executable(test_spine_redact_args tests/unit/test_spine_redact_args.c
                  src/util.c tests/unit/test_spine_stubs.c)
   target_include_directories(test_spine_redact_args PRIVATE
@@ -337,11 +342,13 @@ function(spine_add_tests)
   if(TARGET spine_build_options)
     target_link_libraries(test_spine_redact_args PRIVATE spine_build_options)
   endif()
-  target_link_libraries(test_spine_redact_args PRIVATE spine_hardening)
+  target_link_libraries(test_spine_redact_args PRIVATE
+      spine_hardening spine_mysql spine_netsnmp Threads::Threads)
   add_test(NAME spine_redact_args COMMAND test_spine_redact_args)
 
   # CB age-reap: mock-clock driven. test_spine_stubs provides config_t set
-  # and the spine_audit stubs required by circuit_breaker.c.
+  # and the spine_audit stubs required by circuit_breaker.c. libaudit is
+  # an optional link when HAVE_LIBAUDIT is set.
   add_executable(test_spine_cb_reap tests/unit/test_spine_cb_reap.c
                  src/circuit_breaker.c src/spine_audit.c
                  tests/unit/test_spine_stubs.c)
@@ -350,7 +357,13 @@ function(spine_add_tests)
   if(TARGET spine_build_options)
     target_link_libraries(test_spine_cb_reap PRIVATE spine_build_options)
   endif()
-  target_link_libraries(test_spine_cb_reap PRIVATE spine_hardening)
+  target_link_libraries(test_spine_cb_reap PRIVATE
+      spine_hardening spine_mysql spine_netsnmp Threads::Threads)
+  if(SPINE_HAVE_LIBAUDIT)
+    target_compile_definitions(test_spine_cb_reap PRIVATE HAVE_LIBAUDIT=1)
+    target_include_directories(test_spine_cb_reap SYSTEM PRIVATE ${AUDIT_INCLUDE_DIR})
+    target_link_libraries(test_spine_cb_reap PRIVATE ${AUDIT_LIB})
+  endif()
   add_test(NAME spine_cb_reap COMMAND test_spine_cb_reap)
 
   # async_mysql shutdown fence: API-only, no real uv/mysql handle opened.
@@ -361,7 +374,8 @@ function(spine_add_tests)
   if(TARGET spine_build_options)
     target_link_libraries(test_async_mysql_shutdown PRIVATE spine_build_options)
   endif()
-  target_link_libraries(test_async_mysql_shutdown PRIVATE spine_hardening)
+  target_link_libraries(test_async_mysql_shutdown PRIVATE
+      spine_hardening spine_mysql Threads::Threads)
   if(LIBUV_FOUND)
     target_link_libraries(test_async_mysql_shutdown PRIVATE ${LIBUV_LIBRARIES})
   endif()

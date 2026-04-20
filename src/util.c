@@ -53,24 +53,26 @@
 
 static int nopts = 0;
 
-/* Drop-in replacement for atoi() on config-setting values. atoi has
- * three dangerous failure modes on attacker- or misconfig-supplied
- * input: silent return of 0 on non-numeric strings, undefined behaviour
- * on integer overflow, and no way to distinguish "0" from "bogus".
+/* Range-safe int parser for config-setting values. Replaces atoi() at
+ * every config call site so bad input produces a bounded value rather
+ * than undefined behaviour or a silent zero-reset.
  *
- * spine_atoi uses strtol with errno detection. Overflow clamps to
- * INT_MAX / INT_MIN rather than silently wrapping. Non-numeric input
- * returns 0 (matching atoi's contract for code that assumes "0 means
- * default"); callers that need to distinguish empty-or-bogus from
- * literal "0" should use strtol directly. */
-static int spine_atoi(const char *s) {
+ * - NULL input returns 0 (atoi is UB here).
+ * - Non-numeric input returns 0, matching atoi's "0 means default" for
+ *   existing callers.
+ * - Positive overflow clamps to INT_MAX.
+ * - Negative overflow clamps to INT_MIN (a prior version returned
+ *   INT_MAX on large negatives - sign-flip data corruption).
+ */
+static int spine_parse_int(const char *s) {
 	if (s == NULL) return 0;
 	char *end = NULL;
 	errno = 0;
 	long v = strtol(s, &end, 10);
 	if (end == s) return 0;                /* no digits consumed */
-	if (errno == ERANGE || v > INT_MAX) return INT_MAX;
-	if (v < INT_MIN) return INT_MIN;
+	if (errno == ERANGE) return v < 0 ? INT_MIN : INT_MAX;
+	if (v > INT_MAX)     return INT_MAX;
+	if (v < INT_MIN)     return INT_MIN;
 	return (int)v;
 }
 
@@ -451,7 +453,7 @@ static void read_config_options_legacy(void) {
 
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
-		const int n = spine_atoi(res);
+		const int n = spine_parse_int(res);
 		free(res);
 		if (n != 0) set.log_level = n;
 	}
@@ -481,7 +483,7 @@ static void read_config_options_legacy(void) {
 
 	/* get log separator */
 	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
-		set.log_datetime_separator = spine_atoi(res);
+		set.log_datetime_separator = spine_parse_int(res);
 		free(res);
 
 		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
@@ -524,7 +526,7 @@ static void read_config_options_legacy(void) {
 
 	/* set availability_method */
 	if ((res = getsetting(&mysql, LOCAL, "availability_method")) != 0) {
-		set.availability_method = spine_atoi(res);
+		set.availability_method = spine_parse_int(res);
 		free(res);
 	}
 
@@ -533,7 +535,7 @@ static void read_config_options_legacy(void) {
 
 	/* set ping_recovery_count */
 	if ((res = getsetting(&mysql, LOCAL, "ping_recovery_count")) != 0) {
-		set.ping_recovery_count = spine_atoi(res);
+		set.ping_recovery_count = spine_parse_int(res);
 		free(res);
 	}
 
@@ -542,7 +544,7 @@ static void read_config_options_legacy(void) {
 
 	/* set ping_failure_count */
 	if ((res = getsetting(&mysql, LOCAL, "ping_failure_count")) != 0) {
-		set.ping_failure_count = spine_atoi(res);
+		set.ping_failure_count = spine_parse_int(res);
 		free(res);
 	}
 
@@ -551,7 +553,7 @@ static void read_config_options_legacy(void) {
 
 	/* set ping_method */
 	if ((res = getsetting(&mysql, LOCAL, "ping_method")) != 0) {
-		set.ping_method = spine_atoi(res);
+		set.ping_method = spine_parse_int(res);
 		free(res);
 	}
 
@@ -560,7 +562,7 @@ static void read_config_options_legacy(void) {
 
 	/* set ping_retries */
 	if ((res = getsetting(&mysql, LOCAL, "ping_retries")) != 0) {
-		set.ping_retries = spine_atoi(res);
+		set.ping_retries = spine_parse_int(res);
 		free(res);
 	}
 
@@ -569,7 +571,7 @@ static void read_config_options_legacy(void) {
 
 	/* set ping_timeout */
 	if ((res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
-		set.ping_timeout = spine_atoi(res);
+		set.ping_timeout = spine_parse_int(res);
 		free(res);
 	} else {
 		set.ping_timeout = 400;
@@ -580,7 +582,7 @@ static void read_config_options_legacy(void) {
 
 	/* set snmp_retries */
 	if ((res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
-		set.snmp_retries = spine_atoi(res);
+		set.snmp_retries = spine_parse_int(res);
 		free(res);
 	} else {
 		set.snmp_retries = 3;
@@ -622,7 +624,7 @@ static void read_config_options_legacy(void) {
 	/* get Cacti defined max threads override spine.conf */
 	if (set.threads_set == FALSE) {
 		if ((res = getpsetting(&mysql, mode, "threads")) != 0) {
-			set.threads = spine_atoi(res);
+			set.threads = spine_parse_int(res);
 			free(res);
 			if (set.threads > MAX_THREADS) {
 				set.threads = MAX_THREADS;
@@ -635,7 +637,7 @@ static void read_config_options_legacy(void) {
 
 	/* get the poller_interval for those who have elected to go with a 1 minute polling interval */
 	if ((res = getsetting(&mysql, LOCAL, "poller_interval")) != 0) {
-		set.poller_interval = spine_atoi(res);
+		set.poller_interval = spine_parse_int(res);
 		free(res);
 	} else {
 		set.poller_interval = 0;
@@ -650,7 +652,7 @@ static void read_config_options_legacy(void) {
 
 	/* get the concurrent_processes variable to determine thread sleep values */
 	if ((res = getsetting(&mysql, LOCAL, "concurrent_processes")) != 0) {
-		set.num_parent_processes = spine_atoi(res);
+		set.num_parent_processes = spine_parse_int(res);
 		free(res);
 	} else {
 		set.num_parent_processes = 1;
@@ -661,7 +663,7 @@ static void read_config_options_legacy(void) {
 
 	/* get the script timeout to establish timeouts */
 	if ((res = getsetting(&mysql, LOCAL, "script_timeout")) != 0) {
-		set.script_timeout = spine_atoi(res);
+		set.script_timeout = spine_parse_int(res);
 		free(res);
 		if (set.script_timeout < 5) {
 			set.script_timeout = 5;
@@ -684,7 +686,7 @@ static void read_config_options_legacy(void) {
 
 	/* get spine_log_level */
 	if ((res = getsetting(&mysql, LOCAL, "spine_log_level")) != 0) {
-		set.spine_log_level = spine_atoi(res);
+		set.spine_log_level = spine_parse_int(res);
 		free(res);
 	}
 
@@ -693,7 +695,7 @@ static void read_config_options_legacy(void) {
 
 	/* get the number of script server processes to run */
 	if ((res = getsetting(&mysql, LOCAL, "php_servers")) != 0) {
-		set.php_servers = spine_atoi(res);
+		set.php_servers = spine_parse_int(res);
 		free(res);
 
 		if (set.php_servers > MAX_PHP_SERVERS) {
@@ -712,7 +714,7 @@ static void read_config_options_legacy(void) {
 
 	/* get the number of active profiles on the system run */
 	if ((res = getsetting(&mysql, LOCAL, "active_profiles")) != 0) {
-		set.active_profiles = spine_atoi(res);
+		set.active_profiles = spine_parse_int(res);
 		free(res);
 
 		if (set.active_profiles <= 0) {
@@ -727,7 +729,7 @@ static void read_config_options_legacy(void) {
 
 	/* get the number of snmp_ports in use */
 	if ((res = getsetting(&mysql, LOCAL, "total_snmp_ports")) != 0) {
-		set.total_snmp_ports = spine_atoi(res);
+		set.total_snmp_ports = spine_parse_int(res);
 		free(res);
 
 		if (set.total_snmp_ports <= 0) {
@@ -794,7 +796,7 @@ static void read_config_options_legacy(void) {
 
 	/* determine the maximum oid's to obtain in a single get request */
 	if ((res = getsetting(&mysql, LOCAL, "max_get_size")) != 0) {
-		set.snmp_max_get_size = spine_atoi(res);
+		set.snmp_max_get_size = spine_parse_int(res);
 		free(res);
 
 		if (set.snmp_max_get_size > 128) {

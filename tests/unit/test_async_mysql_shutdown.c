@@ -29,40 +29,44 @@ static void test_refused_count_starts_at_zero(void) {
 }
 
 static void test_submission_refused_after_shutdown(void) {
-	/* Synthetic uv_loop_t pointer value - the function must reject
-	 * before any uv / mysql code runs, so the pointer never gets
-	 * dereferenced. Same for the MYSQL pointer. */
-	uv_loop_t *fake_loop  = (uv_loop_t *)1;
-	MYSQL     *fake_mysql = (MYSQL *)2;
+	/* Real uv_loop so a future refactor that dereferences the loop
+	 * before the fence check does not segfault - it would fail
+	 * cleanly against a valid-but-empty loop. */
+	uv_loop_t loop;
+	ASSERT_INT_EQ(uv_loop_init(&loop), 0);
+
+	MYSQL *fake_mysql = (MYSQL *)2;
 
 	spine_async_mysql_shutdown_reset_for_test();
 	spine_async_mysql_shutdown_begin();
 
 	unsigned long before = spine_async_mysql_shutdown_refused_count();
-	int rc = spine_async_mysql_query(fake_loop, fake_mysql,
+	int rc = spine_async_mysql_query(&loop, fake_mysql,
 	                                 "SELECT 1", noop_cb, NULL);
 	unsigned long after = spine_async_mysql_shutdown_refused_count();
 
 	ASSERT_TRUE(rc < 0);
 
 #ifdef HAVE_MYSQL_ASYNC
-	/* Async build: the fence path specifically bumps the counter. */
 	ASSERT_INT_EQ((int)(after - before), 1);
 #else
-	/* Fallback build: the function returns -ENOTSUP before reaching the
-	 * fence. Counter must be unchanged. */
 	ASSERT_INT_EQ((int)(after - before), 0);
 #endif
+
+	uv_loop_close(&loop);
 }
 
 static void test_reset_clears_counter_for_tests(void) {
+	uv_loop_t loop;
+	ASSERT_INT_EQ(uv_loop_init(&loop), 0);
+
 	spine_async_mysql_shutdown_reset_for_test();
 	spine_async_mysql_shutdown_begin();
-	(void)spine_async_mysql_query((uv_loop_t *)1, (MYSQL *)2,
-	                              "X", noop_cb, NULL);
-	/* Reset must zero both the fence and the counter. */
+	(void)spine_async_mysql_query(&loop, (MYSQL *)2, "X", noop_cb, NULL);
 	spine_async_mysql_shutdown_reset_for_test();
 	ASSERT_INT_EQ((int)spine_async_mysql_shutdown_refused_count(), 0);
+
+	uv_loop_close(&loop);
 }
 
 int main(void) {

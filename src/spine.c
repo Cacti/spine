@@ -166,7 +166,7 @@ static void spine_uv_signal_handler(uv_signal_t *handle, int signo) {
  * operator files an issue. Declared atomic so a future refactor that
  * walks the loop from a worker thread does not lose increments. */
 #include <stdatomic.h>
-static _Atomic int g_spine_uv_leaked_handles = 0;
+static atomic_int g_spine_uv_leaked_handles = 0;
 
 static void spine_uv_force_close(uv_handle_t *handle, void *arg) {
     (void)arg;
@@ -177,11 +177,7 @@ static void spine_uv_force_close(uv_handle_t *handle, void *arg) {
     }
 }
 
-/* Per-phase drain budget at shutdown. systemd's default TimeoutStopSec
- * is 10s; with four drain phases (cleanup, post-flush, post-fence,
- * post-walk) at 3s each we have a 3s headroom for the final
- * db_disconnect / snmp_close. */
-#define SPINE_SHUTDOWN_DRAIN_SECS 3
+#include "spine_shutdown.h"
 
 /* Run the event loop for at most SPINE_SHUTDOWN_DRAIN_SECS wall-clock
  * seconds. Used at shutdown so a stuck callback (wedged c-ares query,
@@ -189,11 +185,14 @@ static void spine_uv_force_close(uv_handle_t *handle, void *arg) {
  * indefinitely - the process must still exit in bounded time for
  * systemd to consider the stop successful.
  *
- * UV_RUN_NOWAIT returns 0 when the loop has no pending work; we use
- * that as the early-exit signal. */
+ * Deadline uses uv_hrtime (monotonic nanoseconds) instead of time(2)
+ * so the budget is real sub-second resolution rather than the 0-to-1s
+ * jitter time(2) produces. UV_RUN_NOWAIT returns 0 when the loop has
+ * no pending work; that is our early-exit signal. */
 static void spine_uv_run_bounded(uv_loop_t *l) {
-    time_t deadline = time(NULL) + SPINE_SHUTDOWN_DRAIN_SECS;
-    while (time(NULL) < deadline) {
+    uint64_t deadline = uv_hrtime() +
+        (uint64_t)SPINE_SHUTDOWN_DRAIN_SECS * 1000000000ULL;
+    while (uv_hrtime() < deadline) {
         if (uv_run(l, UV_RUN_NOWAIT) == 0) break;
     }
 }
@@ -1593,6 +1592,22 @@ int main(int argc, char *argv[]) {
 	uv_loop_close(loop);
 	loop = NULL;
 	SPINE_LOG_DEBUG(("DEBUG: libuv main thread loop drained"));
+
+	/* Single-line shutdown metrics summary. Gives operators a grep-
+	 * friendly record of every shutdown counter without requiring a
+	 * telemetry socket. Non-zero values here are the leading signal
+	 * of a pipeline or coordination bug. */
+	{
+		unsigned long cb_entries = 0, cb_reaped = 0, cb_trips = 0;
+		spine_cb_get_stats(&cb_entries, &cb_reaped, &cb_trips);
+		SPINE_LOG(("INFO: shutdown metrics libuv_leaked=%d "
+		           "cb_entries=%lu cb_trips=%lu cb_reaped=%lu "
+		           "mysql_refused_after_shutdown=%lu",
+		           atomic_load_explicit(&g_spine_uv_leaked_handles,
+		                                memory_order_relaxed),
+		           cb_entries, cb_trips, cb_reaped,
+		           spine_async_mysql_shutdown_refused_count()));
+	}
 #endif
 
 	/* close mysql */
