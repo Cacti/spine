@@ -17,6 +17,16 @@
 
 #include "util.h"
 
+/* Keep in lockstep with spine.h's BUFSIZE. If spine.h raises BUFSIZE,
+ * this test still exercises the function's output at the production
+ * width so truncation invariants track. */
+#ifndef BUFSIZE
+#define BUFSIZE 1024
+#endif
+#if BUFSIZE < 512
+#error "spine.h BUFSIZE shrank below the width this test expects"
+#endif
+
 #include "test_platform_helpers.h"
 
 static int contains(const char *hay, const char *needle) {
@@ -24,7 +34,7 @@ static int contains(const char *hay, const char *needle) {
 }
 
 static void test_snmpv1_community_space_form(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args("snmpget -c PUBLIC host oid", out, sizeof(out));
 
 	ASSERT_TRUE(!contains(out, "PUBLIC"));
@@ -34,14 +44,14 @@ static void test_snmpv1_community_space_form(void) {
 }
 
 static void test_snmpv1_community_equals_form(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args("snmpget -c=PUBLIC host oid", out, sizeof(out));
 	ASSERT_TRUE(!contains(out, "PUBLIC"));
 	ASSERT_TRUE(contains(out, "***"));
 }
 
 static void test_snmpv3_auth_and_priv_passphrases(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args(
 	    "snmpget -v3 -u user -a MD5 -A AUTHPASS -x AES -X PRIVPASS host oid",
 	    out, sizeof(out));
@@ -58,7 +68,7 @@ static void test_snmpv3_auth_and_priv_passphrases(void) {
 }
 
 static void test_snmpv3_master_keys(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args("snmpwalk -3m AUTHKEY -3M PRIVKEY host oid",
 	                  out, sizeof(out));
 	ASSERT_TRUE(!contains(out, "AUTHKEY"));
@@ -66,7 +76,7 @@ static void test_snmpv3_master_keys(void) {
 }
 
 static void test_snmpv3_localized_keys(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args("snmpwalk -3k LOCALAUTH -3K LOCALPRIV host oid",
 	                  out, sizeof(out));
 	ASSERT_TRUE(!contains(out, "LOCALAUTH"));
@@ -74,7 +84,7 @@ static void test_snmpv3_localized_keys(void) {
 }
 
 static void test_long_flag_authkey_privkey(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args(
 	    "snmpget --authKey=0xDEADBEEF --privKey=0xCAFEBABE host oid",
 	    out, sizeof(out));
@@ -84,13 +94,13 @@ static void test_long_flag_authkey_privkey(void) {
 }
 
 static void test_long_flag_community(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args("snmpget --community PUBLIC host oid", out, sizeof(out));
 	ASSERT_TRUE(!contains(out, "PUBLIC"));
 }
 
 static void test_unrecognized_flag_passes_through(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args("/usr/local/bin/wrapper -t 5 host oid", out, sizeof(out));
 
 	/* -t is not a credential flag; its value must survive. */
@@ -100,7 +110,7 @@ static void test_unrecognized_flag_passes_through(void) {
 }
 
 static void test_non_flag_value_not_eaten(void) {
-	char out[512];
+	char out[BUFSIZE];
 	/* A bare token that happens to look like flag characters without
 	 * leading dash must pass unchanged. */
 	spine_redact_args("echo password=hunter2", out, sizeof(out));
@@ -113,7 +123,7 @@ static void test_null_output_does_not_crash(void) {
 }
 
 static void test_null_input_safe(void) {
-	char out[512];
+	char out[BUFSIZE];
 	spine_redact_args(NULL, out, sizeof(out));
 	ASSERT_INT_EQ((int)strlen(out), 0);
 }
