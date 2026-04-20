@@ -11,6 +11,7 @@ typedef enum {
     POLL_STATE_REINDEX,
     POLL_STATE_SNMP_SEND,
     POLL_STATE_SNMP_WAIT,
+    POLL_STATE_WAIT_MUX,
     POLL_STATE_SCRIPTS,
     POLL_STATE_FLUSH,
     POLL_STATE_DONE,
@@ -26,7 +27,7 @@ typedef struct poll_context_struct poll_context_t;
  */
 typedef int (*spine_async_stage_f)(poll_context_t *ctx);
 
-void spine_async_poll_start(poller_thread_t *det);
+void spine_async_poll_start(uv_loop_t *target_loop, poller_thread_t *det);
 void spine_transition_state(poll_context_t *ctx);
 
 #endif

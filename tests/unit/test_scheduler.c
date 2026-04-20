@@ -30,7 +30,7 @@ static bool mock_retry_prepare(spine_task_t *task) {
 
 void test_sparse_id(void) {
     printf("Running Sparse ID Test...\n");
-    spine_scheduler_init();
+    spine_scheduler_init(5000);
     spine_governor_init(5000);
     completed_tasks = 0;
 
@@ -67,7 +67,7 @@ void test_sparse_id(void) {
 
 void test_blackhole(void) {
     printf("Running Blackhole Test...\n");
-    spine_scheduler_init();
+    spine_scheduler_init(5000);
     spine_governor_init(5000);
     completed_tasks = 0;
     failed_tasks = 0;
@@ -131,7 +131,7 @@ void test_blackhole(void) {
 
 void test_aimd_window(void) {
     printf("Running AIMD Window Test...\n");
-    spine_scheduler_init();
+    spine_scheduler_init(5000);
     spine_governor_init(5000);
     
     spine_task_t *t = spine_task_alloc();
@@ -163,7 +163,7 @@ void test_aimd_window(void) {
 
 void test_snmp_toobig(void) {
     printf("Running SNMP tooBig Simulation...\n");
-    spine_scheduler_init();
+    spine_scheduler_init(5000);
     spine_governor_init(5000);
     completed_tasks = 0;
     payload_slices = 0;
@@ -220,7 +220,7 @@ static void *worker_thread(void *arg) {
 
 void test_multithreaded_race(void) {
     printf("Running Multi-threaded Race Test...\n");
-    spine_scheduler_init();
+    spine_scheduler_init(5000);
     spine_governor_init(5000);
     
     uv_loop_t loops[4];

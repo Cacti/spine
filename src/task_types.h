@@ -44,6 +44,7 @@ struct spine_task_s {
     /* Completion State (Safe across uv_close boundary) */
     int final_status;
     void *final_result;
+    void *parent_ctx; /* Pointer to poll_context_t */
     
     /* Hooks */
     bool (*on_retry_prepare)(spine_task_t *task);

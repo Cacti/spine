@@ -5,10 +5,11 @@
 #include <stdlib.h>
 #include <uv.h>
 
-#define MAX_GLOBAL_INFLIGHT 5000
 
 /* Slab Allocator */
-static spine_task_t task_pool[MAX_GLOBAL_INFLIGHT];
+static spine_task_t *task_pool = NULL;
+static uint32_t g_max_tasks = 5000;
+
 static spine_task_t *free_list = NULL;
 
 /* Per-Host Queue */
@@ -26,7 +27,7 @@ static uv_mutex_t scheduler_lock;
 static bool scheduler_initialized = false;
 static uint32_t total_retries = 0;
 
-void spine_scheduler_init(void) {
+void spine_scheduler_init(uint32_t max_global_tasks) {
     if (scheduler_initialized) return;
     uv_mutex_init(&scheduler_lock);
     
@@ -35,12 +36,15 @@ void spine_scheduler_init(void) {
     current_host_ptr = NULL;
     inflight_head = NULL;
     total_retries = 0;
+    g_max_tasks = max_global_tasks;
+    
+    task_pool = calloc(g_max_tasks, sizeof(spine_task_t));
     
     /* Initialize Free List */
-    for (int i = 0; i < MAX_GLOBAL_INFLIGHT - 1; i++) {
+    for (uint32_t i = 0; i < g_max_tasks - 1; i++) {
         task_pool[i].next = &task_pool[i + 1];
     }
-    task_pool[MAX_GLOBAL_INFLIGHT - 1].next = NULL;
+    task_pool[g_max_tasks - 1].next = NULL;
     free_list = &task_pool[0];
     uv_mutex_unlock(&scheduler_lock);
     
@@ -94,9 +98,9 @@ void spine_scheduler_purge(int error_code) {
     /* We cannot free them instantly, we must call complete_task so uv_close triggers */
     spine_task_t *itask = inflight_head;
     /* We must copy the pointers because complete_task alters the list */
-    spine_task_t **inflight_array = calloc(MAX_GLOBAL_INFLIGHT, sizeof(spine_task_t*));
+    spine_task_t **inflight_array = calloc(g_max_tasks, sizeof(spine_task_t*));
     int inflight_count = 0;
-    while (itask && inflight_count < MAX_GLOBAL_INFLIGHT) {
+    while (itask && inflight_count < g_max_tasks) {
         inflight_array[inflight_count++] = itask;
         itask = itask->next_inflight;
     }
@@ -112,6 +116,9 @@ void spine_scheduler_destroy(void) {
     if (!scheduler_initialized) return;
     /* -125 is UV_ECANCELED, safe generic error for teardown */
     spine_scheduler_purge(-125); 
+    free(task_pool);
+    task_pool = NULL;
+
     uv_mutex_destroy(&scheduler_lock);
     scheduler_initialized = false;
 }

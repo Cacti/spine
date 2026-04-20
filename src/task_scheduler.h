@@ -6,7 +6,7 @@
 /**
  * Initialize the global Weighted Round-Robin (WRR) queue scheduler and Slab Allocator.
  */
-void spine_scheduler_init(void);
+void spine_scheduler_init(uint32_t max_global_tasks);
 
 /**
  * Clean up scheduler state and queued tasks.

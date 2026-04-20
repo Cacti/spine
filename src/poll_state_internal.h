@@ -32,6 +32,7 @@ struct poll_context_struct {
     int current_item_idx;
     target_t *poller_items;
     int num_items;
+    int mux_tasks_pending;
     struct poll_context_struct *next_in_queue;
 };
 

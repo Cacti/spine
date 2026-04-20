@@ -35,7 +35,6 @@
 #include "spine.h"
 #include "spine_probes.h"
 #include "circuit_breaker.h"
-#include "composition_root.h"
 #include "host_polling_service.h"
 #include "host_polling_stages.h"
 #include "poll_state.h"
@@ -2894,8 +2893,23 @@ char *exec_poll(spine_spine_host_t *current_host, char *command, int id, const c
 #include "async_php.h"
 #include "async_mysql.h"
 #include "async_batch.h"
+#include "task_scheduler.h"
+#include "task_executor.h"
+
 
 static void poll_step(poll_context_t *ctx);
+
+static void on_mux_complete(spine_task_t *task, int status, void *result) {
+	(void)result;
+	poll_context_t *ctx = (poll_context_t *)task->parent_ctx;
+	ctx->mux_tasks_pending--;
+	if (status != 0) ctx->host_errors++;
+	if (ctx->mux_tasks_pending == 0) {
+		ctx->state = POLL_STATE_SCRIPTS;
+		spine_transition_state(ctx);
+	}
+}
+
 
 static void on_handle_closed(uv_handle_t *handle) {
 	poll_context_t *ctx = (poll_context_t *)handle->data;
@@ -2956,11 +2970,37 @@ static int stage_ping(poll_context_t *ctx) {
 
 static int stage_snmp(poll_context_t *ctx) {
 	if (ctx->num_items > 0) {
-		return 0; // Deferred
+		int items_per_task = 50;
+		int i = 0;
+		ctx->mux_tasks_pending = 0;
+		while (i < ctx->num_items) {
+			spine_task_t *task = spine_task_alloc();
+			if (!task) break; /* Backpressure: wait for slots */
+			task->host_id = ctx->host->id;
+			task->parent_ctx = ctx;
+			task->on_complete = on_mux_complete;
+			task->max_retries = 3;
+			task->timeout_ms = 1000;
+			/* Map a chunk of poller items to the task */
+			task->payload = &ctx->poller_items[i];
+			task->payload_len = (ctx->num_items - i > items_per_task) ? items_per_task : (ctx->num_items - i);
+			spine_scheduler_enqueue(task);
+			ctx->mux_tasks_pending++;
+			i += task->payload_len;
+		}
+		if (ctx->mux_tasks_pending > 0) {
+			ctx->state = POLL_STATE_WAIT_MUX;
+			return 0; /* Async wait */
+		}
 	}
 	ctx->state = POLL_STATE_SCRIPTS;
 	return 1;
 }
+
+static int stage_wait_mux(poll_context_t *ctx) {
+	return 0; /* Stay in this state until on_mux_complete advances us */
+}
+
 
 static int stage_scripts(poll_context_t *ctx) {
 	ctx->state = POLL_STATE_FLUSH;
@@ -2982,6 +3022,7 @@ static const spine_async_stage_f polling_pipeline[] = {
 	[POLL_STATE_DNS]       = stage_dns,
 	[POLL_STATE_PING]      = stage_ping,
 	[POLL_STATE_SNMP_SEND] = stage_snmp,
+	[POLL_STATE_WAIT_MUX]   = stage_wait_mux,
 	[POLL_STATE_SCRIPTS]   = stage_scripts,
 	[POLL_STATE_FLUSH]     = stage_flush,
 };

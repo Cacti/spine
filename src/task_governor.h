@@ -43,4 +43,9 @@ void spine_governor_release(spine_task_t *task, bool success);
  */
 uint32_t spine_governor_get_global_inflight(void);
 
+/**
+ * Returns the number of hosts currently throttled to their max concurrency.
+ */
+uint32_t spine_governor_get_throttled_hosts(void);
+
 #endif

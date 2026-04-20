@@ -109,6 +109,8 @@
 #include "async_mysql.h"
 #include "async_php.h"
 #include "telemetry.h"
+#include "task_scheduler.h"
+
 #endif
 
 #include <signal.h>
@@ -420,7 +422,6 @@ int main(int argc, char *argv[]) {
 	int current_thread;
 	int threads_final = 0;
 	int threads_missing = -1;
-	double total_time = 0;
 	int threads_count;
 	struct snmp_session session;
 #ifdef HAVE_LIBUV
@@ -458,6 +459,8 @@ int main(int argc, char *argv[]) {
 	num_loops = set.threads;
 	spine_loops = calloc(num_loops, sizeof(spine_loop_t));
 	loop = uv_default_loop();
+	spine_scheduler_init(5000);
+
 	spine_async_batch_init(loop, &mysql, 100, 500);
 	spine_async_php_init(loop);
 	spine_telemetry_init(loop, "/tmp/spine_telemetry.sock");
@@ -1417,6 +1420,8 @@ int main(int argc, char *argv[]) {
 		uv_thread_join(&spine_loops[i].thread);
 		uv_mutex_destroy(&spine_loops[i].queue_lock);
 	}
+	spine_scheduler_destroy();
+
 	spine_async_batch_cleanup();
 	spine_async_php_cleanup();
 	spine_telemetry_cleanup();

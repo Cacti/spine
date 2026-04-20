@@ -37,6 +37,15 @@ void spine_executor_dispatch(uv_loop_t *loop, spine_task_t *task) {
 static void on_timer_closed(uv_handle_t *handle) {
     spine_task_t *task = (spine_task_t *)handle->data;
     
+    /* CRITICAL FIX: Do not retry if the failure was a deliberate teardown cancellation */
+    if (task->final_status == -125) {
+        task->state = STATE_FAILED;
+        if (task->on_complete) task->on_complete(task, task->final_status, task->final_result);
+        spine_task_free(task);
+        return;
+    }
+
+
     /* Proceed with final completion ONLY after libuv releases the handle */
     if (task->final_status != 0 && task->retry_count < task->max_retries) {
         
