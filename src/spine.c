@@ -1531,20 +1531,20 @@ int main(int argc, char *argv[]) {
 	 * the walk visits every live handle and requests async close. The
 	 * second uv_run flushes the close callbacks; then uv_loop_close is
 	 * safe. */
-	/* Close the async-mysql submission gate before flushing. Any new
-	 * spine_async_mysql_query call from a still-running worker now
-	 * returns -ESHUTDOWN; in-flight queries keep their uv_poll chain
-	 * and complete via the uv_run drain below. This prevents a late
-	 * callback from dereferencing a MYSQL handle we are about to
-	 * db_disconnect. */
-	spine_async_mysql_shutdown_begin();
-
-	/* Commit any pending async writes before tearing down the loop. The
-	 * cycle-end dummy flush that used to sit in stage_flush was test
-	 * scaffolding; the real flush belongs here, at pipeline tear-down,
-	 * where we know all poll results are in-queue and the batch should
-	 * reach the DB before db_disconnect(). */
+	/* Flush first, fence second.
+	 *
+	 * spine_async_batch_flush submits any pending batched queries via
+	 * spine_async_mysql_query. If the shutdown fence is already flipped
+	 * those calls get -ESHUTDOWN and the batch is silently dropped - the
+	 * same data-loss failure mode the dummy-flush removal was supposed to
+	 * fix. Order: commit the pending batch while submission is still
+	 * open, drain the resulting callbacks, then close the gate so any
+	 * late worker-thread caller cannot sneak a query in between here and
+	 * db_disconnect(). */
 	spine_async_batch_flush();
+	uv_run(loop, UV_RUN_DEFAULT);
+
+	spine_async_mysql_shutdown_begin();
 	uv_run(loop, UV_RUN_DEFAULT);
 
 	uv_walk(loop, spine_uv_force_close, NULL);
