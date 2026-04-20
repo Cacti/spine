@@ -40,24 +40,43 @@ typedef struct spine_cb_entry_s {
  * across its penalty window; short enough to bound a discovery-churn
  * population. */
 #define SPINE_CB_IDLE_SECS        3600
-/* Reap cadence: do the sweep at most once per minute; the sweep is O(N)
- * under the table lock, so rate-limit it. */
+/* Reap cadence: do the sweep at most once per minute. */
 #define SPINE_CB_REAP_INTERVAL    60
+/* Max entries examined per sweep. Bounds the time spent under the
+ * table lock; large backlogs are drained across multiple sweeps. */
+#define SPINE_CB_REAP_BATCH       256
 
 static spine_cb_entry_t *spine_cb_table = NULL;
 static pthread_mutex_t   spine_cb_lock  = PTHREAD_MUTEX_INITIALIZER;
 static int               spine_cb_initialized = 0;
 static time_t            spine_cb_last_reap   = 0;
 
+/* Test seam: tests inject a mock clock so the reap deadline and
+ * last_activity math are deterministic. Production uses time(2). */
+static time_t spine_cb_default_clock(void) { return time(NULL); }
+typedef time_t (*spine_cb_clock_fn)(void);
+static spine_cb_clock_fn spine_cb_clock = spine_cb_default_clock;
+
+void spine_cb_set_clock_for_test(spine_cb_clock_fn fn) {
+	pthread_mutex_lock(&spine_cb_lock);
+	spine_cb_clock = fn ? fn : spine_cb_default_clock;
+	pthread_mutex_unlock(&spine_cb_lock);
+}
+
 /* Caller holds spine_cb_lock. Drop entries whose last_activity is older
  * than SPINE_CB_IDLE_SECS; rate-limit to one pass per
- * SPINE_CB_REAP_INTERVAL seconds. */
+ * SPINE_CB_REAP_INTERVAL seconds; bound work per pass to
+ * SPINE_CB_REAP_BATCH entries so a large backlog cannot stall other
+ * poll threads waiting on the lock. Unscanned entries wait for the
+ * next pass. */
 static void spine_cb_reap_locked(time_t now) {
 	if (now - spine_cb_last_reap < SPINE_CB_REAP_INTERVAL) return;
 	spine_cb_last_reap = now;
 
+	int scanned = 0;
 	spine_cb_entry_t *entry, *tmp;
 	HASH_ITER(hh, spine_cb_table, entry, tmp) {
+		if (scanned++ >= SPINE_CB_REAP_BATCH) break;
 		/* Keep any entry still serving cooldown cycles - the skip state
 		 * is the entire reason the breaker exists. */
 		if (entry->skip_cycles > 0) continue;
@@ -97,7 +116,7 @@ static spine_cb_entry_t *spine_cb_get(int host_id) {
 	if (!entry) return NULL;
 	entry->host_id       = host_id;
 	entry->next_cooldown = SPINE_CB_COOLDOWN_INITIAL;
-	entry->last_activity = time(NULL);
+	entry->last_activity = spine_cb_clock();
 	HASH_ADD_INT(spine_cb_table, host_id, entry);
 	return entry;
 }
@@ -111,6 +130,12 @@ int spine_cb_should_skip(int host_id) {
 		pthread_mutex_unlock(&spine_cb_lock);
 		return 0;
 	}
+
+	/* Opportunistic reap. Every poll cycle calls should_skip for every
+	 * host, so running the reap here guarantees bounded memory even on
+	 * an idle daemon whose spine_cb_record path is never taken. The
+	 * reap itself is rate-limited to once per SPINE_CB_REAP_INTERVAL. */
+	spine_cb_reap_locked(spine_cb_clock());
 
 	/* Lookup only - do not create an entry for an id we have never seen
 	 * fail. A churning host-id population (auto-discovery) would otherwise
@@ -155,9 +180,11 @@ void spine_cb_record(int host_id, int errors) {
 		}
 	}
 
+	const time_t now = spine_cb_clock();
+
 	if (errors > 0) {
 		entry->consecutive_failures++;
-		entry->last_activity = time(NULL);
+		entry->last_activity = now;
 		if (entry->consecutive_failures >= threshold) {
 			entry->skip_cycles   = entry->next_cooldown;
 			entry->next_cooldown = entry->next_cooldown * 2;
@@ -179,7 +206,7 @@ void spine_cb_record(int host_id, int errors) {
 		}
 	} else {
 		entry->consecutive_failures = 0;
-		entry->last_activity        = time(NULL);
+		entry->last_activity        = now;
 		/* Decay the backoff gently on recovery rather than resetting
 		 * to INITIAL. A flapping host that trips -> recovers -> trips
 		 * should not escape its penalty history by being briefly
@@ -197,7 +224,7 @@ void spine_cb_record(int host_id, int errors) {
 
 	/* Opportunistic age-based reap, rate-limited. Bounded memory under
 	 * discovery churn without losing backoff state for active hosts. */
-	spine_cb_reap_locked(time(NULL));
+	spine_cb_reap_locked(now);
 
 	pthread_mutex_unlock(&spine_cb_lock);
 }

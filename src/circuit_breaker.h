@@ -32,4 +32,9 @@ int spine_cb_should_skip(int host_id);
  * the host enters cool-down with exponential backoff. */
 void spine_cb_record(int host_id, int errors);
 
+/* Test seam: install a mock clock so age-based reap is deterministic.
+ * Pass NULL to restore time(2). Production code never calls this. */
+#include <time.h>
+void spine_cb_set_clock_for_test(time_t (*fn)(void));
+
 #endif /* SPINE_CIRCUIT_BREAKER_H */
