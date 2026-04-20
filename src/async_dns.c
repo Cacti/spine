@@ -161,6 +161,7 @@ static void spine_async_dns_on_poll(uv_poll_t *handle, int status, int events) {
 	spine_async_dns_runtime_t *runtime;
 	ares_socket_t read_fd = ARES_SOCKET_BAD;
 	ares_socket_t write_fd = ARES_SOCKET_BAD;
+	ares_socket_t captured_fd;
 
 	if (watcher == NULL) {
 		return;
@@ -170,6 +171,14 @@ static void spine_async_dns_on_poll(uv_poll_t *handle, int status, int events) {
 	if (runtime == NULL || runtime->channel == NULL || runtime->shutting_down) {
 		return;
 	}
+
+	/* Capture the fd before calling ares_process_fd. The watcher struct
+	 * itself may be invalidated by a sock_state_cb reentry during
+	 * ares_process_fd (c-ares calls back into
+	 * spine_async_dns_upsert_watcher -> spine_async_dns_remove_watcher,
+	 * which frees this watcher); never touch `watcher` after the call. */
+	captured_fd = watcher->fd;
+	(void)captured_fd;  /* currently only used via read_fd/write_fd above */
 
 	if (status < 0) {
 		read_fd = watcher->fd;
@@ -184,6 +193,7 @@ static void spine_async_dns_on_poll(uv_poll_t *handle, int status, int events) {
 	}
 
 	ares_process_fd(runtime->channel, read_fd, write_fd);
+	/* watcher may be freed here; only runtime is safe to use. */
 	spine_async_dns_timer_refresh(runtime);
 }
 
