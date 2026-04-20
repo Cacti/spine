@@ -1484,56 +1484,45 @@ static void spine_volatile_bzero(void *p, size_t n) {
  * remain async-signal-safe; this helper is therefore only safe to call
  * from main() and die() on the normal exit path.
  */
-void spine_scrub_secrets(void) {
+/* Single scrub primitive. Compiler-elidable memset is prevented by
+ * explicit_bzero when available; falls back to a volatile-pointer loop
+ * in spine_volatile_bzero otherwise. One call site, one #ifdef, every
+ * caller above routes through this helper. */
+static inline void spine_bzero(void *p, size_t n) {
+	if (p == NULL || n == 0) return;
 #ifdef HAVE_EXPLICIT_BZERO
-	explicit_bzero(set.db_pass,  sizeof(set.db_pass));
-	explicit_bzero(set.rdb_pass, sizeof(set.rdb_pass));
-	explicit_bzero(set.db_user,  sizeof(set.db_user));
-	explicit_bzero(set.rdb_user, sizeof(set.rdb_user));
+	explicit_bzero(p, n);
 #else
-	spine_volatile_bzero(set.db_pass,  sizeof(set.db_pass));
-	spine_volatile_bzero(set.rdb_pass, sizeof(set.rdb_pass));
-	spine_volatile_bzero(set.db_user,  sizeof(set.db_user));
-	spine_volatile_bzero(set.rdb_user, sizeof(set.rdb_user));
+	spine_volatile_bzero(p, n);
 #endif
 }
 
-/* Zero SNMP credential fields on one target_t row. */
-static void spine_scrub_one_target(target_t *t) {
-	if (t == NULL) return;
-
-#ifdef HAVE_EXPLICIT_BZERO
-#define SPINE_BZ(p, n) explicit_bzero((p), (n))
-#else
-#define SPINE_BZ(p, n) spine_volatile_bzero((p), (n))
-#endif
-	SPINE_BZ(t->snmp_community,       sizeof(t->snmp_community));
-	SPINE_BZ(t->snmp_username,        sizeof(t->snmp_username));
-	SPINE_BZ(t->snmp_password,        sizeof(t->snmp_password));
-	SPINE_BZ(t->snmp_priv_passphrase, sizeof(t->snmp_priv_passphrase));
-#undef SPINE_BZ
+void spine_scrub_secrets(void) {
+	spine_bzero(set.db_pass,  sizeof(set.db_pass));
+	spine_bzero(set.rdb_pass, sizeof(set.rdb_pass));
+	spine_bzero(set.db_user,  sizeof(set.db_user));
+	spine_bzero(set.rdb_user, sizeof(set.rdb_user));
 }
 
 void spine_scrub_target_secrets(struct target_struct *items, int count) {
 	if (items == NULL || count <= 0) return;
 
 	for (int i = 0; i < count; i++) {
-		spine_scrub_one_target(&items[i]);
+		target_t *t = &items[i];
+		spine_bzero(t->snmp_community,       sizeof(t->snmp_community));
+		spine_bzero(t->snmp_username,        sizeof(t->snmp_username));
+		spine_bzero(t->snmp_password,        sizeof(t->snmp_password));
+		spine_bzero(t->snmp_priv_passphrase, sizeof(t->snmp_priv_passphrase));
+		spine_bzero(t->snmp_engine_id,       sizeof(t->snmp_engine_id));
+		spine_bzero(t->snmp_context,         sizeof(t->snmp_context));
 	}
 }
 
 void spine_scrub_host_secrets(struct host_struct *host) {
 	if (host == NULL) return;
-
-#ifdef HAVE_EXPLICIT_BZERO
-#define SPINE_BZ(p, n) explicit_bzero((p), (n))
-#else
-#define SPINE_BZ(p, n) spine_volatile_bzero((p), (n))
-#endif
-	SPINE_BZ(host->snmp_community,       sizeof(host->snmp_community));
-	SPINE_BZ(host->snmp_password,        sizeof(host->snmp_password));
-	SPINE_BZ(host->snmp_priv_passphrase, sizeof(host->snmp_priv_passphrase));
-#undef SPINE_BZ
+	spine_bzero(host->snmp_community,       sizeof(host->snmp_community));
+	spine_bzero(host->snmp_password,        sizeof(host->snmp_password));
+	spine_bzero(host->snmp_priv_passphrase, sizeof(host->snmp_priv_passphrase));
 }
 
 /*! \fn void die(const char *format, ...)
