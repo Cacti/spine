@@ -32,8 +32,10 @@ struct spine_task_s {
     uint32_t timeout_ms;
     uint64_t deadline_ns;
     
-    /* Intrusive Queue Pointers */
+    /* Intrusive Pointers */
     spine_task_t *next;
+    spine_task_t *prev_inflight;
+    spine_task_t *next_inflight;
     
     /* Libuv State (Allocated inline to avoid hot-path mallocs) */
     uv_timer_t timer;
@@ -42,6 +44,9 @@ struct spine_task_s {
     /* Completion State (Safe across uv_close boundary) */
     int final_status;
     void *final_result;
+    
+    /* Hooks */
+    bool (*on_retry_prepare)(spine_task_t *task);
     void (*on_complete)(spine_task_t *task, int status, void *result);
 };
 

@@ -488,9 +488,10 @@ void spine_async_dns_runtime_destroy(spine_async_dns_runtime_t *runtime) {
 	}
 
 	/* Bounded wall-clock wait for outstanding uv_getaddrinfo requests.
-	 * UV_RUN_ONCE blocks until one event fires or the loop has no
-	 * work, so a 3-second deadline is a real 3 seconds rather than
-	 * the 300 spin iterations of the earlier UV_RUN_NOWAIT version. */
+	 * Matches SPINE_SHUTDOWN_DRAIN_SECS in spine.c so every shutdown
+	 * phase shares the same per-phase budget. UV_RUN_ONCE blocks until
+	 * one event fires or the loop has no work, so the deadline is real
+	 * wall-clock time rather than a spin count. */
 	time_t deadline = time(NULL) + 3;
 	while (runtime->inflight > 0 && time(NULL) < deadline) {
 		if (uv_run(runtime->loop, UV_RUN_ONCE) == 0) {

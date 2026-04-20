@@ -11,6 +11,7 @@
 
 static void on_timeout(uv_timer_t *timer) {
     spine_task_t *task = (spine_task_t *)timer->data;
+    /* Cancel I/O handle if active (e.g., uv_udp_recv_stop) */
     /* For now, just trigger completion with timeout error */
     spine_executor_complete_task(task, UV_ETIMEDOUT, NULL);
 }
@@ -38,15 +39,28 @@ static void on_timer_closed(uv_handle_t *handle) {
     
     /* Proceed with final completion ONLY after libuv releases the handle */
     if (task->final_status != 0 && task->retry_count < task->max_retries) {
+        
+        /* 4. SNMP Batch Slicing / tooBig handling hook */
+        if (task->on_retry_prepare) {
+            if (!task->on_retry_prepare(task)) {
+                /* Task is unsalvageable (e.g. payload couldn't be split) */
+                task->state = STATE_FAILED;
+                if (task->on_complete) task->on_complete(task, task->final_status, task->final_result);
+                spine_task_free(task);
+                return;
+            }
+        }
+        
         task->retry_count++;
-        /* Exponential backoff logic would sleep here before enqueueing */
+        spine_scheduler_inc_retries();
         spine_scheduler_enqueue(task);
     } else {
         task->state = (task->final_status == 0) ? STATE_COMPLETED : STATE_FAILED;
         if (task->on_complete) {
             task->on_complete(task, task->final_status, task->final_result);
         }
-        /* It is now safe for the caller to free() or pool-recycle the task */
+        /* Now it is safely freed back into the Slab Allocator pool */
+        spine_task_free(task);
     }
 }
 
@@ -59,7 +73,10 @@ void spine_executor_complete_task(spine_task_t *task, int status, void *result) 
     /* 1. Release Governor Tokens IMMEDIATELY so other tasks can dispatch */
     spine_governor_release(task, (status == 0));
     
-    /* 2. Stop and close. Logic continues in on_timer_closed to prevent Use-After-Free */
+    /* 2. Remove from global inflight tracker */
+    spine_scheduler_inflight_remove(task);
+    
+    /* 3. Stop and close. Logic continues in on_timer_closed to prevent Use-After-Free */
     uv_timer_stop(&task->timer);
     uv_close((uv_handle_t *)&task->timer, on_timer_closed);
 }

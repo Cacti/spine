@@ -141,6 +141,9 @@ set(SPINE_CORE_SOURCES
     src/async_php.c
     src/async_dns.c
     src/telemetry.c
+    src/task_governor.c
+    src/task_scheduler.c
+    src/task_executor.c
     src/php.c
     src/ping.c
     src/ping_validate.c
@@ -158,7 +161,7 @@ if(ENABLE_WARNINGS)
     add_library(spine_build_options INTERFACE)
     if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
         target_compile_options(spine_build_options INTERFACE
-            -Wall
+            -g -O0
             -Wextra
             -Wformat
             -Werror=implicit-function-declaration

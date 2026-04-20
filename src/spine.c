@@ -175,16 +175,22 @@ static void spine_uv_force_close(uv_handle_t *handle, void *arg) {
     }
 }
 
-/* Run the event loop for at most `seconds` wall-clock seconds. Used at
- * shutdown so a stuck callback (wedged c-ares query, cyclical timer,
- * misbehaving close handler) cannot hang spine indefinitely - the
- * process must still exit in bounded time for systemd to consider the
- * stop successful.
+/* Per-phase drain budget at shutdown. systemd's default TimeoutStopSec
+ * is 10s; with four drain phases (cleanup, post-flush, post-fence,
+ * post-walk) at 3s each we have a 3s headroom for the final
+ * db_disconnect / snmp_close. */
+#define SPINE_SHUTDOWN_DRAIN_SECS 3
+
+/* Run the event loop for at most SPINE_SHUTDOWN_DRAIN_SECS wall-clock
+ * seconds. Used at shutdown so a stuck callback (wedged c-ares query,
+ * cyclical timer, misbehaving close handler) cannot hang spine
+ * indefinitely - the process must still exit in bounded time for
+ * systemd to consider the stop successful.
  *
  * UV_RUN_NOWAIT returns 0 when the loop has no pending work; we use
  * that as the early-exit signal. */
-static void spine_uv_run_bounded(uv_loop_t *l, int seconds) {
-    time_t deadline = time(NULL) + seconds;
+static void spine_uv_run_bounded(uv_loop_t *l) {
+    time_t deadline = time(NULL) + SPINE_SHUTDOWN_DRAIN_SECS;
     while (time(NULL) < deadline) {
         if (uv_run(l, UV_RUN_NOWAIT) == 0) break;
     }
@@ -1544,7 +1550,7 @@ int main(int argc, char *argv[]) {
 	 * callback cannot hang shutdown; a systemd TimeoutStopSec of 10s
 	 * then has the full unit teardown budget left. */
 	SPINE_LOG_DEBUG(("DEBUG: Running main thread event loop for cleanup"));
-	spine_uv_run_bounded(loop, 3);
+	spine_uv_run_bounded(loop);
 
 	/* Flush first, fence second.
 	 *
@@ -1557,17 +1563,17 @@ int main(int argc, char *argv[]) {
 	 * late worker-thread caller cannot sneak a query in between here and
 	 * db_disconnect(). */
 	spine_async_batch_flush();
-	spine_uv_run_bounded(loop, 3);
+	spine_uv_run_bounded(loop);
 
 	spine_async_mysql_shutdown_begin();
-	spine_uv_run_bounded(loop, 3);
+	spine_uv_run_bounded(loop);
 
 	/* Force-close any handle the pipeline leaked so uv_loop_close does
 	 * not return EBUSY and hang the shutdown path. uv_walk visits every
 	 * live handle; the subsequent bounded run flushes the close
 	 * callbacks. */
 	uv_walk(loop, spine_uv_force_close, NULL);
-	spine_uv_run_bounded(loop, 3);
+	spine_uv_run_bounded(loop);
 
 	{
 		int leaked = atomic_load_explicit(&g_spine_uv_leaked_handles,
