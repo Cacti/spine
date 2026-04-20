@@ -487,14 +487,35 @@ void spine_async_dns_runtime_destroy(spine_async_dns_runtime_t *runtime) {
 		return;
 	}
 
-	/* Bounded wait for outstanding uv_getaddrinfo requests before free.
-	 * uv_loop_close returns EBUSY if a request is still in flight and
-	 * hangs the shutdown path. Give each inflight request up to ~3s to
-	 * complete; that matches typical getaddrinfo(3) timeouts. */
-	int deadline_ticks = 300; /* 300 x 10ms == 3s */
-	while (runtime->inflight > 0 && deadline_ticks > 0 && runtime->loop != NULL) {
-		uv_run(runtime->loop, UV_RUN_NOWAIT);
-		deadline_ticks--;
+	/* Bounded wall-clock wait for outstanding uv_getaddrinfo requests.
+	 * UV_RUN_ONCE blocks until one event fires or the loop has no
+	 * work, so a 3-second deadline is a real 3 seconds rather than
+	 * the 300 spin iterations of the earlier UV_RUN_NOWAIT version. */
+	time_t deadline = time(NULL) + 3;
+	while (runtime->inflight > 0 && time(NULL) < deadline) {
+		if (uv_run(runtime->loop, UV_RUN_ONCE) == 0) {
+			/* No more events to process - either the requests are
+			 * genuinely wedged in a way uv_run cannot advance, or
+			 * they completed between our while-check and here.
+			 * Either way, looping further would spin. */
+			break;
+		}
+	}
+
+	if (runtime->inflight > 0) {
+		/* Deadline exceeded with requests still outstanding. Freeing
+		 * runtime here would UAF when on_resolved later dereferences
+		 * ctx->runtime to decrement inflight. Leak the runtime struct
+		 * instead; the process is terminating and the OS reclaims
+		 * memory at exit. Callers observe the leak via the warning
+		 * log so operators can tune the deadline or diagnose a stuck
+		 * resolver. */
+		fprintf(stderr,
+		    "WARNING: spine_async_dns_runtime_destroy: %d request(s) "
+		    "still in flight after drain deadline; leaking runtime "
+		    "to avoid UAF on late callback\n",
+		    runtime->inflight);
+		return;
 	}
 
 	free(runtime);
