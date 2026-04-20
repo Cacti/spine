@@ -1521,6 +1521,14 @@ int main(int argc, char *argv[]) {
 	 * the walk visits every live handle and requests async close. The
 	 * second uv_run flushes the close callbacks; then uv_loop_close is
 	 * safe. */
+	/* Commit any pending async writes before tearing down the loop. The
+	 * cycle-end dummy flush that used to sit in stage_flush was test
+	 * scaffolding; the real flush belongs here, at pipeline tear-down,
+	 * where we know all poll results are in-queue and the batch should
+	 * reach the DB before db_disconnect(). */
+	spine_async_batch_flush();
+	uv_run(loop, UV_RUN_DEFAULT);
+
 	uv_walk(loop, spine_uv_force_close, NULL);
 	uv_run(loop, UV_RUN_DEFAULT);
 
