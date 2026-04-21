@@ -42,6 +42,19 @@ extern void config_defaults(void);
  * handlers must stay AS-safe and therefore do NOT invoke this. */
 extern void spine_scrub_secrets(void);
 
+/* Range-safe int parser for DB/config-setting values. Safer atoi:
+ *
+ * - NULL input returns 0 (atoi is UB).
+ * - Non-numeric input returns 0 (matches atoi's 'use default' contract).
+ * - Positive overflow clamps to INT_MAX; negative overflow clamps to
+ *   INT_MIN (a bare cast would produce undefined behaviour).
+ * - Trailing garbage is tolerated and ignored, matching atoi; callers
+ *   that need strictness should use strtol directly.
+ *
+ * Exposed for reuse across TUs (config_repository, future config
+ * parsers) so the safety contract is not duplicated. */
+extern int spine_parse_int(const char *s);
+
 /* Zero SNMP credential fields (community, v3 username/password,
  * auth/priv passphrases) in a target_t array before free. Each poll
  * cycle populates these buffers from DB rows; scrubbing them as the

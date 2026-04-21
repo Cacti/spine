@@ -64,7 +64,7 @@ static int nopts = 0;
  * - Negative overflow clamps to INT_MIN (a prior version returned
  *   INT_MAX on large negatives - sign-flip data corruption).
  */
-static int spine_parse_int(const char *s) {
+int spine_parse_int(const char *s) {
 	if (s == NULL) return 0;
 	char *end = NULL;
 	errno = 0;

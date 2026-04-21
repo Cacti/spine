@@ -191,7 +191,7 @@ static void spine_uv_force_close(uv_handle_t *handle, void *arg) {
  * no pending work; that is our early-exit signal. */
 static void spine_uv_run_bounded(uv_loop_t *l) {
     uint64_t deadline = uv_hrtime() +
-        (uint64_t)SPINE_SHUTDOWN_DRAIN_SECS * 1000000000ULL;
+        (uint64_t)SPINE_SHUTDOWN_DRAIN_SECS * SPINE_NS_PER_SEC;
     while (uv_hrtime() < deadline) {
         if (uv_run(l, UV_RUN_NOWAIT) == 0) break;
     }
@@ -1593,20 +1593,28 @@ int main(int argc, char *argv[]) {
 	loop = NULL;
 	SPINE_LOG_DEBUG(("DEBUG: libuv main thread loop drained"));
 
-	/* Single-line shutdown metrics summary. Gives operators a grep-
-	 * friendly record of every shutdown counter without requiring a
-	 * telemetry socket. Non-zero values here are the leading signal
-	 * of a pipeline or coordination bug. */
+	/* Single-line shutdown metrics summary. Emitted at INFO when any
+	 * counter is non-zero (the leading signal of a pipeline or
+	 * coordination bug) and at DEBUG otherwise so a healthy spine that
+	 * restarts every 30 seconds does not flood the operator log. */
 	{
 		unsigned long cb_entries = 0, cb_reaped = 0, cb_trips = 0;
 		spine_cb_get_stats(&cb_entries, &cb_reaped, &cb_trips);
-		SPINE_LOG(("INFO: shutdown metrics libuv_leaked=%d "
-		           "cb_entries=%lu cb_trips=%lu cb_reaped=%lu "
-		           "mysql_refused_after_shutdown=%lu",
-		           atomic_load_explicit(&g_spine_uv_leaked_handles,
-		                                memory_order_relaxed),
-		           cb_entries, cb_trips, cb_reaped,
-		           spine_async_mysql_shutdown_refused_count()));
+		int leaked = atomic_load_explicit(&g_spine_uv_leaked_handles,
+		                                  memory_order_relaxed);
+		unsigned long refused =
+		    spine_async_mysql_shutdown_refused_count();
+		int any_nonzero = leaked || cb_entries || cb_trips ||
+		                  cb_reaped || refused;
+		if (any_nonzero) {
+			SPINE_LOG(("INFO: shutdown metrics libuv_leaked=%d "
+			           "cb_entries=%lu cb_trips=%lu cb_reaped=%lu "
+			           "mysql_refused_after_shutdown=%lu",
+			           leaked, cb_entries, cb_trips, cb_reaped,
+			           refused));
+		} else {
+			SPINE_LOG_DEBUG(("DEBUG: shutdown metrics all zero"));
+		}
 	}
 #endif
 

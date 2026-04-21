@@ -19,4 +19,9 @@
  * becomes load-bearing. */
 #define SPINE_SHUTDOWN_DRAIN_SECS 3
 
+/* Nanoseconds per second. Paired with uv_hrtime() for bounded drain
+ * loops; hoisted here so any future subsystem that needs a similar
+ * sub-second wall-clock deadline picks up the same literal. */
+#define SPINE_NS_PER_SEC 1000000000ULL
+
 #endif /* SPINE_SHUTDOWN_H */
