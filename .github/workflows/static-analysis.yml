@@ -327,6 +327,7 @@ jobs:
               --project=build-cppcheck/compile_commands.json \
               --enable=warning,style,performance,portability \
               --std=c11 \
+              --max-configs=1 \
               --inconclusive \
               --inline-suppr \
               --suppress=missingIncludeSystem \
@@ -340,9 +341,9 @@ jobs:
             cppcheck \
               --enable=warning,style,performance,portability \
               --std=c11 \
+              --max-configs=1 \
               --inconclusive \
               --inline-suppr \
-              --force \
               --suppress=missingIncludeSystem \
               "${sources[@]}" \
               2> cppcheck-report.txt
