@@ -459,6 +459,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if (pkt->icmp_type == ICMP_ECHOREPLY) {
+								/* the raw socket is shared, so verify this echo reply
+								 * carries our id and the sequence we just sent before
+								 * treating the device as alive */
+								if (pkt->icmp_id != (getpid() & 0xFFFF) || pkt->icmp_seq != icmp->icmp_seq) {
+									goto keep_listening;
+								}
+
 								if (is_debug_device(host->id)) {
 									SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								} else {
