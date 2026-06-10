@@ -440,8 +440,22 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
+						int ihl;
+
+						/* the reply must be large enough to hold the IP header */
+						if (return_code < (ssize_t)sizeof(struct ip)) {
+							goto keep_listening;
+						}
+
 						ip  = (struct ip *) socket_reply;
-						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
+						ihl = ip->ip_hl << 2;
+
+						/* and large enough to hold that header plus the ICMP header */
+						if (ihl < (int)sizeof(struct ip) || return_code < (ssize_t)(ihl + ICMP_HDR_SIZE)) {
+							goto keep_listening;
+						}
+
+						pkt = (struct icmp *) (socket_reply + ihl);
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if (pkt->icmp_type == ICMP_ECHOREPLY) {
