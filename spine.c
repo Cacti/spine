@@ -419,10 +419,10 @@ int main(int argc, char *argv[]) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
-			if (*value) {
-				*value++ = '\0';
-			} else {
+			if (value == NULL) {
 				die("ERROR: -O requires setting:value");
+			} else {
+				*value++ = '\0';
 			}
 
 			set_option(setting, value);
@@ -766,6 +766,12 @@ int main(int argc, char *argv[]) {
 
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
+
+			if (mysql_row == NULL) {
+				/* fewer device rows than expected; stop processing */
+				break;
+			}
+
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
 			current_thread  = 1;
@@ -788,7 +794,12 @@ int main(int argc, char *argv[]) {
 			tresult   = db_query(&mysql, LOCAL, querybuf);
 			mysql_row = mysql_fetch_row(tresult);
 
-			total_items = atoi(mysql_row[0]);
+			if (mysql_row == NULL) {
+				total_items = 0;
+			} else {
+				total_items = atoi(mysql_row[0]);
+			}
+
 			db_free_result(tresult);
 
 			if (total_items && total_items < device_threads) {
@@ -812,7 +823,11 @@ int main(int argc, char *argv[]) {
 				tresult   = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = mysql_fetch_row(tresult);
 
-				items_per_thread = atoi(mysql_row[0]);
+				if (mysql_row == NULL) {
+					items_per_thread = 0;
+				} else {
+					items_per_thread = atoi(mysql_row[0]);
+				}
 
 				db_free_result(tresult);
 
@@ -827,7 +842,11 @@ int main(int argc, char *argv[]) {
 			tresult   = db_query(&mysql, LOCAL, querybuf);
 			mysql_row = mysql_fetch_row(tresult);
 
-			items_per_thread = atoi(mysql_row[0]);
+			if (mysql_row == NULL) {
+				items_per_thread = 0;
+			} else {
+				items_per_thread = atoi(mysql_row[0]);
+			}
 
 			db_free_result(tresult);
 
