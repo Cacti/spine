@@ -2343,7 +2343,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 		sem_err = spine_sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
-		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			if (is_debug_device(current_host->id)) {
 				SPINE_LOG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
 			} else {
@@ -2351,9 +2351,9 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			}
 		} else {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
+				SPINE_LOG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, errno));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
+				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, errno));
 			}
 		}
 		usleep(10000);

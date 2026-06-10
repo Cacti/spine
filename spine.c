@@ -928,16 +928,10 @@ int main(int argc, char *argv[]) {
 			sem_err = spine_sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
-				// Acquired a thread
+				/* acquired the thread init lock */
 				break;
-			} else if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
+			} else if (errno != EAGAIN) {
+				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, errno));
 			}
 
 			if (loop_count == 10) {
@@ -982,7 +976,8 @@ int main(int argc, char *argv[]) {
 				spine_sem_getvalue(&available_threads, &a_threads_value);
 				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
 
-				spine_sem_post(&thread_init_sem);
+				/* the child releases thread_init_sem once it has copied poller_details
+				 * and dropped LOCK_HOST_TIME; posting here too double-counts the semaphore */
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" host_threads = %d, host_data_ids = %d, complete = %d",
