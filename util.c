@@ -60,6 +60,10 @@ static struct {
  *
  */
 void set_option(const char *option, const char *value) {
+	if (nopts >= (int)(sizeof(opttable) / sizeof(opttable[0]))) {
+		die("ERROR: too many --option overrides");
+	}
+
 	opttable[nopts  ].opt = option;
 	opttable[nopts++].val = value;
 }
@@ -346,6 +350,8 @@ void read_config_options(void) {
 	char       spine_priv[BUFSIZE];
 	char       spine_auth[BUFSIZE];
 	char       spine_capabilities[BUFSIZE];
+
+	web_root[0] = '\0';
 
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
