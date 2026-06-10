@@ -1,0 +1,161 @@
+name: Integration
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config cmake ninja-build
+    gcc clang llvm mariadb-client
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  DB_HOST: 127.0.0.1
+  DB_PORT: '3306'
+  DB_NAME: cacti
+  DB_USER: cacti
+  DB_PASS: cacti_pw
+
+jobs:
+  mariadb-integration:
+    name: MariaDB integration
+    runs-on: ubuntu-24.04
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root_pw
+          MARIADB_DATABASE: cacti
+          MARIADB_USER: cacti
+          MARIADB_PASSWORD: cacti_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot_pw"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install integration dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Wait for MariaDB health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            if mariadb-admin ping -h "${DB_HOST}" -P "${DB_PORT}" -u"${DB_USER}" -p"${DB_PASS}" --silent; then
+              echo "MariaDB is ready."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MariaDB did not become ready in time." >&2
+          exit 1
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure (Autotools or CMake)
+        run: |
+          set -euo pipefail
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC=gcc CFLAGS='-O1 -g3' LDFLAGS=''
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_C_COMPILER=gcc \
+              -DCMAKE_C_FLAGS='-O1 -g3' \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo "No supported build system found." >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            make -j"$(nproc)"
+          else
+            cmake --build build --parallel "$(nproc)"
+          fi
+
+      - name: Run integration tests (if available)
+        run: |
+          set -euo pipefail
+          export SPINE_DB_HOST="${DB_HOST}"
+          export SPINE_DB_PORT="${DB_PORT}"
+          export SPINE_DB_NAME="${DB_NAME}"
+          export SPINE_DB_USER="${DB_USER}"
+          export SPINE_DB_PASS="${DB_PASS}"
+
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            if make -n integration-test >/dev/null 2>&1; then
+              make integration-test
+            elif make -n integration >/dev/null 2>&1; then
+              make integration
+            elif make -n check >/dev/null 2>&1; then
+              echo "::notice::No dedicated integration target; running make check with DB env."
+              make check VERBOSE=1
+            else
+              echo "::notice::No integration-compatible make target found."
+            fi
+          else
+            if ctest --test-dir build -N > ctest-list.txt 2>&1 && grep -qi 'integration' ctest-list.txt; then
+              ctest --test-dir build -R integration --output-on-failure
+            elif grep -Eq 'Total Tests: [1-9]' ctest-list.txt; then
+              echo "::notice::No integration label found; running full ctest with DB env."
+              ctest --test-dir build --output-on-failure
+            else
+              echo "::notice::No CTest integration tests found."
+            fi
+          fi
+
+      - name: SNMP simulator placeholder
+        run: |
+          set -euo pipefail
+          echo 'Placeholder: add SNMP simulator service/container and test target wiring.'
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: integration-logs
+          path: |
+            config.log
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/Testing/Temporary
+            *.log
+          if-no-files-found: ignore

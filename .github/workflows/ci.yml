@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [develop]
+    branches: [main, develop]
   pull_request:
-    branches: [develop]
+    branches: [main, develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,62 +14,338 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  COMMON_DEPS: >-
+    autoconf automake libtool make pkg-config cmake ninja-build
+    gcc clang llvm
+    libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+  ASAN_OPTIONS: >-
+    detect_leaks=1:abort_on_error=1:strict_string_checks=1:
+    check_initialization_order=1:detect_stack_use_after_return=1:
+    symbolize=1:log_path=asan
+  UBSAN_OPTIONS: >-
+    print_stacktrace=1:halt_on_error=1:log_path=ubsan
+  TSAN_OPTIONS: >-
+    halt_on_error=1:history_size=7:log_path=tsan
+  CFLAGS_COMMON: >-
+    -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion
+    -Wpointer-arith -Wcast-qual -Wwrite-strings
+    -Wstrict-prototypes -Wmissing-prototypes
+  CFLAGS_WERROR_GUARD: >-
+    -Werror=implicit-function-declaration -Werror=implicit-int
+    -Werror=incompatible-pointer-types -Werror=int-conversion
+    -Werror=return-type -Werror=format-security
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  build-and-test:
+    name: ${{ matrix.os }} | ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
-        compiler: [gcc, clang]
-    env:
-      CC: ${{ matrix.compiler }}
+        include:
+          - os: ubuntu-22.04
+            name: gcc-release-hardened
+            cc: gcc
+            cflags: >-
+              -O2 -g -D_FORTIFY_SOURCE=3
+              -fstack-protector-strong -fstack-clash-protection
+            ldflags: >-
+              -Wl,-z,relro,-z,now
+            nightly_only: false
+
+          - os: ubuntu-24.04
+            name: gcc-release-hardened
+            cc: gcc
+            cflags: >-
+              -O2 -g -D_FORTIFY_SOURCE=3
+              -fstack-protector-strong -fstack-clash-protection
+            ldflags: >-
+              -Wl,-z,relro,-z,now
+            nightly_only: false
+
+          - os: ubuntu-22.04
+            name: clang-asan-ubsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,undefined
+            ldflags: >-
+              -fsanitize=address,undefined
+            nightly_only: false
+
+          - os: ubuntu-24.04
+            name: clang-asan-ubsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,undefined
+            ldflags: >-
+              -fsanitize=address,undefined
+            nightly_only: false
+
+          - os: ubuntu-22.04
+            name: clang-asan-leak
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,leak
+            ldflags: >-
+              -fsanitize=address,leak
+            nightly_only: false
+
+          - os: ubuntu-24.04
+            name: clang-asan-leak
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+              -fsanitize=address,leak
+            ldflags: >-
+              -fsanitize=address,leak
+            nightly_only: false
+
+          - os: ubuntu-22.04
+            name: clang-tsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fsanitize=thread
+            ldflags: >-
+              -fsanitize=thread
+            nightly_only: true
+
+          - os: ubuntu-24.04
+            name: clang-tsan
+            cc: clang
+            cflags: >-
+              -O1 -g3 -fno-omit-frame-pointer -fsanitize=thread
+            ldflags: >-
+              -fsanitize=thread
+            nightly_only: true
+
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Gate nightly-only matrix rows
+        id: gate
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.nightly_only }}" == 'true' && "${{ github.event_name }}" != 'schedule' && "${{ github.event_name }}" != 'workflow_dispatch' ]]; then
+            echo "run=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Skipping nightly-only matrix row for event '${{ github.event_name }}'."
+          else
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Install build dependencies
+        if: steps.gate.outputs.run == 'true'
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y \
-          mysql-server libmysqlclient-dev \
-          libsnmp-dev libssl-dev build-essential \
-          help2man autoconf automake libtool dos2unix
+          sudo apt-get install -y ${COMMON_DEPS}
+
+      - name: Export build flags
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          echo "CC=${{ matrix.cc }}" >> "${GITHUB_ENV}"
+          echo "CFLAGS=${CFLAGS_COMMON} ${CFLAGS_WERROR_GUARD} ${{ matrix.cflags }}" >> "${GITHUB_ENV}"
+          echo "LDFLAGS=${{ matrix.ldflags }}" >> "${GITHUB_ENV}"
+          echo "ASAN_SYMBOLIZER_PATH=$(command -v llvm-symbolizer || true)" >> "${GITHUB_ENV}"
+
+      - name: Bootstrap
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          if [[ -x ./bootstrap ]]; then
+            ./bootstrap
+          elif [[ -f ./configure.ac || -f ./configure.in ]]; then
+            autoreconf -fi
+          fi
+
+      - name: Configure (Autotools or CMake)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          if [[ -f ./configure ]]; then
+            chmod +x ./configure || true
+            ./configure CC="${CC}" CFLAGS="${CFLAGS}" LDFLAGS="${LDFLAGS}"
+            echo "BUILD_SYSTEM=autotools" >> "${GITHUB_ENV}"
+          elif [[ -f CMakeLists.txt ]]; then
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_C_COMPILER="${CC}" \
+              -DCMAKE_C_FLAGS="${CFLAGS}" \
+              -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}" \
+              -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}" \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            echo "BUILD_SYSTEM=cmake" >> "${GITHUB_ENV}"
+          else
+            echo "No supported build system found (configure/CMakeLists.txt)." >&2
+            exit 1
+          fi
 
       - name: Prepare for Spine Build
+        if: steps.gate.outputs.run == 'true'
         run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            make -j"$(nproc)" V=1
+          else
+            cmake --build build --parallel "$(nproc)"
+          fi
+
+      - name: Test (make check -> make test -> ctest)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
+            if make -n check >/dev/null 2>&1; then
+              make check VERBOSE=1
+            elif make -n test >/dev/null 2>&1; then
+              make test VERBOSE=1
+            else
+              echo "::notice::No make check/test target found."
+            fi
+          else
+            if ctest --test-dir build -N > ctest-list.txt 2>&1 && grep -Eq "Total Tests: [1-9]" ctest-list.txt; then
+              ctest --test-dir build --output-on-failure --parallel "$(nproc)"
+            else
+              echo "::notice::No CTest tests found."
+            fi
+          fi
+
+      - name: Collect failure artifacts
+        if: failure() && steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+
+          for f in \
+            config.log \
+            build/CMakeFiles/CMakeConfigureLog.yaml \
+            build/CMakeFiles/CMakeError.log \
+            build/CMakeFiles/CMakeOutput.log
+          do
+            if [[ -f "${f}" ]]; then
+              mkdir -p "ci-artifacts/$(dirname "${f}")"
+              cp "${f}" "ci-artifacts/${f}"
+            fi
+          done
+
+          while IFS= read -r -d '' f; do
+            clean="${f#./}"
+            mkdir -p "ci-artifacts/$(dirname "${clean}")"
+            cp "${f}" "ci-artifacts/${clean}"
+          done < <(find . -type f \( \
+            -name 'core*' -o -name '*.core' -o \
+            -name '*.log' -o -name 'asan*' -o -name 'ubsan*' -o -name 'tsan*' \
+            \) -print0)
+
+      - name: Upload failure artifacts
+        if: failure() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
+        with:
+          name: ci-failure-${{ matrix.os }}-${{ matrix.name }}
+          path: ci-artifacts
+          if-no-files-found: ignore
+
+  portability-smoke:
+    name: portability smoke | ${{ matrix.os }} | ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            cc: gcc
+            allow_failure: false
+          - os: ubuntu-24.04
+            cc: clang
+            allow_failure: false
+          - os: macos-14
+            cc: clang
+            allow_failure: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool make pkg-config \
+            gcc clang libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          brew update
+          brew install autoconf automake libtool pkg-config net-snmp mysql-client openssl@3 help2man
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
           ./bootstrap
-          ./configure --enable-warnings
 
-      - name: Build Spine
+      - name: Configure
         run: |
-          make -j"$(nproc)"
+          set -euo pipefail
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            MYSQL_PREFIX="$(brew --prefix mysql-client)"
+            SNMP_PREFIX="$(brew --prefix net-snmp)"
+            OPENSSL_PREFIX="$(brew --prefix openssl@3)"
 
-#  cppcheck:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-#
-#      - name: Install cppcheck
-#        run: |
-#          sudo apt-get update 
-#          sudo apt-get install -y cppcheck build-essential
-#
-#      - name: Run cppcheck
-#        run: |
-#          cppcheck \
-#            --enable=all \
-#            --std=c11 \
-#            --error-exitcode=1 \
-#            --suppress=missingIncludeSystem \
-#            --suppress=unusedFunction \
-#            --suppress=checkersReport \
-#            --suppress=variableScope \
-#            --suppress=unreadVariable \
-#            --suppress=shadowVariable \
-#            --suppress=constVariablePointer \
-#            --suppress=redundantAssignment \
-#            --suppress=toomanyconfigs \
-#            *.c *.h
+            ./configure \
+              --with-mysql="${MYSQL_PREFIX}" \
+              --with-snmp="${SNMP_PREFIX}" \
+              CC="${{ matrix.cc }}" \
+              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security' \
+              CPPFLAGS="-I${OPENSSL_PREFIX}/include -I${MYSQL_PREFIX}/include/mysql" \
+              LDFLAGS="-L${OPENSSL_PREFIX}/lib -L${MYSQL_PREFIX}/lib"
+          else
+            ./configure \
+              CC="${{ matrix.cc }}" \
+              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security'
+          fi
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+          make -j"${JOBS}" V=1
+
+      - name: Run smoke test
+        run: |
+          set -euo pipefail
+          ./spine --version
+
+  api-safety-guard:
+    name: api safety guard
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Enforce unsafe API addition guard
+        run: |
+          set -euo pipefail
+          bash .github/scripts/check-unsafe-api-additions.sh
 
   flawfinder:
     runs-on: ubuntu-latest
@@ -103,40 +380,7 @@ jobs:
 
   # Spine is a threaded network daemon; ASan and UBSan are the checks most
   # likely to catch a real defect here.
-  sanitizers:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y clang mysql-server libmysqlclient-dev libsnmp-dev \
-            libssl-dev build-essential help2man autoconf automake libtool dos2unix
-
-      - name: Build with ASan and UBSan
-        env:
-          CC: clang
-        run: |
-          set -euo pipefail
-          ./bootstrap
-          ./configure \
-            CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1" \
-            LDFLAGS="-fsanitize=address,undefined"
-          make -j"$(nproc)"
-
-      - name: Run the binary under the sanitizers
-        env:
-          ASAN_OPTIONS: detect_leaks=1:exitcode=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: |
-          set -euo pipefail
-          ./spine --version
-          ./spine --help > /dev/null
-  # A release tarball that cannot be compiled is a release blocker, and the
-  # only way to catch it is to build from the tarball the way a packager does.
   distcheck:
     runs-on: ubuntu-latest
     timeout-minutes: 20
