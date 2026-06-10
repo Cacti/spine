@@ -63,8 +63,8 @@ def main() -> int:
 
 		rule_id = m.group("rule") or f"cppcheck-{m.group('severity')}"
 		file_path = m.group("file")
-		line = int(m.group("line"))
-		col = int(m.group("col") or "1")
+		line = max(1, int(m.group("line")))
+		col = max(1, int(m.group("col") or "1"))
 		message = m.group("message").strip()
 		level = level_from_severity(m.group("severity"))
 		key = (file_path, line, col, rule_id, message, level)
