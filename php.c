@@ -255,7 +255,15 @@ char *php_readpipe(int php_process, char *command) {
 			bptr = result_string;
 
 			while (1) {
-				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
+				int avail = RESULTS_BUFFER - 1 - (bptr - result_string);
+
+				if (avail <= 0) {
+					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+					SET_UNDEFINED(result_string);
+					break;
+				}
+
+				i = read(php_processes[php_process].php_read_fd, bptr, avail);
 
 				if (i <= 0) {
 					SET_UNDEFINED(result_string);
@@ -269,9 +277,10 @@ char *php_readpipe(int php_process, char *command) {
 					break;
 				}
 
-				if (bptr >= result_string+BUFSIZE) {
+				if (bptr >= result_string + RESULTS_BUFFER - 1) {
 					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 					SET_UNDEFINED(result_string);
+					break;
 				}
 			}
 		} else {
@@ -557,10 +566,17 @@ void php_close(int php_process) {
 	 	 * a process group leader), and PID 1 is "init".
 	  	 */
 		if (phpp->php_pid > 1) {
+			int wstatus;
+
 			/* end the php script server process */
 			kill(phpp->php_pid, SIGTERM);
 
-			/* reset this PID variable? */
+			/* reap the child so it does not become a zombie */
+			while (waitpid(phpp->php_pid, &wstatus, 0) < 0 && errno == EINTR) {
+				/* interrupted by a signal, retry */
+			}
+
+			phpp->php_pid = -1;
 		}
 
 		/* close file descriptors */
