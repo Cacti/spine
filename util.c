@@ -59,6 +59,10 @@ static struct {
  *
  */
 void set_option(const char *option, const char *value) {
+	if (nopts >= (int)(sizeof(opttable) / sizeof(opttable[0]))) {
+		die("ERROR: Too many command-line options specified");
+	}
+
 	opttable[nopts  ].opt = option;
 	opttable[nopts++].val = value;
 }
