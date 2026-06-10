@@ -1028,10 +1028,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 				strncpy(name->hostname, hostname, sizeof(name->hostname));
 				break;
 			} else if (strlen(token) == 3) {
-				if (strncasecmp(token, "TCP", 3)) {
+				if (strncasecmp(token, "TCP", 3) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv4 method", hostname));
 					name->method = 1;
-				} else if (strncasecmp(hostname, "UDP", 3)) {
+				} else if (strncasecmp(token, "UDP", 3) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv4 method", hostname));
 					name->method = 2;
 				} else {
@@ -1040,10 +1040,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 					tokens++;
 				}
 			} else if (strlen(token) == 4) {
-				if (strncasecmp(token, "TCP6", 3)) {
+				if (strncasecmp(token, "TCP6", 4) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
 					name->method = 3;
-				} else if (strncasecmp(hostname, "UDP6", 3)) {
+				} else if (strncasecmp(token, "UDP6", 4) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv6 method", hostname));
 					name->method = 4;
 				} else {
