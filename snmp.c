@@ -675,7 +675,11 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 			//SPINE_LOG_DEBUG(("TRACE: Status %i Response %i", status, response->errstat));
 
 			if (status == STAT_SUCCESS) {
-				if (response->errstat == SNMP_ERR_NOERROR) {
+				if (response == NULL) {
+					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+					ok = 0;
+					error_occurred = 1;
+				} else if (response->errstat == SNMP_ERR_NOERROR) {
 					/* check resulting variables */
 					for (vars = response->variables; vars; vars	= vars->next_variable) {
 						if ((vars->name_length < rootlen) || (memcmp(root, vars->name, rootlen * sizeof(oid)) != 0)) {
