@@ -73,7 +73,7 @@ static void spine_signal_handler(int spine_signal) {
 			break;
 		case SIGSEGV:
 			fprintf(stderr, "%s FATAL: Spine Encountered a Segmentation Fault\n", logtime);
-			exit(1);
+			_exit(1);
 			break;
 		case SIGBUS:
 			fprintf(stderr, "%s FATAL: Spine Encountered a Bus Error\n", logtime);
