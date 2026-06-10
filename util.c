@@ -447,8 +447,13 @@ void read_config_options(void) {
 		set.log_datetime_separator = atoi(res);
 		free(res);
 
-		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
-			set.log_datetime_separator = GDC_DEFAULT;
+	/* get log date format */
+	if ((res = getsetting(&mysql, LOCAL, "default_dateformat")) != 0) {
+		set.log_datetime_format = atoi(res);
+		free((char *)res);
+
+		if (set.log_datetime_format < GD_MIN || set.log_datetime_format > GD_MAX) {
+			set.log_datetime_format = GD_DEFAULT;
 		}
 	}
 
@@ -1282,18 +1287,25 @@ char *get_date_format(void) {
 	switch (set.log_datetime_format) {
 		case GD_MO_D_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%m%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_MN_D_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%b%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_D_MO_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%m%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_D_MN_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%b%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_Y_MO_D:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_Y_MN_D:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%b%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		default:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 	}
 
 	return (log_fmt);
