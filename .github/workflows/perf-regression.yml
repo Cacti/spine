@@ -38,13 +38,14 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap and build
         run: |
           set -euo pipefail
           ./bootstrap
-          ./configure CC=gcc CFLAGS='-std=c11 -O2 -g' LDFLAGS=''
+          ./configure CC=gcc CFLAGS='-std=c11 -D_DEFAULT_SOURCE -O2 -g' LDFLAGS=''
           make -j"$(nproc)" V=1
 
       - name: Run hyperfine CLI benchmarks
@@ -142,6 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Start local SNMP simulator and benchmark
@@ -151,20 +153,28 @@ jobs:
           cat > snmpd-ci.conf <<'EOF'
           agentAddress udp:127.0.0.1:1161
           rocommunity public 127.0.0.1
-          sysLocation "CI"
-          sysContact "ci@example.com"
+          sysLocation CI
+          sysContact ci@example.com
           EOF
 
           snmpd -f -Lo -C -c snmpd-ci.conf udp:127.0.0.1:1161 > snmpd.log 2>&1 &
           snmpd_pid=$!
           trap 'kill "${snmpd_pid}" 2>/dev/null || true' EXIT
 
+          ready=false
           for _ in $(seq 1 20); do
             if snmpget -v2c -c public -On 127.0.0.1:1161 1.3.6.1.2.1.1.3.0 >/dev/null 2>&1; then
+              ready=true
               break
             fi
             sleep 1
           done
+
+          if [[ "${ready}" != "true" ]]; then
+            echo "::error::snmpd did not become ready."
+            cat snmpd.log || true
+            exit 1
+          fi
 
           samples="$(python3 - <<'PY'
           import json

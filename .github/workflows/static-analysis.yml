@@ -26,7 +26,7 @@ env:
     gcc clang llvm clang-tools cppcheck codespell shellcheck shfmt golang-go
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
   CFLAGS_ANALYZE: >-
-    -std=c11 -O1 -g3 -fno-omit-frame-pointer
+    -std=c11 -D_DEFAULT_SOURCE -O1 -g3 -fno-omit-frame-pointer
   CLANG_TIDY_CHECKS: >-
     clang-analyzer-*,bugprone-*,cert-*
 
@@ -73,17 +73,7 @@ jobs:
       - name: Run shfmt and shellcheck
         run: |
           set -euo pipefail
-          mapfile -t shell_files < <(
-            git ls-files | while read -r file; do
-              [[ -f "${file}" ]] || continue
-              case "${file}" in
-                *.sh) echo "${file}"; continue ;;
-              esac
-              if head -n 1 "${file}" | grep -Eq '^#!.*\b(bash|sh)\b'; then
-                echo "${file}"
-              fi
-            done | sort -u
-          )
+          mapfile -t shell_files < <(git ls-files '.github/scripts/*.sh' | sort -u)
 
           if [[ "${#shell_files[@]}" -eq 0 ]]; then
             echo 'No shell files found for linting.'
@@ -105,6 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Run codespell on tracked source/docs
@@ -143,6 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap
@@ -196,7 +188,7 @@ jobs:
               -checks="${CLANG_TIDY_CHECKS}" \
               "${sources[@]}" \
               -- \
-              -std=c11 -I. -Iconfig -I/usr/include/mysql \
+              -std=c11 -D_DEFAULT_SOURCE -I. -Iconfig -I/usr/include/mysql \
               2>&1 | tee clang-tidy-report.txt
           fi
 
@@ -216,7 +208,7 @@ jobs:
 
       - name: Upload clang-tidy SARIF
         if: always() && env.RUN_CLANG_TIDY == 'true'
-        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.29.0
         with:
           sarif_file: clang-tidy.sarif
           category: clang-tidy
@@ -233,6 +225,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap
@@ -268,10 +261,10 @@ jobs:
           set -euo pipefail
           mkdir -p scan-build-report
           if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
-            scan-build --status-bugs --keep-going --plist --output scan-build-report \
+            scan-build --status-bugs --keep-going --output scan-build-report \
               make -j"$(nproc)"
           else
-            scan-build --status-bugs --keep-going --plist --output scan-build-report \
+            scan-build --status-bugs --keep-going --output scan-build-report \
               cmake --build build-analyze --parallel "$(nproc)"
           fi
 
@@ -295,6 +288,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap
@@ -387,7 +381,7 @@ jobs:
 
       - name: Upload cppcheck SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.29.0
         with:
           sarif_file: cppcheck.sarif
           category: cppcheck

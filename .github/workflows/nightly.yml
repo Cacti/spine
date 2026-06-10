@@ -42,6 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap
@@ -128,6 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap
@@ -142,7 +144,7 @@ jobs:
       - name: Configure (Autotools or CMake)
         run: |
           set -euo pipefail
-          CFLAGS='-std=c11 -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
+          CFLAGS='-std=c11 -D_DEFAULT_SOURCE -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address,undefined'
           LDFLAGS='-fsanitize=address,undefined'
           if [[ -f ./configure ]]; then
             chmod +x ./configure || true
@@ -225,6 +227,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap

@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/init@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.29.0
         with:
           languages: c-cpp
 
@@ -47,6 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Bootstrap
@@ -78,4 +79,4 @@ jobs:
           fi
 
       - name: Analyze
-        uses: github/codeql-action/analyze@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/analyze@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.29.0

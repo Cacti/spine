@@ -33,7 +33,7 @@ env:
   TSAN_OPTIONS: >-
     halt_on_error=1:history_size=7:log_path=tsan
   CFLAGS_COMMON: >-
-    -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion
+    -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion
     -Wpointer-arith -Wcast-qual -Wwrite-strings
     -Wstrict-prototypes -Wmissing-prototypes
   CFLAGS_WERROR_GUARD: >-
@@ -148,16 +148,19 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          # shellcheck disable=SC2086
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Export build flags
         if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
-          echo "CC=${{ matrix.cc }}" >> "${GITHUB_ENV}"
-          echo "CFLAGS=${CFLAGS_COMMON} ${CFLAGS_WERROR_GUARD} ${{ matrix.cflags }}" >> "${GITHUB_ENV}"
-          echo "LDFLAGS=${{ matrix.ldflags }}" >> "${GITHUB_ENV}"
-          echo "ASAN_SYMBOLIZER_PATH=$(command -v llvm-symbolizer || true)" >> "${GITHUB_ENV}"
+          {
+            echo "CC=${{ matrix.cc }}"
+            echo "CFLAGS=${CFLAGS_COMMON} ${CFLAGS_WERROR_GUARD} ${{ matrix.cflags }}"
+            echo "LDFLAGS=${{ matrix.ldflags }}"
+            echo "ASAN_SYMBOLIZER_PATH=$(command -v llvm-symbolizer || true)"
+          } >> "${GITHUB_ENV}"
 
       - name: Bootstrap
         if: steps.gate.outputs.run == 'true'
@@ -312,13 +315,13 @@ jobs:
               --with-mysql="${MYSQL_PREFIX}" \
               --with-snmp="${SNMP_PREFIX}" \
               CC="${{ matrix.cc }}" \
-              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security' \
+              CFLAGS='-std=c11 -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security' \
               CPPFLAGS="-I${OPENSSL_PREFIX}/include -I${MYSQL_PREFIX}/include/mysql" \
               LDFLAGS="-L${OPENSSL_PREFIX}/lib -L${MYSQL_PREFIX}/lib"
           else
             ./configure \
               CC="${{ matrix.cc }}" \
-              CFLAGS='-std=c11 -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security'
+              CFLAGS='-std=c11 -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror=implicit-function-declaration -Werror=format-security'
           fi
 
       - name: Build
