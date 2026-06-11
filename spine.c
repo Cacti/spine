@@ -454,14 +454,23 @@ int main(int argc, char *argv[]) {
 
 	/* we attempt to support scripts better in cygwin */
 	#if defined(__CYGWIN__)
-	setenv("CYGWIN", "nodosfilewarning", 1);
-	if (file_exists("./sh.exe")) {
-		set.cygwinshloc = 0;
+	const char *cygwin_env = getenv("CYGWIN");
+	if (cygwin_env == NULL || strstr(cygwin_env, "nodosfilewarning") == NULL) {
+		char cygwin_opts[BUFSIZE];
+
+		snprintf(cygwin_opts, sizeof(cygwin_opts), "%s%s%s",
+			cygwin_env != NULL ? cygwin_env : "",
+			cygwin_env != NULL && cygwin_env[0] != '\0' ? " " : "",
+			"nodosfilewarning");
+		setenv("CYGWIN", cygwin_opts, 1);
+	}
+	if (access("./sh.exe", X_OK | F_OK) == 0) {
+		snprintf(set.cygwin_sh_path, sizeof(set.cygwin_sh_path), "%s", "./sh.exe");
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("The Shell Command Exists in the current directory\n");
 		}
 	} else {
-		set.cygwinshloc = 1;
+		snprintf(set.cygwin_sh_path, sizeof(set.cygwin_sh_path), "%s", "/bin/sh");
 		if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 			printf("The Shell Command Exists in the /bin directory\n");
 		}
@@ -667,7 +676,7 @@ int main(int argc, char *argv[]) {
 
 	memset(host_time, 0, SMALL_BUFSIZE);
 
-	/* initialize winsock library on Windows */
+	/* initialize socket library on Cygwin/Windows */
 	SOCK_STARTUP;
 
 	/* mark the spine process as started */
@@ -1092,7 +1101,7 @@ int main(int argc, char *argv[]) {
 	/* uninstall the spine signal handler */
 	uninstall_spine_signal_handler();
 
-	/* clueanup winsock library on Windows */
+	/* cleanup socket library on Cygwin/Windows */
 	SOCK_CLEANUP;
 
 	exit(EXIT_SUCCESS);

@@ -42,15 +42,21 @@ chmod +s /usr/local/spine/bin/spine
 
 ## Windows Installation
 
-### CYGWIN Prerequisite
+Spine 1.2.x supports Windows through current 64-bit Cygwin on x86_64 Windows.
+Native Windows builds and 32-bit Cygwin builds are not supported by this build
+system. Current Cygwin releases support recent x86_64 Windows versions starting
+with Windows 8.1; use the Cygwin Time Machine only if you must build for older
+Windows releases.
 
-1. Download Cygwin for Window from [https://www.cygwin.com/](https://www.cygwin.com/)
+### Cygwin Prerequisite
+
+1. Download Cygwin for Windows from [https://www.cygwin.com/](https://www.cygwin.com/)
 
 2. Install Cygwin by executing the downloaded setup program
 
 3. Select _Install from Internet_
 
-4. Select Root Directory:  _C:\cygwin_
+4. Select Root Directory:  _C:\cygwin64_
 
 5. Select a mirror which is close to your location
 
@@ -63,8 +69,7 @@ chmod +s /usr/local/spine/bin/spine
    * gcc-core
    * gzip
    * help2man
-   * inetutils-src
-   * libmysqlclient
+   * inetutils
    * libmariadb-devel
    * libssl-devel
    * libtool
@@ -76,18 +81,18 @@ chmod +s /usr/local/spine/bin/spine
 
 7. Wait for installation to complete, coffee time!
 
-8. Move the cygwin setup to the C:\cygwin\ folder for future usage.
+8. Move the Cygwin setup to the C:\cygwin64\ folder for future usage.
 
 ### Compile Spine
 
-1. Open Cygwin shell prompt (C:\Cygwin\cygwin.bat) and brace yourself to use
-   unix commands on Windows.
+1. Open the Cygwin shell prompt (C:\cygwin64\cygwin.bat) and use Unix commands
+   in the Cygwin environment.
 
 2. Download the Spine source to the current directory:
 
    [http://www.cacti.net/spine_download.php](http://www.cacti.net/spine_download.php)
 
-3. Extract Spine into C:\Cygwin\usr\src\<spineversion>:
+3. Extract Spine into C:\cygwin64\usr\src\<spineversion>:
 
    `tar xzvf cacti-spine-*.tar.gz`
 
@@ -107,18 +112,19 @@ chmod +s /usr/local/spine/bin/spine
 
 8. Ensure that Spine runs well by running with `/usr/local/spine/spine -R -S -V 3`
 
-9. Update Cacti `Paths` Setting to point to the Spine binary and update the
-   `Poller Type` to Spine. For the spine binary on Windows x64, and using default
-   locations, that would be `C:\cygwin64\usr\local\spine\bin\spine.exe`
+9. Update Cacti `Paths` Setting to point to the Cygwin-built Spine binary and
+   update the `Poller Type` to Spine. For the spine binary on Windows x64, and
+   using default locations, that would be
+   `C:\cygwin64\usr\local\spine\bin\spine.exe`
 
 10. If all is good Spine will be run from the poller in place of cmd.php.
 
 ## Known Issues
 
-1. On Windows, Microsoft does not support a TCP Socket send timeout. Therefore,
-   if you are using TCP ping on Windows, spine will not perform a second or
-   subsequent retries to connect and the host will be assumed down on the first
-   failure.
+1. On Cygwin/Windows, TCP ping retries are limited by Windows socket timeout
+   behavior. If you are using TCP ping on Cygwin/Windows, Spine will not perform
+   a second or subsequent retry to connect and the host will be assumed down on
+   the first failure.
 
    If this is a problem it is suggested to use another Availability/Reachability
    method, or moving to Linux/UNIX.

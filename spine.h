@@ -53,7 +53,7 @@
 # define __attribute__(x)  /* NOTHING */
 #endif
 
-/* Windows does not support stderr.  Therefore, don't use it. */
+/* Cygwin service launches may not provide a usable stderr. */
 #ifdef __CYGWIN__
 #define DISABLE_STDERR
 #endif
@@ -355,7 +355,7 @@ typedef struct config_struct {
 	int    logfile_processed;
 	int    boost_enabled;
 	int    boost_redirect;
-	int    cygwinshloc;
+	char   cygwin_sh_path[BUFSIZE];
 	/* debugging options */
 	int    snmponly;
 	int    SQL_readonly;
