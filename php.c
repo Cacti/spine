@@ -452,7 +452,7 @@ int php_init(int php_process) {
 
 		retry:
 
-		pid = vfork();
+		pid = fork();
 
 		/* check the pid status and process as required */
 		switch (pid) {

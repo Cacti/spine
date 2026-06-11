@@ -223,7 +223,7 @@ int nft_popen(const char * command, const char * type) {
 
 	/* Fork. */
 	retry:
-	switch (pid = vfork()) {
+	switch (pid = fork()) {
 	case -1:		/* Error. */
 		switch (errno) {
 		case EAGAIN:

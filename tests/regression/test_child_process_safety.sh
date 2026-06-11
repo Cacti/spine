@@ -30,12 +30,22 @@ grep -q 'waitpid(pid, pstat, WNOHANG)' nft_popen.c ||
 grep -q 'kill(cur->pid, SIGKILL)' nft_popen.c ||
 	fail "nft_popen.c must escalate timed-out child reaping to SIGKILL"
 
+grep -q 'switch (pid = fork())' nft_popen.c ||
+	fail "nft_popen.c must use fork() for child process creation"
+
+grep -q 'pid = fork()' php.c ||
+	fail "php.c must use fork() for script-server child process creation"
+
 if grep -q 'waitpid(cur->pid, &pstat, 0)' nft_popen.c; then
 	fail "nft_popen.c must not use blocking waitpid() in nft_pclose"
 fi
 
 if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' php.c; then
 	fail "php.c must not use blocking waitpid() in php_close"
+fi
+
+if grep -q 'vfork()' nft_popen.c php.c; then
+	fail "deprecated vfork() must not be used in child process creation"
 fi
 
 echo "PASS: child process safety invariants"
