@@ -37,6 +37,41 @@
 
 extern char **environ;
 
+#define PHP_CLOSE_REAP_USEC 50000
+#define PHP_CLOSE_TERM_ATTEMPTS 100
+#define PHP_CLOSE_KILL_ATTEMPTS 20
+
+static int php_reap_child(pid_t pid, int *wstatus, int attempts) {
+	int attempt;
+	pid_t waited;
+
+	for (attempt = 0; attempt < attempts; attempt++) {
+		do {
+			waited = waitpid(pid, wstatus, WNOHANG);
+		} while (waited < 0 && errno == EINTR);
+
+		if (waited == pid || (waited < 0 && errno == ECHILD)) {
+			return TRUE;
+		}
+
+		if (waited < 0) {
+			return FALSE;
+		}
+
+		#ifndef SOLAR_THREAD
+		usleep(PHP_CLOSE_REAP_USEC);
+		#else
+		sleep(1);
+		#endif
+	}
+
+	do {
+		waited = waitpid(pid, wstatus, WNOHANG);
+	} while (waited < 0 && errno == EINTR);
+
+	return (waited == pid || (waited < 0 && errno == ECHILD));
+}
+
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
@@ -514,10 +549,7 @@ int php_init(int php_process) {
  *  information is will close and/or terminate the child PHP Script Server
  *  process and then return to the calling function.
  *
- *  TODO: Make ending of the child process not be reliant on SIG_TERM in cases
- *  where the child process is hung for one reason or another.
- *
- */
+	 */
 void php_close(int php_process) {
 	int i;
 	int num_processes;
@@ -572,7 +604,16 @@ void php_close(int php_process) {
 			/* end the php script server process */
 			kill(phpp->php_pid, SIGTERM);
 
-			/* reset this PID variable? */
+			if (!php_reap_child(phpp->php_pid, &wstatus, PHP_CLOSE_TERM_ATTEMPTS)) {
+				SPINE_LOG(("WARNING: SS[%i] PHP Script Server did not exit after SIGTERM; sending SIGKILL", i));
+				kill(phpp->php_pid, SIGKILL);
+
+				if (!php_reap_child(phpp->php_pid, &wstatus, PHP_CLOSE_KILL_ATTEMPTS)) {
+					SPINE_LOG(("WARNING: SS[%i] PHP Script Server could not be reaped after SIGKILL", i));
+				}
+			}
+
+			phpp->php_pid = -1;
 		}
 
 		/* close file descriptors */
