@@ -72,6 +72,21 @@ static int php_reap_child(pid_t pid, int *wstatus, int attempts) {
 	return (waited == pid || (waited < 0 && errno == ECHILD));
 }
 
+static int php_set_cloexec(int fd) {
+	int flags;
+
+	flags = fcntl(fd, F_GETFD);
+	if (flags < 0) {
+		return FALSE;
+	}
+
+	return fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0;
+}
+
+static int php_set_pipe_cloexec(int pdes[2]) {
+	return php_set_cloexec(pdes[0]) && php_set_cloexec(pdes[1]);
+}
+
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
@@ -362,17 +377,33 @@ int php_init(int php_process) {
 	for (i=0; i < num_processes; i++) {
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", i));
 
-		/* create the output pipes from Spine to php*/
-		if (pipe(cacti2php_pdes) < 0) {
-			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
-			return FALSE;
-		}
+			/* create the output pipes from Spine to php*/
+			if (pipe(cacti2php_pdes) < 0) {
+				SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
+				return FALSE;
+			}
+			if (!php_set_pipe_cloexec(cacti2php_pdes)) {
+				close(cacti2php_pdes[0]);
+				close(cacti2php_pdes[1]);
+				SPINE_LOG(("ERROR: SS[%i] Could not set close-on-exec on php server pipes", i));
+				return FALSE;
+			}
 
-		/* create the input pipes from php to Spine */
-		if (pipe(php2cacti_pdes) < 0) {
-			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
-			return FALSE;
-		}
+			/* create the input pipes from php to Spine */
+			if (pipe(php2cacti_pdes) < 0) {
+				close(cacti2php_pdes[0]);
+				close(cacti2php_pdes[1]);
+				SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
+				return FALSE;
+			}
+			if (!php_set_pipe_cloexec(php2cacti_pdes)) {
+				close(php2cacti_pdes[0]);
+				close(php2cacti_pdes[1]);
+				close(cacti2php_pdes[0]);
+				close(cacti2php_pdes[1]);
+				SPINE_LOG(("ERROR: SS[%i] Could not set close-on-exec on php server pipes", i));
+				return FALSE;
+			}
 
 		/* disable thread cancellation from this point forward. */
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
