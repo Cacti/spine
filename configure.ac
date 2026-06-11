@@ -84,6 +84,11 @@ case $host_alias in
   AC_DEFINE(HAVE_LIBPTHREAD, 1);;
 *darwin*)
   ShLib="dylib";;
+x86_64-*-cygwin*)
+  LIBS="-lpthread -lssl $LIBS"
+  AC_DEFINE(HAVE_LIBPTHREAD, 1, [Define when pthreads are available]);;
+*cygwin*)
+  AC_MSG_ERROR([Spine 1.2.x supports Cygwin only on x86_64 Windows. Please use 64-bit Cygwin.]);;
 *)
   LIBS="-lpthread -lssl $LIBS"
 esac

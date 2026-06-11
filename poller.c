@@ -2316,7 +2316,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 				FD_SET(cmd_fd, &fds);
 
 				/* wait x seconds for pipe response */
-				switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+				switch (select(cmd_fd + 1, &fds, NULL, NULL, &timeout)) {
 					case -1:
 						switch (errno) {
 							case EBADF:
