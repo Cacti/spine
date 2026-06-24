@@ -1248,7 +1248,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	if (num_rows > 0) {
 		/* retreive each hosts polling items from poller cache and load into array */
 		if (!(poller_items = (target_t *) calloc(num_rows, sizeof(target_t)))) {
-			die("ERROR: Fatal malloc error: poller.c poller_items!");
+			die("ERROR: Fatal calloc error: poller.c poller_items!");
 		}
 
 		i = 0;
@@ -1323,7 +1323,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		/* create an array for snmp oids */
 		if (!(snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t)))) {
-			die("ERROR: Fatal malloc error: poller.c snmp_oids!");
+			die("ERROR: Fatal calloc error: poller.c snmp_oids!");
 		}
 
 		/* initialize all the memory to insure we don't get issues */
