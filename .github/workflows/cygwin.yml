@@ -21,6 +21,13 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      # windows-latest defaults to autocrlf=true, which gives the shell scripts
+      # CRLF endings that Cygwin bash cannot parse. Force LF before checkout.
+      - name: Use LF line endings
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
