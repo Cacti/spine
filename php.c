@@ -304,7 +304,23 @@ char *php_readpipe(int php_process, char *command) {
 			bptr = result_string;
 
 			while (1) {
-				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
+				ptrdiff_t avail = RESULTS_BUFFER - 1 - (bptr - result_string);
+
+				if (avail <= 0) {
+					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+					SET_UNDEFINED(result_string);
+					break;
+				}
+
+				ptrdiff_t avail = RESULTS_BUFFER - 1 - (bptr - result_string);
+
+				if (avail <= 0) {
+					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+					SET_UNDEFINED(result_string);
+					break;
+				}
+
+				i = read(php_processes[php_process].php_read_fd, bptr, avail);
 
 				if (i <= 0) {
 					SET_UNDEFINED(result_string);
