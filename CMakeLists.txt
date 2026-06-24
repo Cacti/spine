@@ -970,6 +970,7 @@ if(BUILD_TESTING)
     if(WIN32)
         add_executable(test_icmp_win_loader
             tests/unit/test_icmp_win_loader.c
+            ${SPINE_ICMP_SOURCES}
             $<TARGET_OBJECTS:spine_platform>
         )
         target_include_directories(test_icmp_win_loader PRIVATE
