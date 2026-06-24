@@ -51,6 +51,7 @@ echo "=== Phase 2: skew snmpd clock +200s to trigger notInTimeWindow ==="
     exit 0
   }
 
+# shellcheck disable=SC2016  # command runs inside the container, not on the host
 "${COMPOSE[@]}" exec -T snmpd /bin/sh -c \
   'date -s "$(date -d "+200 seconds" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || date -v+200S +%Y-%m-%dT%H:%M:%S)" 2>/dev/null' ||
   {
