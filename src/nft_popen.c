@@ -99,7 +99,8 @@ extern char **environ;
  * hijack vectors (LD_*, DYLD_*) and shell-startup injection (BASH_ENV, ENV)
  * are the attack surface; everything else is the operator's own config
  * (custom PATH, PERL5LIB, PYTHONPATH for script dependencies) and must pass
- * through. IFS is forced to a safe value if unset. */
+ * through. Any inherited IFS is dropped and replaced with a safe default so a
+ * hostile parent cannot reshape word splitting in the child's shell. */
 static const char *const spine_dangerous_env_prefixes[] = {
 	"LD_PRELOAD=",
 	"LD_LIBRARY_PATH=",
@@ -108,6 +109,7 @@ static const char *const spine_dangerous_env_prefixes[] = {
 	"DYLD_LIBRARY_PATH=",
 	"BASH_ENV=",
 	"ENV=",
+	"IFS=",
 	NULL
 };
 
@@ -133,7 +135,6 @@ char **spine_build_child_env(void) {
 	if (!new_env) return NULL;
 
 	int has_path = 0;
-	int has_ifs  = 0;
 	size_t w = 0;
 	for (size_t r = 0; r < n; r++) {
 		int skip = 0;
@@ -146,11 +147,10 @@ char **spine_build_child_env(void) {
 		}
 		if (skip) continue;
 		if (strncmp(environ[r], "PATH=", 5) == 0) has_path = 1;
-		if (strncmp(environ[r], "IFS=",  4) == 0) has_ifs  = 1;
 		new_env[w++] = environ[r];
 	}
 	if (!has_path) new_env[w++] = (char *)spine_default_path;
-	if (!has_ifs)  new_env[w++] = (char *)spine_default_ifs;
+	new_env[w++] = (char *)spine_default_ifs;
 	new_env[w] = NULL;
 	return new_env;
 }
