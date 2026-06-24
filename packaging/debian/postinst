@@ -2,17 +2,17 @@
 set -e
 
 case "$1" in
-    configure)
-        # Grant CAP_NET_RAW via file capability so spine can open raw ICMP
-        # sockets without running setuid-root.
-        if [ -f /usr/sbin/spine ]; then
-            setcap cap_net_raw+eip /usr/sbin/spine
-        fi
-        # Create default config if not present
-        if [ ! -f /etc/spine.conf ]; then
-            cp /etc/spine.conf.dist /etc/spine.conf 2>/dev/null || true
-        fi
-        ;;
+  configure)
+    # Grant CAP_NET_RAW via file capability so spine can open raw ICMP
+    # sockets without running setuid-root.
+    if [ -f /usr/sbin/spine ]; then
+      setcap cap_net_raw+eip /usr/sbin/spine
+    fi
+    # Create default config if not present
+    if [ ! -f /etc/spine.conf ]; then
+      cp /etc/spine.conf.dist /etc/spine.conf 2>/dev/null || true
+    fi
+    ;;
 esac
 
 #DEBHELPER#
