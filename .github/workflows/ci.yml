@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [1.2.x]
+  pull_request:
+    branches: [1.2.x]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+          mysql-server libmysqlclient-dev \
+          libsnmp-dev libssl-dev build-essential \
+          help2man autoconf automake libtool dos2unix
+
+      - name: Prepare for Spine Build
+        run: |
+          ./bootstrap
+          ./configure --enable-warnings
+
+      - name: Build Spine
+        run: |
+          make -j
+
+  flawfinder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.x"
+
+      - name: Install flawfinder
+        run: pip install flawfinder==2.0.19
+
+      # Note: flawfinder will light up like a christmas tree on this codebase.
+      # error-level=5 means only critical hits fail the build — the rest is
+      # informational so we have a baseline to chip away at.
+      - name: Run flawfinder
+        run: |
+          flawfinder \
+            --minlevel=3 \
+            --error-level=5 \
+            --columns \
+            --context \
+            . | tee flawfinder-report.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: flawfinder-report
+          path: flawfinder-report.txt
