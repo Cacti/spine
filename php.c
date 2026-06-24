@@ -65,11 +65,7 @@ static int php_reap_child(pid_t pid, int *wstatus, int attempts) {
 		#endif
 	}
 
-	do {
-		waited = waitpid(pid, wstatus, WNOHANG);
-	} while (waited < 0 && errno == EINTR);
-
-	return (waited == pid || (waited < 0 && errno == ECHILD));
+	return FALSE;
 }
 
 static int php_set_cloexec(int fd) {
