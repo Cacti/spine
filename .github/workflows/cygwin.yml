@@ -11,38 +11,41 @@ on:
       - ci/cygwin-1.2.x
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   cygwin:
     name: Cygwin x86_64
     runs-on: windows-latest
     timeout-minutes: 30
 
-    defaults:
-      run:
-        shell: C:\cygwin64\bin\bash.exe -eo pipefail '{0}'
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Cygwin packages
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Invoke-WebRequest https://cygwin.com/setup-x86_64.exe -OutFile C:\cygwin-setup.exe
-          C:\cygwin-setup.exe --quiet-mode --root C:\cygwin64 --site https://mirrors.kernel.org/sourceware/cygwin/ --packages autoconf,automake,dos2unix,gcc-core,gzip,help2man,inetutils,libmariadb-devel,libssl-devel,libtool,m4,make,net-snmp-devel,openssl-devel,pkg-config,wget
+      - name: Install Cygwin
+        uses: cygwin/cygwin-install-action@3f0a3f9f988f7e96b8c18098ae05eaec175f5b52
+        with:
+          packages: >-
+            autoconf automake dos2unix gcc-core gzip help2man inetutils
+            libmariadb-devel libssl-devel libtool m4 make net-snmp-devel
+            openssl-devel pkg-config wget
 
       - name: Bootstrap
+        shell: C:\cygwin64\bin\bash.exe --login --norc -o igncr -eo pipefail '{0}'
         run: |
-          export PATH=/usr/bin:$PATH
+          cd "$(cygpath -u "$GITHUB_WORKSPACE")"
           ./bootstrap
 
       - name: Configure
+        shell: C:\cygwin64\bin\bash.exe --login --norc -o igncr -eo pipefail '{0}'
         run: |
-          export PATH=/usr/bin:$PATH
+          cd "$(cygpath -u "$GITHUB_WORKSPACE")"
           ./configure --with-mysql=/usr --with-snmp=/usr
 
       - name: Build
+        shell: C:\cygwin64\bin\bash.exe --login --norc -o igncr -eo pipefail '{0}'
         run: |
-          export PATH=/usr/bin:$PATH
+          cd "$(cygpath -u "$GITHUB_WORKSPACE")"
           make -j2 V=1
