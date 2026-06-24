@@ -20,8 +20,7 @@ The Cacti Group | spine
 -issue: extend IPv4/IPv6 DNS regression coverage (mapped-address, family-forcing, scoped IPv6 parse)
 -issue: harden Windows process spawn/wait correctness (PID lifecycle, UTF-8 command path coverage, strict envp contract)
 -feature: add IPv6 transport integration test lane to Docker integration workflow
--issue: harden script poll execution by rejecting unsafe shell metacharacter command strings before popen
--feature: add unit/integration coverage for script command policy and explicit IPv4/IPv6 numeric family resolution
+-feature: add unit/integration coverage for explicit IPv4/IPv6 numeric family resolution
 -feature#3740: Ability to disable a site
 -feature#5090: Enhance number recognition within Spine
 -feature#6001: Extend SYSTEM STATS

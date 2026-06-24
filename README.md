@@ -41,12 +41,6 @@ Current mapping:
 Platform implementation rules are centralized in
 `docs/platform-idioms.md`.
 
-### Security Behavior Change
-
-Script poll commands now apply a strict shell-metacharacter guard before
-execution. Commands containing `;`, `|`, `&`, `` ` ``, `$`, `>`, `<`, newline,
-or carriage return are rejected and logged as unsafe.
-
 ### Build System Roadmap
 
 CMake is the canonical build system for this repository.
