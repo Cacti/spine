@@ -52,11 +52,14 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
 
 typedef HANDLE (WINAPI *pfn_IcmpCreateFile)(VOID);
 typedef BOOL   (WINAPI *pfn_IcmpCloseHandle)(HANDLE);
-typedef DWORD  (WINAPI *pfn_IcmpSendEcho2Ex)(HANDLE, HANDLE, PIO_APC_ROUTINE, PVOID,
+/* The ApcRoutine parameter is typed PVOID rather than PIO_APC_ROUTINE: MinGW's
+ * iphlpapi headers do not define that type, and we always pass NULL for it, so
+ * a generic pointer is ABI-equivalent on both MinGW and MSVC. */
+typedef DWORD  (WINAPI *pfn_IcmpSendEcho2Ex)(HANDLE, HANDLE, PVOID, PVOID,
                                              IPAddr, IPAddr, LPVOID, WORD,
                                              PIP_OPTION_INFORMATION, LPVOID, DWORD, DWORD);
 typedef HANDLE (WINAPI *pfn_Icmp6CreateFile)(VOID);
-typedef DWORD  (WINAPI *pfn_Icmp6SendEcho2)(HANDLE, HANDLE, PIO_APC_ROUTINE, PVOID,
+typedef DWORD  (WINAPI *pfn_Icmp6SendEcho2)(HANDLE, HANDLE, PVOID, PVOID,
                                             struct sockaddr_in6 *, struct sockaddr_in6 *,
                                             LPVOID, WORD,
                                             PIP_OPTION_INFORMATION, LPVOID, DWORD, DWORD);
