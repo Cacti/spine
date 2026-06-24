@@ -875,7 +875,7 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 
 	if (current_host->snmp_session != NULL) {
 		rootlen = MAX_OID_LEN;
-		/* parse input parm to an array for use with snmp functions */
+		/* parse input param to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
 			return count;
