@@ -328,8 +328,9 @@ void db_connect(int type, MYSQL *mysql) {
 	 *
 	 * H4 fix: on connectors that expose neither MYSQL_OPT_SSL_MODE nor
 	 * MYSQL_OPT_SSL_VERIFY_SERVER_CERT we cannot force server identity
-	 * verification, so ssl_setting >= 1 MUST fail closed instead of
-	 * connecting cleartext. The MYSQL_OPT_SSL_* options are also only set
+	 * verification, so ssl_setting >= 2 (verified TLS required) MUST fail
+	 * closed instead of connecting cleartext; ssl_setting == 1 (preferred)
+	 * falls back to plaintext. The MYSQL_OPT_SSL_* options are also only set
 	 * when TLS is actually requested so a plaintext config does not pin
 	 * stale cert paths into the client state. */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
@@ -348,12 +349,15 @@ void db_connect(int type, MYSQL *mysql) {
 			}
 			#endif
 		} else {
-			/* ssl_setting >= 1 -- TLS requested. Refuse to run on a client
-			 * build that has no way to enforce server identity: without
-			 * MYSQL_OPT_SSL_MODE and without MYSQL_OPT_SSL_VERIFY_SERVER_CERT
-			 * the server can downgrade us to plaintext silently. */
+			/* Mode 2 requires verified TLS. On a client build with no way
+			 * to enforce server identity (neither MYSQL_OPT_SSL_MODE nor
+			 * MYSQL_OPT_SSL_VERIFY_SERVER_CERT) the server can downgrade us
+			 * to plaintext silently, so mode 2 must fail closed. Mode 1 is
+			 * preferred-with-fallback and continues. */
 			#if !defined(HAS_MYSQL_OPT_SSL_MODE) && !defined(HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT)
-			die("FATAL: DB_UseSSL=%d but this libmysqlclient build has no server identity verification option; refusing to connect", ssl_setting);
+			if (ssl_setting >= 2) {
+				die("FATAL: DB_UseSSL=%d but this libmysqlclient build has no server identity verification option; refusing to connect", ssl_setting);
+			}
 			#endif
 
 			if (type == REMOTE) {
@@ -412,12 +416,11 @@ void db_connect(int type, MYSQL *mysql) {
 	}
 	#else
 	/* No MYSQL_OPT_SSL_KEY at all means the connector predates any TLS
-	 * plumbing we can configure. Refuse to run if the operator asked for
-	 * TLS; a silent plaintext connect is the exact failure mode we are
-	 * trying to prevent. */
+	 * plumbing we can configure. Mode 2 (verified TLS required) must fail
+	 * closed; mode 1 is preferred-with-fallback and connects plaintext. */
 	{
 		int ssl_setting = (type == LOCAL) ? set.db_ssl : set.rdb_ssl;
-		if (ssl_setting >= 1) {
+		if (ssl_setting >= 2) {
 			die("FATAL: DB_UseSSL=%d but this libmysqlclient build has no server identity verification option; refusing to connect", ssl_setting);
 		}
 	}
@@ -473,9 +476,16 @@ void db_connect(int type, MYSQL *mysql) {
 				if (ssl_setting >= 1) {
 					const char *cipher = mysql_get_ssl_cipher(mysql);
 					if (cipher == NULL) {
-						die("FATAL: DB_UseSSL=%d but negotiated session is plaintext (no SSL cipher); refusing to continue", ssl_setting);
+						/* Mode 2 requires verified TLS, so a plaintext
+						 * session is fatal. Mode 1 is "preferred with
+						 * graceful fallback": warn but keep running. */
+						if (ssl_setting >= 2) {
+							die("FATAL: DB_UseSSL=%d but negotiated session is plaintext (no SSL cipher); refusing to continue", ssl_setting);
+						}
+						SPINE_LOG(("WARNING: DB_UseSSL=1 (preferred) requested TLS but the session negotiated plaintext; continuing unencrypted"));
+					} else {
+						SPINE_LOG_DEBUG(("DEBUG: %s DB TLS cipher: %s", (type == LOCAL) ? "local" : "remote", cipher));
 					}
-					SPINE_LOG_DEBUG(("DEBUG: %s DB TLS cipher: %s", (type == LOCAL) ? "local" : "remote", cipher));
 				}
 			}
 			#endif

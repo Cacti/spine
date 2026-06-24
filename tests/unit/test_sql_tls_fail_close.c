@@ -5,15 +5,16 @@
  +-------------------------------------------------------------------------+
  | H4 TLS fail-close regression guard.
  |
- | The full end-to-end behaviour (set.db_ssl=1 on a libmysqlclient without
+ | The full end-to-end behaviour (set.db_ssl=2 on a libmysqlclient without
  | MYSQL_OPT_SSL_MODE and without MYSQL_OPT_SSL_VERIFY_SERVER_CERT must
  | die() before mysql_real_connect()) is hard to exercise without a mock
  | libmysqlclient; every host CI toolchain ships one connector with a
  | specific feature mix. Instead we pin the invariant structurally: the
  | SSL code path in src/sql.c must contain a die() call that fires when
- | ssl_setting >= 1 and neither verify-server-cert nor ssl-mode is
- | compiled in, and a post-connect cipher check that die()s on a NULL
- | cipher. If a future refactor drops either guard, this test fails at
+ | ssl_setting >= 2 (verified TLS) and neither verify-server-cert nor
+ | ssl-mode is compiled in, and a post-connect cipher check that die()s on
+ | a NULL cipher in mode 2. Mode 1 is preferred-with-fallback and only
+ | warns. If a future refactor drops either guard, this test fails at
  | build time via ctest, which is the layer CI actually runs.
  |
  | The "compile-time" assertion here is source-level: we open the real
