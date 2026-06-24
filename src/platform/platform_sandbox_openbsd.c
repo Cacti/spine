@@ -57,7 +57,13 @@ void spine_sandbox_restrict(void) {
 	 *   exec     -- execve() of poll scripts
 	 *   getpw    -- getpwuid() for user lookup via drop_root
 	 */
-	if (pledge("stdio rpath wpath cpath inet dns proc exec getpw", NULL) == -1) {
+	/* The second argument is execpromises: the promise set handed to any
+	 * program spine exec()s. Dropping wpath/cpath/getpw there means a
+	 * compromised poll script cannot write files, create directories, or
+	 * read the password database, while keeping the read + network + spawn
+	 * promises that legitimate check scripts rely on. */
+	if (pledge("stdio rpath wpath cpath inet dns proc exec getpw",
+	           "stdio rpath inet dns proc exec") == -1) {
 		/* Non-fatal: keep running with unsandboxed privileges. */
 		fprintf(stderr, "WARNING: pledge() failed: %s\n", strerror(errno));
 	}
