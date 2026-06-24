@@ -290,6 +290,7 @@ jobs:
           usesh: true
           sync: nfs
           prepare: |
+            export IGNORE_OSVERSION=yes
             pkg update -f
             pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
           run: |
