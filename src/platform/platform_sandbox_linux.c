@@ -304,7 +304,15 @@ static int apply_seccomp(void) {
 	/* Apply the filter to every existing thread, not just the caller. By
 	 * the time the sandbox activates spine has already spawned poller
 	 * workers; without TSYNC they would keep running without seccomp. */
-	(void)seccomp_attr_set(ctx, SCMP_FLTATR_CTL_TSYNC, 1);
+	if (seccomp_attr_set(ctx, SCMP_FLTATR_CTL_TSYNC, 1) != 0) {
+		/* Without TSYNC the filter would bind to this thread only, leaving
+		 * already-spawned poller workers unfiltered -- a silent partial
+		 * sandbox that is worse than a clean failure. Bail and let the
+		 * caller's error handling decide. */
+		fprintf(stderr, "WARNING: seccomp TSYNC unavailable; refusing a thread-local-only filter\n");
+		seccomp_release(ctx);
+		return -1;
+	}
 
 	/* On x86_64, ia32 and x32 personalities share the kernel syscall entry
 	 * and can reach spine's address space through the vsyscall page and
