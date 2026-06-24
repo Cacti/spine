@@ -58,7 +58,7 @@ jobs:
 
       - name: Upload Semgrep SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/upload-sarif@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3.28.10
         with:
           sarif_file: semgrep.sarif
           category: semgrep

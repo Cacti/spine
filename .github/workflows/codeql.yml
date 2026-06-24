@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/init@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3.28.10
         with:
           languages: c-cpp
 
@@ -59,4 +59,4 @@ jobs:
           cmake --build build -j"$(nproc)"
 
       - name: Analyze
-        uses: github/codeql-action/analyze@ce28f5bb42b7a342e9c1c977301c0a1aca3958b1 # v3.28.10
+        uses: github/codeql-action/analyze@b0c4fd77f6c559021d78430ec4d0d169ae74a4eb # v3.28.10
