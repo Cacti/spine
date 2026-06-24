@@ -64,7 +64,7 @@ for distro in "${DISTROS[@]}"; do
     alpine*)
       PKG='apk add --no-cache bash cmake gcc make musl-dev net-snmp-dev mariadb-connector-c-dev openssl-dev pkgconfig linux-headers'
       ;;
-    *ubi9* | *ubi:9* | *redhat.com/ubi9*)
+    *ubi9* | *ubi:9*)
       # Advisory: UBI 9 ships a restricted package set.
       # mariadb-connector-c-devel typically requires subscription repos.
       # Run with: bash scripts/test-distros.sh registry.access.redhat.com/ubi9/ubi

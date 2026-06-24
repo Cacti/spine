@@ -1,5 +1,4 @@
-#!/bin/sh
-<?php
+#!/usr/bin/env bash
 # +-------------------------------------------------------------------------+
 # | Copyright (C) 2004-2026 The Cacti Group                                 |
 # |                                                                         |
@@ -32,16 +31,16 @@ display_help() {
   echo "   spine. If all goes well a tar.gz file will be created."
   echo "----------------------------------------------------------------------------"
   echo " Syntax:"
-  echo "  ./$(basename $0) <Version>"
+  echo "  ./$(basename "$0") <Version>"
   echo ""
   echo "    <Version> - Designated version for build (required)"
   echo ""
 }
 
 # Sanity checks
-[ ! -e CMakeLists.txt ] && echo "ERROR: Your current working directory must be a Spine source checkout" && exit -1
+[ ! -e CMakeLists.txt ] && echo "ERROR: Your current working directory must be a Spine source checkout" && exit 1
 
-if [ "${1}x" = "--helpx" -o "${1}x" = "-hx" ]; then
+if [ "${1}x" = "--helpx" ] || [ "${1}x" = "-hx" ]; then
   display_help
   exit 0
 fi
@@ -51,7 +50,7 @@ if [ -z "${1}" ]; then
   echo "ERROR: Invalid syntax, missing required argument"
   echo ""
   display_help
-  exit -1
+  exit 1
 fi
 VERSION=${1}
 
@@ -63,26 +62,29 @@ echo "  Version: ${VERSION}"
 echo "----------------------------------------------------------------------------"
 
 # Clean up previous builds
-if [ -e ${TMP_DIR}/cacti-spine-${VERSION} ]; then
+if [ -e "${TMP_DIR}/cacti-spine-${VERSION}" ]; then
   echo "INFO: Removing previous build ${TMP_DIR}/cacti-spine-${VERSION}..."
-  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
-  [ $? -gt 1 ] && echo "ERROR: Unable to remove directory: ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
+  rm -Rf "${TMP_DIR}/cacti-spine-${VERSION}" >/dev/null 2>&1
+  rc=$?
+  [ "$rc" -gt 1 ] && echo "ERROR: Unable to remove directory: ${TMP_DIR}/cacti-spine-${VERSION}" && exit 1
 fi
-if [ -e ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz ]; then
-  rm -Rf ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz >/dev/null 2>&1
-  [ $? -gt 1 ] && echo "ERROR: Unable to remove file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" && exit -1
+if [ -e "${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" ]; then
+  rm -Rf "${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" >/dev/null 2>&1
+  rc=$?
+  [ "$rc" -gt 1 ] && echo "ERROR: Unable to remove file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" && exit 1
 fi
 
 # Copy repository
-mkdir -p ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
-tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' * | (
-  cd ${TMP_DIR}/cacti-spine-${VERSION}
+mkdir -p "${TMP_DIR}/cacti-spine-${VERSION}" >/dev/null 2>&1
+tar -cf - --exclude 'package' --exclude '.svn' --exclude '.travis.yml' -- * | (
+  cd "${TMP_DIR}/cacti-spine-${VERSION}" || exit 1
   tar -xf -
 )
-[ $? -gt 0 ] && echo "ERROR: Unable to repository to ${TMP_DIR}/cacti-spine-${VERSION}" && exit -1
+rc=$?
+[ "$rc" -gt 0 ] && echo "ERROR: Unable to repository to ${TMP_DIR}/cacti-spine-${VERSION}" && exit 1
 
 # Change working directory
-pushd ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
+pushd "${TMP_DIR}/cacti-spine-${VERSION}" >/dev/null 2>&1 || exit 1
 
 # Get version from source files, warn if different than defined for build
 SRC_VERSION=$(sed -n 's/^project(spine VERSION \([^ ]*\).*/\1/p' CMakeLists.txt | head -n1)
@@ -95,22 +97,24 @@ fi
 # Validate the release tree against the canonical CMake configure path
 echo "INFO: configure release tree with CMake..."
 cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON >/dev/null
-[ $? -gt 0 ] && echo "ERROR: Unable to configure release tree with CMake" && exit -1
+rc=$?
+[ "$rc" -gt 0 ] && echo "ERROR: Unable to configure release tree with CMake" && exit 1
 
 # Check working directory
-cd ${TMP_DIR}/
+cd "${TMP_DIR}/" || exit 1
 
 # Package it
 echo "INFO: Packaging..."
-tar -zcf cacti-spine-${VERSION}.tar.gz cacti-spine-${VERSION}
-[ $? -gt 1 ] && echo "ERROR: Unable to package" && exit -1
+tar -zcf "cacti-spine-${VERSION}.tar.gz" "cacti-spine-${VERSION}"
+rc=$?
+[ "$rc" -gt 1 ] && echo "ERROR: Unable to package" && exit 1
 
 # Change working directory
-popd >/dev/null 2>&1
+popd >/dev/null 2>&1 || exit 1
 
 # Clean up
 echo "INFO: Cleaning up build directory..."
-rm -rf ${TMP_DIR}/cacti-spine-${VERSION} >/dev/null 2>&1
+rm -rf "${TMP_DIR}/cacti-spine-${VERSION}" >/dev/null 2>&1
 
 # Display file locations
 echo "INFO: Completed..."
