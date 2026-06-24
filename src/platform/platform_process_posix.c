@@ -7,6 +7,11 @@
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE 1
 #endif
+/* On the BSDs pipe2() is gated behind __BSD_VISIBLE, which _POSIX_C_SOURCE
+ * turns off. Force it on before any system header latches the symbol set. */
+#if (defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)) && !defined(__BSD_VISIBLE)
+#define __BSD_VISIBLE 1
+#endif
 
 #include "platform_process.h"
 
