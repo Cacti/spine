@@ -520,12 +520,16 @@ target_link_libraries(spine_platform PUBLIC spine_hardening)
 if(WIN32)
     target_link_libraries(spine_platform PUBLIC ws2_32 iphlpapi advapi32)
 else()
-    target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+    if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+        # The BSDs hide BSD/POSIX/XSI symbols (pipe2, usleep, gettimeofday,
+        # SA_RESTART) whenever _POSIX_C_SOURCE is set. _DEFAULT_SOURCE alone
+        # leaves the full default symbol set visible.
+        target_compile_definitions(spine_platform PUBLIC _DEFAULT_SOURCE=1)
+    else()
+        target_compile_definitions(spine_platform PUBLIC _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+    endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         target_compile_definitions(spine_platform PUBLIC _DARWIN_C_SOURCE=1)
-    elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
-        # _POSIX_C_SOURCE hides BSD extensions (pipe2, usleep); re-expose them.
-        target_compile_definitions(spine_platform PUBLIC __BSD_VISIBLE=1)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
         target_compile_definitions(spine_platform PUBLIC _POSIX_PTHREAD_SEMANTICS=1 _XOPEN_SOURCE=700 __EXTENSIONS__=1)
     elseif(CMAKE_SYSTEM_NAME STREQUAL "AIX")
