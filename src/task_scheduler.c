@@ -39,7 +39,13 @@ void spine_scheduler_init(uint32_t max_global_tasks) {
     g_max_tasks = max_global_tasks;
     
     task_pool = calloc(g_max_tasks, sizeof(spine_task_t));
-    
+    if (task_pool == NULL) {
+        /* Leave the scheduler uninitialized rather than dereferencing NULL;
+         * the caller observes scheduler_initialized == false. */
+        uv_mutex_unlock(&scheduler_lock);
+        return;
+    }
+
     /* Initialize Free List */
     for (uint32_t i = 0; i < g_max_tasks - 1; i++) {
         task_pool[i].next = &task_pool[i + 1];
@@ -99,14 +105,20 @@ void spine_scheduler_purge(int error_code) {
     spine_task_t *itask = inflight_head;
     /* We must copy the pointers because complete_task alters the list */
     spine_task_t **inflight_array = calloc(g_max_tasks, sizeof(spine_task_t*));
-    int inflight_count = 0;
+    if (inflight_array == NULL) {
+        /* OOM during teardown: skip the inflight copy rather than NULL-deref.
+         * The process is exiting, so the tasks are reclaimed at exit. */
+        uv_mutex_unlock(&scheduler_lock);
+        return;
+    }
+    uint32_t inflight_count = 0;
     while (itask && inflight_count < g_max_tasks) {
         inflight_array[inflight_count++] = itask;
         itask = itask->next_inflight;
     }
     uv_mutex_unlock(&scheduler_lock);
-    
-    for (int i = 0; i < inflight_count; i++) {
+
+    for (uint32_t i = 0; i < inflight_count; i++) {
         spine_executor_complete_task(inflight_array[i], error_code, NULL);
     }
     free(inflight_array);
