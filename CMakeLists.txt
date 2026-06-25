@@ -132,7 +132,10 @@ endif()
 add_library(spine_hardening INTERFACE)
 if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
     target_compile_options(spine_hardening INTERFACE
-        -D_FORTIFY_SOURCE=2
+        # _FORTIFY_SOURCE needs optimization; at -O0 (Debug) glibc emits a
+        # "_FORTIFY_SOURCE requires compiling with optimization" warning per
+        # TU and the macro is a no-op, so only request it for optimized builds.
+        $<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>
         -fstack-protector-strong
         -Wformat-security
         -fPIE
