@@ -1091,6 +1091,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 						if (pkt->icmp_type != ICMP_ECHOREPLY) {
 							/* received a response other than an echo reply */
+							/* total_time advances inside the listen loop, so this branch is reachable */
+							// cppcheck-suppress oppositeInnerCondition
 							if (total_time > host_timeout) {
 								retry_count++;
 								total_time = 0;

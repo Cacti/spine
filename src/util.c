@@ -1140,6 +1140,8 @@ int read_spine_config(const char *file) {
 			chars = fgets(buff, BUFSIZE, fp);
 
 			if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
+				/* field widths are intentionally smaller than the destination buffers */
+				// cppcheck-suppress invalidScanfFormatWidth_smaller
 				sscanf(buff, "%15s %255s", p1, p2);
 
 				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);

@@ -29,6 +29,9 @@ int spine_platform_setenv(const char *name, const char *value, int overwrite) {
 }
 
 int spine_platform_localtime(const time_t *when, struct tm *out) {
+	/* localtime_s writes *out and returns errno_t, not an address; cppcheck misreads both */
+	// cppcheck-suppress ctuuninitvar
+	// cppcheck-suppress CastAddressToIntegerAtReturn
 	return localtime_s(out, when);
 }
 
