@@ -85,10 +85,11 @@ jobs:
       - name: Install Scorecard CLI
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y golang-go
           mkdir -p "${HOME}/.local/bin"
-          GOBIN="${HOME}/.local/bin" go install github.com/ossf/scorecard/v5/cmd/scorecard@v5.5.0
+          curl -fsSL -o /tmp/scorecard.tar.gz \
+            https://github.com/ossf/scorecard/releases/download/v5.5.0/scorecard_5.5.0_linux_amd64.tar.gz
+          tar -xzf /tmp/scorecard.tar.gz -C "${HOME}/.local/bin" scorecard
+          chmod +x "${HOME}/.local/bin/scorecard"
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
       - name: Run Scorecard
