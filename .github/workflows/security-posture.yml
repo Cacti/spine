@@ -88,7 +88,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y golang-go
           mkdir -p "${HOME}/.local/bin"
-          GOBIN="${HOME}/.local/bin" go install github.com/ossf/scorecard/v5/cmd/scorecard@v5.1.2
+          GOBIN="${HOME}/.local/bin" go install github.com/ossf/scorecard/v5/cmd/scorecard@v5.5.0
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
       - name: Run Scorecard
