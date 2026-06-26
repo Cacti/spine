@@ -12,7 +12,7 @@ static void test_platform_localtime_matches_libc(void) {
 	time_t now;
 	struct tm expected_tm;
 	struct tm actual_tm;
-	struct tm *baseline_tm;
+	const struct tm *baseline_tm;
 
 	now = time(NULL);
 	baseline_tm = localtime(&now);
