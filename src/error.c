@@ -51,7 +51,7 @@ static void spine_signal_handler(int spine_signal) {
 	/* variables for time display */
 	time_t nowbin;
 	struct tm now_time;
-	struct tm *now_ptr;
+	const struct tm *now_ptr;
 
 	/* get time for poller_output table */
 	nowbin = time(&nowbin);
@@ -59,7 +59,7 @@ static void spine_signal_handler(int spine_signal) {
 	spine_platform_localtime(&nowbin, &now_time);
 	now_ptr = &now_time;
 
-	char *log_fmt = get_date_format();
+	const char *log_fmt = get_date_format();
 	char logtime[50];
 
 	strftime(logtime, 50, log_fmt, now_ptr);
@@ -114,7 +114,6 @@ void install_spine_signal_handler(void) {
 	/* Set a handler for any fatal signal not already handled */
 	int i;
 	struct sigaction sa;
-	void (*ohandler)(int);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -127,7 +126,7 @@ void install_spine_signal_handler(void) {
 	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
-		ohandler = signal(spine_fatal_signals[i], spine_signal_handler);
+		void (*ohandler)(int) = signal(spine_fatal_signals[i], spine_signal_handler);
 		if (ohandler != SIG_DFL) {
 			signal(spine_fatal_signals[i], ohandler);
 		}
@@ -144,7 +143,6 @@ void uninstall_spine_signal_handler(void) {
 	/* Remove a handler for any fatal signal handled */
 	int i;
 	struct sigaction sa;
-	void (*ohandler)(int);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -155,7 +153,7 @@ void uninstall_spine_signal_handler(void) {
 	}
 
 	for ( i=0; spine_fatal_signals[i]; ++i ) {
-		ohandler = signal(spine_fatal_signals[i], SIG_DFL);
+		void (*ohandler)(int) = signal(spine_fatal_signals[i], SIG_DFL);
 		if (ohandler != spine_signal_handler) {
 			signal(spine_fatal_signals[i], ohandler);
 		}
