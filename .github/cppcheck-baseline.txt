@@ -1,5 +1,3 @@
-src/error.c:59:26: note: Calling function spine_platform_localtime, 2nd argument is uninitialized
-src/nft_popen.c:268:3: error: Memory leak: cur [memleak]
 src/php.c:177:8: style: Variable 'cp' can be declared as pointer to const [constVariablePointer]
 src/php.c:269:12: style: Variable 'cp' is assigned a value that is never used. [unreadVariable]
 src/php.c:308:22: style: Variable 'result_string' is assigned a value that is never used. [unreadVariable]
@@ -7,17 +5,14 @@ src/ping.c:1031:17: note: return_code is assigned
 src/ping.c:1044:17: note: return_code is overwritten
 src/ping.c:1044:17: style: Variable 'return_code' is assigned a value that is never used. [unreadVariable]
 src/ping.c:1044:17: style: Variable 'return_code' is reassigned a value before the old one has been used. [redundantAssignment]
-src/ping.c:1052:20: note: outer condition: total_time<host_timeout
-src/ping.c:1094:23: note: opposite inner condition: total_time>host_timeout
-src/ping.c:1094:23: warning: Opposite inner 'if' condition leads to a dead code block. [oppositeInnerCondition]
-src/ping.c:1394:21: style: The scope of the variable 'end_time' can be reduced. [variableScope]
-src/ping.c:1401:9: style: The scope of the variable 'retry_count' can be reduced. [variableScope]
-src/ping.c:1402:9: style: The scope of the variable 'return_code' can be reduced. [variableScope]
-src/ping.c:1417:13: style: Variable 'total_time' is assigned a value that is never used. [unreadVariable]
-src/ping.c:1733:9: style: The scope of the variable 'ping_time' can be reduced. [variableScope]
+src/ping.c:1396:21: style: The scope of the variable 'end_time' can be reduced. [variableScope]
+src/ping.c:1403:9: style: The scope of the variable 'retry_count' can be reduced. [variableScope]
+src/ping.c:1404:9: style: The scope of the variable 'return_code' can be reduced. [variableScope]
+src/ping.c:1419:13: style: Variable 'total_time' is assigned a value that is never used. [unreadVariable]
+src/ping.c:1735:9: style: The scope of the variable 'ping_time' can be reduced. [variableScope]
 src/ping.c:177:6: style: The scope of the variable 'rv' can be reduced. [variableScope]
-src/ping.c:2094:17: style: Variable 'pkt' can be declared as pointer to const [constVariablePointer]
-src/ping.c:2262:22: style: Variable 'r' can be declared as pointer to const [constVariablePointer]
+src/ping.c:2096:17: style: Variable 'pkt' can be declared as pointer to const [constVariablePointer]
+src/ping.c:2264:22: style: Variable 'r' can be declared as pointer to const [constVariablePointer]
 src/ping.c:418:35: style: Parameter 'host' can be declared as pointer to const [constParameterPointer]
 src/ping.c:433:20: style: Variable 'reply' can be declared as pointer to const [constVariablePointer]
 src/ping.c:671:9: style: The scope of the variable 'snmp_start_time' can be reduced. [variableScope]
@@ -30,9 +25,6 @@ src/platform/platform_process_win.c:290:14: style: Parameter 'envp' can be decla
 src/platform/platform_process_win.c:297:11: style: The scope of the variable 'command_line' can be reduced. [variableScope]
 src/platform/platform_process_win.c:301:6: style: The scope of the variable 'spawn_error' can be reduced. [variableScope]
 src/platform/platform_win.c:31:61: style: Parameter 'out' can be declared as pointer to const [constParameterPointer]
-src/platform/platform_win.c:32:21: error: Using argument out that points at uninitialized variable now_time [ctuuninitvar]
-src/platform/platform_win.c:32:21: note: Using argument out
-src/platform/platform_win.c:32:2: portability: Returning an address value in a function with integer return type is not portable. [CastAddressToIntegerAtReturn]
 src/poller.c:143:109: style: Parameter 'host_time' can be declared as pointer to const [constParameterPointer]
 src/poller.c:161:7: style: The scope of the variable 'sysUptime' can be reduced. [variableScope]
 src/poller.c:167:7: style: The scope of the variable 'result_string' can be reduced. [variableScope]
@@ -66,35 +58,28 @@ src/poller.c:209:6: style: The scope of the variable 'last_data_query_id' can be
 src/poller.c:210:6: style: The scope of the variable 'perform_assert' can be reduced. [variableScope]
 src/poller.c:211:6: style: The scope of the variable 'new_buffer' can be reduced. [variableScope]
 src/poller.c:212:6: style: The scope of the variable 'ignore_sysinfo' can be reduced. [variableScope]
-src/poller.c:2137:6: style: The scope of the variable 'i' can be reduced. [variableScope]
 src/poller.c:213:6: style: The scope of the variable 'buf_length' can be reduced. [variableScope]
+src/poller.c:2143:6: style: The scope of the variable 'i' can be reduced. [variableScope]
 src/poller.c:217:10: style: Variable 'local_cnn' can be declared as pointer to const [constVariablePointer]
 src/poller.c:218:10: style: Variable 'remote_cnn' can be declared as pointer to const [constVariablePointer]
-src/poller.c:2321:6: style: Unused variable: pid [unusedVariable]
-src/poller.c:2329:20: style: Variable 'begin_time' is assigned a value that is never used. [unreadVariable]
-src/poller.c:243:3: error: Memory leak: buf_errors [memleak]
-src/poller.c:243:3: error: Memory leak: buf_size [memleak]
-src/poller.c:243:3: error: Memory leak: error_string [memleak]
-src/poller.c:2456:26: note: timeout.tv_usec is assigned
-src/poller.c:2461:25: note: timeout.tv_usec is overwritten
-src/poller.c:2461:25: style: Variable 'timeout.tv_usec' is reassigned a value before the old one has been used. [redundantAssignment]
-src/poller.c:252:4: error: Memory leak: buf_errors [memleak]
-src/poller.c:252:4: error: Memory leak: buf_size [memleak]
-src/poller.c:252:4: error: Memory leak: error_string [memleak]
-src/snmp.c:1030:9: note: status is assigned
-src/snmp.c:1034:9: note: status is overwritten
-src/snmp.c:1034:9: style: Variable 'status' is reassigned a value before the old one has been used. [redundantAssignment]
-src/snmp.c:206:3: error: Memory leak: session.localname [memleak]
-src/snmp.c:236:14: style: The scope of the variable 'auth_proto' can be reduced. [variableScope]
-src/snmp.c:433:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
-src/snmp.c:686:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
-src/snmp.c:698:9: note: status is assigned
-src/snmp.c:714:10: note: status is overwritten
-src/snmp.c:714:10: style: Variable 'status' is reassigned a value before the old one has been used. [redundantAssignment]
-src/snmp.c:859:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
-src/snmp.c:860:29: style: Variable 'rootlen' is assigned a value that is never used. [unreadVariable]
-src/snmp.c:864:9: style: The scope of the variable 'ok' can be reduced. [variableScope]
-src/snmp.c:865:9: style: The scope of the variable 'error_occurred' can be reduced. [variableScope]
+src/poller.c:2327:6: style: Unused variable: pid [unusedVariable]
+src/poller.c:2335:20: style: Variable 'begin_time' is assigned a value that is never used. [unreadVariable]
+src/poller.c:2462:26: note: timeout.tv_usec is assigned
+src/poller.c:2467:25: note: timeout.tv_usec is overwritten
+src/poller.c:2467:25: style: Variable 'timeout.tv_usec' is reassigned a value before the old one has been used. [redundantAssignment]
+src/snmp.c:1031:9: note: status is assigned
+src/snmp.c:1035:9: note: status is overwritten
+src/snmp.c:1035:9: style: Variable 'status' is reassigned a value before the old one has been used. [redundantAssignment]
+src/snmp.c:237:14: style: The scope of the variable 'auth_proto' can be reduced. [variableScope]
+src/snmp.c:434:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:687:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:699:9: note: status is assigned
+src/snmp.c:715:10: note: status is overwritten
+src/snmp.c:715:10: style: Variable 'status' is reassigned a value before the old one has been used. [redundantAssignment]
+src/snmp.c:860:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:861:29: style: Variable 'rootlen' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:865:9: style: The scope of the variable 'ok' can be reduced. [variableScope]
+src/snmp.c:866:9: style: The scope of the variable 'error_occurred' can be reduced. [variableScope]
 src/spine.c:1230:28: style: The scope of the variable 'p' can be reduced. [variableScope]
 src/spine.c:261:20: style: Variable 'thread_status' is assigned a value that is never used. [unreadVariable]
 src/spine.c:471:10: style: Variable 'setting' can be declared as pointer to const [constVariablePointer]
@@ -111,27 +96,25 @@ src/util.c:1066:9: style: Variable 'sqlp' is assigned a value that is never used
 src/util.c:1069:9: style: Variable 'rows' is assigned a value that is never used. [unreadVariable]
 src/util.c:1090:8: style: The scope of the variable 'chars' can be reduced. [variableScope]
 src/util.c:1090:8: style: Variable 'chars' can be declared as pointer to const [constVariablePointer]
-src/util.c:1143:5: warning: inconclusive: Width 15 given in format string (no. 1) is smaller than destination buffer 'p1[1024]'. [invalidScanfFormatWidth_smaller]
-src/util.c:1143:5: warning: inconclusive: Width 255 given in format string (no. 2) is smaller than destination buffer 'p2[1024]'. [invalidScanfFormatWidth_smaller]
-src/util.c:1335:13: style: Variable 'now_ptr' can be declared as pointer to const [constVariablePointer]
-src/util.c:1338:13: style: The scope of the variable 'log_error' can be reduced. [variableScope]
-src/util.c:1343:7: style: The scope of the variable 'stdoutmessage' can be reduced. [variableScope]
-src/util.c:1345:9: style: The scope of the variable 'cur_time' can be reduced. [variableScope]
-src/util.c:1522:28: note: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'.
-src/util.c:1522:28: style: inconclusive: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'. [funcArgNamesDifferent]
-src/util.c:1689:10: note: Found duplicate branches for 'if' and 'else'.
-src/util.c:1689:10: style: inconclusive: Found duplicate branches for 'if' and 'else'. [duplicateBranch]
-src/util.c:1691:5: note: Found duplicate branches for 'if' and 'else'.
-src/util.c:1718:51: note: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'.
-src/util.c:1718:51: style: inconclusive: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'. [funcArgNamesDifferent]
-src/util.c:1783:14: note: Shadow variable
-src/util.c:1783:14: style: Local variable 'trim' shadows outer function [shadowFunction]
-src/util.c:1805:14: note: Shadow variable
-src/util.c:1805:14: style: Local variable 'trim' shadows outer function [shadowFunction]
-src/util.c:1963:14: style: Unused variable: capval [unusedVariable]
-src/util.c:2073:13: style: The scope of the variable 'retval' can be reduced. [variableScope]
-src/util.c:2077:12: style: The scope of the variable 'cacti_version' can be reduced. [variableScope]
-src/util.c:2127:9: style: The scope of the variable 'match_len' can be reduced. [variableScope]
+src/util.c:1337:13: style: Variable 'now_ptr' can be declared as pointer to const [constVariablePointer]
+src/util.c:1340:13: style: The scope of the variable 'log_error' can be reduced. [variableScope]
+src/util.c:1345:7: style: The scope of the variable 'stdoutmessage' can be reduced. [variableScope]
+src/util.c:1347:9: style: The scope of the variable 'cur_time' can be reduced. [variableScope]
+src/util.c:1524:28: note: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'.
+src/util.c:1524:28: style: inconclusive: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'. [funcArgNamesDifferent]
+src/util.c:1691:10: note: Found duplicate branches for 'if' and 'else'.
+src/util.c:1691:10: style: inconclusive: Found duplicate branches for 'if' and 'else'. [duplicateBranch]
+src/util.c:1693:5: note: Found duplicate branches for 'if' and 'else'.
+src/util.c:1720:51: note: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'.
+src/util.c:1720:51: style: inconclusive: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'. [funcArgNamesDifferent]
+src/util.c:1785:14: note: Shadow variable
+src/util.c:1785:14: style: Local variable 'trim' shadows outer function [shadowFunction]
+src/util.c:1807:14: note: Shadow variable
+src/util.c:1807:14: style: Local variable 'trim' shadows outer function [shadowFunction]
+src/util.c:1965:14: style: Unused variable: capval [unusedVariable]
+src/util.c:2075:13: style: The scope of the variable 'retval' can be reduced. [variableScope]
+src/util.c:2079:12: style: The scope of the variable 'cacti_version' can be reduced. [variableScope]
+src/util.c:2129:9: style: The scope of the variable 'match_len' can be reduced. [variableScope]
 src/util.c:342:19: note: sqlp is initialized
 src/util.c:64:29: note: Function 'set_option' argument 1 names different: declaration 'setting' definition 'option'.
 src/util.c:64:29: style: inconclusive: Function 'set_option' argument 1 names different: declaration 'setting' definition 'option'. [funcArgNamesDifferent]
