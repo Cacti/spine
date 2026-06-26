@@ -203,6 +203,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.peername    = strdup(hostnameport);
 	if (!session.peername) {
 		SPINE_LOG(("Device[%i] ERROR: Failed to allocate peername for '%s'", host_id, hostname));
+		free(session.localname);
 		return 0;
 	}
 	session.retries     = set.snmp_retries;
