@@ -666,7 +666,9 @@ if(BUILD_TESTING)
 
     # systemd_notify: idempotency + null-safety. Builds against the wrapper TU
     # with or without libsystemd; when libsystemd is linked, sd_notify no-ops
-    # because NOTIFY_SOCKET is unset in the test harness.
+    # because NOTIFY_SOCKET is unset in the test harness. Skipped on Windows,
+    # which has neither systemd nor a POSIX unsetenv().
+    if(NOT WIN32)
     add_executable(test_systemd_notify
         tests/unit/test_systemd_notify.c
         src/systemd_notify.c
@@ -688,6 +690,7 @@ if(BUILD_TESTING)
         endif()
     endif()
     add_test(NAME systemd_notify COMMAND test_systemd_notify)
+    endif()
 endif()
 
 configure_file(
