@@ -1,1 +1,207 @@
-
+src/error.c:59:26: note: Calling function spine_platform_localtime, 2nd argument is uninitialized
+src/nft_popen.c:268:3: error: Memory leak: cur [memleak]
+src/php.c:177:8: style: Variable 'cp' can be declared as pointer to const [constVariablePointer]
+src/php.c:269:12: style: Variable 'cp' is assigned a value that is never used. [unreadVariable]
+src/php.c:308:22: style: Variable 'result_string' is assigned a value that is never used. [unreadVariable]
+src/ping.c:1031:17: note: return_code is assigned
+src/ping.c:1044:17: note: return_code is overwritten
+src/ping.c:1044:17: style: Variable 'return_code' is assigned a value that is never used. [unreadVariable]
+src/ping.c:1044:17: style: Variable 'return_code' is reassigned a value before the old one has been used. [redundantAssignment]
+src/ping.c:1052:20: note: outer condition: total_time<host_timeout
+src/ping.c:1094:23: note: opposite inner condition: total_time>host_timeout
+src/ping.c:1094:23: warning: Opposite inner 'if' condition leads to a dead code block. [oppositeInnerCondition]
+src/ping.c:1394:21: style: The scope of the variable 'end_time' can be reduced. [variableScope]
+src/ping.c:1401:9: style: The scope of the variable 'retry_count' can be reduced. [variableScope]
+src/ping.c:1402:9: style: The scope of the variable 'return_code' can be reduced. [variableScope]
+src/ping.c:1417:13: style: Variable 'total_time' is assigned a value that is never used. [unreadVariable]
+src/ping.c:1733:9: style: The scope of the variable 'ping_time' can be reduced. [variableScope]
+src/ping.c:177:6: style: The scope of the variable 'rv' can be reduced. [variableScope]
+src/ping.c:2094:17: style: Variable 'pkt' can be declared as pointer to const [constVariablePointer]
+src/ping.c:2262:22: style: Variable 'r' can be declared as pointer to const [constVariablePointer]
+src/ping.c:418:35: style: Parameter 'host' can be declared as pointer to const [constParameterPointer]
+src/ping.c:433:20: style: Variable 'reply' can be declared as pointer to const [constVariablePointer]
+src/ping.c:671:9: style: The scope of the variable 'snmp_start_time' can be reduced. [variableScope]
+src/ping.c:672:9: style: The scope of the variable 'snmp_end_time' can be reduced. [variableScope]
+src/ping.c:783:21: style: The scope of the variable 'end_time' can be reduced. [variableScope]
+src/ping.c:783:31: style: The scope of the variable 'total_time' can be reduced. [variableScope]
+src/ping.c:783:9: style: The scope of the variable 'begin_time' can be reduced. [variableScope]
+src/ping.c:908:18: style: Variable 'pkt' can be declared as pointer to const [constVariablePointer]
+src/platform/platform_process_win.c:290:14: style: Parameter 'envp' can be declared as const array [constParameter]
+src/platform/platform_process_win.c:297:11: style: The scope of the variable 'command_line' can be reduced. [variableScope]
+src/platform/platform_process_win.c:301:6: style: The scope of the variable 'spawn_error' can be reduced. [variableScope]
+src/platform/platform_win.c:31:61: style: Parameter 'out' can be declared as pointer to const [constParameterPointer]
+src/platform/platform_win.c:32:21: error: Using argument out that points at uninitialized variable now_time [ctuuninitvar]
+src/platform/platform_win.c:32:21: note: Using argument out
+src/platform/platform_win.c:32:2: portability: Returning an address value in a function with integer return type is not portable. [CastAddressToIntegerAtReturn]
+src/poller.c:143:109: style: Parameter 'host_time' can be declared as pointer to const [constParameterPointer]
+src/poller.c:161:7: style: The scope of the variable 'sysUptime' can be reduced. [variableScope]
+src/poller.c:167:7: style: The scope of the variable 'result_string' can be reduced. [variableScope]
+src/poller.c:168:7: style: The scope of the variable 'result_length' can be reduced. [variableScope]
+src/poller.c:169:7: style: The scope of the variable 'temp_result' can be reduced. [variableScope]
+src/poller.c:176:9: style: The scope of the variable 'assert_fail' can be reduced. [variableScope]
+src/poller.c:177:9: style: The scope of the variable 'reindex_err' can be reduced. [variableScope]
+src/poller.c:179:9: style: The scope of the variable 'rows_processed' can be reduced. [variableScope]
+src/poller.c:180:9: style: The scope of the variable 'i' can be reduced. [variableScope]
+src/poller.c:181:9: style: The scope of the variable 'j' can be reduced. [variableScope]
+src/poller.c:182:9: style: The scope of the variable 'k' can be reduced. [variableScope]
+src/poller.c:183:9: style: The scope of the variable 'num_oids' can be reduced. [variableScope]
+src/poller.c:184:9: style: The scope of the variable 'out_buffer' can be reduced. [variableScope]
+src/poller.c:188:7: style: The scope of the variable 'update_sql' can be reduced. [variableScope]
+src/poller.c:189:7: style: The scope of the variable 'temp_poll_result' can be reduced. [variableScope]
+src/poller.c:190:7: style: The scope of the variable 'temp_arg1' can be reduced. [variableScope]
+src/poller.c:193:7: style: The scope of the variable 'last_snmp_version' can be reduced. [variableScope]
+src/poller.c:194:7: style: The scope of the variable 'last_snmp_port' can be reduced. [variableScope]
+src/poller.c:195:7: style: The scope of the variable 'last_snmp_community' can be reduced. [variableScope]
+src/poller.c:196:7: style: The scope of the variable 'last_snmp_username' can be reduced. [variableScope]
+src/poller.c:197:7: style: The scope of the variable 'last_snmp_password' can be reduced. [variableScope]
+src/poller.c:198:7: style: The scope of the variable 'last_snmp_auth_protocol' can be reduced. [variableScope]
+src/poller.c:199:7: style: The scope of the variable 'last_snmp_priv_passphrase' can be reduced. [variableScope]
+src/poller.c:200:7: style: The scope of the variable 'last_snmp_priv_protocol' can be reduced. [variableScope]
+src/poller.c:201:7: style: The scope of the variable 'last_snmp_context' can be reduced. [variableScope]
+src/poller.c:202:7: style: The scope of the variable 'last_snmp_engine_id' can be reduced. [variableScope]
+src/poller.c:204:9: style: The scope of the variable 'thread_start' can be reduced. [variableScope]
+src/poller.c:205:9: style: The scope of the variable 'thread_end' can be reduced. [variableScope]
+src/poller.c:208:6: style: The scope of the variable 'previous_assert_failure' can be reduced. [variableScope]
+src/poller.c:209:6: style: The scope of the variable 'last_data_query_id' can be reduced. [variableScope]
+src/poller.c:210:6: style: The scope of the variable 'perform_assert' can be reduced. [variableScope]
+src/poller.c:211:6: style: The scope of the variable 'new_buffer' can be reduced. [variableScope]
+src/poller.c:212:6: style: The scope of the variable 'ignore_sysinfo' can be reduced. [variableScope]
+src/poller.c:2137:6: style: The scope of the variable 'i' can be reduced. [variableScope]
+src/poller.c:213:6: style: The scope of the variable 'buf_length' can be reduced. [variableScope]
+src/poller.c:217:10: style: Variable 'local_cnn' can be declared as pointer to const [constVariablePointer]
+src/poller.c:218:10: style: Variable 'remote_cnn' can be declared as pointer to const [constVariablePointer]
+src/poller.c:2321:6: style: Unused variable: pid [unusedVariable]
+src/poller.c:2329:20: style: Variable 'begin_time' is assigned a value that is never used. [unreadVariable]
+src/poller.c:243:3: error: Memory leak: buf_errors [memleak]
+src/poller.c:243:3: error: Memory leak: buf_size [memleak]
+src/poller.c:243:3: error: Memory leak: error_string [memleak]
+src/poller.c:2456:26: note: timeout.tv_usec is assigned
+src/poller.c:2461:25: note: timeout.tv_usec is overwritten
+src/poller.c:2461:25: style: Variable 'timeout.tv_usec' is reassigned a value before the old one has been used. [redundantAssignment]
+src/poller.c:252:4: error: Memory leak: buf_errors [memleak]
+src/poller.c:252:4: error: Memory leak: buf_size [memleak]
+src/poller.c:252:4: error: Memory leak: error_string [memleak]
+src/snmp.c:1030:9: note: status is assigned
+src/snmp.c:1034:9: note: status is overwritten
+src/snmp.c:1034:9: style: Variable 'status' is reassigned a value before the old one has been used. [redundantAssignment]
+src/snmp.c:206:3: error: Memory leak: session.localname [memleak]
+src/snmp.c:236:14: style: The scope of the variable 'auth_proto' can be reduced. [variableScope]
+src/snmp.c:433:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:686:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:698:9: note: status is assigned
+src/snmp.c:714:10: note: status is overwritten
+src/snmp.c:714:10: style: Variable 'status' is reassigned a value before the old one has been used. [redundantAssignment]
+src/snmp.c:859:29: style: Variable 'anOID_len' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:860:29: style: Variable 'rootlen' is assigned a value that is never used. [unreadVariable]
+src/snmp.c:864:9: style: The scope of the variable 'ok' can be reduced. [variableScope]
+src/snmp.c:865:9: style: The scope of the variable 'error_occurred' can be reduced. [variableScope]
+src/spine.c:1230:28: style: The scope of the variable 'p' can be reduced. [variableScope]
+src/spine.c:261:20: style: Variable 'thread_status' is assigned a value that is never used. [unreadVariable]
+src/spine.c:471:10: style: Variable 'setting' can be declared as pointer to const [constVariablePointer]
+src/spine.c:571:9: style: Variable 'token' can be declared as pointer to const [constVariablePointer]
+src/spine.c:812:12: style: Variable 'canexit' is assigned a value that is never used. [unreadVariable]
+src/sql.c:106:65: note: Function 'db_reconnect' argument 4 names different: declaration 'location' definition 'function'.
+src/sql.c:106:65: style: inconclusive: Function 'db_reconnect' argument 4 names different: declaration 'location' definition 'function'. [funcArgNamesDifferent]
+src/sql.c:108:9: style: The scope of the variable 'query' can be reduced. [variableScope]
+src/sql.c:157:21: style: Variable 'error' is assigned a value that is never used. [unreadVariable]
+src/sql.c:236:11: style: Variable 'connect_error' can be declared as pointer to const [constVariablePointer]
+src/sql.c:396:12: style: Variable 'tries' is assigned a value that is never used. [unreadVariable]
+src/sql.h:44:73: note: Function 'db_reconnect' argument 4 names different: declaration 'location' definition 'function'.
+src/util.c:1066:9: style: Variable 'sqlp' is assigned a value that is never used. [unreadVariable]
+src/util.c:1069:9: style: Variable 'rows' is assigned a value that is never used. [unreadVariable]
+src/util.c:1090:8: style: The scope of the variable 'chars' can be reduced. [variableScope]
+src/util.c:1090:8: style: Variable 'chars' can be declared as pointer to const [constVariablePointer]
+src/util.c:1143:5: warning: inconclusive: Width 15 given in format string (no. 1) is smaller than destination buffer 'p1[1024]'. [invalidScanfFormatWidth_smaller]
+src/util.c:1143:5: warning: inconclusive: Width 255 given in format string (no. 2) is smaller than destination buffer 'p2[1024]'. [invalidScanfFormatWidth_smaller]
+src/util.c:1335:13: style: Variable 'now_ptr' can be declared as pointer to const [constVariablePointer]
+src/util.c:1338:13: style: The scope of the variable 'log_error' can be reduced. [variableScope]
+src/util.c:1343:7: style: The scope of the variable 'stdoutmessage' can be reduced. [variableScope]
+src/util.c:1345:9: style: The scope of the variable 'cur_time' can be reduced. [variableScope]
+src/util.c:1522:28: note: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'.
+src/util.c:1522:28: style: inconclusive: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'. [funcArgNamesDifferent]
+src/util.c:1689:10: note: Found duplicate branches for 'if' and 'else'.
+src/util.c:1689:10: style: inconclusive: Found duplicate branches for 'if' and 'else'. [duplicateBranch]
+src/util.c:1691:5: note: Found duplicate branches for 'if' and 'else'.
+src/util.c:1718:51: note: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'.
+src/util.c:1718:51: style: inconclusive: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'. [funcArgNamesDifferent]
+src/util.c:1783:14: note: Shadow variable
+src/util.c:1783:14: style: Local variable 'trim' shadows outer function [shadowFunction]
+src/util.c:1805:14: note: Shadow variable
+src/util.c:1805:14: style: Local variable 'trim' shadows outer function [shadowFunction]
+src/util.c:1963:14: style: Unused variable: capval [unusedVariable]
+src/util.c:2073:13: style: The scope of the variable 'retval' can be reduced. [variableScope]
+src/util.c:2077:12: style: The scope of the variable 'cacti_version' can be reduced. [variableScope]
+src/util.c:2127:9: style: The scope of the variable 'match_len' can be reduced. [variableScope]
+src/util.c:342:19: note: sqlp is initialized
+src/util.c:64:29: note: Function 'set_option' argument 1 names different: declaration 'setting' definition 'option'.
+src/util.c:64:29: style: inconclusive: Function 'set_option' argument 1 names different: declaration 'setting' definition 'option'. [funcArgNamesDifferent]
+src/util.c:694:8: note: sqlp is overwritten
+src/util.c:694:8: style: Redundant initialization for 'sqlp'. The initialized value is overwritten before it is read. [redundantInitialization]
+src/util.c:699:8: style: Variable 'sqlp' is assigned a value that is never used. [unreadVariable]
+src/util.c:717:8: style: Variable 'sqlp' is assigned a value that is never used. [unreadVariable]
+src/util.h:48:36: note: Function 'set_option' argument 1 names different: declaration 'setting' definition 'option'.
+src/util.h:53:35: note: Function 'all_digits' argument 1 names different: declaration 'str' definition 'string'.
+src/util.h:62:58: note: Function 'strncopy' argument 3 names different: declaration 'n' definition 'obuf'.
+src/util.h:63:14: note: Shadowed declaration
+tests/unit/test_build_fixes.c:105:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:117:3: style: Statements following noreturn function 'exit()' will never be executed. [unreachableCode]
+tests/unit/test_build_fixes.c:117:3: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:121:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:129:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:130:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:149:6: style: struct member 'config_subset_t::stdout_notty' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:150:6: style: struct member 'config_subset_t::stderr_notty' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:151:6: style: struct member 'config_subset_t::poller_id' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:152:6: style: struct member 'config_subset_t::poller_interval' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:153:6: style: struct member 'config_subset_t::parent_fork' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:154:6: style: struct member 'config_subset_t::num_parent_processes' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:155:6: style: struct member 'config_subset_t::script_timeout' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:156:6: style: struct member 'config_subset_t::active_profiles' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:157:6: style: struct member 'config_subset_t::total_snmp_ports' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:158:6: style: struct member 'config_subset_t::threads' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:159:6: style: struct member 'config_subset_t::threads_set' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:160:6: style: struct member 'config_subset_t::logfile_processed' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:161:6: style: struct member 'config_subset_t::boost_enabled' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:162:6: style: struct member 'config_subset_t::boost_redirect' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:163:6: style: struct member 'config_subset_t::snmponly' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:164:6: style: struct member 'config_subset_t::SQL_readonly' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:165:6: style: struct member 'config_subset_t::start_host_id' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:166:6: style: struct member 'config_subset_t::end_host_id' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:167:7: style: struct member 'config_subset_t::host_id_list' is never used. [unusedStructMember]
+tests/unit/test_build_fixes.c:207:9: style: The scope of the variable 'match_len' can be reduced. [variableScope]
+tests/unit/test_build_fixes.c:69:2: style: Statements following noreturn function 'exit()' will never be executed. [unreachableCode]
+tests/unit/test_build_fixes.c:69:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:70:2: style: Statements following noreturn function 'exit()' will never be executed. [unreachableCode]
+tests/unit/test_build_fixes.c:70:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:74:18: note: Assignment 'found=NULL', assigned value is 0
+tests/unit/test_build_fixes.c:76:2: note: Assuming condition is false
+tests/unit/test_build_fixes.c:78:19: note: Null pointer dereference
+tests/unit/test_build_fixes.c:78:19: warning: inconclusive: Possible null pointer dereference: found [nullPointer]
+tests/unit/test_build_fixes.c:83:19: note: Null pointer dereference
+tests/unit/test_build_fixes.c:83:19: warning: inconclusive: Possible null pointer dereference: found [nullPointer]
+tests/unit/test_build_fixes.c:86:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:87:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_build_fixes.c:98:2: style: Statements following noreturn function 'exit()' will never be executed. [unreachableCode]
+tests/unit/test_build_fixes.c:98:2: style: Variable '_prev' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_platform_dns.c:108:19: style: Variable 'cursor' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_platform_dns.c:17:6: style: The scope of the variable 'count' can be reduced. [variableScope]
+tests/unit/test_platform_dns.c:18:19: style: Variable 'cursor' can be declared as pointer to const [constVariablePointer]
+tests/unit/test_platform_env.c:13:2: note: Assuming that condition 'value!=NULL' is not redundant
+tests/unit/test_platform_env.c:14:2: note: Null pointer dereference
+tests/unit/test_platform_env.c:14:2: warning: Either the condition 'value!=NULL' is redundant or there is possible null pointer dereference: value. [nullPointerRedundantCheck]
+tests/unit/test_platform_env.c:18:2: note: Assuming that condition 'value!=NULL' is not redundant
+tests/unit/test_platform_env.c:19:2: note: Null pointer dereference
+tests/unit/test_platform_env.c:19:2: warning: Either the condition 'value!=NULL' is redundant or there is possible null pointer dereference: value. [nullPointerRedundantCheck]
+tests/unit/test_platform_env.c:23:2: note: Assuming that condition 'value!=NULL' is not redundant
+tests/unit/test_platform_env.c:24:2: note: Null pointer dereference
+tests/unit/test_platform_env.c:24:2: warning: Either the condition 'value!=NULL' is redundant or there is possible null pointer dereference: value. [nullPointerRedundantCheck]
+tests/unit/test_platform_error.c:12:2: note: Assuming that condition 'message!=NULL' is not redundant
+tests/unit/test_platform_error.c:13:2: note: Null pointer dereference
+tests/unit/test_platform_error.c:13:2: warning: Either the condition 'message!=NULL' is redundant or there is possible null pointer dereference: message. [nullPointerRedundantCheck]
+tests/unit/test_platform_fd.c:9:7: style: Variable 'message' can be declared as const array [constVariable]
+tests/unit/test_platform_socket.c:125:7: style: The scope of the variable 'message' can be reduced. [variableScope]
+tests/unit/test_platform_socket.c:125:7: style: Variable 'message' can be declared as const array [constVariable]
+tests/unit/test_platform_socket.c:126:7: style: The scope of the variable 'buffer' can be reduced. [variableScope]
+tests/unit/test_platform_socket.c:194:7: style: Variable 'message' can be declared as const array [constVariable]
+tests/unit/test_platform_socket.c:243:7: style: Variable 'message' can be declared as const array [constVariable]
+tests/unit/test_platform_socket.c:51:7: style: Variable 'message' can be declared as const array [constVariable]
