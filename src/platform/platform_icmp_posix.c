@@ -40,6 +40,9 @@ int spine_icmp_echo_v6(const char *ip, uint32_t timeout_ms,
 
 #include <arpa/inet.h>
 #include <errno.h>
+/* On the BSDs <netinet/ip.h> uses u_char/u_short without pulling them in, so
+   <sys/types.h> has to come first or the header fails to compile. */
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
