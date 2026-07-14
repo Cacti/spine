@@ -97,6 +97,15 @@ jobs:
         run: |
           set -eu
           dnf install -y epel-release
+          # libuv-devel is published in CRB/PowerTools on RHEL clones.
+          # Enable the repository when the image provides the helper; keep
+          # this portable across Rocky 8/9 and AlmaLinux 9.
+          dnf install -y dnf-plugins-core || true
+          if command -v crb >/dev/null 2>&1; then
+            crb enable || true
+          else
+            dnf config-manager --set-enabled crb || dnf config-manager --set-enabled powertools || true
+          fi
           dnf install -y cmake gcc make git \
             net-snmp-devel mariadb-connector-c-devel openssl-devel \
             pkgconfig systemd-devel libseccomp-devel libuv-devel uthash-devel
@@ -168,6 +177,10 @@ jobs:
         run: ./build/spine --help | head -3
 
       - name: Run CTest
+        # The container default is /bin/sh.  This step uses bash-only
+        # conditionals and pipefail, so declare the interpreter explicitly
+        # instead of relying on the runner's host-shell default.
+        shell: bash
         run: |
           set -eu
           if [ -x build/test_platform_time ]; then
