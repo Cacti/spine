@@ -189,7 +189,7 @@ jobs:
           if-no-files-found: ignore
 
   docker-tests:
-    continue-on-error: true
+    if: github.event_name != 'pull_request'
     name: Docker Integration Tests
     runs-on: ubuntu-24.04
     steps:
