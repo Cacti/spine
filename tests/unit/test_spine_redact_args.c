@@ -58,11 +58,9 @@ static void test_snmpv3_auth_and_priv_passphrases(void) {
 
 	ASSERT_TRUE(!contains(out, "AUTHPASS"));
 	ASSERT_TRUE(!contains(out, "PRIVPASS"));
-	ASSERT_TRUE(contains(out, "user"));   /* -u is redacted; but the value
-	                                       * "user" is a security-name, not
-	                                       * a secret. Still, we redact on
-	                                       * the conservative side. Assert
-	                                       * the non-flag tokens survived. */
+	ASSERT_TRUE(!contains(out, "user"));  /* credential-bearing -u values are
+	                                        * redacted conservatively. */
+	ASSERT_TRUE(contains(out, "***"));
 	ASSERT_TRUE(contains(out, "host"));
 	ASSERT_TRUE(contains(out, "oid"));
 }
