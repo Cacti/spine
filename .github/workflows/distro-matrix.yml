@@ -169,8 +169,8 @@ jobs:
 
       - name: Run CTest
         run: |
-          set -euo pipefail
-          if [[ -x build/test_platform_time ]]; then
+          set -eu
+          if [ -x build/test_platform_time ]; then
             ctest --test-dir build --output-on-failure
           else
             echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
