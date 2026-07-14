@@ -487,7 +487,7 @@ int main(int argc, char *argv[]) {
 		}
 	} else {
 		if (!(conf_file = calloc(CONFIG_PATHS, LRG_BUFSIZE))) {
-			die("ERROR: Fatal malloc error: spine.c conf_file!");
+			die("ERROR: Fatal calloc error: spine.c conf_file!");
 		}
 
 		for (i=0; i<CONFIG_PATHS; i++) {

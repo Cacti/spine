@@ -44,53 +44,44 @@
  *
  */
 static void spine_signal_handler(int spine_signal) {
+	const char *message = "FATAL: Spine interrupted by an unhandled signal\n";
+	size_t message_length = sizeof("FATAL: Spine interrupted by an unhandled signal\n") - 1;
+
 	signal(spine_signal, SIG_DFL);
-
-	set.exit_code = spine_signal;
-
-	/* variables for time display */
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
-
-	/* get time for poller_output table */
-	nowbin = time(&nowbin);
-
-	localtime_r(&nowbin,&now_time);
-	now_ptr = &now_time;
-
-	char *log_fmt = get_date_format();
-	char logtime[50];
-
-	strftime(logtime, 50, log_fmt, now_ptr);
 
 	switch (spine_signal) {
 		case SIGABRT:
-			fprintf(stderr, "%s FATAL: Spine Interrupted by Abort Signal\n", logtime);
+			message = "FATAL: Spine interrupted by abort signal\n";
+			message_length = sizeof("FATAL: Spine interrupted by abort signal\n") - 1;
 			break;
 		case SIGINT:
-			fprintf(stderr, "%s FATAL: Spine Interrupted by Console Operator\n", logtime);
+			message = "FATAL: Spine interrupted by console operator\n";
+			message_length = sizeof("FATAL: Spine interrupted by console operator\n") - 1;
 			break;
 		case SIGSEGV:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Segmentation Fault\n", logtime);
-			_exit(1);
+			message = "FATAL: Spine encountered a segmentation fault\n";
+			message_length = sizeof("FATAL: Spine encountered a segmentation fault\n") - 1;
 			break;
 		case SIGBUS:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Bus Error\n", logtime);
+			message = "FATAL: Spine encountered a bus error\n";
+			message_length = sizeof("FATAL: Spine encountered a bus error\n") - 1;
 			break;
 		case SIGFPE:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Floating Point Exception\n", logtime);
+			message = "FATAL: Spine encountered a floating point exception\n";
+			message_length = sizeof("FATAL: Spine encountered a floating point exception\n") - 1;
 			break;
 		case SIGQUIT:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Keyboard Quit Command\n", logtime);
+			message = "FATAL: Spine encountered a keyboard quit command\n";
+			message_length = sizeof("FATAL: Spine encountered a keyboard quit command\n") - 1;
 			break;
 		case SIGPIPE:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Broken Pipe\n", logtime);
-			break;
-		default:
-			fprintf(stderr, "%s FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", logtime, spine_signal);
+			message = "FATAL: Spine encountered a broken pipe\n";
+			message_length = sizeof("FATAL: Spine encountered a broken pipe\n") - 1;
 			break;
 	}
+
+	(void) write(STDERR_FILENO, message, message_length);
+	_exit(1);
 }
 
 static int spine_fatal_signals[] = {
