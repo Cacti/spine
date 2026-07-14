@@ -99,7 +99,7 @@ jobs:
           dnf install -y epel-release
           dnf install -y cmake gcc make git \
             net-snmp-devel mariadb-connector-c-devel openssl-devel \
-            pkgconfig systemd-devel libseccomp-devel libuv-devel
+            pkgconfig systemd-devel libseccomp-devel libuv-devel uthash-devel
 
       - name: Install prerequisites (fedora)
         if: matrix.family == 'fedora'
@@ -107,7 +107,7 @@ jobs:
           set -eu
           dnf install -y cmake gcc make git \
             net-snmp-devel mariadb-connector-c-devel openssl-devel \
-            pkgconfig systemd-devel libseccomp-devel libuv-devel
+            pkgconfig systemd-devel libseccomp-devel libuv-devel uthash-devel
 
       - name: Install prerequisites (debian)
         if: matrix.family == 'debian'
@@ -119,7 +119,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             cmake gcc make git ca-certificates \
             libsnmp-dev libmariadb-dev-compat libssl-dev \
-            pkg-config libsystemd-dev libseccomp-dev libuv1-dev
+            pkg-config libsystemd-dev libseccomp-dev libuv1-dev uthash-dev
 
       - name: Install prerequisites (suse)
         if: matrix.family == 'suse'
@@ -131,7 +131,7 @@ jobs:
           zypper --non-interactive install \
             cmake gcc13 make git \
             net-snmp-devel libmariadb-devel libopenssl-devel \
-            pkg-config systemd-devel libseccomp-devel libuv-devel
+            pkg-config systemd-devel libseccomp-devel libuv-devel uthash-devel
 
       - name: Install prerequisites (ubi)
         if: matrix.family == 'ubi'
@@ -142,7 +142,7 @@ jobs:
           # paid subscription. Keep going and let the configure step surface
           # what's missing. This lane is advisory (Tier 3, continue-on-error).
           dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || true
-          dnf install -y cmake gcc make git openssl-devel pkgconfig systemd-devel libseccomp-devel libuv-devel || true
+          dnf install -y cmake gcc make git openssl-devel pkgconfig systemd-devel libseccomp-devel libuv-devel uthash-devel || true
           dnf install -y net-snmp-devel || echo "net-snmp-devel not available on UBI+EPEL"
           dnf install -y mariadb-connector-c-devel || echo "mariadb-connector-c-devel requires subscription repos"
 
@@ -152,7 +152,7 @@ jobs:
           set -eu
           apk add --no-cache bash cmake gcc make musl-dev \
             net-snmp-dev mariadb-connector-c-dev openssl-dev \
-            pkgconfig linux-headers git libseccomp-dev libuv-dev
+            pkgconfig linux-headers git libseccomp-dev libuv-dev uthash-dev
 
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 

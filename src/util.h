@@ -122,10 +122,6 @@ const char *regex_replace(const char *exp, const char *value);
 	}\
 
 
-/* Keep this public header self-contained for focused unit tests that include
- * it without common.h (which normally provides the MySQL client typedef). */
-typedef struct st_mysql MYSQL;
-
 /* get highres time as double */
 extern double get_time_as_double(void);
 
@@ -146,7 +142,7 @@ extern void poller_push_data_to_main(void);
 extern double start_time;
 
 /* the version of Cacti as a decimal */
-int get_cacti_version(MYSQL *psql, int mode);
+int get_cacti_version(struct st_mysql *psql, int mode);
 
 /* Operational CLI helpers. */
 extern int spine_health_check(void);
