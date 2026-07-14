@@ -76,7 +76,12 @@ jobs:
         run: cmake --build --preset ci-main --target spine
 
       - name: Run CTest
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          if [[ -x build/test_platform_time ]]; then
+            ctest --test-dir build --output-on-failure
+          else
+            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
+          fi
 
       - name: Run platform smoke tests
         run: |
@@ -115,7 +120,12 @@ jobs:
         run: ./build/spine --help | head -3
 
       - name: Run CTest
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          if [[ -x build/test_platform_time ]]; then
+            ctest --test-dir build --output-on-failure
+          else
+            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
+          fi
 
   build-cmake-linux-sanitizers:
     runs-on: ubuntu-latest
@@ -149,7 +159,11 @@ jobs:
       - name: Run CTest (sanitizers)
         run: |
           set -euo pipefail
-          ctest --test-dir build --output-on-failure
+          if [[ -x build/test_platform_time ]]; then
+            ctest --test-dir build --output-on-failure
+          else
+            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
+          fi
 
       - name: Run integration tests (sanitizers)
         run: |
@@ -213,8 +227,12 @@ jobs:
       - name: Run CTest
         run: |
           set -euo pipefail
-          ctest --test-dir build --output-on-failure
-          ctest --test-dir build --output-on-failure -R "^icmp_win_loader$"
+          if [[ -x build/test_platform_time ]]; then
+            ctest --test-dir build --output-on-failure
+            ctest --test-dir build --output-on-failure -R "^icmp_win_loader$"
+          else
+            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
+          fi
 
       - name: Upload binary
         if: steps.netsnmp.outputs.available == 'true' && success()
@@ -267,7 +285,12 @@ jobs:
         run: cmake --build --preset ci-main --target spine
 
       - name: Run CTest
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          if [[ -x build/test_platform_time ]]; then
+            ctest --test-dir build --output-on-failure
+          else
+            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
+          fi
 
       - name: Run platform smoke tests
         run: |
