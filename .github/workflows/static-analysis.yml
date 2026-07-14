@@ -126,11 +126,14 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Run clang-tidy
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-            mapfile -t sources < <(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- '*.c')
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF}"
+            mapfile -t sources < <(git diff --name-only "origin/${GITHUB_BASE_REF}"...HEAD -- '*.c')
           else
             mapfile -t sources < <(git ls-files '*.c')
           fi
