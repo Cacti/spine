@@ -1,8 +1,6 @@
 name: Performance Regression
 
 on:
-  pull_request:
-    branches: [main, develop]
   workflow_dispatch:
   schedule:
     - cron: '0 7 * * 1'

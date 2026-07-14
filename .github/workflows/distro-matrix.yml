@@ -15,12 +15,6 @@ name: Distro Matrix
 on:
   workflow_dispatch:
   push:
-    branches:
-      - develop
-      - feat/**
-      - fix/**
-      - ci/**
-  pull_request:
     branches: [develop]
   schedule:
     # Weekly drift check against upstream distro package updates.
