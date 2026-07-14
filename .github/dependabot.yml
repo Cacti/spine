@@ -1,33 +1,84 @@
-# +-------------------------------------------------------------------------+
-# | Dependabot: auto-update pinned versions for supply-chain hygiene.       |
-# |                                                                         |
-# | Docker base images are pinned by tag in the Dockerfiles; Dependabot's   |
-# | 'docker' ecosystem rewrites the @sha256 digest when upstream updates,   |
-# | so a new PR lands whenever debian:bookworm-slim or alpine:3.19 change. |
-# |                                                                         |
-# | github-actions coverage matches the repo's pinned-SHA convention; each  |
-# | 'uses:' line in .github/workflows/*.yml gets refreshed automatically.  |
-# +-------------------------------------------------------------------------+
 version: 2
-updates:
-  - package-ecosystem: docker
-    directory: /
-    schedule:
-      interval: daily
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 5
-    labels:
-      - docker
-      - dependencies
 
+updates:
+  # Workflow actions are supply-chain dependencies. Keep them current, but
+  # group routine updates so the PR queue stays reviewable.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+    labels: [dependencies, github-actions]
+    commit-message:
+      prefix: ci
+      include: scope
+
+  # The production image and the SNMPv3 integration image are maintained
+  # independently, so each directory gets its own bounded update stream.
+  - package-ecosystem: docker
+    directory: /docker
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: '06:00'
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ['*']
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /tests/snmpv3
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: '06:00'
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ['*']
+    labels: [dependencies, docker, tests]
+    commit-message:
+      prefix: test
+      include: scope
+
+  # Tabler is the only checked-in Node package. Keep application and tooling
+  # updates together because the package is built and linted as one unit.
+  - package-ecosystem: npm
+    directory: /include/tabler
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: '06:00'
+      timezone: America/Los_Angeles
     open-pull-requests-limit: 5
-    labels:
-      - ci
-      - dependencies
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ['*']
+    labels: [dependencies, javascript]
+    commit-message:
+      prefix: build
+      include: scope
