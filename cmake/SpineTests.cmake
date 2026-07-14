@@ -1,5 +1,9 @@
 include_guard(GLOBAL)
 
+# All focused tests include common.h directly; expose the generated config
+# header to every test target, including minimal standalone fixtures.
+include_directories(${CMAKE_BINARY_DIR})
+
 function(spine_add_platform_test test_name)
   add_executable(test_platform_${test_name} tests/unit/test_platform_${test_name}.c)
   target_include_directories(
