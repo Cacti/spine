@@ -351,7 +351,7 @@ function(spine_add_tests)
                  src/util.c tests/unit/test_spine_stubs.c
                  src/config_repository.c src/config_builder.c src/config_apply.c
                  src/log_formatter.c src/log_sink.c src/systemd_notify.c
-                 src/platform/platform_process_posix.c)
+                 src/platform/platform_process_posix.c src/platform/platform_posix.c)
   target_include_directories(test_spine_redact_args PRIVATE
       ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests/unit)
   if(TARGET spine_build_options)
