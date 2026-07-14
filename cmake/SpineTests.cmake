@@ -176,7 +176,6 @@ function(spine_add_tests)
     src/task_scheduler.c src/task_governor.c src/task_executor.c
     src/config_repository.c src/config_builder.c src/config_apply.c
     src/log_formatter.c src/log_sink.c src/systemd_notify.c
-    src/platform/platform_process_posix.c
     # Configuration repository/build helpers call the shared utility
     # implementations (strpos, get_cacti_version, ...).  Include util.c so
     # this focused executable links the same production code paths it tests.
