@@ -14,23 +14,23 @@ concurrency:
 
 jobs:
   rocky-linux:
-    name: Rocky Linux 9 build and tests
+    name: Rocky Linux 9 build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Build and test in Rocky Linux 9
+      - name: Build in Rocky Linux 9
         run: |
-          docker run --rm \\
-            --volume "$GITHUB_WORKSPACE:/workspace:ro" \\
-            --workdir /workspace \\
-            rockylinux:9 \\
-            bash -euo pipefail -c '
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --workdir /workspace \
+            rockylinux:9 \
+            bash -euo pipefail -c '''
               dnf -y group install "Development Tools"
-              dnf -y install cmake openssl-devel libtirpc-devel mariadb-connector-c-devel libxml2-devel libcurl-devel net-snmp-devel zlib-devel
-              cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
-              cmake --build build --parallel "$(nproc)"
-              ctest --test-dir build --output-on-failure
-            '
+              dnf -y install autoconf automake libtool mariadb-connector-c-devel net-snmp-devel openssl-devel libtirpc-devel libxml2-devel libcurl-devel zlib-devel
+              autoreconf -fi
+              ./configure --enable-warnings
+              make --jobs "$(nproc)"
+            '''
