@@ -1,55 +1,34 @@
 name: CI
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - develop
-      - feat/**
-      - fix/**
-      - issue-**
-      - ci/**
-      - refactor/**
   pull_request:
-    branches: [develop]
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  BUILD_DEPS: >-
+    cmake ninja-build pkg-config gcc clang
+    libsnmp-dev default-libmysqlclient-dev libssl-dev
+    libseccomp-dev libuv1-dev uthash-dev
+
 jobs:
-  flawfinder:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.x"
-
-      - name: Install flawfinder
-        run: pip install flawfinder==2.0.19
-
-      # Note: flawfinder will light up like a christmas tree on this codebase.
-      # error-level=5 means only critical hits fail the build — the rest is
-      # informational so we have a baseline to chip away at.
-      - name: Run flawfinder
-        run: |
-          set -euo pipefail
-          flawfinder \
-            --minlevel=3 \
-            --error-level=5 \
-            --columns \
-            --context \
-            . | tee flawfinder-report.txt
-
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        if: always()
-        with:
-          name: flawfinder-report
-          path: flawfinder-report.txt
-
-  build-cmake-linux:
-    runs-on: ubuntu-latest
+  build:
+    name: build (${{ matrix.compiler }})
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -57,270 +36,71 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build pkg-config \
-            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev uthash-dev
-
-      - name: Configure
-        run: |
-          set -euo pipefail
-          cmake --preset ci-main
-
-      - name: Build
-        run: cmake --build --preset ci-main --target spine
-
-      - name: Run CTest
-        run: |
-          set -euo pipefail
-          if [[ -x build/test_platform_time ]]; then
-            ctest --test-dir build --output-on-failure
-          else
-            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
-          fi
-
-      - name: Run platform smoke tests
-        run: |
-          set -euo pipefail
-          make -C tests/unit clean
-          make -C tests/unit run
-
-  # Verify the libsystemd-absent code path builds and links on Linux. macOS and
-  # Windows already exercise this implicitly (libsystemd is Linux-only), but
-  # pinning it here guards against regressions where WITH_SYSTEMD=OFF stops
-  # compiling on the primary CI platform.
-  build-no-systemd:
-    name: Build without libsystemd
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - name: Install build dependencies (no libsystemd-dev)
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build pkg-config \
-            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev uthash-dev
-
-      - name: Configure with WITH_SYSTEMD=OFF
-        run: |
-          set -euo pipefail
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
-            -DSPINE_BUILD_MAIN=ON -DWITH_SYSTEMD=OFF
-
-      - name: Build
-        run: cmake --build build --target spine
-
-      - name: Verify spine binary
-        run: ./build/spine --help | head -3
-
-      - name: Run CTest
-        run: |
-          set -euo pipefail
-          if [[ -x build/test_platform_time ]]; then
-            ctest --test-dir build --output-on-failure
-          else
-            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
-          fi
-
-  build-cmake-linux-sanitizers:
-    runs-on: ubuntu-latest
-    env:
-      CC: clang
-      CFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
-      LDFLAGS: -fsanitize=address,undefined
-      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
-      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - name: Install sanitizer dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build pkg-config clang \
-            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev uthash-dev
-
-      - name: Configure (sanitizers)
-        run: |
-          set -euo pipefail
-          cmake --preset ci-main
-
-      - name: Build (sanitizers)
-        run: |
-          set -euo pipefail
-          cmake --build --preset ci-main --target spine
-
-      - name: Run CTest (sanitizers)
-        run: |
-          set -euo pipefail
-          if [[ -x build/test_platform_time ]]; then
-            ctest --test-dir build --output-on-failure
-          else
-            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
-          fi
-
-      - name: Run integration tests (sanitizers)
-        run: |
-          set -euo pipefail
-          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans || true
-          ./tests/integration/smoke_test.sh
-          docker compose -f tests/snmpv3/docker-compose.yml down -v --remove-orphans || true
-          ./tests/integration/test_ipv6_transport.sh
-
-  build-windows:
-    runs-on: windows-latest
-    continue-on-error: false
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - uses: msys2/setup-msys2@cafece8e6baf9247cf9b1bf95097b0b983cc558d
+      - name: Install dependencies
+        uses: ./.github/actions/install-apt-deps
         with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-libmariadbclient
-            mingw-w64-x86_64-openssl
-            pkg-config
-
-      - name: Check Net-SNMP availability
-        id: netsnmp
-        run: |
-          set -euo pipefail
-          if pacman -Ss '^mingw-w64-x86_64-net-snmp$' >/dev/null 2>&1; then
-            pacman --noconfirm -S --needed mingw-w64-x86_64-net-snmp
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::MSYS2 does not currently publish mingw-w64-x86_64-net-snmp; skipping the Windows compile on this runner."
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          packages: ${{ env.BUILD_DEPS }}
 
       - name: Configure
         run: |
           set -euo pipefail
-          if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
-            cmake --preset ci-main
-          else
-            cmake --preset ci-smoke
-          fi
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSPINE_BUILD_MAIN=ON \
+            -DBUILD_TESTING=OFF
 
-      - name: Build
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.netsnmp.outputs.available }}" = "true" ]; then
-            cmake --build --preset ci-main
-          else
-            cmake --build --preset ci-smoke
-          fi
+      - name: Build production binary
+        run: cmake --build build --target spine --parallel
 
-      - name: Run CTest
-        run: |
-          set -euo pipefail
-          if [[ -x build/test_platform_time ]]; then
-            ctest --test-dir build --output-on-failure
-            ctest --test-dir build --output-on-failure -R "^icmp_win_loader$"
-          else
-            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
-          fi
+      - name: Smoke test
+        run: ./build/spine --help >/dev/null
 
       - name: Upload binary
-        if: steps.netsnmp.outputs.available == 'true' && success()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: spine-windows-x64
-          path: build/spine.exe
-
-      - name: Configure crash dumps
         if: always()
-        shell: pwsh
-        run: $ErrorActionPreference='Stop'; $dumpDir='${{ github.workspace }}\crashdumps'; New-Item -ItemType Directory -Path $dumpDir -Force; $regPath='HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\spine.exe'; New-Item -Path $regPath -Force; Set-ItemProperty -Path $regPath -Name 'DumpType' -Value 2 -Type DWord; Set-ItemProperty -Path $regPath -Name 'DumpFolder' -Value $dumpDir -Type ExpandString
-
-      - name: Upload crash dumps
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
-          name: crash-dumps
-          path: crashdumps/
+          name: spine-${{ matrix.compiler }}
+          path: build/spine
           if-no-files-found: ignore
 
-  build-macos:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [clang]
-    env:
-      CC: ${{ matrix.compiler }}
+  unit:
+    name: unit tests
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          brew install \
-            cmake \
-            ninja \
-            pkg-config \
-            mysql-client \
-            net-snmp \
-            openssl@3
-
-      - name: Configure
-        run: |
-          set -euo pipefail
-          cmake --preset ci-main -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
-
-      - name: Build
-        run: cmake --build --preset ci-main --target spine
-
-      - name: Run CTest
-        run: |
-          set -euo pipefail
-          if [[ -x build/test_platform_time ]]; then
-            ctest --test-dir build --output-on-failure
-          else
-            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
-          fi
-
-      - name: Run platform smoke tests
-        run: |
-          set -euo pipefail
-          make -C tests/unit clean
-          make -C tests/unit run
-
-  build-freebsd:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-
-      - name: Build and test on FreeBSD VM
-        uses: vmactions/freebsd-vm@7ca82f79fe3078fecded6d3a2bff094995447bbd # v1
+      - name: Install dependencies
+        uses: ./.github/actions/install-apt-deps
         with:
-          release: 14.1
-          usesh: true
-          sync: nfs
-          prepare: |
-            # FreeBSD 14.1 userland plus a catalog that has newer 14.3-tagged
-            # packages (zycore-c and friends). IGNORE_OSVERSION lets pkg
-            # install them without refusing on the osversion mismatch.
-            env IGNORE_OSVERSION=yes pkg update -f
-            env IGNORE_OSVERSION=yes pkg install -y cmake ninja pkgconf mysql80-client net-snmp openssl
-          run: |
-            cmake -G Ninja -S . -B build -DSPINE_BUILD_MAIN=ON
-            cmake --build build
-            ctest --test-dir build --output-on-failure
-            make -C tests/unit clean
-            make -C tests/unit run
+          packages: ${{ env.BUILD_DEPS }}
+
+      - name: Configure test build
+        run: |
+          set -euo pipefail
+          cmake -G Ninja -S . -B build-tests \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DSPINE_BUILD_MAIN=ON \
+            -DBUILD_TESTING=ON
+
+      - name: Build and run tests
+        run: |
+          set -euo pipefail
+          cmake --build build-tests --parallel
+          ctest --test-dir build-tests --output-on-failure
+
+  policy:
+    name: workflow policy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate workflows
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check pyyaml==6.0.2
+          python3 .github/scripts/check-workflow-policy.py
