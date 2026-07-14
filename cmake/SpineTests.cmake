@@ -177,6 +177,10 @@ function(spine_add_tests)
     src/config_repository.c src/config_builder.c src/config_apply.c
     src/log_formatter.c src/log_sink.c src/systemd_notify.c
     src/platform/platform_process_posix.c
+    # Configuration repository/build helpers call the shared utility
+    # implementations (strpos, get_cacti_version, ...).  Include util.c so
+    # this focused executable links the same production code paths it tests.
+    src/util.c
   )
 
   add_executable(test_spine_audit tests/unit/test_spine_audit.c src/spine_audit.c)
@@ -354,7 +358,7 @@ function(spine_add_tests)
     target_link_libraries(test_spine_redact_args PRIVATE spine_build_options)
   endif()
   target_link_libraries(test_spine_redact_args PRIVATE
-      spine_hardening spine_mysql spine_netsnmp Threads::Threads)
+      spine_hardening spine_mysql spine_netsnmp Threads::Threads m)
   add_test(NAME spine_redact_args COMMAND test_spine_redact_args)
 
   # CB age-reap: mock-clock driven. test_spine_stubs provides config_t set
