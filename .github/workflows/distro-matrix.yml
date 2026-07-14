@@ -168,7 +168,13 @@ jobs:
         run: ./build/spine --help | head -3
 
       - name: Run CTest
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          set -euo pipefail
+          if [[ -x build/test_platform_time ]]; then
+            ctest --test-dir build --output-on-failure
+          else
+            echo 'Focused tests are built by dedicated test jobs; skipping in production-only lane.'
+          fi
 
   macos:
     name: macOS (Tier 1)
