@@ -28,6 +28,7 @@ env:
     cmake make pkg-config
     gcc clang llvm
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+    libseccomp-dev libuv1-dev uthash-dev
 
 jobs:
   analyze:
