@@ -24,6 +24,7 @@ env:
     cmake make pkg-config
     gcc clang llvm mariadb-client
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
+    libuv1-dev libseccomp-dev uthash-dev
   DB_HOST: 127.0.0.1
   DB_PORT: '3306'
   DB_NAME: cacti
