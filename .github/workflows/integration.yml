@@ -167,7 +167,7 @@ jobs:
             apt-get update
             apt-get install -y --no-install-recommends \
               gcc make cmake pkg-config \
-              libsnmp-dev default-libmysqlclient-dev libssl-dev
+              libsnmp-dev default-libmysqlclient-dev libssl-dev libuv1-dev libseccomp-dev uthash-dev
             echo "net-snmp version:"
             dpkg -l libsnmp-dev | grep libsnmp
             cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
