@@ -24,7 +24,7 @@ env:
     cmake make pkg-config
     gcc lcov
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
-    libseccomp-dev libuv1-dev
+    libseccomp-dev libuv1-dev uthash-dev
   COVERAGE_MIN_LINE_PCT: '10.0'
   CFLAGS_COVERAGE: >-
     -O0 -g3 --coverage

@@ -25,7 +25,7 @@ env:
     cmake make pkg-config
     gcc clang llvm clang-tools cppcheck codespell shellcheck shfmt golang-go
     libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
-    libseccomp-dev libuv1-dev
+    libseccomp-dev libuv1-dev uthash-dev
   CFLAGS_ANALYZE: >-
     -std=c17 -O1 -g3 -fno-omit-frame-pointer
   CLANG_TIDY_CHECKS: >-

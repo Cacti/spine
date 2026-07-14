@@ -24,7 +24,7 @@ env:
     cmake make pkg-config
     gcc libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
     hyperfine time snmp snmpd
-    libseccomp-dev libuv1-dev
+    libseccomp-dev libuv1-dev uthash-dev
 
 jobs:
   cli-benchmark:
