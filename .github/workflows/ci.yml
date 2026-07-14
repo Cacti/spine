@@ -65,7 +65,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build pkg-config \
-            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev
+            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev uthash-dev
 
       - name: Configure
         run: |
@@ -100,7 +100,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build pkg-config \
-            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev
+            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev uthash-dev
 
       - name: Configure with WITH_SYSTEMD=OFF
         run: |
@@ -134,7 +134,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build pkg-config clang \
-            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev
+            libmysqlclient-dev libsnmp-dev libssl-dev libseccomp-dev libuv1-dev uthash-dev
 
       - name: Configure (sanitizers)
         run: |
