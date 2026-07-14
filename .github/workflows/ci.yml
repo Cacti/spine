@@ -77,6 +77,7 @@ jobs:
 
       - name: Run CTest
         run: |
+          set -euo pipefail
           if [[ -x build/test_platform_time ]]; then
             ctest --test-dir build --output-on-failure
           else
@@ -121,6 +122,7 @@ jobs:
 
       - name: Run CTest
         run: |
+          set -euo pipefail
           if [[ -x build/test_platform_time ]]; then
             ctest --test-dir build --output-on-failure
           else
@@ -286,6 +288,7 @@ jobs:
 
       - name: Run CTest
         run: |
+          set -euo pipefail
           if [[ -x build/test_platform_time ]]; then
             ctest --test-dir build --output-on-failure
           else
