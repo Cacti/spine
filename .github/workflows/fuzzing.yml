@@ -23,7 +23,7 @@ env:
   COMMON_DEPS: >-
     cmake make pkg-config
     clang llvm libsnmp-dev default-libmysqlclient-dev help2man libssl-dev
-    libseccomp-dev libuv1-dev
+    libseccomp-dev libuv1-dev uthash-dev
   ASAN_OPTIONS: >-
     detect_leaks=1:abort_on_error=1:strict_string_checks=1:
     check_initialization_order=1:detect_stack_use_after_return=1:
