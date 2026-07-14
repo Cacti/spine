@@ -565,6 +565,10 @@ typedef struct php_processes {
 	spine_pid_t  php_pid;
 	int    php_write_fd;
 	int    php_read_fd;
+#ifdef HAVE_LIBUV
+	uv_pipe_t php_pipe;
+	void *pending_request;
+#endif
 } php_t;
 
 /*! Host Structure
