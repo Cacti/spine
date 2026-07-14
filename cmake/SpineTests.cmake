@@ -173,6 +173,10 @@ function(spine_add_tests)
   target_link_libraries(test_async_coverage PRIVATE spine_platform spine_hardening spine_netsnmp spine_mysql)
   target_sources(test_async_coverage PRIVATE
     src/async_exec.c src/async_snmp.c src/async_mysql.c src/async_batch.c src/async_dns.c src/async_php.c src/telemetry.c
+    src/task_scheduler.c src/task_governor.c src/task_executor.c
+    src/config_repository.c src/config_builder.c src/config_apply.c
+    src/log_formatter.c src/log_sink.c src/systemd_notify.c
+    src/platform/platform_process_posix.c
   )
 
   add_executable(test_spine_audit tests/unit/test_spine_audit.c src/spine_audit.c)
@@ -340,7 +344,10 @@ function(spine_add_tests)
   spine_require_mysql()
   spine_require_netsnmp()
   add_executable(test_spine_redact_args tests/unit/test_spine_redact_args.c
-                 src/util.c tests/unit/test_spine_stubs.c)
+                 src/util.c tests/unit/test_spine_stubs.c
+                 src/config_repository.c src/config_builder.c src/config_apply.c
+                 src/log_formatter.c src/log_sink.c src/systemd_notify.c
+                 src/platform/platform_process_posix.c)
   target_include_directories(test_spine_redact_args PRIVATE
       ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tests/unit)
   if(TARGET spine_build_options)
