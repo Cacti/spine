@@ -73,7 +73,7 @@ jobs:
           cmake --preset ci-main
 
       - name: Build
-        run: cmake --build --preset ci-main
+        run: cmake --build --preset ci-main --target spine
 
       - name: Run CTest
         run: ctest --test-dir build --output-on-failure
@@ -109,7 +109,7 @@ jobs:
             -DSPINE_BUILD_MAIN=ON -DWITH_SYSTEMD=OFF
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build --target spine
 
       - name: Verify spine binary
         run: ./build/spine --help | head -3
@@ -144,7 +144,7 @@ jobs:
       - name: Build (sanitizers)
         run: |
           set -euo pipefail
-          cmake --build --preset ci-main
+          cmake --build --preset ci-main --target spine
 
       - name: Run CTest (sanitizers)
         run: |
@@ -264,7 +264,7 @@ jobs:
           cmake --preset ci-main -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/mysql-client;/opt/homebrew/opt/net-snmp;/opt/homebrew/opt/openssl@3;/usr/local/opt/mysql-client;/usr/local/opt/net-snmp;/usr/local/opt/openssl@3"
 
       - name: Build
-        run: cmake --build --preset ci-main
+        run: cmake --build --preset ci-main --target spine
 
       - name: Run CTest
         run: ctest --test-dir build --output-on-failure

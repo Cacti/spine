@@ -162,7 +162,7 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build -j
+        run: cmake --build build --target spine -j
 
       - name: Smoke test binary
         run: ./build/spine --help | head -3
