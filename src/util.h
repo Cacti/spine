@@ -31,6 +31,10 @@
  +-------------------------------------------------------------------------+
 */
 
+/* util.h is included directly by focused unit tests, so provide the client
+ * type here instead of relying on common.h include ordering. */
+#include <mysql.h>
+
 /* cacti config reading functions */
 extern void read_config_options(void);
 extern int read_spine_config(const char *file);
@@ -142,7 +146,7 @@ extern void poller_push_data_to_main(void);
 extern double start_time;
 
 /* the version of Cacti as a decimal */
-int get_cacti_version(struct st_mysql *psql, int mode);
+int get_cacti_version(MYSQL *psql, int mode);
 
 /* Operational CLI helpers. */
 extern int spine_health_check(void);
