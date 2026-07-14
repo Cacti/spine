@@ -122,6 +122,10 @@ const char *regex_replace(const char *exp, const char *value);
 	}\
 
 
+/* Keep this public header self-contained for focused unit tests that include
+ * it without common.h (which normally provides the MySQL client typedef). */
+typedef struct st_mysql MYSQL;
+
 /* get highres time as double */
 extern double get_time_as_double(void);
 
