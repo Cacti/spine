@@ -281,13 +281,16 @@ static int apply_seccomp(void) {
 		SCMP_SYS(lstat), SCMP_SYS(lstat64),
 		SCMP_SYS(newfstatat), SCMP_SYS(statx),
 		SCMP_SYS(access), SCMP_SYS(faccessat), SCMP_SYS(faccessat2),
+		/* flawfinder: ignore - syscall identifiers, not filesystem calls. */
 		SCMP_SYS(readlink), SCMP_SYS(readlinkat),
 		SCMP_SYS(getdents), SCMP_SYS(getdents64),
 		SCMP_SYS(getcwd), SCMP_SYS(chdir), SCMP_SYS(fchdir),
 		SCMP_SYS(unlink), SCMP_SYS(unlinkat),
 		SCMP_SYS(rename), SCMP_SYS(renameat), SCMP_SYS(renameat2),
 		SCMP_SYS(mkdir), SCMP_SYS(mkdirat),
+		/* flawfinder: ignore - syscall identifiers, not filesystem calls. */
 		SCMP_SYS(chmod), SCMP_SYS(fchmod), SCMP_SYS(fchmodat),
+		/* flawfinder: ignore - syscall identifiers, not filesystem calls. */
 		SCMP_SYS(chown), SCMP_SYS(fchown), SCMP_SYS(fchownat), SCMP_SYS(lchown),
 		SCMP_SYS(utimensat), SCMP_SYS(utimes), SCMP_SYS(futimesat),
 		SCMP_SYS(umask),
