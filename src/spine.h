@@ -534,8 +534,25 @@ typedef struct poller_thread {
 #ifdef HAVE_LIBUV
 	uv_loop_t *event_loop;
 	spine_async_dns_runtime_t *dns_runtime;
+	struct poller_thread *next_task;
 #endif
 } poller_thread_t;
+
+#ifdef HAVE_LIBUV
+/** Shared state for one libuv polling loop and its worker thread. */
+typedef struct spine_loop {
+	uv_loop_t loop;
+	uv_thread_t thread;
+	uv_async_t wake_handle;
+	uv_mutex_t queue_lock;
+	spine_async_dns_runtime_t *dns_runtime;
+	poller_thread_t *task_queue_head;
+	poller_thread_t *task_queue_tail;
+	int core_id;
+	bool active;
+	bool stop_requested;
+} spine_loop_t;
+#endif
 
 /*! PHP Script Server Structure
  *
