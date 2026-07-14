@@ -37,6 +37,7 @@ int spine_platform_setenv(const char *name, const char *value, int overwrite) {
 }
 
 int spine_platform_localtime(const time_t *when, struct tm *out) {
+	memset(out, 0, sizeof(*out));
 	return localtime_s(out, when);
 }
 
