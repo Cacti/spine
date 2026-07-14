@@ -88,7 +88,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y golang-go
           mkdir -p "${HOME}/.local/bin"
-          GOBIN="${HOME}/.local/bin" go install github.com/ossf/scorecard/v5/cmd/scorecard@latest
+          # Scorecard v5 moved its CLI to the module root. Pin the version so
+          # the security gate remains reproducible as upstream evolves.
+          GOBIN="${HOME}/.local/bin" go install github.com/ossf/scorecard/v5@v5.5.0
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
       - name: Run Scorecard
