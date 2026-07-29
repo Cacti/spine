@@ -809,7 +809,6 @@ int main(int argc, char *argv[]) {
 		if (spine_stop_requested) {
 			SPINE_LOG(("NOTE: SIGTERM received, stopping after current device"));
 			spine_sd_stopping("SIGTERM received");
-			canexit = TRUE;
 			break;
 		}
 

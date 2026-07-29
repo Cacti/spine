@@ -1342,7 +1342,6 @@ int spine_log(const char *format, ...) {
 	char logprefix[LOGSIZE];        /* Formatted Log Prefix */
 	char ulogmessage[LOGSIZE];      /* Un-Formatted Log Message */
 	char flogmessage[LOGSIZE];      /* Formatted Log Message */
-	char stdoutmessage[LOGSIZE + 20]; /* Message for stdout */
 
 	double cur_time;
 	char * log_fmt;
@@ -1368,6 +1367,8 @@ int spine_log(const char *format, ...) {
 	now_ptr = &now_time;
 
 	if (IS_LOGGING_TO_STDOUT()) {
+		char stdoutmessage[LOGSIZE + 20]; /* Message for stdout */
+
 		cur_time = get_time_as_double();
 		snprintf(stdoutmessage, sizeof(stdoutmessage), "Total[%3.4f] %s", cur_time - start_time, ulogmessage);
 		puts(stdoutmessage);
