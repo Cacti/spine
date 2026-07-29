@@ -328,7 +328,6 @@ int spine_process_spawn_retry(
 	STARTUPINFOW startup_info;
 	PROCESS_INFORMATION process_info;
 	wchar_t *command_line_template;
-	wchar_t *command_line;
 	wchar_t *environment_block;
 	wchar_t *wide_path;
 	BOOL create_result;
@@ -357,10 +356,13 @@ int spine_process_spawn_retry(
 	memset(&process_info, 0, sizeof(process_info));
 
 	do {
+		wchar_t *command_line;
+
 		command_line = _wcsdup(command_line_template);
 		if (command_line == NULL) {
 			free(wide_path);
 			free(command_line_template);
+			free(environment_block);
 			return ENOMEM;
 		}
 

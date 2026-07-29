@@ -28,6 +28,7 @@ int spine_platform_setenv(const char *name, const char *value, int overwrite) {
 	return _putenv_s(name, value);
 }
 
+// cppcheck-suppress constParameterPointer
 int spine_platform_localtime(const time_t *when, struct tm *out) {
 	/* localtime_s writes *out and returns errno_t, not an address; cppcheck misreads both */
 	// cppcheck-suppress ctuuninitvar
