@@ -50,7 +50,11 @@ def main() -> int:
 
 	in_path = Path(sys.argv[1])
 	out_path = Path(sys.argv[2])
-	text = in_path.read_text(encoding="utf-8", errors="replace") if in_path.exists() else ""
+	try:
+		text = in_path.read_text(encoding="utf-8", errors="replace") if in_path.exists() else ""
+	except OSError as exc:
+		print(f"Failed to read clang-tidy input '{in_path}': {exc}", file=sys.stderr)
+		return 2
 
 	results = []
 	seen = set()

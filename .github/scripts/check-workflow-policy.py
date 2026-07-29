@@ -155,7 +155,11 @@ def main() -> int:
 			violations.append(f"{rel}: failed to parse YAML: {exc}")
 			continue
 
-		jobs = doc.get("jobs", {}) if isinstance(doc, dict) else {}
+		if not isinstance(doc, dict):
+			violations.append(f"{rel}: top-level YAML must be a mapping")
+			continue
+
+		jobs = doc.get("jobs", {})
 		if not isinstance(jobs, dict):
 			continue
 
