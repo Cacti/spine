@@ -89,6 +89,10 @@ def main() -> int:
 		return 2
 
 	mode_cfg = baseline_doc.get(args.mode, {})
+	if not isinstance(mode_cfg, dict):
+		print("Leak baseline configuration errors:", file=sys.stderr)
+		print(f"- {args.mode} baseline must be an object", file=sys.stderr)
+		return 2
 	text = collect_text(args.logs)
 
 	if args.mode == "valgrind":

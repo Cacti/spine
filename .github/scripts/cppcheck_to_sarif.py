@@ -24,6 +24,16 @@ def level_from_severity(severity: str) -> str:
 	return "note"
 
 
+def parse_positive_int(raw: str, field: str, line: str) -> int:
+	try:
+		value = int(raw)
+	except ValueError as exc:
+		raise ValueError(f"invalid {field} value in cppcheck line: {line}") from exc
+	if value < 1:
+		raise ValueError(f"invalid {field} value in cppcheck line: {line}")
+	return value
+
+
 def build_sarif(results: list[dict], rules: dict[str, dict]) -> dict:
 	return {
 		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -67,8 +77,12 @@ def main() -> int:
 
 		rule_id = m.group("rule") or f"cppcheck-{m.group('severity')}"
 		file_path = m.group("file")
-		line = int(m.group("line"))
-		col = int(m.group("col") or "1")
+		try:
+			line = parse_positive_int(m.group("line"), "line", raw_line)
+			col = parse_positive_int(m.group("col") or "1", "column", raw_line)
+		except ValueError as exc:
+			print(str(exc), file=sys.stderr)
+			return 2
 		message = m.group("message").strip()
 		level = level_from_severity(m.group("severity"))
 		key = (file_path, line, col, rule_id, message, level)

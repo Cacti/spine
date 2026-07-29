@@ -86,6 +86,18 @@ class CheckLeakTrendTest(unittest.TestCase):
 		self.assertIn("max_definitely_lost_bytes must be an integer", result.stderr)
 		self.assertNotIn("Traceback", result.stderr + result.stdout)
 
+	def test_non_object_mode_baseline_fails_without_traceback(self) -> None:
+		with tempfile.TemporaryDirectory() as td:
+			tmp = Path(td)
+			baseline = tmp / "baseline.json"
+			baseline.write_text(json.dumps({"valgrind": []}), encoding="utf-8")
+			(tmp / "valgrind.log").write_text("definitely lost: 0 bytes\n", encoding="utf-8")
+			result = self.run_gate(tmp, baseline, str(tmp / "*.log"))
+
+		self.assertEqual(result.returncode, 2)
+		self.assertIn("valgrind baseline must be an object", result.stderr)
+		self.assertNotIn("Traceback", result.stderr + result.stdout)
+
 	def test_asan_over_limit_fails(self) -> None:
 		with tempfile.TemporaryDirectory() as td:
 			tmp = Path(td)
