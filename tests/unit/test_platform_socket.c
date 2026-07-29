@@ -334,6 +334,18 @@ static void test_socket_invalid_wait_sets_error(void) {
 	ASSERT_TRUE(!spine_socket_error_is_interrupted(error_code));
 }
 
+#ifndef _WIN32
+static void test_socket_wait_rejects_fd_setsize_boundary(void) {
+	struct timeval timeout;
+
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 1000;
+
+	ASSERT_INT_EQ(spine_socket_wait_readable((spine_socket_t) FD_SETSIZE, &timeout), -1);
+	ASSERT_INT_EQ(spine_socket_last_error(), EINVAL);
+}
+#endif
+
 static void test_ping_socket_platform_policy(void) {
 #ifdef _WIN32
 	ASSERT_INT_EQ(spine_socket_ping_icmp_recv_flags(), 0);
@@ -365,6 +377,9 @@ int main(void) {
 	test_socket_ipv6_loopback_udp();
 	test_socket_timeout_argument_validation();
 	test_socket_invalid_wait_sets_error();
+#ifndef _WIN32
+	test_socket_wait_rejects_fd_setsize_boundary();
+#endif
 	test_ping_socket_platform_policy();
 	spine_platform_cleanup();
 	return finish_tests("platform socket tests");

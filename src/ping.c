@@ -1999,7 +1999,6 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 	socklen_t recvlen;
 	char recvbuf[BUFSIZE];
 	struct timeval tv;
-	fd_set rfds;
 	ssize_t n;
 	struct icmp *icp;
 	uint16_t our_id;
@@ -2079,14 +2078,12 @@ int ping_icmp_v4_posix_numeric(const char *ip, uint32_t timeout_ms,
 		}
 		tv.tv_sec  = (long)(remaining_ms / 1000.0);
 		tv.tv_usec = (long)((remaining_ms - (double) tv.tv_sec * 1000.0) * 1000.0);
-		FD_ZERO(&rfds);
-		FD_SET(sock, &rfds);
-		sel = select(sock + 1, &rfds, NULL, NULL, &tv);
-		if (sel < 0) {
-			if (errno == EINTR) continue;
-			result->system_errno = errno;
-			goto cleanup;
-		}
+			sel = spine_socket_wait_readable(sock, &tv);
+			if (sel < 0) {
+				result->system_errno = spine_socket_last_error();
+				if (spine_socket_error_is_interrupted(result->system_errno)) continue;
+				goto cleanup;
+			}
 		if (sel == 0) {
 			result->status = SPINE_ICMP_TIMEOUT;
 			ret = 0;
@@ -2153,7 +2150,6 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 	socklen_t recvlen;
 	char recvbuf[BUFSIZE];
 	struct timeval tv;
-	fd_set rfds;
 	ssize_t n;
 	struct icmp6_hdr *icp;
 	uint16_t our_id;
@@ -2250,14 +2246,12 @@ int ping_icmp_v6_posix_numeric(const char *ip, uint32_t timeout_ms,
 		}
 		tv.tv_sec  = (long)(remaining_ms / 1000.0);
 		tv.tv_usec = (long)((remaining_ms - (double) tv.tv_sec * 1000.0) * 1000.0);
-		FD_ZERO(&rfds);
-		FD_SET(sock, &rfds);
-		sel = select(sock + 1, &rfds, NULL, NULL, &tv);
-		if (sel < 0) {
-			if (errno == EINTR) continue;
-			result->system_errno = errno;
-			goto cleanup;
-		}
+			sel = spine_socket_wait_readable(sock, &tv);
+			if (sel < 0) {
+				result->system_errno = spine_socket_last_error();
+				if (spine_socket_error_is_interrupted(result->system_errno)) continue;
+				goto cleanup;
+			}
 		if (sel == 0) {
 			result->status = SPINE_ICMP_TIMEOUT;
 			ret = 0;
