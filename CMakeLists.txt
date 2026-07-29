@@ -634,6 +634,20 @@ if(BUILD_TESTING)
         spine_add_platform_test(${test_name})
     endforeach()
 
+    if(WIN32)
+        add_executable(test_platform_process_argv_child
+            tests/unit/test_platform_process_argv_child.c
+        )
+        if(TARGET spine_build_options)
+            target_link_libraries(test_platform_process_argv_child PRIVATE spine_build_options)
+        endif()
+        target_link_libraries(test_platform_process_argv_child PRIVATE spine_hardening)
+        target_compile_definitions(test_platform_process PRIVATE
+            SPINE_ARGV_CHILD_PATH="$<TARGET_FILE:test_platform_process_argv_child>"
+        )
+        add_dependencies(test_platform_process test_platform_process_argv_child)
+    endif()
+
     # Ping validation: links against the standalone validator TU only.
     add_executable(test_ping_reply_validation
         tests/unit/test_ping_reply_validation.c

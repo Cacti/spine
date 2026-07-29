@@ -131,6 +131,28 @@ static void test_platform_spawn_custom_env_is_visible_to_child(void) {
 	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
 	ASSERT_INT_EQ(status, 0);
 }
+
+static void test_platform_spawn_preserves_quoted_argv_edges(void) {
+	spine_pid_t pid;
+	int status;
+	char child_path[] = SPINE_ARGV_CHILD_PATH;
+	char quote_arg[] = "a\"b";
+	char trailing_backslash_arg[] = "a \\";
+	char backslash_quote_arg[] = "\\\"";
+	char empty_arg[] = "";
+	char *argv[] = {
+		child_path,
+		quote_arg,
+		trailing_backslash_arg,
+		backslash_quote_arg,
+		empty_arg,
+		NULL
+	};
+
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, NULL, 1, 1000), 0);
+	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
+	ASSERT_INT_EQ(status, 0);
+}
 #endif
 
 int main(void) {
@@ -144,6 +166,7 @@ int main(void) {
 #ifdef _WIN32
 	test_platform_spawn_utf8_path_argument();
 	test_platform_spawn_custom_env_is_visible_to_child();
+	test_platform_spawn_preserves_quoted_argv_edges();
 #endif
 	return finish_tests("platform process tests");
 }
