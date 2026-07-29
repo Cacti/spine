@@ -108,6 +108,16 @@ class CheckLeakTrendTest(unittest.TestCase):
 		self.assertEqual(result.returncode, 0)
 		self.assertEqual(summary, {"asan_error_events": 0, "ubsan_error_events": 0})
 
+	def test_valid_empty_baseline_uses_zero_limits(self) -> None:
+		with tempfile.TemporaryDirectory() as td:
+			tmp = Path(td)
+			baseline = tmp / "baseline.json"
+			baseline.write_text("{}", encoding="utf-8")
+			result = self.run_gate(tmp, baseline, str(tmp / "*.missing"))
+
+		self.assertEqual(result.returncode, 0)
+		self.assertIn("valgrind leak trend gate passed", result.stdout)
+
 
 if __name__ == "__main__":
 	unittest.main()

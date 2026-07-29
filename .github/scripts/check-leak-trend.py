@@ -65,7 +65,7 @@ def enforce(summary: dict[str, int], baseline: dict[str, int]) -> tuple[list[str
 	return failures, errors
 
 
-def load_baseline(path: str) -> dict:
+def load_baseline(path: str) -> dict | None:
 	try:
 		return json.loads(Path(path).read_text(encoding="utf-8"))
 	except OSError as e:
@@ -73,7 +73,7 @@ def load_baseline(path: str) -> dict:
 	except json.JSONDecodeError as e:
 		print(f"Failed to parse leak baseline '{path}': {e}", file=sys.stderr)
 
-	return {}
+	return None
 
 
 def main() -> int:
@@ -85,7 +85,7 @@ def main() -> int:
 	args = parser.parse_args()
 
 	baseline_doc = load_baseline(args.baseline)
-	if not baseline_doc:
+	if baseline_doc is None:
 		return 2
 
 	mode_cfg = baseline_doc.get(args.mode, {})
