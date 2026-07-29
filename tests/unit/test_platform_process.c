@@ -62,6 +62,14 @@ static void test_platform_spawn_and_terminate(void) {
 	ASSERT_TRUE(status != 0);
 }
 
+#ifndef _WIN32
+static void test_platform_terminate_rejects_unsafe_pids(void) {
+	ASSERT_INT_EQ(spine_process_terminate((spine_pid_t) 0), -1);
+	ASSERT_INT_EQ(spine_process_terminate((spine_pid_t) 1), -1);
+	ASSERT_INT_EQ(spine_process_terminate((spine_pid_t) -1), -1);
+}
+#endif
+
 #ifdef _WIN32
 static void test_platform_spawn_utf8_path_argument(void) {
 	wchar_t temp_dir[MAX_PATH];
@@ -127,6 +135,9 @@ int main(void) {
 	test_platform_pipe_helpers();
 	test_platform_spawn_and_wait();
 	test_platform_spawn_and_terminate();
+#ifndef _WIN32
+	test_platform_terminate_rejects_unsafe_pids();
+#endif
 #ifdef _WIN32
 	test_platform_spawn_utf8_path_argument();
 	test_platform_spawn_custom_env_not_supported();

@@ -60,6 +60,11 @@ int spine_process_wait(spine_pid_t pid, int *status) {
 }
 
 int spine_process_terminate(spine_pid_t pid) {
+	if (pid <= 1) {
+		errno = ESRCH;
+		return -1;
+	}
+
 	return kill(pid, SIGTERM);
 }
 
