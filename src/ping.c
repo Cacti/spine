@@ -423,6 +423,7 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	struct timeval timeout;
 	struct sockaddr_in6 recvname;
 	struct sockaddr_in6 fromname;
+	struct sockaddr_storage fromname_storage;
 	char socket_reply[BUFSIZE];
 	int retry_count;
 	int packet_len;
@@ -515,6 +516,7 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	}
 	memset(packet, 0, packet_len);
 	memset(&fromname, 0, sizeof(fromname));
+	memset(&fromname_storage, 0, sizeof(fromname_storage));
 	memset(&recvname, 0, sizeof(recvname));
 
 	our_id = (uint16_t)((spine_platform_process_id() & 0xFFFF) ^ icmp_id_mask);
@@ -532,12 +534,22 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		memcpy(packet + sizeof(struct icmp6_hdr), &sig, sizeof(sig));
 	}
 
-	if ((strlen(host->hostname) == 0) || !resolve_sockaddr((struct sockaddr_storage *) &fromname, &fromlen, AF_INET6, host->hostname, 7)) {
+	if ((strlen(host->hostname) == 0) || !resolve_sockaddr(&fromname_storage, &fromlen, AF_INET6, host->hostname, 7)) {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Destination hostname invalid");
 		snprintf(ping->ping_status, 50, "down");
 		ret = HOST_DOWN;
 		goto cleanup;
 	}
+
+	if (fromname_storage.ss_family != AF_INET6 || fromlen < sizeof(fromname)) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Destination hostname resolved to an invalid address");
+		snprintf(ping->ping_status, 50, "down");
+		ret = HOST_DOWN;
+		goto cleanup;
+	}
+
+	memcpy(&fromname, &fromname_storage, sizeof(fromname));
+	fromlen = sizeof(fromname);
 
 	/* Link-local destinations need a scope_id. Auto-detect when the
 	 * kernel did not set one (it does not for numeric literals without

@@ -51,6 +51,13 @@ class CheckWorkflowPolicyTest(unittest.TestCase):
 
 		self.assertEqual(violations, [])
 
+	def test_curl_pipe_allowlist_token_only_applies_to_matching_line(self) -> None:
+		violations: list[str] = []
+		run = "set -euo pipefail\n# example.invalid/install\ncurl https://other.invalid/install | sh\n"
+		policy.check_run(".github/workflows/ci.yml", "install", run, violations, {".github/workflows/ci.yml": ["example.invalid/install"]})
+
+		self.assertIn("curl|sh is not allowlisted", violations[0])
+
 
 if __name__ == "__main__":
 	unittest.main()

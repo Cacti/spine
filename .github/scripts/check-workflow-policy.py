@@ -74,10 +74,11 @@ def check_run(path: str, step_name: str, run_value: str, violations: list[str], 
 		if lines[0] != STRICT_LINE:
 			violations.append(f"{path}:{step_name}: multiline run must start with '{STRICT_LINE}'")
 
-	for match in CURL_PIPE_RE.finditer(run_value):
-		_ = match
+	for line in run_value.splitlines():
+		if not CURL_PIPE_RE.search(line):
+			continue
 		allow_tokens = curl_pipe_allowlist.get(path, [])
-		if not any(token in run_value for token in allow_tokens):
+		if not any(token in line for token in allow_tokens):
 			violations.append(f"{path}:{step_name}: curl|sh is not allowlisted")
 
 

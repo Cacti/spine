@@ -97,7 +97,12 @@ def main() -> int:
 		)
 
 	sarif = build_sarif(results, rules)
-	out_path.write_text(json.dumps(sarif, indent=2) + "\n", encoding="utf-8")
+	try:
+		out_path.write_text(json.dumps(sarif, indent=2) + "\n", encoding="utf-8")
+	except OSError as exc:
+		print(f"Failed to write SARIF output '{out_path}': {exc}", file=sys.stderr)
+		return 2
+
 	return 0
 
 
