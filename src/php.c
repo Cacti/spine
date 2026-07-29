@@ -38,6 +38,7 @@
 #include "platform/platform_process.h"
 #include "nft_popen.h"
 #include <spawn.h>
+#include <signal.h>
 
 extern char **environ;
 
@@ -377,7 +378,11 @@ int php_init(int php_process) {
 
 		{
 			posix_spawn_file_actions_t fa;
+			posix_spawnattr_t attr;
+			sigset_t default_sigs;
+			sigset_t empty_mask;
 			int spawn_err;
+			int attr_initialized = 0;
 			char **child_env;
 
 			if (posix_spawn_file_actions_init(&fa) != 0) {
@@ -390,6 +395,17 @@ int php_init(int php_process) {
 				return FALSE;
 			}
 
+			/* Reset signal dispositions in the PHP child the same way script
+			 * spawns do, so spine's handlers/masks do not leak into PHP. */
+			if (posix_spawnattr_init(&attr) == 0) {
+				attr_initialized = 1;
+				sigfillset(&default_sigs);
+				posix_spawnattr_setsigdefault(&attr, &default_sigs);
+				sigemptyset(&empty_mask);
+				posix_spawnattr_setsigmask(&attr, &empty_mask);
+				posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
+			}
+
 			/* wire cacti->php read end to child stdin, php->cacti write end to child stdout */
 			if (posix_spawn_file_actions_adddup2(&fa, cacti2php_pdes[0], STDIN_FILENO) != 0 ||
 			    posix_spawn_file_actions_adddup2(&fa, php2cacti_pdes[1], STDOUT_FILENO) != 0 ||
@@ -400,6 +416,9 @@ int php_init(int php_process) {
 			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]) != 0) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions setup failed", i));
 				posix_spawn_file_actions_destroy(&fa);
+				if (attr_initialized) {
+					posix_spawnattr_destroy(&attr);
+				}
 				spine_process_close_fd(cacti2php_pdes[0]);
 				spine_process_close_fd(cacti2php_pdes[1]);
 				spine_process_close_fd(php2cacti_pdes[0]);
@@ -415,6 +434,9 @@ int php_init(int php_process) {
 			if (child_env == NULL) {
 				SPINE_LOG(("ERROR: SS[%i] Could not build sanitized PHP Script Server environment", i));
 				posix_spawn_file_actions_destroy(&fa);
+				if (attr_initialized) {
+					posix_spawnattr_destroy(&attr);
+				}
 				spine_process_close_fd(php2cacti_pdes[0]);
 				spine_process_close_fd(php2cacti_pdes[1]);
 				spine_process_close_fd(cacti2php_pdes[0]);
@@ -423,10 +445,14 @@ int php_init(int php_process) {
 				return FALSE;
 			}
 
-			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, NULL, argv,
-				child_env, 3, 50000);
+			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa,
+				attr_initialized ? &attr : NULL,
+				argv, child_env, 3, 50000);
 
 			posix_spawn_file_actions_destroy(&fa);
+			if (attr_initialized) {
+				posix_spawnattr_destroy(&attr);
+			}
 			free(child_env);
 
 			if (spawn_err != 0) {

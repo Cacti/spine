@@ -164,6 +164,54 @@ static wchar_t *spine_windows_build_command_line(char *const argv[]) {
 	return command_line;
 }
 
+static wchar_t *spine_windows_build_environment_block(char *const envp[]) {
+	size_t total_len;
+	size_t env_index;
+	wchar_t *block;
+	wchar_t *output;
+	wchar_t *wide_env;
+
+	if (envp == NULL) {
+		return NULL;
+	}
+
+	total_len = 1; /* final NUL after the last NUL-terminated entry */
+	for (env_index = 0; envp[env_index] != NULL; env_index++) {
+		wide_env = spine_windows_utf8_to_wide(envp[env_index]);
+		if (wide_env == NULL) {
+			return NULL;
+		}
+		total_len += wcslen(wide_env) + 1;
+		free(wide_env);
+	}
+
+	block = (wchar_t *) malloc(total_len * sizeof(wchar_t));
+	if (block == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	output = block;
+	for (env_index = 0; envp[env_index] != NULL; env_index++) {
+		size_t len;
+
+		wide_env = spine_windows_utf8_to_wide(envp[env_index]);
+		if (wide_env == NULL) {
+			free(block);
+			return NULL;
+		}
+
+		len = wcslen(wide_env);
+		memcpy(output, wide_env, len * sizeof(wchar_t));
+		output += len;
+		*output++ = L'\0';
+		free(wide_env);
+	}
+	*output = L'\0';
+
+	return block;
+}
+
 static int spine_windows_map_error_to_errno(DWORD error_code) {
 	switch (error_code) {
 	case ERROR_NOT_ENOUGH_MEMORY:
@@ -281,6 +329,7 @@ int spine_process_spawn_retry(
 	PROCESS_INFORMATION process_info;
 	wchar_t *command_line_template;
 	wchar_t *command_line;
+	wchar_t *environment_block;
 	wchar_t *wide_path;
 	BOOL create_result;
 	int retry_count;
@@ -293,15 +342,13 @@ int spine_process_spawn_retry(
 
 	retry_count = 0;
 	creation_flags = CREATE_NO_WINDOW;
-	if (envp != NULL) {
-		errno = ENOTSUP;
-		return ENOTSUP;
-	}
 	wide_path = spine_windows_utf8_to_wide(path);
 	command_line_template = spine_windows_build_command_line(argv);
-	if (wide_path == NULL || command_line_template == NULL) {
+	environment_block = spine_windows_build_environment_block(envp);
+	if (wide_path == NULL || command_line_template == NULL || (envp != NULL && environment_block == NULL)) {
 		free(wide_path);
 		free(command_line_template);
+		free(environment_block);
 		return ENOMEM;
 	}
 
@@ -323,8 +370,8 @@ int spine_process_spawn_retry(
 			NULL,
 			NULL,
 			FALSE,
-			creation_flags,
-			NULL,
+			creation_flags | (environment_block != NULL ? CREATE_UNICODE_ENVIRONMENT : 0),
+			environment_block,
 			NULL,
 			&startup_info,
 			&process_info
@@ -335,6 +382,7 @@ int spine_process_spawn_retry(
 			*pid = (spine_pid_t) process_info.hProcess;
 			free(wide_path);
 			free(command_line_template);
+			free(environment_block);
 			return 0;
 		}
 
@@ -348,6 +396,7 @@ int spine_process_spawn_retry(
 
 		free(wide_path);
 		free(command_line_template);
+		free(environment_block);
 		errno = spawn_error;
 		return spawn_error;
 	} while (1);
