@@ -50,13 +50,19 @@ def collect_text(patterns: list[str]) -> str:
 	return "\n".join(parts)
 
 
-def enforce(summary: dict[str, int], baseline: dict[str, int]) -> list[str]:
+def enforce(summary: dict[str, int], baseline: dict[str, int]) -> tuple[list[str], list[str]]:
 	failures: list[str] = []
+	errors: list[str] = []
 	for key, value in summary.items():
-		limit = int(baseline.get(f"max_{key}", 0))
+		limit_key = f"max_{key}"
+		try:
+			limit = int(baseline.get(limit_key, 0))
+		except (TypeError, ValueError):
+			errors.append(f"{limit_key} must be an integer")
+			continue
 		if value > limit:
-			failures.append(f"{key}={value} exceeded max_{key}={limit}")
-	return failures
+			failures.append(f"{key}={value} exceeded {limit_key}={limit}")
+	return failures, errors
 
 
 def load_baseline(path: str) -> dict:
@@ -90,9 +96,19 @@ def main() -> int:
 	else:
 		summary = parse_asan(text)
 
-	Path(args.output).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+	try:
+		Path(args.output).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+	except OSError as e:
+		print(f"Failed to write leak summary '{args.output}': {e}", file=sys.stderr)
+		return 2
 
-	failures = enforce(summary, mode_cfg)
+	failures, errors = enforce(summary, mode_cfg)
+	if errors:
+		print("Leak baseline configuration errors:", file=sys.stderr)
+		for line in errors:
+			print(f"- {line}", file=sys.stderr)
+		return 2
+
 	if failures:
 		print("Leak trend gate failed:")
 		for line in failures:

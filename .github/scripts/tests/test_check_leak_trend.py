@@ -74,6 +74,29 @@ class CheckLeakTrendTest(unittest.TestCase):
 		self.assertEqual(result.returncode, 1)
 		self.assertIn("definitely_lost_bytes=1234 exceeded max_definitely_lost_bytes=1233", result.stdout)
 
+	def test_non_integer_baseline_limit_fails_without_traceback(self) -> None:
+		with tempfile.TemporaryDirectory() as td:
+			tmp = Path(td)
+			baseline = tmp / "baseline.json"
+			baseline.write_text(json.dumps({"valgrind": {"max_definitely_lost_bytes": "many"}}), encoding="utf-8")
+			(tmp / "valgrind.log").write_text("definitely lost: 1 byte\n", encoding="utf-8")
+			result = self.run_gate(tmp, baseline, str(tmp / "*.log"))
+
+		self.assertEqual(result.returncode, 2)
+		self.assertIn("max_definitely_lost_bytes must be an integer", result.stderr)
+		self.assertNotIn("Traceback", result.stderr + result.stdout)
+
+	def test_asan_over_limit_fails(self) -> None:
+		with tempfile.TemporaryDirectory() as td:
+			tmp = Path(td)
+			baseline = tmp / "baseline.json"
+			baseline.write_text(json.dumps({"asan": {"max_asan_error_events": 0}}), encoding="utf-8")
+			(tmp / "asan.log").write_text("AddressSanitizer: heap-use-after-free\n", encoding="utf-8")
+			result = self.run_gate(tmp, baseline, str(tmp / "*.log"), mode="asan")
+
+		self.assertEqual(result.returncode, 1)
+		self.assertIn("asan_error_events=1 exceeded max_asan_error_events=0", result.stdout)
+
 	def test_empty_glob_uses_zero_summary(self) -> None:
 		with tempfile.TemporaryDirectory() as td:
 			tmp = Path(td)
