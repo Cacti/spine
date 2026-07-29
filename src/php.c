@@ -410,12 +410,21 @@ int php_init(int php_process) {
 
 			/* Strip LD_ and DYLD_ prefixes plus BASH_ENV/ENV so a tampered
 			 * parent env cannot hijack the PHP interpreter via the dynamic
-			 * linker or shell startup. Fall back to raw environ if allocation
-			 * fails so the poller still runs (degraded security but
-			 * functional). */
+			 * linker or shell startup. Fail closed if allocation fails. */
 			child_env = spine_build_child_env();
+			if (child_env == NULL) {
+				SPINE_LOG(("ERROR: SS[%i] Could not build sanitized PHP Script Server environment", i));
+				posix_spawn_file_actions_destroy(&fa);
+				spine_process_close_fd(php2cacti_pdes[0]);
+				spine_process_close_fd(php2cacti_pdes[1]);
+				spine_process_close_fd(cacti2php_pdes[0]);
+				spine_process_close_fd(cacti2php_pdes[1]);
+				pthread_setcancelstate(cancel_state, NULL);
+				return FALSE;
+			}
+
 			spawn_err = spine_process_spawn_retry(&pid, argv[0], &fa, NULL, argv,
-				child_env ? child_env : environ, 3, 50000);
+				child_env, 3, 50000);
 
 			posix_spawn_file_actions_destroy(&fa);
 			free(child_env);

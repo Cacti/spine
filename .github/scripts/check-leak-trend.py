@@ -7,6 +7,7 @@ import argparse
 import glob
 import json
 import re
+import sys
 from pathlib import Path
 
 
@@ -57,6 +58,17 @@ def enforce(summary: dict[str, int], baseline: dict[str, int]) -> list[str]:
 	return failures
 
 
+def load_baseline(path: str) -> dict:
+	try:
+		return json.loads(Path(path).read_text(encoding="utf-8"))
+	except OSError as e:
+		print(f"Failed to read leak baseline '{path}': {e}", file=sys.stderr)
+	except json.JSONDecodeError as e:
+		print(f"Failed to parse leak baseline '{path}': {e}", file=sys.stderr)
+
+	return {}
+
+
 def main() -> int:
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--mode", choices=("valgrind", "asan"), required=True)
@@ -65,7 +77,10 @@ def main() -> int:
 	parser.add_argument("--logs", nargs="+", required=True)
 	args = parser.parse_args()
 
-	baseline_doc = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+	baseline_doc = load_baseline(args.baseline)
+	if not baseline_doc:
+		return 2
+
 	mode_cfg = baseline_doc.get(args.mode, {})
 	text = collect_text(args.logs)
 
