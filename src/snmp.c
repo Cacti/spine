@@ -128,10 +128,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
 	int    priv_type;
-	/* Zero credential buffers after we are done with them so short-lived
-	 * string copies of passphrases do not linger on the heap or in the
-	 * caller's stack. */
-	int    zero_sensitive = 1;
+		/* Zero only local credential copies after use. The caller owns the
+		 * snmp_password/snmp_priv_passphrase buffers and poller.c reuses them
+		 * across items when deciding whether an SNMPv3 session changed. */
+		int    zero_sensitive = 1;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
@@ -286,10 +286,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			free(Apsz);
 			Apsz = strdup(snmp_password);
 
-			if (zero_sensitive) {
-	            memset(snmp_password, 0x0, strlen(snmp_password));
-			}
-
 			// Privacy Protocol Setup
 			if (Xpsz && zero_sensitive) {
 				memset(Xpsz, 0x0, strlen(Xpsz));
@@ -297,10 +293,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			free(Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
-
-			if (zero_sensitive) {
-				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
-			}
 
 			if (Apsz) {
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
