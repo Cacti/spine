@@ -557,11 +557,8 @@ void php_close(int php_process) {
 			#endif
 		}
 
-		/* only try to kill the process if the PID looks valid.
-		 * Trying to kill a negative number is bad news (it's
-	 	 * a process group leader), and PID 1 is "init".
-	  	 */
-		if (phpp->php_pid > 1) {
+		/* On POSIX this is a PID; on Windows it is the retained process handle. */
+		if (phpp->php_pid != 0) {
 			/* end the php script server process */
 			spine_process_terminate(phpp->php_pid);
 

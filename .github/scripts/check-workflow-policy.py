@@ -62,7 +62,10 @@ def main() -> int:
 		rel = str(wf.relative_to(root))
 		try:
 			doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-		except Exception as exc:  # pragma: no cover
+		except OSError as exc:  # pragma: no cover
+			violations.append(f"{rel}: failed to read YAML: {exc}")
+			continue
+		except yaml.YAMLError as exc:  # pragma: no cover
 			violations.append(f"{rel}: failed to parse YAML: {exc}")
 			continue
 

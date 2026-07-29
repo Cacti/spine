@@ -44,7 +44,8 @@ def collect_text(patterns: list[str]) -> str:
 		for path in matches:
 			try:
 				parts.append(Path(path).read_text(encoding="utf-8", errors="replace"))
-			except OSError:
+			except OSError as e:
+				print(f"Skipping unreadable leak log '{path}': {e}", file=sys.stderr)
 				continue
 	return "\n".join(parts)
 
