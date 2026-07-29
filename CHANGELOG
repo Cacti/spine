@@ -17,6 +17,7 @@ The Cacti Group | spine
 -feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
 -note: Cygwin is no longer a supported build/runtime target; Windows support is MSYS2/MinGW-native
 -note: CMake portability profiles expanded for Solaris/AIX and C17-oriented toolchain defaults
+-note: spine.conf must not be world-readable or group/world-writable; tighten permissions before upgrading
 -issue: extend IPv4/IPv6 DNS regression coverage (mapped-address, family-forcing, scoped IPv6 parse)
 -issue: harden Windows process spawn/wait correctness (PID lifecycle, UTF-8 command path coverage, strict envp contract)
 -feature: add IPv6 transport integration test lane to Docker integration workflow

@@ -118,15 +118,18 @@ static void test_platform_spawn_utf8_path_argument(void) {
 	DeleteFileW(script_path);
 }
 
-static void test_platform_spawn_custom_env_not_supported(void) {
+static void test_platform_spawn_custom_env_is_visible_to_child(void) {
 	spine_pid_t pid;
+	int status;
 	char cmd_path[] = "C:\\Windows\\System32\\cmd.exe";
 	char cmd_flag[] = "/c";
-	char cmd_body[] = "exit 0";
+	char cmd_body[] = "if \"%SPINE_TEST_ENV%\"==\"1\" (exit /b 0) else (exit /b 7)";
 	char *argv[] = { cmd_path, cmd_flag, cmd_body, NULL };
 	char *envp[] = { "SPINE_TEST_ENV=1", NULL };
 
-	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, envp, 1, 1000), ENOTSUP);
+	ASSERT_INT_EQ(spine_process_spawn_retry(&pid, argv[0], NULL, NULL, argv, envp, 1, 1000), 0);
+	ASSERT_INT_EQ(spine_process_wait(pid, &status), 0);
+	ASSERT_INT_EQ(status, 0);
 }
 #endif
 
@@ -140,7 +143,7 @@ int main(void) {
 #endif
 #ifdef _WIN32
 	test_platform_spawn_utf8_path_argument();
-	test_platform_spawn_custom_env_not_supported();
+	test_platform_spawn_custom_env_is_visible_to_child();
 #endif
 	return finish_tests("platform process tests");
 }
