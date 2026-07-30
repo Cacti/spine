@@ -16,6 +16,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")
+
+"$REPO_ROOT/tests/snmpv3/scripts/prepare_config_permissions.sh"
 PASS=0
 FAIL=0
 

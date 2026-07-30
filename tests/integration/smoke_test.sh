@@ -13,6 +13,8 @@ PASS=0
 FAIL=0
 CLEANUP_NEEDED=0
 
+"$REPO_ROOT/tests/snmpv3/scripts/prepare_config_permissions.sh"
+
 pass() {
   echo "  PASS: $*"
   PASS=$((PASS + 1))

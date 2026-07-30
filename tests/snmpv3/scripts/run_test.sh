@@ -12,6 +12,8 @@ COMPOSE=(docker compose -f "$(dirname "$0")/../docker-compose.yml")
 PASS=0
 FAIL=0
 
+"$(dirname "$0")/prepare_config_permissions.sh"
+
 pass() {
   echo "  PASS: $*"
   PASS=$((PASS + 1))

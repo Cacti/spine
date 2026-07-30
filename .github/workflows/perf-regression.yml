@@ -247,6 +247,7 @@ jobs:
       - name: Build spine and test infrastructure
         run: |
           set -euo pipefail
+          ./tests/snmpv3/scripts/prepare_config_permissions.sh
           docker compose -f tests/snmpv3/docker-compose.yml build spine
 
       - name: Start infrastructure
