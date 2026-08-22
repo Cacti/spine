@@ -1,34 +1,18 @@
 The Cacti Group | spine
 
-1.3.0
--issue#360: If a Remote Data Collector has not devices, spine does not properly register itself
--issue#423: Reinitialize fd_set before each select() call in ping_icmp() to prevent instant retry expiry after first timeout
--issue#424: Correct inverted spike_kill condition for PHP script server (IS_UNDEFINED -> !IS_UNDEFINED)
--issue#425: Mark all OIDs undefined when snmp_get_multi() receives errindex==0 from agent
--issue#426: Add NULL check after malloc in host_errors insert path to prevent UB on memory pressure
--issue#438: Resolve stale content in spine.c (--help search path), configure.ac (AC_PREREQ, obsolete macros), spine.conf.dist (missing settings), and Copilot instructions
--issue#441: Update copyright year to 2026 in 12 source files
--issue#445: Replace vfork/execv with posix_spawn in php_init; fix stack-local return in regex_replace
--issue#447: Correct off-by-one OOB write in strncopy() when src fills buffer; remove suppressing pragma
--feature#362: Report the number of data collection errors during data collection in host table
--feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
--feature#442: Add GitHub Actions CI: build matrix (gcc/clang), cppcheck, flawfinder, CodeQL
--feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
--feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
--feature#3740: Ability to disable a site
--feature#5090: Enhance number recognition within Spine
--feature#6001: Extend SYSTEM STATS
--feature: Make spine work with Stream feature
-
 1.2.31
--issue#365: Removing Backtrace Support
--issue#366: Failing to actually a poll device that returns "NoSuchObject"
--issue#370: Errors experienced with very long OIDs
--issue#373: Spine SNMPv3 SHA-512 auth doesn't work
--issue#374: Error DES is no longer supported on this system
--issue#383: Spine returns Segmentation fault
--issue#384: ICMP Buffer overflows on Debian/Unbuntu related recvfrom() calls
--issue: Clear up a few very minor leaks in spine
+-issue: Bound PHP script-server shutdown and use width-safe pipe capacity arithmetic
+-issue#365: Removed Backtrace Support due to lack of OS support
+-issue#366: Prevent polling from stopping when sysDescr OID returns noSuchObject
+-issue#370: Increase buffer sizes to handle large OID numbers
+-issue#373: Spine cannot generate SNMPv3 Ku for SHA-384/SHA-512
+-issue#374: Improve depreciated DES support
+-issue#383: Improve Spine buffer handling #383
+-issue#384: Buffer overflow in ping_icmp() causes Spine crash
+-issue: Clear up some minor memory leaks
+
+1.2.30
+-no changes
 
 1.2.29
 -no changes
@@ -671,4 +655,4 @@ The Cacti Group | spine
 -bug: small log file reformatting
 
 -----------------------------------------------
-Copyright (c) 2004-2026 - The Cacti Group, Inc.
+Copyright (c) 2004-2024 - The Cacti Group, Inc.
