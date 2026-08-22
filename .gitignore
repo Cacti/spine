@@ -37,4 +37,5 @@ build-*/
 
 # Agent / tooling session state
 .omc/
+.claude/settings.local.json
 .claude/worktrees/
