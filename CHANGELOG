@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.2.31
+-issue: Bound PHP script-server shutdown and use width-safe pipe capacity arithmetic
 -issue#365: Removed Backtrace Support due to lack of OS support
 -issue#366: Prevent polling from stopping when sysDescr OID returns noSuchObject
 -issue#370: Increase buffer sizes to handle large OID numbers

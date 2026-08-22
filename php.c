@@ -213,7 +213,7 @@ char *php_readpipe(int php_process, char *command) {
 	double remaining_usec = 0;
 	char *result_string;
 
-	int  i;
+	ssize_t i;
 	char *cp;
 	char *bptr;
 
@@ -301,14 +301,15 @@ char *php_readpipe(int php_process, char *command) {
 			bptr = result_string;
 
 			while (1) {
-				ptrdiff_t avail = RESULTS_BUFFER - 1 - (bptr - result_string);
+				size_t used = (size_t)(bptr - result_string);
 
-				if (avail <= 0) {
+				if (used >= RESULTS_BUFFER - 1) {
 					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 					SET_UNDEFINED(result_string);
 					break;
 				}
 
+				size_t avail = (size_t)RESULTS_BUFFER - 1 - used;
 				i = read(php_processes[php_process].php_read_fd, bptr, avail);
 
 				if (i <= 0) {
