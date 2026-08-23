@@ -9,8 +9,10 @@ runs:
   steps:
     - name: Install packages
       shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.packages }}
       run: |
         set -euo pipefail
         sudo apt-get update
-        # Intentionally unquoted to split package tokens.
-        sudo apt-get install -y ${{ inputs.packages }}
+        read -r -a packages <<< "$APT_PACKAGES"
+        sudo apt-get install -y -- "${packages[@]}"

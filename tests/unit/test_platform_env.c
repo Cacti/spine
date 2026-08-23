@@ -11,16 +11,25 @@ static void test_platform_setenv_respects_overwrite(void) {
 	ASSERT_INT_EQ(spine_platform_setenv(name, "initial", 1), 0);
 	value = getenv(name);
 	ASSERT_TRUE(value != NULL);
+	if (value == NULL) {
+		return;
+	}
 	ASSERT_TRUE(strcmp(value, "initial") == 0);
 
 	ASSERT_INT_EQ(spine_platform_setenv(name, "kept", 0), 0);
 	value = getenv(name);
 	ASSERT_TRUE(value != NULL);
+	if (value == NULL) {
+		return;
+	}
 	ASSERT_TRUE(strcmp(value, "initial") == 0);
 
 	ASSERT_INT_EQ(spine_platform_setenv(name, "updated", 1), 0);
 	value = getenv(name);
 	ASSERT_TRUE(value != NULL);
+	if (value == NULL) {
+		return;
+	}
 	ASSERT_TRUE(strcmp(value, "updated") == 0);
 }
 

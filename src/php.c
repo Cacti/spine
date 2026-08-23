@@ -174,7 +174,6 @@ char *php_readpipe(int php_process, char *command) {
 	char *result_string;
 
 	int  i;
-	char *cp;
 	char *bptr;
 
 	if (!(result_string = (char *)malloc(RESULTS_BUFFER))) {
@@ -266,7 +265,7 @@ char *php_readpipe(int php_process, char *command) {
 			bptr += i;
 			*bptr = '\0';	/* make what we've got into a string */
 
-			if ((cp = strstr(result_string,"\n")) != 0) {
+			if (strstr(result_string,"\n") != NULL) {
 				break;
 			}
 

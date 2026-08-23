@@ -10,6 +10,9 @@ static void test_error_string_returns_text(void) {
 
 	message = spine_platform_error_string(EINVAL, buffer, sizeof(buffer));
 	ASSERT_TRUE(message != NULL);
+	if (message == NULL) {
+		return;
+	}
 	ASSERT_TRUE(strlen(message) > 0);
 }
 

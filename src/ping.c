@@ -590,8 +590,11 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 		spine_socket_set_timeout(icmp_socket, &timeout);
 
-		return_code = spine_socket_sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, fromlen);
-		(void) return_code;
+		if (spine_socket_sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, fromlen) < 0) {
+			total_time = 0;
+			retry_count++;
+			continue;
+		}
 
 keep_listening_ipv6:
 		if (!spine_socket_is_valid(icmp_socket)) {
@@ -1050,7 +1053,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				spine_socket_set_timeout(icmp_socket, &timeout);
 
 				/* send packet to destination */
-				return_code = spine_socket_sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname));
+				if (spine_socket_sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname)) < 0) {
+					total_time = 0;
+					retry_count++;
+					continue;
+				}
 
 				fromlen = sizeof(fromname);
 
@@ -1113,10 +1120,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 						if (pkt->icmp_type != ICMP_ECHOREPLY) {
 							/* received a response other than an echo reply */
-							if (total_time > host_timeout) {
-								retry_count++;
-								total_time = 0;
-							}
 							continue;
 						}
 
