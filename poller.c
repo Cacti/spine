@@ -37,7 +37,7 @@
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
-	SPINE_LOG_DEVDBG(("DEBUG: Device[%i] HT[%i] The Device Thread has cleaned up.", poller_details.host_id, poller_details.host_thread));
+	SPINE_LOG_DEVDBG(("Device[%i] HT[%i] DEBUG: The Device Thread has cleaned up.", poller_details.host_id, poller_details.host_thread));
 
 	child_cleanup_thread(arg);
 }
@@ -102,9 +102,9 @@ void *child(void *arg) {
 	spine_sem_post(poller_details.thread_init_sem);
 
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
+		SPINE_LOG(("Device[%i] HT[%i] DEBUG: In Poller, About to Start Polling", host_id, host_thread));
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
+		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: In Poller, About to Start Polling", host_id, host_thread));
 	}
 
 	poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
@@ -902,9 +902,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 			if (num_rows > 0) {
 				if (is_debug_device(host->id)) {
-					SPINE_LOG(("DEBUG: Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
+					SPINE_LOG(("Device[%i] HT[%i] DEBUG: RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				} else {
-					SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
+					SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				}
 
 				// Cache uptime in case we need it again
@@ -2036,9 +2036,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	mysql_thread_end();
 
 	if (is_debug_device(host_id)) {
-		SPINE_LOG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+		SPINE_LOG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
 	if (set.spine_log_level == 1) {
@@ -2335,15 +2335,15 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			break;
 		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
+				SPINE_LOG(("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", current_host->id));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as unable to obtain a script execution lock", current_host->id));
+				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", current_host->id));
 			}
 		} else {
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
+				SPINE_LOG(("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			} else {
-				SPINE_LOG_DEVDBG(("DEBUG: Device[%i]: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
+				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
 			}
 		}
 		usleep(10000);
@@ -2377,16 +2377,16 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			fd = popen((char *)proc_command, "r");
 			cmd_fd = fileno(fd);
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+				SPINE_LOG(("Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			} else {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+				SPINE_LOG_DEBUG(("Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			}
 			#else
 			cmd_fd = nft_popen(proc_command, "r");
 			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+				SPINE_LOG(("Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			} else {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
+				SPINE_LOG_DEBUG(("Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			}
 			#endif
 

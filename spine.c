@@ -954,14 +954,14 @@ int main(int argc, char *argv[]) {
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 			if (thread_status == 0) {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", poller_details->host_id, (unsigned long int)threads[device_counter]));
+				SPINE_LOG_DEBUG(("Device[%i] DEBUG: Valid Thread to be Created (%ld)", poller_details->host_id, (unsigned long int)threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
 				}
 
 				spine_sem_getvalue(&available_threads, &a_threads_value);
-				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
+				SPINE_LOG_HIGH(("Device[%i] DEBUG: Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
 
 				spine_sem_post(&thread_init_sem);
 
