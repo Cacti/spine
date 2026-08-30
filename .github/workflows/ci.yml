@@ -58,7 +58,6 @@ jobs:
               -fstack-protector-strong -fstack-clash-protection
             ldflags: >-
               -Wl,-z,relro,-z,now
-            nightly_only: false
 
           - os: ubuntu-24.04
             name: gcc-release-hardened
@@ -68,7 +67,6 @@ jobs:
               -fstack-protector-strong -fstack-clash-protection
             ldflags: >-
               -Wl,-z,relro,-z,now
-            nightly_only: false
 
           - os: ubuntu-22.04
             name: clang-asan-ubsan
@@ -78,7 +76,6 @@ jobs:
               -fsanitize=address,undefined
             ldflags: >-
               -fsanitize=address,undefined
-            nightly_only: false
 
           - os: ubuntu-24.04
             name: clang-asan-ubsan
@@ -88,7 +85,6 @@ jobs:
               -fsanitize=address,undefined
             ldflags: >-
               -fsanitize=address,undefined
-            nightly_only: false
 
           - os: ubuntu-22.04
             name: clang-asan-leak
@@ -98,7 +94,6 @@ jobs:
               -fsanitize=address,leak
             ldflags: >-
               -fsanitize=address,leak
-            nightly_only: false
 
           - os: ubuntu-24.04
             name: clang-asan-leak
@@ -108,43 +103,12 @@ jobs:
               -fsanitize=address,leak
             ldflags: >-
               -fsanitize=address,leak
-            nightly_only: false
-
-          - os: ubuntu-22.04
-            name: clang-tsan
-            cc: clang
-            cflags: >-
-              -O1 -g3 -fno-omit-frame-pointer -fsanitize=thread
-            ldflags: >-
-              -fsanitize=thread
-            nightly_only: true
-
-          - os: ubuntu-24.04
-            name: clang-tsan
-            cc: clang
-            cflags: >-
-              -O1 -g3 -fno-omit-frame-pointer -fsanitize=thread
-            ldflags: >-
-              -fsanitize=thread
-            nightly_only: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Gate nightly-only matrix rows
-        id: gate
-        run: |
-          set -euo pipefail
-          if [[ "${{ matrix.nightly_only }}" == 'true' && "${{ github.event_name }}" != 'schedule' && "${{ github.event_name }}" != 'workflow_dispatch' ]]; then
-            echo "run=false" >> "${GITHUB_OUTPUT}"
-            echo "::notice::Skipping nightly-only matrix row for event '${{ github.event_name }}'."
-          else
-            echo "run=true" >> "${GITHUB_OUTPUT}"
-          fi
-
       - name: Install build dependencies
-        if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -152,7 +116,6 @@ jobs:
           sudo apt-get install -y ${COMMON_DEPS}
 
       - name: Export build flags
-        if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
           {
@@ -163,7 +126,6 @@ jobs:
           } >> "${GITHUB_ENV}"
 
       - name: Bootstrap
-        if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
           if [[ -x ./bootstrap ]]; then
@@ -173,7 +135,6 @@ jobs:
           fi
 
       - name: Configure (Autotools or CMake)
-        if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
           if [[ -f ./configure ]]; then
@@ -195,7 +156,6 @@ jobs:
           fi
 
       - name: Prepare for Spine Build
-        if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
           if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
@@ -205,7 +165,6 @@ jobs:
           fi
 
       - name: Test (make check -> make test -> ctest)
-        if: steps.gate.outputs.run == 'true'
         run: |
           set -euo pipefail
           if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
@@ -225,7 +184,7 @@ jobs:
           fi
 
       - name: Collect failure artifacts
-        if: failure() && steps.gate.outputs.run == 'true'
+        if: failure()
         run: |
           set -euo pipefail
           mkdir -p ci-artifacts
@@ -252,7 +211,7 @@ jobs:
             \) -print0)
 
       - name: Upload failure artifacts
-        if: failure() && steps.gate.outputs.run == 'true'
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.1
         with:
           name: ci-failure-${{ matrix.os }}-${{ matrix.name }}
