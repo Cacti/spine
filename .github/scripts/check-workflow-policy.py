@@ -14,11 +14,7 @@ PINNED_REF_RE = re.compile(r"^[0-9a-f]{40}$")
 CURL_PIPE_RE = re.compile(r"curl\b[^\n|]*\|\s*(?:sh|bash)\b")
 STRICT_LINE = "set -euo pipefail"
 WORKFLOW_GLOB = ".github/workflows/*"
-ALLOWLIST_CURL_PIPE = {
-	".github/workflows/release-verification.yml": [
-		"raw.githubusercontent.com/anchore/syft/main/install.sh",
-	],
-}
+ALLOWLIST_CURL_PIPE: dict[str, list[str]] = {}
 
 
 def normalize_steps(job: dict) -> list[dict]:

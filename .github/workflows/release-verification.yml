@@ -152,10 +152,27 @@ jobs:
           fi
 
       - name: Install syft
+        env:
+          SYFT_VERSION: '1.20.0'
+          SYFT_SHA256: '689e12c5cbf67521ce61b9c126068f9eaabe1223e77971b2fede50033ff6b5cc'
         run: |
           set -euo pipefail
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b "${HOME}/.local/bin" v1.20.0
+          # anchore's install.sh lives on a mutable branch and this job can mint
+          # a build-provenance attestation, so take the pinned release tarball
+          # and check it against a recorded digest instead.
+          if [[ "$(uname -m)" != 'x86_64' ]]; then
+            echo "Recorded syft digest is for linux_amd64; runner is $(uname -m)." >&2
+            exit 1
+          fi
+
+          tarball="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL --retry 3 --proto '=https' --tlsv1.2 -o "${tarball}" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${tarball}"
+          echo "${SYFT_SHA256}  ${tarball}" | sha256sum -c -
+
+          mkdir -p "${HOME}/.local/bin"
+          tar -xzf "${tarball}" -C "${HOME}/.local/bin" syft
+          rm -f "${tarball}"
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
       - name: Generate SBOM
