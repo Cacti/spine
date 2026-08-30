@@ -381,6 +381,23 @@ void read_config_options(void) {
 	/* log the path_webroot variable */
 	SPINE_LOG_DEBUG(("DEBUG: The binary Cacti version is %d", set.cacti_version));
 
+	/* Warn when Spine and Cacti come from different release lines.  Point
+	 * releases are expected to drift, so only major.minor is compared;
+	 * cacti_version is encoded as major*1000 + minor*100 + point. */
+	if (set.cacti_version > 0) {
+		int spine_major = 0, spine_minor = 0, spine_point = 0;
+
+		if (sscanf(VERSION, "%d.%d.%d", &spine_major, &spine_minor, &spine_point) >= 2) {
+			int spine_line = (spine_major * 1000) + (spine_minor * 100);
+			int cacti_line = (set.cacti_version / 100) * 100;
+
+			if (spine_line != cacti_line) {
+				SPINE_LOG(("WARNING: Spine %s does not match the Cacti release line (Cacti reports %d.%d). Use the Spine built for this Cacti version.",
+					VERSION, set.cacti_version / 1000, (set.cacti_version / 100) % 10));
+			}
+		}
+	}
+
 	/* get logging level from database - overrides spine.conf */
 	if ((res = getsetting(&mysql, LOCAL, "log_verbosity")) != 0) {
 		const int n = atoi(res);
