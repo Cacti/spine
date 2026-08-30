@@ -8,11 +8,14 @@ on:
     branches:
       - 1.2.x
       - develop-1.2.x
-      - ci/cygwin-1.2.x
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   cygwin:
@@ -47,7 +50,7 @@ jobs:
         run: bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")" && ./bootstrap'
 
       - name: Configure
-        run: bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")" && ./configure --with-mysql=/usr --with-snmp=/usr'
+        run: bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")" && ./configure --enable-warnings --with-mysql=/usr --with-snmp=/usr'
 
       - name: Build
         run: bash -lc 'cd "$(cygpath -u "$GITHUB_WORKSPACE")" && make -j2 V=1'
