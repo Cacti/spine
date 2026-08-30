@@ -409,7 +409,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				keep_listening:
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
@@ -658,7 +658,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				wait_more:
-				return_code = select(udp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
 
 				/* record end time */
 				end_time = get_time_as_double();
