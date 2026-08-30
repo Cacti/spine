@@ -30,3 +30,10 @@ libtool
 /spine
 *.o
 *.m4
+
+# make check
+/tests/unit/test_util_strings
+/tests/unit/test_build_fixes
+*.trs
+.dirstamp
+test-suite.log
