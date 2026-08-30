@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule: {interval: weekly, day: friday}
+    open-pull-requests-limit: 5
+    cooldown: {default-days: 7}
+    groups:
+      github-actions: {patterns: ["*"]}
+    labels: [dependencies, github-actions]
+    commit-message: {prefix: ci, include: scope}
+  - package-ecosystem: docker
+    directories: ["/", "/tests/snmpv3/snmpd"]
+    target-branch: develop
+    schedule: {interval: weekly, day: friday}
+    open-pull-requests-limit: 5
+    cooldown: {default-days: 7}
+    groups:
+      docker: {patterns: ["*"]}
+    labels: [dependencies, docker]
+    commit-message: {prefix: build, include: scope}
