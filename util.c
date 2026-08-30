@@ -442,11 +442,6 @@ void read_config_options(void) {
 		}
 	}
 
-	/* get log separator */
-	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
-		set.log_datetime_separator = atoi(res);
-		free(res);
-
 	/* get log date format */
 	if ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0) {
 		set.log_datetime_format = atoi(res);
