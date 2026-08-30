@@ -55,11 +55,7 @@ static int php_reap_child(pid_t pid, int *wstatus, int attempts) {
 			return FALSE;
 		}
 
-		#ifndef SOLAR_THREAD
 		usleep(PHP_CLOSE_REAP_USEC);
-		#else
-		sleep(1);
-		#endif
 	}
 
 	return FALSE;

@@ -142,11 +142,7 @@ static int reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 			return -1;
 		}
 
-		#ifndef SOLAR_THREAD
 		usleep(NFT_PCLOSE_REAP_USEC);
-		#else
-		sleep(1);
-		#endif
 	}
 
 	return 1;
