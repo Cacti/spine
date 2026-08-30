@@ -590,6 +590,7 @@ void php_close(int php_process) {
 	int i;
 	int num_processes;
 	int len;
+	int wstatus;
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
