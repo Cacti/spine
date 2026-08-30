@@ -63,15 +63,14 @@ chmod +s /usr/local/spine/bin/spine
    * gcc-core
    * gzip
    * help2man
-   * inetutils-src
-   * libmysqlclient
+   * inetutils
    * libmariadb-devel
    * libssl-devel
    * libtool
    * m4
    * make
    * net-snmp-devel
-   * openssl-devel
+   * pkg-config
    * wget
 
 7. Wait for installation to complete, coffee time!

@@ -37,7 +37,7 @@ jobs:
           packages: >-
             autoconf automake dos2unix gcc-core gzip help2man inetutils
             libmariadb-devel libssl-devel libtool m4 make net-snmp-devel
-            libssl-devel pkg-config wget
+            pkg-config wget
 
       # The Cygwin bash is on PATH via cygwin-install-action. We invoke it from
       # the default shell rather than via `shell: C:\...\bash.exe`, because the
