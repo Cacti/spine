@@ -420,7 +420,7 @@ void read_config_options() {
 	}
 
 	/* get log date format */
-	if ((res = getsetting(&mysql, LOCAL, "default_dateformat")) != 0) {
+	if ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0) {
 		set.log_datetime_format = atoi(res);
 		free((char *)res);
 
