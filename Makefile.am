@@ -19,7 +19,7 @@
 # | http://www.cacti.net/                                                   |
 # +-------------------------------------------------------------------------+
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign subdir-objects
 ACLOCAL_AMFLAGS = -I m4
 
 spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
@@ -36,7 +36,28 @@ man_MANS = spine.1
 noinst_HEADERS = common.h error.h keywords.h locks.h nft_popen.h php.h \
 	ping.h poller.h snmp.h spine.h spine_sem.h sql.h uthash.h util.h
 
-EXTRA_DIST = spine.1 spine.conf.dist
+EXTRA_DIST = spine.1 spine.conf.dist \
+	tests/integration/smoke_test.sh \
+	tests/integration/test_db_column_detect.sh \
+	tests/integration/test_output_regex.sh
+
+AM_CPPFLAGS = -I$(top_srcdir) -I$(top_builddir)
+
+check_PROGRAMS =
+
+if HAVE_CMOCKA
+check_PROGRAMS += tests/unit/test_util_strings tests/unit/test_build_fixes
+endif
+
+# test_util_strings includes util.c directly, so it needs the same libraries
+# spine links against; test_build_fixes is self-contained.
+tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
+tests_unit_test_util_strings_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+tests_unit_test_build_fixes_SOURCES = tests/unit/test_build_fixes.c
+tests_unit_test_build_fixes_LDADD = $(CMOCKA_LIBS)
+
+TESTS = $(check_PROGRAMS)
 
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
