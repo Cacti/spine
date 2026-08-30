@@ -87,7 +87,7 @@ jobs:
               "./spine --help": "time-help.txt",
           }.items():
               text = Path(file_name).read_text()
-              m = re.search(r"Maximum resident set size \\(kbytes\\):\\s*(\\d+)", text)
+              m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text)
               rss[key] = int(m.group(1)) if m else 0
 
           medians = {entry["command"]: float(entry["median"]) for entry in hyperfine["results"]}
@@ -110,7 +110,7 @@ jobs:
               if rss_kb > max_rss:
                   failures.append(f"{command}: rss {rss_kb}KB > {max_rss}KB")
 
-          Path("perf-cli-summary.json").write_text(json.dumps(summary, indent=2) + "\\n")
+          Path("perf-cli-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
           if failures:
               print("CLI performance threshold failures:")
               for item in failures:
@@ -207,7 +207,7 @@ jobs:
           median = float(hyperfine["results"][0]["median"])
 
           time_text = Path("time-snmpget.txt").read_text()
-          m = re.search(r"Maximum resident set size \\(kbytes\\):\\s*(\\d+)", time_text)
+          m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", time_text)
           rss_kb = int(m.group(1)) if m else 0
 
           max_median = baseline["median_seconds"] * baseline["allowed_regression_factor"]
@@ -218,7 +218,7 @@ jobs:
               "rss_kb": rss_kb,
               "rss_limit_kb": max_rss,
           }
-          Path("perf-snmp-summary.json").write_text(json.dumps(summary, indent=2) + "\\n")
+          Path("perf-snmp-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
           failures = []
           if median > max_median:
