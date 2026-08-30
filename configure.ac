@@ -31,6 +31,7 @@ AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
 AM_INIT_AUTOMAKE([foreign])
+AM_SILENT_RULES([yes])
 AC_CONFIG_HEADERS(config/config.h)
 
 # static libraries
@@ -93,6 +94,17 @@ AC_ARG_ENABLE(warnings,
   [if test -n "$GCC"; then
     AC_MSG_RESULT(adding -Wall to CFLAGS.)
     CFLAGS="$CFLAGS -Wall"
+   fi
+  ],
+  AC_MSG_RESULT(no)
+)
+
+AC_ARG_ENABLE(sanitizers,
+  [  --enable-sanitizers     Build with AddressSanitizer and UndefinedBehaviorSanitizer.],
+  [if test "x$enableval" = "xyes"; then
+    AC_MSG_RESULT(adding -fsanitize=address,undefined to CFLAGS.)
+    CFLAGS="$CFLAGS -fsanitize=address,undefined -fno-omit-frame-pointer -g"
+    LDFLAGS="$LDFLAGS -fsanitize=address,undefined"
    fi
   ],
   AC_MSG_RESULT(no)
