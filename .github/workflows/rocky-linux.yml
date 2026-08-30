@@ -23,10 +23,11 @@ jobs:
 
       - name: Build and test in Rocky Linux 9
         run: |
+          set -euo pipefail
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/src:ro" \
             --workdir /workspace \
-            rockylinux:9 \
+            rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
             bash -euo pipefail -c '
               cp -a /src/. /workspace/
               dnf -y group install "Development Tools"
