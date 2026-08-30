@@ -139,7 +139,6 @@ AC_CHECK_HEADERS(
 )
 
 # Checks for typedefs, structures, and compiler characteristics.
-AC_HEADER_TIME
 AC_CHECK_TYPES([unsigned long long, long long])
 AC_TYPE_SIZE_T
 
