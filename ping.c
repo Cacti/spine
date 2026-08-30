@@ -999,6 +999,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	int tokens = 0;
 	char *stack = NULL;
 	char *token = NULL;
+	char *saveptr = NULL;
 
 	if (!(stack = (char *) malloc(strlen(hostname)+1))) {
 		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
@@ -1006,7 +1007,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 
 	memset(stack, '\0', strlen(hostname)+1);
 	strncopy(stack, hostname, strlen(stack));
-	token = strtok(stack, ":");
+	token = strtok_r(stack, ":", &saveptr);
 
 	if (token == NULL) {
 		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
@@ -1057,7 +1058,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		if (tokens == 2) {
 			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting hostname: %s", hostname, token));
 			strncpy(name->hostname, token, sizeof(name->hostname)-1);
-			name->hostname[strlen(token)] = '\0';
+			name->hostname[sizeof(name->hostname) - 1] = '\0';
 		}
 
 		if (tokens == 3 && strlen(token)) {
@@ -1068,7 +1069,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		if (tokens > 3) {
 			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Unexpected token: %i", hostname, tokens));
 		}
-		token = strtok(NULL, ":");
+		token = strtok_r(NULL, ":", &saveptr);
 	}
 
 	if (stack != NULL) {
