@@ -1,1 +1,9 @@
-
+# cppcheck error/warning findings accepted as of this commit.
+# Produced by the cppcheck job in .github/workflows/static-analysis.yml.
+# Anything not listed here fails the build. Shrink this file; do not grow it.
+nft_popen.c:197:3: error: Memory leak: cur [memleak]
+snmp.c:198:3: error: Memory leak: session.localname [memleak]
+tests/unit/test_build_fixes.c:78:19: warning: inconclusive: Possible null pointer dereference: found [nullPointer]
+tests/unit/test_build_fixes.c:83:19: warning: inconclusive: Possible null pointer dereference: found [nullPointer]
+util.c:1110:5: warning: inconclusive: Width 15 given in format string (no. 1) is smaller than destination buffer 'p1[1024]'. [invalidScanfFormatWidth_smaller]
+util.c:1110:5: warning: inconclusive: Width 255 given in format string (no. 2) is smaller than destination buffer 'p2[1024]'. [invalidScanfFormatWidth_smaller]

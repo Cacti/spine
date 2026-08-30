@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -124,7 +123,9 @@ jobs:
   clang-tidy:
     name: clang-tidy
     runs-on: ubuntu-24.04
-    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout
@@ -178,22 +179,17 @@ jobs:
           fi
 
           if [[ "${CLANG_TIDY_USE_CMAKE}" == "true" ]]; then
-            {
-              clang-tidy \
-                -checks="${CLANG_TIDY_CHECKS}" \
-                -p build-tidy \
-                "${sources[@]}" \
-                || echo "::warning::clang-tidy reported diagnostics; see clang-tidy-report artifact and SARIF."
-            } 2>&1 | tee clang-tidy-report.txt
+            clang-tidy \
+              -checks="${CLANG_TIDY_CHECKS}" \
+              -p build-tidy \
+              "${sources[@]}" 2>&1 | tee clang-tidy-report.txt
           else
-            {
-              clang-tidy \
-                -checks="${CLANG_TIDY_CHECKS}" \
-                "${sources[@]}" \
-                -- \
-                -std=c11 -D_DEFAULT_SOURCE -I. -Iconfig -I/usr/include/mysql \
-                || echo "::warning::clang-tidy reported diagnostics; see clang-tidy-report artifact and SARIF."
-            } 2>&1 | tee clang-tidy-report.txt
+            clang-tidy \
+              -checks="${CLANG_TIDY_CHECKS}" \
+              "${sources[@]}" \
+              -- \
+              -std=c11 -D_DEFAULT_SOURCE -I. -Iconfig -I/usr/include/mysql 2>&1 \
+              | tee clang-tidy-report.txt
           fi
 
       - name: Upload clang-tidy report
@@ -266,12 +262,10 @@ jobs:
           mkdir -p scan-build-report
           if [[ "${BUILD_SYSTEM}" == "autotools" ]]; then
             scan-build --keep-going -o scan-build-report \
-              make -j"$(nproc)" \
-              || echo "::warning::scan-build reported diagnostics; see scan-build-report artifact."
+              make -j"$(nproc)"
           else
             scan-build --keep-going -o scan-build-report \
-              cmake --build build-analyze --parallel "$(nproc)" \
-              || echo "::warning::scan-build reported diagnostics; see scan-build-report artifact."
+              cmake --build build-analyze --parallel "$(nproc)"
           fi
 
       - name: Upload scan-build report
@@ -285,6 +279,9 @@ jobs:
   cppcheck:
     name: cppcheck
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout
@@ -353,10 +350,16 @@ jobs:
             : > cppcheck-report.txt
           fi
 
-          grep -E '^[^:]+:[0-9]+:' cppcheck-report.txt | sort -u > cppcheck-report.normalized.txt || true
+          # Only error and warning severities gate the build. style,
+          # performance, portability and information are advisory; the
+          # codebase carries over a hundred of them and gating on those
+          # leaves the job permanently red.
+          grep -E '^[^:]+:[0-9]+:.*: (error|warning):' cppcheck-report.txt \
+            | sort -u > cppcheck-report.normalized.txt || true
 
           if [[ -f .github/cppcheck-baseline.txt ]]; then
-            sort -u .github/cppcheck-baseline.txt > cppcheck-baseline.sorted.txt
+            grep -vE '^[[:space:]]*(#|$)' .github/cppcheck-baseline.txt \
+              | sort -u > cppcheck-baseline.sorted.txt || true
           else
             : > cppcheck-baseline.sorted.txt
           fi
@@ -364,8 +367,9 @@ jobs:
           comm -23 cppcheck-report.normalized.txt cppcheck-baseline.sorted.txt > cppcheck-regressions.txt || true
 
           if [[ -s cppcheck-regressions.txt ]]; then
-            echo "::warning::New cppcheck findings not in baseline:"
+            echo "::error::New cppcheck error/warning findings not in .github/cppcheck-baseline.txt:"
             cat cppcheck-regressions.txt
+            exit 1
           fi
 
       - name: Upload cppcheck report
