@@ -37,6 +37,14 @@
 #define ICMP_ECHOREPLY		0	/* Echo Reply			*/
 #endif
 
+/* IPv6 pinging needs a raw ICMPv6 socket and the RFC 3542 socket options.
+ * Platforms without them keep the previous behavior of reporting IPv6
+ * devices as pingable by SNMP only. */
+#if !defined(__CYGWIN__) && defined(AF_INET6) && defined(IPPROTO_ICMPV6) && \
+	defined(ICMP6_FILTER) && defined(ICMP6_ECHO_REQUEST) && defined(ICMP6_ECHO_REPLY)
+#define SPINE_HAVE_ICMPV6 1
+#endif
+
 #ifndef MSG_WAITALL
 #define MSG_WAITALL 0x100
 #endif

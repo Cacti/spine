@@ -111,6 +111,14 @@
 #  include <netinet/ip_icmp.h>
 #endif
 
+#if HAVE_NET_IF_H
+#  include <net/if.h>
+#endif
+
+#if HAVE_IFADDRS_H
+#  include <ifaddrs.h>
+#endif
+
 #if HAVE_SYS_TIME_H
 #  include <sys/time.h>
 #endif
