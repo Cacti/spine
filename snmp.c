@@ -824,6 +824,21 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 
 				for (i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
+						/* Under v2c an agent reports a per-OID failure as an
+						 * exception varbind while the PDU errstat stays
+						 * NOERROR.  Without this check snprint_value() renders
+						 * the exception as text and it is stored as a value. */
+						if (vars->type == SNMP_NOSUCHOBJECT ||
+							vars->type == SNMP_NOSUCHINSTANCE ||
+							vars->type == SNMP_ENDOFMIBVIEW) {
+							SPINE_LOG_HIGH(("Device[%i] WARNING: No SNMP data returned for OID '%s'", current_host->id, snmp_oids[i].oid));
+
+							SET_UNDEFINED(snmp_oids[i].result);
+
+							vars = vars->next_variable;
+							continue;
+						}
+
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
