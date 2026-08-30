@@ -677,6 +677,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 			if (status == STAT_SUCCESS) {
 				if (response == NULL) {
 					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+					status = STAT_ERROR;
 					ok = 0;
 					error_occurred = 1;
 				} else if (response->errstat == SNMP_ERR_NOERROR) {
