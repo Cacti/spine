@@ -29,7 +29,6 @@ AC_CANONICAL_HOST
 AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
-AC_PROG_CC
 
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config/config.h)
@@ -353,7 +352,7 @@ fi
 
 # Net-SNMP includes v3 support and insists on crypto unless compiled --without-openssl
 AC_MSG_CHECKING([if Net-SNMP needs crypto support])
-AC_TRY_COMPILE([#include <net-snmp-config.h>], [return NETSNMP_USE_OPENSSL != 1;],
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <net-snmp-config.h>]], [[return NETSNMP_USE_OPENSSL != 1;]])],
   [  AC_MSG_RESULT(yes)
      SNMP_SSL=yes
   ],[AC_MSG_RESULT(no)
