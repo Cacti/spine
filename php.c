@@ -606,10 +606,15 @@ void php_close(int php_process) {
 
 			len = write(phpp->php_write_fd, quit, strlen(quit));
 
-			if (len >= 0) {
-				close(phpp->php_write_fd);
-				phpp->php_write_fd = -1;
+			if (len < 0) {
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Script Server quit write failed, closing anyway", i));
 			}
+
+			/* Close regardless of the write result.  A dead child makes the
+			 * write fail with EPIPE, and skipping the close leaked one
+			 * descriptor per script server restart. */
+			close(phpp->php_write_fd);
+			phpp->php_write_fd = -1;
 
 			/* wait before killing php */
 			#ifndef SOLAR_THREAD
