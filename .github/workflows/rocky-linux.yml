@@ -30,7 +30,7 @@ jobs:
             bash -euo pipefail -c '
               cp -a /src/. /workspace/
               dnf -y group install "Development Tools"
-              dnf -y install autoconf automake libtool mariadb-connector-c-devel net-snmp-devel openssl-devel libtirpc-devel libxml2-devel libcurl-devel zlib-devel
+              dnf -y install autoconf automake libtool mariadb-connector-c-devel net-snmp-devel openssl-devel libxml2-devel libcurl-devel zlib-devel
               autoreconf -fi
               ./configure --enable-warnings
               make --jobs "$(nproc)"
