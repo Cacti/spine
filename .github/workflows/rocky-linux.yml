@@ -4,6 +4,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "37 3 * * 6"
+  pull_request:
+    branches: [develop]
+    paths:
+      - "configure.ac"
+      - "Makefile.am"
+      - "**.c"
+      - "**.h"
+      - ".github/workflows/rocky-linux.yml"
 
 permissions:
   contents: read
