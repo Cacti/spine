@@ -39,15 +39,37 @@
 #include "common.h"
 #include "spine.h"
 
+/*! \fn static void signal_write(const char *message, size_t message_length)
+ *  \brief emits a diagnostic from inside a signal handler.
+ *
+ *  Only async-signal-safe calls are permitted here, and a short or failed
+ *  write cannot be reported through any other channel, so the result is
+ *  deliberately discarded.
+ */
+static void signal_write(const char *message, size_t message_length) {
+	ssize_t written;
+
+	written = write(STDERR_FILENO, message, message_length);
+
+	(void) written;
+}
+
 /*! \fn static void spine_signal_handler(int spine_signal)
  *  \brief interupts the os default signal handler as appropriate.
  *
  */
 static void spine_signal_handler(int spine_signal) {
-	const char *message = "FATAL: Spine interrupted by an unhandled signal\n";
-	size_t message_length = sizeof("FATAL: Spine interrupted by an unhandled signal\n") - 1;
+	static const char unhandled[] = "FATAL: Spine interrupted by an unhandled signal, number ";
+	const char *message = NULL;
+	size_t message_length = 0;
+	int unrecoverable = FALSE;
+	char digits[16];
+	int offset;
+	int number;
 
 	signal(spine_signal, SIG_DFL);
+
+	set.exit_code = spine_signal;
 
 	switch (spine_signal) {
 		case SIGABRT:
@@ -61,14 +83,17 @@ static void spine_signal_handler(int spine_signal) {
 		case SIGSEGV:
 			message = "FATAL: Spine encountered a segmentation fault\n";
 			message_length = sizeof("FATAL: Spine encountered a segmentation fault\n") - 1;
+			unrecoverable = TRUE;
 			break;
 		case SIGBUS:
 			message = "FATAL: Spine encountered a bus error\n";
 			message_length = sizeof("FATAL: Spine encountered a bus error\n") - 1;
+			unrecoverable = TRUE;
 			break;
 		case SIGFPE:
 			message = "FATAL: Spine encountered a floating point exception\n";
 			message_length = sizeof("FATAL: Spine encountered a floating point exception\n") - 1;
+			unrecoverable = TRUE;
 			break;
 		case SIGQUIT:
 			message = "FATAL: Spine encountered a keyboard quit command\n";
@@ -78,10 +103,31 @@ static void spine_signal_handler(int spine_signal) {
 			message = "FATAL: Spine encountered a broken pipe\n";
 			message_length = sizeof("FATAL: Spine encountered a broken pipe\n") - 1;
 			break;
+		default:
+			/* render the number by hand; snprintf is not async-signal-safe */
+			offset = sizeof(digits);
+			digits[--offset] = '\n';
+			number = spine_signal;
+
+			do {
+				digits[--offset] = (char) ('0' + (number % 10));
+				number /= 10;
+			} while (number > 0 && offset > 0);
+
+			signal_write(unhandled, sizeof(unhandled) - 1);
+			signal_write(digits + offset, sizeof(digits) - offset);
+			break;
 	}
 
-	(void) write(STDERR_FILENO, message, message_length);
-	_exit(1);
+	if (message != NULL) {
+		signal_write(message, message_length);
+	}
+
+	/* returning would resume the faulting instruction, so these cannot be
+	   handed back to the interrupted thread */
+	if (unrecoverable) {
+		_exit(1);
+	}
 }
 
 static int spine_fatal_signals[] = {
