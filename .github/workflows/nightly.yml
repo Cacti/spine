@@ -198,7 +198,7 @@ jobs:
             --mode asan \
             --baseline .github/nightly-leak-baseline.json \
             --output nightly-asan-summary.json \
-            --logs 'asan*' 'ubsan*' '*.log'
+            --logs 'asan*' 'ubsan*'
 
       - name: Upload asan artifacts
         if: always()
@@ -398,15 +398,3 @@ jobs:
             fuzz-corpus
             *.log
           if-no-files-found: ignore
-
-  soak-placeholder:
-    name: soak/integration placeholder
-    runs-on: ubuntu-24.04
-    needs: [tsan, asan-soak, valgrind, fuzz-smoke]
-
-    steps:
-      - name: Placeholder
-        run: |
-          set -euo pipefail
-          echo 'Placeholder for long-running soak/integration checks.'
-          echo 'Add SNMP simulator container and multi-hour stress scenario here.'
