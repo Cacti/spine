@@ -128,7 +128,13 @@ static int reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 			waited = waitpid(pid, pstat, WNOHANG);
 		} while (waited < 0 && errno == EINTR);
 
-		if (waited == pid || (waited < 0 && errno == ECHILD)) {
+		if (waited == pid) {
+			return 0;
+		}
+
+		if (waited < 0 && errno == ECHILD) {
+			/* someone else reaped it, so no status is available */
+			*pstat = 0;
 			return 0;
 		}
 
