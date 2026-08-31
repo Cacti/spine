@@ -424,9 +424,9 @@ typedef struct config_struct {
 	char   rdb_user[BUFSIZE];
 	char   rdb_pass[BUFSIZE];
 	int    rdb_ssl;
-	char   rdb_ssl_key[BIG_BUFSIZE];
-	char   rdb_ssl_cert[BIG_BUFSIZE];
-	char   rdb_ssl_ca[BIG_BUFSIZE];
+	char   rdb_ssl_key[BUFSIZE];
+	char   rdb_ssl_cert[BUFSIZE];
+	char   rdb_ssl_ca[BUFSIZE];
 	unsigned int rdb_port;
 	char   rdbversion[BUFSIZE];
 	int    rdbonupdate;
