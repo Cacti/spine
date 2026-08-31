@@ -100,6 +100,7 @@ extern int hasCaps(void);
 extern void checkAsRoot(void);
 
 /* log format */
+extern void set_date_format(void);
 extern char *get_date_format(void);
 
 /* remote/main server synchronization */
