@@ -1543,9 +1543,16 @@ int spine_log(const char *format, ...) {
 		closelog();
 	}
 
-	/* append a line feed to the log message if needed */
+	/* append a line feed to the log message if needed.  The two strncat()
+	 * calls above are allowed to fill flogmessage exactly, so appending
+	 * unconditionally would put the terminator one byte past the end. */
 	if (!strstr(flogmessage, "\n")) {
-		strcat(flogmessage, "\n");
+		size_t flogmessage_len = strlen(flogmessage);
+
+		if (flogmessage_len < sizeof(flogmessage) - 1) {
+			flogmessage[flogmessage_len]     = '\n';
+			flogmessage[flogmessage_len + 1] = '\0';
+		}
 	}
 
 	if ((IS_LOGGING_TO_FILE() &&
