@@ -30,3 +30,4 @@ libtool
 /spine
 *.o
 *.m4
+tests/unit/bin/

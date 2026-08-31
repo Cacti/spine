@@ -244,6 +244,75 @@ int ping_snmp(host_t *host, ping_t *ping) {
 	}
 }
 
+#ifdef __CYGWIN__
+/*! \fn static void icmp_discard_reply(int icmp_socket, char *buffer)
+ *  \brief consumes a datagram that ping_icmp() has only peeked at
+ *
+ *  Cygwin cannot use MSG_WAITALL on a raw socket, so ping_icmp() reads with
+ *  MSG_PEEK.  A peeked datagram stays queued, so a reply we decline has to be
+ *  drained here.  Otherwise the next pass reads the same bytes again and the
+ *  loop spins until the device timeout expires.
+ */
+static void icmp_discard_reply(int icmp_socket, char *buffer) {
+	while (recvfrom(icmp_socket, buffer, BUFSIZE, 0, NULL, NULL) < 0 && errno == EINTR) {
+		/* interrupted before the datagram was removed, try again */
+	}
+}
+
+#define ICMP_DISCARD_PEEKED(sock, buf) icmp_discard_reply((sock), (buf))
+#else
+#define ICMP_DISCARD_PEEKED(sock, buf) ((void)0)
+#endif
+
+
+/*! \fn spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply, ssize_t len, uint16_t want_id, uint16_t want_seq, const struct icmp **out_pkt)
+ *  \brief bounds-check a raw ICMP reply and decide whether it answers our echo
+ *
+ *  The raw socket is shared across every poller thread and is fed by whatever
+ *  the network sends, so this walks the IP header length field before touching
+ *  the ICMP header.  Split out of ping_icmp() so the fuzz target exercises the
+ *  same code the poller runs.
+ *
+ *  \return the reply classification; *out_pkt is set only for SPINE_ICMP_REPLY_OK
+ */
+spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply, ssize_t len,
+	uint16_t want_id, uint16_t want_seq, const struct icmp **out_pkt) {
+	const struct ip   *iph;
+	const struct icmp *pkt;
+	int ihl;
+
+	if (out_pkt != NULL) {
+		*out_pkt = NULL;
+	}
+
+	if (reply == NULL || len < (ssize_t) sizeof(struct ip)) {
+		return SPINE_ICMP_REPLY_TOO_SHORT;
+	}
+
+	iph = (const struct ip *) reply;
+	ihl = iph->ip_hl << 2;
+
+	if (ihl < (int) sizeof(struct ip) || len < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
+		return SPINE_ICMP_REPLY_BAD_HEADER;
+	}
+
+	pkt = (const struct icmp *) (reply + ihl);
+
+	if (pkt->icmp_type != ICMP_ECHOREPLY) {
+		return SPINE_ICMP_REPLY_NOT_ECHO;
+	}
+
+	if (pkt->icmp_id != want_id || pkt->icmp_seq != want_seq) {
+		return SPINE_ICMP_REPLY_NOT_OURS;
+	}
+
+	if (out_pkt != NULL) {
+		*out_pkt = pkt;
+	}
+
+	return SPINE_ICMP_REPLY_OK;
+}
+
 /*! \fn int ping_icmp(host_t *host, ping_t *ping)
  *  \brief ping a host using an ICMP packet
  *  \param host a pointer to the current host structure
@@ -268,7 +337,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
-	int    ihl;
 	const char *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	socklen_t    fromlen;
@@ -277,7 +345,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	static   unsigned int seq = 0;
 	struct   icmp  *icmp;
-	struct   ip    *ip;
 	struct   icmp  *pkt;
 	unsigned char  *packet;
 
@@ -441,21 +508,30 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
-						if (return_code < (ssize_t) sizeof(struct ip)) {
+						const struct icmp  *reply_pkt = NULL;
+						spine_icmp_reply_t  verdict;
+
+						verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
+							return_code, (uint16_t)(getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
+
+						if (verdict == SPINE_ICMP_REPLY_NOT_OURS) {
+							/* a middlebox that rewrites ICMP query ids is indistinguishable
+							 * from a dead device once the reply is dropped, so record what
+							 * arrived */
+							pkt = (struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
+							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int)(getpid() & 0xFFFF), icmp->icmp_seq, pkt->icmp_id, pkt->icmp_seq));
+						}
+
+						if (verdict != SPINE_ICMP_REPLY_OK && verdict != SPINE_ICMP_REPLY_NOT_ECHO) {
+							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
 
-						ip  = (struct ip *) socket_reply;
-						ihl = ip->ip_hl << 2;
-
-						if (ihl < (int) sizeof(struct ip) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
-							goto keep_listening;
-						}
-
-						pkt = (struct icmp *) (socket_reply + ihl);
+						pkt = (struct icmp *) reply_pkt;
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-							if (pkt->icmp_type == ICMP_ECHOREPLY) {
+							if (verdict == SPINE_ICMP_REPLY_OK) {
+
 								if (is_debug_device(host->id)) {
 									SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 								} else {
@@ -485,6 +561,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								return HOST_UP;
 							} else {
 								/* received a response other than an echo reply */
+								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+
 								if (total_time > host_timeout) {
 									retry_count++;
 									total_time = 0;
@@ -494,6 +572,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							}
 						} else {
 							/* another host responded */
+							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
 					}
@@ -1002,14 +1081,16 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 	int tokens = 0;
 	char *stack = NULL;
 	char *token = NULL;
+	char *saveptr = NULL;
 
 	if (!(stack = (char *) malloc(strlen(hostname)+1))) {
 		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
 	}
 
 	memset(stack, '\0', strlen(hostname)+1);
-	strncopy(stack, hostname, strlen(hostname));
-	token = strtok(stack, ":");
+	/* obuf includes the NUL, so pass the full buffer size to copy all chars */
+	strncopy(stack, hostname, strlen(hostname)+1);
+	token = strtok_r(stack, ":", &saveptr);
 
 	if (token == NULL) {
 		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
@@ -1025,10 +1106,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 				strncpy(name->hostname, hostname, sizeof(name->hostname));
 				break;
 			} else if (strlen(token) == 3) {
-				if (strncasecmp(token, "TCP", 3)) {
+				if (strncasecmp(token, "TCP", 3) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv4 method", hostname));
 					name->method = 1;
-				} else if (strncasecmp(hostname, "UDP", 3)) {
+				} else if (strncasecmp(token, "UDP", 3) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv4 method", hostname));
 					name->method = 2;
 				} else {
@@ -1037,10 +1118,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 					tokens++;
 				}
 			} else if (strlen(token) == 4) {
-				if (strncasecmp(token, "TCP6", 3)) {
+				if (strncasecmp(token, "TCP6", 4) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
 					name->method = 3;
-				} else if (strncasecmp(hostname, "UDP6", 3)) {
+				} else if (strncasecmp(token, "UDP6", 4) == 0) {
 					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv6 method", hostname));
 					name->method = 4;
 				} else {
@@ -1059,8 +1140,8 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 
 		if (tokens == 2) {
 			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting hostname: %s", hostname, token));
-			strncpy(name->hostname, token, sizeof(name->hostname));
-			name->hostname[strlen(token)] = '\0';
+			strncpy(name->hostname, token, sizeof(name->hostname) - 1);
+			name->hostname[sizeof(name->hostname) - 1] = '\0';
 		}
 
 		if (tokens == 3 && strlen(token)) {
@@ -1071,7 +1152,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		if (tokens > 3) {
 			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Unexpected token: %i", hostname, tokens));
 		}
-		token = strtok(NULL, ":");
+		token = strtok_r(NULL, ":", &saveptr);
 	}
 
 	if (stack != NULL) {

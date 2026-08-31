@@ -31,6 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_POLLER_H
+#define SPINE_POLLER_H
 extern void *child(void *arg);
 extern void child_cleanup(void *arg);
 extern void child_cleanup_thread(void *arg);
@@ -41,3 +43,5 @@ extern void get_system_information(host_t *host, MYSQL *mysql, int system);
 extern int is_multipart_output(char *result);
 extern int validate_result(char *result);
 extern void buffer_output_errors(char * error_string, int * buf_size, int * buf_errors, int device_id, int thread_id, int local_data_id, bool flush);
+
+#endif /* SPINE_POLLER_H */

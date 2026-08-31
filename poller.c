@@ -218,9 +218,15 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	target_t    *poller_items = NULL;
 	snmp_oids_t *snmp_oids = NULL;
 
-	error_string = malloc(DBL_BUFSIZE);
-	buf_size     = malloc(sizeof(int));
-	buf_errors   = malloc(sizeof(int));
+	if (!(error_string = malloc(DBL_BUFSIZE))) {
+		die("ERROR: Fatal malloc error: poller.c error_string!");
+	}
+	if (!(buf_size = malloc(sizeof(int)))) {
+		die("ERROR: Fatal malloc error: poller.c buf_size!");
+	}
+	if (!(buf_errors = malloc(sizeof(int)))) {
+		die("ERROR: Fatal malloc error: poller.c buf_errors!");
+	}
 
 	*buf_size     = 0;
 	*buf_errors   = 0;
@@ -1279,7 +1285,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	if (num_rows > 0) {
 		/* retrieve each hosts polling items from poller cache and load into array */
-		/* retreive each hosts polling items from poller cache and load into array */
 		if (!(poller_items = (target_t *) calloc(num_rows, sizeof(target_t)))) {
 			die("ERROR: Fatal calloc error: poller.c poller_items!");
 		}
@@ -1812,6 +1817,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					}
 				}
 
+				if (strlen(poller_items[snmp_oids[j].array_position].output_regex)) {
+					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(poller_items[snmp_oids[j].array_position].output_regex, snmp_oids[j].result));
+					snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%s", temp_result);
+				}
+
 				snprintf(poller_items[snmp_oids[j].array_position].result, RESULTS_BUFFER, "%s", snmp_oids[j].result);
 
 				thread_end = get_time_as_double();
@@ -2338,17 +2348,21 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 		sem_err = spine_sem_trywait(&available_scripts);
 		if (sem_err == 0) {
 			break;
-		} else if (sem_err == EAGAIN || sem_err == EWOULDBLOCK) {
-			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", current_host->id));
-			} else {
-				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", current_host->id));
-			}
 		} else {
-			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
+			int sem_errno = errno;
+
+			if (sem_errno == EAGAIN || sem_errno == EWOULDBLOCK) {
+				if (is_debug_device(current_host->id)) {
+					SPINE_LOG(("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", current_host->id));
+				} else {
+					SPINE_LOG_DEVDBG(("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", current_host->id));
+				}
 			} else {
-				SPINE_LOG_DEVDBG(("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_err));
+				if (is_debug_device(current_host->id)) {
+					SPINE_LOG(("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_errno));
+				} else {
+					SPINE_LOG_DEVDBG(("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", current_host->id, sem_errno));
+				}
 			}
 		}
 		usleep(10000);

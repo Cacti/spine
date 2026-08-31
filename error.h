@@ -31,5 +31,9 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_ERROR_H
+#define SPINE_ERROR_H
 extern void install_spine_signal_handler(void);
 extern void uninstall_spine_signal_handler(void);
+
+#endif /* SPINE_ERROR_H */

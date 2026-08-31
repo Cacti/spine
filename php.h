@@ -31,8 +31,12 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_PHP_H
+#define SPINE_PHP_H
 extern char *php_cmd(const char *php_command, int php_process);
 extern char *php_readpipe(int php_process, char *command);
 extern int php_init(int php_process);
 extern void php_close(int php_process);
 extern int php_get_process(void);
+
+#endif /* SPINE_PHP_H */

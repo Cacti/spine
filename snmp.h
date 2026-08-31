@@ -31,6 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_SNMP_H
+#define SPINE_SNMP_H
 #define SNMP_SESSION_FREE(s) { if (s != NULL) { snmp_host_cleanup(s); s = NULL; } }
 
 extern void snmp_spine_init(void);
@@ -38,8 +40,11 @@ extern void snmp_spine_close(void);
 extern void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community, char *snmp_username, char *snmp_password, char *snmp_auth_protocol, char *snmp_priv_passphrase, char *snmp_priv_protocol, char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout);
 extern void snmp_host_cleanup(void *snmp_session);
 extern char *snmp_get_base(host_t *current_host, const char *snmp_oid, bool should_fail);
+extern int snmp_varbind_is_exception(const struct variable_list *vars);
 extern char *snmp_get(host_t *current_host, const char *snmp_oid);
 extern char *snmp_getnext(host_t *current_host, const char *snmp_oid);
 extern int snmp_count(host_t *current_host, const char *snmp_oid);
 extern void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids);
 extern void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable);
+
+#endif /* SPINE_SNMP_H */
