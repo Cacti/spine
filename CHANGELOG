@@ -1,8 +1,15 @@
 The Cacti Group | spine
 
 1.3.0
--issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
+-issue#60: Warn at startup when the spine and Cacti versions come from different release lines
+-issue#263: Unify the debug message prefix so a single poll no longer logs two orders
 -issue#360: If a Remote Data Collector has not devices, spine does not properly register itself
+-issue#411: Replace deprecated MYSQL_OPT_RECONNECT with an explicit reconnect
+-issue#412: Decode USM report errors instead of logging a generic Unknown error
+-issue#414: Fix a double-free in poll_host(), an off-by-one in db_get_connection(), an unbounded vsprintf in die(), and a result set leak in host-range filtering
+-issue#415: Plug resource leaks in SNMP session setup and the poll paths
+-issue#416: Plug leaks in exec_poll() and php_cmd(), capture the mysql_init() handle, and bound the debug_devices tokenizer
+-issue#422: Move count++ inside the valid-type branch in snmp_count()
 -issue#423: Reinitialize fd_set before each select() call in ping_icmp() to prevent instant retry expiry after first timeout
 -issue#424: Correct inverted spike_kill condition for PHP script server (IS_UNDEFINED -> !IS_UNDEFINED)
 -issue#425: Mark all OIDs undefined when snmp_get_multi() receives errindex==0 from agent
@@ -11,14 +18,29 @@ The Cacti Group | spine
 -issue#441: Update copyright year to 2026 in 12 source files
 -issue#445: Replace vfork/execv with posix_spawn in php_init; fix stack-local return in regex_replace
 -issue#447: Correct off-by-one OOB write in strncopy() when src fills buffer; remove suppressing pragma
+-issue#450: Correct codespell-detected spelling errors in the C sources
+-issue#464: Tighten const usage and the pthread format specifier
+-issue#499: Mechanical compiler warning cleanup
+-issue#515: Resolve compilation failures on develop
+-issue#516: Replace deprecated POSIX semaphores with a pthread wrapper
+-issue#552: Terminate die() output so consecutive fatal messages no longer run together
+-issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
+-issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
+-issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
+-issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
+-issue: Restore the twelve headers and spine.conf.dist missing from the dist tarball so a release tarball can be compiled from
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
+-feature#440: Add idiomatic Debian packaging
 -feature#442: Add GitHub Actions CI: build matrix (gcc/clang), cppcheck, flawfinder, CodeQL
 -feature#443: Add make targets for Docker build and verification (docker, docker-dev, verify, cppcheck)
 -feature#444: Add multi-stage Dockerfile and Dockerfile.dev with ASan/cppcheck/scan-build
+-feature#461: Add a top-level packaging overview README
 -feature#3740: Ability to disable a site
 -feature#5090: Enhance number recognition within Spine
 -feature#6001: Extend SYSTEM STATS
+-feature: Add Rocky Linux 9 build and test coverage to CI
+-feature: Add the unit, fuzz and integration test suites
 -feature: Make spine work with Stream feature
 
 1.2.31
