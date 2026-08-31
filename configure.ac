@@ -505,5 +505,24 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ],[AC_MSG_RESULT(no)
 ])
 
+# cmocka is only used by the unit tests under "make check".  Absence is not
+# fatal; the tests are dropped from check_PROGRAMS instead.
+have_cmocka=no
+AC_CHECK_LIB([cmocka], [_cmocka_run_group_tests], [have_cmocka=yes])
+if test "x$have_cmocka" = xyes; then
+  AC_CHECK_HEADER([cmocka.h], [], [have_cmocka=no], [[
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+  ]])
+fi
+
+CMOCKA_LIBS=
+if test "x$have_cmocka" = xyes; then
+  CMOCKA_LIBS=-lcmocka
+fi
+AC_SUBST(CMOCKA_LIBS)
+AM_CONDITIONAL([HAVE_CMOCKA], [test "x$have_cmocka" = xyes])
+
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
