@@ -31,6 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_PING_H
+#define SPINE_PING_H
 #ifndef ICMP_ECHOREPLY
 #define ICMP_ECHOREPLY		0	/* Echo Reply			*/
 #endif
@@ -131,9 +133,23 @@ struct icmp
 #define	icmp_mask	icmp_dun.id_mask
 #define	icmp_data	icmp_dun.id_data
 };
+
 #endif
 
 /* Host availability functions */
+/* Classification of a raw ICMP reply. Declared here so the fuzz target can
+ * link against the shipped implementation. */
+typedef enum {
+	SPINE_ICMP_REPLY_TOO_SHORT = 0,   /* shorter than an IP header */
+	SPINE_ICMP_REPLY_BAD_HEADER,      /* IHL implausible, or no room for the ICMP header */
+	SPINE_ICMP_REPLY_NOT_ECHO,        /* not an echo reply */
+	SPINE_ICMP_REPLY_NOT_OURS,        /* echo reply, but not our id/sequence */
+	SPINE_ICMP_REPLY_OK
+} spine_icmp_reply_t;
+
+extern spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply,
+	ssize_t len, uint16_t want_id, uint16_t want_seq, const struct icmp **out_pkt);
+
 extern int ping_host(host_t *host, ping_t *ping);
 extern int ping_snmp(host_t *host, ping_t *ping);
 extern int ping_icmp(host_t *host, ping_t *ping);
@@ -144,3 +160,5 @@ extern void update_host_status(int status, host_t *host, ping_t *ping, int avail
 extern int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port);
 extern int get_address_type(host_t *host);
 extern unsigned short int get_checksum(void* buf, int len);
+
+#endif /* SPINE_PING_H */
