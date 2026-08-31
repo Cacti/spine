@@ -65,11 +65,12 @@ check_PROGRAMS += \
 	tests/unit/test_util_strings \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
-	tests/unit/test_linked
+	tests/unit/test_linked \
+	tests/unit/test_log_newline_bound
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
-# the same libraries spine links against.  The other two are self-contained.
+# the same libraries spine links against.  The others are self-contained.
 tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
 tests_unit_test_util_strings_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
@@ -85,5 +86,8 @@ tests_unit_test_safety_fixes_LDADD   = $(CMOCKA_LIBS)
 tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
+tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
 
 TESTS = $(check_PROGRAMS)
