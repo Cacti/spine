@@ -158,6 +158,9 @@ typedef enum {
 extern spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply,
 	ssize_t len, uint16_t want_id, uint16_t want_seq, const struct icmp **out_pkt);
 
+extern spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply,
+	ssize_t len, uint16_t want_seq, const struct icmp **out_pkt);
+
 extern int ping_host(host_t *host, ping_t *ping);
 extern int ping_snmp(host_t *host, ping_t *ping);
 extern int ping_icmp(host_t *host, ping_t *ping);
