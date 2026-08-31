@@ -555,8 +555,77 @@ static void test_php_readpipe_bounded(void **state) {
 /* -------------------------------------------------------------------------
  * main
  * ------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------------
+ * spine_log(): the newline must not be written past flogmessage
+ *
+ * The strncat() calls above the append are allowed to fill the buffer
+ * exactly, after which strcat() wrote the newline at LOGSIZE-1 and its
+ * terminator at LOGSIZE.  A canary byte follows the buffer here so the
+ * overflow is observable rather than merely undefined.  issue#565
+ * ---------------------------------------------------------------------- */
+
+#define TEST_LOGSIZE 16
+
+static void append_newline(char *flogmessage, size_t logsize) {
+	if (!strstr(flogmessage, "\n")) {
+		size_t flog_used = strlen(flogmessage);
+
+		if (flog_used < logsize - 1) {
+			flogmessage[flog_used]     = '\n';
+			flogmessage[flog_used + 1] = '\0';
+		} else {
+			flogmessage[logsize - 2] = '\n';
+			flogmessage[logsize - 1] = '\0';
+		}
+	}
+}
+
+static void test_log_newline_fits_when_room_remains(void **state) {
+	struct { char buf[TEST_LOGSIZE]; unsigned char canary; } b;
+	(void) state;
+
+	memset(&b, 0xAA, sizeof b);
+	strcpy(b.buf, "short");
+	append_newline(b.buf, TEST_LOGSIZE);
+
+	assert_string_equal(b.buf, "short\n");
+	assert_int_equal(b.canary, 0xAA);
+}
+
+static void test_log_newline_does_not_overflow_a_full_buffer(void **state) {
+	struct { char buf[TEST_LOGSIZE]; unsigned char canary; } b;
+	(void) state;
+
+	memset(&b, 0xAA, sizeof b);
+	/* fill the buffer exactly: 15 characters plus the terminator */
+	memset(b.buf, 'x', TEST_LOGSIZE - 1);
+	b.buf[TEST_LOGSIZE - 1] = '\0';
+
+	append_newline(b.buf, TEST_LOGSIZE);
+
+	assert_int_equal(b.canary, 0xAA);
+	assert_int_equal(strlen(b.buf), TEST_LOGSIZE - 1);
+	assert_int_equal(b.buf[TEST_LOGSIZE - 2], '\n');
+}
+
+static void test_log_newline_left_alone_when_already_present(void **state) {
+	struct { char buf[TEST_LOGSIZE]; unsigned char canary; } b;
+	(void) state;
+
+	memset(&b, 0xAA, sizeof b);
+	strcpy(b.buf, "has\nnewline");
+	append_newline(b.buf, TEST_LOGSIZE);
+
+	assert_string_equal(b.buf, "has\nnewline");
+	assert_int_equal(b.canary, 0xAA);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_log_newline_fits_when_room_remains),
+		cmocka_unit_test(test_log_newline_does_not_overflow_a_full_buffer),
+		cmocka_unit_test(test_log_newline_left_alone_when_already_present),
 		/* date format (missing break) */
 		cmocka_unit_test(test_date_format_each_code_differs),
 		cmocka_unit_test(test_date_format_separator_applied),

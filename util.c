@@ -1546,9 +1546,20 @@ int spine_log(const char *format, ...) {
 		closelog();
 	}
 
-	/* append a line feed to the log message if needed */
+	/* append a line feed to the log message if needed.  The strncat() calls
+	 * above are allowed to fill flogmessage exactly, so the newline only fits
+	 * when a byte is free; otherwise it replaces the last character rather
+	 * than running past the end. */
 	if (!strstr(flogmessage, "\n")) {
-		strcat(flogmessage, "\n");
+		size_t flog_used = strlen(flogmessage);
+
+		if (flog_used < LOGSIZE - 1) {
+			flogmessage[flog_used]     = '\n';
+			flogmessage[flog_used + 1] = '\0';
+		} else {
+			flogmessage[LOGSIZE - 2] = '\n';
+			flogmessage[LOGSIZE - 1] = '\0';
+		}
 	}
 
 	if ((IS_LOGGING_TO_FILE() &&
