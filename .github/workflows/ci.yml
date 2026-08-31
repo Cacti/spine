@@ -9,9 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -36,7 +41,7 @@ jobs:
 
       - name: Build Spine
         run: |
-          make -j 
+          make -j"$(nproc)"
 
 #  cppcheck:
 #    runs-on: ubuntu-latest
@@ -67,6 +72,7 @@ jobs:
 
   flawfinder:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -94,3 +100,38 @@ jobs:
         with:
           name: flawfinder-report
           path: flawfinder-report.txt
+
+  # Spine is a threaded network daemon; ASan and UBSan are the checks most
+  # likely to catch a real defect here.
+  sanitizers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang mysql-server libmysqlclient-dev libsnmp-dev \
+            libssl-dev build-essential help2man autoconf automake libtool dos2unix
+
+      - name: Build with ASan and UBSan
+        env:
+          CC: clang
+        run: |
+          set -euo pipefail
+          ./bootstrap
+          ./configure \
+            CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1" \
+            LDFLAGS="-fsanitize=address,undefined"
+          make -j"$(nproc)"
+
+      - name: Run the binary under the sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:exitcode=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          set -euo pipefail
+          ./spine --version
+          ./spine --help > /dev/null
