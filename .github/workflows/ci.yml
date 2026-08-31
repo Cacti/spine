@@ -135,3 +135,24 @@ jobs:
           set -euo pipefail
           ./spine --version
           ./spine --help > /dev/null
+  # A release tarball that cannot be compiled is a release blocker, and the
+  # only way to catch it is to build from the tarball the way a packager does.
+  distcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y mysql-server libmysqlclient-dev libsnmp-dev \
+            libssl-dev build-essential help2man autoconf automake libtool dos2unix
+
+      - name: make distcheck
+        run: |
+          set -euo pipefail
+          ./bootstrap
+          ./configure
+          make distcheck

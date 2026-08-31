@@ -31,7 +31,12 @@ bin_PROGRAMS = spine
 
 man_MANS = spine.1
 
-EXTRA_DIST = spine.1 uthash.h spine_sem.h
+# Headers are not referenced by any _SOURCES, so automake will not distribute
+# them unless they are listed. Without this the release tarball builds nothing.
+noinst_HEADERS = common.h error.h keywords.h locks.h nft_popen.h php.h \
+	ping.h poller.h snmp.h spine.h spine_sem.h sql.h uthash.h util.h
+
+EXTRA_DIST = spine.1 spine.conf.dist
 
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
