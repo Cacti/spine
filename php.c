@@ -255,7 +255,17 @@ char *php_readpipe(int php_process, char *command) {
 			bptr = result_string;
 
 			while (1) {
-				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
+				/* reserve one byte for the trailing '\0' written below */
+				size_t used = (size_t)(bptr - result_string);
+
+				if (used >= RESULTS_BUFFER - 1) {
+					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+					SET_UNDEFINED(result_string);
+					break;
+				}
+
+				size_t avail = (size_t)RESULTS_BUFFER - 1 - used;
+				i = read(php_processes[php_process].php_read_fd, bptr, avail);
 
 				if (i <= 0) {
 					SET_UNDEFINED(result_string);
