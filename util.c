@@ -930,6 +930,8 @@ void read_config_options(void) {
 	}
 
 	settings_cache_free();
+
+	set_date_format();
 }
 
 void poller_push_data_to_main(void) {
@@ -1367,13 +1369,20 @@ void die(const char *format, ...) {
 	exit(set.exit_code);
 }
 
-char *get_date_format(void) {
-	char *log_fmt;
-	char log_sep = '/';
+/* The log timestamp format depends only on two settings that are read once in
+ * read_config_options(), so it is built there, while spine is still single
+ * threaded, and only read afterwards.  Rebuilding it per log line cost a
+ * malloc/free pair and two switches on every message. */
+static char log_date_format[GD_FMT_SIZE] = "%Y/%m/%d %H:%M:%S - ";
 
-	if (!(log_fmt = (char *) malloc(GD_FMT_SIZE))) {
-		die("ERROR: Fatal malloc error: util.c get_date_format!");
-	}
+/*! \fn void set_date_format(void)
+ *  \brief build the cached log timestamp format from the current settings
+ *
+ *  Call once the log format and separator settings are known.  Not safe to
+ *  call after the poller threads have started.
+ */
+void set_date_format(void) {
+	char log_sep = '/';
 
 	if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
 		set.log_datetime_separator = GDC_DEFAULT;
@@ -1397,29 +1406,31 @@ char *get_date_format(void) {
 
 	switch (set.log_datetime_format) {
 		case GD_MO_D_Y:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%m%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%m%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 		case GD_MN_D_Y:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%b%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%b%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 		case GD_D_MO_Y:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%m%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%d%c%%m%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 		case GD_D_MN_Y:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%b%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%d%c%%b%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 		case GD_Y_MO_D:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 		case GD_Y_MN_D:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%b%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%Y%c%%b%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 		default:
-			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			snprintf(log_date_format, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
 			break;
 	}
+}
 
-	return (log_fmt);
+char *get_date_format(void) {
+	return log_date_format;
 }
 
 /*! \fn void spine_log(const char *format, ...)
@@ -1600,7 +1611,6 @@ int spine_log(const char *format, ...) {
 		}
 	}
 
-	free(log_fmt);
 
 	return TRUE;
 }
