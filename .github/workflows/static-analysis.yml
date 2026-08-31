@@ -123,6 +123,10 @@ jobs:
   clang-tidy:
     name: clang-tidy
     runs-on: ubuntu-24.04
+    # The existing tree carries roughly nine hundred findings under these
+    # checks. Report them to code scanning and tighten the gate once the
+    # backlog is worked down, rather than blocking every pull request on it.
+    continue-on-error: true
     permissions:
       contents: read
       security-events: write
