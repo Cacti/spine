@@ -2177,8 +2177,21 @@ void checkAsRoot(void) {
 		}
 
 		if (geteuid() != 0) {
-			SPINE_LOG_DEBUG(("WARNING: Spine NOT running as root.  This is required if using ICMP.  Please run \"chown root:root spine;chmod u+s spine\" to resolve."));
-			set.icmp_avail = FALSE;
+			int probe;
+
+			/* Root is not the only way in.  net.ipv4.ping_group_range lists
+			 * the groups allowed to open datagram ICMP sockets, so ask the
+			 * kernel for one instead of assuming ICMP is unavailable */
+			probe = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+
+			if (probe != -1) {
+				close(probe);
+				SPINE_LOG_DEBUG(("DEBUG: Spine may use unprivileged ICMP sockets."));
+				set.icmp_avail = TRUE;
+			} else {
+				SPINE_LOG_DEBUG(("WARNING: Spine NOT running as root.  This is required if using ICMP unless net.ipv4.ping_group_range covers this user.  Please run \"chown root:root spine;chmod u+s spine\" to resolve."));
+				set.icmp_avail = FALSE;
+			}
 		} else {
 			SPINE_LOG_DEBUG(("DEBUG: Spine is running as root."));
 			set.icmp_avail = TRUE;

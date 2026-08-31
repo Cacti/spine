@@ -324,6 +324,43 @@ spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply, ssize_t
 	return SPINE_ICMP_REPLY_OK;
 }
 
+/*! \fn spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply, ssize_t len, uint16_t want_seq, const struct icmp **out_pkt)
+ *  \brief classifies an echo reply read from an unprivileged datagram socket
+ *
+ *  A SOCK_DGRAM ICMP socket delivers the reply with the IPv4 header already
+ *  stripped, and the kernel assigns the echo id rather than honouring the one
+ *  we wrote, so the sequence is all that is left to match on.  The caller has
+ *  already checked the source address.
+ */
+spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply, ssize_t len,
+	uint16_t want_seq, const struct icmp **out_pkt) {
+	const struct icmp *pkt;
+
+	if (out_pkt != NULL) {
+		*out_pkt = NULL;
+	}
+
+	if (reply == NULL || len < (ssize_t) ICMP_HDR_SIZE) {
+		return SPINE_ICMP_REPLY_TOO_SHORT;
+	}
+
+	pkt = (const struct icmp *) reply;
+
+	if (pkt->icmp_type != ICMP_ECHOREPLY) {
+		return SPINE_ICMP_REPLY_NOT_ECHO;
+	}
+
+	if (pkt->icmp_seq != want_seq) {
+		return SPINE_ICMP_REPLY_NOT_OURS;
+	}
+
+	if (out_pkt != NULL) {
+		*out_pkt = pkt;
+	}
+
+	return SPINE_ICMP_REPLY_OK;
+}
+
 /*! \fn int ping_icmp(host_t *host, ping_t *ping)
  *  \brief ping a host using an ICMP packet
  *  \param host a pointer to the current host structure
@@ -338,6 +375,7 @@ spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply, ssize_t
  */
 int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_socket;
+	int    icmp_dgram;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -365,9 +403,21 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	}
 
+	/* Linux hands out SOCK_DGRAM ICMP sockets to the groups listed in
+	 * net.ipv4.ping_group_range, so try that before asking for root.  When
+	 * the sysctl excludes us the call fails and the raw path below runs
+	 * unchanged.  A datagram reply arrives with the IPv4 header already
+	 * stripped, which the receive path has to account for. */
+	icmp_dgram  = FALSE;
+	icmp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+
+	if (icmp_socket != -1) {
+		icmp_dgram = TRUE;
+	}
+
 	/* get ICMP socket */
 	retry_count = 0;
-	while (TRUE) {
+	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 		if (hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
@@ -401,7 +451,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	}
 
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (hasCaps() != TRUE) {
+	if (!icmp_dgram && hasCaps() != TRUE) {
 		if (seteuid(getuid()) == -1) {
 			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 		}
@@ -520,17 +570,29 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						}
 					} else {
 						const struct icmp  *reply_pkt = NULL;
+						const struct icmp  *seen       = NULL;
 						spine_icmp_reply_t  verdict;
 
-						verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
-							return_code, (uint16_t)(getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
+						if (icmp_dgram) {
+							verdict = spine_icmp_classify_dgram_reply((const unsigned char *) socket_reply,
+								return_code, icmp->icmp_seq, &reply_pkt);
+						} else {
+							verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
+								return_code, (uint16_t)(getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
+						}
 
 						if (verdict == SPINE_ICMP_REPLY_NOT_OURS) {
 							/* a middlebox that rewrites ICMP query ids is indistinguishable
 							 * from a dead device once the reply is dropped, so record what
-							 * arrived */
-							pkt = (struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
-							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int)(getpid() & 0xFFFF), icmp->icmp_seq, pkt->icmp_id, pkt->icmp_seq));
+							 * arrived.  Both classifiers validate the length before they can
+							 * return this, so the header is safe to read here */
+							if (icmp_dgram) {
+								seen = (const struct icmp *) socket_reply;
+							} else {
+								seen = (const struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
+							}
+
+							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int)(getpid() & 0xFFFF), icmp->icmp_seq, seen->icmp_id, seen->icmp_seq));
 						}
 
 						if (verdict != SPINE_ICMP_REPLY_OK && verdict != SPINE_ICMP_REPLY_NOT_ECHO) {
@@ -795,6 +857,7 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	unsigned char  *packet;
 	uint16_t our_id;
 	uint16_t our_seq;
+	int      icmp_dgram;
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMPv6 Ping", host->id));
@@ -808,8 +871,19 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	retry_count = 0;
 	msg_len     = strlen(cacti_msg);
 
+	/* net.ipv4.ping_group_range governs IPPROTO_ICMPV6 datagram sockets as
+	 * well, so the unprivileged path is worth trying here too.  The kernel
+	 * rewrites the echo id on such a socket, which the reply match below
+	 * accounts for. */
+	icmp_dgram  = FALSE;
+	icmp_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+
+	if (icmp_socket != -1) {
+		icmp_dgram = TRUE;
+	}
+
 	/* get ICMPv6 socket */
-	while (TRUE) {
+	while (icmp_socket == -1) {
 		if (hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
@@ -1006,8 +1080,14 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 				memcpy(&reply, socket_reply, sizeof(reply));
 
 				if ((reply.icmp6_type != ICMP6_ECHO_REPLY) ||
-					(reply.icmp6_id   != htons(our_id)) ||
 					(reply.icmp6_seq  != htons(our_seq))) {
+					goto keep_listening_ipv6;
+				}
+
+				/* on a datagram socket the kernel assigns the echo id, so it
+				 * will not match what we wrote; sequence, source address and
+				 * payload still identify the reply */
+				if (!icmp_dgram && reply.icmp6_id != htons(our_id)) {
 					goto keep_listening_ipv6;
 				}
 
