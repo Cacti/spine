@@ -245,13 +245,18 @@ int main(int argc, char *argv[]) {
 	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
-	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
+	if (!(php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t)))) {
+		die("ERROR: Fatal calloc error: spine.c php_processes!");
+	}
+
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
 		php_processes[i].php_state = PHP_BUSY;
 	}
 
 	/* create the array of debug devices */
-	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
+	if (!(debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int)))) {
+		die("ERROR: Fatal calloc error: spine.c debug_devices!");
+	}
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -552,7 +557,10 @@ int main(int argc, char *argv[]) {
 	db_connect(LOCAL, &mysql);
 
 	/* setup local connection pool for hosts */
-	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	if (!(db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t)))) {
+		die("ERROR: Fatal calloc error: spine.c db_pool_local!");
+	}
+
 	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
@@ -560,7 +568,10 @@ int main(int argc, char *argv[]) {
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
-		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		if (!(db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t)))) {
+			die("ERROR: Fatal calloc error: spine.c db_pool_remote!");
+		}
+
 		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;
