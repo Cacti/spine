@@ -1279,7 +1279,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	if (num_rows > 0) {
 		/* retrieve each hosts polling items from poller cache and load into array */
-		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
+		/* retreive each hosts polling items from poller cache and load into array */
+		if (!(poller_items = (target_t *) calloc(num_rows, sizeof(target_t)))) {
+			die("ERROR: Fatal calloc error: poller.c poller_items!");
+		}
 
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
@@ -1353,7 +1356,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		db_free_result(result);
 
 		/* create an array for snmp oids */
-		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
+		if (!(snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t)))) {
+			die("ERROR: Fatal calloc error: poller.c snmp_oids!");
+		}
 
 		/* initialize all the memory to insure we don't get issues */
 		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);

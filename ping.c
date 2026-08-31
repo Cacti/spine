@@ -268,6 +268,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
+	int    ihl;
 	const char *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	socklen_t    fromlen;
@@ -440,8 +441,18 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
+						if (return_code < (ssize_t) sizeof(struct ip)) {
+							goto keep_listening;
+						}
+
 						ip  = (struct ip *) socket_reply;
-						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
+						ihl = ip->ip_hl << 2;
+
+						if (ihl < (int) sizeof(struct ip) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
+							goto keep_listening;
+						}
+
+						pkt = (struct icmp *) (socket_reply + ihl);
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if (pkt->icmp_type == ICMP_ECHOREPLY) {
