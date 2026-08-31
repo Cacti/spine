@@ -5,6 +5,9 @@ The Cacti Group | spine
 -issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
 -issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
 -issue#573: Copy the hostname in get_namebyhost() so transport and port parsing runs, and tokenise reentrantly
+-issue#564: Check the remaining calloc() results in spine.c before they are dereferenced
+-issue#565: Keep the appended newline inside flogmessage when the log line fills LOGSIZE
+-issue#566: Free the result set when the settings helpers fetch no row
 
 1.2.31
 -issue#365: Removed Backtrace Support due to lack of OS support
