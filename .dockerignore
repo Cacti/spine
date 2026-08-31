@@ -1,10 +1,38 @@
-# Test fixtures and CI scripts -- not needed for the spine build
-tests/
+# Keep the build context to sources and build-system inputs only.
+#
+# Build outputs must never enter the image: make would find them newer than
+# the sources, skip compiling, and ship a binary linked against whatever
+# libraries the host had.
+
 .git/
-*.md
-config/
-m4/
-autom4te.cache/
+.github/
 .omc/
-*.conf.dist
+tests/
+*.md
+
+# autotools and compiler output
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile_commands.json
+config.h
+config.log
+config.status
+configure
+configure~
+libtool
+stamp-h1
+.deps/
+.dirstamp
+.libs/
+*.o
+*.lo
+*.la
+*.gcda
+*.gcno
 *.log
+*.tar.gz
+
+# the built binary itself
+/spine
