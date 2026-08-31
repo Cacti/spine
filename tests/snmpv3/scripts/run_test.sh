@@ -139,6 +139,93 @@ fi
     -e "DELETE FROM poller_reindex WHERE host_id=1 AND data_query_id=99;" 2>/dev/null
 
 # ---------------------------------------------------------------------------
+# 5. Full poll cycle — spine exits 0 and poller_output is populated.
+#    Guards the end-to-end DB write path; also checks no zombie php children
+#    linger (php_close reap fix) when the run touches the script-server code.
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Phase 5: full poll cycle writes poller_output ==="
+
+"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+    -e "TRUNCATE poller_output;" 2>/dev/null
+
+# Run spine in a shell so we can read its exit code and process table together.
+poll_out=$("${COMPOSE[@]}" run --rm --no-deps --entrypoint sh spine -c '
+    /usr/local/bin/spine --conf=/etc/spine/spine.conf -f 1 -l 1 -S
+    echo "spine_rc=$?"
+    echo "---PROCTABLE---"
+    ps -eo pid,ppid,stat,comm 2>/dev/null || true
+' 2>&1 || true)
+echo "$poll_out"
+
+spine_rc=$(echo "$poll_out" | sed -n 's/^spine_rc=//p' | tail -1)
+if [[ "$spine_rc" == "0" ]]; then
+    pass "full poll: spine exited 0"
+else
+    fail "full poll: spine exited non-zero (rc=$spine_rc)"
+fi
+
+po_count=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+    -N -e "SELECT COUNT(*) FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "0")
+if [[ "$po_count" -gt 0 ]]; then
+    pass "full poll: poller_output populated (rows=$po_count)"
+else
+    fail "full poll: poller_output empty after poll"
+fi
+
+# A reaped script-server child leaves no <defunct> / Z-state php in the table.
+proctable=$(echo "$poll_out" | sed -n '/---PROCTABLE---/,$p')
+if echo "$proctable" | grep -Eiq '<defunct>|[[:space:]]Z[[:space:]N+lL<>]*[[:space:]]+php'; then
+    fail "full poll: zombie php child remained (php_close reap regression)"
+else
+    pass "full poll: no zombie php children"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. ICMP availability — drives the ping path so the new ICMP reply-length
+#    guard (ping.c) runs against a live reply.  Host 1 is repointed to ICMP
+#    ping for one run; spine must not crash on the reply and the host must
+#    stay UP (AVAIL_SNMP_OR_PING falls back to SNMP if raw sockets are denied).
+#
+#    Requires CAP_NET_RAW for true ICMP; the compose spine service grants it.
+#    The exact accept/reject predicate has direct, fixture-independent coverage
+#    in tests/unit/test_safety_fixes.c (the icmp_len_ok cases).
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Phase 6: ICMP availability (length-guard exercise) ==="
+
+# Drive ICMP at both the host and the global-settings layer: the settings
+# row gates ping_method regardless of the per-host column.
+"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+    UPDATE host SET availability_method = 4, ping_method = 1, hostname = 'snmpd'
+        WHERE id = 1;
+    UPDATE settings SET value = '1' WHERE name = 'ping_method';
+    UPDATE settings SET value = '4' WHERE name = 'availability_method';" 2>/dev/null
+
+icmp_out=$("${COMPOSE[@]}" run --rm --no-deps spine 2>&1 || true)
+echo "$icmp_out"
+
+if echo "$icmp_out" | grep -qi "segfault\|SIGSEGV\|Aborted"; then
+    fail "icmp: spine crashed parsing the ping reply"
+else
+    pass "icmp: spine parsed the ping reply without crashing"
+fi
+
+icmp_status=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+    -N -e "SELECT status FROM host WHERE id=1;" 2>/dev/null || echo "unknown")
+if [[ "$icmp_status" == "3" ]]; then
+    pass "icmp: host remained UP after availability poll (status=3)"
+else
+    fail "icmp: host not UP after availability poll (status=$icmp_status)"
+fi
+
+# Restore the host and settings to the SNMP-only baseline.
+"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+    UPDATE host SET availability_method = 2, ping_method = 0 WHERE id = 1;
+    UPDATE settings SET value = '0' WHERE name = 'ping_method';
+    UPDATE settings SET value = '2' WHERE name = 'availability_method';" 2>/dev/null
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

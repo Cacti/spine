@@ -1,0 +1,7 @@
+# The root .gitignore excludes every Makefile, but this one is hand-written.
+!Makefile
+
+bin/
+crash-*
+leak-*
+timeout-*
