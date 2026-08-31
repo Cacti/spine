@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration tests for output_regex column detection.
+# Integration tests for output_regex column detection and application.
 #
 # Validates that spine correctly detects the presence or absence of the
 # output_regex column in poller_item and adjusts its queries accordingly.
@@ -172,10 +172,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 4: Drop column again, verify spine falls back gracefully
+# Test 4: the regex is applied to the trailing multi-get batch
+#
+# poller.c drains SNMP OIDs in two places: inside the item loop once MAX_OIDS
+# have accumulated, and once more after the loop for whatever is left over.
+# Only the in-loop drain applied output_regex, so a host whose OID count did
+# not land on a MAX_OIDS boundary stored raw values.  A single data source is
+# always the leftover case, so this asserts on the value rather than merely on
+# it being non-empty.
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Test 4: column removal fallback ==="
+echo "=== Test 4: regex applied to the trailing batch ==="
+
+"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+UPDATE poller_item SET output_regex = '^[0-9]' WHERE local_data_id = 1;
+TRUNCATE poller_output;
+" 2>/dev/null
+
+"${COMPOSE[@]}" run --rm --entrypoint spine spine \
+	--conf=/etc/spine/spine.conf -f 1 -l 1 -S >/dev/null 2>&1 || true
+
+v_tail=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+	-N -e "SELECT output FROM poller_output WHERE local_data_id=1;" 2>/dev/null || echo "")
+
+if [[ ${#v_tail} -eq 1 ]]; then
+	pass "trailing batch honoured output_regex (value=$v_tail)"
+else
+	fail "trailing batch ignored output_regex (value=$v_tail, expected one digit)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 5: Drop column again, verify spine falls back gracefully
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Test 5: column removal fallback ==="
 
 "${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
 ALTER TABLE poller_item DROP COLUMN output_regex;

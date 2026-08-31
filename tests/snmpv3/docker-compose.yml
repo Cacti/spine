@@ -34,6 +34,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+    cap_add:
+      - NET_RAW   # raw sockets for the ICMP availability test (Phase 6)
     depends_on:
       db:
         condition: service_healthy
@@ -41,6 +43,20 @@ services:
         condition: service_healthy
     volumes:
       - ./spine/spine.conf:/etc/spine/spine.conf:ro
+      - ./scripts/test-script.sh:/usr/local/bin/test-script.sh:ro
     entrypoint: ["/usr/local/bin/spine", "--conf=/etc/spine/spine.conf"]
     command: ["1", "1"]   # poll host_id 1
     # SPINE_LOG_LEVEL is not read by spine; verbosity is set via Log_Level in spine.conf
+
+  # Asserts on the database spine wrote to. Without this the fixture only
+  # proves spine exited 0, which a broken poll would also do.
+  verify:
+    image: mariadb:11
+    depends_on:
+      db:
+        condition: service_healthy
+      spine:
+        condition: service_completed_successfully
+    volumes:
+      - ./scripts/verify.sh:/verify.sh:ro
+    entrypoint: ["/bin/sh", "/verify.sh"]

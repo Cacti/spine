@@ -208,3 +208,36 @@ INSERT INTO `poller_item` (
   'uptime', '/dev/null', 1, 300,
   '.1.3.6.1.2.1.1.3.0', '', 1
 );
+
+-- A second data source driven by POLLER_ACTION_SCRIPT (1). The SNMP row above
+-- leaves the script branch of poll_host() and exec_poll() unexercised.
+INSERT INTO `poller_item` (
+  `local_data_id`, `host_id`, `action`,
+  `hostname`, `snmp_community`,
+  `snmp_version`, `snmp_username`, `snmp_password`,
+  `snmp_auth_protocol`, `snmp_priv_passphrase`, `snmp_priv_protocol`,
+  `snmp_context`, `snmp_engine_id`,
+  `snmp_port`, `snmp_timeout`,
+  `rrd_name`, `rrd_path`, `rrd_num`, `rrd_step`,
+  `arg1`, `deleted`, `poller_id`
+) VALUES (
+  2, 1, 1,
+  'snmpd', 'public',
+  3, 'testuser', 'authpass1234',
+  'SHA-256', 'privpass1234', 'AES',
+  '', '',
+  1161, 1000,
+  'scripted', '/dev/null', 1, 300,
+  '/usr/local/bin/test-script.sh 42', '', 1
+);
+
+-- Auto-reindex assertion. poller_reindex was empty, so the whole RECACHE
+-- branch of poll_host() (the largest untested region in the poller) never ran.
+-- action 0 = SNMP: spine walks arg1 and compares the result to assert_value
+-- with op. sysDescr is stable, so a matching assertion exercises the compare
+-- without queueing a reindex on every poll.
+INSERT INTO `poller_reindex` (
+  `host_id`, `data_query_id`, `action`, `op`, `assert_value`, `arg1`
+) VALUES (
+  1, 1, 0, '=', 'Cacti Spine SNMPv3 test agent', '.1.3.6.1.2.1.1.1.0'
+);

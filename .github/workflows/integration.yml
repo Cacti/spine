@@ -1,0 +1,32 @@
+name: Integration
+
+on:
+  pull_request:
+    branches: [develop]
+    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/snmpv3/**', '.github/workflows/integration.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snmpv3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # Brings up MariaDB and an snmpd, then polls a real device through
+      # poll_host() and checks the value lands in poller_output.
+      - name: Poll an SNMPv3 device end to end
+        run: tests/snmpv3/scripts/run-integration.sh
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          cd tests/snmpv3
+          docker compose logs --no-color || true
