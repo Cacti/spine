@@ -503,6 +503,44 @@ int php_init(int php_process) {
 	return TRUE;
 }
 
+static void php_terminate_and_reap(pid_t pid) {
+	int attempts;
+	int phase;
+	int status;
+	int signal_number = SIGTERM;
+	pid_t waited;
+
+	for (phase = 0; phase < 2; phase++) {
+		if (kill(pid, signal_number) < 0 && errno != ESRCH) {
+			SPINE_LOG(("WARNING: Unable to signal PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
+		}
+
+		for (attempts = 0; attempts < 20; attempts++) {
+			do {
+				waited = waitpid(pid, &status, WNOHANG);
+			} while (waited < 0 && errno == EINTR);
+
+			if (waited == pid || (waited < 0 && errno == ECHILD)) {
+				return;
+			}
+
+			if (waited < 0) {
+				SPINE_LOG(("WARNING: Unable to reap PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
+				return;
+			}
+
+			/* The delay is load-bearing: without it both phases burn twenty
+			 * WNOHANG polls in nanoseconds, so SIGKILL lands immediately and
+			 * the child is never reaped. */
+			usleep(50000);
+		}
+
+		signal_number = SIGKILL;
+	}
+
+	SPINE_LOG(("WARNING: PHP Script Server PID[%ld] did not exit after SIGKILL", (long)pid));
+}
+
 /*! \fn void php_close(int php_process)
  *  \brief close the php script server process
  *  \param php_process the process to close or PHP_INIT
@@ -567,10 +605,10 @@ void php_close(int php_process) {
 	 	 * a process group leader), and PID 1 is "init".
 	  	 */
 		if (phpp->php_pid > 1) {
-			/* end the php script server process */
-			kill(phpp->php_pid, SIGTERM);
-
-			/* reset this PID variable? */
+			/* end the php script server process, escalating if it ignores
+			 * SIGTERM, and reap it so it cannot linger as an orphan */
+			php_terminate_and_reap(phpp->php_pid);
+			phpp->php_pid = -1;
 		}
 
 		/* close file descriptors */
