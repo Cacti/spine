@@ -34,54 +34,9 @@
 #include "common.h"
 #include "spine.h"
 #include <spawn.h>
+#include <sys/wait.h>
 
 extern char **environ;
-
-#define PHP_CLOSE_REAP_USEC 50000
-#define PHP_CLOSE_TERM_ATTEMPTS 100
-#define PHP_CLOSE_KILL_ATTEMPTS 20
-
-static int php_reap_child(pid_t pid, int *wstatus, int attempts) {
-	int attempt;
-	pid_t waited;
-
-	for (attempt = 0; attempt < attempts; attempt++) {
-		do {
-			waited = waitpid(pid, wstatus, WNOHANG);
-		} while (waited < 0 && errno == EINTR);
-
-		if (waited == pid || (waited < 0 && errno == ECHILD)) {
-			return TRUE;
-		}
-
-		if (waited < 0) {
-			return FALSE;
-		}
-
-		#ifndef SOLAR_THREAD
-		usleep(PHP_CLOSE_REAP_USEC);
-		#else
-		sleep(1);
-		#endif
-	}
-
-	return FALSE;
-}
-
-static int php_set_cloexec(int fd) {
-	int flags;
-
-	flags = fcntl(fd, F_GETFD);
-	if (flags < 0) {
-		return FALSE;
-	}
-
-	return fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0;
-}
-
-static int php_set_pipe_cloexec(int pdes[2]) {
-	return php_set_cloexec(pdes[0]) && php_set_cloexec(pdes[1]);
-}
 
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
@@ -304,6 +259,7 @@ char *php_readpipe(int php_process, char *command) {
 			bptr = result_string;
 
 			while (1) {
+				/* reserve one byte for the trailing '\0' written below */
 				size_t used = (size_t)(bptr - result_string);
 
 				if (used >= RESULTS_BUFFER - 1) {
@@ -312,8 +268,8 @@ char *php_readpipe(int php_process, char *command) {
 					break;
 				}
 
-				size_t avail = (size_t)RESULTS_BUFFER - 1 - used;
-				i = read(php_processes[php_process].php_read_fd, bptr, avail);
+				size_t space = (size_t)RESULTS_BUFFER - 1 - used;
+				i = read(php_processes[php_process].php_read_fd, bptr, space);
 
 				if (i <= 0) {
 					SET_UNDEFINED(result_string);
@@ -327,9 +283,10 @@ char *php_readpipe(int php_process, char *command) {
 					break;
 				}
 
-				if (bptr >= result_string+BUFSIZE) {
+				if (bptr >= result_string + RESULTS_BUFFER - 1) {
 					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 					SET_UNDEFINED(result_string);
+					break;
 				}
 			}
 		} else {
@@ -382,33 +339,17 @@ int php_init(int php_process) {
 	for (i=0; i < num_processes; i++) {
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", i));
 
-			/* create the output pipes from Spine to php*/
-			if (pipe(cacti2php_pdes) < 0) {
-				SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
-				return FALSE;
-			}
-			if (!php_set_pipe_cloexec(cacti2php_pdes)) {
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				SPINE_LOG(("ERROR: SS[%i] Could not set close-on-exec on php server pipes", i));
-				return FALSE;
-			}
+		/* create the output pipes from Spine to php*/
+		if (pipe(cacti2php_pdes) < 0) {
+			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
+			return FALSE;
+		}
 
-			/* create the input pipes from php to Spine */
-			if (pipe(php2cacti_pdes) < 0) {
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
-				return FALSE;
-			}
-			if (!php_set_pipe_cloexec(php2cacti_pdes)) {
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				SPINE_LOG(("ERROR: SS[%i] Could not set close-on-exec on php server pipes", i));
-				return FALSE;
-			}
+		/* create the input pipes from php to Spine */
+		if (pipe(php2cacti_pdes) < 0) {
+			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
+			return FALSE;
+		}
 
 		/* disable thread cancellation from this point forward. */
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
@@ -576,6 +517,44 @@ int php_init(int php_process) {
 	return TRUE;
 }
 
+static void php_terminate_and_reap(pid_t pid) {
+	int attempts;
+	int phase;
+	int status;
+	int signal_number = SIGTERM;
+	pid_t waited;
+
+	for (phase = 0; phase < 2; phase++) {
+		if (kill(pid, signal_number) < 0 && errno != ESRCH) {
+			SPINE_LOG(("WARNING: Unable to signal PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
+		}
+
+		for (attempts = 0; attempts < 20; attempts++) {
+			do {
+				waited = waitpid(pid, &status, WNOHANG);
+			} while (waited < 0 && errno == EINTR);
+
+			if (waited == pid || (waited < 0 && errno == ECHILD)) {
+				return;
+			}
+
+			if (waited < 0) {
+				SPINE_LOG(("WARNING: Unable to reap PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
+				return;
+			}
+
+			/* The delay is load-bearing: without it both phases burn twenty
+			 * WNOHANG polls in nanoseconds, so SIGKILL lands immediately and
+			 * the child is never reaped. */
+			usleep(50000);
+		}
+
+		signal_number = SIGKILL;
+	}
+
+	SPINE_LOG(("WARNING: PHP Script Server PID[%ld] did not exit after SIGKILL", (long)pid));
+}
+
 /*! \fn void php_close(int php_process)
  *  \brief close the php script server process
  *  \param php_process the process to close or PHP_INIT
@@ -585,12 +564,13 @@ int php_init(int php_process) {
  *  information is will close and/or terminate the child PHP Script Server
  *  process and then return to the calling function.
  *
-	 */
+	 *  Child shutdown is bounded: SIGTERM receives a grace period before SIGKILL.
+	 *  Both phases use non-blocking reaping so a wedged child cannot hang Spine.
+ */
 void php_close(int php_process) {
 	int i;
 	int num_processes;
 	int len;
-	int wstatus;
 
 	if (php_process == PHP_INIT) {
 		num_processes = set.php_servers;
@@ -622,15 +602,18 @@ void php_close(int php_process) {
 
 			len = write(phpp->php_write_fd, quit, strlen(quit));
 
-			if (len >= 0) {
-				close(phpp->php_write_fd);
-				phpp->php_write_fd = -1;
+			if (len < 0) {
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Script Server quit write failed, closing anyway", i));
 			}
 
+			/* Close regardless of the write result.  A dead child makes the
+			 * write fail with EPIPE, and skipping the close leaked one
+			 * descriptor per script server restart. */
+			close(phpp->php_write_fd);
+			phpp->php_write_fd = -1;
+
 			/* wait before killing php */
-			#ifndef SOLAR_THREAD
 			usleep(50000);			/* 50 msec */
-			#endif
 		}
 
 		/* only try to kill the process if the PID looks valid.
@@ -638,17 +621,7 @@ void php_close(int php_process) {
 	 	 * a process group leader), and PID 1 is "init".
 	  	 */
 		if (phpp->php_pid > 1) {
-			/* end the php script server process */
-			kill(phpp->php_pid, SIGTERM);
-
-			if (!php_reap_child(phpp->php_pid, &wstatus, PHP_CLOSE_TERM_ATTEMPTS)) {
-				SPINE_LOG(("WARNING: SS[%i] PHP Script Server did not exit after SIGTERM; sending SIGKILL", i));
-				kill(phpp->php_pid, SIGKILL);
-
-				if (!php_reap_child(phpp->php_pid, &wstatus, PHP_CLOSE_KILL_ATTEMPTS)) {
-					SPINE_LOG(("WARNING: SS[%i] PHP Script Server could not be reaped after SIGKILL", i));
-				}
-			}
+			php_terminate_and_reap(phpp->php_pid);
 
 			phpp->php_pid = -1;
 		}

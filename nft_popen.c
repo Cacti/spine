@@ -101,58 +101,6 @@ static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void	close_cleanup(void *);
 
-#define NFT_PCLOSE_REAP_USEC 50000
-#define NFT_PCLOSE_TERM_ATTEMPTS 100
-#define NFT_PCLOSE_KILL_ATTEMPTS 20
-
-static int set_cloexec(int fd) {
-	int flags;
-
-	flags = fcntl(fd, F_GETFD);
-	if (flags < 0) {
-		return -1;
-	}
-
-	return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
-}
-
-static int set_pipe_cloexec(int pdes[2]) {
-	return set_cloexec(pdes[0]) == 0 && set_cloexec(pdes[1]) == 0;
-}
-
-static int reap_child_bounded(pid_t pid, int *pstat, int attempts) {
-	int attempt;
-	pid_t waited;
-
-	for (attempt = 0; attempt < attempts; attempt++) {
-		do {
-			waited = waitpid(pid, pstat, WNOHANG);
-		} while (waited < 0 && errno == EINTR);
-
-		if (waited == pid) {
-			return 0;
-		}
-
-		if (waited < 0 && errno == ECHILD) {
-			/* someone else reaped it, so no status is available */
-			*pstat = 0;
-			return 0;
-		}
-
-		if (waited < 0) {
-			return -1;
-		}
-
-		#ifndef SOLAR_THREAD
-		usleep(NFT_PCLOSE_REAP_USEC);
-		#else
-		sleep(1);
-		#endif
-	}
-
-	return 1;
-}
-
 /*! ------------------------------------------------------------------------------
  *
  *  nft_popen
@@ -209,12 +157,6 @@ int nft_popen(const char * command, const char * type) {
 	if (pipe(pdes) < 0)
 		return -1;
 
-	if (!set_pipe_cloexec(pdes)) {
-		(void)close(pdes[0]);
-		(void)close(pdes[1]);
-		return -1;
-	}
-
 	/* Disable thread cancellation from this point forward. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
@@ -251,6 +193,7 @@ int nft_popen(const char * command, const char * type) {
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
 		free(command_copy);
+		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
 		return -1;
 	}
@@ -301,6 +244,7 @@ int nft_popen(const char * command, const char * type) {
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
 		free(command_copy);
+		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
 		return -1;
 	}
@@ -412,23 +356,8 @@ nft_pclose(int fd)
 
 	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-	switch (reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS)) {
-	case 0:
-		pid = cur->pid;
-		break;
-	case 1:
-		(void)kill(cur->pid, SIGKILL);
-		if (reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
-			pid = cur->pid;
-		} else {
-			errno = ETIMEDOUT;
-			pid = -1;
-		}
-		break;
-	default:
-		pid = -1;
-		break;
-	}
+	do { pid = waitpid(cur->pid, &pstat, 0);
+	} while (pid == -1 && errno == EINTR);
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 

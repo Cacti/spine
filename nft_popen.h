@@ -21,6 +21,8 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_NFT_POPEN_H
+#define SPINE_NFT_POPEN_H
 /******************************************************************************
  ex: set tabstop=4 shiftwidth=4 autoindent:
  *
@@ -91,3 +93,5 @@ extern int	nft_pchild(int fd);
  *	ECHILD	waitpid() failed.
  */
 extern int	nft_pclose(int fd);
+
+#endif /* SPINE_NFT_POPEN_H */
