@@ -421,9 +421,9 @@ int main(int argc, char *argv[]) {
 
 			if (value == NULL) {
 				die("ERROR: -O requires setting:value");
+			} else {
+				*value++ = '\0';
 			}
-
-			*value++ = '\0';
 
 			set_option(setting, value);
 		}
@@ -768,6 +768,7 @@ int main(int argc, char *argv[]) {
 			mysql_row       = mysql_fetch_row(result);
 
 			if (mysql_row == NULL) {
+				/* fewer device rows than expected; stop processing */
 				break;
 			}
 
@@ -791,9 +792,14 @@ int main(int argc, char *argv[]) {
 			}
 
 			tresult   = db_query(&mysql, LOCAL, querybuf);
-			mysql_row = mysql_fetch_row(tresult);
+			mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
 
-			total_items = (mysql_row != NULL) ? atoi(mysql_row[0]) : 0;
+			if (mysql_row == NULL) {
+				total_items = 0;
+			} else {
+				total_items = atoi(mysql_row[0]);
+			}
+
 			db_free_result(tresult);
 
 			if (total_items && total_items < device_threads) {
@@ -815,9 +821,13 @@ int main(int argc, char *argv[]) {
 				}
 
 				tresult   = db_query(&mysql, LOCAL, querybuf);
-				mysql_row = mysql_fetch_row(tresult);
+				mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
 
-				items_per_thread = (mysql_row != NULL) ? atoi(mysql_row[0]) : 0;
+				if (mysql_row == NULL) {
+					items_per_thread = 0;
+				} else {
+					items_per_thread = atoi(mysql_row[0]);
+				}
 
 				db_free_result(tresult);
 
@@ -830,9 +840,13 @@ int main(int argc, char *argv[]) {
 		} else {
 			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
 			tresult   = db_query(&mysql, LOCAL, querybuf);
-			mysql_row = mysql_fetch_row(tresult);
+			mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
 
-			items_per_thread = (mysql_row != NULL) ? atoi(mysql_row[0]) : 0;
+			if (mysql_row == NULL) {
+				items_per_thread = 0;
+			} else {
+				items_per_thread = atoi(mysql_row[0]);
+			}
 
 			db_free_result(tresult);
 
@@ -914,16 +928,14 @@ int main(int argc, char *argv[]) {
 			sem_err = spine_sem_trywait(&thread_init_sem);
 
 			if (sem_err == 0) {
-				// Acquired a thread
+				/* acquired the thread init lock */
 				break;
-			} else if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
 			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
+				int sem_errno = errno;
+
+				if (sem_errno != EAGAIN) {
+					SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_errno));
+				}
 			}
 
 			if (loop_count == 10) {
@@ -968,7 +980,8 @@ int main(int argc, char *argv[]) {
 				spine_sem_getvalue(&available_threads, &a_threads_value);
 				SPINE_LOG_HIGH(("Device[%i] DEBUG: Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
 
-				spine_sem_post(&thread_init_sem);
+				/* the child releases thread_init_sem once it has copied poller_details
+				 * and dropped LOCK_HOST_TIME; posting here too double-counts the semaphore */
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" host_threads = %d, host_data_ids = %d, complete = %d",
