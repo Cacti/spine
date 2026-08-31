@@ -67,6 +67,7 @@ static inline int spine_sem_wait(spine_sem_t *s) {
 	return 0;
 }
 
+/* Returns 0 when a token is acquired, or -1 with errno set like sem_trywait. */
 static inline int spine_sem_trywait(spine_sem_t *s) {
 	pthread_mutex_lock(&s->mutex);
 	if (s->value <= 0) {

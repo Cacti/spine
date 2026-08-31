@@ -61,11 +61,94 @@ static struct {
  */
 void set_option(const char *option, const char *value) {
 	if (nopts >= (int)(sizeof(opttable) / sizeof(opttable[0]))) {
-		die("ERROR: Too many command-line options specified");
+		die("ERROR: too many --option overrides");
 	}
 
 	opttable[nopts  ].opt = option;
 	opttable[nopts++].val = value;
+}
+
+/* Settings cache.
+ *
+ * read_config_options() looks up two dozen settings and each one was its own
+ * round trip.  The settings table is small, so it is read once up front and
+ * served from memory for the duration of that call.  Only ever populated and
+ * used from read_config_options(), which runs before any poller thread
+ * exists, so no locking is required.
+ */
+typedef struct setting_cache_entry {
+	char *name;
+	char *value;
+} setting_cache_t;
+
+static setting_cache_t *settings_cache       = NULL;
+static int              settings_cache_count = 0;
+
+static void settings_cache_free(void) {
+	int i;
+
+	if (settings_cache == NULL) return;
+
+	for (i = 0; i < settings_cache_count; i++) {
+		free(settings_cache[i].name);
+		free(settings_cache[i].value);
+	}
+
+	free(settings_cache);
+	settings_cache       = NULL;
+	settings_cache_count = 0;
+}
+
+static void settings_cache_load(MYSQL *psql, int mode) {
+	MYSQL_RES *result;
+	MYSQL_ROW  row;
+	my_ulonglong rows;
+	setting_cache_t *table;
+	int i = 0;
+
+	assert(psql != 0);
+
+	settings_cache_free();
+
+	result = db_query(psql, mode, "SELECT SQL_NO_CACHE name, value FROM settings");
+
+	if (result == NULL) return;
+
+	rows = mysql_num_rows(result);
+
+	if (rows == 0 || rows > (my_ulonglong) INT_MAX) {
+		db_free_result(result);
+		return;
+	}
+
+	table = (setting_cache_t *) calloc((size_t) rows, sizeof(setting_cache_t));
+
+	if (table == NULL) {
+		db_free_result(result);
+		return;
+	}
+
+	while ((row = mysql_fetch_row(result)) != NULL && i < (int) rows) {
+		if (row[0] == NULL) continue;
+
+		table[i].name  = strdup(row[0]);
+		table[i].value = strdup(row[1] != NULL ? row[1] : "");
+
+		if (table[i].name == NULL || table[i].value == NULL) {
+			free(table[i].name);
+			free(table[i].value);
+			break;
+		}
+
+		i++;
+	}
+
+	db_free_result(result);
+
+	settings_cache       = table;
+	settings_cache_count = i;
+
+	SPINE_LOG_DEBUG(("DEBUG: Loaded %i Cacti settings in one query", i));
 }
 
 /*! \fn static char *getsetting(MYSQL *psql, int mode, const char *setting)
@@ -98,6 +181,17 @@ static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 			retval = strdup(opttable[i].val);
 			return retval;
 		}
+	}
+
+	/* served from the bulk-loaded table when read_config_options() is running */
+	if (settings_cache != NULL) {
+		for (i = 0; i < settings_cache_count; i++) {
+			if (STRIMATCH(setting, settings_cache[i].name)) {
+				return strdup(settings_cache[i].value);
+			}
+		}
+
+		return strdup("");
 	}
 
 	snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
@@ -331,6 +425,83 @@ int is_debug_device(int device_id) {
 	return FALSE;
 }
 
+/*! \fn static void read_availability_settings(MYSQL *psql)
+ *  \brief load the device availability and ping settings
+ *
+ *  Split out of read_config_options() unchanged; the settings and their
+ *  fallbacks are exactly as they were.
+ */
+static void read_availability_settings(MYSQL *psql) {
+	char *res;
+
+	/* set availability_method */
+	if ((res = getsetting(psql, LOCAL, "availability_method")) != 0) {
+		set.availability_method = atoi(res);
+		free(res);
+	}
+
+	/* log the availability_method variable */
+	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i", set.availability_method));
+
+	/* set ping_recovery_count */
+	if ((res = getsetting(psql, LOCAL, "ping_recovery_count")) != 0) {
+		set.ping_recovery_count = atoi(res);
+		free(res);
+	}
+
+	/* log the ping_recovery_count variable */
+	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i", set.ping_recovery_count));
+
+	/* set ping_failure_count */
+	if ((res = getsetting(psql, LOCAL, "ping_failure_count")) != 0) {
+		set.ping_failure_count = atoi(res);
+		free(res);
+	}
+
+	/* log the ping_failure_count variable */
+	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i", set.ping_failure_count));
+
+	/* set ping_method */
+	if ((res = getsetting(psql, LOCAL, "ping_method")) != 0) {
+		set.ping_method = atoi(res);
+		free(res);
+	}
+
+	/* log the ping_method variable */
+	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i", set.ping_method));
+
+	/* set ping_retries */
+	if ((res = getsetting(psql, LOCAL, "ping_retries")) != 0) {
+		set.ping_retries = atoi(res);
+		free(res);
+	}
+
+	/* log the ping_retries variable */
+	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i", set.ping_retries));
+
+	/* set ping_timeout */
+	if ((res = getsetting(psql, LOCAL, "ping_timeout")) != 0) {
+		set.ping_timeout = atoi(res);
+		free(res);
+	} else {
+		set.ping_timeout = 400;
+	}
+
+	/* log the ping_timeout variable */
+	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
+
+	/* set snmp_retries */
+	if ((res = getsetting(psql, LOCAL, "snmp_retries")) != 0) {
+		set.snmp_retries = atoi(res);
+		free(res);
+	} else {
+		set.snmp_retries = 3;
+	}
+
+	/* log the snmp_retries variable */
+	SPINE_LOG_DEBUG(("DEBUG: The snmp_retries variable is %i", set.snmp_retries));
+}
+
 /*! \fn void read_config_options(void)
  *  \brief Reads the default Spine runtime parameters from the database and set's the global array
  *
@@ -351,12 +522,17 @@ void read_config_options(void) {
 	char       spine_auth[BUFSIZE];
 	char       spine_capabilities[BUFSIZE];
 
+	web_root[0] = '\0';
+
 	/* publish spine snmpv3 capabilities to the database */
 	memset(spine_capabilities, 0, sizeof(spine_capabilities));
 	memset(spine_priv, 0, sizeof(spine_priv));
 	memset(spine_auth, 0, sizeof(spine_auth));
 
 	db_connect(LOCAL, &mysql);
+
+	/* one round trip instead of one per setting */
+	settings_cache_load(&mysql, LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		db_connect(REMOTE, &mysqlr);
@@ -445,7 +621,7 @@ void read_config_options(void) {
 	/* get log date format */
 	if ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0) {
 		set.log_datetime_format = atoi(res);
-		free((char *)res);
+		free(res);
 
 		if (set.log_datetime_format < GD_MIN || set.log_datetime_format > GD_MAX) {
 			set.log_datetime_format = GD_DEFAULT;
@@ -485,72 +661,7 @@ void read_config_options(void) {
 	/* log the path_php variable */
 	SPINE_LOG_DEBUG(("DEBUG: The path_php variable is %s", set.path_php));
 
-	/* set availability_method */
-	if ((res = getsetting(&mysql, LOCAL, "availability_method")) != 0) {
-		set.availability_method = atoi(res);
-		free(res);
-	}
-
-	/* log the availability_method variable */
-	SPINE_LOG_DEBUG(("DEBUG: The availability_method variable is %i", set.availability_method));
-
-	/* set ping_recovery_count */
-	if ((res = getsetting(&mysql, LOCAL, "ping_recovery_count")) != 0) {
-		set.ping_recovery_count = atoi(res);
-		free(res);
-	}
-
-	/* log the ping_recovery_count variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_recovery_count variable is %i", set.ping_recovery_count));
-
-	/* set ping_failure_count */
-	if ((res = getsetting(&mysql, LOCAL, "ping_failure_count")) != 0) {
-		set.ping_failure_count = atoi(res);
-		free(res);
-	}
-
-	/* log the ping_failure_count variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_failure_count variable is %i", set.ping_failure_count));
-
-	/* set ping_method */
-	if ((res = getsetting(&mysql, LOCAL, "ping_method")) != 0) {
-		set.ping_method = atoi(res);
-		free(res);
-	}
-
-	/* log the ping_method variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_method variable is %i", set.ping_method));
-
-	/* set ping_retries */
-	if ((res = getsetting(&mysql, LOCAL, "ping_retries")) != 0) {
-		set.ping_retries = atoi(res);
-		free(res);
-	}
-
-	/* log the ping_retries variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_retries variable is %i", set.ping_retries));
-
-	/* set ping_timeout */
-	if ((res = getsetting(&mysql, LOCAL, "ping_timeout")) != 0) {
-		set.ping_timeout = atoi(res);
-		free(res);
-	} else {
-		set.ping_timeout = 400;
-	}
-
-	/* log the ping_timeout variable */
-	SPINE_LOG_DEBUG(("DEBUG: The ping_timeout variable is %i", set.ping_timeout));
-
-	/* set snmp_retries */
-	if ((res = getsetting(&mysql, LOCAL, "snmp_retries")) != 0) {
-		set.snmp_retries = atoi(res);
-		free(res);
-	} else {
-		set.snmp_retries = 3;
-	}
-
-	/* log the snmp_retries variable */
-	SPINE_LOG_DEBUG(("DEBUG: The snmp_retries variable is %i", set.snmp_retries));
+	read_availability_settings(&mysql);
 
 	/* set logging option for errors */
 	set.log_perror = getboolsetting(&mysql, LOCAL, "log_perror", FALSE);
@@ -814,6 +925,8 @@ void read_config_options(void) {
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		db_disconnect(&mysqlr);
 	}
+
+	settings_cache_free();
 }
 
 void poller_push_data_to_main(void) {
@@ -1762,7 +1875,9 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 	copy_len = strnlen(src, obuf - 1);
 
 	if (copy_len) {
-		strncpy(dst, src, copy_len);
+		/* copy_len is the exact byte count and dst is terminated below, so
+		 * memcpy avoids the strncpy truncation diagnostic. */
+		memcpy(dst, src, copy_len);
 	}
 
 	dst[copy_len] = '\0';

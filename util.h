@@ -31,6 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
+#ifndef SPINE_UTIL_H
+#define SPINE_UTIL_H
 /* cacti config reading functions */
 extern void read_config_options(void);
 extern int read_spine_config(const char *file);
@@ -108,3 +110,5 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+#endif /* SPINE_UTIL_H */

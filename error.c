@@ -39,58 +39,112 @@
 #include "common.h"
 #include "spine.h"
 
+/*! \fn static void signal_write(const char *text)
+ *  \brief writes a NUL terminated message to stderr from a signal handler
+ *
+ */
+static void signal_write(const char *text) {
+	size_t length = 0;
+
+	while (text[length] != '\0') {
+		length++;
+	}
+
+	while (length > 0) {
+		ssize_t written = write(STDERR_FILENO, text, length);
+
+		if (written <= 0) {
+			if (written < 0 && errno == EINTR) {
+				continue;
+			}
+
+			return;
+		}
+
+		text   += written;
+		length -= (size_t) written;
+	}
+}
+
+/*! \fn static void signal_write_number(long long value)
+ *  \brief writes a number to stderr from a signal handler
+ *
+ */
+static void signal_write_number(long long value) {
+	char   digits[24];
+	size_t index = sizeof(digits) - 1;
+	unsigned long long magnitude = (unsigned long long) value;
+
+	digits[index] = '\0';
+
+	do {
+		digits[--index] = (char) ('0' + (magnitude % 10));
+		magnitude /= 10;
+	} while (magnitude > 0 && index > 0);
+
+	signal_write(digits + index);
+}
+
 /*! \fn static void spine_signal_handler(int spine_signal)
  *  \brief interrupts the os default signal handler as appropriate.
  *
+ *  Only async-signal-safe calls belong here.  A SIGSEGV usually follows heap
+ *  corruption, so formatting a log timestamp with strftime would take the
+ *  malloc arena lock from the fault handler and hang the poller instead of
+ *  killing it.  time() is on the POSIX async-signal-safe list, so the stamp is
+ *  written as epoch seconds and the reader converts it.
  */
 static void spine_signal_handler(int spine_signal) {
+	const char *message = NULL;
+	int saved_errno = errno;
+
 	signal(spine_signal, SIG_DFL);
 
 	set.exit_code = spine_signal;
 
-	/* variables for time display */
-	time_t nowbin;
-	struct tm now_time;
-	struct tm *now_ptr;
-
-	/* get time for poller_output table */
-	nowbin = time(&nowbin);
-
-	localtime_r(&nowbin,&now_time);
-	now_ptr = &now_time;
-
-	char *log_fmt = get_date_format();
-	char logtime[50];
-
-	strftime(logtime, 50, log_fmt, now_ptr);
-
 	switch (spine_signal) {
 		case SIGABRT:
-			fprintf(stderr, "%s FATAL: Spine Interrupted by Abort Signal\n", logtime);
+			message = "FATAL: Spine Interrupted by Abort Signal\n";
 			break;
 		case SIGINT:
-			fprintf(stderr, "%s FATAL: Spine Interrupted by Console Operator\n", logtime);
+			message = "FATAL: Spine Interrupted by Console Operator\n";
 			break;
 		case SIGSEGV:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Segmentation Fault\n", logtime);
-			_exit(1);
+			message = "FATAL: Spine Encountered a Segmentation Fault\n";
 			break;
 		case SIGBUS:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Bus Error\n", logtime);
+			message = "FATAL: Spine Encountered a Bus Error\n";
 			break;
 		case SIGFPE:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Floating Point Exception\n", logtime);
+			message = "FATAL: Spine Encountered a Floating Point Exception\n";
 			break;
 		case SIGQUIT:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Keyboard Quit Command\n", logtime);
+			message = "FATAL: Spine Encountered a Keyboard Quit Command\n";
 			break;
 		case SIGPIPE:
-			fprintf(stderr, "%s FATAL: Spine Encountered a Broken Pipe\n", logtime);
+			message = "FATAL: Spine Encountered a Broken Pipe\n";
 			break;
 		default:
-			fprintf(stderr, "%s FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", logtime, spine_signal);
 			break;
 	}
+
+	signal_write("[");
+	signal_write_number((long long) time(NULL));
+	signal_write("] ");
+
+	if (message != NULL) {
+		signal_write(message);
+	} else {
+		signal_write("FATAL: Spine Encountered An Unhandled Exception Signal Number: '");
+		signal_write_number(spine_signal);
+		signal_write("'\n");
+	}
+
+	if (spine_signal == SIGSEGV) {
+		_exit(1);
+	}
+
+	errno = saved_errno;
 }
 
 static int spine_fatal_signals[] = {
