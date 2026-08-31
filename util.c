@@ -207,6 +207,7 @@ static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 				db_free_result(result);
 				return retval;
 			}else{
+				db_free_result(result);
 				return strdup("");
 			}
 		}else{
@@ -299,6 +300,7 @@ static char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 				db_free_result(result);
 				return retval;
 			} else {
+				db_free_result(result);
 				return 0;
 			}
 		} else {
@@ -394,6 +396,7 @@ static char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 				db_free_result(result);
 				return retval;
 			} else {
+				db_free_result(result);
 				return 0;
 			}
 		} else {
@@ -2240,6 +2243,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 					return cacti_version;
 				}
 			}else{
+				db_free_result(result);
 				return 0;
 			}
 		}else{
