@@ -195,6 +195,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	session.peername    = strdup(hostnameport);
 	if (!session.peername) {
 		SPINE_LOG(("Device[%i] ERROR: Failed to allocate peername for '%s'", host_id, hostname));
+		free(session.localname);
 		return 0;
 	}
 	session.retries     = set.snmp_retries;
@@ -406,6 +407,26 @@ void snmp_host_cleanup(void *snmp_session) {
 		snmp_sess_close(snmp_session);
 		thread_mutex_unlock(LOCK_SNMP);
 	}
+}
+
+/*! \fn int snmp_varbind_is_exception(const struct variable_list *vars)
+ *  \brief report whether a varbind carries a per-OID exception rather than data
+ *
+ *  Under SNMPv2c an agent reports a single unanswerable OID as an inline
+ *  exception varbind while the PDU errstat stays SNMP_ERR_NOERROR. Passing one
+ *  to snprint_value() renders the exception as text, which then gets stored as
+ *  though it were a real value.
+ *
+ *  \return TRUE when the varbind is an exception
+ */
+int snmp_varbind_is_exception(const struct variable_list *vars) {
+	if (vars == NULL) {
+		return FALSE;
+	}
+
+	return (vars->type == SNMP_NOSUCHOBJECT ||
+		vars->type == SNMP_NOSUCHINSTANCE ||
+		vars->type == SNMP_ENDOFMIBVIEW);
 }
 
 /*! \fn char *snmp_get_base(host_t *current_host, const char *snmp_oid, bool should_fail)
@@ -728,7 +749,7 @@ char *snmp_getnext(host_t *current_host, const char *snmp_oid) {
 				if (response->errstat == SNMP_ERR_NOERROR) {
 					vars = response->variables;
 
-					if (vars != NULL) {
+					if (vars != NULL && !snmp_varbind_is_exception(vars)) {
 						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
 
 						snprint_asciistring(result_string, RESULTS_BUFFER, (unsigned char *)temp_result, strlen(temp_result));
@@ -890,8 +911,7 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 
 			if (status == STAT_SUCCESS) {
 				if (response == NULL) {
-					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
-					status = STAT_ERROR;
+					SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error in snmp_count for OID %s", current_host->id, snmp_oid));
 					ok = 0;
 					error_occurred = 1;
 				} else if (response->errstat == SNMP_ERR_NOERROR) {
@@ -923,14 +943,16 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 						}
 					}
 				} else {
-					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+					SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error in snmp_count for OID %s", current_host->id, snmp_oid));
+					ok = 0;
+					error_occurred = 1;
 				}
 			} else if (status == STAT_TIMEOUT) {
-				SPINE_LOG(("ERROR: Timeout detected in Cacti snmp_count"));
+				SPINE_LOG(("ERROR: Device[%i] timeout in snmp_count for OID %s", current_host->id, snmp_oid));
 				ok = 0;
 				error_occurred = 1;
 			} else { /* status == STAT_ERROR */
-				SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count (STAT_ERROR)"));
+				SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error in snmp_count for OID %s (STAT_ERROR)", current_host->id, snmp_oid));
 				ok = 0;
 				error_occurred = 1;
 			}
@@ -1044,9 +1066,19 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 
 				for (i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
-						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						/* Under v2c an agent reports a per-OID failure as an
+						 * exception varbind while the PDU errstat stays
+						 * NOERROR.  Without this check snprint_value() renders
+						 * the exception as text and it is stored as a value. */
+						if (snmp_varbind_is_exception(vars)) {
+							SPINE_LOG_HIGH(("Device[%i] WARNING: No SNMP data returned for OID '%s'", current_host->id, snmp_oids[i].oid));
 
-						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
+							SET_UNDEFINED(snmp_oids[i].result);
+						} else {
+							snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+
+							snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
+						}
 
 						vars = vars->next_variable;
 					}
