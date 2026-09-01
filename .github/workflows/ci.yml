@@ -75,6 +75,40 @@ jobs:
 #            --suppress=toomanyconfigs \
 #            *.c *.h
 
+  # Coverage is reported, not gated.  The number is only meaningful once
+  # something measures it; the threshold conversation comes after that.
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y mysql-server libmysqlclient-dev libsnmp-dev \
+            libssl-dev build-essential help2man autoconf automake libtool \
+            dos2unix libcmocka-dev gcovr
+
+      - name: Build instrumented
+        run: |
+          set -euo pipefail
+          ./bootstrap
+          ./configure CFLAGS="-g -O0 --coverage" LDFLAGS="--coverage"
+          make -j"$(nproc)"
+
+      - name: Run the unit tests
+        run: make check
+
+      - name: Report coverage
+        run: |
+          set -euo pipefail
+          # configure leaves instrumented conftest objects behind and gcovr
+          # cannot resolve their sources
+          rm -f ./*conftest*.gcno ./*conftest*.gcda
+          gcovr -r . --exclude 'tests/.*' --txt --print-summary
+
   flawfinder:
     runs-on: ubuntu-latest
     timeout-minutes: 20
