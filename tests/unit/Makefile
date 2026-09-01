@@ -49,7 +49,8 @@ BUILD_FIXES   := $(BINDIR)/test_build_fixes
 SAFETY_FIXES  := $(BINDIR)/test_safety_fixes
 STRINGS       := $(BINDIR)/test_util_strings
 NEWLINE_BOUND := $(BINDIR)/test_log_newline_bound
-TARGETS       := $(BUILD_FIXES) $(SAFETY_FIXES) $(STRINGS) $(NEWLINE_BOUND)
+UTIL_PATHS    := $(BINDIR)/test_util_paths
+TARGETS       := $(BUILD_FIXES) $(SAFETY_FIXES) $(STRINGS) $(NEWLINE_BOUND) $(UTIL_PATHS)
 
 .PHONY: all build run clean
 

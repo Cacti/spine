@@ -393,21 +393,24 @@ static void test_read_spine_config_reads_settings(void **state) {
 	remove(path);
 }
 
-/* --- get_date_format(): every format and separator is owned by the caller -- */
+/* --- get_date_format(): cached storage, rebuilt by set_date_format() ------ */
 
-static void test_get_date_format_returns_owned_memory(void **state) {
+static void test_get_date_format_returns_cached_storage(void **state) {
 	char *fmt;
 	(void) state;
 
 	config_defaults();
+	set_date_format();
 	fmt = get_date_format();
 
 	assert_non_null(fmt);
 	assert_true(strlen(fmt) > 0);
-	free(fmt);
+
+	/* the buffer belongs to util.c and is handed out, not owned by us */
+	assert_ptr_equal(fmt, get_date_format());
 }
 
-static void test_get_date_format_clamps_an_out_of_range_format(void **state) {
+static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
 	char *fmt;
 	(void) state;
 
@@ -415,12 +418,12 @@ static void test_get_date_format_clamps_an_out_of_range_format(void **state) {
 	set.log_datetime_format    = GD_MAX + 10;
 	set.log_datetime_separator = GDC_MAX + 10;
 
+	set_date_format();
 	fmt = get_date_format();
 
 	assert_non_null(fmt);
 	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
 	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
-	free(fmt);
 }
 
 static void test_get_date_format_covers_each_supported_format(void **state) {
@@ -436,10 +439,10 @@ static void test_get_date_format_covers_each_supported_format(void **state) {
 			set.log_datetime_format    = fmt_value;
 			set.log_datetime_separator = sep_value;
 
+			set_date_format();
 			fmt = get_date_format();
 			assert_non_null(fmt);
 			assert_true(strlen(fmt) > 0);
-			free(fmt);
 		}
 	}
 }
@@ -634,8 +637,8 @@ int main(void) {
 		cmocka_unit_test(test_config_defaults_populates_the_set),
 		cmocka_unit_test(test_read_spine_config_rejects_a_missing_file),
 		cmocka_unit_test(test_read_spine_config_reads_settings),
-		cmocka_unit_test(test_get_date_format_returns_owned_memory),
-		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
+		cmocka_unit_test(test_get_date_format_returns_cached_storage),
+		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
