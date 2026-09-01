@@ -34,6 +34,10 @@
 #include "common.h"
 #include "spine.h"
 
+#ifdef SPINE_HAVE_ICMPV6
+static int ping_icmp_ipv6(host_t *host, ping_t *ping);
+#endif
+
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
  *  \param host a pointer to the current host structure
@@ -47,6 +51,7 @@
 int ping_host(host_t *host, ping_t *ping) {
 	int ping_result;
 	int snmp_result;
+	int address_type;
 	double snmp_start_time;
 	double snmp_end_time;
 
@@ -67,7 +72,9 @@ int ping_host(host_t *host, ping_t *ping) {
 		}
 
 		if (!strstr(host->hostname, "localhost")) {
-			if (get_address_type(host) == 1) {
+			address_type = get_address_type(host);
+
+			if (address_type == SPINE_IPV4) {
 				if (host->ping_method == PING_ICMP) {
 					ping_result = ping_icmp(host, ping);
 				} else if (host->ping_method == PING_UDP) {
@@ -75,6 +82,10 @@ int ping_host(host_t *host, ping_t *ping) {
 				} else if (host->ping_method == PING_TCP || host->ping_method == PING_TCP_CLOSED) {
 					ping_result = ping_tcp(host, ping);
 				}
+			#ifdef SPINE_HAVE_ICMPV6
+			} else if (address_type == SPINE_IPV6 && host->ping_method == PING_ICMP) {
+				ping_result = ping_icmp_ipv6(host, ping);
+			#endif
 			} else if (host->availability_method == AVAIL_PING) {
 				snprintf(ping->ping_status, 50, "0.000");
 				snprintf(ping->ping_response, SMALL_BUFSIZE, "PING: Device is Unknown or is IPV6.  Please use the SNMP ping options only.");
@@ -313,6 +324,43 @@ spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply, ssize_t
 	return SPINE_ICMP_REPLY_OK;
 }
 
+/*! \fn spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply, ssize_t len, uint16_t want_seq, const struct icmp **out_pkt)
+ *  \brief classifies an echo reply read from an unprivileged datagram socket
+ *
+ *  A SOCK_DGRAM ICMP socket delivers the reply with the IPv4 header already
+ *  stripped, and the kernel assigns the echo id rather than honouring the one
+ *  we wrote, so the sequence is all that is left to match on.  The caller has
+ *  already checked the source address.
+ */
+spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply, ssize_t len,
+	uint16_t want_seq, const struct icmp **out_pkt) {
+	const struct icmp *pkt;
+
+	if (out_pkt != NULL) {
+		*out_pkt = NULL;
+	}
+
+	if (reply == NULL || len < (ssize_t) ICMP_HDR_SIZE) {
+		return SPINE_ICMP_REPLY_TOO_SHORT;
+	}
+
+	pkt = (const struct icmp *) reply;
+
+	if (pkt->icmp_type != ICMP_ECHOREPLY) {
+		return SPINE_ICMP_REPLY_NOT_ECHO;
+	}
+
+	if (pkt->icmp_seq != want_seq) {
+		return SPINE_ICMP_REPLY_NOT_OURS;
+	}
+
+	if (out_pkt != NULL) {
+		*out_pkt = pkt;
+	}
+
+	return SPINE_ICMP_REPLY_OK;
+}
+
 /*! \fn int ping_icmp(host_t *host, ping_t *ping)
  *  \brief ping a host using an ICMP packet
  *  \param host a pointer to the current host structure
@@ -327,6 +375,7 @@ spine_icmp_reply_t spine_icmp_classify_reply(const unsigned char *reply, ssize_t
  */
 int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_socket;
+	int    icmp_dgram;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -354,9 +403,21 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	}
 
+	/* Linux hands out SOCK_DGRAM ICMP sockets to the groups listed in
+	 * net.ipv4.ping_group_range, so try that before asking for root.  When
+	 * the sysctl excludes us the call fails and the raw path below runs
+	 * unchanged.  A datagram reply arrives with the IPv4 header already
+	 * stripped, which the receive path has to account for. */
+	icmp_dgram  = FALSE;
+	icmp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+
+	if (icmp_socket != -1) {
+		icmp_dgram = TRUE;
+	}
+
 	/* get ICMP socket */
 	retry_count = 0;
-	while (TRUE) {
+	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 		if (hasCaps() != TRUE) {
 			thread_mutex_lock(LOCK_SETEUID);
@@ -390,7 +451,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	}
 
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (hasCaps() != TRUE) {
+	if (!icmp_dgram && hasCaps() != TRUE) {
 		if (seteuid(getuid()) == -1) {
 			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 		}
@@ -509,17 +570,29 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						}
 					} else {
 						const struct icmp  *reply_pkt = NULL;
+						const struct icmp  *seen       = NULL;
 						spine_icmp_reply_t  verdict;
 
-						verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
-							return_code, (uint16_t)(getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
+						if (icmp_dgram) {
+							verdict = spine_icmp_classify_dgram_reply((const unsigned char *) socket_reply,
+								return_code, icmp->icmp_seq, &reply_pkt);
+						} else {
+							verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
+								return_code, (uint16_t)(getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
+						}
 
 						if (verdict == SPINE_ICMP_REPLY_NOT_OURS) {
 							/* a middlebox that rewrites ICMP query ids is indistinguishable
 							 * from a dead device once the reply is dropped, so record what
-							 * arrived */
-							pkt = (struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
-							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int)(getpid() & 0xFFFF), icmp->icmp_seq, pkt->icmp_id, pkt->icmp_seq));
+							 * arrived.  Both classifiers validate the length before they can
+							 * return this, so the header is safe to read here */
+							if (icmp_dgram) {
+								seen = (const struct icmp *) socket_reply;
+							} else {
+								seen = (const struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
+							}
+
+							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int)(getpid() & 0xFFFF), icmp->icmp_seq, seen->icmp_id, seen->icmp_seq));
 						}
 
 						if (verdict != SPINE_ICMP_REPLY_OK && verdict != SPINE_ICMP_REPLY_NOT_ECHO) {
@@ -639,6 +712,427 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		return HOST_DOWN;
 	}
 }
+
+#ifdef SPINE_HAVE_ICMPV6
+
+/*! \fn static int init_sockaddr6(struct sockaddr_in6 *name, const char *hostname)
+ *  \brief converts a hostname or IPv6 literal to an IPv6 socket address
+ *
+ *  \return TRUE if successful, FALSE otherwise.
+ *
+ */
+static int init_sockaddr6(struct sockaddr_in6 *name, const char *hostname) {
+	struct addrinfo hints, *hostinfo;
+	int rv, retry_count;
+
+	memset(&hints, 0, sizeof(hints));
+
+	/* AI_ADDRCONFIG is deliberately omitted: it hides IPv6 results on hosts
+	 * that only carry a loopback address, which is exactly where a ::1 test
+	 * has to work */
+	hints.ai_family   = AF_INET6;
+	hints.ai_socktype = SOCK_DGRAM;
+
+	retry_count = 0;
+	hostinfo    = NULL;
+
+	while (TRUE) {
+		rv = getaddrinfo(hostname, NULL, &hints, &hostinfo);
+
+		if (rv == 0) {
+			break;
+		}
+
+		if ((rv == EAI_AGAIN) && (retry_count < 3)) {
+			retry_count++;
+			usleep(50000);
+			continue;
+		}
+
+		SPINE_LOG(("WARNING: Error resolving IPv6 host %s (%s)", hostname, gai_strerror(rv)));
+
+		return FALSE;
+	}
+
+	if (hostinfo == NULL) {
+		SPINE_LOG(("WARNING: Unknown host %s", hostname));
+
+		return FALSE;
+	}
+
+	if ((hostinfo->ai_family != AF_INET6) || (hostinfo->ai_addrlen < sizeof(struct sockaddr_in6))) {
+		SPINE_LOG(("WARNING: Host %s did not resolve to an IPv6 address", hostname));
+		freeaddrinfo(hostinfo);
+
+		return FALSE;
+	}
+
+	memcpy(name, hostinfo->ai_addr, sizeof(struct sockaddr_in6));
+
+	/* on a raw IPv6 socket sin6_port carries the protocol number rather
+	 * than a port, and the kernel rejects anything that disagrees with the
+	 * socket's own protocol */
+	name->sin6_port = 0;
+
+	freeaddrinfo(hostinfo);
+
+	return TRUE;
+}
+
+/*! \fn static void apply_ipv6_scope_id(struct sockaddr_in6 *name)
+ *  \brief supplies a scope id for a link local destination that lacks one
+ *
+ *  getaddrinfo() only fills in sin6_scope_id when the literal carries a
+ *  %zone suffix.  Without it the kernel refuses to send, so fall back to
+ *  the first non loopback interface that carries an IPv6 address.
+ *
+ */
+static void apply_ipv6_scope_id(struct sockaddr_in6 *name) {
+	#if defined(HAVE_IFADDRS_H) && defined(HAVE_NET_IF_H) && defined(HAVE_GETIFADDRS) && defined(HAVE_IF_NAMETOINDEX)
+	struct ifaddrs *ifa_list, *ifa;
+	unsigned int if_index;
+
+	ifa_list = NULL;
+
+	if (getifaddrs(&ifa_list) != 0) {
+		return;
+	}
+
+	for (ifa = ifa_list; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL) continue;
+		if (ifa->ifa_addr->sa_family != AF_INET6) continue;
+		if (ifa->ifa_flags & IFF_LOOPBACK) continue;
+
+		if_index = if_nametoindex(ifa->ifa_name);
+
+		if (if_index != 0) {
+			name->sin6_scope_id = if_index;
+			break;
+		}
+	}
+
+	freeifaddrs(ifa_list);
+	#else
+	(void) name;
+	#endif
+}
+
+/*! \fn static int ping_icmp_ipv6(host_t *host, ping_t *ping)
+ *  \brief ping a host using an ICMPv6 echo request
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  The IPv6 counterpart of ping_icmp().  The payload carries the same
+ *  "Cacti" marker so that firewalls can be configured to allow it, and the
+ *  kernel computes the ICMPv6 checksum on our behalf.  It will modify the
+ *  ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
+static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
+	int    icmp_socket;
+
+	double begin_time, end_time, total_time;
+	double host_timeout;
+	double one_thousand = 1000.00;
+	struct timeval timeout;
+
+	struct sockaddr_in6 recvname;
+	struct sockaddr_in6 fromname;
+	char   socket_reply[BUFSIZE];
+	int    retry_count;
+	const char *cacti_msg = "cacti-monitoring-system";
+	size_t msg_len;
+	int    packet_len;
+	socklen_t    fromlen;
+	ssize_t    return_code;
+	fd_set socket_fds;
+	int    result;
+
+	static   unsigned int seq = 0;
+
+	struct   icmp6_hdr *icmp6;
+	struct   icmp6_hdr reply;
+	unsigned char  *packet;
+	uint16_t our_id;
+	uint16_t our_seq;
+	int      icmp_dgram;
+
+	if (is_debug_device(host->id)) {
+		SPINE_LOG(("Device[%i] DEBUG: Entering ICMPv6 Ping", host->id));
+	} else {
+		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering ICMPv6 Ping", host->id));
+	}
+
+	result      = HOST_DOWN;
+	packet      = NULL;
+	icmp_socket = -1;
+	retry_count = 0;
+	msg_len     = strlen(cacti_msg);
+
+	/* net.ipv4.ping_group_range governs IPPROTO_ICMPV6 datagram sockets as
+	 * well, so the unprivileged path is worth trying here too.  The kernel
+	 * rewrites the echo id on such a socket, which the reply match below
+	 * accounts for. */
+	icmp_dgram  = FALSE;
+	icmp_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+
+	if (icmp_socket != -1) {
+		icmp_dgram = TRUE;
+	}
+
+	/* get ICMPv6 socket */
+	while (icmp_socket == -1) {
+		if (hasCaps() != TRUE) {
+			thread_mutex_lock(LOCK_SETEUID);
+			if (seteuid(0) == -1) {
+				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
+			}
+		}
+
+		icmp_socket = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+
+		if (hasCaps() != TRUE) {
+			if (seteuid(getuid()) == -1) {
+				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+			}
+			thread_mutex_unlock(LOCK_SETEUID);
+		}
+
+		if (icmp_socket != -1) {
+			break;
+		}
+
+		usleep(500000);
+		retry_count++;
+
+		if (retry_count > 4) {
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping unable to create ICMPv6 Socket");
+			snprintf(ping->ping_status, 50, "down");
+
+			return HOST_DOWN;
+		}
+	}
+
+	/* RFC 3542 hardening.  Both options are best effort because older
+	 * kernels and restricted sandboxes reject them without breaking the
+	 * ping itself */
+	{
+		struct icmp6_filter filter;
+
+		ICMP6_FILTER_SETBLOCKALL(&filter);
+		ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &filter);
+
+		if (setsockopt(icmp_socket, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter)) < 0) {
+			SPINE_LOG_DEBUG(("DEBUG: ICMP6_FILTER not supported: %s", strerror(errno)));
+		}
+	}
+
+	#ifdef IPV6_CHECKSUM
+	{
+		/* tell the kernel where to write the checksum it computes for us */
+		int cksum_offset = (int) offsetof(struct icmp6_hdr, icmp6_cksum);
+
+		if (setsockopt(icmp_socket, IPPROTO_IPV6, IPV6_CHECKSUM, &cksum_offset, sizeof(cksum_offset)) < 0) {
+			SPINE_LOG_DEBUG(("DEBUG: IPV6_CHECKSUM not supported: %s", strerror(errno)));
+		}
+	}
+	#endif
+
+	/* convert the host timeout to a double precision number in seconds */
+	host_timeout = host->ping_timeout;
+
+	/* allocate the packet in memory */
+	packet_len = (int) (sizeof(struct icmp6_hdr) + msg_len);
+
+	if (!(packet = malloc(packet_len))) {
+		die("ERROR: Fatal malloc error: ping.c ping_icmp_ipv6!");
+	}
+	memset(packet, 0, packet_len);
+
+	/* set the memory of the ping address */
+	memset(&fromname, 0, sizeof(struct sockaddr_in6));
+	memset(&recvname, 0, sizeof(struct sockaddr_in6));
+
+	our_id = (uint16_t) (getpid() & 0xFFFF);
+
+	/* lock set/get the sequence and unlock */
+	thread_mutex_lock(LOCK_GHBN);
+	our_seq = (uint16_t) seq++;
+	thread_mutex_unlock(LOCK_GHBN);
+
+	icmp6 = (struct icmp6_hdr *) packet;
+
+	icmp6->icmp6_type  = ICMP6_ECHO_REQUEST;
+	icmp6->icmp6_code  = 0;
+	icmp6->icmp6_id    = htons(our_id);
+	icmp6->icmp6_seq   = htons(our_seq);
+	icmp6->icmp6_cksum = 0;
+
+	memcpy(packet + sizeof(struct icmp6_hdr), cacti_msg, msg_len);
+
+	/* hostname must be nonblank */
+	if (strlen(host->hostname) == 0) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Destination address not specified");
+		snprintf(ping->ping_status, 50, "down");
+		goto cleanup;
+	}
+
+	/* get address of hostname */
+	if (!init_sockaddr6(&fromname, host->hostname)) {
+		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Destination hostname invalid");
+		snprintf(ping->ping_status, 50, "down");
+		goto cleanup;
+	}
+
+	if (IN6_IS_ADDR_LINKLOCAL(&fromname.sin6_addr) && (fromname.sin6_scope_id == 0)) {
+		apply_ipv6_scope_id(&fromname);
+	}
+
+	/* initialize variables */
+	snprintf(ping->ping_status, 50, "down");
+	snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
+
+	retry_count = 0;
+	total_time  = 0;
+	begin_time  = get_time_as_double();
+
+	while (1) {
+		if (retry_count > host->ping_retries) {
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping timed out");
+			snprintf(ping->ping_status, 50, "down");
+			goto cleanup;
+		}
+
+		if (is_debug_device(host->id)) {
+			SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, our_seq, retry_count, host->ping_retries));
+		} else {
+			SPINE_LOG_DEBUG(("DEBUG: Device[%i] Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, our_seq, retry_count, host->ping_retries));
+		}
+
+		/* decrement the timeout value by the total time */
+		timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+		timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
+
+		/* set the socket send and receive timeout */
+		setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+		setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
+
+		/* send packet to destination */
+		if (sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname)) < 0) {
+			SPINE_LOG_DEBUG(("DEBUG: Device[%i] ICMPv6 sendto failed (%s)", host->id, strerror(errno)));
+
+			total_time = 0;
+			retry_count++;
+			continue;
+		}
+
+		/* wait for a response on the socket */
+		/* reinitialize fd_set -- select(2) clears bits in place on return */
+		keep_listening_ipv6:
+		FD_ZERO(&socket_fds);
+		if (icmp_socket >= FD_SETSIZE) {
+			SPINE_LOG(("ERROR: Device[%i] ICMPv6 socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+			snprintf(ping->ping_status, 50, "down");
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: fd exceeds FD_SETSIZE");
+			goto cleanup;
+		}
+		FD_SET(icmp_socket,&socket_fds);
+		return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+
+		/* record end time */
+		end_time = get_time_as_double();
+
+		/* calculate total time */
+		total_time = (end_time - begin_time) * one_thousand;
+
+		if ((return_code > 0) && (total_time < host_timeout)) {
+			fromlen     = sizeof(recvname);
+			return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &recvname, &fromlen);
+
+			if (return_code < 0) {
+				if (errno == EINTR) {
+					/* call was interrupted by some system event */
+
+					if (is_debug_device(host->id)) {
+						SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
+					} else {
+						SPINE_LOG_DEBUG(("DEBUG: Device[%i] Received EINTR", host->id));
+					}
+
+					goto keep_listening_ipv6;
+				}
+			} else {
+				/* a raw ICMPv6 socket delivers the ICMPv6 header without the
+				 * IPv6 header, so anything shorter than our own probe cannot
+				 * be the reply to it */
+				if ((size_t) return_code < sizeof(struct icmp6_hdr) + msg_len) {
+					goto keep_listening_ipv6;
+				}
+
+				/* the kernel does not match the source address for us */
+				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) {
+					/* another host responded */
+					goto keep_listening_ipv6;
+				}
+
+				memcpy(&reply, socket_reply, sizeof(reply));
+
+				if ((reply.icmp6_type != ICMP6_ECHO_REPLY) ||
+					(reply.icmp6_seq  != htons(our_seq))) {
+					goto keep_listening_ipv6;
+				}
+
+				/* on a datagram socket the kernel assigns the echo id, so it
+				 * will not match what we wrote; sequence, source address and
+				 * payload still identify the reply */
+				if (!icmp_dgram && reply.icmp6_id != htons(our_id)) {
+					goto keep_listening_ipv6;
+				}
+
+				if (memcmp(socket_reply + sizeof(struct icmp6_hdr), cacti_msg, msg_len) != 0) {
+					goto keep_listening_ipv6;
+				}
+
+				if (is_debug_device(host->id)) {
+					SPINE_LOG(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+				} else {
+					SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+				}
+
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
+				snprintf(ping->ping_status, 50, "%.5f", total_time);
+
+				result = HOST_UP;
+				goto cleanup;
+			}
+		} else {
+			if (is_debug_device(host->id)) {
+				SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
+			} else {
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Exceeded Device Timeout, Retrying", host->id));
+			}
+		}
+
+		total_time = 0;
+		retry_count++;
+		#ifndef SOLAR_THREAD
+		usleep(1000);
+		#endif
+	}
+
+cleanup:
+	SPINE_FREE(packet);
+
+	if (icmp_socket != -1) {
+		close(icmp_socket);
+	}
+
+	return result;
+}
+
+#endif /* SPINE_HAVE_ICMPV6 */
 
 /*! \fn int ping_udp(host_t *host, ping_t *ping)
  *  \brief ping a host using an UDP datagram
