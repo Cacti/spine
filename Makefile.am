@@ -66,7 +66,8 @@ check_PROGRAMS += \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
 	tests/unit/test_linked \
-	tests/unit/test_log_newline_bound
+	tests/unit/test_log_newline_bound \
+	tests/unit/test_util_paths
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
@@ -89,5 +90,9 @@ tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
 tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
+
+# includes util.c, so it needs the same libraries spine links against
+tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
+tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 TESTS = $(check_PROGRAMS)
