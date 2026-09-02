@@ -599,105 +599,75 @@ static void test_reap_reports_an_already_reaped_child(void **state) {
 	/* ECHILD: someone else took the status, which is success with none */
 	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 0);
 	assert_int_equal(pstat, 0);
-||||||| parent of c1efb06 (fix: size the escape destination from the caller's buffer)
 
-/* db_escape() stands between a device-supplied poller result and the SQL text
- * spine builds: it escapes the metacharacters and must never write past the
- * destination. It used to stage the input through a fixed DBL_BUFSIZE buffer,
- * which capped every caller at 1022 input bytes no matter how large a
- * destination it passed, so poller results were silently truncated.
+/* Cacti stores the literal "[None]" when no SNMPv3 protocol is selected, and an
+ * empty string for an absent passphrase. Treating either as an error made two
+ * of the three security levels unusable: noAuthNoPriv was refused before the
+ * session opened, and authNoPriv authenticated with a key that was never
+ * derived. cmd.php accepts both, so a device that polls under the PHP poller
+ * has to poll under spine.
  */
-static MYSQL *escape_handle(void) {
-	static MYSQL *handle = NULL;
-
-	if (handle == NULL) {
-		handle = mysql_init(NULL);
-	}
-
-	return handle;
-}
-
-static void test_db_escape_escapes_sql_metacharacters(void **state) {
-	char out[64];
+static void test_snmpv3_value_is_set_treats_none_as_unset(void **state) {
 	(void) state;
 
-	db_escape(escape_handle(), out, sizeof out, "a'b");
-	assert_string_equal(out, "a\\'b");
+	assert_int_equal(spine_snmpv3_value_is_set(NULL), FALSE);
+	assert_int_equal(spine_snmpv3_value_is_set(""), FALSE);
+	assert_int_equal(spine_snmpv3_value_is_set("[None]"), FALSE);
 
-	db_escape(escape_handle(), out, sizeof out, "back\\slash");
-	assert_string_equal(out, "back\\\\slash");
-
-	db_escape(escape_handle(), out, sizeof out, "plain value");
-	assert_string_equal(out, "plain value");
+	assert_int_equal(spine_snmpv3_value_is_set("SHA"), TRUE);
+	assert_int_equal(spine_snmpv3_value_is_set("secret"), TRUE);
+	/* only the exact sentinel is unset */
+	assert_int_equal(spine_snmpv3_value_is_set("[None] "), TRUE);
+	assert_int_equal(spine_snmpv3_value_is_set("none"), TRUE);
 }
 
-static void test_db_escape_ignores_a_null_input(void **state) {
-	char out[16];
+static void test_snmpv3_level_is_noauth_without_a_protocol(void **state) {
 	(void) state;
 
-	memcpy(out, "untouched", 10);
-	db_escape(escape_handle(), out, sizeof out, NULL);
-	assert_string_equal(out, "untouched");
+	assert_int_equal(spine_snmpv3_security_level("[None]", "", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(spine_snmpv3_security_level(NULL, NULL, NULL, NULL),
+		SNMP_SEC_LEVEL_NOAUTH);
+	/* a protocol with no password cannot authenticate */
+	assert_int_equal(spine_snmpv3_security_level("SHA", "", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+	/* nor a password with no protocol */
+	assert_int_equal(spine_snmpv3_security_level("[None]", "secret", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
 }
 
-/* A result the size of the poller's own buffer has to survive when the
- * destination is sized 2N+1 for it. This is the case that regressed. */
-static void test_db_escape_keeps_a_full_results_buffer(void **state) {
-	char input[RESULTS_BUFFER];
-	char out[(RESULTS_BUFFER * 2) + 1];
+static void test_snmpv3_level_is_authnopriv_without_privacy(void **state) {
 	(void) state;
 
-	memset(input, 'x', sizeof input - 1);
-	input[sizeof input - 1] = '\0';
-
-	db_escape(escape_handle(), out, sizeof out, input);
-
-	assert_int_equal((int) strlen(out), (int) (sizeof input - 1));
-	assert_string_equal(out, input);
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "[None]", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(spine_snmpv3_security_level("MD5", "secret", "", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(spine_snmpv3_security_level("SHA-512", "secret", NULL, NULL),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	/* a privacy protocol without its passphrase is not privacy */
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "AES", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
 }
 
-/* Walk across the old staging boundary to prove the cut is gone. */
-static void test_db_escape_survives_the_old_staging_boundary(void **state) {
-	const int sizes[] = { 1022, 1023, 1024, 1100, 2047 };
-	char      input[2048];
-	char      out[(2048 * 2) + 1];
-	size_t    i;
+static void test_snmpv3_level_is_authpriv_when_both_are_set(void **state) {
 	(void) state;
 
-	for (i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
-		memset(input, 'y', (size_t) sizes[i]);
-		input[sizes[i]] = '\0';
-
-		db_escape(escape_handle(), out, sizeof out, input);
-
-		assert_int_equal((int) strlen(out), sizes[i]);
-	}
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "AES", "privpass"),
+		SNMP_SEC_LEVEL_AUTHPRIV);
+	assert_int_equal(spine_snmpv3_security_level("SHA-256", "secret", "AES-192", "privpass"),
+		SNMP_SEC_LEVEL_AUTHPRIV);
 }
 
-/* When the destination genuinely cannot hold the escaped form the result is
- * truncated rather than overflowing, and stays NUL terminated. */
-static void test_db_escape_truncates_into_a_small_destination(void **state) {
-	char out[11];
+/* Privacy without authentication is not a level SNMPv3 offers, so a privacy
+ * selection alone must not raise the level above noAuthNoPriv. */
+static void test_snmpv3_privacy_alone_does_not_raise_the_level(void **state) {
 	(void) state;
 
-	db_escape(escape_handle(), out, sizeof out, "0123456789abcdef");
-
-	/* (11 - 1) / 2 == 5 input bytes may be represented */
-	assert_int_equal((int) strlen(out), 5);
-	assert_string_equal(out, "01234");
-}
-
-static void test_db_escape_handles_a_degenerate_destination(void **state) {
-	char out[4];
-	(void) state;
-
-	memcpy(out, "abc", 4);
-	db_escape(escape_handle(), out, 1, "anything");
-	assert_string_equal(out, "");
-
-	memcpy(out, "abc", 4);
-	db_escape(escape_handle(), out, 0, "anything");
-	assert_string_equal(out, "abc");
+	assert_int_equal(spine_snmpv3_security_level("[None]", "", "AES", "privpass"),
+		SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(spine_snmpv3_security_level("SHA", "", "AES", "privpass"),
+		SNMP_SEC_LEVEL_NOAUTH);
 }
 
 int main(void) {
@@ -746,13 +716,11 @@ int main(void) {
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
-||||||| parent of c1efb06 (fix: size the escape destination from the caller's buffer)
-		cmocka_unit_test(test_db_escape_escapes_sql_metacharacters),
-		cmocka_unit_test(test_db_escape_ignores_a_null_input),
-		cmocka_unit_test(test_db_escape_keeps_a_full_results_buffer),
-		cmocka_unit_test(test_db_escape_survives_the_old_staging_boundary),
-		cmocka_unit_test(test_db_escape_truncates_into_a_small_destination),
-		cmocka_unit_test(test_db_escape_handles_a_degenerate_destination),
+		cmocka_unit_test(test_snmpv3_value_is_set_treats_none_as_unset),
+		cmocka_unit_test(test_snmpv3_level_is_noauth_without_a_protocol),
+		cmocka_unit_test(test_snmpv3_level_is_authnopriv_without_privacy),
+		cmocka_unit_test(test_snmpv3_level_is_authpriv_when_both_are_set),
+		cmocka_unit_test(test_snmpv3_privacy_alone_does_not_raise_the_level),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
