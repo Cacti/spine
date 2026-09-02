@@ -457,6 +457,77 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+
+/* Cacti stores the literal "[None]" when no SNMPv3 protocol is selected, and an
+ * empty string for an absent passphrase. Treating either as an error made two
+ * of the three security levels unusable: noAuthNoPriv was refused before the
+ * session opened, and authNoPriv authenticated with a key that was never
+ * derived. cmd.php accepts both, so a device that polls under the PHP poller
+ * has to poll under spine.
+ */
+static void test_snmpv3_value_is_set_treats_none_as_unset(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_value_is_set(NULL), FALSE);
+	assert_int_equal(spine_snmpv3_value_is_set(""), FALSE);
+	assert_int_equal(spine_snmpv3_value_is_set("[None]"), FALSE);
+
+	assert_int_equal(spine_snmpv3_value_is_set("SHA"), TRUE);
+	assert_int_equal(spine_snmpv3_value_is_set("secret"), TRUE);
+	/* only the exact sentinel is unset */
+	assert_int_equal(spine_snmpv3_value_is_set("[None] "), TRUE);
+	assert_int_equal(spine_snmpv3_value_is_set("none"), TRUE);
+}
+
+static void test_snmpv3_level_is_noauth_without_a_protocol(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("[None]", "", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(spine_snmpv3_security_level(NULL, NULL, NULL, NULL),
+		SNMP_SEC_LEVEL_NOAUTH);
+	/* a protocol with no password cannot authenticate */
+	assert_int_equal(spine_snmpv3_security_level("SHA", "", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+	/* nor a password with no protocol */
+	assert_int_equal(spine_snmpv3_security_level("[None]", "secret", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+}
+
+static void test_snmpv3_level_is_authnopriv_without_privacy(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "[None]", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(spine_snmpv3_security_level("MD5", "secret", "", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(spine_snmpv3_security_level("SHA-512", "secret", NULL, NULL),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	/* a privacy protocol without its passphrase is not privacy */
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "AES", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+}
+
+static void test_snmpv3_level_is_authpriv_when_both_are_set(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "AES", "privpass"),
+		SNMP_SEC_LEVEL_AUTHPRIV);
+	assert_int_equal(spine_snmpv3_security_level("SHA-256", "secret", "AES-192", "privpass"),
+		SNMP_SEC_LEVEL_AUTHPRIV);
+}
+
+/* Privacy without authentication is not a level SNMPv3 offers, so a privacy
+ * selection alone must not raise the level above noAuthNoPriv. */
+static void test_snmpv3_privacy_alone_does_not_raise_the_level(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("[None]", "", "AES", "privpass"),
+		SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(spine_snmpv3_security_level("SHA", "", "AES", "privpass"),
+		SNMP_SEC_LEVEL_NOAUTH);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -496,6 +567,11 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_snmpv3_value_is_set_treats_none_as_unset),
+		cmocka_unit_test(test_snmpv3_level_is_noauth_without_a_protocol),
+		cmocka_unit_test(test_snmpv3_level_is_authnopriv_without_privacy),
+		cmocka_unit_test(test_snmpv3_level_is_authpriv_when_both_are_set),
+		cmocka_unit_test(test_snmpv3_privacy_alone_does_not_raise_the_level),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
