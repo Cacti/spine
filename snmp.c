@@ -41,6 +41,62 @@
 
 #define OIDSIZE(p) (sizeof(p)/sizeof(oid))
 
+/*! \fn int spine_snmpv3_value_is_set(const char *value)
+ *  \brief Whether a Cacti-supplied SNMPv3 field selects anything.
+ *
+ *  Cacti stores the literal "[None]" when the user picks no protocol, and an
+ *  empty string when a passphrase is absent. Both mean "not selected".
+ */
+int spine_snmpv3_value_is_set(const char *value) {
+	if (value == NULL) {
+		return FALSE;
+	}
+
+	if (value[0] == '\0') {
+		return FALSE;
+	}
+
+	if (strcmp(value, "[None]") == 0) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*! \fn int spine_snmpv3_security_level(...)
+ *  \brief Pick the SNMPv3 security level from the values Cacti stores.
+ *
+ *  Authentication needs both a protocol and a password; privacy additionally
+ *  needs a privacy protocol and passphrase, and is only meaningful on top of
+ *  authentication. Anything not selected leaves the level lower rather than
+ *  making the device an error, which is what Cacti's own poller does.
+ *
+ *  \return SNMP_SEC_LEVEL_NOAUTH, SNMP_SEC_LEVEL_AUTHNOPRIV or
+ *          SNMP_SEC_LEVEL_AUTHPRIV
+ */
+int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_password,
+		const char *priv_protocol, const char *priv_passphrase) {
+	int authenticates;
+	int encrypts;
+
+	authenticates = spine_snmpv3_value_is_set(auth_protocol) &&
+		spine_snmpv3_value_is_set(auth_password);
+
+	encrypts = authenticates &&
+		spine_snmpv3_value_is_set(priv_protocol) &&
+		spine_snmpv3_value_is_set(priv_passphrase);
+
+	if (encrypts) {
+		return SNMP_SEC_LEVEL_AUTHPRIV;
+	}
+
+	if (authenticates) {
+		return SNMP_SEC_LEVEL_AUTHNOPRIV;
+	}
+
+	return SNMP_SEC_LEVEL_NOAUTH;
+}
+
 /*! \fn void snmp_spine_init()
  *  \brief wrapper function for init_snmp
  *
@@ -226,18 +282,31 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		/* set the authentication protocol */
 		{
 		int auth_type;
+		int security_level;
 		const oid *auth_proto;
 
-		auth_type = usm_lookup_auth_type(snmp_auth_protocol);
-		if (auth_type > 0) {
-            auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
-            free(session.securityAuthProto);
-            session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
+		/* Cacti stores "[None]" when no protocol is selected, and an absent
+		 * passphrase means the same thing. Neither is an error: the device is
+		 * simply noAuthNoPriv, which is what cmd.php does with the same values.
+		 * Only a protocol that is set and unrecognised is invalid. */
+		security_level = spine_snmpv3_security_level(snmp_auth_protocol, snmp_password,
+			snmp_priv_protocol, snmp_priv_passphrase);
+
+		if (security_level == SNMP_SEC_LEVEL_NOAUTH) {
+			session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
 		} else {
-			SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
-			free(session.peername);
-			free(session.localname);
-			return 0;
+			auth_type = usm_lookup_auth_type(snmp_auth_protocol);
+
+			if (auth_type > 0) {
+				auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
+				free(session.securityAuthProto);
+				session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
+			} else {
+				SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
+				free(session.peername);
+				free(session.localname);
+				return 0;
+			}
 		}
 
 		/* set the privacy protocol to none */
@@ -247,10 +316,39 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
 
 			/* set the security level to authenticate, but not encrypted */
-			if (strlen(snmp_password)) {
-				session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
-			} else {
-				session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
+			session.securityLevel = security_level;
+
+			/* The authentication key was only ever derived on the privacy path,
+			 * so authNoPriv sessions authenticated with an empty key and every
+			 * such device failed with a USM authentication error. */
+			if (security_level == SNMP_SEC_LEVEL_AUTHNOPRIV) {
+				if (Apsz && zero_sensitive) {
+					memset(Apsz, 0x0, strlen(Apsz));
+				}
+
+				free(Apsz);
+				Apsz = strdup(snmp_password);
+
+				if (zero_sensitive) {
+					memset(snmp_password, 0x0, strlen(snmp_password));
+				}
+
+				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+
+				if (Apsz == NULL || generate_Ku(session.securityAuthProto,
+					session.securityAuthProtoLen,
+					(u_char *) Apsz, strlen(Apsz),
+					session.securityAuthKey,
+					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
+					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
+					free(session.peername);
+					free(session.securityAuthProto);
+					free(session.securityPrivProto);
+					free(Apsz);
+					free(Xpsz);
+					free(session.localname);
+					return 0;
+				}
 			}
 		} else {
 			const oid *priv_proto;
