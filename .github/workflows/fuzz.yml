@@ -20,20 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y clang libmysqlclient-dev libsnmp-dev libssl-dev \
-            autoconf automake libtool help2man pkg-config
-
-      - name: Generate config.h
-        run: |
-          set -euo pipefail
-          ./bootstrap
-          ./configure
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: clang pkg-config
 
       # A pull request gets a short regression run against the committed corpus.
       # The weekly schedule runs long enough to explore.
@@ -47,7 +38,7 @@ jobs:
           fi
           make -C tests/fuzz FUZZ_SECONDS="$seconds" run
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
           name: fuzz-crashes
