@@ -457,6 +457,106 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+
+/* db_escape() stands between a device-supplied poller result and the SQL text
+ * spine builds: it escapes the metacharacters and must never write past the
+ * destination. It used to stage the input through a fixed DBL_BUFSIZE buffer,
+ * which capped every caller at 1022 input bytes no matter how large a
+ * destination it passed, so poller results were silently truncated.
+ */
+static MYSQL *escape_handle(void) {
+	static MYSQL *handle = NULL;
+
+	if (handle == NULL) {
+		handle = mysql_init(NULL);
+	}
+
+	return handle;
+}
+
+static void test_db_escape_escapes_sql_metacharacters(void **state) {
+	char out[64];
+	(void) state;
+
+	db_escape(escape_handle(), out, sizeof out, "a'b");
+	assert_string_equal(out, "a\\'b");
+
+	db_escape(escape_handle(), out, sizeof out, "back\\slash");
+	assert_string_equal(out, "back\\\\slash");
+
+	db_escape(escape_handle(), out, sizeof out, "plain value");
+	assert_string_equal(out, "plain value");
+}
+
+static void test_db_escape_ignores_a_null_input(void **state) {
+	char out[16];
+	(void) state;
+
+	memcpy(out, "untouched", 10);
+	db_escape(escape_handle(), out, sizeof out, NULL);
+	assert_string_equal(out, "untouched");
+}
+
+/* A result the size of the poller's own buffer has to survive when the
+ * destination is sized 2N+1 for it. This is the case that regressed. */
+static void test_db_escape_keeps_a_full_results_buffer(void **state) {
+	char input[RESULTS_BUFFER];
+	char out[(RESULTS_BUFFER * 2) + 1];
+	(void) state;
+
+	memset(input, 'x', sizeof input - 1);
+	input[sizeof input - 1] = '\0';
+
+	db_escape(escape_handle(), out, sizeof out, input);
+
+	assert_int_equal((int) strlen(out), (int) (sizeof input - 1));
+	assert_string_equal(out, input);
+}
+
+/* Walk across the old staging boundary to prove the cut is gone. */
+static void test_db_escape_survives_the_old_staging_boundary(void **state) {
+	const int sizes[] = { 1022, 1023, 1024, 1100, 2047 };
+	char      input[2048];
+	char      out[(2048 * 2) + 1];
+	size_t    i;
+	(void) state;
+
+	for (i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
+		memset(input, 'y', (size_t) sizes[i]);
+		input[sizes[i]] = '\0';
+
+		db_escape(escape_handle(), out, sizeof out, input);
+
+		assert_int_equal((int) strlen(out), sizes[i]);
+	}
+}
+
+/* When the destination genuinely cannot hold the escaped form the result is
+ * truncated rather than overflowing, and stays NUL terminated. */
+static void test_db_escape_truncates_into_a_small_destination(void **state) {
+	char out[11];
+	(void) state;
+
+	db_escape(escape_handle(), out, sizeof out, "0123456789abcdef");
+
+	/* (11 - 1) / 2 == 5 input bytes may be represented */
+	assert_int_equal((int) strlen(out), 5);
+	assert_string_equal(out, "01234");
+}
+
+static void test_db_escape_handles_a_degenerate_destination(void **state) {
+	char out[4];
+	(void) state;
+
+	memcpy(out, "abc", 4);
+	db_escape(escape_handle(), out, 1, "anything");
+	assert_string_equal(out, "");
+
+	memcpy(out, "abc", 4);
+	db_escape(escape_handle(), out, 0, "anything");
+	assert_string_equal(out, "abc");
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -496,6 +596,12 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_db_escape_escapes_sql_metacharacters),
+		cmocka_unit_test(test_db_escape_ignores_a_null_input),
+		cmocka_unit_test(test_db_escape_keeps_a_full_results_buffer),
+		cmocka_unit_test(test_db_escape_survives_the_old_staging_boundary),
+		cmocka_unit_test(test_db_escape_truncates_into_a_small_destination),
+		cmocka_unit_test(test_db_escape_handles_a_degenerate_destination),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

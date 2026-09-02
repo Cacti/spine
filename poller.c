@@ -1882,7 +1882,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while (i < rows_processed) {
-			char escaped_result[DBL_BUFSIZE];
+			/* escaping can double every byte, so the destination has to be
+			 * twice the source plus the terminator */
+			char escaped_result[(RESULTS_BUFFER * 2) + 1];
 			char escaped_rrd_name[DBL_BUFSIZE];
 
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
