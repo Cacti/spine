@@ -818,6 +818,89 @@ static void test_old_idiom_overshoots_where_appendf_does_not(void **state) {
 	remaining = sizeof(buf);
 	assert_false(spine_appendf(&q, &remaining, "%s", "0123456789012345678901234567890123456789"));
 	assert_true(q - buf < (ptrdiff_t) sizeof(buf));
+
+/* poller.c decides here whether a polled value is stored at all. A result that
+ * validate_result() rejects is discarded, so a mistake in either predicate
+ * silently drops data or accepts a malformed multi-value string. poller.c is
+ * the most frequently changed file in the tree and had no coverage of either.
+ */
+static void test_validate_result_accepts_numeric_forms(void **state) {
+	char integer[]  = "42";
+	char negative[] = "-17";
+	char decimal[]  = "3.14159";
+	char zero[]     = "0";
+	(void) state;
+
+	assert_int_equal(validate_result(integer), TRUE);
+	assert_int_equal(validate_result(negative), TRUE);
+	assert_int_equal(validate_result(decimal), TRUE);
+	assert_int_equal(validate_result(zero), TRUE);
+}
+
+static void test_validate_result_rejects_a_null_and_junk(void **state) {
+	char junk[]  = "not a value";
+	char empty[] = "";
+	(void) state;
+
+	assert_int_equal(validate_result(NULL), FALSE);
+	assert_int_equal(validate_result(junk), FALSE);
+	assert_int_equal(validate_result(empty), FALSE);
+}
+
+static void test_validate_result_accepts_multipart_output(void **state) {
+	char one[]  = "field:1";
+	char many[] = "in:100 out:200 errors:0";
+	(void) state;
+
+	assert_int_equal(validate_result(one), TRUE);
+	assert_int_equal(validate_result(many), TRUE);
+}
+
+/* trim() is asymmetric and the caller needs to know it. rtrim() writes a NUL
+ * over the trailing run, so it mutates the caller's buffer; ltrim() only walks
+ * a pointer forward and leaves the leading run in place. validate_result()
+ * therefore edits the buffer it is handed, but not into the string the
+ * predicate actually saw. Its trim set is also wider than whitespace: it
+ * includes quotes and a backslash.
+ */
+static void test_validate_result_trims_the_buffer_asymmetrically(void **state) {
+	char padded[] = "  field:1  ";
+	char quoted[] = "\"field:1\"";
+	(void) state;
+
+	assert_int_equal(validate_result(padded), TRUE);
+	/* rtrim removed the trailing run in place, ltrim did not touch the front */
+	assert_string_equal(padded, "  field:1");
+
+	assert_int_equal(validate_result(quoted), TRUE);
+	assert_string_equal(quoted, "\"field:1");
+}
+
+static void test_is_multipart_output_requires_a_delimiter(void **state) {
+	char colon[]    = "a:1";
+	char bang[]     = "a!1";
+	char no_delim[] = "abc";
+	(void) state;
+
+	assert_int_equal(is_multipart_output(colon), TRUE);
+	assert_int_equal(is_multipart_output(bang), TRUE);
+	assert_int_equal(is_multipart_output(no_delim), FALSE);
+	assert_int_equal(is_multipart_output(NULL), FALSE);
+}
+
+/* With spaces present the pair count has to line up: one more delimiter than
+ * spaces. That is what separates "a:1 b:2" from a value that merely contains
+ * a colon somewhere in free text.
+ */
+static void test_is_multipart_output_balances_spaces_against_delimiters(void **state) {
+	char balanced[]   = "a:1 b:2 c:3";
+	char unbalanced[] = "a:1 b:2 c";
+	char prose[]      = "time is 12:30 today";
+	(void) state;
+
+	assert_int_equal(is_multipart_output(balanced), TRUE);
+	assert_int_equal(is_multipart_output(unbalanced), FALSE);
+	assert_int_equal(is_multipart_output(prose), FALSE);
 }
 
 int main(void) {
@@ -878,6 +961,12 @@ int main(void) {
 		cmocka_unit_test(test_appendf_rejects_null_arguments),
 		cmocka_unit_test(test_appendf_rejects_an_exhausted_buffer),
 		cmocka_unit_test(test_old_idiom_overshoots_where_appendf_does_not),
+		cmocka_unit_test(test_validate_result_accepts_numeric_forms),
+		cmocka_unit_test(test_validate_result_rejects_a_null_and_junk),
+		cmocka_unit_test(test_validate_result_accepts_multipart_output),
+		cmocka_unit_test(test_validate_result_trims_the_buffer_asymmetrically),
+		cmocka_unit_test(test_is_multipart_output_requires_a_delimiter),
+		cmocka_unit_test(test_is_multipart_output_balances_spaces_against_delimiters),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
