@@ -457,6 +457,68 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+
+/* poll_host() built the same six queries twice, once for the main poller and
+ * once for a remote one, differing only in how each query is scoped. A column
+ * added to one copy would not have reached the other, and none of it was
+ * reachable from a test. These two helpers hold the scoping rule.
+ */
+static void test_poller_item_scope_filters_deleted_on_the_main_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	poller_item_scope(scope, sizeof scope, 0);
+	assert_string_equal(scope, " AND deleted = ''");
+}
+
+static void test_poller_item_scope_filters_by_owner_on_a_remote_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	poller_item_scope(scope, sizeof scope, 3);
+	assert_string_equal(scope, " AND poller_id = 3");
+
+	poller_item_scope(scope, sizeof scope, 1);
+	assert_string_equal(scope, " AND poller_id = 1");
+}
+
+/* The main poller does not constrain the ownership queries at all, so the
+ * fragment has to be empty rather than absent: the caller interpolates it
+ * unconditionally. */
+static void test_poller_owner_scope_is_empty_on_the_main_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	memcpy(scope, "stale", 6);
+	poller_owner_scope(scope, sizeof scope, 0);
+	assert_string_equal(scope, "");
+}
+
+static void test_poller_owner_scope_names_the_remote_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	poller_owner_scope(scope, sizeof scope, 7);
+	assert_string_equal(scope, " AND poller_id = 7");
+}
+
+/* Both helpers are handed fixed stack buffers by poll_host(), so a degenerate
+ * size must not write. */
+static void test_poller_scopes_refuse_a_degenerate_buffer(void **state) {
+	char scope[8];
+	(void) state;
+
+	memcpy(scope, "keep", 5);
+	poller_item_scope(scope, 0, 0);
+	assert_string_equal(scope, "keep");
+
+	poller_owner_scope(scope, 0, 4);
+	assert_string_equal(scope, "keep");
+
+	poller_item_scope(NULL, sizeof scope, 0);
+	poller_owner_scope(NULL, sizeof scope, 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -496,6 +558,11 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_poller_item_scope_filters_deleted_on_the_main_poller),
+		cmocka_unit_test(test_poller_item_scope_filters_by_owner_on_a_remote_poller),
+		cmocka_unit_test(test_poller_owner_scope_is_empty_on_the_main_poller),
+		cmocka_unit_test(test_poller_owner_scope_names_the_remote_poller),
+		cmocka_unit_test(test_poller_scopes_refuse_a_degenerate_buffer),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

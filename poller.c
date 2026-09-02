@@ -117,6 +117,45 @@ void *child(void *arg) {
 	exit(0);
 }
 
+/*! \fn void poller_item_scope(char *out, size_t len, int poller_id)
+ *  \brief The poller_item filter for the poller this process is running as.
+ *
+ *  The main poller reads every item that has not been deleted. A remote poller
+ *  reads the items assigned to it, and ownership already excludes deleted rows.
+ *  Kept in one place because poll_host() built the same pair of queries twice,
+ *  once per branch, and a column added to one copy would not reach the other.
+ */
+void poller_item_scope(char *out, size_t len, int poller_id) {
+	if (out == NULL || len == 0) {
+		return;
+	}
+
+	if (poller_id == 0) {
+		snprintf(out, len, " AND deleted = ''");
+	} else {
+		snprintf(out, len, " AND poller_id = %i", poller_id);
+	}
+}
+
+/*! \fn void poller_owner_scope(char *out, size_t len, int poller_id)
+ *  \brief The ownership filter applied only by a remote poller.
+ *
+ *  The main poller does not constrain these queries at all; a remote poller
+ *  restricts them to its own rows. Returns an empty string for the main poller
+ *  so the caller can interpolate it unconditionally.
+ */
+void poller_owner_scope(char *out, size_t len, int poller_id) {
+	if (out == NULL || len == 0) {
+		return;
+	}
+
+	if (poller_id == 0) {
+		out[0] = '\0';
+	} else {
+		snprintf(out, len, " AND poller_id = %i", poller_id);
+	}
+}
+
 /*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti

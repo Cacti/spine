@@ -626,6 +626,9 @@ typedef struct db_connection {
 #include "error.h"
 
 /* Globals */
+extern void poller_item_scope(char *out, size_t len, int poller_id);
+extern void poller_owner_scope(char *out, size_t len, int poller_id);
+
 extern config_t set;
 extern php_t  *php_processes;
 extern char   start_datetime[20];
