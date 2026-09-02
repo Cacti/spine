@@ -105,7 +105,8 @@ jobs:
           path: flawfinder-report.txt
 
   # Spine is a threaded network daemon; ASan and UBSan are the checks most
-  # likely to catch a real defect here.
+  # likely to catch a real defect here.  The unit tests are what actually
+  # exercises the code, so they are what runs instrumented.
   sanitizers:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -127,7 +128,12 @@ jobs:
           set -euo pipefail
           make -j"$(nproc)"
 
-      - name: Run the binary under the sanitizers
+      - name: Run the unit tests under the sanitizers
+        run: |
+          set -euo pipefail
+          make check
+
+      - name: Smoke-test the binary under the sanitizers
         run: |
           set -euo pipefail
           ./spine --version
