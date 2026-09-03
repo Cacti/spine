@@ -112,4 +112,20 @@ extern double start_time;
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
 
+/*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
+ *  \brief append to a bounded buffer without walking off the end
+ *
+ *  snprintf() returns the length it would have written, so `p += snprintf(p,
+ *  remaining, ...)` moves the cursor past the buffer the first time a value is
+ *  truncated. The next `remaining` is then negative, and as a size_t it is
+ *  effectively unbounded, at a destination already out of bounds.
+ *
+ *  This advances the cursor by what was actually written, stops on the
+ *  terminator when the text does not fit, and says so.
+ *
+ *  \return TRUE when the whole string was appended, FALSE on truncation or a
+ *          formatting error, in which case the buffer stays NUL-terminated
+ */
+extern int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...);
+
 #endif /* SPINE_UTIL_H */

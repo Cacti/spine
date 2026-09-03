@@ -26,6 +26,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <stddef.h>
+
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
 
@@ -668,6 +670,154 @@ static void test_snmpv3_privacy_alone_does_not_raise_the_level(void **state) {
 		SNMP_SEC_LEVEL_NOAUTH);
 	assert_int_equal(spine_snmpv3_security_level("SHA", "", "AES", "privpass"),
 		SNMP_SEC_LEVEL_NOAUTH);
+
+/* ---------------------------------------------------------------------------
+ * spine_appendf (util.c)
+ *
+ * Replaces `p += snprintf(p, remaining, ...)`, which advances by the length
+ * snprintf *would* have written, so the first truncation puts the cursor past
+ * the end and the next `remaining` underflows to a huge size_t.
+ * ------------------------------------------------------------------------- */
+
+struct guarded_buf {
+	char body[32];
+	char canary[8];
+};
+
+static void guarded_init(struct guarded_buf *g) {
+	memset(g->body, 0, sizeof(g->body));
+	memset(g->canary, 0x7e, sizeof(g->canary));
+}
+
+static void guarded_check(struct guarded_buf *g) {
+	size_t i;
+
+	for (i = 0; i < sizeof(g->canary); i++) {
+		assert_int_equal((unsigned char) g->canary[i], 0x7e);
+	}
+}
+
+static void test_appendf_writes_and_advances(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_true(spine_appendf(&p, &remaining, "abc"));
+	assert_int_equal(p - g.body, 3);
+	assert_int_equal(remaining, sizeof(g.body) - 3);
+	assert_string_equal(g.body, "abc");
+	guarded_check(&g);
+}
+
+static void test_appendf_accumulates(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_true(spine_appendf(&p, &remaining, "SELECT %d", 7));
+	assert_true(spine_appendf(&p, &remaining, " FROM %s", "t"));
+	assert_string_equal(g.body, "SELECT 7 FROM t");
+	assert_int_equal(remaining, sizeof(g.body) - strlen("SELECT 7 FROM t"));
+	guarded_check(&g);
+}
+
+/* The case the old idiom got wrong. */
+static void test_appendf_reports_truncation_and_stays_in_bounds(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_false(spine_appendf(&p, &remaining, "%s", "0123456789012345678901234567890123456789"));
+
+	/* cursor lands on the terminator, not past the end */
+	assert_true(p >= g.body);
+	assert_true(p < g.body + sizeof(g.body));
+	assert_int_equal(*p, '\0');
+	assert_int_equal(remaining, 1);
+	assert_int_equal(strlen(g.body), sizeof(g.body) - 1);
+	guarded_check(&g);
+}
+
+static void test_appendf_after_truncation_keeps_failing(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+	char full[sizeof(g.body)];
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_false(spine_appendf(&p, &remaining, "%s", "0123456789012345678901234567890123456789"));
+	memcpy(full, g.body, sizeof(full));
+
+	/* a second append must not write anything, anywhere */
+	assert_false(spine_appendf(&p, &remaining, " AND poller_id=%d", 3));
+	assert_memory_equal(g.body, full, sizeof(full));
+	guarded_check(&g);
+}
+
+static void test_appendf_rejects_null_arguments(void **state) {
+	char buf[8] = "";
+	char *p = buf;
+	size_t remaining = sizeof(buf);
+	char *nullp = NULL;
+
+	(void) state;
+
+	assert_false(spine_appendf(NULL, &remaining, "x"));
+	assert_false(spine_appendf(&nullp, &remaining, "x"));
+	assert_false(spine_appendf(&p, NULL, "x"));
+}
+
+static void test_appendf_rejects_an_exhausted_buffer(void **state) {
+	char buf[8] = "";
+	char *p = buf;
+	size_t remaining = 0;
+
+	(void) state;
+
+	assert_false(spine_appendf(&p, &remaining, "x"));
+	assert_ptr_equal(p, buf);
+	assert_int_equal(buf[0], '\0');
+}
+
+/* Documents the defect: the same sequence with the old idiom leaves the cursor
+   outside the buffer, so the next remainder is negative. */
+static void test_old_idiom_overshoots_where_appendf_does_not(void **state) {
+	char buf[32];
+	char *p = buf;
+	ptrdiff_t old_offset;
+	char *q;
+	size_t remaining;
+
+	(void) state;
+
+	p += snprintf(p, sizeof(buf), "%s", "0123456789012345678901234567890123456789");
+	old_offset = p - buf;
+	assert_true(old_offset > (ptrdiff_t) sizeof(buf));
+	assert_true((ptrdiff_t) (sizeof(buf) - old_offset) < 0);
+
+	q = buf;
+	remaining = sizeof(buf);
+	assert_false(spine_appendf(&q, &remaining, "%s", "0123456789012345678901234567890123456789"));
+	assert_true(q - buf < (ptrdiff_t) sizeof(buf));
 }
 
 int main(void) {
@@ -721,6 +871,13 @@ int main(void) {
 		cmocka_unit_test(test_snmpv3_level_is_authnopriv_without_privacy),
 		cmocka_unit_test(test_snmpv3_level_is_authpriv_when_both_are_set),
 		cmocka_unit_test(test_snmpv3_privacy_alone_does_not_raise_the_level),
+		cmocka_unit_test(test_appendf_writes_and_advances),
+		cmocka_unit_test(test_appendf_accumulates),
+		cmocka_unit_test(test_appendf_reports_truncation_and_stays_in_bounds),
+		cmocka_unit_test(test_appendf_after_truncation_keeps_failing),
+		cmocka_unit_test(test_appendf_rejects_null_arguments),
+		cmocka_unit_test(test_appendf_rejects_an_exhausted_buffer),
+		cmocka_unit_test(test_old_idiom_overshoots_where_appendf_does_not),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
