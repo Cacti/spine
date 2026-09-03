@@ -1811,6 +1811,58 @@ static void test_snmp_batch_rejects_null_arguments(void **state) {
 		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
 }
 
+
+/* A value that survives stripping but still does not validate is the branch
+   that turns a plausible-looking response into an explicit failure. */
+static void test_snmp_batch_rejects_a_value_that_fails_validation(void **state) {
+	(void) state;
+	set_oid(0, "no such object");
+
+	assert_int_equal(run_batch(1, FALSE), 1);
+	assert_true(IS_UNDEFINED(sn_oids[0].result));
+}
+
+/* At log level 2 every rejection is logged individually. The logging is the
+   only thing that changes; the outcome must not. */
+static void test_snmp_batch_outcome_is_the_same_at_log_level_two(void **state) {
+	(void) state;
+	set.spine_log_level = 2;
+	set_oid(0, "U");
+	set_oid(1, "Nan");
+	set_oid(2, "no such object");
+	set_oid(3, "1000");
+
+	assert_int_equal(run_batch(4, FALSE), 3);
+	assert_string_equal(sn_items[3].result, "1000");
+}
+
+/* A device on the debug list takes the louder logging path. */
+static void test_snmp_batch_outcome_is_the_same_for_a_debug_device(void **state) {
+	(void) state;
+	sn_debug_table[0] = 7;
+	set_oid(0, "1000");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "1000");
+}
+
+/* Same for the script path: level 2 logs each rejection, nothing else moves. */
+static void test_store_outcome_is_the_same_at_log_level_two(void **state) {
+	char undef[] = "U";
+	char junk[]  = "connection refused";
+	char good[]  = "42";
+
+	(void) state;
+	set.spine_log_level = 2;
+
+	assert_true(store(undef));
+	assert_true(IS_UNDEFINED(sr_item.result));
+	assert_true(store(junk));
+	assert_true(IS_UNDEFINED(sr_item.result));
+	assert_false(store(good));
+	assert_string_equal(sr_item.result, "42");
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -1928,6 +1980,10 @@ int main(void) {
 		cmocka_unit_test_setup(test_snmp_batch_spike_kill_blanks_a_scalar_but_not_multipart, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_handles_an_empty_batch, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_rejects_null_arguments, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_rejects_a_value_that_fails_validation, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_outcome_is_the_same_at_log_level_two, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_outcome_is_the_same_for_a_debug_device, snmp_reset),
+		cmocka_unit_test_setup(test_store_outcome_is_the_same_at_log_level_two, store_reset),
 		cmocka_unit_test(test_build_queries_gates_on_rrd_next_step_for_multiple_profiles),
 		cmocka_unit_test(test_build_queries_multiple_profiles_scope_a_remote_poller),
 	};
