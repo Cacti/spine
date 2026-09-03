@@ -383,7 +383,7 @@ int reindex_assert_failed(const char *op, const char *assert_value, const char *
 	return FALSE;
 }
 
-/*! \fn static void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping, char **error_string, int **buf_size, int **buf_errors, pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread)
+/*! \fn void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping, char **error_string, int **buf_size, int **buf_errors, pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread)
  *  \brief release everything poll_host() owns, on every exit path
  *
  *  poll_host() leaves through three places and each used to spell this out
@@ -392,7 +392,7 @@ int reindex_assert_failed(const char *op, const char *assert_value, const char *
  *  leaks the client library's thread-local state once per affected device per
  *  cycle on a thread-per-device poller. See #594.
  */
-static void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread) {
+void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread) {
 	if (local_cnn != NULL) {
 		db_release_connection(LOCAL, local_cnn->id);
 	} else {
@@ -408,7 +408,7 @@ static void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn,
 	}
 }
 
-static void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
+void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
 	char **error_string, int **buf_size, int **buf_errors,
 	pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread) {
 

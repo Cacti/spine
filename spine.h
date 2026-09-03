@@ -651,6 +651,10 @@ typedef struct {
 	int    posuffix_len;
 } poll_host_queries_t;
 
+extern void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread);
+extern void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
+	char **error_string, int **buf_size, int **buf_errors,
+	pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread);
 extern int reindex_assert_failed(const char *op, const char *assert_value, const char *poll_result);
 extern void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *regex_col, const char *limits);
 extern void poller_item_scope(char *out, size_t len, int poller_id);

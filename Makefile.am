@@ -67,7 +67,8 @@ check_PROGRAMS += \
 	tests/unit/test_safety_fixes \
 	tests/unit/test_linked \
 	tests/unit/test_log_newline_bound \
-	tests/unit/test_util_paths
+	tests/unit/test_util_paths \
+	tests/unit/test_poll_host_release
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
@@ -87,6 +88,14 @@ tests_unit_test_safety_fixes_LDADD   = $(CMOCKA_LIBS)
 tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+# poll_host's teardown calls db_release_connection() and mysql_thread_end(),
+# neither of which returns anything to assert on. Interpose on both so the
+# release path is reachable from the suite at all.
+tests_unit_test_poll_host_release_SOURCES = tests/unit/test_poll_host_release.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_poll_host_release_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_poll_host_release_LDFLAGS = -Wl,--wrap=db_release_connection -Wl,--wrap=mysql_thread_end
 
 tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
 tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
