@@ -1900,6 +1900,147 @@ static void test_appendf_reports_a_formatting_error(void **state) {
 	assert_true(p >= buf && p < buf + sizeof(buf));
 }
 
+
+/* ---------------------------------------------------------------------------
+ * Differential check for reindex_assert_failed().
+ *
+ * That function replaced an if/else-if chain rather than moving it, so the
+ * tests above were written against the new shape and could have pinned a
+ * boundary I got wrong. This reproduces the original chain verbatim from
+ * before the change and compares the two over every combination that matters.
+ *
+ * The reference is deliberately a transcription, not a tidy version: the same
+ * order, the same operators, the same "0" guard sitting in the final else-if.
+ * ------------------------------------------------------------------------- */
+
+static int reference_assert_failed(const char *op, const char *assert_value, const char *poll_result) {
+	int assert_fail = FALSE;      /* the loop reset this per row */
+
+	if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+		assert_fail = FALSE;
+	} else if ((!strcmp(op, "=")) && (strcmp(assert_value, poll_result))) {
+		assert_fail = TRUE;
+	} else if ((!strcmp(op, ">")) && (atoll(assert_value) < atoll(poll_result))) {
+		assert_fail = TRUE;
+	} else if (strcmp(assert_value, "0")) {
+		if ((!strcmp(op, "<")) && (atoll(assert_value) > atoll(poll_result))) {
+			assert_fail = TRUE;
+		}
+	}
+
+	return assert_fail;
+}
+
+static void test_assert_matches_the_chain_it_replaced(void **state) {
+	static const char *ops[]    = { "=", ">", "<", ">=", "!=", "" };
+	static const char *values[] = {
+		"0", "1", "100", "007", "7", "-1", "4294967295", "4294967296",
+		"eth0", "", "U", "No Such Instance", "no such instance"
+	};
+	size_t o, a, p;
+	int checked = 0;
+
+	(void) state;
+
+	for (o = 0; o < sizeof(ops) / sizeof(ops[0]); o++) {
+		for (a = 0; a < sizeof(values) / sizeof(values[0]); a++) {
+			for (p = 0; p < sizeof(values) / sizeof(values[0]); p++) {
+				int want = reference_assert_failed(ops[o], values[a], values[p]);
+				int got  = reindex_assert_failed(ops[o], values[a], values[p]);
+
+				if (want != got) {
+					fail_msg("op '%s' assert '%s' result '%s': chain said %d, function said %d",
+						ops[o], values[a], values[p], want, got);
+				}
+
+				checked++;
+			}
+		}
+	}
+
+	assert_int_equal(checked, 6 * 13 * 13);
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Differential check for poller_store_result().
+ *
+ * Also a restructure rather than a move: the if/else-if chain became a series
+ * of early returns. This reproduces the original chain and compares both the
+ * error verdict and the value written to the target.
+ *
+ * Every call gets a fresh copy of the input, because trim(), strip_alpha() and
+ * hex2dec() all modify the string in place. Reusing one buffer would compare
+ * the function against a reference that saw different input.
+ * ------------------------------------------------------------------------- */
+
+static int reference_store_result(target_t *item, char *poll_result,
+	char *error_string, int *buf_size, int *buf_errors, int host_id, int host_thread) {
+	char temp_result[RESULTS_BUFFER];
+	int  failed = FALSE;
+
+	if (IS_UNDEFINED(poll_result)) {
+		SET_UNDEFINED(item->result);
+		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, item->local_data_id, false);
+		failed = TRUE;
+	} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
+		snprintf(item->result, RESULTS_BUFFER, "%s", poll_result);
+	} else if (is_hexadecimal(poll_result, TRUE)) {
+		snprintf(item->result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+	} else {
+		snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
+		snprintf(item->result, RESULTS_BUFFER, "%s", temp_result);
+
+		if (!validate_result(item->result)) {
+			buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, item->local_data_id, false);
+			failed = TRUE;
+			SET_UNDEFINED(item->result);
+		}
+	}
+
+	return failed;
+}
+
+static void test_store_matches_the_chain_it_replaced(void **state) {
+	static const char *inputs[] = {
+		"4242", "-17", "3.14159", "0", "007", "U", "",
+		"in:1000 out:2000", "DE:AD:BE:EF", "de-ad-be-ef", "DE AD BE EF",
+		"deadbeef", "0x1F", "42 packets", "connection refused",
+		"  7  ", "No Such Instance", "1e5", "4294967296"
+	};
+	char a[RESULTS_BUFFER], b[RESULTS_BUFFER];
+	target_t ia, ib;
+	char errs[DBL_BUFSIZE];
+	int bs, be;
+	size_t k;
+
+	(void) state;
+
+	for (k = 0; k < sizeof(inputs) / sizeof(inputs[0]); k++) {
+		int want, got;
+
+		memset(&ia, 0, sizeof(ia)); memset(&ib, 0, sizeof(ib));
+		ia.local_data_id = ib.local_data_id = 5;
+		memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
+
+		snprintf(a, sizeof(a), "%s", inputs[k]);
+		want = reference_store_result(&ia, a, errs, &bs, &be, 7, 1);
+
+		memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
+		snprintf(b, sizeof(b), "%s", inputs[k]);
+		got = poller_store_result(&ib, b, errs, &bs, &be, 7, 1);
+
+		if (want != got) {
+			fail_msg("input '%s': chain said %d, function said %d", inputs[k], want, got);
+		}
+
+		if (strcmp(ia.result, ib.result) != 0) {
+			fail_msg("input '%s': chain stored '%s', function stored '%s'",
+				inputs[k], ia.result, ib.result);
+		}
+	}
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -1991,6 +2132,7 @@ int main(void) {
 		cmocka_unit_test(test_assert_ignores_an_unknown_operator),
 		cmocka_unit_test(test_assert_rejects_null_arguments),
 		cmocka_unit_test(test_assert_handles_values_beyond_32_bits),
+		cmocka_unit_test(test_assert_matches_the_chain_it_replaced),
 		cmocka_unit_test(test_item_from_row_maps_every_column),
 		cmocka_unit_test(test_item_from_row_keeps_defaults_for_null_columns),
 		cmocka_unit_test(test_item_from_row_ignores_output_regex_on_an_old_schema),
@@ -2009,6 +2151,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_store_rejects_a_value_with_no_number_in_it, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_an_empty_result, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_null_arguments, store_reset),
+		cmocka_unit_test_setup(test_store_matches_the_chain_it_replaced, store_reset),
 		cmocka_unit_test_setup(test_snmp_batch_copies_numeric_results_to_their_targets, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_honours_array_position, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_counts_undefined_results_as_rejected, snmp_reset),
