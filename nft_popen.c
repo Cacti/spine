@@ -181,6 +181,13 @@ int spine_open_pipe_cloexec(int pdes[2]) {
 	if (spine_set_cloexec(pdes[0]) != 0 || spine_set_cloexec(pdes[1]) != 0) {
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
+
+		/* the caller owns nothing on failure, so do not leave it holding two
+		   descriptor numbers that now belong to whoever opens next; a caller
+		   with one cleanup path would close them a second time */
+		pdes[0] = -1;
+		pdes[1] = -1;
+
 		return FALSE;
 	}
 
