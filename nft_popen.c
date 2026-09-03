@@ -623,18 +623,33 @@ nft_sweep_abandoned(void)
 static void
 nft_abandon_child(pid_t pid, const char *reason)
 {
+	int	parked;
+	int	oldstate;
+
+	/* nft_pclose() calls this inside its pthread_cleanup_push() region, and
+	   close_cleanup() takes ListMutex. A cancel delivered while this held the
+	   lock would run the handler straight into it, so hold it uncancellable. */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+
 	pthread_mutex_lock(&ListMutex);
 
 	nft_sweep_abandoned();
 
-	if (AbandonedCount < NFT_ABANDONED_MAX) {
+	parked = (AbandonedCount < NFT_ABANDONED_MAX);
+
+	if (parked) {
 		AbandonedPids[AbandonedCount++] = pid;
-		SPINE_LOG(("WARNING: Script pid %ld survived SIGKILL (%s); parked for reaping", (long) pid, reason));
-	} else {
-		SPINE_LOG(("ERROR: Script pid %ld survived SIGKILL (%s) and the abandoned list is full; it will remain a zombie", (long) pid, reason));
 	}
 
 	pthread_mutex_unlock(&ListMutex);
+
+	pthread_setcancelstate(oldstate, NULL);
+
+	if (parked) {
+		SPINE_LOG(("WARNING: SCRIPT: pid %ld survived SIGKILL (%s); parked for reaping", (long) pid, reason));
+	} else {
+		SPINE_LOG(("ERROR: SCRIPT: pid %ld survived SIGKILL (%s) and the abandoned list is full; it will remain a zombie", (long) pid, reason));
+	}
 }
 
 /*! ------------------------------------------------------------------------------
