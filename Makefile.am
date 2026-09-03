@@ -68,10 +68,14 @@ check_PROGRAMS += \
 	tests/unit/test_linked \
 	tests/unit/test_log_newline_bound \
 	tests/unit/test_util_paths \
-	tests/unit/test_poll_host_release \
-	tests/unit/test_poller_output \
 	tests/unit/test_snmpv3_session \
 	tests/unit/test_ping_icmp
+
+if HAVE_LD_WRAP
+check_PROGRAMS += \
+	tests/unit/test_poll_host_release \
+	tests/unit/test_poller_output
+endif
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
@@ -92,6 +96,7 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
+if HAVE_LD_WRAP
 # poll_host's teardown calls db_release_connection() and mysql_thread_end(),
 # neither of which returns anything to assert on. Interpose on both so the
 # release path is reachable from the suite at all.
@@ -99,13 +104,16 @@ tests_unit_test_poll_host_release_SOURCES = tests/unit/test_poll_host_release.c 
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_poll_host_release_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poll_host_release_LDFLAGS = -Wl,--wrap=db_release_connection -Wl,--wrap=mysql_thread_end
+endif
 
+if HAVE_LD_WRAP
 # db_escape() needs a live connection, so the tuple builder is only reachable
 # with a stand-in escaper in its place.
 tests_unit_test_poller_output_SOURCES = tests/unit/test_poller_output.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_poller_output_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poller_output_LDFLAGS = -Wl,--wrap=db_escape
+endif
 
 # snmp_sess_open() builds a session without contacting anything, so the
 # security level spine ends up with is assertable directly.

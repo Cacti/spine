@@ -38,7 +38,6 @@
 
 extern char **environ;
 
-
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command

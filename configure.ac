@@ -407,6 +407,27 @@ AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session str
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
 
+# ****************** Linker --wrap support (tests only) *********************
+dnl Two unit binaries interpose on db_escape(), db_release_connection() and
+dnl mysql_thread_end() so the code that calls them is reachable at all. That
+dnl needs GNU ld or lld; Solaris ld has no equivalent. Probe rather than assume,
+dnl or the suite fails to link on a platform spine otherwise builds on.
+AC_MSG_CHECKING([whether the linker supports --wrap])
+spine_save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -Wl,--wrap=spine_ld_wrap_probe"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  int spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void) { return 0; }
+]], [[
+  return spine_ld_wrap_probe();
+]])],
+  [spine_ld_wrap=yes],
+  [spine_ld_wrap=no])
+LDFLAGS="$spine_save_LDFLAGS"
+AC_MSG_RESULT($spine_ld_wrap)
+AM_CONDITIONAL([HAVE_LD_WRAP], [test "x$spine_ld_wrap" = "xyes"])
+
 # ****************** DES privacy protocol availability **********************
 dnl SNMP_DEFAULT_PRIV_PROTO names usmDESPrivProtocol unless the header sets
 dnl NETSNMP_DISABLE_DES. Fedora once shipped a net-snmp where the header took

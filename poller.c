@@ -1193,7 +1193,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					char escaped_last_error[BUFSIZE];
 					db_escape(&mysql, escaped_last_error, sizeof(escaped_last_error), host->status_last_error);
 
-			host_status_update_sql(update_sql, BIG_BUFSIZE, host, ignore_sysinfo, escaped_last_error);
+					host_status_update_sql(update_sql, BIG_BUFSIZE, host, ignore_sysinfo, escaped_last_error);
 
 					db_insert(&mysql, LOCAL, update_sql);
 				}
@@ -1432,7 +1432,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 							query3[0] = '\0';
 
-							/* assume ok if host is up and result wasn't obtained */
 							/* assume ok if host is up and result was not obtained */
 							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
