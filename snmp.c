@@ -441,8 +441,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				}
 
 				if (session.securityPrivProto == NULL) {
+#if defined(HAVE_USM_DES_PRIV_PROTOCOL) || defined(NETSNMP_DISABLE_DES)
 					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
 					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
+#else
+					/* The header names DES as the default but this library does
+					 * not export it, so the macro cannot be referenced. Every
+					 * net-snmp that omits DES provides AES. See #575. */
+					session.securityPrivProto = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
+					session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
+#endif
 				}
 
 				if (generate_Ku(session.securityAuthProto,
