@@ -48,6 +48,21 @@ if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' php.c; then
 	fail "php_close() must not block in waitpid()"
 fi
 
+# ping_icmp() owns a packet and a raw socket and has six exits. One of them
+# closed the socket and returned without freeing the packet (#593). Both are
+# released in one place now, so there must be exactly one of each.
+[ "$(grep -c 'SPINE_FREE(packet)' ping.c)" = "1" ] ||
+	fail "ping_icmp() must release its packet in one place"
+
+[ "$(grep -c 'close(icmp_socket)' ping.c)" = "1" ] ||
+	fail "ping_icmp() must close its socket in one place"
+
+# close() needs no privileges; re-entering root to call it widened the elevated
+# window and serialised every poller thread on LOCK_SETEUID.
+if grep -A6 'close(icmp_socket)' ping.c | grep -q 'seteuid(0)'; then
+	fail "ping_icmp() must not elevate to close its socket"
+fi
+
 # Every exit from poll_host() must end the MySQL thread; see #594.
 grep -q 'mysql_thread_end' poller.c ||
 	fail "poll_host() must end the MySQL thread"
