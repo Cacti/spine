@@ -640,13 +640,29 @@ static void test_db_escape_escapes_sql_metacharacters(void **state) {
 	assert_string_equal(out, "plain value");
 }
 
-static void test_db_escape_ignores_a_null_input(void **state) {
+/* A NULL column must clear the destination rather than leave it alone.
+   poller_push_data_to_main() reuses one tmpstr across a dozen nullable
+   columns without reinitialising it, so "leave it alone" means "emit the
+   previous column's value", and on the first row it means uninitialised
+   stack, inside a quoted SQL literal. */
+static void test_db_escape_clears_on_a_null_input(void **state) {
 	char out[16];
 	(void) state;
 
 	memcpy(out, "untouched", 10);
 	db_escape(escape_handle(), out, sizeof out, NULL);
-	assert_string_equal(out, "untouched");
+	assert_string_equal(out, "");
+}
+
+static void test_db_escape_does_not_leak_the_previous_column(void **state) {
+	char shared[32];
+	(void) state;
+
+	db_escape(escape_handle(), shared, sizeof shared, "sysDescr value");
+	assert_string_equal(shared, "sysDescr value");
+
+	db_escape(escape_handle(), shared, sizeof shared, NULL);
+	assert_string_equal(shared, "");
 }
 
 /* A result the size of the poller's own buffer has to survive when the
@@ -2971,7 +2987,8 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_returns_cached_storage),
 		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_db_escape_escapes_sql_metacharacters),
-		cmocka_unit_test(test_db_escape_ignores_a_null_input),
+		cmocka_unit_test(test_db_escape_clears_on_a_null_input),
+		cmocka_unit_test(test_db_escape_does_not_leak_the_previous_column),
 		cmocka_unit_test(test_db_escape_keeps_a_full_results_buffer),
 		cmocka_unit_test(test_db_escape_survives_the_old_staging_boundary),
 		cmocka_unit_test(test_db_escape_truncates_into_a_small_destination),

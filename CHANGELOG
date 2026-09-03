@@ -35,6 +35,7 @@ The Cacti Group | spine
 -issue#606: Allocate the undefined-value string in php_cmd() only once the retry budget is spent
 -issue#607: Ignore SIGPIPE rather than treating it as fatal, so a second dead child cannot stop the poller
 -issue: Compile REGEX_NUMBER as an extended regex so output_regex number recognition matches
+-issue: Clear the destination in db_escape() when the column is NULL
 -issue#608: Bound the script server restart so a server that starts but never answers cannot recurse
 -issue#610: Detach the subprocess entry under ListMutex so nft_pclose() owns the child it reaps
 -issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()

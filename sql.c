@@ -587,7 +587,18 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	size_t input_len;
 	size_t max_input;
 
-	if (input == NULL || output == NULL) return;
+	/* Callers reuse one stack buffer across nullable columns, so leaving it
+	   untouched here interpolates the previous column, or uninitialised stack
+	   on the first row. */
+	if (output == NULL) return;
+
+	if (input == NULL) {
+		if (max_size > 0) {
+			*output = '\0';
+		}
+
+		return;
+	}
 
 	if (max_size <= 1) {
 		if (max_size == 1) {
