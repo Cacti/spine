@@ -355,7 +355,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
 	}
 
-	/* get ICMP socket */
+	/* get ICMP socket
+	 *
+	 * Each attempt is one complete lock/elevate/open/drop/unlock block. The
+	 * retry used to sleep and loop back while still holding LOCK_SETEUID, so
+	 * the second attempt relocked a non-recursive process-global mutex from
+	 * the thread that already owned it. That deadlocks this thread at euid 0
+	 * in a SUID root binary and takes every other thread that needs the lock
+	 * down with it, on nothing worse than a transient socket() failure. */
 	retry_count = 0;
 	while (TRUE) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
@@ -367,38 +374,33 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 		#endif
 
-		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-			usleep(500000);
-			retry_count++;
+		icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
-			if (retry_count > 4) {
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
-				snprintf(ping->ping_status, 50, "down");
-				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				if (hasCaps() != TRUE) {
-					if (seteuid(getuid()) == -1) {
-						SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-					}
-					thread_mutex_unlock(LOCK_SETEUID);
-				}
-				#endif
-
-				rc = HOST_DOWN;
-				goto cleanup;
+		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+		if (hasCaps() != TRUE) {
+			if (seteuid(getuid()) == -1) {
+				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 			}
-		} else {
+			thread_mutex_unlock(LOCK_SETEUID);
+		}
+		#endif
+
+		if (icmp_socket != -1) {
 			break;
 		}
-	}
 
-	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (hasCaps() != TRUE) {
-		if (seteuid(getuid()) == -1) {
-			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+		retry_count++;
+
+		if (retry_count > 4) {
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
+			snprintf(ping->ping_status, 50, "down");
+
+			rc = HOST_DOWN;
+			goto cleanup;
 		}
-		thread_mutex_unlock(LOCK_SETEUID);
+
+		usleep(500000);
 	}
-	#endif
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;

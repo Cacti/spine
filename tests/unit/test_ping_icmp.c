@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <signal.h>
 
 #include "common.h"
 #include "spine.h"
@@ -59,6 +60,8 @@ static void make_host(host_t *host, const char *addr) {
 static int ping_reset(void **state) {
 	(void) state;
 	config_defaults();
+	/* ping_icmp() takes LOCK_SETEUID; pthread_once makes this idempotent */
+	init_mutexes();
 	/* is_debug_device() walks this global unguarded and ping_icmp() calls it */
 	memset(pi_debug_table, 0, sizeof(pi_debug_table));
 	debug_devices = pi_debug_table;
@@ -159,11 +162,70 @@ static void test_fd_setsize_guard_releases_the_packet(void **state) {
 	assert_non_null(strstr(ping.ping_response, "FD_SETSIZE"));
 }
 
+/* The socket() retry used to sleep and loop back with LOCK_SETEUID still held,
+   so attempt two relocked a non-recursive process-global mutex from its own
+   owner. That wedges the thread at euid 0 and every other thread behind it.
+
+   This runs exactly where the tests above skip: with no privilege, socket()
+   fails with EPERM and the retry loop is what executes. An alarm turns the
+   deadlock into a named failure instead of a CI job that hangs until the
+   runner's own timeout kills it with nothing to read. */
+static sigjmp_buf ping_deadlock_env;
+
+static void ping_alarm(int sig) {
+	(void) sig;
+	siglongjmp(ping_deadlock_env, 1);
+}
+
+static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
+	struct sigaction sa, prev;
+	host_t host;
+	ping_t ping;
+	int rc;
+
+	(void) state;
+
+	if (have_raw_socket()) {
+		/* socket() would succeed, so the retry loop never runs */
+		skip();
+	}
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = ping_alarm;
+	sigemptyset(&sa.sa_mask);
+	assert_int_equal(sigaction(SIGALRM, &sa, &prev), 0);
+
+	if (sigsetjmp(ping_deadlock_env, 1) != 0) {
+		alarm(0);
+		sigaction(SIGALRM, &prev, NULL);
+		fail_msg("ping_icmp() blocked in the socket() retry; LOCK_SETEUID was held across the sleep");
+	}
+
+	make_host(&host, "127.0.0.1");
+	memset(&ping, 0, sizeof(ping));
+
+	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */
+	alarm(15);
+	rc = ping_icmp(&host, &ping);
+	alarm(0);
+
+	sigaction(SIGALRM, &prev, NULL);
+
+	/* it gave up rather than hanging, and said why */
+	assert_int_equal(rc, HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "ICMP Socket"));
+
+	/* the lock is free: a thread that still owned it could not take it again */
+	thread_mutex_lock(LOCK_SETEUID);
+	thread_mutex_unlock(LOCK_SETEUID);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_loopback_answers, ping_reset),
 		cmocka_unit_test_setup(test_repeated_pings_do_not_accumulate, ping_reset),
 		cmocka_unit_test_setup(test_fd_setsize_guard_releases_the_packet, ping_reset),
+		cmocka_unit_test_setup(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
