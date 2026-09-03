@@ -626,6 +626,28 @@ typedef struct db_connection {
 #include "error.h"
 
 /* Globals */
+/*! Every query poll_host() issues for one device.
+ *
+ *  Grouped so the construction can be built and inspected on its own; the
+ *  three lengths are cached because the result loop appends these fragments
+ *  once per data source. */
+typedef struct {
+	char   query1[BUFSIZE];      /* poller_item rows this poller owns */
+	char   query2[BIG_BUFSIZE];  /* host row, for the uptime checks */
+	char   query4[BUFSIZE];
+	char   query5[BUFSIZE];
+	char   query6[BUFSIZE];
+	char   query8[BUFSIZE];
+	char   query9[BUFSIZE];
+	char   query10[BUFSIZE];
+	char   query11[BUFSIZE];
+	char   posuffix[BUFSIZE];    /* upsert tail for poller_output */
+	int    query8_len;
+	int    query11_len;
+	int    posuffix_len;
+} poll_host_queries_t;
+
+extern void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *regex_col, const char *limits);
 extern void poller_item_scope(char *out, size_t len, int poller_id);
 extern void poller_owner_scope(char *out, size_t len, int poller_id);
 
