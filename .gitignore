@@ -31,3 +31,7 @@ libtool
 *.o
 *.m4
 tests/unit/bin/
+
+# automake test-suite artifacts
+*.trs
+test-suite.log

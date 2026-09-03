@@ -104,4 +104,41 @@ tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-TESTS = $(check_PROGRAMS)
+# Shell tests run alongside the cmocka binaries. Each exits 77 when its
+# fixture is unavailable, which automake reports as SKIP, so `make check` is
+# meaningful on a laptop without docker and complete in CI with it.
+#
+# tests/regression/test_child_process_safety.sh was in the tree but in no
+# TESTS list, and had been failing on develop since #542 removed the code it
+# guards. Nothing ran it. That is the reason these are wired in here.
+SHELL_TESTS = \
+	tests/integration/smoke_test.sh \
+	tests/integration/test_alloc_failure.sh \
+	tests/integration/test_cli_args.sh \
+	tests/integration/test_db_column_detect.sh \
+	tests/integration/test_output_regex.sh \
+	tests/integration/test_script_server_reap.sh \
+	tests/regression/test_child_process_safety.sh
+
+TEST_EXTENSIONS = .sh
+SH_LOG_COMPILER = $(SHELL)
+
+TESTS = $(check_PROGRAMS) $(SHELL_TESTS)
+
+EXTRA_DIST += $(SHELL_TESTS) tests/golden/poll_host_queries.golden tests/golden/README.md
+
+# Per-function coverage for the code that has been pulled out of the large
+# functions, which is the number worth watching. Requires a build configured
+# with --enable-coverage.
+.PHONY: coverage
+coverage:
+	@if [ ! -f poller.gcno ] && [ ! -f .libs/poller.gcno ]; then \
+		echo "configure with --enable-coverage first"; exit 1; \
+	fi
+	@$(MAKE) check >/dev/null 2>&1 || true
+	@echo "function coverage:"
+	@gcov -n -f $(srcdir)/poller.c $(srcdir)/util.c $(srcdir)/sql.c 2>/dev/null \
+		| grep -A1 "^Function" | paste - - - \
+		| sed "s/Function //; s/Lines executed://" \
+		| awk -F'\t' '{ printf "  %-38s %s\n", $$1, $$2 }' \
+		| sort -k2 -t: -n

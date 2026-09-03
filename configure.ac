@@ -110,6 +110,34 @@ AC_ARG_ENABLE(sanitizers,
   AC_MSG_RESULT(no)
 )
 
+dnl ThreadSanitizer is a separate build: it cannot be combined with
+dnl AddressSanitizer, and spine runs a thread per device with shared counters
+dnl and a process-wide effective uid, so a data race here is the failure mode
+dnl that costs the most to find any other way.
+AC_ARG_ENABLE(tsan,
+  [  --enable-tsan           Build with ThreadSanitizer. Not combinable with --enable-sanitizers.],
+  [if test "x$enableval" = "xyes"; then
+    AC_MSG_RESULT(adding -fsanitize=thread to CFLAGS.)
+    CFLAGS="$CFLAGS -fsanitize=thread -fno-omit-frame-pointer -g"
+    LDFLAGS="$LDFLAGS -fsanitize=thread"
+   fi
+  ],
+  AC_MSG_RESULT(no)
+)
+
+dnl Coverage instrumentation, so `make check` and gcov agree on one build
+dnl rather than each caller inventing its own CFLAGS.
+AC_ARG_ENABLE(coverage,
+  [  --enable-coverage       Build with gcov instrumentation for coverage reports.],
+  [if test "x$enableval" = "xyes"; then
+    AC_MSG_RESULT(adding --coverage to CFLAGS.)
+    CFLAGS="$CFLAGS --coverage -O0 -g"
+    LDFLAGS="$LDFLAGS --coverage"
+   fi
+  ],
+  AC_MSG_RESULT(no)
+)
+
 AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
 AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])

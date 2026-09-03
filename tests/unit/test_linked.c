@@ -1194,6 +1194,7 @@ static void write_all(FILE *f) {
 
 static void test_build_queries_matches_the_golden_capture(void **state) {
 	const char *path = getenv("SPINE_GOLDEN");
+	char fallback[512];
 	char actual[] = "/tmp/spine_golden_actual.XXXXXX";
 	FILE *f;
 	FILE *g;
@@ -1205,13 +1206,18 @@ static void test_build_queries_matches_the_golden_capture(void **state) {
 	(void) state;
 
 	if (path == NULL) {
-		path = "tests/golden/poll_host_queries.golden";
+		/* automake runs from the build directory, which is not the source
+		   directory under `make distcheck` */
+		const char *dir = getenv("srcdir");
+
+		snprintf(fallback, sizeof(fallback), "%s/tests/golden/poll_host_queries.golden",
+			dir != NULL ? dir : ".");
+		path = fallback;
 	}
 
 	g = fopen(path, "r");
 	if (g == NULL) {
-		print_message("golden fixture %s not readable, skipping\n", path);
-		return;
+		fail_msg("golden fixture %s is not readable; this test must run, not skip", path);
 	}
 
 	fd = mkstemp(actual);

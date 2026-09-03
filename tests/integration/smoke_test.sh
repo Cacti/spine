@@ -6,6 +6,20 @@
 # Usage: ./tests/integration/smoke_test.sh
 set -euo pipefail
 
+
+# Skip rather than fail where the fixture cannot run: 77 is the exit status
+# automake reads as SKIP, so `make check` stays green on a machine without
+# docker while still reporting the test as not run.
+if ! command -v docker >/dev/null 2>&1; then
+	echo "  SKIP: docker not installed"
+	exit 77
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+	echo "  SKIP: docker compose not available"
+	exit 77
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")
