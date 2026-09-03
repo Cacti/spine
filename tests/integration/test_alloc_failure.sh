@@ -43,6 +43,15 @@ if ! command -v cc >/dev/null 2>&1; then
 	exit 77
 fi
 
+# AddressSanitizer replaces the allocator, so an LD_PRELOAD calloc is never
+# reached and the injection quietly does nothing. The --help probe below still
+# succeeds, so it cannot be relied on to catch this; read the binary instead.
+if nm -D "$SPINE" 2>/dev/null | grep -q '__asan_' ||
+	ldd "$SPINE" 2>/dev/null | grep -qi 'libasan'; then
+	echo "built with AddressSanitizer, which owns the allocator; skipping"
+	exit 77
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
