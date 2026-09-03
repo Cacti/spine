@@ -378,6 +378,17 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.localname);
 					return 0;
 				}
+
+				/* The privacy path releases this after deriving its key; this
+				 * one did not, so every authNoPriv session leaked the
+				 * passphrase copy. Zero it first when the setting asks: it is
+				 * the cleartext auth passphrase. */
+				if (zero_sensitive) {
+					memset(Apsz, 0x0, strlen(Apsz));
+				}
+
+				free(Apsz);
+				Apsz = NULL;
 			}
 		} else {
 			const oid *priv_proto;
