@@ -2105,6 +2105,316 @@ static void test_store_matches_the_chain_it_replaced(void **state) {
 /* The failure path: a descriptor that cannot carry the flag must be reported,
    not silently accepted. A pipe whose reader is inheritable is worse than no
    pipe, so the helper refuses rather than continuing. */
+/* update_host_status() is the availability state machine: it decides when Cacti
+   marks a device down, when it calls it recovered, and what the alert says. It
+   is pure logic, no database and no sockets, and it had no coverage at all.
+
+   These are characterization tests. They record what the shipped code does so
+   the behaviour is pinned before anyone rearranges it, not what someone thinks
+   it ought to do. Where the current behaviour looks odd it is written down as
+   observed and called out rather than quietly corrected. */
+static void uhs_reset(host_t *host, ping_t *ping) {
+	memset(host, 0, sizeof(*host));
+	memset(ping, 0, sizeof(*ping));
+
+	host->id = 7;
+	host->min_time = 9999999.0;
+	snprintf(host->snmp_community, sizeof(host->snmp_community), "public");
+	host->snmp_version = 2;
+
+	snprintf(ping->ping_status,   sizeof(ping->ping_status),   "%s", "10.000");
+	snprintf(ping->ping_response, sizeof(ping->ping_response), "%s", "ok");
+	snprintf(ping->snmp_status,   sizeof(ping->snmp_status),   "%s", "20.000");
+	snprintf(ping->snmp_response, sizeof(ping->snmp_response), "%s", "snmp ok");
+
+	set.ping_failure_count  = 1;
+	set.ping_recovery_count = 1;
+	set.log_level = POLLER_VERBOSITY_NONE;
+
+	/* the HOST EVENT lines go to stderr regardless of level; keep them out of
+	   the test output rather than have every run print a wall of red herrings */
+	set.stderr_notty = TRUE;
+	set.stdout_notty = TRUE;
+}
+
+static void test_a_single_failure_downs_the_device_when_the_threshold_is_one(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 1);
+	assert_int_equal(host.failed_polls, 1);
+	assert_int_equal(host.total_polls, 1);
+	assert_true(strlen(host.status_fail_date) > 0);
+}
+
+static void test_the_device_stays_up_until_the_failure_threshold_is_reached(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	set.ping_failure_count = 3;
+	host.status = HOST_UP;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 1);
+	/* the first failure stamps the date even though no alert fires yet */
+	assert_true(strlen(host.status_fail_date) > 0);
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 2);
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 3);
+}
+
+static void test_a_failure_while_recovering_returns_the_device_to_down(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_RECOVERING;
+	host.status_event_count = 4;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 1);
+}
+
+static void test_an_unknown_device_that_fails_goes_down_with_a_zero_count(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UNKNOWN;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 0);
+}
+
+static void test_a_device_already_down_keeps_counting_events(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_DOWN;
+	host.status_event_count = 5;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	/* the counter is not capped while the device stays down */
+	assert_int_equal(host.status_event_count, 6);
+}
+
+static void test_a_down_device_recovers_in_one_step_when_the_threshold_is_one(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_DOWN;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 0);
+	assert_true(strlen(host.status_rec_date) > 0);
+}
+
+static void test_a_down_device_passes_through_recovering_when_the_threshold_is_higher(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	set.ping_recovery_count = 3;
+	host.status = HOST_DOWN;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_RECOVERING);
+	assert_int_equal(host.status_event_count, 1);
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_RECOVERING);
+	assert_int_equal(host.status_event_count, 2);
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 0);
+}
+
+static void test_availability_is_the_share_of_successful_polls(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	update_host_status(HOST_UP,   &host, &ping, AVAIL_PING);
+	update_host_status(HOST_UP,   &host, &ping, AVAIL_PING);
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	update_host_status(HOST_UP,   &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.total_polls, 4);
+	assert_int_equal(host.failed_polls, 1);
+	assert_true(host.availability > 74.9 && host.availability < 75.1);
+}
+
+static void test_the_ping_time_source_follows_the_availability_method(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+
+	/* ping only: the ping time */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_true(host.cur_time > 9.9 && host.cur_time < 10.1);
+
+	/* snmp only: the snmp time */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP);
+	assert_true(host.cur_time > 19.9 && host.cur_time < 20.1);
+
+	/* both: their mean */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP_AND_PING);
+	assert_true(host.cur_time > 14.9 && host.cur_time < 15.1);
+
+	/* none: no time at all */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_NONE);
+	assert_true(host.cur_time < 0.001);
+}
+
+static void test_a_device_without_snmp_is_timed_by_ping_alone(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+
+	/* no community and version below 3 means SNMP does not apply to it */
+	uhs_reset(&host, &ping);
+	host.snmp_community[0] = '\0';
+	host.snmp_version = 1;
+	host.status = HOST_UP;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP_AND_PING);
+	assert_true(host.cur_time > 9.9 && host.cur_time < 10.1);
+
+	/* and under SNMP only there is nothing to time it by */
+	uhs_reset(&host, &ping);
+	host.snmp_community[0] = '\0';
+	host.snmp_version = 1;
+	host.status = HOST_UP;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP);
+	assert_true(host.cur_time < 0.001);
+}
+
+static void test_the_recorded_error_follows_the_availability_method(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_string_equal(host.status_last_error, "ok");
+
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_SNMP);
+	assert_string_equal(host.status_last_error, "snmp ok");
+
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_SNMP_OR_PING);
+	assert_string_equal(host.status_last_error, "snmp ok, ok");
+
+	/* a device that does not speak SNMP, asked for by SNMP, says so */
+	uhs_reset(&host, &ping);
+	host.snmp_community[0] = '\0';
+	host.snmp_version = 1;
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_SNMP);
+	assert_string_equal(host.status_last_error, "Device does not require SNMP");
+}
+
+/* The running average divides by the successful polls, not by every poll. A
+   test with no failures cannot tell the two apart, so this one mixes a failure
+   in: 10 and 20 average to 15, a failed poll moves neither, and 30 then gives
+   (2*15 + 30) / 3 = 20. Dividing by total_polls instead would give 15. */
+static void test_the_average_ignores_failed_polls(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "10.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "20.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_true(host.avg_time > 14.9 && host.avg_time < 15.1);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "30.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.total_polls, 4);
+	assert_int_equal(host.failed_polls, 1);
+	assert_true(host.avg_time > 19.9 && host.avg_time < 20.1);
+}
+
+static void test_min_and_max_track_the_extremes(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "5.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "25.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "15.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	assert_true(host.min_time > 4.9  && host.min_time < 5.1);
+	assert_true(host.max_time > 24.9 && host.max_time < 25.1);
+	assert_true(host.avg_time > 14.9 && host.avg_time < 15.1);
+}
+
 /* spine_log() emits a log line with fputs() to a stdio stream. LOGSIZE is 65535
    and BUFSIZ is 8192, so any message past 8KB leaves fputs() as several write()
    calls, and a second thread's writes land between them. That is #298: a user
@@ -2633,6 +2943,19 @@ int main(void) {
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_a_single_failure_downs_the_device_when_the_threshold_is_one),
+		cmocka_unit_test(test_the_device_stays_up_until_the_failure_threshold_is_reached),
+		cmocka_unit_test(test_a_failure_while_recovering_returns_the_device_to_down),
+		cmocka_unit_test(test_an_unknown_device_that_fails_goes_down_with_a_zero_count),
+		cmocka_unit_test(test_a_device_already_down_keeps_counting_events),
+		cmocka_unit_test(test_a_down_device_recovers_in_one_step_when_the_threshold_is_one),
+		cmocka_unit_test(test_a_down_device_passes_through_recovering_when_the_threshold_is_higher),
+		cmocka_unit_test(test_availability_is_the_share_of_successful_polls),
+		cmocka_unit_test(test_the_ping_time_source_follows_the_availability_method),
+		cmocka_unit_test(test_a_device_without_snmp_is_timed_by_ping_alone),
+		cmocka_unit_test(test_the_recorded_error_follows_the_availability_method),
+		cmocka_unit_test(test_min_and_max_track_the_extremes),
+		cmocka_unit_test(test_the_average_ignores_failed_polls),
 		cmocka_unit_test(test_concurrent_log_writes_are_not_spliced),
 		cmocka_unit_test(test_pipe_exhaustion_reports_failure),
 		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
