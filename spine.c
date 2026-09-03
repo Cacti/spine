@@ -645,25 +645,25 @@ int main(int argc, char *argv[]) {
 
 	/* obtain the list of hosts to poll */
 	{
-		int remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+		size_t remaining = MEGA_BUFSIZE - (qp - querybuf);
+		spine_appendf(&qp, &remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " WHERE disabled = ''");
+		spine_appendf(&qp, &remaining, " WHERE disabled = ''");
 
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
+		spine_appendf(&qp, &remaining, " AND availability_method != %d", AVAIL_STREAM);
 
 		if (!strlen(set.host_id_list)) {
 			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
 		} else {
 			remaining = MEGA_BUFSIZE - (qp - querybuf);
-			qp += snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
+			spine_appendf(&qp, &remaining, " AND h.id IN(%s)", set.host_id_list);
 		}
 
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
+		spine_appendf(&qp, &remaining, " AND h.poller_id = %i", set.poller_id);
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " ORDER BY picount DESC");
+		spine_appendf(&qp, &remaining, " ORDER BY picount DESC");
 	}
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
