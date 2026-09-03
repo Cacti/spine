@@ -168,6 +168,42 @@ static void test_tuple_rejects_null_arguments(void **state) {
 	assert_int_equal(poller_output_tuple(out, sizeof(out), NULL, make_item("a", "b", 1), NULL), 0);
 }
 
+
+/* The tuple must survive the largest row the poller can produce: a result that
+   fills RESULTS_BUFFER and is entirely quotable, alongside a full rrd_name.
+   result_string is what the caller passes, so if it is undersized the row
+   reaches the database truncated, silently. */
+static void test_tuple_fits_the_largest_row_the_poller_can_produce(void **state) {
+	char *out;
+	char quotes[RESULTS_BUFFER];
+	char name[DBL_BUFSIZE];
+	target_t item;
+	int n;
+	size_t cap = POLLER_OUTPUT_TUPLE_MAX;   /* what poll_host() passes */
+
+	(void) state;
+
+	out = malloc(cap);
+	assert_non_null(out);
+
+	memset(quotes, '\'', sizeof(quotes) - 1);
+	quotes[sizeof(quotes) - 1] = '\0';
+	memset(name, 'n', sizeof(name) - 1);
+	name[sizeof(name) - 1] = '\0';
+
+	memset(&item, 0, sizeof(item));
+	snprintf(item.rrd_name, sizeof(item.rrd_name), "%s", name);
+	snprintf(item.result, sizeof(item.result), "%s", quotes);
+	item.local_data_id = 2147483647;
+
+	n = poller_output_tuple(out, cap, NULL, &item, "1700000000");
+
+	/* a complete tuple ends with the closing paren; a truncated one does not */
+	assert_int_equal(out[n - 1], ')');
+
+	free(out);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_tuple_has_the_expected_shape, reset),
@@ -177,6 +213,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_tuple_survives_a_result_that_is_all_quotes, reset),
 		cmocka_unit_test_setup(test_tuple_reports_the_length_it_wrote, reset),
 		cmocka_unit_test_setup(test_tuple_rejects_null_arguments, reset),
+		cmocka_unit_test_setup(test_tuple_fits_the_largest_row_the_poller_can_produce, reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

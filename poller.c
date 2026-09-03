@@ -567,7 +567,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 
 	char sysUptime[BUFSIZE];
-	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
+	char result_string[POLLER_OUTPUT_TUPLE_MAX];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
 	int  errors = 0;
@@ -1842,7 +1842,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while (i < rows_processed) {
-			result_length = poller_output_tuple(result_string, RESULTS_BUFFER + SMALL_BUFSIZE,
+			result_length = poller_output_tuple(result_string, sizeof(result_string),
 				&mysqlt, &poller_items[i], host_time);
 
 			/* if the next element to the buffer will overflow it, write to the database */

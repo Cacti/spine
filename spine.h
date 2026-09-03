@@ -136,6 +136,13 @@
 #define MEDIUM_BUFSIZE 512
 #define BUFSIZE 1024
 #define DBL_BUFSIZE 2048
+
+/* A poller_output VALUES tuple holds both free-text columns after escaping.
+ * mysql_real_escape_string() can double every byte, so the result contributes
+ * twice RESULTS_BUFFER and the rrd_name contributes DBL_BUFSIZE; the rest is
+ * the literal text and the integer. Sizing the destination as
+ * RESULTS_BUFFER + SMALL_BUFSIZE truncated the row, silently. */
+#define POLLER_OUTPUT_TUPLE_MAX ((RESULTS_BUFFER * 2) + DBL_BUFSIZE + SMALL_BUFSIZE)
 #define LRG_BUFSIZE 8096
 #define BIG_BUFSIZE 65535
 #define MEGA_BUFSIZE 1024000
