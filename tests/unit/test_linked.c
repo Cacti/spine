@@ -1666,6 +1666,151 @@ static void test_store_rejects_null_arguments(void **state) {
 	assert_false(poller_store_result(&sr_item, NULL, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1));
 }
 
+
+/* ---------------------------------------------------------------------------
+ * poller_process_snmp_results (poller.c)
+ *
+ * One multi-get batch of SNMP results normalised onto their targets. The same
+ * seventy-six lines ran in both places poll_host() flushes a batch: when it
+ * fills mid-loop, and for the remainder at the end. They differed only in
+ * indentation.
+ * ------------------------------------------------------------------------- */
+
+static host_t       sn_host;
+static target_t     sn_items[4];
+static snmp_oids_t  sn_oids[4];
+static char         sn_errstr[DBL_BUFSIZE];
+static int          sn_bufsize;
+static int          sn_buferrors;
+
+static int sn_debug_table[100];
+
+static int snmp_reset(void **state) {
+	int k;
+
+	(void) state;
+	/* is_debug_device() walks this global unguarded, and the batch loop calls
+	   it for every result */
+	memset(sn_debug_table, 0, sizeof(sn_debug_table));
+	debug_devices = sn_debug_table;
+	memset(&sn_host, 0, sizeof(sn_host));
+	memset(sn_items, 0, sizeof(sn_items));
+	memset(sn_oids, 0, sizeof(sn_oids));
+	memset(sn_errstr, 0, sizeof(sn_errstr));
+	sn_bufsize = 0;
+	sn_buferrors = 0;
+	set.spine_log_level = 0;
+	sn_host.snmp_version = 2;
+	snprintf(sn_host.hostname, sizeof(sn_host.hostname), "%s", "router1");
+
+	for (k = 0; k < 4; k++) {
+		sn_items[k].local_data_id = 100 + k;
+		sn_oids[k].array_position = k;
+	}
+	return 0;
+}
+
+static int run_batch(int n, int spike_kill) {
+	return poller_process_snmp_results(&sn_host, sn_items, sn_oids, n,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, spike_kill);
+}
+
+static void set_oid(int k, const char *value) {
+	snprintf(sn_oids[k].result, RESULTS_BUFFER, "%s", value);
+}
+
+static void test_snmp_batch_copies_numeric_results_to_their_targets(void **state) {
+	(void) state;
+	set_oid(0, "1000");
+	set_oid(1, "2000");
+
+	assert_int_equal(run_batch(2, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "1000");
+	assert_string_equal(sn_items[1].result, "2000");
+}
+
+/* array_position is what maps an OID back to its data source; the batch order
+   is not the target order. */
+static void test_snmp_batch_honours_array_position(void **state) {
+	(void) state;
+	sn_oids[0].array_position = 2;
+	sn_oids[1].array_position = 0;
+	set_oid(0, "111");
+	set_oid(1, "222");
+
+	assert_int_equal(run_batch(2, FALSE), 0);
+	assert_string_equal(sn_items[2].result, "111");
+	assert_string_equal(sn_items[0].result, "222");
+}
+
+static void test_snmp_batch_counts_undefined_results_as_rejected(void **state) {
+	(void) state;
+	set_oid(0, "1000");
+	set_oid(1, "U");
+	set_oid(2, "Nan");
+
+	assert_int_equal(run_batch(3, FALSE), 2);
+	assert_string_equal(sn_items[0].result, "1000");
+}
+
+/* An ignored host blanks the whole batch without counting errors: the device
+   is already known bad and each OID is not a separate failure. */
+static void test_snmp_batch_blanks_everything_for_an_ignored_host(void **state) {
+	(void) state;
+	sn_host.ignore_host = TRUE;
+	set_oid(0, "1000");
+	set_oid(1, "2000");
+
+	assert_int_equal(run_batch(2, FALSE), 0);
+	assert_true(IS_UNDEFINED(sn_oids[0].result));
+	assert_true(IS_UNDEFINED(sn_oids[1].result));
+}
+
+static void test_snmp_batch_converts_a_delimited_octet_string(void **state) {
+	(void) state;
+	set_oid(0, "DE AD BE EF");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "3735928559");
+}
+
+/* A data source with an output_regex has it applied after normalisation. */
+static void test_snmp_batch_applies_the_data_source_output_regex(void **state) {
+	(void) state;
+	snprintf(sn_items[0].output_regex, sizeof(sn_items[0].output_regex), "%s", "[0-9]+");
+	set_oid(0, "value=4242 units");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "4242");
+}
+
+/* spike_kill blanks a value when the agent has restarted, but leaves
+   multi-part output alone because a colon means it is not a single counter. */
+static void test_snmp_batch_spike_kill_blanks_a_scalar_but_not_multipart(void **state) {
+	(void) state;
+	set_oid(0, "1000");
+	set_oid(1, "in:1 out:2");
+
+	assert_int_equal(run_batch(2, TRUE), 0);
+	assert_true(IS_UNDEFINED(sn_items[0].result));
+	assert_string_equal(sn_items[1].result, "in:1 out:2");
+}
+
+static void test_snmp_batch_handles_an_empty_batch(void **state) {
+	(void) state;
+	assert_int_equal(run_batch(0, FALSE), 0);
+}
+
+static void test_snmp_batch_rejects_null_arguments(void **state) {
+	(void) state;
+	assert_int_equal(poller_process_snmp_results(NULL, sn_items, sn_oids, 1,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
+	assert_int_equal(poller_process_snmp_results(&sn_host, NULL, sn_oids, 1,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
+	assert_int_equal(poller_process_snmp_results(&sn_host, sn_items, NULL, 1,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -1774,6 +1919,15 @@ int main(void) {
 		cmocka_unit_test_setup(test_store_rejects_a_value_with_no_number_in_it, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_an_empty_result, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_null_arguments, store_reset),
+		cmocka_unit_test_setup(test_snmp_batch_copies_numeric_results_to_their_targets, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_honours_array_position, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_counts_undefined_results_as_rejected, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_blanks_everything_for_an_ignored_host, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_converts_a_delimited_octet_string, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_applies_the_data_source_output_regex, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_spike_kill_blanks_a_scalar_but_not_multipart, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_handles_an_empty_batch, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_rejects_null_arguments, snmp_reset),
 		cmocka_unit_test(test_build_queries_gates_on_rrd_next_step_for_multiple_profiles),
 		cmocka_unit_test(test_build_queries_multiple_profiles_scope_a_remote_poller),
 	};
