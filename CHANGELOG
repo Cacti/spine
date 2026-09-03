@@ -26,6 +26,7 @@ The Cacti Group | spine
 -issue#552: Terminate die() output so consecutive fatal messages no longer run together
 -issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
 -issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
+-issue#610: Give nft_pclose exclusive ownership of subprocess registry entries
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
 -issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
 -issue: Restore the twelve headers and spine.conf.dist missing from the dist tarball so a release tarball can be compiled from
