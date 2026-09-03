@@ -335,6 +335,74 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	q->posuffix_len = strlen(q->posuffix);
 }
 
+/*! \fn int poller_store_result(target_t *item, char *poll_result, char *error_string, int *buf_size, int *buf_errors, int host_id, int host_thread)
+ *  \brief normalise one polled value and store it on the target
+ *
+ *  The same thirty-three lines ran after exec_poll() and after php_cmd(). They
+ *  were identical, which is the only reason the two paths still agreed on what
+ *  a valid result is.
+ *
+ *  Four outcomes, in order:
+ *    - undefined, which is the poller reporting it got nothing usable
+ *    - already numeric, or a multi-part "name:value" line, stored as it stands
+ *    - hexadecimal, converted to decimal
+ *    - anything else, stripped to its numeric part and then validated; a value
+ *      that still does not validate becomes undefined
+ *
+ *  \return TRUE when the result was rejected, so the caller counts an error
+ */
+int poller_store_result(target_t *item, char *poll_result, char *error_string,
+	int *buf_size, int *buf_errors, int host_id, int host_thread) {
+	char temp_result[RESULTS_BUFFER];
+
+	if (item == NULL || poll_result == NULL) {
+		return FALSE;
+	}
+
+	if (IS_UNDEFINED(poll_result)) {
+		SET_UNDEFINED(item->result);
+		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, item->local_data_id, false);
+
+		if (set.spine_log_level == 2) {
+			SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
+				host_id, host_thread, item->local_data_id,
+				item->arg1, item->result));
+		}
+
+		return TRUE;
+	}
+
+	if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
+		snprintf(item->result, RESULTS_BUFFER, "%s", poll_result);
+		return FALSE;
+	}
+
+	if (is_hexadecimal(poll_result, TRUE)) {
+		snprintf(item->result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+		return FALSE;
+	}
+
+	/* remove double or single quotes from string */
+	snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
+	snprintf(item->result, RESULTS_BUFFER, "%s", temp_result);
+
+	/* detect erroneous result. can be non-numeric */
+	if (!validate_result(item->result)) {
+		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, item->local_data_id, false);
+
+		if (set.spine_log_level == 2) {
+			SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
+				host_id, host_thread, item->local_data_id,
+				item->arg1, item->result));
+		}
+
+		SET_UNDEFINED(item->result);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 /*! \fn int poller_output_tuple(char *out, size_t out_len, MYSQL *mysql, const target_t *item, const char *host_time)
  *  \brief format one poller_output row for the batched INSERT
  *
@@ -1585,39 +1653,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				poll_result = exec_poll(host, poller_items[i].arg1, poller_items[i].local_data_id, "DS");
 
 				/* process the result */
-				if (IS_UNDEFINED(poll_result)) {
-					SET_UNDEFINED(poller_items[i].result);
-					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
-					errors++;
-
-					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-							host_id, host_thread, poller_items[i].local_data_id,
-							poller_items[i].arg1, poller_items[i].result));
-					}
-				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
-				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
-					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
-
-					/* detect erroneous result. can be non-numeric */
-					if (!validate_result(poller_items[i].result)) {
-						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
-						errors++;
-
-						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-								host_id, host_thread, poller_items[i].local_data_id,
-								poller_items[i].arg1, poller_items[i].result));
-						}
-
-						SET_UNDEFINED(poller_items[i].result);
-					}
-				}
+							if (poller_store_result(&poller_items[i], poll_result,
+								error_string, buf_size, buf_errors, host_id, host_thread)) {
+								errors++;
+							}
 
 				SPINE_FREE(poll_result);
 
@@ -1651,39 +1690,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 				/* process the output */
-				if (IS_UNDEFINED(poll_result)) {
-					SET_UNDEFINED(poller_items[i].result);
-					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
-					errors++;
-
-					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-							host_id, host_thread, poller_items[i].local_data_id,
-							poller_items[i].arg1, poller_items[i].result));
-					}
-				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
-				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
-					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
-
-					/* detect erroneous result. can be non-numeric */
-					if (!validate_result(poller_items[i].result)) {
-						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
-						errors++;
-
-						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-								host_id, host_thread, poller_items[i].local_data_id,
-								poller_items[i].arg1, poller_items[i].result));
-						}
-
-						SET_UNDEFINED(poller_items[i].result);
-					}
-				}
+							if (poller_store_result(&poller_items[i], poll_result,
+								error_string, buf_size, buf_errors, host_id, host_thread)) {
+								errors++;
+							}
 
 				SPINE_FREE(poll_result);
 

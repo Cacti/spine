@@ -1517,6 +1517,158 @@ static void test_item_from_row_rejects_null_arguments(void **state) {
 	poller_item_from_row(&item, NULL);
 }
 
+
+/* ---------------------------------------------------------------------------
+ * poller_store_result (poller.c)
+ *
+ * Decides what a polled value means and what gets stored. The same thirty-three
+ * lines ran after exec_poll() and after php_cmd(); they were identical, which is
+ * the only reason the script and script-server paths still agreed on what a
+ * valid result is.
+ * ------------------------------------------------------------------------- */
+
+static target_t sr_item;
+static char     sr_errstr[DBL_BUFSIZE];
+static int      sr_bufsize;
+static int      sr_buferrors;
+
+static int store_reset(void **state) {
+	(void) state;
+	memset(&sr_item, 0, sizeof(sr_item));
+	memset(sr_errstr, 0, sizeof(sr_errstr));
+	sr_bufsize = 0;
+	sr_buferrors = 0;
+	set.spine_log_level = 0;
+	sr_item.local_data_id = 42;
+	snprintf(sr_item.arg1, sizeof(sr_item.arg1), "%s", "/usr/bin/probe");
+	return 0;
+}
+
+static int store(char *value) {
+	return poller_store_result(&sr_item, value, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1);
+}
+
+static void test_store_keeps_a_numeric_result(void **state) {
+	char v[] = "4242";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "4242");
+}
+
+static void test_store_keeps_a_negative_and_a_float(void **state) {
+	char neg[] = "-17";
+	char flt[] = "3.14159";
+
+	(void) state;
+	assert_false(store(neg));
+	assert_string_equal(sr_item.result, "-17");
+	assert_false(store(flt));
+	assert_string_equal(sr_item.result, "3.14159");
+}
+
+/* 'U' is the poller reporting it got nothing usable. */
+static void test_store_reports_an_undefined_result_as_an_error(void **state) {
+	char v[] = "U";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+/* is_hexadecimal() wants a delimited octet string, at least three characters
+   long. Dashes and spaces reach it; a colon does not, because Cacti's own
+   multi-part "name:value" format is checked first and claims it. */
+static void test_store_converts_a_delimited_octet_string(void **state) {
+	char dashes[] = "de-ad-be-ef";
+	char spaces[] = "DE AD BE EF";
+
+	(void) state;
+
+	assert_false(store(spaces));
+	assert_string_equal(sr_item.result, "3735928559");
+
+	/* The dash form is accepted by is_hexadecimal() and then converted to zero,
+	   because hex2dec() only skips '"', ' ' and '\t' and returns 0 on anything
+	   else. This pins the current behaviour; the next commit fixes it. */
+	assert_false(store(dashes));
+	assert_string_equal(sr_item.result, "0");
+}
+
+/* The colon form is multi-part output, not hex, and is stored as it arrived. */
+static void test_store_treats_colon_separated_hex_as_multipart(void **state) {
+	char colons[] = "DE:AD:BE:EF";
+
+	(void) state;
+	assert_false(store(colons));
+	assert_string_equal(sr_item.result, "DE:AD:BE:EF");
+}
+
+/* Undelimited hex is not an octet string, so it falls through to the strip and
+   validate path and is rejected rather than silently misread as decimal. */
+static void test_store_rejects_undelimited_hex(void **state) {
+	char v[] = "deadbeef";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+/* A 0x prefix is claimed earlier, by is_numeric(): strtod() accepts C99
+   hex-float literals, so "0x1F" parses whole and is stored as it arrived. */
+static void test_store_keeps_0x_prefixed_hex_as_text(void **state) {
+	char v[] = "0x1F";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "0x1F");
+}
+
+/* A multi-part line is name:value pairs and is stored verbatim for the caller
+   to split later. */
+static void test_store_keeps_multipart_output_verbatim(void **state) {
+	char v[] = "in:1000 out:2000";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "in:1000 out:2000");
+}
+
+/* Anything else is stripped to its numeric part rather than rejected outright,
+   which is what lets a device answering "42 packets" still record 42. */
+static void test_store_strips_a_value_wearing_units(void **state) {
+	char v[] = "42 packets";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "42");
+}
+
+/* And a value with nothing numeric in it becomes undefined and counts. */
+static void test_store_rejects_a_value_with_no_number_in_it(void **state) {
+	char v[] = "connection refused";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+static void test_store_rejects_an_empty_result(void **state) {
+	char v[] = "";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+static void test_store_rejects_null_arguments(void **state) {
+	char v[] = "1";
+
+	(void) state;
+	assert_false(poller_store_result(NULL, v, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1));
+	assert_false(poller_store_result(&sr_item, NULL, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -1613,6 +1765,18 @@ int main(void) {
 		cmocka_unit_test(test_item_from_row_starts_the_result_undefined),
 		cmocka_unit_test(test_item_from_row_does_not_carry_state_between_rows),
 		cmocka_unit_test(test_item_from_row_rejects_null_arguments),
+		cmocka_unit_test_setup(test_store_keeps_a_numeric_result, store_reset),
+		cmocka_unit_test_setup(test_store_keeps_a_negative_and_a_float, store_reset),
+		cmocka_unit_test_setup(test_store_reports_an_undefined_result_as_an_error, store_reset),
+		cmocka_unit_test_setup(test_store_converts_a_delimited_octet_string, store_reset),
+		cmocka_unit_test_setup(test_store_treats_colon_separated_hex_as_multipart, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_undelimited_hex, store_reset),
+		cmocka_unit_test_setup(test_store_keeps_0x_prefixed_hex_as_text, store_reset),
+		cmocka_unit_test_setup(test_store_keeps_multipart_output_verbatim, store_reset),
+		cmocka_unit_test_setup(test_store_strips_a_value_wearing_units, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_a_value_with_no_number_in_it, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_an_empty_result, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_null_arguments, store_reset),
 		cmocka_unit_test(test_build_queries_gates_on_rrd_next_step_for_multiple_profiles),
 		cmocka_unit_test(test_build_queries_multiple_profiles_scope_a_remote_poller),
 	};
