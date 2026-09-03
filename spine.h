@@ -647,6 +647,7 @@ typedef struct {
 	int    posuffix_len;
 } poll_host_queries_t;
 
+extern int reindex_assert_failed(const char *op, const char *assert_value, const char *poll_result);
 extern void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *regex_col, const char *limits);
 extern void poller_item_scope(char *out, size_t len, int poller_id);
 extern void poller_owner_scope(char *out, size_t len, int poller_id);

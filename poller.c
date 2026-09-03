@@ -335,6 +335,54 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	q->posuffix_len = strlen(q->posuffix);
 }
 
+/*! \fn int reindex_assert_failed(const char *op, const char *assert_value, const char *poll_result)
+ *  \brief decide whether a data query reindex assert has been violated
+ *
+ *  The assert reads assert_value op poll_result, and fails when that relation
+ *  does not hold. Cacti stores only three operators.
+ *
+ *  Two details are load-bearing and were easy to miss while this was spelled
+ *  out three times inside poll_host():
+ *
+ *  - '=' compares as text, '<' and '>' as numbers. A device reporting "007"
+ *    equals "7" numerically but not textually.
+ *  - an assert_value of "0" never fails a '<' assert. That is the uptime case:
+ *    a device that has not reported an uptime yet must not look like it
+ *    rebooted.
+ *
+ *  Equality does not fail '<' or '>'; only a strict violation does.
+ *
+ *  \return TRUE when the assert failed and the data query should be reindexed
+ */
+int reindex_assert_failed(const char *op, const char *assert_value, const char *poll_result) {
+	if (op == NULL || assert_value == NULL || poll_result == NULL) {
+		return FALSE;
+	}
+
+	/* the host is up but gave us nothing usable, so assume the assert holds */
+	if (IS_UNDEFINED(poll_result) || STRIMATCH(poll_result, "No Such Instance")) {
+		return FALSE;
+	}
+
+	if (STRMATCH(op, "=")) {
+		return strcmp(assert_value, poll_result) != 0;
+	}
+
+	if (STRMATCH(op, ">")) {
+		return atoll(assert_value) < atoll(poll_result);
+	}
+
+	if (STRMATCH(op, "<")) {
+		if (STRMATCH(assert_value, "0")) {
+			return FALSE;
+		}
+
+		return atoll(assert_value) > atoll(poll_result);
+	}
+
+	return FALSE;
+}
+
 /*! \fn static void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping, char **error_string, int **buf_size, int **buf_errors, pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread)
  *  \brief release everything poll_host() owns, on every exit path
  *
@@ -1031,25 +1079,26 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							query3[0] = '\0';
 
 							/* assume ok if host is up and result wasn't obtained */
+							/* assume ok if host is up and result was not obtained */
 							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								assert_fail = FALSE;
-							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value, poll_result))) {
+							} else if (reindex_assert_failed(reindex->op, reindex->assert_value, poll_result)) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s%s%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, reindex->op, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s%s%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, reindex->op, poll_result));
 								}
 
 								if (host_thread == 1) {
-									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action,command) values (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 									if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 										db_insert(&mysqlr, REMOTE, query3);
@@ -1063,61 +1112,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
-							} else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) < atoll(poll_result))) {
-								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-								} else {
-									if (set.spine_log_level == 1) {
-										errors++;
-									}
-
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-								}
-
-								if (host_thread == 1) {
-									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) ValueS (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-
-									if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-										db_insert(&mysqlr, REMOTE, query3);
-									} else {
-										db_insert(&mysql, LOCAL, query3);
-									}
-
-									/* set zeros */
-									memset(query3, 0, LRG_BUFSIZE);
-								}
-
-								assert_fail = TRUE;
-								previous_assert_failure = TRUE;
-							/* if uptime is set to '0' don't fail out */
-							} else if (strcmp(reindex->assert_value, "0")) {
-								if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) > atoll(poll_result))) {
-									if (is_debug_device(host->id) || set.spine_log_level == 2) {
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-									} else {
-										if (set.spine_log_level == 1) {
-											errors++;
-										}
-
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-									}
-
-									if (host_thread == 1) {
-										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-
-										if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-											db_insert(&mysqlr, REMOTE, query3);
-										} else {
-											db_insert(&mysql, LOCAL, query3);
-										}
-
-										/* set zeros */
-										memset(query3, 0, LRG_BUFSIZE);
-									}
-
-									assert_fail = TRUE;
-									previous_assert_failure = TRUE;
-								}
 							}
 
 							/* update 'poller_reindex' with the correct information if:
