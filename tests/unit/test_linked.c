@@ -963,6 +963,207 @@ static void test_poller_scopes_refuse_a_degenerate_buffer(void **state) {
 	poller_owner_scope(NULL, sizeof scope, 0);
 }
 
+
+/* ---------------------------------------------------------------------------
+ * poll_host_build_queries()
+ *
+ * poll_host() is 1,600+ lines and builds its SQL inline, so none of this was
+ * reachable from a test. The construction now lives in its own function, and
+ * these pin what it emits across every input it branches on, against the
+ * fixture in tests/golden/poll_host_queries.golden.
+ * ------------------------------------------------------------------------- */
+
+static void build_with(poll_host_queries_t *q, int poller_id, int ports, int dbonupdate) {
+	set.poller_id        = poller_id;
+	set.total_snmp_ports = ports;
+	set.dbonupdate       = dbonupdate;
+	set.poller_interval  = 60;
+	set.active_profiles  = 1;
+
+	memset(q, 0, sizeof(*q));
+	poll_host_build_queries(q, 42, ", 'RE' AS re", "LIMIT 0,100");
+}
+
+static void test_build_queries_scopes_the_main_poller_by_deleted(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+
+	assert_non_null(strstr(q.query1, " AND deleted = ''"));
+	assert_null(strstr(q.query1, "poller_id"));
+	/* the ownership filter is absent, not defaulted to some poller */
+	assert_null(strstr(q.query5, "poller_id"));
+	assert_null(strstr(q.query9, "poller_id"));
+}
+
+static void test_build_queries_scopes_a_remote_poller_by_owner(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 7, 1, 0);
+
+	assert_non_null(strstr(q.query1, " AND poller_id = 7"));
+	assert_null(strstr(q.query1, "deleted"));
+	assert_non_null(strstr(q.query5, " AND poller_id = 7"));
+	assert_non_null(strstr(q.query9, " AND poller_id = 7"));
+	assert_non_null(strstr(q.query10, " AND poller_id = 7"));
+
+	/* the host row is filtered by deleted on both, never by owner */
+	assert_non_null(strstr(q.query2, " AND deleted = ''"));
+	assert_null(strstr(q.query2, "poller_id"));
+}
+
+static void test_build_queries_orders_by_port_only_for_multiple_ports(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+	assert_null(strstr(q.query1, "ORDER BY snmp_port"));
+
+	build_with(&q, 0, 2, 0);
+	assert_non_null(strstr(q.query1, "ORDER BY snmp_port"));
+}
+
+/* The defect the extraction exposed: the remote branch had its own copy of
+   this suffix and never picked up the version check. */
+static void test_build_queries_applies_dbonupdate_on_both_poller_types(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+
+	build_with(&q, 0, 1, 0);
+	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
+	build_with(&q, 0, 1, 1);
+	assert_string_equal(q.posuffix, " AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+
+	build_with(&q, 7, 1, 0);
+	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
+	build_with(&q, 7, 1, 1);
+	assert_string_equal(q.posuffix, " AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+}
+
+static void test_build_queries_caches_the_lengths_the_result_loop_uses(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+
+	assert_int_equal(q.query8_len, (int) strlen(q.query8));
+	assert_int_equal(q.query11_len, (int) strlen(q.query11));
+	assert_int_equal(q.posuffix_len, (int) strlen(q.posuffix));
+}
+
+static void test_build_queries_fills_every_buffer(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+
+	assert_true(strlen(q.query1) > 0);
+	assert_true(strlen(q.query2) > 0);
+	assert_true(strlen(q.query4) > 0);
+	assert_true(strlen(q.query5) > 0);
+	assert_true(strlen(q.query6) > 0);
+	assert_true(strlen(q.query8) > 0);
+	assert_true(strlen(q.query9) > 0);
+	assert_true(strlen(q.query10) > 0);
+	assert_true(strlen(q.query11) > 0);
+	assert_true(strlen(q.posuffix) > 0);
+}
+
+/* The golden fixture, executed rather than documented. Regenerate it with
+   SPINE_WRITE_GOLDEN=1 and read the diff before committing the result. */
+static void emit_one(FILE *f, const char *tag, poll_host_queries_t *q) {
+	fprintf(f, "### %s query1\n%s\n", tag, q->query1);
+	fprintf(f, "### %s query2\n%s\n", tag, q->query2);
+	fprintf(f, "### %s query4\n%s\n", tag, q->query4);
+	fprintf(f, "### %s query5\n%s\n", tag, q->query5);
+	fprintf(f, "### %s query6\n%s\n", tag, q->query6);
+	fprintf(f, "### %s query8\n%s\n", tag, q->query8);
+	fprintf(f, "### %s query9\n%s\n", tag, q->query9);
+	fprintf(f, "### %s query10\n%s\n", tag, q->query10);
+	fprintf(f, "### %s posuffix\n%s\n", tag, q->posuffix);
+}
+
+static void write_all(FILE *f) {
+	poll_host_queries_t q;
+	int ports[2] = {1, 2};
+	int onupd[2] = {0, 1};
+	int pid[2]   = {3, 7};
+	int i, j;
+
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < 2; j++) {
+			build_with(&q, 0, ports[i], onupd[j]);
+			fprintf(f, "== MAIN ports=%d onupd=%d ==\n", ports[i], onupd[j]);
+			emit_one(f, "main", &q);
+		}
+	}
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < 2; j++) {
+			build_with(&q, pid[j], ports[i], onupd[j]);
+			fprintf(f, "== REMOTE ports=%d onupd=%d pid=%d ==\n", ports[i], onupd[j], pid[j]);
+			emit_one(f, "remote", &q);
+		}
+	}
+}
+
+static void test_build_queries_matches_the_golden_capture(void **state) {
+	const char *path = getenv("SPINE_GOLDEN");
+	char actual[] = "/tmp/spine_golden_actual.XXXXXX";
+	FILE *f;
+	FILE *g;
+	int fd;
+	int line = 0;
+	char a[BIG_BUFSIZE];
+	char b[BIG_BUFSIZE];
+
+	(void) state;
+
+	if (path == NULL) {
+		path = "tests/golden/poll_host_queries.golden";
+	}
+
+	g = fopen(path, "r");
+	if (g == NULL) {
+		print_message("golden fixture %s not readable, skipping\n", path);
+		return;
+	}
+
+	fd = mkstemp(actual);
+	assert_true(fd >= 0);
+	f = fdopen(fd, "w+");
+	assert_non_null(f);
+
+	write_all(f);
+	fflush(f);
+	rewind(f);
+
+	while (fgets(a, sizeof(a), g) != NULL) {
+		line++;
+		if (fgets(b, sizeof(b), f) == NULL) {
+			fclose(g);
+			fclose(f);
+			unlink(actual);
+			fail_msg("golden has more lines than produced, first missing at %d", line);
+		}
+		if (strcmp(a, b) != 0) {
+			print_message("line %d\n  golden: %s  actual: %s", line, a, b);
+			fclose(g);
+			fclose(f);
+			unlink(actual);
+			fail_msg("query construction diverged from the golden capture at line %d", line);
+		}
+	}
+
+	assert_null(fgets(b, sizeof(b), f));
+
+	fclose(g);
+	fclose(f);
+	unlink(actual);
+}
+
 int main(void) {
 
 	const struct CMUnitTest tests[] = {
@@ -1032,6 +1233,13 @@ int main(void) {
 		cmocka_unit_test(test_poller_owner_scope_is_empty_on_the_main_poller),
 		cmocka_unit_test(test_poller_owner_scope_names_the_remote_poller),
 		cmocka_unit_test(test_poller_scopes_refuse_a_degenerate_buffer),
+		cmocka_unit_test(test_build_queries_scopes_the_main_poller_by_deleted),
+		cmocka_unit_test(test_build_queries_scopes_a_remote_poller_by_owner),
+		cmocka_unit_test(test_build_queries_orders_by_port_only_for_multiple_ports),
+		cmocka_unit_test(test_build_queries_applies_dbonupdate_on_both_poller_types),
+		cmocka_unit_test(test_build_queries_caches_the_lengths_the_result_loop_uses),
+		cmocka_unit_test(test_build_queries_fills_every_buffer),
+		cmocka_unit_test(test_build_queries_matches_the_golden_capture),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
