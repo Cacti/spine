@@ -2105,6 +2105,35 @@ static void test_store_matches_the_chain_it_replaced(void **state) {
 /* The failure path: a descriptor that cannot carry the flag must be reported,
    not silently accepted. A pipe whose reader is inheritable is worse than no
    pipe, so the helper refuses rather than continuing. */
+/* pipe() itself failing: it does not write pdes, so the caller's array is
+   untouched. The cloexec branch is the one that had to be taught to clear it,
+   and that needs interposition; it lives in test_poll_host_release.c. */
+static void test_pipe_exhaustion_reports_failure(void **state) {
+	struct rlimit saved, tight;
+	int pdes[2] = { -1, -1 };
+	int rc;
+
+	(void) state;
+
+	assert_int_equal(getrlimit(RLIMIT_NOFILE, &saved), 0);
+
+	/* no room for a pipe */
+	tight = saved;
+	tight.rlim_cur = 3;
+
+	if (setrlimit(RLIMIT_NOFILE, &tight) != 0) {
+		skip();
+	}
+
+	rc = spine_open_pipe_cloexec(pdes);
+
+	assert_int_equal(setrlimit(RLIMIT_NOFILE, &saved), 0);
+
+	assert_false(rc);
+	assert_int_equal(pdes[0], -1);
+	assert_int_equal(pdes[1], -1);
+}
+
 static void test_cloexec_rejects_a_bad_descriptor(void **state) {
 	(void) state;
 
@@ -2504,6 +2533,7 @@ int main(void) {
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_pipe_exhaustion_reports_failure),
 		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
 		cmocka_unit_test(test_cloexec_rejects_a_closed_descriptor),
 		cmocka_unit_test(test_nft_popen_reads_a_script_with_stdout_closed),
