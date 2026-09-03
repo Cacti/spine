@@ -335,6 +335,97 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	q->posuffix_len = strlen(q->posuffix);
 }
 
+/*! \fn void host_status_update_sql(char *out, size_t out_len, host_t *host, int ignore_sysinfo, const char *escaped_last_error)
+ *  \brief build the UPDATE that writes a device's poll result back to host
+ *
+ *  Three variants of the same statement, chosen by whether the sysinfo
+ *  columns are being refreshed and whether the device is being ignored. They
+ *  sat inline in poll_host() and none of them was reachable from a test.
+ *
+ *  escaped_last_error is escaped by the caller because it comes from the
+ *  device and is interpolated directly.
+ */
+void host_status_update_sql(char *out, size_t out_len, host_t *host,
+	int ignore_sysinfo, const char *escaped_last_error) {
+	char *update_sql = out;
+
+	if (out == NULL || out_len == 0 || host == NULL || escaped_last_error == NULL) {
+		return;
+	}
+
+		if (!ignore_sysinfo) {
+			if (host->ignore_host != TRUE) {
+				snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+					"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
+						" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
+						" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+						" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
+						" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%llu', "
+						" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
+					"WHERE id='%i'",
+					host->status,
+					host->status_event_count,
+					host->status_fail_date,
+					host->status_rec_date,
+					escaped_last_error,
+					host->min_time,
+					host->max_time,
+					host->cur_time,
+					host->avg_time,
+					host->total_polls,
+					host->failed_polls,
+					host->availability,
+					host->snmp_sysDescr,
+					host->snmp_sysObjectID,
+					host->snmp_sysUpTimeInstance,
+					host->snmp_sysContact,
+					host->snmp_sysName,
+					host->snmp_sysLocation,
+					host->id);
+			} else {
+				snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+					"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
+						" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
+						" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+						" failed_polls='%i', availability='%.4f' "
+					"WHERE id='%i'",
+					host->status,
+					host->status_event_count,
+					host->status_fail_date,
+					host->status_rec_date,
+					escaped_last_error,
+					host->min_time,
+					host->max_time,
+					host->cur_time,
+					host->avg_time,
+					host->total_polls,
+					host->failed_polls,
+					host->availability,
+					host->id);
+			}
+		} else {
+			snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+				"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
+					" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
+					" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
+					" failed_polls='%i', availability='%.4f' "
+				"WHERE id='%i'",
+				host->status,
+				host->status_event_count,
+				host->status_fail_date,
+				host->status_rec_date,
+				escaped_last_error,
+				host->min_time,
+				host->max_time,
+				host->cur_time,
+				host->avg_time,
+				host->total_polls,
+				host->failed_polls,
+				host->availability,
+				host->id);
+		}
+}
+
 /*! \fn void host_from_row(host_t *host, MYSQL_ROW row, MYSQL *mysql, int host_id, int host_thread)
  *  \brief map one host row onto the device structure
  *
@@ -1076,77 +1167,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					char escaped_last_error[BUFSIZE];
 					db_escape(&mysql, escaped_last_error, sizeof(escaped_last_error), host->status_last_error);
 
-					if (!ignore_sysinfo) {
-						if (host->ignore_host != TRUE) {
-							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
-								"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
-									" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
-									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-									" failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
-									" snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%llu', "
-									" snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
-								"WHERE id='%i'",
-								host->status,
-								host->status_event_count,
-								host->status_fail_date,
-								host->status_rec_date,
-								escaped_last_error,
-								host->min_time,
-								host->max_time,
-								host->cur_time,
-								host->avg_time,
-								host->total_polls,
-								host->failed_polls,
-								host->availability,
-								host->snmp_sysDescr,
-								host->snmp_sysObjectID,
-								host->snmp_sysUpTimeInstance,
-								host->snmp_sysContact,
-								host->snmp_sysName,
-								host->snmp_sysLocation,
-								host->id);
-						} else {
-							snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
-								"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
-									" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
-									" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-									" failed_polls='%i', availability='%.4f' "
-								"WHERE id='%i'",
-								host->status,
-								host->status_event_count,
-								host->status_fail_date,
-								host->status_rec_date,
-								escaped_last_error,
-								host->min_time,
-								host->max_time,
-								host->cur_time,
-								host->avg_time,
-								host->total_polls,
-								host->failed_polls,
-								host->availability,
-								host->id);
-						}
-					} else {
-						snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
-							"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
-								" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
-								" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-								" failed_polls='%i', availability='%.4f' "
-							"WHERE id='%i'",
-							host->status,
-							host->status_event_count,
-							host->status_fail_date,
-							host->status_rec_date,
-							escaped_last_error,
-							host->min_time,
-							host->max_time,
-							host->cur_time,
-							host->avg_time,
-							host->total_polls,
-							host->failed_polls,
-							host->availability,
-							host->id);
-					}
+			host_status_update_sql(update_sql, BIG_BUFSIZE, host, ignore_sysinfo, escaped_last_error);
 
 					db_insert(&mysql, LOCAL, update_sql);
 				}

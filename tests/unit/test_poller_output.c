@@ -360,6 +360,113 @@ static void test_host_row_rejects_null_arguments(void **state) {
 }
 
 
+
+/* ---------------------------------------------------------------------------
+ * host_status_update_sql (poller.c)
+ *
+ * The UPDATE that writes a device's poll result back to the host table. Three
+ * variants, chosen by whether the sysinfo columns are being refreshed and
+ * whether the device is being ignored. All three were inline in poll_host().
+ *
+ * The extraction was checked against a capture taken before the move: the
+ * shipped block was compiled standalone and its output for all four input
+ * combinations recorded, then diffed. These pin the parts that matter.
+ * ------------------------------------------------------------------------- */
+
+static host_t hs;
+
+static int hs_reset(void **state) {
+	(void) state;
+	memset(&hs, 0, sizeof(hs));
+	hs.id = 42;
+	hs.status = 3;
+	hs.status_event_count = 2;
+	snprintf(hs.status_fail_date, sizeof(hs.status_fail_date), "%s", "1700000000");
+	snprintf(hs.status_rec_date, sizeof(hs.status_rec_date), "%s", "1700000600");
+	hs.min_time = 1.5; hs.max_time = 9.25; hs.cur_time = 4.0;
+	hs.avg_time = 3.75; hs.availability = 99.5;
+	hs.total_polls = 100; hs.failed_polls = 4;
+	hs.snmp_sysUpTimeInstance = 123456789LL;
+	snprintf(hs.snmp_sysDescr, sizeof(hs.snmp_sysDescr), "%s", "Linux router 6.1");
+	snprintf(hs.snmp_sysName, sizeof(hs.snmp_sysName), "%s", "router1");
+	return 0;
+}
+
+static void build_update(char *out, size_t n, int ignore_sysinfo, int ignore_host) {
+	hs.ignore_host = ignore_host;
+	memset(out, 0, n);
+	host_status_update_sql(out, n, &hs, ignore_sysinfo, "timeout after 3 tries");
+}
+
+/* The sysinfo columns are only written when this poll refreshed them. */
+static void test_update_writes_sysinfo_only_when_it_was_collected(void **state) {
+	char sql[BIG_BUFSIZE];
+
+	(void) state;
+
+	build_update(sql, sizeof(sql), FALSE, FALSE);
+	assert_non_null(strstr(sql, "snmp_sysDescr"));
+	assert_non_null(strstr(sql, "Linux router 6.1"));
+
+	build_update(sql, sizeof(sql), TRUE, FALSE);
+	assert_null(strstr(sql, "snmp_sysDescr"));
+	assert_null(strstr(sql, "Linux router 6.1"));
+}
+
+/* An ignored device still records its status, so a device that has gone away
+   does not look like it is simply unchanged. */
+static void test_update_still_records_status_for_an_ignored_device(void **state) {
+	char sql[BIG_BUFSIZE];
+
+	(void) state;
+	build_update(sql, sizeof(sql), FALSE, TRUE);
+
+	assert_non_null(strstr(sql, "UPDATE host"));
+	assert_non_null(strstr(sql, "status='3'"));
+	assert_non_null(strstr(sql, "WHERE"));
+}
+
+static void test_update_targets_exactly_one_device(void **state) {
+	char sql[BIG_BUFSIZE];
+	int variant;
+
+	(void) state;
+
+	for (variant = 0; variant < 4; variant++) {
+		build_update(sql, sizeof(sql), variant & 1, (variant >> 1) & 1);
+		assert_non_null(strstr(sql, "UPDATE host"));
+		assert_non_null(strstr(sql, "id='42'"));
+		/* every variant must be bounded by a WHERE; an unbounded UPDATE here
+		   would rewrite the whole host table once per poll */
+		assert_non_null(strstr(sql, "WHERE"));
+	}
+}
+
+static void test_update_carries_the_escaped_error_verbatim(void **state) {
+	char sql[BIG_BUFSIZE];
+
+	(void) state;
+	hs.ignore_host = FALSE;
+	memset(sql, 0, sizeof(sql));
+	host_status_update_sql(sql, sizeof(sql), &hs, FALSE, "it''s gone");
+
+	assert_non_null(strstr(sql, "it''s gone"));
+}
+
+static void test_update_rejects_null_arguments(void **state) {
+	char sql[64];
+
+	(void) state;
+	memset(sql, 0, sizeof(sql));
+
+	host_status_update_sql(NULL, sizeof(sql), &hs, FALSE, "x");
+	host_status_update_sql(sql, 0, &hs, FALSE, "x");
+	host_status_update_sql(sql, sizeof(sql), NULL, FALSE, "x");
+	host_status_update_sql(sql, sizeof(sql), &hs, FALSE, NULL);
+	assert_int_equal(sql[0], '\0');
+}
+
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_tuple_has_the_expected_shape, reset),
@@ -377,6 +484,11 @@ int main(void) {
 		cmocka_unit_test_setup(test_host_row_splits_the_port_off_the_hostname, host_reset),
 		cmocka_unit_test_setup(test_host_row_escapes_the_sysinfo_strings, host_reset),
 		cmocka_unit_test_setup(test_host_row_rejects_null_arguments, host_reset),
+		cmocka_unit_test_setup(test_update_writes_sysinfo_only_when_it_was_collected, hs_reset),
+		cmocka_unit_test_setup(test_update_still_records_status_for_an_ignored_device, hs_reset),
+		cmocka_unit_test_setup(test_update_targets_exactly_one_device, hs_reset),
+		cmocka_unit_test_setup(test_update_carries_the_escaped_error_verbatim, hs_reset),
+		cmocka_unit_test_setup(test_update_rejects_null_arguments, hs_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
