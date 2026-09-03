@@ -70,7 +70,8 @@ check_PROGRAMS += \
 	tests/unit/test_util_paths \
 	tests/unit/test_poll_host_release \
 	tests/unit/test_poller_output \
-	tests/unit/test_snmpv3_session
+	tests/unit/test_snmpv3_session \
+	tests/unit/test_ping_icmp
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
@@ -111,6 +112,11 @@ tests_unit_test_poller_output_LDFLAGS = -Wl,--wrap=db_escape
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+# ping_icmp() needs a raw ICMP socket, so these skip where that is unavailable.
+tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
 tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
