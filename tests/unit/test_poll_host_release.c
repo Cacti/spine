@@ -22,6 +22,9 @@
 
 #include "common.h"
 #include "spine.h"
+#include "nft_popen.h"
+
+#include <unistd.h>
 
 /* what the wrappers saw */
 static int  released[8][2];
@@ -171,6 +174,34 @@ static void test_release_is_safe_on_already_null_pointers(void **state) {
 	assert_int_equal(release_count, 0);
 }
 
+
+/* Both helpers take pointers the caller owns. Every other extracted function
+   refuses a NULL rather than dereferencing it; these did not. */
+static void test_reap_rejects_a_null_status(void **state) {
+	(void) state;
+	assert_int_equal(spine_reap_child_bounded(getpid(), NULL, 2), -1);
+}
+
+static void test_release_rejects_null_arguments(void **state) {
+	host_t    *host   = NULL;
+	reindex_t *rex    = NULL;
+	ping_t    *ping   = NULL;
+	char      *errstr = NULL;
+	int       *bsize  = NULL;
+	int       *berr   = NULL;
+
+	(void) state;
+
+	poll_host_release(NULL, &rex, &ping, &errstr, &bsize, &berr, NULL, NULL, 42, 1);
+	poll_host_release(&host, NULL, &ping, &errstr, &bsize, &berr, NULL, NULL, 42, 1);
+	poll_host_release(&host, &rex, &ping, &errstr, NULL, &berr, NULL, NULL, 42, 1);
+
+	/* nothing was released, so the thread was not ended either */
+	assert_int_equal(thread_end_count, 0);
+	assert_int_equal(release_count, 0);
+}
+
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_local_connection_is_released, reset),
@@ -179,6 +210,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_release_ends_the_mysql_thread, reset),
 		cmocka_unit_test_setup(test_release_nulls_every_pointer, reset),
 		cmocka_unit_test_setup(test_release_is_safe_on_already_null_pointers, reset),
+		cmocka_unit_test_setup(test_reap_rejects_a_null_status, reset),
+		cmocka_unit_test_setup(test_release_rejects_null_arguments, reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

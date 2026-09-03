@@ -168,6 +168,10 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 	int attempt;
 	pid_t waited;
 
+	if (pstat == NULL) {
+		return -1;
+	}
+
 	for (attempt = 0; attempt < attempts; attempt++) {
 		do {
 			waited = waitpid(pid, pstat, WNOHANG);

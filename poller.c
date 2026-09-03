@@ -924,6 +924,11 @@ void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
 	char **error_string, int **buf_size, int **buf_errors,
 	pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread) {
 
+	if (host == NULL || reindex == NULL || ping == NULL ||
+		error_string == NULL || buf_size == NULL || buf_errors == NULL) {
+		return;
+	}
+
 	poll_host_release_connections(local_cnn, remote_cnn, host_id, host_thread);
 
 	SPINE_FREE(*host);
