@@ -973,6 +973,17 @@ static void test_poller_scopes_refuse_a_degenerate_buffer(void **state) {
  * fixture in tests/golden/poll_host_queries.golden.
  * ------------------------------------------------------------------------- */
 
+static void build_profiles(poll_host_queries_t *q, int poller_id, int ports, int dbonupdate, int profiles) {
+	set.poller_id        = poller_id;
+	set.total_snmp_ports = ports;
+	set.dbonupdate       = dbonupdate;
+	set.poller_interval  = 60;
+	set.active_profiles  = profiles;
+
+	memset(q, 0, sizeof(*q));
+	poll_host_build_queries(q, 42, ", 'RE' AS re", "LIMIT 0,100");
+}
+
 static void build_with(poll_host_queries_t *q, int poller_id, int ports, int dbonupdate) {
 	set.poller_id        = poller_id;
 	set.total_snmp_ports = ports;
@@ -1164,6 +1175,140 @@ static void test_build_queries_matches_the_golden_capture(void **state) {
 	unlink(actual);
 }
 
+
+/* ---------------------------------------------------------------------------
+ * reindex_assert_failed (poller.c)
+ *
+ * The data query reindex assert, which decides whether Cacti re-runs a data
+ * query. It was written out three times inside poll_host(), once per operator,
+ * with about twenty-four identical lines of logging and queueing around each.
+ * ------------------------------------------------------------------------- */
+
+static void test_assert_equal_compares_as_text(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed("=", "eth0", "eth0"));
+	assert_true(reindex_assert_failed("=", "eth0", "eth1"));
+
+	/* '=' is a string compare, so these differ even though atoll() agrees */
+	assert_true(reindex_assert_failed("=", "007", "7"));
+}
+
+static void test_assert_greater_compares_as_numbers(void **state) {
+	(void) state;
+
+	/* the assert is assert_value > poll_result; it fails when that is false */
+	assert_false(reindex_assert_failed(">", "100", "50"));
+	assert_true(reindex_assert_failed(">", "50", "100"));
+
+	/* unlike '=', these are numerically equal and so do not fail */
+	assert_false(reindex_assert_failed(">", "007", "7"));
+}
+
+static void test_assert_less_compares_as_numbers(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed("<", "50", "100"));
+	assert_true(reindex_assert_failed("<", "100", "50"));
+}
+
+/* Equality is not a violation of either ordering operator. */
+static void test_assert_equal_values_do_not_fail_an_ordering_assert(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed(">", "100", "100"));
+	assert_false(reindex_assert_failed("<", "100", "100"));
+}
+
+/* The uptime case: a device with no uptime recorded yet must not look like it
+   rebooted, so a stored "0" never fails a '<' assert. */
+static void test_assert_zero_never_fails_a_less_than(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed("<", "0", "0"));
+	assert_false(reindex_assert_failed("<", "0", "999999"));
+
+	/* the guard is specific to '<'; it does not cover the other operators */
+	assert_true(reindex_assert_failed("=", "0", "1"));
+}
+
+static void test_assert_holds_when_the_device_gave_nothing_usable(void **state) {
+	(void) state;
+
+	/* 'U' is spine's undefined marker */
+	assert_false(reindex_assert_failed("=", "eth0", "U"));
+	assert_false(reindex_assert_failed(">", "100", "U"));
+	assert_false(reindex_assert_failed("<", "100", "U"));
+
+	/* SNMP says the instance is gone; that is a reindex trigger elsewhere,
+	   not an assert failure here */
+	assert_false(reindex_assert_failed("=", "eth0", "No Such Instance"));
+	assert_false(reindex_assert_failed("=", "eth0", "no such instance"));
+}
+
+static void test_assert_ignores_an_unknown_operator(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed(">=", "100", "50"));
+	assert_false(reindex_assert_failed("", "100", "50"));
+	assert_false(reindex_assert_failed("!=", "eth0", "eth1"));
+}
+
+static void test_assert_rejects_null_arguments(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed(NULL, "100", "50"));
+	assert_false(reindex_assert_failed("=", NULL, "50"));
+	assert_false(reindex_assert_failed("=", "100", NULL));
+}
+
+/* Large uptimes overflow a 32-bit compare; sysUpTime is centiseconds and wraps
+   past INT_MAX in under a year. */
+static void test_assert_handles_values_beyond_32_bits(void **state) {
+	(void) state;
+
+	assert_true(reindex_assert_failed("<", "4294967296", "4294967295"));
+	assert_false(reindex_assert_failed("<", "4294967295", "4294967296"));
+}
+
+
+/* With more than one polling profile active, query5 and query10 additionally
+   filter on rrd_next_step so only items due this tick are polled. Both queries
+   are built either way; only the filter differs. */
+static void test_build_queries_gates_on_rrd_next_step_for_multiple_profiles(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+
+	build_profiles(&q, 0, 1, 0, 1);
+	assert_null(strstr(q.query5, "rrd_next_step"));
+	assert_null(strstr(q.query10, "rrd_next_step"));
+
+	build_profiles(&q, 0, 1, 0, 2);
+	assert_non_null(strstr(q.query5, " AND rrd_next_step <= 0"));
+	assert_non_null(strstr(q.query10, " AND rrd_next_step <= 0"));
+
+	/* the guard is the profile count alone; poller_id does not change it */
+	build_profiles(&q, 2, 1, 0, 1);
+	assert_null(strstr(q.query5, "rrd_next_step"));
+	build_profiles(&q, 2, 1, 0, 3);
+	assert_non_null(strstr(q.query5, "rrd_next_step"));
+}
+
+static void test_build_queries_multiple_profiles_scope_a_remote_poller(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+
+	build_profiles(&q, 9, 1, 0, 2);
+	assert_non_null(strstr(q.query5, " AND poller_id = 9"));
+	assert_non_null(strstr(q.query10, " AND poller_id = 9"));
+
+	/* and the port ordering still keys off total_snmp_ports, not profiles */
+	build_profiles(&q, 9, 2, 0, 2);
+	assert_non_null(strstr(q.query5, "ORDER BY snmp_port"));
+}
+
 int main(void) {
 
 	const struct CMUnitTest tests[] = {
@@ -1240,6 +1385,17 @@ int main(void) {
 		cmocka_unit_test(test_build_queries_caches_the_lengths_the_result_loop_uses),
 		cmocka_unit_test(test_build_queries_fills_every_buffer),
 		cmocka_unit_test(test_build_queries_matches_the_golden_capture),
+		cmocka_unit_test(test_assert_equal_compares_as_text),
+		cmocka_unit_test(test_assert_greater_compares_as_numbers),
+		cmocka_unit_test(test_assert_less_compares_as_numbers),
+		cmocka_unit_test(test_assert_equal_values_do_not_fail_an_ordering_assert),
+		cmocka_unit_test(test_assert_zero_never_fails_a_less_than),
+		cmocka_unit_test(test_assert_holds_when_the_device_gave_nothing_usable),
+		cmocka_unit_test(test_assert_ignores_an_unknown_operator),
+		cmocka_unit_test(test_assert_rejects_null_arguments),
+		cmocka_unit_test(test_assert_handles_values_beyond_32_bits),
+		cmocka_unit_test(test_build_queries_gates_on_rrd_next_step_for_multiple_profiles),
+		cmocka_unit_test(test_build_queries_multiple_profiles_scope_a_remote_poller),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
