@@ -2104,7 +2104,11 @@ unsigned long long hex2dec(char *str) {
 			number += pow(16, i) * 15;
 			i++;
 			break;
-		case '"': case ' ': case '\t':
+		/* separators. is_hexadecimal() accepts '-' and ':' as well as space,
+		 * so anything it lets through has to be convertible here; skipping
+		 * only space meant a dash-separated octet string validated and then
+		 * converted to zero. */
+		case '"': case ' ': case '\t': case '-': case ':':
 			break;
 		default:
 			return 0;

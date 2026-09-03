@@ -1588,11 +1588,8 @@ static void test_store_converts_a_delimited_octet_string(void **state) {
 	assert_false(store(spaces));
 	assert_string_equal(sr_item.result, "3735928559");
 
-	/* The dash form is accepted by is_hexadecimal() and then converted to zero,
-	   because hex2dec() only skips '"', ' ' and '\t' and returns 0 on anything
-	   else. This pins the current behaviour; the next commit fixes it. */
 	assert_false(store(dashes));
-	assert_string_equal(sr_item.result, "0");
+	assert_string_equal(sr_item.result, "3735928559");
 }
 
 /* The colon form is multi-part output, not hex, and is stored as it arrived. */
