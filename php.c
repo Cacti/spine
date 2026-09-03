@@ -38,6 +38,20 @@
 
 extern char **environ;
 
+/*! \fn static int php_addclose_unless_std(posix_spawn_file_actions_t *fa, int fd)
+ *  \brief queue a close for a pipe end unless it is stdin or stdout
+ *
+ *  After the dup2 redirects, descriptors 0 and 1 hold the child's ends. Closing
+ *  them here would undo the redirect that was just set up.
+ */
+static int php_addclose_unless_std(posix_spawn_file_actions_t *fa, int fd) {
+	if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
+		return 0;
+	}
+
+	return posix_spawn_file_actions_addclose(fa, fd);
+}
+
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
@@ -323,6 +337,10 @@ int php_init(int php_process) {
 	char arg_mode_online[] = "--mode=online";
 	char arg_mode_offline[] = "--mode=offline";
 	int  cancel_state;
+	int  child_stdin;
+	int  child_stdout;
+	int  dup_stdin  = -1;
+	int  dup_stdout = -1;
 	char *result_string = 0;
 	int num_processes;
 	int i;
@@ -410,15 +428,43 @@ int php_init(int php_process) {
 			}
 
 			/* wire cacti->php read end to child stdin, php->cacti write end to child stdout */
-			if (posix_spawn_file_actions_adddup2(&fa, cacti2php_pdes[0], STDIN_FILENO) != 0 ||
-			    posix_spawn_file_actions_adddup2(&fa, php2cacti_pdes[1], STDOUT_FILENO) != 0 ||
-			    /* close all four pipe ends in the child after dup2 redirects are in place */
-			    posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[0]) != 0 ||
-			    posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[1]) != 0 ||
-			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[0]) != 0 ||
-			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]) != 0) {
+			/* The pipe ends are close-on-exec, and dup2 clears that on its target, so
+			 * the usual case is fine. When an end already sits on the descriptor it is
+			 * destined for, dup2(fd, fd) is a no-op that clears nothing and the
+			 * unconditional close below would then shut the child's stdin or stdout.
+			 * The script server would exec with it closed, never answer, and every
+			 * script-server data source would record U with no diagnostic. Reaching it
+			 * needs spine to start with fd 0 or 1 closed, which a daemon can do.
+			 * Same treatment as nft_popen(): dup() to a fresh descriptor, which does
+			 * not carry the flag. */
+			child_stdin  = cacti2php_pdes[0];
+			child_stdout = php2cacti_pdes[1];
+
+			if (child_stdin == STDIN_FILENO) {
+				dup_stdin = dup(child_stdin);
+				child_stdin = dup_stdin;
+			}
+
+			if (child_stdout == STDOUT_FILENO) {
+				dup_stdout = dup(child_stdout);
+				child_stdout = dup_stdout;
+			}
+
+			if (child_stdin < 0 || child_stdout < 0 ||
+			    posix_spawn_file_actions_adddup2(&fa, child_stdin, STDIN_FILENO) != 0 ||
+			    posix_spawn_file_actions_adddup2(&fa, child_stdout, STDOUT_FILENO) != 0 ||
+			    /* close the pipe ends the child does not need. Skip fd 0 and 1: after
+			       the redirects above they hold the copies the child polls on. */
+			    php_addclose_unless_std(&fa, cacti2php_pdes[0]) != 0 ||
+			    php_addclose_unless_std(&fa, cacti2php_pdes[1]) != 0 ||
+			    php_addclose_unless_std(&fa, php2cacti_pdes[0]) != 0 ||
+			    php_addclose_unless_std(&fa, php2cacti_pdes[1]) != 0 ||
+			    (dup_stdin  != -1 && posix_spawn_file_actions_addclose(&fa, dup_stdin)  != 0) ||
+			    (dup_stdout != -1 && posix_spawn_file_actions_addclose(&fa, dup_stdout) != 0)) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions setup failed", i));
 				posix_spawn_file_actions_destroy(&fa);
+				if (dup_stdin  != -1) close(dup_stdin);
+				if (dup_stdout != -1) close(dup_stdout);
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 				close(php2cacti_pdes[0]);
@@ -440,6 +486,17 @@ int php_init(int php_process) {
 			} while (1);
 
 			posix_spawn_file_actions_destroy(&fa);
+
+			/* the child holds its own copies now */
+			if (dup_stdin != -1) {
+				close(dup_stdin);
+				dup_stdin = -1;
+			}
+
+			if (dup_stdout != -1) {
+				close(dup_stdout);
+				dup_stdout = -1;
+			}
 
 			if (spawn_err != 0) {
 				if (spawn_err == EAGAIN) {
