@@ -37,6 +37,7 @@ The Cacti Group | spine
 -issue: Compile REGEX_NUMBER as an extended regex so output_regex number recognition matches
 -issue: Clear the destination in db_escape() when the column is NULL
 -issue: Zero the details array so an early poller exit cannot free uninitialised pointers
+-issue: Terminate error_string so the host_errors insert cannot read uninitialised heap
 -issue#608: Bound the script server restart so a server that starts but never answers cannot recurse
 -issue#610: Detach the subprocess entry under ListMutex so nft_pclose() owns the child it reaps
 -issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()

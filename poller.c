@@ -1011,7 +1011,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	int  last_snmp_version = 0;
 	int  last_snmp_port    = 0;
-	char last_snmp_community[50];
+	char last_snmp_community[100];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
 	char last_snmp_auth_protocol[7];
@@ -1045,6 +1045,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	if (!(error_string = malloc(DBL_BUFSIZE))) {
 		die("ERROR: Fatal malloc error: poller.c error_string!");
 	}
+
+	/* errors++ fires on paths that never call buffer_output_errors(), and the
+	   host_errors INSERT runs strlen() on this buffer whenever errors > 0. */
+	error_string[0] = '\0';
 	if (!(buf_size = malloc(sizeof(int)))) {
 		die("ERROR: Fatal malloc error: poller.c buf_size!");
 	}
