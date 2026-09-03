@@ -26,6 +26,8 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <dirent.h>
+#include <poll.h>
 #include <unistd.h>
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
@@ -2201,6 +2203,140 @@ static void test_nft_popen_reads_a_script_with_stdout_closed(void **state) {
 	assert_non_null(strstr(buf, "spine-cloexec-probe"));
 }
 
+
+static int open_fd_count(void) {
+	DIR *d = opendir("/proc/self/fd");
+	struct dirent *e;
+	int n = 0;
+
+	if (d == NULL) {
+		return -1;
+	}
+
+	while ((e = readdir(d)) != NULL) {
+		if (e->d_name[0] != '.') n++;
+	}
+
+	closedir(d);
+	return n;
+}
+
+/* Reading to EOF is the assertion that catches a write end still held by the
+   parent. A single read() returns the data and tells you nothing: the pipe
+   only fails to close when you ask for the next byte. exec_poll() waits for
+   that EOF, so a held copy stalls it to script_timeout on a script that
+   already answered. */
+static void test_nft_popen_reaches_eof_with_stdio_closed(void **state) {
+	int saved_stdin, saved_stdout, fd;
+	char buf[64];
+	ssize_t n, total = 0;
+
+	(void) state;
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	fd = nft_popen("echo spine-eof-probe", "r");
+
+	n = -1;
+
+	if (fd >= 0) {
+		struct pollfd pfd;
+
+		pfd.fd = fd;
+		pfd.events = POLLIN;
+
+		/* poll rather than block: a write end still held by the parent means
+		   this never becomes readable again, and a test that hangs is a worse
+		   signal than one that fails. */
+		for (;;) {
+			int ready = poll(&pfd, 1, 5000);
+
+			if (ready <= 0) {
+				n = -1;   /* timed out: EOF never arrived */
+				break;
+			}
+
+			n = read(fd, buf, sizeof(buf));
+
+			if (n <= 0) {
+				break;
+			}
+
+			total += n;
+		}
+
+		nft_pclose(fd);
+	}
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(fd >= 0);
+	if (n != 0) {
+		fail_msg("the pipe never reached EOF; the parent is still holding the write end");
+	}
+	assert_true(total > 0);
+}
+
+/* One descriptor per call would exhaust the process. The collision branch is
+   the one that dup()s, so it is the one that can leak. */
+static void test_nft_popen_does_not_leak_descriptors_in_the_collision_case(void **state) {
+	int saved_stdin, saved_stdout;
+	int before, after;
+	char buf[64];
+	int i;
+
+	(void) state;
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	before = open_fd_count();
+
+	for (i = 0; i < 12; i++) {
+		int fd;
+
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		fd = nft_popen("echo x", "r");
+
+		if (fd >= 0) {
+			struct pollfd pfd;
+
+			pfd.fd = fd;
+			pfd.events = POLLIN;
+
+			/* bounded, for the same reason as the EOF test above */
+			while (poll(&pfd, 1, 5000) > 0 && read(fd, buf, sizeof(buf)) > 0) { }
+
+			nft_pclose(fd);
+		}
+
+		dup2(saved_stdin, STDIN_FILENO);
+		dup2(saved_stdout, STDOUT_FILENO);
+	}
+
+	after = open_fd_count();
+
+	close(saved_stdin);
+	close(saved_stdout);
+
+	if (before < 0 || after < 0) {
+		print_message("no /proc/self/fd here; skipping the count\n");
+		return;
+	}
+
+	assert_true(after <= before);
+}
+
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -2245,6 +2381,8 @@ int main(void) {
 		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
 		cmocka_unit_test(test_cloexec_rejects_a_closed_descriptor),
 		cmocka_unit_test(test_nft_popen_reads_a_script_with_stdout_closed),
+		cmocka_unit_test(test_nft_popen_reaches_eof_with_stdio_closed),
+		cmocka_unit_test(test_nft_popen_does_not_leak_descriptors_in_the_collision_case),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),

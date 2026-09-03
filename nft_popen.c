@@ -351,11 +351,7 @@ int nft_popen(const char * command, const char * type) {
 
 			if (inherit_fd < 0) {
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
-				posix_spawn_file_actions_destroy(&fa);
-				(void)close(pdes[0]);
-				(void)close(pdes[1]);
-				pthread_setcancelstate(cancel_state, NULL);
-				return -1;
+				goto spawn_failed;
 			}
 
 			posix_spawn_file_actions_adddup2(&fa, inherit_fd, STDOUT_FILENO);
@@ -373,11 +369,7 @@ int nft_popen(const char * command, const char * type) {
 
 			if (inherit_fd < 0) {
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
-				posix_spawn_file_actions_destroy(&fa);
-				(void)close(pdes[0]);
-				(void)close(pdes[1]);
-				pthread_setcancelstate(cancel_state, NULL);
-				return -1;
+				goto spawn_failed;
 			}
 
 			posix_spawn_file_actions_adddup2(&fa, inherit_fd, STDIN_FILENO);
@@ -409,16 +401,18 @@ int nft_popen(const char * command, const char * type) {
 		}
 
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", strerror(spawn_err)));
-	posix_spawn_file_actions_destroy(&fa);
 
-	/* the child has its own copy now; the parent must not keep this one */
-	if (inherit_fd != -1) {
-		(void)close(inherit_fd);
-		inherit_fd = -1;
-	}
+spawn_failed:
+		/* One teardown for every failure after the file actions exist and the
+		 * list mutex is held. ListMutex is process-global, so a path that
+		 * returns still holding it wedges every later nft_popen() and
+		 * nft_pclose() in every poller thread and the daemon stops collecting
+		 * script data until it is restarted. */
+		posix_spawn_file_actions_destroy(&fa);
 
 		if (inherit_fd != -1) {
 			(void)close(inherit_fd);
+			inherit_fd = -1;
 		}
 
 		(void)close(pdes[0]);
@@ -431,6 +425,15 @@ int nft_popen(const char * command, const char * type) {
 	}
 
 	posix_spawn_file_actions_destroy(&fa);
+
+	/* The child holds its own duplicate. Keeping this one would hold the pipe's
+	 * write end open, so the reader never sees EOF and exec_poll() blocks to
+	 * script_timeout on a script that already answered. That is the failure the
+	 * close-on-exec work exists to prevent. */
+	if (inherit_fd != -1) {
+		(void)close(inherit_fd);
+		inherit_fd = -1;
+	}
 
 	/* Parent. */
 	if (*type == 'r') {
