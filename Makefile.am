@@ -141,7 +141,7 @@ tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 # TESTS list, and had been failing on develop since #542 removed the code it
 # guards. Nothing ran it. That is the reason these are wired in here.
 SHELL_TESTS = \
-	tests/regression/test_remote_upsert_syntax.sh \
+	tests/regression/test_remote_push.sh \
 	tests/integration/smoke_test.sh \
 	tests/integration/test_alloc_failure.sh \
 	tests/integration/test_cli_args.sh \

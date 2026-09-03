@@ -1,5 +1,5 @@
 #!/bin/sh
-# Structural guard for the cross-vendor upsert rule.
+# Structural guards for the remote push path.
 #
 # poller_push_data_to_main() writes to the main server, but spine derives
 # set.dbonupdate from the local one. Branching on it there emitted MySQL 8 row
@@ -42,5 +42,24 @@ printf '%s\n' "$body" | grep -q 'if (set.dbonupdate' &&
 # unless this is a remote poller. Both halves of that condition must survive.
 grep -q 'set.dbonupdate == 0 || (set.poller_id > 1 && set.mode == REMOTE_ONLINE)' poller.c ||
 	fail "poll_host_build_queries() must keep the remote-poller exception on the upsert form"
+
+# The batch loops must flush before emitting a row, never in place of it. The
+# original shape reset the batch when it filled and dropped the row that
+# triggered the reset, so every 501st host and every 10001st poller_item never
+# reached the main server. Both loops now share push_flush_batch().
+printf '%s\n' "$body" | grep -q 'push_flush_batch(&mysqlr, sqlbuf, &sqlp, suffix)' ||
+	fail "poller_push_data_to_main() must flush its batches through push_flush_batch()"
+
+printf '%s\n' "$body" | grep -Eq 'rows >= 500 \|\| remaining < PUSH_ROW_MAX' ||
+	fail "the host batch must flush on remaining bytes as well as row count"
+
+printf '%s\n' "$body" | grep -Eq 'rows >= 10000 \|\| remaining < PUSH_ROW_MAX' ||
+	fail "the poller_item batch must flush on remaining bytes as well as row count"
+
+# A batch that did not fit must not be sent. spine_appendf() reports it; the
+# point of the helper is that somebody reads the report.
+awk '/^static void push_flush_batch/{f=1} f{print} f&&/^\}/{exit}' util.c |
+	grep -q 'if (!spine_appendf' ||
+	fail "push_flush_batch() must refuse to send a statement that overflowed"
 
 exit 0
