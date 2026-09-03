@@ -109,13 +109,11 @@ static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
    one, so the pids are parked here and swept with WNOHANG instead. Bounded: past
    the cap the pid is logged and dropped, because an unbounded list trades a pid
    leak for a memory leak. */
-#define NFT_ABANDONED_MAX 64
 static pid_t	AbandonedPids[NFT_ABANDONED_MAX];
 static int	AbandonedCount;
 
 static void	close_cleanup(void *);
 static void	nft_sweep_abandoned(void);
-static void	nft_abandon_child(pid_t pid, const char *reason);
 
 /* nft_pclose() must not block a poller thread indefinitely. A script that
    writes its value and then lingers, or that ignores SIGPIPE, would otherwise
@@ -614,13 +612,38 @@ nft_sweep_abandoned(void)
 }
 
 /*! ------------------------------------------------------------------------------
+  * nft_abandoned_pending	- sweep, then report how many pids are still parked.
+  *
+  * Takes ListMutex itself, so a caller that already holds it uses
+  * nft_sweep_abandoned() directly.
+  *------------------------------------------------------------------------------
+ */
+int
+nft_abandoned_pending(void)
+{
+	int	remaining;
+	int	oldstate;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	pthread_mutex_lock(&ListMutex);
+
+	nft_sweep_abandoned();
+	remaining = AbandonedCount;
+
+	pthread_mutex_unlock(&ListMutex);
+	pthread_setcancelstate(oldstate, NULL);
+
+	return remaining;
+}
+
+/*! ------------------------------------------------------------------------------
   * nft_abandon_child	- record a child that outlived its kill budget.
   *
   * The pid and the reason are logged either way. A silent drop leaves PID
   * exhaustion with nothing in the log pointing at its cause.
   *------------------------------------------------------------------------------
  */
-static void
+void
 nft_abandon_child(pid_t pid, const char *reason)
 {
 	int	parked;

@@ -26,6 +26,8 @@
 
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
+#include <errno.h>
 
 /* what the wrappers saw */
 static int  released[8][2];
@@ -249,6 +251,111 @@ static void test_reap_polls_before_it_sleeps(void **state) {
 	assert_int_equal(WEXITSTATUS(pstat), 0);
 }
 
+/* nft_pclose() gives up on a child that outlives SIGKILL, and before this
+   branch there was nothing to hand it to: no SIGCHLD handler, no waitpid(-1).
+   The dropped child stayed a zombie for the daemon's lifetime and accumulated
+   once per affected script per cycle against RLIMIT_NPROC.
+
+   The give-up path itself cannot be driven from a test, because SIGKILL cannot
+   be blocked and a D-state child needs stalled hardware. What is testable is
+   the thing that path depends on: that a parked pid really is reaped, and that
+   the list is bounded. */
+static pid_t spawn_sleeper(void) {
+	pid_t pid = fork();
+
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	return pid;
+}
+
+static void test_a_parked_child_is_reaped_by_the_sweep(void **state) {
+	siginfo_t info;
+	pid_t     pid;
+
+	(void) state;
+
+	assert_int_equal(nft_abandoned_pending(), 0);
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(0);
+	}
+
+	/* block until it has exited but leave it reapable, so the sweep below is
+	   testing the sweep and not racing the child's exit */
+	memset(&info, 0, sizeof(info));
+	assert_int_equal(waitid(P_PID, pid, &info, WEXITED | WNOWAIT), 0);
+
+	nft_abandon_child(pid, "test");
+
+	/* the sweep runs inside the accessor, so an exited child is gone by now */
+	assert_int_equal(nft_abandoned_pending(), 0);
+
+	/* and it really was reaped, not merely forgotten */
+	assert_int_equal(waitpid(pid, NULL, WNOHANG), -1);
+	assert_int_equal(errno, ECHILD);
+}
+
+static void test_a_live_child_stays_parked_until_it_exits(void **state) {
+	pid_t pid;
+
+	(void) state;
+
+	assert_int_equal(nft_abandoned_pending(), 0);
+
+	pid = spawn_sleeper();
+	nft_abandon_child(pid, "test");
+
+	/* still running, so the sweep must leave it on the list */
+	assert_int_equal(nft_abandoned_pending(), 1);
+
+	kill(pid, SIGKILL);
+
+	/* it exits asynchronously; the sweep is WNOHANG, so allow it to land */
+	while (nft_abandoned_pending() != 0) {
+		usleep(1000);
+	}
+}
+
+static void test_the_parked_list_is_bounded(void **state) {
+	pid_t pids[NFT_ABANDONED_MAX + 4];
+	int   i;
+
+	(void) state;
+
+	assert_int_equal(nft_abandoned_pending(), 0);
+
+	for (i = 0; i < NFT_ABANDONED_MAX + 4; i++) {
+		pids[i] = spawn_sleeper();
+		nft_abandon_child(pids[i], "test");
+	}
+
+	/* past the cap a pid is logged and dropped rather than growing the list */
+	assert_int_equal(nft_abandoned_pending(), NFT_ABANDONED_MAX);
+
+	for (i = 0; i < NFT_ABANDONED_MAX + 4; i++) {
+		kill(pids[i], SIGKILL);
+	}
+
+	while (nft_abandoned_pending() != 0) {
+		usleep(1000);
+	}
+
+	/* the four the list refused are this process's children and nobody swept
+	   them, which is exactly the leak the cap accepts; reap them here so the
+	   test does not leave zombies behind */
+	for (i = 0; i < NFT_ABANDONED_MAX + 4; i++) {
+		(void) waitpid(pids[i], NULL, 0);
+	}
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_local_connection_is_released, reset),
@@ -260,6 +367,9 @@ int main(void) {
 		cmocka_unit_test_setup(test_reap_rejects_a_null_status, reset),
 		cmocka_unit_test_setup(test_reap_polls_before_it_sleeps, reset),
 		cmocka_unit_test_setup(test_release_rejects_null_arguments, reset),
+		cmocka_unit_test_setup(test_a_parked_child_is_reaped_by_the_sweep, reset),
+		cmocka_unit_test_setup(test_a_live_child_stays_parked_until_it_exits, reset),
+		cmocka_unit_test_setup(test_the_parked_list_is_bounded, reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
