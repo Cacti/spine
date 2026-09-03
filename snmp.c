@@ -292,21 +292,27 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		security_level = spine_snmpv3_security_level(snmp_auth_protocol, snmp_password,
 			snmp_priv_protocol, snmp_priv_passphrase);
 
-		if (security_level == SNMP_SEC_LEVEL_NOAUTH) {
-			session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
-		} else {
+		/* A protocol that is set but unrecognised is a configuration error at
+		 * any security level. Deciding the level first and only validating on
+		 * the authenticated path would let a typo through as noAuthNoPriv,
+		 * because a device with no passphrase never reaches the check. */
+		if (spine_snmpv3_value_is_set(snmp_auth_protocol)) {
 			auth_type = usm_lookup_auth_type(snmp_auth_protocol);
 
-			if (auth_type > 0) {
-				auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
-				free(session.securityAuthProto);
-				session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
-			} else {
+			if (auth_type <= 0) {
 				SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
 				free(session.peername);
 				free(session.localname);
 				return 0;
 			}
+		}
+
+		if (security_level == SNMP_SEC_LEVEL_NOAUTH) {
+			session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
+		} else {
+			auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
+			free(session.securityAuthProto);
+			session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
 		}
 
 		/* set the privacy protocol to none */

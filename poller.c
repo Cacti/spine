@@ -171,6 +171,12 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	char item_scope[SMALL_BUFSIZE];
 	char owner_scope[SMALL_BUFSIZE];
 
+	/* regex_col and limits are interpolated with %s, so a NULL is undefined
+	 * behaviour rather than an empty column list. */
+	if (q == NULL || regex_col == NULL || limits == NULL) {
+		return;
+	}
+
 	/* Scope every poller_item read to what this poller owns: the main poller
 	   takes every undeleted row, a remote poller takes the rows assigned to it.
 	   Both fragments are interpolated unconditionally, so the queries below do

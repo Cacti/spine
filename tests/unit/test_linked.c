@@ -2064,6 +2064,22 @@ static void test_cloexec_rejects_a_closed_descriptor(void **state) {
 	assert_int_equal(spine_set_cloexec(pdes[0]), -1);
 }
 
+
+static void test_build_queries_rejects_null_arguments(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	memset(&q, 0, sizeof(q));
+
+	poll_host_build_queries(NULL, 42, "", "");
+	poll_host_build_queries(&q, 42, NULL, "");
+	poll_host_build_queries(&q, 42, "", NULL);
+
+	/* nothing was written on any of those */
+	assert_int_equal(q.query1[0], '\0');
+	assert_int_equal(q.posuffix[0], '\0');
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -2148,6 +2164,7 @@ int main(void) {
 		cmocka_unit_test(test_build_queries_caches_the_lengths_the_result_loop_uses),
 		cmocka_unit_test(test_build_queries_fills_every_buffer),
 		cmocka_unit_test(test_build_queries_matches_the_golden_capture),
+		cmocka_unit_test(test_build_queries_rejects_null_arguments),
 		cmocka_unit_test(test_assert_equal_compares_as_text),
 		cmocka_unit_test(test_assert_greater_compares_as_numbers),
 		cmocka_unit_test(test_assert_less_compares_as_numbers),
