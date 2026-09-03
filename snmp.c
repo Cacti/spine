@@ -97,6 +97,37 @@ int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_pass
 	return SNMP_SEC_LEVEL_NOAUTH;
 }
 
+/*! \fn static void free_passphrase(char *psz)
+ *  \brief Wipes a local passphrase copy, then releases it.
+ *
+ *  Only the copies snmp_host_init() makes are wiped. The caller's
+ *  snmp_password and snmp_priv_passphrase belong to the poller item and have
+ *  to survive the call: poller.c compares them against last_snmp_password and
+ *  last_snmp_priv_passphrase to decide whether the next item can keep the
+ *  open session, so blanking them would tear down the SNMPv3 session and
+ *  re-derive the USM keys for every remaining item on the device.
+ */
+static void free_passphrase(char *psz) {
+	volatile char *wipe;
+	size_t len;
+
+	if (psz != NULL) {
+		/* Written through a volatile pointer on purpose. A plain memset() here
+		   is a dead store into memory that is about to be freed, and gcc -O2
+		   removes it outright, which leaves the passphrase in the heap for
+		   whatever allocates the block next. explicit_bzero() would say this
+		   more clearly but is absent on the Solaris and Cygwin builds. */
+		wipe = (volatile char *) psz;
+		len  = strlen(psz);
+
+		while (len-- > 0) {
+			*wipe++ = '\0';
+		}
+
+		free(psz);
+	}
+}
+
 /*! \fn void snmp_spine_init()
  *  \brief wrapper function for init_snmp
  *
@@ -184,7 +215,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
 	int    priv_type;
-	int    zero_sensitive = 0;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
@@ -351,16 +381,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			 * so authNoPriv sessions authenticated with an empty key and every
 			 * such device failed with a USM authentication error. */
 			if (security_level == SNMP_SEC_LEVEL_AUTHNOPRIV) {
-				if (Apsz && zero_sensitive) {
-					memset(Apsz, 0x0, strlen(Apsz));
-				}
-
-				free(Apsz);
+				free_passphrase(Apsz);
 				Apsz = strdup(snmp_password);
-
-				if (zero_sensitive) {
-					memset(snmp_password, 0x0, strlen(snmp_password));
-				}
 
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
 
@@ -373,21 +395,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
-					free(Apsz);
-					free(Xpsz);
+					free_passphrase(Apsz);
+					free_passphrase(Xpsz);
 					free(session.localname);
 					return 0;
 				}
 
 				/* The privacy path releases this after deriving its key; this
 				 * one did not, so every authNoPriv session leaked the
-				 * passphrase copy. Zero it first when the setting asks: it is
-				 * the cleartext auth passphrase. */
-				if (zero_sensitive) {
-					memset(Apsz, 0x0, strlen(Apsz));
-				}
-
-				free(Apsz);
+				 * passphrase copy. */
+				free_passphrase(Apsz);
 				Apsz = NULL;
 			}
 		} else {
@@ -412,28 +429,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityLevel     = security_level;
 
 			// Auth Protocol Setup
-			if (Apsz && zero_sensitive) {
-				memset(Apsz, 0x0, strlen(Apsz));
-			}
-
-			free(Apsz);
+			free_passphrase(Apsz);
 			Apsz = strdup(snmp_password);
 
-			if (zero_sensitive) {
-	            memset(snmp_password, 0x0, strlen(snmp_password));
-			}
-
 			// Privacy Protocol Setup
-			if (Xpsz && zero_sensitive) {
-				memset(Xpsz, 0x0, strlen(Xpsz));
-			}
-
-			free(Xpsz);
+			free_passphrase(Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
-
-			if (zero_sensitive) {
-				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
-			}
 
 			if (Apsz) {
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
@@ -459,8 +460,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
-					free(Apsz);
-					free(Xpsz);
+					free_passphrase(Apsz);
+					free_passphrase(Xpsz);
 					if (session.localname) {
 						free(session.localname);
 						session.localname = NULL;
@@ -468,7 +469,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					return 0;
 				}
 
-				free(Apsz);
+				free_passphrase(Apsz);
 				Apsz = NULL;
 			}
 
@@ -505,7 +506,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
-					free(Xpsz);
+					free_passphrase(Xpsz);
 					if (session.localname) {
 						free(session.localname);
 						session.localname = NULL;
@@ -513,7 +514,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					return 0;
 				}
 
-				free(Xpsz);
+				free_passphrase(Xpsz);
 				Xpsz = NULL;
 			}
 		}
