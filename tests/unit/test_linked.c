@@ -2152,6 +2152,55 @@ static void test_hex2dec_rejects_an_unknown_separator(void **state) {
 	assert_int_equal(hex2dec(slashes), 0);
 }
 
+
+/* nft_popen() sets close-on-exec on both pipe ends so a concurrent spawn
+   cannot inherit them. When the write end lands on the descriptor it is
+   destined for, there is no dup2 to clear the flag, and the child execs with
+   stdout closed: every script data source records U, silently.
+   That happens whenever stdout was closed before the call, which for a daemon
+   is not exotic. */
+static void test_nft_popen_reads_a_script_with_stdout_closed(void **state) {
+	int saved_stdin;
+	int saved_stdout;
+	int fd;
+	char buf[64];
+	ssize_t n;
+
+	(void) state;
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	/* Both, deliberately: pipe() hands out the lowest free descriptors, so the
+	   write end only lands on fd 1 when fd 0 is free as well. Closing stdout
+	   alone puts the read end there instead and the collision never happens. */
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	fd = nft_popen("echo spine-cloexec-probe", "r");
+
+	if (fd < 0) {
+		dup2(saved_stdin, STDIN_FILENO);
+		dup2(saved_stdout, STDOUT_FILENO);
+		close(saved_stdin);
+		close(saved_stdout);
+		fail_msg("nft_popen failed with stdin and stdout closed");
+	}
+
+	memset(buf, 0, sizeof(buf));
+	n = read(fd, buf, sizeof(buf) - 1);
+	nft_pclose(fd);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(n > 0);
+	assert_non_null(strstr(buf, "spine-cloexec-probe"));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -2195,6 +2244,7 @@ int main(void) {
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
 		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
 		cmocka_unit_test(test_cloexec_rejects_a_closed_descriptor),
+		cmocka_unit_test(test_nft_popen_reads_a_script_with_stdout_closed),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),

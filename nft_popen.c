@@ -107,11 +107,23 @@ static void	close_cleanup(void *);
    writes its value and then lingers, or that ignores SIGPIPE, would otherwise
    pin the thread across polling cycles while holding its available_scripts
    token. Poll with WNOHANG, then escalate to SIGKILL. */
+/* Budget to SIGKILL is about five seconds on both platforms. The counts differ
+ * because the granularity does: everywhere else in the tree usleep() is simply
+ * skipped under SOLAR_THREAD rather than replaced, so the coarsest wait
+ * available there is a whole second and the attempt count scales to match.
+ * Leaving the counts equal made the Solaris path roughly a hundred seconds,
+ * longer than a polling cycle, while nft_pclose() holds an available_scripts
+ * token throughout. */
 #define NFT_PCLOSE_REAP_USEC 50000
 #define NFT_PCLOSE_SPIN_USEC 200
 #define NFT_PCLOSE_SPIN_ATTEMPTS 10
+#ifndef SOLAR_THREAD
 #define NFT_PCLOSE_TERM_ATTEMPTS 100
 #define NFT_PCLOSE_KILL_ATTEMPTS 20
+#else
+#define NFT_PCLOSE_TERM_ATTEMPTS 5
+#define NFT_PCLOSE_KILL_ATTEMPTS 2
+#endif
 
 int spine_set_cloexec(int fd) {
 	int flags;
@@ -190,6 +202,7 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		}
 
 		if (waited < 0) {
+			/* leave errno as waitpid set it; nft_pclose() reports it */
 			return -1;
 		}
 
@@ -210,11 +223,7 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 			usleep(NFT_PCLOSE_REAP_USEC);
 		}
 		#else
-		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
-			usleep(NFT_PCLOSE_SPIN_USEC);
-		} else {
-			sleep(1);
-		}
+		sleep(1);
 		#endif
 	}
 
@@ -250,6 +259,7 @@ int nft_popen(const char * command, const char * type) {
 	struct pid *cur;
 	struct pid *p;
 	int    pdes[2];
+	int     inherit_fd = -1;
 	int    fd, twoway;
 	pid_t  pid;
 	char   *argv[4];
@@ -318,6 +328,17 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
+	/* The pipe ends are close-on-exec, which is the point: another thread
+	 * spawning in this window must not inherit them. The child needs its own
+	 * end, and dup2 clears the flag on its target, so the usual paths are
+	 * fine.
+	 *
+	 * When the end already sits on the descriptor it is destined for, there is
+	 * no dup2 to clear anything and the child would exec with that descriptor
+	 * closed. That happens whenever stdin or stdout was closed before this
+	 * call, which for a daemon is not exotic, and the failure is silent: every
+	 * script data source records U. dup() the end to a fresh descriptor, which
+	 * does not carry the flag, and let the child dup2 from that. */
 	if (*type == 'r') {
 		posix_spawn_file_actions_addclose(&fa, pdes[0]);
 		if (pdes[1] != STDOUT_FILENO) {
@@ -325,13 +346,42 @@ int nft_popen(const char * command, const char * type) {
 			posix_spawn_file_actions_addclose(&fa, pdes[1]);
 			if (twoway)
 				posix_spawn_file_actions_adddup2(&fa, STDOUT_FILENO, STDIN_FILENO);
-		} else if (twoway && (pdes[1] != STDIN_FILENO)) {
-			posix_spawn_file_actions_adddup2(&fa, pdes[1], STDIN_FILENO);
+		} else {
+			inherit_fd = dup(pdes[1]);
+
+			if (inherit_fd < 0) {
+				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
+				posix_spawn_file_actions_destroy(&fa);
+				(void)close(pdes[0]);
+				(void)close(pdes[1]);
+				pthread_setcancelstate(cancel_state, NULL);
+				return -1;
+			}
+
+			posix_spawn_file_actions_adddup2(&fa, inherit_fd, STDOUT_FILENO);
+			posix_spawn_file_actions_addclose(&fa, inherit_fd);
+
+			if (twoway)
+				posix_spawn_file_actions_adddup2(&fa, STDOUT_FILENO, STDIN_FILENO);
 		}
 	} else {
 		if (pdes[0] != STDIN_FILENO) {
 			posix_spawn_file_actions_adddup2(&fa, pdes[0], STDIN_FILENO);
 			posix_spawn_file_actions_addclose(&fa, pdes[0]);
+		} else {
+			inherit_fd = dup(pdes[0]);
+
+			if (inherit_fd < 0) {
+				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
+				posix_spawn_file_actions_destroy(&fa);
+				(void)close(pdes[0]);
+				(void)close(pdes[1]);
+				pthread_setcancelstate(cancel_state, NULL);
+				return -1;
+			}
+
+			posix_spawn_file_actions_adddup2(&fa, inherit_fd, STDIN_FILENO);
+			posix_spawn_file_actions_addclose(&fa, inherit_fd);
 		}
 		posix_spawn_file_actions_addclose(&fa, pdes[1]);
 	}
@@ -359,7 +409,18 @@ int nft_popen(const char * command, const char * type) {
 		}
 
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", strerror(spawn_err)));
-		posix_spawn_file_actions_destroy(&fa);
+	posix_spawn_file_actions_destroy(&fa);
+
+	/* the child has its own copy now; the parent must not keep this one */
+	if (inherit_fd != -1) {
+		(void)close(inherit_fd);
+		inherit_fd = -1;
+	}
+
+		if (inherit_fd != -1) {
+			(void)close(inherit_fd);
+		}
+
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
