@@ -1454,6 +1454,20 @@ char *get_date_format(void) {
 	return log_date_format;
 }
 
+/* Serialises the log emit below.
+ *
+ * Not one of the locks.c mutexes, for two reasons. thread_mutex_lock() itself
+ * calls SPINE_LOG_DEVDBG, which is a runtime level check rather than a compiled
+ * out one, so routing the logger through it would recurse at the highest
+ * verbosity. And init_mutexes() runs well into main(), after this function has
+ * already been called nineteen times, so a lock that needs initialising would
+ * be used uninitialised first. A static initialiser has neither problem.
+ *
+ * The tearing this prevents is not hypothetical: LOGSIZE is 65535 and stdio's
+ * BUFSIZ is 8192, so any message over 8KB leaves fputs() as several write()
+ * calls that another thread can interleave with. See #298. */
+static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /*! \fn void spine_log(const char *format, ...)
  *  \brief output's log information to the desired cacti logfile.
  *  \param *logmessage a pointer to the pre-formatted log message.
@@ -1594,11 +1608,19 @@ int spine_log(const char *format, ...) {
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
-			if (!file_exists(set.path_logfile)) {
-				log_file = fopen(set.path_logfile, "w");
-			} else {
-				log_file = fopen(set.path_logfile, "a");
-			}
+			int oldstate;
+
+			/* a cancel delivered here would leave every other thread's logging
+			   blocked on a mutex nothing will release */
+			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+			pthread_mutex_lock(&log_mutex);
+
+			/* "a" creates the file when it is absent, which is all the
+			   file_exists() test and the "w" mode were doing, minus a stat and
+			   the window between the two. Reopening per message is deliberate:
+			   it is what lets an operator rotate the log out from under a
+			   running poller. */
+			log_file = fopen(set.path_logfile, "a");
 
 			if (log_file) {
 				fputs(flogmessage, log_file);
@@ -1609,6 +1631,9 @@ int spine_log(const char *format, ...) {
 					log_error = TRUE;
 				}
 			}
+
+			pthread_mutex_unlock(&log_mutex);
+			pthread_setcancelstate(oldstate, NULL);
 		}
 	}
 
