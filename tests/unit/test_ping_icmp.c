@@ -74,7 +74,7 @@ static void test_loopback_answers(void **state) {
 	(void) state;
 	if (!have_raw_socket()) {
 		print_message("no raw ICMP socket here; skipping\n");
-		return;
+		skip();
 	}
 
 	make_host(&host, "127.0.0.1");
@@ -94,7 +94,7 @@ static void test_repeated_pings_do_not_accumulate(void **state) {
 	(void) state;
 	if (!have_raw_socket()) {
 		print_message("no raw ICMP socket here; skipping\n");
-		return;
+		skip();
 	}
 
 	for (i = 0; i < 20; i++) {
@@ -118,7 +118,7 @@ static void test_fd_setsize_guard_releases_the_packet(void **state) {
 	(void) state;
 	if (!have_raw_socket()) {
 		print_message("no raw ICMP socket here; skipping\n");
-		return;
+		skip();
 	}
 
 	held = calloc(FD_SETSIZE + 16, sizeof(int));
@@ -143,7 +143,7 @@ static void test_fd_setsize_guard_releases_the_packet(void **state) {
 		for (i = 0; i < count; i++) close(held[i]);
 		free(held);
 		print_message("could not reach FD_SETSIZE descriptors here; skipping\n");
-		return;
+		skip();
 	}
 
 	make_host(&host, "127.0.0.1");

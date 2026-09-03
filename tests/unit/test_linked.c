@@ -2345,7 +2345,7 @@ static void test_nft_popen_does_not_leak_descriptors_in_the_collision_case(void 
 
 	if (before < 0 || after < 0) {
 		print_message("no /proc/self/fd here; skipping the count\n");
-		return;
+		skip();
 	}
 
 	assert_true(after <= before);
@@ -2386,7 +2386,7 @@ static void test_nft_popen_releases_the_lock_when_dup_fails(void **state) {
 
 	if (getrlimit(RLIMIT_NOFILE, &saved_limit) != 0) {
 		print_message("cannot read RLIMIT_NOFILE; skipping\n");
-		return;
+		skip();
 	}
 
 	saved_stdin  = dup(STDIN_FILENO);
@@ -2400,7 +2400,7 @@ static void test_nft_popen_releases_the_lock_when_dup_fails(void **state) {
 		close(saved_stdin);
 		close(saved_stdout);
 		print_message("cannot lower RLIMIT_NOFILE; skipping\n");
-		return;
+		skip();
 	}
 
 	/* fill first, with 0 and 1 still occupied by stdin and stdout */
