@@ -987,7 +987,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	char sysUptime[BUFSIZE];
 	char result_string[POLLER_OUTPUT_TUPLE_MAX];
 	int  result_length;
-	char temp_result[RESULTS_BUFFER];
 	int  errors = 0;
 	int  *buf_errors;
 	int  *buf_size;
@@ -999,7 +998,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int    spike_kill = FALSE;
 	int    rows_processed = 0;
 	int    i = 0;
-	int    j = 0;
 	int    k = 0;
 	int    num_oids = 0;
 	size_t out_buffer;
@@ -1628,8 +1626,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					if (num_oids > 0) {
 						snmp_get_multi(host, poller_items, snmp_oids, num_oids);
 
-					errors += poller_process_snmp_results(host, poller_items, snmp_oids, num_oids,
-						error_string, buf_size, buf_errors, host_id, host_thread, thread_start, spike_kill);
+						errors += poller_process_snmp_results(host, poller_items, snmp_oids, num_oids,
+							error_string, buf_size, buf_errors, host_id, host_thread, thread_start, spike_kill);
 
 						/* reset num_snmps */
 						num_oids = 0;
@@ -1694,8 +1692,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				poll_result = exec_poll(host, poller_items[i].arg1, poller_items[i].local_data_id, "DS");
 
 				/* process the result */
-							if (poller_store_result(&poller_items[i], poll_result,
-								error_string, buf_size, buf_errors, host_id, host_thread)) {
+				if (poller_store_result(&poller_items[i], poll_result,
+					error_string, buf_size, buf_errors, host_id, host_thread)) {
 								errors++;
 							}
 
@@ -1731,8 +1729,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				poll_result = php_cmd(poller_items[i].arg1, php_process);
 
 				/* process the output */
-							if (poller_store_result(&poller_items[i], poll_result,
-								error_string, buf_size, buf_errors, host_id, host_thread)) {
+				if (poller_store_result(&poller_items[i], poll_result,
+					error_string, buf_size, buf_errors, host_id, host_thread)) {
 								errors++;
 							}
 

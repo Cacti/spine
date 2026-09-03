@@ -484,13 +484,25 @@ static void test_pipe_is_not_inherited_across_exec(void **state) {
 	(void) state;
 
 	assert_true(spine_open_pipe_cloexec(pdes));
+
+	/* Asserting the descriptor is absent from /proc/self/fd would also pass
+	   where /proc does not exist, which is the wrong reason. Check /proc is
+	   usable first, and skip rather than pass vacuously. */
+	if (access("/proc/self/fd", R_OK) != 0) {
+		close(pdes[0]);
+		close(pdes[1]);
+		print_message("no /proc/self/fd here; cannot observe the child's table\n");
+		return;
+	}
+
 	snprintf(fdarg, sizeof(fdarg), "/proc/self/fd/%d", pdes[1]);
 
 	pid = fork();
 	assert_true(pid >= 0);
 
 	if (pid == 0) {
-		/* exits 0 when the descriptor survived exec, 1 when it did not */
+		/* 0 when the descriptor survived exec, 1 when it did not, and the
+		   parent has already confirmed /proc answers */
 		execl("/bin/sh", "sh", "-c", "test -e \"$0\"", fdarg, (char *) NULL);
 		_exit(127);
 	}
