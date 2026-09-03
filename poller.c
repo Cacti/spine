@@ -437,7 +437,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		" (local_data_id, rrd_name, time, output) VALUES");
 
 	/* query suffix to add rows to the poller output table */
-	if (set.poller_id != 0 || set.dbonupdate == 0) {
+	if (set.dbonupdate == 0) {
 		snprintf(posuffix, BUFSIZE,
 			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
 	} else {

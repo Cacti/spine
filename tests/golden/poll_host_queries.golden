@@ -76,7 +76,7 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
  AS rs ON DUPLICATE KEY UPDATE output=rs.output
 == REMOTE ports=1 onupd=0 pid=3 ==
 ### remote query1
-SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id=3 LIMIT 0,100
+SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id = 3 LIMIT 0,100
 ### remote query2
 SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, snmp_username, snmp_password, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, availability_method, ping_method, ping_port, ping_timeout, ping_retries, status, status_event_count, UNIX_TIMESTAMP(status_fail_date), UNIX_TIMESTAMP(status_rec_date), status_last_error, min_time, max_time, cur_time, avg_time, total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, snmp_sysContact, snmp_sysName, snmp_sysLocation FROM host WHERE id = 42 AND deleted = ''
 ### remote query4
@@ -95,7 +95,7 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
  ON DUPLICATE KEY UPDATE output=VALUES(output)
 == REMOTE ports=1 onupd=1 pid=7 ==
 ### remote query1
-SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id=7 LIMIT 0,100
+SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id = 7 LIMIT 0,100
 ### remote query2
 SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, snmp_username, snmp_password, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, availability_method, ping_method, ping_port, ping_timeout, ping_retries, status, status_event_count, UNIX_TIMESTAMP(status_fail_date), UNIX_TIMESTAMP(status_rec_date), status_last_error, min_time, max_time, cur_time, avg_time, total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, snmp_sysContact, snmp_sysName, snmp_sysLocation FROM host WHERE id = 42 AND deleted = ''
 ### remote query4
@@ -111,10 +111,10 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
 ### remote query10
 SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id = 42 AND poller_id = 7 GROUP BY snmp_port LIMIT 0,100
 ### remote posuffix
- ON DUPLICATE KEY UPDATE output=VALUES(output)
+ AS rs ON DUPLICATE KEY UPDATE output=rs.output
 == REMOTE ports=2 onupd=0 pid=3 ==
 ### remote query1
-SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id=3 ORDER BY snmp_port LIMIT 0,100
+SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id = 3 ORDER BY snmp_port LIMIT 0,100
 ### remote query2
 SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, snmp_username, snmp_password, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, availability_method, ping_method, ping_port, ping_timeout, ping_retries, status, status_event_count, UNIX_TIMESTAMP(status_fail_date), UNIX_TIMESTAMP(status_rec_date), status_last_error, min_time, max_time, cur_time, avg_time, total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, snmp_sysContact, snmp_sysName, snmp_sysLocation FROM host WHERE id = 42 AND deleted = ''
 ### remote query4
@@ -133,7 +133,7 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
  ON DUPLICATE KEY UPDATE output=VALUES(output)
 == REMOTE ports=2 onupd=1 pid=7 ==
 ### remote query1
-SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id=7 ORDER BY snmp_port LIMIT 0,100
+SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id = 7 ORDER BY snmp_port LIMIT 0,100
 ### remote query2
 SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, snmp_username, snmp_password, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, availability_method, ping_method, ping_port, ping_timeout, ping_retries, status, status_event_count, UNIX_TIMESTAMP(status_fail_date), UNIX_TIMESTAMP(status_rec_date), status_last_error, min_time, max_time, cur_time, avg_time, total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, snmp_sysContact, snmp_sysName, snmp_sysLocation FROM host WHERE id = 42 AND deleted = ''
 ### remote query4
@@ -149,4 +149,4 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
 ### remote query10
 SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id = 42 AND poller_id = 7 GROUP BY snmp_port LIMIT 0,100
 ### remote posuffix
- ON DUPLICATE KEY UPDATE output=VALUES(output)
+ AS rs ON DUPLICATE KEY UPDATE output=rs.output
