@@ -2335,7 +2335,9 @@ const char *regex_replace(const char *exp, const char *value) {
 	size_t match_len;
 
 	/* Compile regular expression */
-	reti = regcomp(&regex, exp, 0);
+	/* REGEX_NUMBER is an extended regex: without REG_EXTENDED the parens and
+	   the + are literals and it never matches. */
+	reti = regcomp(&regex, exp, REG_EXTENDED);
 	if (reti) {
 		return value;
 	}
