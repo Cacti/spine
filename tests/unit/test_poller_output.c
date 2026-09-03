@@ -204,6 +204,162 @@ static void test_tuple_fits_the_largest_row_the_poller_can_produce(void **state)
 	free(out);
 }
 
+
+/* ---------------------------------------------------------------------------
+ * host_from_row (poller.c)
+ *
+ * Maps one host row onto the device structure. A hundred lines in the middle
+ * of poll_host(), so none of the defaults, the hostname parsing or the
+ * max_oids clamp was reachable. Thirty-seven columns, all optional.
+ * ------------------------------------------------------------------------- */
+
+extern int *debug_devices;
+
+static int hr_debug_table[100];
+
+static int host_reset(void **state) {
+	(void) state;
+	escape_calls = 0;
+	memset(hr_debug_table, 0, sizeof(hr_debug_table));
+	debug_devices = hr_debug_table;
+	return 0;
+}
+
+/* 37 columns; index 1 is the hostname, 13 is max_oids. */
+static void blank_row(char **row, int n) {
+	int i;
+
+	for (i = 0; i < n; i++) row[i] = NULL;
+}
+
+static void test_host_row_maps_the_identity_columns(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+	row[0] = "42";
+	row[1] = "router1";
+	row[2] = "public";
+	row[3] = "2";
+
+	host_from_row(&h, row, NULL, 42, 1);
+
+	assert_int_equal(h.id, 42);
+	assert_string_equal(h.hostname, "router1");
+	assert_string_equal(h.snmp_community, "public");
+	assert_int_equal(h.snmp_version, 2);
+	assert_false(h.ignore_host);
+}
+
+/* A NULL column leaves the initialised default rather than zeroing it. */
+static void test_host_row_keeps_defaults_for_null_columns(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+	memset(&h, 'x', sizeof(h));
+	blank_row(row, 40);
+
+	host_from_row(&h, row, NULL, 42, 1);
+
+	assert_int_equal(h.id, 0);
+	assert_int_equal(h.hostname[0], '\0');
+	assert_int_equal(h.snmp_community[0], '\0');
+	assert_false(h.ignore_host);
+}
+
+/* max_oids sizes an SNMP multi-get batch, so a row carrying 0 or an absurd
+   value has to be clamped before it reaches that. */
+static void test_host_row_clamps_max_oids(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+	row[13] = "0";
+	host_from_row(&h, row, NULL, 42, 1);
+	assert_int_equal(h.max_oids, 5);
+
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+	row[13] = "101";
+	host_from_row(&h, row, NULL, 42, 1);
+	assert_int_equal(h.max_oids, 5);
+
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+	row[13] = "25";
+	host_from_row(&h, row, NULL, 42, 1);
+	assert_int_equal(h.max_oids, 25);
+}
+
+/* A missing max_oids column keeps the initialised default of 10, which is in
+   range and so is not clamped. */
+static void test_host_row_defaults_max_oids_when_the_column_is_absent(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+
+	host_from_row(&h, row, NULL, 42, 1);
+	assert_int_equal(h.max_oids, 10);
+}
+
+/* The hostname column carries an optional transport and port, which
+   get_namebyhost() splits out. */
+static void test_host_row_splits_the_port_off_the_hostname(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+	row[1] = "192.0.2.10:1161";
+
+	host_from_row(&h, row, NULL, 42, 1);
+
+	assert_string_equal(h.hostname, "192.0.2.10");
+	assert_int_equal(h.ping_port, 1161);
+}
+
+/* The five sysinfo strings are written back to the database later without
+   further quoting, so they are escaped on the way in. */
+static void test_host_row_escapes_the_sysinfo_strings(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+	row[32] = "it's a router";
+	row[35] = "o'brien";
+
+	host_from_row(&h, row, NULL, 42, 1);
+
+	assert_int_equal(escape_calls, 2);
+	assert_string_equal(h.snmp_sysDescr, "it''s a router");
+	assert_string_equal(h.snmp_sysName, "o''brien");
+}
+
+static void test_host_row_rejects_null_arguments(void **state) {
+	host_t h;
+	char *row[40];
+
+	(void) state;
+	memset(&h, 0, sizeof(h));
+	blank_row(row, 40);
+
+	host_from_row(NULL, row, NULL, 42, 1);
+	host_from_row(&h, NULL, NULL, 42, 1);
+}
+
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_tuple_has_the_expected_shape, reset),
@@ -214,6 +370,13 @@ int main(void) {
 		cmocka_unit_test_setup(test_tuple_reports_the_length_it_wrote, reset),
 		cmocka_unit_test_setup(test_tuple_rejects_null_arguments, reset),
 		cmocka_unit_test_setup(test_tuple_fits_the_largest_row_the_poller_can_produce, reset),
+		cmocka_unit_test_setup(test_host_row_maps_the_identity_columns, host_reset),
+		cmocka_unit_test_setup(test_host_row_keeps_defaults_for_null_columns, host_reset),
+		cmocka_unit_test_setup(test_host_row_clamps_max_oids, host_reset),
+		cmocka_unit_test_setup(test_host_row_defaults_max_oids_when_the_column_is_absent, host_reset),
+		cmocka_unit_test_setup(test_host_row_splits_the_port_off_the_hostname, host_reset),
+		cmocka_unit_test_setup(test_host_row_escapes_the_sysinfo_strings, host_reset),
+		cmocka_unit_test_setup(test_host_row_rejects_null_arguments, host_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

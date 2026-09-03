@@ -662,6 +662,7 @@ extern void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn,
 extern void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
 	char **error_string, int **buf_size, int **buf_errors,
 	pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread);
+extern void host_from_row(host_t *host, MYSQL_ROW row, MYSQL *mysql, int host_id, int host_thread);
 extern int poller_process_snmp_results(host_t *host, target_t *poller_items,
 	snmp_oids_t *snmp_oids, int num_oids,
 	char *error_string, int *buf_size, int *buf_errors,
