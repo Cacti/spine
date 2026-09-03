@@ -1364,6 +1364,153 @@ static void test_build_queries_multiple_profiles_scope_a_remote_poller(void **st
 	assert_non_null(strstr(q.query5, "ORDER BY snmp_port"));
 }
 
+
+/* ---------------------------------------------------------------------------
+ * poller_item_from_row (poller.c)
+ *
+ * Maps one poller_item row onto a target. It was 62 lines in the middle of
+ * poll_host()'s result loop, so none of the defaults or the NULL handling was
+ * reachable. MYSQL_ROW is char **, so the rows here are ordinary arrays.
+ * ------------------------------------------------------------------------- */
+
+static char *full_row[] = {
+	"2",                    /*  0 action              */
+	"router1",              /*  1 hostname            */
+	"public",               /*  2 snmp_community      */
+	"3",                    /*  3 snmp_version        */
+	"snmpuser",             /*  4 snmp_username       */
+	"snmppass",             /*  5 snmp_password       */
+	"traffic_in",           /*  6 rrd_name            */
+	"/var/lib/rrd/1.rrd",   /*  7 rrd_path            */
+	"argument one",         /*  8 arg1                */
+	"argument two",         /*  9 arg2                */
+	"argument three",       /* 10 arg3                */
+	"77",                   /* 11 local_data_id       */
+	"4",                    /* 12 rrd_num             */
+	"1161",                 /* 13 snmp_port           */
+	"900",                  /* 14 snmp_timeout        */
+	"MD5",                  /* 15 snmp_auth_protocol  */
+	"privpass",             /* 16 snmp_priv_passphrase*/
+	"AES128",               /* 17 snmp_priv_protocol  */
+	"ctx",                  /* 18 snmp_context        */
+	"0x8000",               /* 19 snmp_engine_id      */
+	"^[0-9]+$"              /* 20 output_regex        */
+};
+
+static void test_item_from_row_maps_every_column(void **state) {
+	target_t item;
+
+	(void) state;
+	set.has_output_regex = TRUE;
+	poller_item_from_row(&item, full_row);
+
+	assert_int_equal(item.action, 2);
+	assert_string_equal(item.hostname, "router1");
+	assert_string_equal(item.snmp_community, "public");
+	assert_int_equal(item.snmp_version, 3);
+	assert_string_equal(item.snmp_username, "snmpuser");
+	assert_string_equal(item.snmp_password, "snmppass");
+	assert_string_equal(item.rrd_name, "traffic_in");
+	assert_string_equal(item.rrd_path, "/var/lib/rrd/1.rrd");
+	assert_string_equal(item.arg1, "argument one");
+	assert_string_equal(item.arg2, "argument two");
+	assert_string_equal(item.arg3, "argument three");
+	assert_int_equal(item.local_data_id, 77);
+	assert_int_equal(item.rrd_num, 4);
+	assert_int_equal(item.snmp_port, 1161);
+	assert_int_equal(item.snmp_timeout, 900);
+	assert_string_equal(item.snmp_auth_protocol, "MD5");
+	assert_string_equal(item.snmp_priv_passphrase, "privpass");
+	assert_string_equal(item.snmp_priv_protocol, "AES128");
+	assert_string_equal(item.snmp_context, "ctx");
+	assert_string_equal(item.snmp_engine_id, "0x8000");
+	assert_string_equal(item.output_regex, "^[0-9]+$");
+}
+
+/* A NULL column must leave the default in place. A device whose row is missing
+   snmp_port has to poll on 161, not 0. */
+static void test_item_from_row_keeps_defaults_for_null_columns(void **state) {
+	target_t item;
+	char *empty[21];
+	int i;
+
+	(void) state;
+	for (i = 0; i < 21; i++) empty[i] = NULL;
+	set.has_output_regex = TRUE;
+
+	poller_item_from_row(&item, empty);
+
+	assert_int_equal(item.action, -1);
+	assert_int_equal(item.snmp_version, 1);
+	assert_int_equal(item.snmp_port, 161);
+	assert_int_equal(item.snmp_timeout, 500);
+	assert_int_equal(item.local_data_id, 0);
+	assert_int_equal(item.rrd_num, 0);
+	assert_int_equal(item.hostname[0], '\0');
+	assert_int_equal(item.rrd_path[0], '\0');
+	assert_int_equal(item.output_regex[0], '\0');
+}
+
+/* output_regex arrived in Cacti 1.3.1. On an older schema the column is not in
+   the select, so the mapper must not read row[20] at all. */
+static void test_item_from_row_ignores_output_regex_on_an_old_schema(void **state) {
+	target_t item;
+
+	(void) state;
+
+	set.has_output_regex = FALSE;
+	poller_item_from_row(&item, full_row);
+	assert_int_equal(item.output_regex[0], '\0');
+
+	set.has_output_regex = TRUE;
+	poller_item_from_row(&item, full_row);
+	assert_string_equal(item.output_regex, "^[0-9]+$");
+}
+
+/* Every target starts undefined, so a data source that never answers reports
+   U rather than a stale value from the previous item in the array. */
+static void test_item_from_row_starts_the_result_undefined(void **state) {
+	target_t item;
+
+	(void) state;
+	memset(&item, 'x', sizeof(item));
+	set.has_output_regex = TRUE;
+
+	poller_item_from_row(&item, full_row);
+
+	assert_true(IS_UNDEFINED(item.result));
+}
+
+/* Reusing one target across rows must not leak the previous row's strings. */
+static void test_item_from_row_does_not_carry_state_between_rows(void **state) {
+	target_t item;
+	char *sparse[21];
+	int i;
+
+	(void) state;
+	set.has_output_regex = TRUE;
+
+	poller_item_from_row(&item, full_row);
+	assert_string_equal(item.hostname, "router1");
+
+	for (i = 0; i < 21; i++) sparse[i] = NULL;
+	poller_item_from_row(&item, sparse);
+
+	assert_int_equal(item.hostname[0], '\0');
+	assert_int_equal(item.snmp_community[0], '\0');
+	assert_int_equal(item.arg1[0], '\0');
+	assert_int_equal(item.snmp_port, 161);
+}
+
+static void test_item_from_row_rejects_null_arguments(void **state) {
+	target_t item;
+
+	(void) state;
+
+	poller_item_from_row(NULL, full_row);
+	poller_item_from_row(&item, NULL);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -1454,6 +1601,12 @@ int main(void) {
 		cmocka_unit_test(test_assert_ignores_an_unknown_operator),
 		cmocka_unit_test(test_assert_rejects_null_arguments),
 		cmocka_unit_test(test_assert_handles_values_beyond_32_bits),
+		cmocka_unit_test(test_item_from_row_maps_every_column),
+		cmocka_unit_test(test_item_from_row_keeps_defaults_for_null_columns),
+		cmocka_unit_test(test_item_from_row_ignores_output_regex_on_an_old_schema),
+		cmocka_unit_test(test_item_from_row_starts_the_result_undefined),
+		cmocka_unit_test(test_item_from_row_does_not_carry_state_between_rows),
+		cmocka_unit_test(test_item_from_row_rejects_null_arguments),
 		cmocka_unit_test(test_build_queries_gates_on_rrd_next_step_for_multiple_profiles),
 		cmocka_unit_test(test_build_queries_multiple_profiles_scope_a_remote_poller),
 	};

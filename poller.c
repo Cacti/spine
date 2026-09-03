@@ -335,6 +335,85 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	q->posuffix_len = strlen(q->posuffix);
 }
 
+/*! \fn void poller_item_from_row(target_t *item, MYSQL_ROW row)
+ *  \brief map one poller_item row onto a target
+ *
+ *  Split out of poll_host() so the mapping can be reached from a test.
+ *  Every column is optional: a NULL leaves the default below in place, so
+ *  a row missing snmp_port still polls on 161 rather than 0.
+ *
+ *  output_regex is read only when the schema has it, which is Cacti 1.3.1
+ *  and later. On an older schema the column is not in the select at all.
+ */
+void poller_item_from_row(target_t *item, MYSQL_ROW row) {
+	if (item == NULL || row == NULL) {
+		return;
+	}
+
+	/* initialize monitored object */
+	item->target_id                = 0;
+	item->action                   = -1;
+	item->hostname[0]              = '\0';
+	item->snmp_community[0]        = '\0';
+	item->snmp_version             = 1;
+	item->snmp_username[0]         = '\0';
+	item->snmp_password[0]         = '\0';
+	item->snmp_auth_protocol[0]    = '\0';
+	item->snmp_priv_passphrase[0]  = '\0';
+	item->snmp_priv_protocol[0]    = '\0';
+	item->snmp_context[0]          = '\0';
+	item->snmp_engine_id[0]        = '\0';
+	item->snmp_port                = 161;
+	item->snmp_timeout             = 500;
+	item->rrd_name[0]              = '\0';
+	item->rrd_path[0]              = '\0';
+	item->arg1[0]                  = '\0';
+	item->arg2[0]                  = '\0';
+	item->arg3[0]                  = '\0';
+	item->local_data_id            = 0;
+	item->rrd_num                  = 0;
+	item->output_regex[0]          = '\0';
+
+	if (row[0] != NULL)  item->action = atoi(row[0]);
+
+	if (row[1] != NULL)  snprintf(item->hostname, sizeof(item->hostname), "%s", row[1]);
+	if (row[2] != NULL)  snprintf(item->snmp_community, sizeof(item->snmp_community), "%s", row[2]);
+
+	if (row[3] != NULL)  item->snmp_version = atoi(row[3]);
+
+	if (row[4] != NULL)  snprintf(item->snmp_username, sizeof(item->snmp_username), "%s", row[4]);
+	if (row[5] != NULL)  snprintf(item->snmp_password, sizeof(item->snmp_password), "%s", row[5]);
+
+	if (row[6]  != NULL) snprintf(item->rrd_name,      sizeof(item->rrd_name),      "%s", row[6]);
+	if (row[7]  != NULL) snprintf(item->rrd_path,      sizeof(item->rrd_path),      "%s", row[7]);
+	if (row[8]  != NULL) snprintf(item->arg1,          sizeof(item->arg1),          "%s", row[8]);
+	if (row[9]  != NULL) snprintf(item->arg2,          sizeof(item->arg2),          "%s", row[9]);
+	if (row[10] != NULL) snprintf(item->arg3,          sizeof(item->arg3),          "%s", row[10]);
+
+	if (row[11] != NULL) item->local_data_id = atoi(row[11]);
+
+	if (row[12] != NULL) item->rrd_num       = atoi(row[12]);
+	if (row[13] != NULL) item->snmp_port     = atoi(row[13]);
+	if (row[14] != NULL) item->snmp_timeout  = atoi(row[14]);
+
+	if (row[15] != NULL)  snprintf(item->snmp_auth_protocol,
+		sizeof(item->snmp_auth_protocol), "%s", row[15]);
+	if (row[16] != NULL)  snprintf(item->snmp_priv_passphrase,
+		sizeof(item->snmp_priv_passphrase), "%s", row[16]);
+	if (row[17] != NULL)  snprintf(item->snmp_priv_protocol,
+		sizeof(item->snmp_priv_protocol), "%s", row[17]);
+	if (row[18] != NULL)  snprintf(item->snmp_context,
+		sizeof(item->snmp_context), "%s", row[18]);
+	if (row[19] != NULL)  snprintf(item->snmp_engine_id,
+		sizeof(item->snmp_engine_id), "%s", row[19]);
+
+	if (set.has_output_regex && row[20] != NULL)
+		snprintf(item->output_regex,
+			sizeof(item->output_regex), "%s", row[20]);
+
+	SET_UNDEFINED(item->result);
+}
+
 /*! \fn int reindex_assert_failed(const char *op, const char *assert_value, const char *poll_result)
  *  \brief decide whether a data query reindex assert has been violated
  *
@@ -1199,69 +1278,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
-			/* initialize monitored object */
-			poller_items[i].target_id                = 0;
-			poller_items[i].action                   = -1;
-			poller_items[i].hostname[0]              = '\0';
-			poller_items[i].snmp_community[0]        = '\0';
-			poller_items[i].snmp_version             = 1;
-			poller_items[i].snmp_username[0]         = '\0';
-			poller_items[i].snmp_password[0]         = '\0';
-			poller_items[i].snmp_auth_protocol[0]    = '\0';
-			poller_items[i].snmp_priv_passphrase[0]  = '\0';
-			poller_items[i].snmp_priv_protocol[0]    = '\0';
-			poller_items[i].snmp_context[0]          = '\0';
-			poller_items[i].snmp_engine_id[0]        = '\0';
-			poller_items[i].snmp_port                = 161;
-			poller_items[i].snmp_timeout             = 500;
-			poller_items[i].rrd_name[0]              = '\0';
-			poller_items[i].rrd_path[0]              = '\0';
-			poller_items[i].arg1[0]                  = '\0';
-			poller_items[i].arg2[0]                  = '\0';
-			poller_items[i].arg3[0]                  = '\0';
-			poller_items[i].local_data_id            = 0;
-			poller_items[i].rrd_num                  = 0;
-			poller_items[i].output_regex[0]          = '\0';
-
-			if (row[0] != NULL)  poller_items[i].action = atoi(row[0]);
-
-			if (row[1] != NULL)  snprintf(poller_items[i].hostname, sizeof(poller_items[i].hostname), "%s", row[1]);
-			if (row[2] != NULL)  snprintf(poller_items[i].snmp_community, sizeof(poller_items[i].snmp_community), "%s", row[2]);
-
-			if (row[3] != NULL)  poller_items[i].snmp_version = atoi(row[3]);
-
-			if (row[4] != NULL)  snprintf(poller_items[i].snmp_username, sizeof(poller_items[i].snmp_username), "%s", row[4]);
-			if (row[5] != NULL)  snprintf(poller_items[i].snmp_password, sizeof(poller_items[i].snmp_password), "%s", row[5]);
-
-			if (row[6]  != NULL) snprintf(poller_items[i].rrd_name,      sizeof(poller_items[i].rrd_name),      "%s", row[6]);
-			if (row[7]  != NULL) snprintf(poller_items[i].rrd_path,      sizeof(poller_items[i].rrd_path),      "%s", row[7]);
-			if (row[8]  != NULL) snprintf(poller_items[i].arg1,          sizeof(poller_items[i].arg1),          "%s", row[8]);
-			if (row[9]  != NULL) snprintf(poller_items[i].arg2,          sizeof(poller_items[i].arg2),          "%s", row[9]);
-			if (row[10] != NULL) snprintf(poller_items[i].arg3,          sizeof(poller_items[i].arg3),          "%s", row[10]);
-
-			if (row[11] != NULL) poller_items[i].local_data_id = atoi(row[11]);
-
-			if (row[12] != NULL) poller_items[i].rrd_num       = atoi(row[12]);
-			if (row[13] != NULL) poller_items[i].snmp_port     = atoi(row[13]);
-			if (row[14] != NULL) poller_items[i].snmp_timeout  = atoi(row[14]);
-
-			if (row[15] != NULL)  snprintf(poller_items[i].snmp_auth_protocol,
-				sizeof(poller_items[i].snmp_auth_protocol), "%s", row[15]);
-			if (row[16] != NULL)  snprintf(poller_items[i].snmp_priv_passphrase,
-				sizeof(poller_items[i].snmp_priv_passphrase), "%s", row[16]);
-			if (row[17] != NULL)  snprintf(poller_items[i].snmp_priv_protocol,
-				sizeof(poller_items[i].snmp_priv_protocol), "%s", row[17]);
-			if (row[18] != NULL)  snprintf(poller_items[i].snmp_context,
-				sizeof(poller_items[i].snmp_context), "%s", row[18]);
-			if (row[19] != NULL)  snprintf(poller_items[i].snmp_engine_id,
-				sizeof(poller_items[i].snmp_engine_id), "%s", row[19]);
-
-			if (set.has_output_regex && row[20] != NULL)
-				snprintf(poller_items[i].output_regex,
-					sizeof(poller_items[i].output_regex), "%s", row[20]);
-
-			SET_UNDEFINED(poller_items[i].result);
-
+			poller_item_from_row(&poller_items[i], row);
 			i++;
 		}
 
