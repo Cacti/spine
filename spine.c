@@ -695,7 +695,10 @@ int main(int argc, char *argv[]) {
 			die("ERROR: Fatal malloc error: spine.c threads!");
 		}
 
-		if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
+		/* calloc, not malloc: the device loop can exit early on a poller
+		   overrun, and both the NULL test below and the free loop at the end
+		   walk every slot up to num_rows. */
+		if (!(details = (poller_thread_t **)calloc(num_rows, sizeof(poller_thread_t*)))) {
 			die("ERROR: Fatal malloc error: spine.c details!");
 		}
 
