@@ -2041,6 +2041,29 @@ static void test_store_matches_the_chain_it_replaced(void **state) {
 	}
 }
 
+
+/* The failure path: a descriptor that cannot carry the flag must be reported,
+   not silently accepted. A pipe whose reader is inheritable is worse than no
+   pipe, so the helper refuses rather than continuing. */
+static void test_cloexec_rejects_a_bad_descriptor(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_set_cloexec(-1), -1);
+}
+
+static void test_cloexec_rejects_a_closed_descriptor(void **state) {
+	int pdes[2];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	close(pdes[0]);
+	close(pdes[1]);
+
+	/* both ends are gone, so fcntl cannot read their flags */
+	assert_int_equal(spine_set_cloexec(pdes[0]), -1);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -2080,6 +2103,8 @@ int main(void) {
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
+		cmocka_unit_test(test_cloexec_rejects_a_closed_descriptor),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),

@@ -116,10 +116,16 @@ int spine_set_cloexec(int fd) {
 
 	flags = fcntl(fd, F_GETFD);
 	if (flags < 0) {
+		SPINE_LOG(("ERROR: Unable to read descriptor flags on fd %d: %s", fd, strerror(errno)));
 		return -1;
 	}
 
-	return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
+		SPINE_LOG(("ERROR: Unable to set close-on-exec on fd %d: %s", fd, strerror(errno)));
+		return -1;
+	}
+
+	return 0;
 }
 
 /*! \fn static int open_pipe_cloexec(int pdes[2])
@@ -139,9 +145,13 @@ int spine_set_cloexec(int fd) {
  */
 int spine_open_pipe_cloexec(int pdes[2]) {
 	if (pipe(pdes) < 0) {
+		SPINE_LOG(("ERROR: Unable to create a pipe: %s", strerror(errno)));
 		return FALSE;
 	}
 
+	/* spine_set_cloexec() has already said which descriptor failed and why;
+	 * a descriptor that stays inheritable is worse than no pipe at all, so
+	 * this fails rather than continuing without the flag. */
 	if (spine_set_cloexec(pdes[0]) != 0 || spine_set_cloexec(pdes[1]) != 0) {
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
