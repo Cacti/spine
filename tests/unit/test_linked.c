@@ -20,13 +20,10 @@
 #include "util.h"
 #include "ping.h"
 #include "nft_popen.h"
-
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-#include <stddef.h>
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -395,38 +392,9 @@ static void test_read_spine_config_reads_settings(void **state) {
 	remove(path);
 }
 
-/* --- get_date_format(): cached storage, rebuilt by set_date_format() ------ */
+/* --- get_date_format(): every format and separator is owned by the caller -- */
 
-static void test_get_date_format_returns_cached_storage(void **state) {
-	char *fmt;
-	(void) state;
 
-	config_defaults();
-	set_date_format();
-	fmt = get_date_format();
-
-	assert_non_null(fmt);
-	assert_true(strlen(fmt) > 0);
-
-	/* the buffer belongs to util.c and is handed out, not owned by us */
-	assert_ptr_equal(fmt, get_date_format());
-}
-
-static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
-	char *fmt;
-	(void) state;
-
-	config_defaults();
-	set.log_datetime_format    = GD_MAX + 10;
-	set.log_datetime_separator = GDC_MAX + 10;
-
-	set_date_format();
-	fmt = get_date_format();
-
-	assert_non_null(fmt);
-	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
-	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
-}
 
 static void test_get_date_format_covers_each_supported_format(void **state) {
 	int fmt_value;
@@ -468,15 +436,6 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
-/* ---------------------------------------------------------------------------
- * Child process hardening (nft_popen.c)
- *
- * PR #542 removed the close-on-exec and bounded-reap code PR #557 had just
- * added, and nothing failed, because the only guard was a shell script that
- * grepped the source and was deleted in the same commit. These exercise the
- * behaviour against the shipped object instead.
- * ------------------------------------------------------------------------- */
-
 static void test_cloexec_is_set_on_both_pipe_ends(void **state) {
 	int pdes[2];
 	int i;
@@ -511,9 +470,6 @@ static void test_cloexec_pipe_is_a_working_pipe(void **state) {
 	close(pdes[1]);
 }
 
-/* The descriptor must not survive an exec. A child that inherits the write end
-   keeps the pipe open, so the polling thread never sees EOF and blocks to
-   script_timeout for a data source that already answered. */
 static void test_pipe_is_not_inherited_across_exec(void **state) {
 	int pdes[2];
 	int status;
@@ -601,6 +557,137 @@ static void test_reap_reports_an_already_reaped_child(void **state) {
 	/* ECHILD: someone else took the status, which is success with none */
 	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 0);
 	assert_int_equal(pstat, 0);
+}
+
+static void test_get_date_format_returns_cached_storage(void **state) {
+	char *fmt;
+	(void) state;
+
+	config_defaults();
+	set_date_format();
+	fmt = get_date_format();
+
+	assert_non_null(fmt);
+	assert_true(strlen(fmt) > 0);
+
+	/* the buffer belongs to util.c and is handed out, not owned by us */
+	assert_ptr_equal(fmt, get_date_format());
+}
+
+static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
+	char *fmt;
+	(void) state;
+
+	config_defaults();
+	set.log_datetime_format    = GD_MAX + 10;
+	set.log_datetime_separator = GDC_MAX + 10;
+
+	set_date_format();
+	fmt = get_date_format();
+
+	assert_non_null(fmt);
+	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
+	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
+}
+
+/* db_escape() stands between a device-supplied poller result and the SQL text
+ * spine builds: it escapes the metacharacters and must never write past the
+ * destination. It used to stage the input through a fixed DBL_BUFSIZE buffer,
+ * which capped every caller at 1022 input bytes no matter how large a
+ * destination it passed, so poller results were silently truncated.
+ */
+static MYSQL *escape_handle(void) {
+	static MYSQL *handle = NULL;
+
+	if (handle == NULL) {
+		handle = mysql_init(NULL);
+	}
+
+	return handle;
+}
+
+static void test_db_escape_escapes_sql_metacharacters(void **state) {
+	char out[64];
+	(void) state;
+
+	db_escape(escape_handle(), out, sizeof out, "a'b");
+	assert_string_equal(out, "a\\'b");
+
+	db_escape(escape_handle(), out, sizeof out, "back\\slash");
+	assert_string_equal(out, "back\\\\slash");
+
+	db_escape(escape_handle(), out, sizeof out, "plain value");
+	assert_string_equal(out, "plain value");
+}
+
+static void test_db_escape_ignores_a_null_input(void **state) {
+	char out[16];
+	(void) state;
+
+	memcpy(out, "untouched", 10);
+	db_escape(escape_handle(), out, sizeof out, NULL);
+	assert_string_equal(out, "untouched");
+}
+
+/* A result the size of the poller's own buffer has to survive when the
+ * destination is sized 2N+1 for it. This is the case that regressed. */
+static void test_db_escape_keeps_a_full_results_buffer(void **state) {
+	char input[RESULTS_BUFFER];
+	char out[(RESULTS_BUFFER * 2) + 1];
+	(void) state;
+
+	memset(input, 'x', sizeof input - 1);
+	input[sizeof input - 1] = '\0';
+
+	db_escape(escape_handle(), out, sizeof out, input);
+
+	assert_int_equal((int) strlen(out), (int) (sizeof input - 1));
+	assert_string_equal(out, input);
+}
+
+/* Walk across the old staging boundary to prove the cut is gone. */
+static void test_db_escape_survives_the_old_staging_boundary(void **state) {
+	const int sizes[] = { 1022, 1023, 1024, 1100, 2047 };
+	char      input[2048];
+	char      out[(2048 * 2) + 1];
+	size_t    i;
+	(void) state;
+
+	for (i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
+		memset(input, 'y', (size_t) sizes[i]);
+		input[sizes[i]] = '\0';
+
+		db_escape(escape_handle(), out, sizeof out, input);
+
+		assert_int_equal((int) strlen(out), sizes[i]);
+	}
+}
+
+/* When the destination genuinely cannot hold the escaped form the result is
+ * truncated rather than overflowing, and stays NUL terminated. */
+static void test_db_escape_truncates_into_a_small_destination(void **state) {
+	char out[11];
+	(void) state;
+
+	db_escape(escape_handle(), out, sizeof out, "0123456789abcdef");
+
+	/* (11 - 1) / 2 == 5 input bytes may be represented */
+	assert_int_equal((int) strlen(out), 5);
+	assert_string_equal(out, "01234");
+}
+
+static void test_db_escape_handles_a_degenerate_destination(void **state) {
+	char out[4];
+	(void) state;
+
+	memcpy(out, "abc", 4);
+	db_escape(escape_handle(), out, 1, "anything");
+	assert_string_equal(out, "");
+
+	memcpy(out, "abc", 4);
+	db_escape(escape_handle(), out, 0, "anything");
+	assert_string_equal(out, "abc");
+}
 
 /* Cacti stores the literal "[None]" when no SNMPv3 protocol is selected, and an
  * empty string for an absent passphrase. Treating either as an error made two
@@ -670,14 +757,7 @@ static void test_snmpv3_privacy_alone_does_not_raise_the_level(void **state) {
 		SNMP_SEC_LEVEL_NOAUTH);
 	assert_int_equal(spine_snmpv3_security_level("SHA", "", "AES", "privpass"),
 		SNMP_SEC_LEVEL_NOAUTH);
-
-/* ---------------------------------------------------------------------------
- * spine_appendf (util.c)
- *
- * Replaces `p += snprintf(p, remaining, ...)`, which advances by the length
- * snprintf *would* have written, so the first truncation puts the cursor past
- * the end and the next `remaining` underflows to a huge size_t.
- * ------------------------------------------------------------------------- */
+}
 
 struct guarded_buf {
 	char body[32];
@@ -798,26 +878,31 @@ static void test_appendf_rejects_an_exhausted_buffer(void **state) {
 	assert_int_equal(buf[0], '\0');
 }
 
-/* Documents the defect: the same sequence with the old idiom leaves the cursor
-   outside the buffer, so the next remainder is negative. */
 static void test_old_idiom_overshoots_where_appendf_does_not(void **state) {
 	char buf[32];
 	char *p = buf;
 	ptrdiff_t old_offset;
 	char *q;
 	size_t remaining;
+	char longer[41];
 
 	(void) state;
 
-	p += snprintf(p, sizeof(buf), "%s", "0123456789012345678901234567890123456789");
+	/* built at run time: a literal here lets the compiler prove the truncation
+	   and warn about a case the test exists to demonstrate */
+	memset(longer, '7', sizeof(longer) - 1);
+	longer[sizeof(longer) - 1] = '\0';
+
+	p += snprintf(p, sizeof(buf), "%s", longer);
 	old_offset = p - buf;
 	assert_true(old_offset > (ptrdiff_t) sizeof(buf));
 	assert_true((ptrdiff_t) (sizeof(buf) - old_offset) < 0);
 
 	q = buf;
 	remaining = sizeof(buf);
-	assert_false(spine_appendf(&q, &remaining, "%s", "0123456789012345678901234567890123456789"));
+	assert_false(spine_appendf(&q, &remaining, "%s", longer));
 	assert_true(q - buf < (ptrdiff_t) sizeof(buf));
+}
 
 /* poller.c decides here whether a polled value is stored at all. A result that
  * validate_result() rejects is discarded, so a mistake in either predicate
@@ -901,6 +986,7 @@ static void test_is_multipart_output_balances_spaces_against_delimiters(void **s
 	assert_int_equal(is_multipart_output(balanced), TRUE);
 	assert_int_equal(is_multipart_output(unbalanced), FALSE);
 	assert_int_equal(is_multipart_output(prose), FALSE);
+}
 
 /* poll_host() built the same six queries twice, once for the main poller and
  * once for a remote one, differing only in how each query is scoped. A column
@@ -962,16 +1048,6 @@ static void test_poller_scopes_refuse_a_degenerate_buffer(void **state) {
 	poller_item_scope(NULL, sizeof scope, 0);
 	poller_owner_scope(NULL, sizeof scope, 0);
 }
-
-
-/* ---------------------------------------------------------------------------
- * poll_host_build_queries()
- *
- * poll_host() is 1,600+ lines and builds its SQL inline, so none of this was
- * reachable from a test. The construction now lives in its own function, and
- * these pin what it emits across every input it branches on, against the
- * fixture in tests/golden/poll_host_queries.golden.
- * ------------------------------------------------------------------------- */
 
 static void build_profiles(poll_host_queries_t *q, int poller_id, int ports, int dbonupdate, int profiles) {
 	set.poller_id        = poller_id;
@@ -1036,8 +1112,6 @@ static void test_build_queries_orders_by_port_only_for_multiple_ports(void **sta
 	assert_non_null(strstr(q.query1, "ORDER BY snmp_port"));
 }
 
-/* The defect the extraction exposed: the remote branch had its own copy of
-   this suffix and never picked up the version check. */
 static void test_build_queries_applies_dbonupdate_on_both_poller_types(void **state) {
 	poll_host_queries_t q;
 
@@ -1083,8 +1157,6 @@ static void test_build_queries_fills_every_buffer(void **state) {
 	assert_true(strlen(q.posuffix) > 0);
 }
 
-/* The golden fixture, executed rather than documented. Regenerate it with
-   SPINE_WRITE_GOLDEN=1 and read the diff before committing the result. */
 static void emit_one(FILE *f, const char *tag, poll_host_queries_t *q) {
 	fprintf(f, "### %s query1\n%s\n", tag, q->query1);
 	fprintf(f, "### %s query2\n%s\n", tag, q->query2);
@@ -1175,15 +1247,6 @@ static void test_build_queries_matches_the_golden_capture(void **state) {
 	unlink(actual);
 }
 
-
-/* ---------------------------------------------------------------------------
- * reindex_assert_failed (poller.c)
- *
- * The data query reindex assert, which decides whether Cacti re-runs a data
- * query. It was written out three times inside poll_host(), once per operator,
- * with about twenty-four identical lines of logging and queueing around each.
- * ------------------------------------------------------------------------- */
-
 static void test_assert_equal_compares_as_text(void **state) {
 	(void) state;
 
@@ -1220,8 +1283,6 @@ static void test_assert_equal_values_do_not_fail_an_ordering_assert(void **state
 	assert_false(reindex_assert_failed("<", "100", "100"));
 }
 
-/* The uptime case: a device with no uptime recorded yet must not look like it
-   rebooted, so a stored "0" never fails a '<' assert. */
 static void test_assert_zero_never_fails_a_less_than(void **state) {
 	(void) state;
 
@@ -1262,8 +1323,6 @@ static void test_assert_rejects_null_arguments(void **state) {
 	assert_false(reindex_assert_failed("=", "100", NULL));
 }
 
-/* Large uptimes overflow a 32-bit compare; sysUpTime is centiseconds and wraps
-   past INT_MAX in under a year. */
 static void test_assert_handles_values_beyond_32_bits(void **state) {
 	(void) state;
 
@@ -1271,10 +1330,6 @@ static void test_assert_handles_values_beyond_32_bits(void **state) {
 	assert_false(reindex_assert_failed("<", "4294967295", "4294967296"));
 }
 
-
-/* With more than one polling profile active, query5 and query10 additionally
-   filter on rrd_next_step so only items due this tick are polled. Both queries
-   are built either way; only the filter differs. */
 static void test_build_queries_gates_on_rrd_next_step_for_multiple_profiles(void **state) {
 	poll_host_queries_t q;
 
@@ -1310,7 +1365,6 @@ static void test_build_queries_multiple_profiles_scope_a_remote_poller(void **st
 }
 
 int main(void) {
-
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
 		cmocka_unit_test(test_strncopy_copies_a_short_source_whole),
@@ -1345,8 +1399,6 @@ int main(void) {
 		cmocka_unit_test(test_config_defaults_populates_the_set),
 		cmocka_unit_test(test_read_spine_config_rejects_a_missing_file),
 		cmocka_unit_test(test_read_spine_config_reads_settings),
-		cmocka_unit_test(test_get_date_format_returns_cached_storage),
-		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
@@ -1355,6 +1407,14 @@ int main(void) {
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
+		cmocka_unit_test(test_get_date_format_returns_cached_storage),
+		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
+		cmocka_unit_test(test_db_escape_escapes_sql_metacharacters),
+		cmocka_unit_test(test_db_escape_ignores_a_null_input),
+		cmocka_unit_test(test_db_escape_keeps_a_full_results_buffer),
+		cmocka_unit_test(test_db_escape_survives_the_old_staging_boundary),
+		cmocka_unit_test(test_db_escape_truncates_into_a_small_destination),
+		cmocka_unit_test(test_db_escape_handles_a_degenerate_destination),
 		cmocka_unit_test(test_snmpv3_value_is_set_treats_none_as_unset),
 		cmocka_unit_test(test_snmpv3_level_is_noauth_without_a_protocol),
 		cmocka_unit_test(test_snmpv3_level_is_authnopriv_without_privacy),
