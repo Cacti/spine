@@ -335,6 +335,47 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	q->posuffix_len = strlen(q->posuffix);
 }
 
+/*! \fn static void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping, char **error_string, int **buf_size, int **buf_errors, pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread)
+ *  \brief release everything poll_host() owns, on every exit path
+ *
+ *  poll_host() leaves through three places and each used to spell this out
+ *  again. The copies were not in the same order and did not contain the same
+ *  steps: the device-row-missing path never called mysql_thread_end(), which
+ *  leaks the client library's thread-local state once per affected device per
+ *  cycle on a thread-per-device poller. See #594.
+ */
+static void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread) {
+	if (local_cnn != NULL) {
+		db_release_connection(LOCAL, local_cnn->id);
+	} else {
+		SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
+	}
+
+	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+		if (remote_cnn != NULL) {
+			db_release_connection(REMOTE, remote_cnn->id);
+		} else {
+			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
+		}
+	}
+}
+
+static void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
+	char **error_string, int **buf_size, int **buf_errors,
+	pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread) {
+
+	poll_host_release_connections(local_cnn, remote_cnn, host_id, host_thread);
+
+	SPINE_FREE(*host);
+	SPINE_FREE(*reindex);
+	SPINE_FREE(*ping);
+	SPINE_FREE(*error_string);
+	SPINE_FREE(*buf_size);
+	SPINE_FREE(*buf_errors);
+
+	mysql_thread_end();
+}
+
 /*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
@@ -499,26 +540,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			if (num_rows != 1) {
 				db_free_result(result);
 
-				if (local_cnn != NULL) {
-					db_release_connection(LOCAL, local_cnn->id);
-				} else {
-					SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
-				}
-
-				if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-					if (remote_cnn != NULL) {
-						db_release_connection(REMOTE, remote_cnn->id);
-					} else {
-						SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
-					}
-				}
-
-				SPINE_FREE(host);
-				SPINE_FREE(reindex);
-				SPINE_FREE(ping);
-				SPINE_FREE(error_string);
-				SPINE_FREE(buf_size);
-				SPINE_FREE(buf_errors);
+				poll_host_release(&host, &reindex, &ping, &error_string, &buf_size, &buf_errors,
+					local_cnn, remote_cnn, host_id, host_thread);
 
 				return;
 			}
@@ -786,28 +809,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	}
 
 	if (set.ping_only) {
-		SPINE_FREE(host);
-		SPINE_FREE(reindex);
-		SPINE_FREE(ping);
-		SPINE_FREE(error_string);
-		SPINE_FREE(buf_size);
-		SPINE_FREE(buf_errors);
-
-		if (local_cnn != NULL) {
-			db_release_connection(LOCAL, local_cnn->id);
-		} else {
-			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
-		}
-
-		if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-			if (remote_cnn != NULL) {
-				db_release_connection(REMOTE, remote_cnn->id);
-			} else {
-				SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
-			}
-		}
-
-		mysql_thread_end();
+		poll_host_release(&host, &reindex, &ping, &error_string, &buf_size, &buf_errors,
+			local_cnn, remote_cnn, host_id, host_thread);
 
 		return;
 	}
@@ -1945,19 +1948,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	thread_mutex_unlock(LOCK_THDET);
 
-	if (local_cnn != NULL) {
-		db_release_connection(LOCAL, local_cnn->id);
-	} else {
-		SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", host_id, host_thread));
-	}
-
-	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-		if (remote_cnn != NULL) {
-			db_release_connection(REMOTE, remote_cnn->id);
-		} else {
-			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", host_id, host_thread));
-		}
-	}
+	poll_host_release_connections(local_cnn, remote_cnn, host_id, host_thread);
 
 	mysql_thread_end();
 
