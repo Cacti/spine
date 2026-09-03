@@ -30,6 +30,7 @@ The Cacti Group | spine
 -issue#565: Bound the newline appended by spine_log() so a full log line cannot write past flogmessage
 -issue#566: Free the result set on the NULL-row branch of the util.c settings helpers
 -issue#567: Build the log timestamp format once at config load instead of rebuilding it on every log line
+-issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
 -issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
 -issue: Restore the twelve headers and spine.conf.dist missing from the dist tarball so a release tarball can be compiled from

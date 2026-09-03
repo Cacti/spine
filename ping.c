@@ -949,7 +949,7 @@ int get_address_type(host_t *host) {
  *
  */
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
-	struct addrinfo hints, *hostinfo;
+	struct addrinfo hints, *hostinfo = NULL;
 	int rv, retry_count;
 
 	// Initialize the hints structure
@@ -970,43 +970,28 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 				case EAI_AGAIN:
 					if (retry_count < 3) {
 						SPINE_LOG(("WARNING: EAGAIN received resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
-						if (hostinfo != NULL) {
-							freeaddrinfo(hostinfo);
-						}
 
 						retry_count++;
 						usleep(50000);
 						continue;
 					} else {
 						SPINE_LOG(("WARNING: Error resolving after 3 retryies for host %s (%s)", hostname, gai_strerror(rv)));
-						if (hostinfo != NULL) {
-							freeaddrinfo(hostinfo);
-						}
 						return FALSE;
 					}
 
 					break;
 				case EAI_FAIL:
 					SPINE_LOG(("WARNING: DNS Server reported permanent error for host %s (%s)", hostname, gai_strerror(rv)));
-					if (hostinfo != NULL) {
-						freeaddrinfo(hostinfo);
-					}
 					return FALSE;
 
 					break;
 				case EAI_MEMORY:
 					SPINE_LOG(("WARNING: Out of memory trying to resolve host %s (%s)", hostname, gai_strerror(rv)));
-					if (hostinfo != NULL) {
-						freeaddrinfo(hostinfo);
-					}
 					return FALSE;
 
 					break;
 				default:
 					SPINE_LOG(("WARNING: Unknown error while resolving host %s (%s)", hostname, gai_strerror(rv)));
-					if (hostinfo != NULL) {
-						freeaddrinfo(hostinfo);
-					}
 					return FALSE;
 
 					break;
