@@ -520,6 +520,7 @@ void read_config_options(void) {
 	char       web_root[BUFSIZE];
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
+	size_t     remaining;
 	char       *res;
 	char       spine_priv[BUFSIZE];
 	char       spine_auth[BUFSIZE];
@@ -829,11 +830,13 @@ void read_config_options(void) {
 	/* log the requirement for the script server */
 	if (!strlen(set.host_id_list)) {
 		sqlp = sqlbuf;
-		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += snprintf(sqlp, BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		remaining = sizeof(sqlbuf);
+		spine_appendf(&sqlp, &remaining, "SELECT SQL_NO_CACHE action FROM poller_item");
+		spine_appendf(&sqlp, &remaining, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
 		sqlp += append_hostrange(sqlp, "host_id");
-		sqlp += snprintf(sqlp, BUFSIZE, " AND poller_id=%i", set.poller_id);
-		sqlp += snprintf(sqlp, BUFSIZE, " LIMIT 1");
+		remaining = sizeof(sqlbuf) - (size_t) (sqlp - sqlbuf);
+		spine_appendf(&sqlp, &remaining, " AND poller_id=%i", set.poller_id);
+		spine_appendf(&sqlp, &remaining, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -847,11 +850,12 @@ void read_config_options(void) {
 			num_rows));
 	} else {
 		sqlp = sqlbuf;
-		sqlp += snprintf(sqlp, BUFSIZE, "SELECT SQL_NO_CACHE action FROM poller_item");
-		sqlp += snprintf(sqlp, BUFSIZE, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-		sqlp += snprintf(sqlp, BUFSIZE, " AND host_id IN(%s)", set.host_id_list);
-		sqlp += snprintf(sqlp, BUFSIZE, " AND poller_id=%i", set.poller_id);
-		sqlp += snprintf(sqlp, BUFSIZE, " LIMIT 1");
+		remaining = sizeof(sqlbuf);
+		spine_appendf(&sqlp, &remaining, "SELECT SQL_NO_CACHE action FROM poller_item");
+		spine_appendf(&sqlp, &remaining, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
+		spine_appendf(&sqlp, &remaining, " AND host_id IN(%s)", set.host_id_list);
+		spine_appendf(&sqlp, &remaining, " AND poller_id=%i", set.poller_id);
+		spine_appendf(&sqlp, &remaining, " LIMIT 1");
 
 		result = db_query(&mysql, LOCAL, sqlbuf);
 		num_rows = mysql_num_rows(result);
@@ -943,7 +947,7 @@ void poller_push_data_to_main(void) {
 	int        rows;
 	char       sqlbuf[HUGE_BUFSIZE];
 	char       *sqlp = sqlbuf;
-	int        remaining;
+	size_t     remaining;
 	char       query[MEGA_BUFSIZE];
 	char       prefix[BUFSIZE];
 	char       suffix[BUFSIZE];
@@ -1042,80 +1046,80 @@ void poller_push_data_to_main(void) {
 					if (rows == 0) {
 						sqlp  = sqlbuf;
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-						sqlp += snprintf(sqlp, remaining, "%s", prefix);
+						spine_appendf(&sqlp, &remaining, "%s", prefix);
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-						sqlp += snprintf(sqlp, remaining, " (");
+						spine_appendf(&sqlp, &remaining, " (");
 					} else {
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-						sqlp += snprintf(sqlp, remaining, ", (");
+						spine_appendf(&sqlp, &remaining, ", (");
 					}
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[0]); // id mediumint
+					spine_appendf(&sqlp, &remaining, "%s, ", row[0]); // id mediumint
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[1]); // snmp_sysDescr varchar(300)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // snmp_sysObjectID varchar(128)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[3]); // snmp_sysUpTimeInstance bigint
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[4]); // snmp_sysContact varchar(300)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[5]); // snmp_sysName varchar(300)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[6]); // snmp_sysLocation varchar(300)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[7]); // status tinyint
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[8]); // status_event_count mediumint
+					spine_appendf(&sqlp, &remaining, "%s, ", row[8]); // status_event_count mediumint
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[9]);  // status_fail_date timestamp
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[10]); // status_rec_date timestamp
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[11]); // status_last_error varchar(255)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[12]); // min_time decimal(10,5)
+					spine_appendf(&sqlp, &remaining, "%s, ", row[12]); // min_time decimal(10,5)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[13]); // max_time decimal(10,5)
+					spine_appendf(&sqlp, &remaining, "%s, ", row[13]); // max_time decimal(10,5)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[14]); // cur_time decimal(10,5)
+					spine_appendf(&sqlp, &remaining, "%s, ", row[14]); // cur_time decimal(10,5)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[15]); // avg_time decimal(10,5)
+					spine_appendf(&sqlp, &remaining, "%s, ", row[15]); // avg_time decimal(10,5)
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[16]); // polling_time double
+					spine_appendf(&sqlp, &remaining, "%s, ", row[16]); // polling_time double
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[17]); // total_polls int
+					spine_appendf(&sqlp, &remaining, "%s, ", row[17]); // total_polls int
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[18]); // failed_polls int
+					spine_appendf(&sqlp, &remaining, "%s, ", row[18]); // failed_polls int
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[19]); // availability decimal(8,5)
+					spine_appendf(&sqlp, &remaining, "%s, ", row[19]); // availability decimal(8,5)
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[20]); // last_updated timestamp
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s'", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s'", tmpstr);
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, ")");
+					spine_appendf(&sqlp, &remaining, ")");
 
 					rows++;
 				} else {
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s", suffix);
+					spine_appendf(&sqlp, &remaining, "%s", suffix);
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
@@ -1125,7 +1129,7 @@ void poller_push_data_to_main(void) {
 
 		if (rows > 0) {
 			remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-			sqlp += snprintf(sqlp, remaining, "%s", suffix);
+			spine_appendf(&sqlp, &remaining, "%s", suffix);
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 		}
 	}
@@ -1166,35 +1170,35 @@ void poller_push_data_to_main(void) {
 					if (rows == 0) {
 						sqlp = sqlbuf;
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-						sqlp += snprintf(sqlp, remaining, "%s", prefix);
+						spine_appendf(&sqlp, &remaining, "%s", prefix);
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-						sqlp += snprintf(sqlp, remaining, " (");
+						spine_appendf(&sqlp, &remaining, " (");
 					} else {
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-						sqlp += snprintf(sqlp, remaining, ", (");
+						spine_appendf(&sqlp, &remaining, ", (");
 					}
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[0]); // local_data_id
+					spine_appendf(&sqlp, &remaining, "%s, ", row[0]); // local_data_id
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[1]); // host_id
+					spine_appendf(&sqlp, &remaining, "%s, ", row[1]); // host_id
 
 					db_escape(&mysql, tmpstr, sizeof(tmpstr), row[2]); // rrd_name
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "'%s', ", tmpstr);
+					spine_appendf(&sqlp, &remaining, "'%s', ", tmpstr);
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s, ", row[3]); // rrd_step
+					spine_appendf(&sqlp, &remaining, "%s, ", row[3]); // rrd_step
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s",   row[4]); // rrd_next_step
+					spine_appendf(&sqlp, &remaining, "%s",   row[4]); // rrd_next_step
 
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, ")");
+					spine_appendf(&sqlp, &remaining, ")");
 
 					rows++;
 				} else {
 					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					sqlp += snprintf(sqlp, remaining, "%s", suffix);
+					spine_appendf(&sqlp, &remaining, "%s", suffix);
 					db_insert(&mysqlr, REMOTE, sqlbuf);
 
 					rows = 0;
@@ -1204,7 +1208,7 @@ void poller_push_data_to_main(void) {
 
 		if (rows > 0) {
 			remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-			sqlp += snprintf(sqlp, remaining, "%s", suffix);
+			spine_appendf(&sqlp, &remaining, "%s", suffix);
 			db_insert(&mysqlr, REMOTE, sqlbuf);
 
 			rows = 0;
@@ -2305,4 +2309,45 @@ const char *regex_replace(const char *exp, const char *value) {
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
+}
+
+/*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
+ *  \brief append to a bounded buffer without walking off the end
+ *
+ *  See util.h for why the `p += snprintf(...)` idiom this replaces is unsafe.
+ *
+ *  \return TRUE when the whole string was appended, FALSE otherwise
+ */
+int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...) {
+	va_list args;
+	int written;
+
+	if (cursor == NULL || *cursor == NULL || remaining == NULL || *remaining == 0) {
+		return FALSE;
+	}
+
+	va_start(args, fmt);
+	written = vsnprintf(*cursor, *remaining, fmt, args);
+	va_end(args);
+
+	if (written < 0) {
+		/* the buffer is untouched on an encoding error, but vsnprintf may have
+		   written a partial result, so re-terminate where the cursor stands */
+		**cursor = '\0';
+		return FALSE;
+	}
+
+	if ((size_t) written >= *remaining) {
+		/* Truncated. Leave the cursor on the terminator vsnprintf wrote, so
+		   the buffer stays a valid string and every later append fails here
+		   rather than running past the end. */
+		*cursor += *remaining - 1;
+		*remaining = 1;
+		return FALSE;
+	}
+
+	*cursor    += written;
+	*remaining -= (size_t) written;
+
+	return TRUE;
 }
