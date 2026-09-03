@@ -116,7 +116,6 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
-		result_string = strdup("U");
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
 
 		php_close(php_process);
@@ -126,6 +125,10 @@ char *php_cmd(const char *php_command, int php_process) {
 		if (retries < 3) {
 			goto retry;
 		}
+
+		/* allocated only once the retry budget is spent: a successful retry
+		   reassigns result_string below and would orphan an earlier copy */
+		result_string = strdup("U");
 	} else {
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process, command);
@@ -219,6 +222,16 @@ char *php_readpipe(int php_process, char *command) {
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
 	retry:
+
+	/* FD_SET on a descriptor at or past FD_SETSIZE writes outside fds, which is
+	   a stack object here. ping_icmp() guards its socket the same way. */
+	if (php_processes[php_process].php_read_fd >= FD_SETSIZE) {
+		SPINE_LOG(("ERROR: SS[%i] Script server descriptor %d exceeds FD_SETSIZE %d", php_process, php_processes[php_process].php_read_fd, FD_SETSIZE));
+
+		SET_UNDEFINED(result_string);
+
+		return result_string;
+	}
 
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
