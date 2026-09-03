@@ -103,7 +103,7 @@ if HAVE_LD_WRAP
 tests_unit_test_poll_host_release_SOURCES = tests/unit/test_poll_host_release.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_poll_host_release_LDADD   = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_poll_host_release_LDFLAGS = -Wl,--wrap=db_release_connection -Wl,--wrap=mysql_thread_end
+tests_unit_test_poll_host_release_LDFLAGS = -Wl,--wrap=db_release_connection -Wl,--wrap=mysql_thread_end -Wl,--wrap=usleep
 endif
 
 if HAVE_LD_WRAP

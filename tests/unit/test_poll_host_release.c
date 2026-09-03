@@ -25,7 +25,7 @@
 #include "nft_popen.h"
 
 #include <unistd.h>
-#include <sys/time.h>
+#include <sys/wait.h>
 
 /* what the wrappers saw */
 static int  released[8][2];
@@ -47,11 +47,23 @@ int __wrap_mysql_thread_end(void) {
 	return 0;
 }
 
+/* spine_reap_child_bounded() is meant to poll before it ever sleeps. Counting
+   the sleeps states that directly; timing the call only states it on an idle
+   machine, and the CI runners are not idle. */
+static int usleep_count;
+
+int __real_usleep(useconds_t usec);
+int __wrap_usleep(useconds_t usec) {
+	usleep_count++;
+	return __real_usleep(usec);
+}
+
 static int reset(void **state) {
 	(void) state;
 	memset(released, 0, sizeof(released));
 	release_count = 0;
 	thread_end_count = 0;
+	usleep_count = 0;
 	set.poller_id = 1;
 	set.mode = 0;
 	return 0;
@@ -205,13 +217,18 @@ static void test_release_rejects_null_arguments(void **state) {
 
 
 /* A script that exits a moment after closing stdout used to cost the full
-   50ms, because the first WNOHANG missed and the loop slept before retrying.
-   nft_pclose() holds an available_scripts token throughout, so that is poller
-   capacity, not just one thread. */
-static void test_reap_does_not_charge_the_full_delay_to_a_prompt_child(void **state) {
-	struct timeval a, b;
-	long elapsed_us;
-	int pstat = 0;
+   50ms, because the loop slept before its first WNOHANG. nft_pclose() holds an
+   available_scripts token throughout, so that was poller capacity, not just one
+   thread.
+
+   waitid(WNOWAIT) blocks until the child has exited but leaves it reapable, so
+   by the time the call is made the very first WNOHANG must succeed. A correct
+   implementation sleeps zero times; the old one slept once before looking. The
+   assertion is on that count rather than on elapsed time, so a loaded runner or
+   a sanitizer build cannot turn it red. */
+static void test_reap_polls_before_it_sleeps(void **state) {
+	siginfo_t info;
+	int pstat = 1;
 	pid_t pid;
 
 	(void) state;
@@ -220,20 +237,17 @@ static void test_reap_does_not_charge_the_full_delay_to_a_prompt_child(void **st
 	assert_true(pid >= 0);
 
 	if (pid == 0) {
-		usleep(3000);   /* exits well before the old 50ms first sleep */
 		_exit(0);
 	}
 
-	gettimeofday(&a, NULL);
+	memset(&info, 0, sizeof(info));
+	assert_int_equal(waitid(P_PID, pid, &info, WEXITED | WNOWAIT), 0);
+
 	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 100), 0);
-	gettimeofday(&b, NULL);
-
-	elapsed_us = (b.tv_sec - a.tv_sec) * 1000000L + (b.tv_usec - a.tv_usec);
-
-	/* generous: the old path could not beat 50ms, the spin lands near 3ms */
-	assert_true(elapsed_us < 40000);
+	assert_int_equal(usleep_count, 0);
+	assert_true(WIFEXITED(pstat));
+	assert_int_equal(WEXITSTATUS(pstat), 0);
 }
-
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
@@ -244,7 +258,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_release_nulls_every_pointer, reset),
 		cmocka_unit_test_setup(test_release_is_safe_on_already_null_pointers, reset),
 		cmocka_unit_test_setup(test_reap_rejects_a_null_status, reset),
-		cmocka_unit_test_setup(test_reap_does_not_charge_the_full_delay_to_a_prompt_child, reset),
+		cmocka_unit_test_setup(test_reap_polls_before_it_sleeps, reset),
 		cmocka_unit_test_setup(test_release_rejects_null_arguments, reset),
 	};
 
