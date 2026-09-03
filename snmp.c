@@ -316,6 +316,22 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
 		}
 
+		/* Privacy requires authentication in USM. A device configured with a
+		 * privacy protocol and passphrase but no auth passphrase cannot have
+		 * what it asked for, and quietly opening it as noAuthNoPriv would
+		 * leave the operator believing the traffic is encrypted. Refuse and
+		 * say why: the old code also refused, but by failing key derivation
+		 * with "passphrase below the length requirements of the USM". */
+		if (security_level != SNMP_SEC_LEVEL_AUTHPRIV &&
+			spine_snmpv3_value_is_set(snmp_priv_protocol) &&
+			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] Error privacy requires authentication; set an auth protocol and password, or clear the privacy settings.", host_id));
+			free(session.peername);
+			free(session.localname);
+			free(session.securityAuthProto);
+			return 0;
+		}
+
 		session.securityLevel = security_level;
 
 		/* Privacy follows the computed level. Selecting it from the privacy

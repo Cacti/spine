@@ -69,7 +69,8 @@ check_PROGRAMS += \
 	tests/unit/test_log_newline_bound \
 	tests/unit/test_util_paths \
 	tests/unit/test_poll_host_release \
-	tests/unit/test_poller_output
+	tests/unit/test_poller_output \
+	tests/unit/test_snmpv3_session
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
@@ -104,6 +105,12 @@ tests_unit_test_poller_output_SOURCES = tests/unit/test_poller_output.c tests/fu
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_poller_output_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poller_output_LDFLAGS = -Wl,--wrap=db_escape
+
+# snmp_sess_open() builds a session without contacting anything, so the
+# security level spine ends up with is assertable directly.
+tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
 tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
