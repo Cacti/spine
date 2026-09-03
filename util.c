@@ -938,6 +938,30 @@ void read_config_options(void) {
 	set_date_format();
 }
 
+/* An upper bound on one row of either batch below. Every column is a number or
+   a db_escape() result bounded by sizeof(tmpstr), plus separators. The row
+   count alone is not a size bound: 500 rows of wide escaped SNMP strings
+   overrun sqlbuf, and spine_appendf() then reports a truncation nothing was
+   checking, so a statement cut inside a quoted value reached the server. */
+#define PUSH_ROW_MAX (24 * DBL_BUFSIZE)
+
+/*! \fn static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix)
+ *  \brief terminate the accumulated batch and send it to the main server
+ *
+ *  Refuses to send a statement that did not fit rather than shipping a
+ *  truncated one, and says how much was lost.
+ */
+static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix) {
+	size_t remaining = HUGE_BUFSIZE - (*sqlp - sqlbuf);
+
+	if (!spine_appendf(sqlp, &remaining, "%s", suffix)) {
+		SPINE_LOG(("ERROR: The remote push statement overflowed its buffer; this batch was dropped"));
+		return;
+	}
+
+	db_insert(mysqlr, REMOTE, sqlbuf);
+}
+
 void poller_push_data_to_main(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
@@ -1025,7 +1049,19 @@ void poller_push_data_to_main(void) {
 
 		if (num_rows > 0) {
 			while ((row = mysql_fetch_row(result))) {
-				if (rows < 500) {
+				remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+
+				/* Flush before the row, never in place of it. The old shape reset
+				   the batch when it filled and dropped the row that triggered the
+				   reset, so every 501th device silently missed the push. The byte
+				   test is the other half: the count is not a size bound once the
+				   escaped SNMP strings are wide. */
+				if (rows > 0 && (rows >= 500 || remaining < PUSH_ROW_MAX)) {
+					push_flush_batch(&mysqlr, sqlbuf, &sqlp, suffix);
+					rows = 0;
+				}
+
+				{
 					if (rows == 0) {
 						sqlp  = sqlbuf;
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
@@ -1100,20 +1136,12 @@ void poller_push_data_to_main(void) {
 					spine_appendf(&sqlp, &remaining, ")");
 
 					rows++;
-				} else {
-					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					spine_appendf(&sqlp, &remaining, "%s", suffix);
-					db_insert(&mysqlr, REMOTE, sqlbuf);
-
-					rows = 0;
 				}
 			}
 		}
 
 		if (rows > 0) {
-			remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-			spine_appendf(&sqlp, &remaining, "%s", suffix);
-			db_insert(&mysqlr, REMOTE, sqlbuf);
+			push_flush_batch(&mysqlr, sqlbuf, &sqlp, suffix);
 		}
 	}
 
@@ -1151,7 +1179,19 @@ void poller_push_data_to_main(void) {
 
 		if (num_rows > 0) {
 			while ((row = mysql_fetch_row(result))) {
-				if (rows < 10000) {
+				remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
+
+				/* Flush before the row, never in place of it. The old shape reset
+				   the batch when it filled and dropped the row that triggered the
+				   reset, so every 10001th device silently missed the push. The byte
+				   test is the other half: the count is not a size bound once the
+				   escaped SNMP strings are wide. */
+				if (rows > 0 && (rows >= 10000 || remaining < PUSH_ROW_MAX)) {
+					push_flush_batch(&mysqlr, sqlbuf, &sqlp, suffix);
+					rows = 0;
+				}
+
+				{
 					if (rows == 0) {
 						sqlp = sqlbuf;
 						remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
@@ -1181,20 +1221,12 @@ void poller_push_data_to_main(void) {
 					spine_appendf(&sqlp, &remaining, ")");
 
 					rows++;
-				} else {
-					remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-					spine_appendf(&sqlp, &remaining, "%s", suffix);
-					db_insert(&mysqlr, REMOTE, sqlbuf);
-
-					rows = 0;
 				}
 			}
 		}
 
 		if (rows > 0) {
-			remaining = HUGE_BUFSIZE - (sqlp - sqlbuf);
-			spine_appendf(&sqlp, &remaining, "%s", suffix);
-			db_insert(&mysqlr, REMOTE, sqlbuf);
+			push_flush_batch(&mysqlr, sqlbuf, &sqlp, suffix);
 
 			rows = 0;
 		}
