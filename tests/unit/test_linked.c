@@ -2123,6 +2123,35 @@ static void test_build_queries_rejects_null_arguments(void **state) {
 	assert_int_equal(q.posuffix[0], '\0');
 }
 
+
+/* hex2dec() accepts '-', ':' and space as separators, matching what
+   is_hexadecimal() lets through. The colon form cannot arrive via
+   poller_store_result(), because is_multipart_output() claims anything with a
+   colon and no space first, so it is only reachable by calling directly. That
+   is exactly why it is worth a test: nothing else exercises it. */
+static void test_hex2dec_accepts_every_separator_is_hexadecimal_allows(void **state) {
+	char dashes[] = "de-ad-be-ef";
+	char colons[] = "de:ad:be:ef";
+	char spaces[] = "de ad be ef";
+	char mixed[]  = "DE-AD BE:EF";
+
+	(void) state;
+
+	assert_int_equal(hex2dec(dashes), 3735928559ULL);
+	assert_int_equal(hex2dec(colons), 3735928559ULL);
+	assert_int_equal(hex2dec(spaces), 3735928559ULL);
+	assert_int_equal(hex2dec(mixed),  3735928559ULL);
+}
+
+/* A separator it does not know still returns 0 rather than a partial value,
+   which is what keeps a malformed octet string out of the database. */
+static void test_hex2dec_rejects_an_unknown_separator(void **state) {
+	char slashes[] = "de/ad/be/ef";
+
+	(void) state;
+	assert_int_equal(hex2dec(slashes), 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -2144,6 +2173,8 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_hex2dec),
+		cmocka_unit_test(test_hex2dec_accepts_every_separator_is_hexadecimal_allows),
+		cmocka_unit_test(test_hex2dec_rejects_an_unknown_separator),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),

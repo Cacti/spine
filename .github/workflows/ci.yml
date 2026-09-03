@@ -40,6 +40,16 @@ jobs:
           set -euo pipefail
           make check
 
+      # test_ping_icmp needs a raw ICMP socket, which the runner user cannot
+      # open, so under `make check` above it skips and reports nothing. Running
+      # it with privilege is the only way those cases actually execute, and
+      # ping_icmp() is a SUID-root path, so a silent skip is the wrong default.
+      - name: Run the privileged ping tests
+        run: |
+          set -euo pipefail
+          sudo ./tests/unit/test_ping_icmp
+          echo "raw ICMP cases executed rather than skipped"
+
   # Coverage is reported, not gated.  The number is only meaningful once
   # something measures it; the threshold conversation comes after that.
   coverage:
