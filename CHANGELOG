@@ -30,6 +30,7 @@ The Cacti Group | spine
 -issue#565: Bound the newline appended by spine_log() so a full log line cannot write past flogmessage
 -issue#566: Free the result set on the NULL-row branch of the util.c settings helpers
 -issue#567: Build the log timestamp format once at config load instead of rebuilding it on every log line
+-issue#600: Wipe the local SNMPv3 passphrase copies in snmp_host_init() before freeing them
 -issue#605: Refuse a script server descriptor at or past FD_SETSIZE instead of writing outside fd_set
 -issue#606: Allocate the undefined-value string in php_cmd() only once the retry budget is spent
 -issue#607: Ignore SIGPIPE rather than treating it as fatal, so a second dead child cannot stop the poller
