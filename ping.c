@@ -374,8 +374,9 @@ spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply, s
  *
  */
 int ping_icmp(host_t *host, ping_t *ping) {
-	int    icmp_socket;
+	int    icmp_socket = -1;
 	int    icmp_dgram;
+	int    rc = HOST_DOWN;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -395,7 +396,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	static   unsigned int seq = 0;
 	struct   icmp  *icmp;
 	struct   icmp  *pkt;
-	unsigned char  *packet;
+	unsigned char  *packet = NULL;
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
@@ -443,7 +444,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				}
 				#endif
 
-				return HOST_DOWN;
+				rc = HOST_DOWN;
+				goto cleanup;
 			}
 		} else {
 			break;
@@ -505,9 +507,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					free(packet);
-					close(icmp_socket);
-					return HOST_DOWN;
+					rc = HOST_DOWN;
+					goto cleanup;
 				}
 
 				if (is_debug_device(host->id)) {
@@ -537,8 +538,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
 					snprintf(ping->ping_status, 50, "down");
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
-					close(icmp_socket);
-					return HOST_DOWN;
+					rc = HOST_DOWN;
+					goto cleanup;
 				}
 				FD_SET(icmp_socket,&socket_fds);
 				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
@@ -612,26 +613,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 								}
 								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
 								snprintf(ping->ping_status, 50, "%.5f", total_time);
-								free(packet);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
-									thread_mutex_lock(LOCK_SETEUID);
-									if (seteuid(0) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-									}
-								}
-								#endif
-								close(icmp_socket);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
-									if (seteuid(getuid()) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-									}
-									thread_mutex_unlock(LOCK_SETEUID);
-								}
-								#endif
-
-								return HOST_UP;
+								rc = HOST_UP;
+								goto cleanup;
 							} else {
 								/* received a response other than an echo reply */
 								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
@@ -666,51 +649,34 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			free(packet);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				thread_mutex_lock(LOCK_SETEUID);
-				if (seteuid(0) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-				}
-			}
-			#endif
-			close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				if (seteuid(getuid()) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-				}
-				thread_mutex_unlock(LOCK_SETEUID);
-			}
-			#endif
-			return HOST_DOWN;
+			rc = HOST_DOWN;
+			goto cleanup;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
-		free(packet);
-		if (icmp_socket != -1) {
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				thread_mutex_lock(LOCK_SETEUID);
-				if (seteuid(0) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-				}
-			}
-			#endif
-			close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				if (seteuid(getuid()) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-				}
-				thread_mutex_unlock(LOCK_SETEUID);
-			}
-			#endif
-		}
-		return HOST_DOWN;
+		rc = HOST_DOWN;
+		goto cleanup;
 	}
+
+cleanup:
+	/* One owner for both resources. Five exits used to spell this out
+	 * separately and they had already drifted: the FD_SETSIZE guard closed the
+	 * socket and returned without freeing the packet, once per affected device
+	 * per cycle. See #593.
+	 *
+	 * close() needs no privileges. Three of those exits re-entered root and
+	 * took LOCK_SETEUID to call it, which widened the elevated window and
+	 * serialised every poller thread on a global mutex for nothing. The raw
+	 * socket needs root to open, which is done above, and the elevation is
+	 * dropped there. */
+	SPINE_FREE(packet);
+
+	if (icmp_socket != -1) {
+		close(icmp_socket);
+	}
+
+	return rc;
 }
 
 #ifdef SPINE_HAVE_ICMPV6
