@@ -19,6 +19,12 @@
 #include "spine.h"
 #include "util.h"
 #include "ping.h"
+#include "nft_popen.h"
+
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -457,7 +463,143 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+/* ---------------------------------------------------------------------------
+ * Child process hardening (nft_popen.c)
+ *
+ * PR #542 removed the close-on-exec and bounded-reap code PR #557 had just
+ * added, and nothing failed, because the only guard was a shell script that
+ * grepped the source and was deleted in the same commit. These exercise the
+ * behaviour against the shipped object instead.
+ * ------------------------------------------------------------------------- */
+
+static void test_cloexec_is_set_on_both_pipe_ends(void **state) {
+	int pdes[2];
+	int i;
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+
+	for (i = 0; i < 2; i++) {
+		int flags = fcntl(pdes[i], F_GETFD);
+
+		assert_true(flags >= 0);
+		assert_true((flags & FD_CLOEXEC) != 0);
+	}
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_cloexec_pipe_is_a_working_pipe(void **state) {
+	int pdes[2];
+	char buf[8];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	assert_int_equal(write(pdes[1], "ok", 2), 2);
+	assert_int_equal(read(pdes[0], buf, sizeof(buf)), 2);
+	assert_memory_equal(buf, "ok", 2);
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+/* The descriptor must not survive an exec. A child that inherits the write end
+   keeps the pipe open, so the polling thread never sees EOF and blocks to
+   script_timeout for a data source that already answered. */
+static void test_pipe_is_not_inherited_across_exec(void **state) {
+	int pdes[2];
+	int status;
+	pid_t pid;
+	char fdarg[32];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	snprintf(fdarg, sizeof(fdarg), "/proc/self/fd/%d", pdes[1]);
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		/* exits 0 when the descriptor survived exec, 1 when it did not */
+		execl("/bin/sh", "sh", "-c", "test -e \"$0\"", fdarg, (char *) NULL);
+		_exit(127);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 1);
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_reap_returns_still_running_rather_than_blocking(void **state) {
+	int pstat = 0;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	/* the shipped code blocked here forever; two attempts must come back */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 1);
+
+	assert_int_equal(kill(pid, SIGKILL), 0);
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+}
+
+static void test_reap_collects_an_exited_child(void **state) {
+	int pstat = 0;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(3);
+	}
+
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 20), 0);
+	assert_true(WIFEXITED(pstat));
+	assert_int_equal(WEXITSTATUS(pstat), 3);
+}
+
+static void test_reap_reports_an_already_reaped_child(void **state) {
+	int pstat = 99;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(0);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+
+	/* ECHILD: someone else took the status, which is success with none */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 0);
+	assert_int_equal(pstat, 0);
+}
+
 int main(void) {
+
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
 		cmocka_unit_test(test_strncopy_copies_a_short_source_whole),
@@ -496,6 +638,12 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
+		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
+		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
+		cmocka_unit_test(test_reap_collects_an_exited_child),
+		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

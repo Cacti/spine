@@ -87,6 +87,8 @@
 #include "common.h"
 #include "spine.h"
 #include <spawn.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
@@ -100,6 +102,92 @@ static struct pid
 static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void	close_cleanup(void *);
+
+/* nft_pclose() must not block a poller thread indefinitely. A script that
+   writes its value and then lingers, or that ignores SIGPIPE, would otherwise
+   pin the thread across polling cycles while holding its available_scripts
+   token. Poll with WNOHANG, then escalate to SIGKILL. */
+#define NFT_PCLOSE_REAP_USEC 50000
+#define NFT_PCLOSE_TERM_ATTEMPTS 100
+#define NFT_PCLOSE_KILL_ATTEMPTS 20
+
+int spine_set_cloexec(int fd) {
+	int flags;
+
+	flags = fcntl(fd, F_GETFD);
+	if (flags < 0) {
+		return -1;
+	}
+
+	return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+}
+
+/*! \fn static int open_pipe_cloexec(int pdes[2])
+ *  \brief open a pipe whose descriptors are not inherited across exec
+ *
+ *  nft_popen() creates the pipe before taking ListMutex, so a second thread
+ *  can spawn while these descriptors are live. Without close-on-exec that
+ *  child holds the first thread's write end, the first thread never sees EOF,
+ *  and it blocks to script_timeout for a data source that answered.
+ *
+ *  pipe2(pdes, O_CLOEXEC) would set the flag atomically, but it needs
+ *  _GNU_SOURCE on glibc and spine defines no feature macro, so the fcntl()
+ *  pair stays. It leaves a window between the two calls, which is narrower
+ *  than none.
+ *
+ *  \return TRUE on success, FALSE with the descriptors closed on failure
+ */
+int spine_open_pipe_cloexec(int pdes[2]) {
+	if (pipe(pdes) < 0) {
+		return FALSE;
+	}
+
+	if (spine_set_cloexec(pdes[0]) != 0 || spine_set_cloexec(pdes[1]) != 0) {
+		(void)close(pdes[0]);
+		(void)close(pdes[1]);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*! \fn static int reap_child_bounded(pid_t pid, int *pstat, int attempts)
+ *  \return 0 when reaped, 1 when still running after attempts, -1 on error
+ */
+int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
+	int attempt;
+	pid_t waited;
+
+	for (attempt = 0; attempt < attempts; attempt++) {
+		do {
+			waited = waitpid(pid, pstat, WNOHANG);
+		} while (waited < 0 && errno == EINTR);
+
+		if (waited == pid) {
+			return 0;
+		}
+
+		if (waited < 0 && errno == ECHILD) {
+			/* someone else reaped it, so no status is available */
+			*pstat = 0;
+			return 0;
+		}
+
+		if (waited < 0) {
+			return -1;
+		}
+
+		/* The delay is load-bearing: without it the attempts are spent in
+		   nanoseconds and SIGKILL lands before the child can exit. */
+		#ifndef SOLAR_THREAD
+		usleep(NFT_PCLOSE_REAP_USEC);
+		#else
+		sleep(1);
+		#endif
+	}
+
+	return 1;
+}
 
 /*! ------------------------------------------------------------------------------
  *
@@ -154,7 +242,7 @@ int nft_popen(const char * command, const char * type) {
 		}
 	}
 
-	if (pipe(pdes) < 0)
+	if (!spine_open_pipe_cloexec(pdes))
 		return -1;
 
 	/* Disable thread cancellation from this point forward. */
@@ -356,8 +444,23 @@ nft_pclose(int fd)
 
 	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-	do { pid = waitpid(cur->pid, &pstat, 0);
-	} while (pid == -1 && errno == EINTR);
+	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS)) {
+	case 0:
+		pid = cur->pid;
+		break;
+	case 1:
+		(void)kill(cur->pid, SIGKILL);
+		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
+			pid = cur->pid;
+		} else {
+			errno = ETIMEDOUT;
+			pid = -1;
+		}
+		break;
+	default:
+		pid = -1;
+		break;
+	}
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 
