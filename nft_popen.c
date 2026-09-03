@@ -101,7 +101,21 @@ static struct pid
 /* Serialize access to PidList. */
 static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Children nft_pclose() gave up waiting for. Nothing else in spine reaps: there
+   is no SIGCHLD handler and no waitpid(-1), so a child dropped here would stay
+   a zombie for the daemon's lifetime and accumulate once per affected script
+   per cycle against RLIMIT_NPROC. SA_NOCLDWAIT would fix the leak but auto-reap
+   every child, and spine reads exit status to tell a failed script from a silent
+   one, so the pids are parked here and swept with WNOHANG instead. Bounded: past
+   the cap the pid is logged and dropped, because an unbounded list trades a pid
+   leak for a memory leak. */
+#define NFT_ABANDONED_MAX 64
+static pid_t	AbandonedPids[NFT_ABANDONED_MAX];
+static int	AbandonedCount;
+
 static void	close_cleanup(void *);
+static void	nft_sweep_abandoned(void);
+static void	nft_abandon_child(pid_t pid, const char *reason);
 
 /* nft_pclose() must not block a poller thread indefinitely. A script that
    writes its value and then lingers, or that ignores SIGPIPE, would otherwise
@@ -314,6 +328,11 @@ int nft_popen(const char * command, const char * type) {
 	 * the child process sees PidList in a consistent list state.
 	 */
 	pthread_mutex_lock(&ListMutex);
+
+	/* Drain anything a previous nft_pclose() gave up on. Doing it here means the
+	   list empties on the next script poll rather than waiting for another
+	   failure to trigger a sweep. */
+	nft_sweep_abandoned();
 
 	/* Build file actions for posix_spawn to replace vfork+execve. */
 	posix_spawn_file_actions_t fa;
@@ -549,11 +568,13 @@ nft_pclose(int fd)
 		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
 			pid = cur->pid;
 		} else {
+			nft_abandon_child(cur->pid, "kill budget expired");
 			errno = ETIMEDOUT;
 			pid = -1;
 		}
 		break;
 	default:
+		nft_abandon_child(cur->pid, "waitpid failed");
 		pid = -1;
 		break;
 	}
@@ -561,6 +582,59 @@ nft_pclose(int fd)
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 
 	return (pid == -1 ? -1 : pstat);
+}
+
+/*! ------------------------------------------------------------------------------
+  * nft_sweep_abandoned	- reap any child a previous nft_pclose() gave up on.
+  *
+  * Called with ListMutex held. WNOHANG only: this runs on a poller thread and
+  * must never block on a child that is still stuck.
+  *------------------------------------------------------------------------------
+ */
+static void
+nft_sweep_abandoned(void)
+{
+	int	i = 0;
+	int	status;
+	pid_t	waited;
+
+	while (i < AbandonedCount) {
+		do {
+			waited = waitpid(AbandonedPids[i], &status, WNOHANG);
+		} while (waited < 0 && errno == EINTR);
+
+		if (waited == AbandonedPids[i] || (waited < 0 && errno == ECHILD)) {
+			SPINE_LOG_DEBUG(("DEBUG: Reaped abandoned script child pid %ld", (long) AbandonedPids[i]));
+			AbandonedPids[i] = AbandonedPids[AbandonedCount - 1];
+			AbandonedCount--;
+		} else {
+			i++;
+		}
+	}
+}
+
+/*! ------------------------------------------------------------------------------
+  * nft_abandon_child	- record a child that outlived its kill budget.
+  *
+  * The pid and the reason are logged either way. A silent drop leaves PID
+  * exhaustion with nothing in the log pointing at its cause.
+  *------------------------------------------------------------------------------
+ */
+static void
+nft_abandon_child(pid_t pid, const char *reason)
+{
+	pthread_mutex_lock(&ListMutex);
+
+	nft_sweep_abandoned();
+
+	if (AbandonedCount < NFT_ABANDONED_MAX) {
+		AbandonedPids[AbandonedCount++] = pid;
+		SPINE_LOG(("WARNING: Script pid %ld survived SIGKILL (%s); parked for reaping", (long) pid, reason));
+	} else {
+		SPINE_LOG(("ERROR: Script pid %ld survived SIGKILL (%s) and the abandoned list is full; it will remain a zombie", (long) pid, reason));
+	}
+
+	pthread_mutex_unlock(&ListMutex);
 }
 
 /*! ------------------------------------------------------------------------------
