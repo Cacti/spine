@@ -63,6 +63,17 @@ if grep -A6 'close(icmp_socket)' ping.c | grep -q 'seteuid(0)'; then
 	fail "ping_icmp() must not elevate to close its socket"
 fi
 
+# poll_host() owns ten allocations and used to release them from eleven
+# clusters across three exits, which is how #594 happened. It has one exit now.
+# Any early return added later bypasses the cleanup label and reintroduces the
+# whole class, so there must not be one.
+if awk '/^void poll_host\(/,/^}/' poller.c | grep -qE '^\s*return\s*;'; then
+	fail "poll_host() must leave through its cleanup label, not an early return"
+fi
+
+grep -q '^cleanup:' poller.c ||
+	fail "poll_host() must have a single cleanup label"
+
 # Every exit from poll_host() must end the MySQL thread; see #594.
 grep -q 'mysql_thread_end' poller.c ||
 	fail "poll_host() must end the MySQL thread"

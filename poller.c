@@ -702,10 +702,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			if (num_rows != 1) {
 				db_free_result(result);
 
-				poll_host_release(&host, &reindex, &ping, &error_string, &buf_size, &buf_errors,
-					local_cnn, remote_cnn, host_id, host_thread);
-
-				return;
+				goto cleanup;
 			}
 
 			/* fetch the result */
@@ -971,10 +968,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	}
 
 	if (set.ping_only) {
-		poll_host_release(&host, &reindex, &ping, &error_string, &buf_size, &buf_errors,
-			local_cnn, remote_cnn, host_id, host_thread);
-
-		return;
+		goto cleanup;
 	}
 
 	/* do the reindex check for this host if not script based */
@@ -1912,27 +1906,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			}
 		}
 
-		/* cleanup memory and prepare for function exit */
-		if (host->snmp_session != NULL) {
-			snmp_host_cleanup(host->snmp_session);
-			host->snmp_session = NULL;
-		}
-
-		SPINE_FREE(query3);
-		if (set.boost_redirect && set.boost_enabled) {
-			SPINE_FREE(query12);
-		}
-
-		SPINE_FREE(poller_items);
-		SPINE_FREE(snmp_oids);
 	} else {
 		/* free the mysql result */
 		db_free_result(result);
 	}
-
-	SPINE_FREE(host);
-	SPINE_FREE(reindex);
-	SPINE_FREE(ping);
 
 	/* update poller_items table for next polling interval */
 	if (host_thread == host_threads && set.active_profiles != 1) {
@@ -1983,25 +1960,43 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	thread_mutex_unlock(LOCK_THDET);
 
-	poll_host_release_connections(local_cnn, remote_cnn, host_id, host_thread);
-
-	mysql_thread_end();
-
 	if (is_debug_device(host_id)) {
 		SPINE_LOG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	} else {
 		SPINE_LOG_DEBUG(("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 	}
 
+	/* Only the path that polled has anything buffered to report; the early
+	 * exits below reached cleanup before any of it was produced. */
 	if (set.spine_log_level == 1) {
 		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
 	}
 
-	SPINE_FREE(error_string);
-	SPINE_FREE(buf_size);
-	SPINE_FREE(buf_errors);
-
 	*host_errors = errors;
+
+cleanup:
+	/* One owner for everything this function allocates, released in reverse
+	 * order of acquisition.
+	 *
+	 * There were seventeen SPINE_FREE calls in eleven clusters, and three
+	 * exits each spelling the teardown out on their own terms. They had
+	 * already drifted: one omitted mysql_thread_end() (#594), and query3 is
+	 * reused for two unrelated lifetimes, so any early return added between
+	 * its two allocations would have leaked it. SPINE_FREE tolerates NULL and
+	 * clears the pointer, so reaching here before a given allocation is made
+	 * costs nothing and cannot double free. */
+	if (host != NULL && host->snmp_session != NULL) {
+		snmp_host_cleanup(host->snmp_session);
+		host->snmp_session = NULL;
+	}
+
+	SPINE_FREE(query12);
+	SPINE_FREE(query3);
+	SPINE_FREE(snmp_oids);
+	SPINE_FREE(poller_items);
+
+	poll_host_release(&host, &reindex, &ping, &error_string, &buf_size, &buf_errors,
+		local_cnn, remote_cnn, host_id, host_thread);
 }
 
 /*! \fn void buffer_output_errors(local_data_id) {
