@@ -28,6 +28,9 @@
 #include <sys/wait.h>
 #include <dirent.h>
 #include <poll.h>
+#include <sys/resource.h>
+#include <signal.h>
+#include <setjmp.h>
 #include <unistd.h>
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
@@ -2349,6 +2352,117 @@ static void test_nft_popen_does_not_leak_descriptors_in_the_collision_case(void 
 }
 
 
+
+static sigjmp_buf nft_lock_timeout;
+
+static void nft_lock_alarm(int sig) {
+	(void) sig;
+	siglongjmp(nft_lock_timeout, 1);
+}
+
+/* The dup() failure path inside nft_popen(). Reaching it needs a precise state:
+   the table full except for exactly two descriptors, and those two being 0 and
+   1 so the pipe lands there and the collision branch runs, leaving the dup()
+   with nothing to take.
+
+   Order matters. Filling the table first and only then closing stdin and stdout
+   is what leaves 0 and 1 as the two free slots; closing them first just means
+   the filler takes them and the collision never happens. An earlier version of
+   this test did that and passed against a deliberately reintroduced bug.
+
+   The assertion that matters is the second nft_popen(). A failure path that
+   returns still holding ListMutex leaves every later caller blocked forever,
+   and that mutex is process-global, so the daemon stops collecting script data
+   until it is restarted. */
+static void test_nft_popen_releases_the_lock_when_dup_fails(void **state) {
+	struct rlimit saved_limit, tight;
+	int saved_stdin, saved_stdout;
+	int held[512];
+	int count = 0;
+	int first, second;
+	char buf[64];
+
+	(void) state;
+
+	if (getrlimit(RLIMIT_NOFILE, &saved_limit) != 0) {
+		print_message("cannot read RLIMIT_NOFILE; skipping\n");
+		return;
+	}
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	tight = saved_limit;
+	tight.rlim_cur = (rlim_t) (saved_stdout + 24);
+
+	if (setrlimit(RLIMIT_NOFILE, &tight) != 0) {
+		close(saved_stdin);
+		close(saved_stdout);
+		print_message("cannot lower RLIMIT_NOFILE; skipping\n");
+		return;
+	}
+
+	/* fill first, with 0 and 1 still occupied by stdin and stdout */
+	while (count < 512) {
+		int fd = open("/dev/null", O_RDONLY);
+
+		if (fd < 0) {
+			break;
+		}
+
+		held[count++] = fd;
+	}
+
+	/* now the only free descriptors are 0 and 1 */
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	first = nft_popen("echo unreachable", "r");
+
+	if (first >= 0) {
+		nft_pclose(first);
+	}
+
+	while (count > 0) {
+		close(held[--count]);
+	}
+
+	setrlimit(RLIMIT_NOFILE, &saved_limit);
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	/* the setup must actually have defeated it, or this proves nothing */
+	if (first >= 0) {
+		fail_msg("nft_popen succeeded with the descriptor table full; the dup failure path was not exercised");
+	}
+
+	/* A leaked ListMutex blocks here rather than returning, and a hung suite
+	   is a worse signal than a failing one: it looks like a stuck CI job
+	   instead of a defect. Convert the hang into a failure. */
+	if (sigsetjmp(nft_lock_timeout, 1) != 0) {
+		fail_msg("nft_popen blocked after a failed dup; ListMutex was not released");
+	}
+
+	signal(SIGALRM, nft_lock_alarm);
+	alarm(10);
+
+	second = nft_popen("echo lock-still-usable", "r");
+
+	alarm(0);
+	signal(SIGALRM, SIG_DFL);
+
+	assert_true(second >= 0);
+
+	memset(buf, 0, sizeof(buf));
+	read(second, buf, sizeof(buf) - 1);
+	nft_pclose(second);
+
+	assert_non_null(strstr(buf, "lock-still-usable"));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -2395,6 +2509,7 @@ int main(void) {
 		cmocka_unit_test(test_nft_popen_reads_a_script_with_stdout_closed),
 		cmocka_unit_test(test_nft_popen_reaches_eof_with_stdio_closed),
 		cmocka_unit_test(test_nft_popen_does_not_leak_descriptors_in_the_collision_case),
+		cmocka_unit_test(test_nft_popen_releases_the_lock_when_dup_fails),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
