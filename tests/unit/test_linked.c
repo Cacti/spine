@@ -2105,6 +2105,106 @@ static void test_store_matches_the_chain_it_replaced(void **state) {
 /* The failure path: a descriptor that cannot carry the flag must be reported,
    not silently accepted. A pipe whose reader is inheritable is worse than no
    pipe, so the helper refuses rather than continuing. */
+/* spine_log() emits a log line with fputs() to a stdio stream. LOGSIZE is 65535
+   and BUFSIZ is 8192, so any message past 8KB leaves fputs() as several write()
+   calls, and a second thread's writes land between them. That is #298: a user
+   reported two poller stats lines spliced into one. The emit is serialised now,
+   so this writes messages far past the stdio buffer from several threads at
+   once and checks that every line came out whole.
+
+   Without the lock this fails within a handful of runs; the payload is one
+   repeated character per thread, so a spliced line shows two of them. */
+#define LOGRACE_THREADS 6
+#define LOGRACE_ROUNDS  25
+#define LOGRACE_PAYLOAD 12000
+
+static char lograce_path[256];
+
+static void *lograce_writer(void *arg) {
+	char *payload = malloc(LOGRACE_PAYLOAD + 1);
+	int   round;
+
+	assert_non_null(payload);
+	memset(payload, *(const char *) arg, LOGRACE_PAYLOAD);
+	payload[LOGRACE_PAYLOAD] = '\0';
+
+	for (round = 0; round < LOGRACE_ROUNDS; round++) {
+		spine_log("%s", payload);
+	}
+
+	free(payload);
+	return NULL;
+}
+
+static void test_concurrent_log_writes_are_not_spliced(void **state) {
+	pthread_t threads[LOGRACE_THREADS];
+	char      marks[LOGRACE_THREADS];
+	config_t  saved;
+	FILE     *fp;
+	char     *line = NULL;
+	size_t    cap = 0;
+	ssize_t   len;
+	int       i;
+	int       lines = 0;
+
+	(void) state;
+
+	saved = set;
+
+	snprintf(lograce_path, sizeof(lograce_path), "/tmp/spine_lograce_%d.log", (int) getpid());
+	unlink(lograce_path);
+
+	set.log_destination  = LOGDEST_FILE;
+	set.logfile_processed = TRUE;
+	set.log_level        = POLLER_VERBOSITY_LOW;
+	snprintf(set.path_logfile, sizeof(set.path_logfile), "%s", lograce_path);
+
+	for (i = 0; i < LOGRACE_THREADS; i++) {
+		marks[i] = (char) ('A' + i);
+		assert_int_equal(pthread_create(&threads[i], NULL, lograce_writer, &marks[i]), 0);
+	}
+
+	for (i = 0; i < LOGRACE_THREADS; i++) {
+		assert_int_equal(pthread_join(threads[i], NULL), 0);
+	}
+
+	set = saved;
+
+	fp = fopen(lograce_path, "r");
+	assert_non_null(fp);
+
+	while ((len = getline(&line, &cap, fp)) > 0) {
+		const char *run;
+		ssize_t     n = 0;
+
+		if (line[len - 1] == '\n') {
+			line[--len] = '\0';
+		}
+
+		/* the payload is the trailing run of one repeated letter */
+		run = line + len;
+		while (run > line && run[-1] >= 'A' && run[-1] < (char) ('A' + LOGRACE_THREADS)) {
+			run--;
+			n++;
+		}
+
+		assert_int_equal(n, LOGRACE_PAYLOAD);
+
+		while (n-- > 1) {
+			/* every byte of it is the same letter: a spliced line is not */
+			assert_int_equal(run[n], run[0]);
+		}
+
+		lines++;
+	}
+
+	free(line);
+	fclose(fp);
+	unlink(lograce_path);
+
+	assert_int_equal(lines, LOGRACE_THREADS * LOGRACE_ROUNDS);
+}
+
 /* pipe() itself failing: it does not write pdes, so the caller's array is
    untouched. The cloexec branch is the one that had to be taught to clear it,
    and that needs interposition; it lives in test_poll_host_release.c. */
@@ -2533,6 +2633,7 @@ int main(void) {
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_concurrent_log_writes_are_not_spliced),
 		cmocka_unit_test(test_pipe_exhaustion_reports_failure),
 		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
 		cmocka_unit_test(test_cloexec_rejects_a_closed_descriptor),
