@@ -38,6 +38,7 @@
 
 extern char **environ;
 
+
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
@@ -340,13 +341,15 @@ int php_init(int php_process) {
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", i));
 
 		/* create the output pipes from Spine to php*/
-		if (pipe(cacti2php_pdes) < 0) {
+		if (!spine_open_pipe_cloexec(cacti2php_pdes)) {
 			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
 			return FALSE;
 		}
 
 		/* create the input pipes from php to Spine */
-		if (pipe(php2cacti_pdes) < 0) {
+		if (!spine_open_pipe_cloexec(php2cacti_pdes)) {
+			close(cacti2php_pdes[0]);
+			close(cacti2php_pdes[1]);
 			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
 			return FALSE;
 		}

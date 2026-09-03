@@ -94,4 +94,36 @@ extern int	nft_pchild(int fd);
  */
 extern int	nft_pclose(int fd);
 
+/*!
+ *  spine_set_cloexec
+ *
+ *  Mark a descriptor close-on-exec.
+ *
+ *  Returns 0 on success, -1 on failure with errno set by fcntl().
+ */
+extern int	spine_set_cloexec(int fd);
+
+/*!
+ *  spine_open_pipe_cloexec
+ *
+ *  Open a pipe whose descriptors are not inherited across exec. Spine spawns
+ *  children from several threads, so a descriptor left inheritable is held by
+ *  an unrelated child and the reader never sees EOF.
+ *
+ *  Returns TRUE on success. On failure the descriptors are closed and FALSE is
+ *  returned, so the caller owns nothing.
+ */
+extern int	spine_open_pipe_cloexec(int pdes[2]);
+
+/*!
+ *  spine_reap_child_bounded
+ *
+ *  Reap a child with WNOHANG, sleeping between attempts, so a wedged script
+ *  cannot pin a poller thread indefinitely.
+ *
+ *  Returns 0 when the child was reaped, 1 when it is still running after
+ *  attempts, and -1 on a waitpid() error other than EINTR or ECHILD.
+ */
+extern int	spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
+
 #endif /* SPINE_NFT_POPEN_H */
