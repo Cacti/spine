@@ -34,6 +34,7 @@ The Cacti Group | spine
 -issue#605: Refuse a script server descriptor at or past FD_SETSIZE instead of writing outside fd_set
 -issue#606: Allocate the undefined-value string in php_cmd() only once the retry budget is spent
 -issue#607: Ignore SIGPIPE rather than treating it as fatal, so a second dead child cannot stop the poller
+-issue#608: Bound the script server restart so a server that starts but never answers cannot recurse
 -issue#610: Detach the subprocess entry under ListMutex so nft_pclose() owns the child it reaps
 -issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts

@@ -101,4 +101,21 @@ printf '%s\n' "$php_init_body" | grep -cE '^\s+return FALSE;' | grep -qx '1' ||
 printf '%s\n' "$php_init_body" | grep -q '^cleanup:' ||
 	fail "php_init() must have a single cleanup label"
 
+# php_init() must not reach a read that can restart the server. php_readpipe()
+# used to restart from inside itself, and php_init() confirms startup by
+# reading, so a server that spawned but never answered recursed without bound,
+# spawning another server at every level. The handshake read must stay on the
+# non-restarting entry point.
+php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' php.c)
+
+printf '%s\n' "$php_init_body" | grep -q 'php_read_result(slot, command, FALSE)' ||
+	fail "php_init() must read the startup handshake with restarts disabled"
+
+printf '%s\n' "$php_init_body" | grep -q 'php_readpipe(' &&
+	fail "php_init() must not call php_readpipe(), which may restart the server"
+
+awk '/^static char \*php_read_result/,/^\}/' php.c |
+	grep -q 'if (allow_restart) {' ||
+	fail "php_read_result() must gate the server restart on allow_restart"
+
 exit 0

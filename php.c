@@ -195,7 +195,17 @@ int php_get_process(void) {
  *
  *  \return a string pointer to the PHP Script Server response
  */
-char *php_readpipe(int php_process, char *command) {
+/*! \fn static char *php_read_result(int php_process, char *command, int allow_restart)
+ *  \brief reads one script server response.
+ *
+ *  allow_restart is FALSE for the startup handshake. php_init() calls this to
+ *  confirm the server it just spawned is answering, and a restart from inside
+ *  that read would call php_init() again, which reads again: a server that
+ *  starts but never answers put a poller thread into unbounded mutual
+ *  recursion, spawning a fresh server at every level. Refusing the restart on
+ *  the handshake bounds the depth at one by construction.
+ */
+static char *php_read_result(int php_process, char *command, int allow_restart) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
@@ -283,8 +293,10 @@ char *php_readpipe(int php_process, char *command) {
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
-		php_close(php_process);
-		php_init(php_process);
+		if (allow_restart) {
+			php_close(php_process);
+			php_init(php_process);
+		}
 		break;
 	case 0:
 		/* record end time */
@@ -293,8 +305,10 @@ char *php_readpipe(int php_process, char *command) {
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
-		php_close(php_process);
-		php_init(php_process);
+		if (allow_restart) {
+			php_close(php_process);
+			php_init(php_process);
+		}
 		break;
 	default:
 		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
@@ -340,6 +354,16 @@ char *php_readpipe(int php_process, char *command) {
 	}
 
 	return result_string;
+}
+
+/*! \fn char *php_readpipe(int php_process, char *command)
+ *  \brief reads a script server response, restarting a server that stops
+ *         answering.
+ *
+ *  \return a string pointer to the PHP Script Server response
+ */
+char *php_readpipe(int php_process, char *command) {
+	return php_read_result(php_process, command, TRUE);
 }
 
 /*! \fn int php_init(int php_process)
@@ -558,7 +582,7 @@ int php_init(int php_process) {
 		cancel_held = FALSE;
 
 		/* check pipe to insure startup took place */
-		result_string = php_readpipe(slot, command);
+		result_string = php_read_result(slot, command, FALSE);
 
 		if (strstr(result_string, "Started")) {
 			SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", slot, php_processes[slot].php_read_fd, php_processes[slot].php_write_fd));
