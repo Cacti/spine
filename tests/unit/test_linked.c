@@ -1115,7 +1115,10 @@ static void test_build_queries_orders_by_port_only_for_multiple_ports(void **sta
 	assert_non_null(strstr(q.query1, "ORDER BY snmp_port"));
 }
 
-static void test_build_queries_applies_dbonupdate_on_both_poller_types(void **state) {
+/* The upsert suffix follows the server the INSERT is sent to, not the one the
+   version was read from. set.dbonupdate describes the LOCAL connection, and a
+   main poller writes poller_output there, so the flag applies. */
+static void test_build_queries_upsert_follows_the_local_server(void **state) {
 	poll_host_queries_t q;
 
 	(void) state;
@@ -1124,11 +1127,26 @@ static void test_build_queries_applies_dbonupdate_on_both_poller_types(void **st
 	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
 	build_with(&q, 0, 1, 1);
 	assert_string_equal(q.posuffix, " AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+}
 
+/* A remote poller sends this INSERT to the main server over mysqlr, which may
+   be a different vendor from its own. MariaDB rejects the row-alias form, so a
+   MySQL 8 remote poller writing to a MariaDB main server would lose every
+   batch. It keeps the portable form regardless of its own version. */
+static void test_build_queries_remote_poller_keeps_the_portable_upsert(void **state) {
+	poll_host_queries_t q;
+	int saved_mode = set.mode;
+
+	(void) state;
+
+	set.mode = REMOTE_ONLINE;
+
+	build_with(&q, 7, 1, 1);
+	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
 	build_with(&q, 7, 1, 0);
 	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
-	build_with(&q, 7, 1, 1);
-	assert_string_equal(q.posuffix, " AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+
+	set.mode = saved_mode;
 }
 
 static void test_build_queries_caches_the_lengths_the_result_loop_uses(void **state) {
@@ -1174,6 +1192,7 @@ static void emit_one(FILE *f, const char *tag, poll_host_queries_t *q) {
 
 static void write_all(FILE *f) {
 	poll_host_queries_t q;
+	int saved_mode;
 	int ports[2] = {1, 2};
 	int onupd[2] = {0, 1};
 	int pid[2]   = {3, 7};
@@ -1186,6 +1205,13 @@ static void write_all(FILE *f) {
 			emit_one(f, "main", &q);
 		}
 	}
+	/* A remote poller is poller_id > 1 AND mode REMOTE_ONLINE; the second half
+	   is what routes poller_output to the main server, and the upsert suffix
+	   depends on it. Setting only the id modelled a poller that writes
+	   locally, which is not the case this fixture exists to pin. */
+	saved_mode = set.mode;
+	set.mode = REMOTE_ONLINE;
+
 	for (i = 0; i < 2; i++) {
 		for (j = 0; j < 2; j++) {
 			build_with(&q, pid[j], ports[i], onupd[j]);
@@ -1193,6 +1219,8 @@ static void write_all(FILE *f) {
 			emit_one(f, "remote", &q);
 		}
 	}
+
+	set.mode = saved_mode;
 }
 
 static void test_build_queries_matches_the_golden_capture(void **state) {
@@ -1216,6 +1244,21 @@ static void test_build_queries_matches_the_golden_capture(void **state) {
 		snprintf(fallback, sizeof(fallback), "%s/tests/golden/poll_host_queries.golden",
 			dir != NULL ? dir : ".");
 		path = fallback;
+	}
+
+	/* Regenerate rather than compare. Documented in tests/golden/README.md;
+	   read the diff before committing what it produces. */
+	if (getenv("SPINE_WRITE_GOLDEN") != NULL) {
+		FILE *w = fopen(path, "w");
+
+		if (w == NULL) {
+			fail_msg("cannot write the golden fixture to %s", path);
+		}
+
+		write_all(w);
+		fclose(w);
+		print_message("wrote %s\n", path);
+		return;
 	}
 
 	g = fopen(path, "r");
@@ -2160,7 +2203,8 @@ int main(void) {
 		cmocka_unit_test(test_build_queries_scopes_the_main_poller_by_deleted),
 		cmocka_unit_test(test_build_queries_scopes_a_remote_poller_by_owner),
 		cmocka_unit_test(test_build_queries_orders_by_port_only_for_multiple_ports),
-		cmocka_unit_test(test_build_queries_applies_dbonupdate_on_both_poller_types),
+		cmocka_unit_test(test_build_queries_upsert_follows_the_local_server),
+		cmocka_unit_test(test_build_queries_remote_poller_keeps_the_portable_upsert),
 		cmocka_unit_test(test_build_queries_caches_the_lengths_the_result_loop_uses),
 		cmocka_unit_test(test_build_queries_fills_every_buffer),
 		cmocka_unit_test(test_build_queries_matches_the_golden_capture),

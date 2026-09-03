@@ -108,6 +108,8 @@ static void	close_cleanup(void *);
    pin the thread across polling cycles while holding its available_scripts
    token. Poll with WNOHANG, then escalate to SIGKILL. */
 #define NFT_PCLOSE_REAP_USEC 50000
+#define NFT_PCLOSE_SPIN_USEC 200
+#define NFT_PCLOSE_SPIN_ATTEMPTS 10
 #define NFT_PCLOSE_TERM_ATTEMPTS 100
 #define NFT_PCLOSE_KILL_ATTEMPTS 20
 
@@ -192,11 +194,27 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		}
 
 		/* The delay is load-bearing: without it the attempts are spent in
-		   nanoseconds and SIGKILL lands before the child can exit. */
+		   nanoseconds and SIGKILL lands before the child can exit.
+		 
+		   Starting at the full 50ms charged that to every script that exits a
+		   moment after closing stdout, which is the common case for anything
+		   that flushes or tears down an interpreter. nft_pclose() runs while
+		   the caller still holds an available_scripts token, so that delay
+		   costs poller capacity rather than one thread. Spin briefly first,
+		   then settle. The attempt count and so the time to SIGKILL are
+		   unchanged. */
 		#ifndef SOLAR_THREAD
-		usleep(NFT_PCLOSE_REAP_USEC);
+		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
+			usleep(NFT_PCLOSE_SPIN_USEC);
+		} else {
+			usleep(NFT_PCLOSE_REAP_USEC);
+		}
 		#else
-		sleep(1);
+		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
+			usleep(NFT_PCLOSE_SPIN_USEC);
+		} else {
+			sleep(1);
+		}
 		#endif
 	}
 

@@ -467,6 +467,39 @@ static void test_update_rejects_null_arguments(void **state) {
 }
 
 
+
+/* out_len is part of the contract now that this is exported, and it was only
+   read by the NULL guard: all three statements were bounded by BIG_BUFSIZE.
+   A caller passing a smaller buffer overflowed its stack with no diagnostic.
+   The canary makes an overflow observable rather than merely undefined. */
+static void test_update_honours_the_buffer_it_is_given(void **state) {
+	struct {
+		char body[512];
+		char canary[16];
+	} g;
+	size_t i;
+
+	(void) state;
+	memset(g.body, 0, sizeof(g.body));
+	memset(g.canary, 0x7e, sizeof(g.canary));
+
+	/* a full sysinfo set pushes the statement well past 512 bytes */
+	memset(hs.snmp_sysDescr, 'D', sizeof(hs.snmp_sysDescr) - 1);
+	memset(hs.snmp_sysLocation, 'L', sizeof(hs.snmp_sysLocation) - 1);
+	hs.ignore_host = FALSE;
+
+	host_status_update_sql(g.body, sizeof(g.body), &hs, FALSE, "err");
+
+	for (i = 0; i < sizeof(g.canary); i++) {
+		assert_int_equal((unsigned char) g.canary[i], 0x7e);
+	}
+
+	/* truncated, but still a NUL-terminated string inside the buffer */
+	assert_int_equal(g.body[sizeof(g.body) - 1], '\0');
+	assert_true(strlen(g.body) < sizeof(g.body));
+}
+
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_tuple_has_the_expected_shape, reset),
@@ -489,6 +522,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_update_targets_exactly_one_device, hs_reset),
 		cmocka_unit_test_setup(test_update_carries_the_escaped_error_verbatim, hs_reset),
 		cmocka_unit_test_setup(test_update_rejects_null_arguments, hs_reset),
+		cmocka_unit_test_setup(test_update_honours_the_buffer_it_is_given, hs_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

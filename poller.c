@@ -296,8 +296,19 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 		"INSERT INTO poller_output"
 		" (local_data_id, rrd_name, time, output) VALUES");
 
-	/* query suffix to add rows to the poller output table */
-	if (set.dbonupdate == 0) {
+	/* Query suffix to add rows to the poller output table.
+	 *
+	 * set.dbonupdate is read from the LOCAL connection at config load, but a
+	 * remote poller sends this INSERT to the main server over mysqlr. The two
+	 * can be different vendors, and the row-alias form is MySQL 8 only: a
+	 * MySQL 8 remote poller writing to a MariaDB main server would emit
+	 * syntax MariaDB rejects, losing every batch of output rather than
+	 * warning. VALUES() is deprecated on MySQL 8 but accepted by both, so it
+	 * stays until the main server's version is actually known here.
+	 *
+	 * config_t carries rdbversion and rdbonupdate for exactly this, and
+	 * nothing ever populates them. That is the real fix; see #590. */
+	if (set.dbonupdate == 0 || (set.poller_id > 1 && set.mode == REMOTE_ONLINE)) {
 		snprintf(q->posuffix, BUFSIZE,
 			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
 	} else {
@@ -361,7 +372,7 @@ void host_status_update_sql(char *out, size_t out_len, host_t *host,
 
 		if (!ignore_sysinfo) {
 			if (host->ignore_host != TRUE) {
-				snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+				snprintf(update_sql, out_len, "UPDATE host "
 					"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
 						" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
 						" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
@@ -389,7 +400,7 @@ void host_status_update_sql(char *out, size_t out_len, host_t *host,
 					host->snmp_sysLocation,
 					host->id);
 			} else {
-				snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+				snprintf(update_sql, out_len, "UPDATE host "
 					"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
 						" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
 						" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
@@ -410,7 +421,7 @@ void host_status_update_sql(char *out, size_t out_len, host_t *host,
 					host->id);
 			}
 		} else {
-			snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
+			snprintf(update_sql, out_len, "UPDATE host "
 				"SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
 					" status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
 					" max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"

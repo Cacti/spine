@@ -35,3 +35,17 @@ tests/unit/bin/
 # automake test-suite artifacts
 *.trs
 test-suite.log
+
+# coverage instrumentation from --enable-coverage
+*.gcda
+*.gcno
+*.gcov
+
+# make dist output
+spine-poller-*.tar.gz
+
+# cmocka test binaries and automake stamps
+tests/unit/test_*
+!tests/unit/test_*.c
+.dirstamp
+tests/unit/.dirstamp

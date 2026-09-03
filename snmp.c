@@ -305,18 +305,25 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				free(session.localname);
 				return 0;
 			}
-		}
 
-		if (security_level == SNMP_SEC_LEVEL_NOAUTH) {
-			session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
-		} else {
+			/* Install it whenever it is configured, not only when the level
+			 * says the session authenticates. The privacy branch below can
+			 * still raise the level, and leaving this to that branch meant a
+			 * device with a protocol but no passphrase got the library
+			 * default instead of the one it was configured with. */
 			auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
 			free(session.securityAuthProto);
 			session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
 		}
 
-		/* set the privacy protocol to none */
-		if (strcmp(snmp_priv_protocol, "[None]") == 0 || (strlen(snmp_priv_passphrase) == 0)) {
+		session.securityLevel = security_level;
+
+		/* Privacy follows the computed level. Selecting it from the privacy
+		 * fields alone disagreed with spine_snmpv3_security_level(), which
+		 * requires authentication before encryption: a device with privacy
+		 * configured but no auth passphrase took this branch's else and was
+		 * built as authPriv with no authentication key. */
+		if (security_level != SNMP_SEC_LEVEL_AUTHPRIV) {
 			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol));
 			session.securityPrivProtoLen = OID_LENGTH(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
@@ -372,7 +379,10 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			priv_proto = sc_get_priv_oid(priv_type, &session.securityPrivProtoLen);
 			free(session.securityPrivProto);
 			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
-			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
+			/* security_level is AUTHPRIV here by construction: this branch is
+			 * only reached when it is. Assigning the computed value keeps one
+			 * predicate authoritative rather than two that can disagree. */
+			session.securityLevel     = security_level;
 
 			// Auth Protocol Setup
 			if (Apsz && zero_sensitive) {

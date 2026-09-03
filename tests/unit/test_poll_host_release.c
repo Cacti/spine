@@ -25,6 +25,7 @@
 #include "nft_popen.h"
 
 #include <unistd.h>
+#include <sys/time.h>
 
 /* what the wrappers saw */
 static int  released[8][2];
@@ -202,6 +203,38 @@ static void test_release_rejects_null_arguments(void **state) {
 }
 
 
+
+/* A script that exits a moment after closing stdout used to cost the full
+   50ms, because the first WNOHANG missed and the loop slept before retrying.
+   nft_pclose() holds an available_scripts token throughout, so that is poller
+   capacity, not just one thread. */
+static void test_reap_does_not_charge_the_full_delay_to_a_prompt_child(void **state) {
+	struct timeval a, b;
+	long elapsed_us;
+	int pstat = 0;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		usleep(3000);   /* exits well before the old 50ms first sleep */
+		_exit(0);
+	}
+
+	gettimeofday(&a, NULL);
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 100), 0);
+	gettimeofday(&b, NULL);
+
+	elapsed_us = (b.tv_sec - a.tv_sec) * 1000000L + (b.tv_usec - a.tv_usec);
+
+	/* generous: the old path could not beat 50ms, the spin lands near 3ms */
+	assert_true(elapsed_us < 40000);
+}
+
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_local_connection_is_released, reset),
@@ -211,6 +244,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_release_nulls_every_pointer, reset),
 		cmocka_unit_test_setup(test_release_is_safe_on_already_null_pointers, reset),
 		cmocka_unit_test_setup(test_reap_rejects_a_null_status, reset),
+		cmocka_unit_test_setup(test_reap_does_not_charge_the_full_delay_to_a_prompt_child, reset),
 		cmocka_unit_test_setup(test_release_rejects_null_arguments, reset),
 	};
 

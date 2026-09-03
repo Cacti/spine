@@ -111,7 +111,7 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
 ### remote query10
 SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id = 42 AND poller_id = 7 GROUP BY snmp_port LIMIT 0,100
 ### remote posuffix
- AS rs ON DUPLICATE KEY UPDATE output=rs.output
+ ON DUPLICATE KEY UPDATE output=VALUES(output)
 == REMOTE ports=2 onupd=0 pid=3 ==
 ### remote query1
 SELECT SQL_NO_CACHE action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, 'RE' AS re FROM poller_item WHERE host_id = 42 AND poller_id = 3 ORDER BY snmp_port LIMIT 0,100
@@ -149,4 +149,4 @@ SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id =
 ### remote query10
 SELECT SQL_NO_CACHE snmp_port, count(snmp_port) FROM poller_item WHERE host_id = 42 AND poller_id = 7 GROUP BY snmp_port LIMIT 0,100
 ### remote posuffix
- AS rs ON DUPLICATE KEY UPDATE output=rs.output
+ ON DUPLICATE KEY UPDATE output=VALUES(output)
