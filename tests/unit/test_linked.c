@@ -20,6 +20,9 @@
 #include "util.h"
 #include "ping.h"
 #include "nft_popen.h"
+
+#include <wchar.h>
+#include <locale.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -1863,6 +1866,40 @@ static void test_store_outcome_is_the_same_at_log_level_two(void **state) {
 	assert_string_equal(sr_item.result, "42");
 }
 
+
+/* The remaining branch: vsnprintf reporting a formatting error rather than
+   truncation. In the C locale a wide character above ASCII cannot be converted,
+   so %ls returns -1 with EILSEQ. Probed at run time first, because a libc that
+   converts it anyway would otherwise fail this for the wrong reason. */
+static void test_appendf_reports_a_formatting_error(void **state) {
+	char buf[32];
+	char probe[8];
+	char *p = buf;
+	size_t remaining = sizeof(buf);
+	wchar_t wide[2];
+
+	(void) state;
+
+	wide[0] = 0x00E9;
+	wide[1] = 0;
+	setlocale(LC_ALL, "C");
+
+	if (snprintf(probe, sizeof(probe), "%ls", wide) >= 0) {
+		print_message("this libc converts %%ls in the C locale; branch not exercised\n");
+		return;
+	}
+
+	memset(buf, 'x', sizeof(buf));
+	p = buf;
+	remaining = sizeof(buf);
+
+	assert_false(spine_appendf(&p, &remaining, "%ls", wide));
+
+	/* the contract on failure: the buffer is left a valid string */
+	assert_int_equal(*p, '\0');
+	assert_true(p >= buf && p < buf + sizeof(buf));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -1926,6 +1963,7 @@ int main(void) {
 		cmocka_unit_test(test_appendf_rejects_null_arguments),
 		cmocka_unit_test(test_appendf_rejects_an_exhausted_buffer),
 		cmocka_unit_test(test_old_idiom_overshoots_where_appendf_does_not),
+		cmocka_unit_test(test_appendf_reports_a_formatting_error),
 		cmocka_unit_test(test_validate_result_accepts_numeric_forms),
 		cmocka_unit_test(test_validate_result_rejects_a_null_and_junk),
 		cmocka_unit_test(test_validate_result_accepts_multipart_output),
