@@ -554,7 +554,11 @@ void read_config_options(void) {
 	if (STRIMATCH(set.dbversion, "mariadb")) {
 		set.dbonupdate = 0;
 	} else if (strpos(set.dbversion, "8.") == 0) {
-		set.dbonupdate = 1;
+		/* The row alias form, INSERT ... AS rs, is a syntax error before
+		   8.0.20, and the string test matches every 8.0.x. Ask the client
+		   library for the numeric version instead, so an older 8.0 keeps the
+		   VALUES() form rather than failing every poller_output insert. */
+		set.dbonupdate = (mysql_get_server_version(&mysql) >= 80020) ? 1 : 0;
 	} else {
 		set.dbonupdate = 0;
 	}
