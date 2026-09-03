@@ -114,6 +114,7 @@ static int	AbandonedCount;
 
 static void	close_cleanup(void *);
 static void	nft_sweep_abandoned(void);
+static struct pid *pid_list_close_and_take(int);
 
 /* nft_pclose() must not block a poller thread indefinitely. A script that
    writes its value and then lingers, or that ignores SIGPIPE, would otherwise
@@ -136,6 +137,39 @@ static void	nft_sweep_abandoned(void);
 #define NFT_PCLOSE_TERM_ATTEMPTS 5
 #define NFT_PCLOSE_KILL_ATTEMPTS 2
 #endif
+
+/* Detach the entry for fd from PidList and hand the caller sole ownership.
+   The close() happens under ListMutex on purpose: nft_popen() walks PidList to
+   build the child's posix_spawn close list, so a descriptor closed outside the
+   lock can be handed to posix_spawn_file_actions_addclose() after the number
+   has been reused. Unlinking in the same critical section is what makes a
+   second closer see EBADF instead of racing this one to free().
+
+   Keep this noinline: GCC 12.2 emits -Wclobbered for the local when it is
+   inlined into nft_pclose()'s pthread cleanup macro scope. */
+static __attribute__((noinline)) struct pid *
+pid_list_close_and_take(int fd)
+{
+	struct pid **link;
+	struct pid *cur = NULL;
+
+	pthread_mutex_lock(&ListMutex);
+
+	for (link = &PidList; *link != NULL; link = &(*link)->next) {
+		if ((*link)->fd == fd) {
+			cur = *link;
+			(void)close(cur->fd);
+			cur->fd = -1;
+			*link = cur->next;
+			cur->next = NULL;
+			break;
+		}
+	}
+
+	pthread_mutex_unlock(&ListMutex);
+
+	return cur;
+}
 
 int spine_set_cloexec(int fd) {
 	int flags;
@@ -538,32 +572,30 @@ nft_pclose(int fd)
 {
 	struct pid *cur;
 	int		pstat;
+	int		cancel_state;
 	pid_t	pid;
 
-	/* Find the appropriate file descriptor. */
-	pthread_mutex_lock(&ListMutex);
+	/* Detaching transfers exclusive ownership of the entry to this thread, so
+	 * a concurrent closer gets EBADF rather than racing us to close(), wait()
+	 * and free() the same child. Cancellation stays disabled until the cleanup
+	 * handler is responsible for the detached entry; a cancel in that gap would
+	 * leak it, since nothing else can reach it any more.
+	 */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
-	for (cur = PidList; cur; cur = cur->next)
-	if (cur->fd == fd) break;
-
-	pthread_mutex_unlock(&ListMutex);
+	cur = pid_list_close_and_take(fd);
 
 	if (cur == NULL) {
+		pthread_setcancelstate(cancel_state, NULL);
 		errno = EBADF;
 		return -1;
 	}
 
-	/* The close and waitpid calls below are cancellation points.
-	 * We want to ensure that the fd is closed and the PidList
-	 * entry freed despite cancellation, so push a cleanup handler.
-	 */
 	pthread_cleanup_push(close_cleanup, cur);
 
+	pthread_setcancelstate(cancel_state, NULL);
+
 	/* end the process nicely and then forcefully */
-	(void)close(fd);
-
-	cur->fd = -1;		/* Prevent the fd being closed twice. */
-
 	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS)) {
 	case 0:
 		pid = cur->pid;
@@ -584,7 +616,9 @@ nft_pclose(int fd)
 		break;
 	}
 
-	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
+	pthread_cleanup_pop(0);	/* Normal path: this thread still owns cur. */
+
+	SPINE_FREE(cur);
 
 	return (pid == -1 ? -1 : pstat);
 }
@@ -656,9 +690,9 @@ nft_abandon_child(pid_t pid, const char *reason)
 	int	parked;
 	int	oldstate;
 
-	/* nft_pclose() calls this inside its pthread_cleanup_push() region, and
-	   close_cleanup() takes ListMutex. A cancel delivered while this held the
-	   lock would run the handler straight into it, so hold it uncancellable. */
+	/* nft_pclose() calls this inside its pthread_cleanup_push() region. A cancel
+	   delivered while this held ListMutex would run close_cleanup() with the
+	   lock still held, so take it uncancellable. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
 
 	pthread_mutex_lock(&ListMutex);
@@ -690,29 +724,28 @@ static void
 close_cleanup(void * arg)
 {
 	struct pid * cur = arg;
-	struct pid * prev;
+	pid_t pid;
 
-	/* Close the pipe fd if necessary. */
-	if (cur->fd >= 0) {
-		(void)close(cur->fd);
+	/* Runs only when a cancel arrives after nft_pclose() detached the entry, so
+	 * cur is already off PidList, its descriptor is already closed, and this
+	 * thread is its only owner. Nothing needs the list here.
+	 *
+	 * The child still has to be reaped. Spine has no SIGCHLD handler and no
+	 * waitpid(-1), so returning without reaping would leave a zombie for the
+	 * daemon's lifetime. Check before killing so an already-exited and reused
+	 * pid can never be signalled.
+	 */
+	do {
+		pid = waitpid(cur->pid, NULL, WNOHANG);
+	} while (pid < 0 && errno == EINTR);
+
+	if (pid == 0) {
+		(void)kill(cur->pid, SIGKILL);
+
+		do {
+			pid = waitpid(cur->pid, NULL, 0);
+		} while (pid < 0 && errno == EINTR);
 	}
 
-	/* Remove the entry from the linked list. */
-	pthread_mutex_lock(&ListMutex);
-
-	if (PidList == cur) {
-		PidList =  cur->next;
-	}else{
-		for (prev = PidList; prev; prev = prev->next)
-		if (prev->next == cur) {
-			prev->next =  cur->next;
-			break;
-		}
-
-		assert(prev != NULL);	/* Search should not fail */
-	}
-
-	pthread_mutex_unlock(&ListMutex);
-
-	free(cur);
+	SPINE_FREE(cur);
 }
