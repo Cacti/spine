@@ -14,6 +14,18 @@
 set -euo pipefail
 
 
+# These need a prepared docker fixture and an in-tree build, neither of which
+# holds under `make distcheck`, where the tree is a read-only copy. Default to
+# skipping so `make check` stays meaningful everywhere; the integration
+# workflow sets SPINE_INTEGRATION=1 where the fixture is actually up.
+#
+# The earlier guard only checked whether docker existed. On a GitHub runner it
+# does, so these ran and failed rather than skipping.
+if [ "${SPINE_INTEGRATION:-0}" != "1" ]; then
+	echo "  SKIP: set SPINE_INTEGRATION=1 with the docker fixture running"
+	exit 77
+fi
+
 # Skip rather than fail where the fixture cannot run: 77 is the exit status
 # automake reads as SKIP, so `make check` stays green on a machine without
 # docker while still reporting the test as not run.
