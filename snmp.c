@@ -682,6 +682,10 @@ char *snmp_get(host_t *current_host, const char *snmp_oid) {
 	return snmp_get_base(current_host, snmp_oid, true);
 }
 
+char *snmp_get_allow_fail(host_t *current_host, const char *snmp_oid) {
+	return snmp_get_base(current_host, snmp_oid, true);
+}
+
 /*! \fn char *snmp_getnext(host_t *current_host, const char *snmp_oid)
  *  \brief performs a single snmp_getnext for a specific snmp OID
  *
