@@ -2486,7 +2486,11 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 					SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
 
 					pid = nft_pchild(cmd_fd);
-					kill(pid, SIGKILL);
+					if (pid > 0) {
+						kill(pid, SIGKILL);
+					} else {
+						SPINE_LOG(("Device[%i] ERROR: Unable to find the timed-out POPEN child", current_host->id));
+					}
 					#endif
 
 					SET_UNDEFINED(result_string);

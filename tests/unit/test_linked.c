@@ -14,11 +14,17 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "spine.h"
 #include "util.h"
 #include "ping.h"
+#include "nft_popen.h"
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -457,6 +463,182 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+/* --- nft_popen(): registry entries have exactly one closing owner -------- */
+
+struct close_result {
+	int fd;
+	int result;
+	int error;
+};
+
+static void *close_from_thread(void *arg) {
+	struct close_result *result = arg;
+
+	result->result = nft_pclose(result->fd);
+	result->error = errno;
+
+	return NULL;
+}
+
+static void test_nft_pclose_has_one_owner_per_registry_entry(void **state) {
+	static struct close_result results[2];
+	pthread_t threads[2];
+	int create_results[2] = {-1, -1};
+	int fd;
+	int successes = 0;
+	int bad_fds = 0;
+	int owner_result = -1;
+	int join_results[2] = {-1, -1};
+	int reap_error;
+	int reap_result;
+	pid_t child;
+	int i;
+	(void) state;
+
+	fd = nft_popen("exit 7", "r");
+	assert_true(fd >= 0);
+	child = nft_pchild(fd);
+	assert_true(child > 0);
+
+	for (i = 0; i < 2; i++) {
+		results[i].fd = fd;
+		results[i].result = -1;
+		results[i].error = 0;
+		create_results[i] = pthread_create(&threads[i], NULL, close_from_thread, &results[i]);
+	}
+
+	for (i = 0; i < 2; i++) {
+		if (create_results[i] == 0) {
+			join_results[i] = pthread_join(threads[i], NULL);
+		}
+
+		if (results[i].result >= 0) {
+			successes++;
+			owner_result = results[i].result;
+		} else if (results[i].error == EBADF) {
+			bad_fds++;
+		}
+	}
+
+	/* Avoid leaking the child if thread creation failed before either closer ran. */
+	if (successes == 0) {
+		(void)nft_pclose(fd);
+	}
+
+	assert_int_equal(create_results[0], 0);
+	assert_int_equal(create_results[1], 0);
+	assert_int_equal(join_results[0], 0);
+	assert_int_equal(join_results[1], 0);
+	assert_int_equal(successes, 1);
+	assert_int_equal(bad_fds, 1);
+	assert_true(WIFEXITED(owner_result));
+	assert_int_equal(WEXITSTATUS(owner_result), 7);
+
+	errno = 0;
+	reap_result = waitpid(child, NULL, WNOHANG);
+	reap_error = errno;
+	assert_int_equal(fcntl(fd, F_GETFD), -1);
+	assert_int_equal(errno, EBADF);
+	assert_int_equal(reap_result, -1);
+	assert_int_equal(reap_error, ECHILD);
+}
+
+static void test_nft_pclose_cancellation_releases_registry_entry(void **state) {
+	struct close_result result;
+	pthread_t thread;
+	void *thread_result = NULL;
+	pid_t child;
+	int cancel_result = -1;
+	int create_result;
+	int detached = 0;
+	int fd;
+	int i;
+	int join_result = -1;
+	int lookup_error;
+	int lookup_result;
+	char ready;
+	int status;
+	(void) state;
+
+	fd = nft_popen("printf x; kill -STOP $$", "r");
+	assert_true(fd >= 0);
+	child = nft_pchild(fd);
+	assert_true(child > 0);
+	assert_int_equal(read(fd, &ready, 1), 1);
+	assert_int_equal(ready, 'x');
+
+	result.fd = fd;
+	result.result = -1;
+	result.error = 0;
+	create_result = pthread_create(&thread, NULL, close_from_thread, &result);
+	if (create_result == 0) {
+		/* The registry transition, rather than elapsed time, proves the closer has
+		 * taken exclusive ownership and reached waitpid().
+		 */
+		for (i = 0; i < 5000; i++) {
+			errno = 0;
+			if (nft_pchild(fd) == -1 && errno == EBADF) {
+				detached = 1;
+				break;
+			}
+			usleep(1000);
+		}
+
+		if (detached) {
+			cancel_result = pthread_cancel(thread);
+		} else {
+			kill(child, SIGKILL);
+		}
+		join_result = pthread_join(thread, &thread_result);
+	}
+
+	errno = 0;
+	lookup_result = nft_pchild(fd);
+	lookup_error = errno;
+
+	/* Cancellation stops nft_pclose() before it can reap.  Clean up the child
+	 * before asserting because cmocka assertions longjmp.
+	 */
+	if (lookup_result > 0) {
+		kill(lookup_result, SIGKILL);
+		(void)nft_pclose(fd);
+	} else if (detached) {
+		kill(child, SIGKILL);
+		do {
+			status = waitpid(child, NULL, 0);
+		} while (status < 0 && errno == EINTR);
+	}
+
+	assert_int_equal(create_result, 0);
+	assert_true(detached);
+	assert_int_equal(cancel_result, 0);
+	assert_int_equal(join_result, 0);
+	assert_ptr_equal(thread_result, PTHREAD_CANCELED);
+	assert_int_equal(lookup_result, -1);
+	assert_int_equal(lookup_error, EBADF);
+}
+
+static void test_nft_pclose_early_error_preserves_cancellation_mode(void **state) {
+	int cancel_state_after;
+	int cancel_state_before;
+	(void) state;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state_before);
+	pthread_setcancelstate(cancel_state_before, NULL);
+
+	errno = 0;
+	assert_int_equal(nft_pclose(-1), -1);
+	assert_int_equal(errno, EBADF);
+	errno = 0;
+	assert_int_equal(nft_pchild(-1), -1);
+	assert_int_equal(errno, EBADF);
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state_after);
+	pthread_setcancelstate(cancel_state_after, NULL);
+
+	assert_int_equal(cancel_state_after, cancel_state_before);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -496,6 +678,9 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_nft_pclose_has_one_owner_per_registry_entry),
+		cmocka_unit_test(test_nft_pclose_cancellation_releases_registry_entry),
+		cmocka_unit_test(test_nft_pclose_early_error_preserves_cancellation_mode),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

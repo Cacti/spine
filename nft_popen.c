@@ -101,6 +101,37 @@ static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void	close_cleanup(void *);
 
+/* Close and remove an entry from the shared registry, then transfer exclusive
+ * ownership to the caller.  Closing under ListMutex preserves the invariant
+ * that every descriptor still visible to nft_popen() is open, so its
+ * posix_spawn addclose walk cannot queue an already-closed descriptor.  Once
+ * returned, no other thread can find or free the entry.
+ * Keep this noinline: GCC 12.2 emits -Wclobbered for the helper local when it
+ * is inlined into nft_pclose()'s pthread cleanup macro scope.
+ */
+static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd)
+{
+	struct pid **link;
+	struct pid *cur = NULL;
+
+	pthread_mutex_lock(&ListMutex);
+
+	for (link = &PidList; *link != NULL; link = &(*link)->next) {
+		if ((*link)->fd == fd) {
+			cur = *link;
+			(void)close(cur->fd);
+			cur->fd = -1;
+			*link = cur->next;
+			cur->next = NULL;
+			break;
+		}
+	}
+
+	pthread_mutex_unlock(&ListMutex);
+
+	return cur;
+}
+
 /*! ------------------------------------------------------------------------------
  *
  *  nft_popen
@@ -330,31 +361,25 @@ nft_pclose(int fd)
 {
 	struct pid *cur;
 	int		pstat;
+	int		cancel_state;
 	pid_t	pid;
 
-	/* Find the appropriate file descriptor. */
-	pthread_mutex_lock(&ListMutex);
-
-	for (cur = PidList; cur; cur = cur->next)
-	if (cur->fd == fd) break;
-
-	pthread_mutex_unlock(&ListMutex);
+	/* Cancellation must remain disabled until the detached entry is protected
+	 * by the cleanup handler.  Detaching transfers exclusive ownership here.
+	 */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
+	cur = pid_list_close_and_take(fd);
 
 	if (cur == NULL) {
+		pthread_setcancelstate(cancel_state, NULL);
 		errno = EBADF;
 		return -1;
 	}
 
-	/* The close and waitpid calls below are cancellation points.
-	 * We want to ensure that the fd is closed and the PidList
-	 * entry freed despite cancellation, so push a cleanup handler.
-	 */
+	/* Install the cleanup handler before restoring cancellation. */
 	pthread_cleanup_push(close_cleanup, cur);
 
-	/* end the process nicely and then forcefully */
-	(void)close(fd);
-
-	cur->fd = -1;		/* Prevent the fd being closed twice. */
+	pthread_setcancelstate(cancel_state, NULL);
 
 	do { pid = waitpid(cur->pid, &pstat, 0);
 	} while (pid == -1 && errno == EINTR);
@@ -372,29 +397,6 @@ static void
 close_cleanup(void * arg)
 {
 	struct pid * cur = arg;
-	struct pid * prev;
 
-	/* Close the pipe fd if necessary. */
-	if (cur->fd >= 0) {
-		(void)close(cur->fd);
-	}
-
-	/* Remove the entry from the linked list. */
-	pthread_mutex_lock(&ListMutex);
-
-	if (PidList == cur) {
-		PidList =  cur->next;
-	}else{
-		for (prev = PidList; prev; prev = prev->next)
-		if (prev->next == cur) {
-			prev->next =  cur->next;
-			break;
-		}
-
-		assert(prev != NULL);	/* Search should not fail */
-	}
-
-	pthread_mutex_unlock(&ListMutex);
-
-	free(cur);
+	SPINE_FREE(cur);
 }
