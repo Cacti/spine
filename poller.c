@@ -335,6 +335,41 @@ void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *re
 	q->posuffix_len = strlen(q->posuffix);
 }
 
+/*! \fn int poller_output_tuple(char *out, size_t out_len, MYSQL *mysql, const target_t *item, const char *host_time)
+ *  \brief format one poller_output row for the batched INSERT
+ *
+ *  Escapes the two free-text columns and writes the VALUES tuple. The leading
+ *  space is deliberate: the caller overwrites out[0] with a comma for every
+ *  tuple after the first, which is how the list is joined without tracking a
+ *  separate delimiter.
+ *
+ *  The escape destination is twice the source plus a terminator, because
+ *  mysql_real_escape_string() can double every byte. Sizing it from the source
+ *  buffer instead is what truncated results at 1022 bytes; see #583.
+ *
+ *  \return the length written, which the caller uses to decide whether the
+ *          batch buffer has room for it
+ */
+int poller_output_tuple(char *out, size_t out_len, MYSQL *mysql, const target_t *item, const char *host_time) {
+	char escaped_result[(RESULTS_BUFFER * 2) + 1];
+	char escaped_rrd_name[DBL_BUFSIZE];
+
+	if (out == NULL || out_len == 0 || item == NULL || host_time == NULL) {
+		return 0;
+	}
+
+	db_escape(mysql, escaped_result, sizeof(escaped_result), item->result);
+	db_escape(mysql, escaped_rrd_name, sizeof(escaped_rrd_name), item->rrd_name);
+
+	snprintf(out, out_len, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
+		item->local_data_id,
+		escaped_rrd_name,
+		host_time,
+		escaped_result);
+
+	return (int) strlen(out);
+}
+
 /*! \fn void poller_item_from_row(target_t *item, MYSQL_ROW row)
  *  \brief map one poller_item row onto a target
  *
@@ -1807,21 +1842,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while (i < rows_processed) {
-			/* escaping can double every byte, so the destination has to be
-			 * twice the source plus the terminator */
-			char escaped_result[(RESULTS_BUFFER * 2) + 1];
-			char escaped_rrd_name[DBL_BUFSIZE];
-
-			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
-			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
-
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
-				poller_items[i].local_data_id,
-				escaped_rrd_name,
-				host_time,
-				escaped_result);
-
-			result_length = strlen(result_string);
+			result_length = poller_output_tuple(result_string, RESULTS_BUFFER + SMALL_BUFSIZE,
+				&mysqlt, &poller_items[i], host_time);
 
 			/* if the next element to the buffer will overflow it, write to the database */
 			if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
