@@ -235,6 +235,12 @@ static void test_disconnect_is_null_safe(void **state) {
 	assert_int_equal(close_calls, 1);
 }
 
+static void test_escape_accepts_a_null_output(void **state) {
+	MYSQL mysql;
+	(void) state;
+	db_escape(&mysql, NULL, 32, "ignored");
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_insert_honors_read_only_mode, sql_reset),
@@ -246,6 +252,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_pool_checkout_and_release, sql_reset),
 		cmocka_unit_test_setup(test_pool_reports_exhaustion, sql_reset),
 		cmocka_unit_test_setup(test_disconnect_is_null_safe, sql_reset),
+		cmocka_unit_test_setup(test_escape_accepts_a_null_output, sql_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

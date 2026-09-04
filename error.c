@@ -155,6 +155,13 @@ static int spine_fatal_signals[] = {
 	0
 };
 
+/* A caught disposition is reset to SIG_DFL by exec(), unlike SIG_IGN. Keep
+ * broken pipes non-fatal in Spine while preserving normal SIGPIPE semantics
+ * for operator scripts launched through either posix_spawn() or libc popen(). */
+static void spine_sigpipe_handler(int spine_signal) {
+	(void) spine_signal;
+}
+
 /*! \fn void install_spine_signal_handler(void)
  *  \brief installs the spine signal handler to stop certain calls from
  *         abending Spine.
@@ -166,12 +173,14 @@ void install_spine_signal_handler(void) {
 	struct sigaction sa;
 	void (*ohandler)(int);
 
-	/* A broken pipe is a normal condition here, not a fatal one: a script
-	   server or popen child can exit at any time. The handler reset itself to
-	   SIG_DFL on entry and never re-armed, so the second dead child spine wrote
-	   to terminated the poller. Both write() call sites check their return, so
-	   ignoring the signal lets them see EPIPE and handle it. */
-	signal(SIGPIPE, SIG_IGN);
+	/* Broken pipes are ordinary runtime failures for database sockets, script
+	 * pipes and redirected logs. A caught handler makes write() return EPIPE,
+	 * and exec'd children automatically regain SIG_DFL. */
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = spine_sigpipe_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	sigaction(SIGPIPE, &sa, NULL);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -203,7 +212,13 @@ void uninstall_spine_signal_handler(void) {
 	struct sigaction sa;
 	void (*ohandler)(int);
 
-	signal(SIGPIPE, SIG_DFL);
+	sigaction(SIGPIPE, NULL, &sa);
+	if (sa.sa_handler == spine_sigpipe_handler) {
+		sa.sa_handler = SIG_DFL;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = 0;
+		sigaction(SIGPIPE, &sa, NULL);
+	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);

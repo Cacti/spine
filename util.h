@@ -105,6 +105,10 @@ extern char *get_date_format(void);
 
 /* remote/main server synchronization */
 extern void poller_push_data_to_main(void);
+extern int db_row_alias_upsert_supported(const char *version, unsigned long numeric_version);
+#ifdef SPINE_REMOTE_PUSH_TESTING
+extern void push_flush_batch_test(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix);
+#endif
 
 /* start time for spine */
 extern double start_time;
@@ -126,6 +130,7 @@ int get_cacti_version(MYSQL *psql, int mode);
  *  \return TRUE when the whole string was appended, FALSE on truncation or a
  *          formatting error, in which case the buffer stays NUL-terminated
  */
-extern int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...);
+extern int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
+	__attribute__((format(printf, 3, 4)));
 
 #endif /* SPINE_UTIL_H */

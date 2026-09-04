@@ -66,7 +66,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 void db_free_result(MYSQL_RES *result) { (void) result; frees_seen++; }
 int db_insert(MYSQL *mysql, int type, const char *query) { return 0; }
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {}
-int append_hostrange(char *obuf, const char *colname) { return 0; }
+int append_hostrange(char *obuf, size_t obuf_size, const char *colname) { return 0; }
 int parse_logdest(const char *res, int default_dest) { return 0; }
 const char *printable_logdest(int dest) { return ""; }
 void php_close(int php_process) {}

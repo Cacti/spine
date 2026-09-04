@@ -21,10 +21,22 @@
 #include "common.h"
 #include "spine.h"
 
+static int fail_objid_duplicates;
+
+oid *__real_snmp_duplicate_objid(const oid *objid, size_t objidlen);
+oid *__wrap_snmp_duplicate_objid(const oid *objid, size_t objidlen) {
+	if (fail_objid_duplicates > 0) {
+		fail_objid_duplicates--;
+		return NULL;
+	}
+	return __real_snmp_duplicate_objid(objid, objidlen);
+}
+
 static int session_reset(void **state) {
 	(void) state;
 	config_defaults();
 	set.snmp_retries = 1;
+	fail_objid_duplicates = 0;
 	return 0;
 }
 
@@ -74,6 +86,19 @@ static void test_auth_without_privacy_is_authnopriv(void **state) {
 	char empty[] = "";
 
 	(void) state;
+	assert_int_equal(level_for(sha, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
+}
+
+static void test_auth_without_privacy_falls_back_after_proto_allocation_failure(void **state) {
+	char sha[] = "SHA";
+	char pw[] = "authpass123";
+	char none[] = "[None]";
+	char empty[] = "";
+
+	(void) state;
+	/* Fail both the configured-protocol copy and net-snmp's configured default;
+	 * the probed explicit SHA-1 fallback must keep authNoPriv usable. */
+	fail_objid_duplicates = 2;
 	assert_int_equal(level_for(sha, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
 }
 
@@ -127,6 +152,7 @@ int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_no_credentials_is_noauthnopriv, session_reset),
 		cmocka_unit_test_setup(test_auth_without_privacy_is_authnopriv, session_reset),
+		cmocka_unit_test_setup(test_auth_without_privacy_falls_back_after_proto_allocation_failure, session_reset),
 		cmocka_unit_test_setup(test_auth_with_privacy_is_authpriv, session_reset),
 		cmocka_unit_test_setup(test_privacy_without_auth_is_refused, session_reset),
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_even_without_a_password, session_reset),

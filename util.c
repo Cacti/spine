@@ -511,6 +511,14 @@ static void read_availability_settings(MYSQL *psql) {
  *  load default values from the database for poller processing
  *
  */
+int db_row_alias_upsert_supported(const char *version, unsigned long numeric_version) {
+	if (version == NULL || STRIMATCH(version, "mariadb")) {
+		return FALSE;
+	}
+
+	return strpos(version, "8.") == 0 && numeric_version >= 80020;
+}
+
 void read_config_options(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
@@ -551,17 +559,10 @@ void read_config_options(void) {
 		free(res);
 	}
 
-	if (STRIMATCH(set.dbversion, "mariadb")) {
-		set.dbonupdate = 0;
-	} else if (strpos(set.dbversion, "8.") == 0) {
-		/* The row alias form, INSERT ... AS rs, is a syntax error before
-		   8.0.20, and the string test matches every 8.0.x. Ask the client
-		   library for the numeric version instead, so an older 8.0 keeps the
-		   VALUES() form rather than failing every poller_output insert. */
-		set.dbonupdate = (mysql_get_server_version(&mysql) >= 80020) ? 1 : 0;
-	} else {
-		set.dbonupdate = 0;
-	}
+	/* INSERT ... AS rs is a syntax error before MySQL 8.0.20. Keep the
+	 * portable VALUES() form for MariaDB, older MySQL, and unknown servers. */
+	set.dbonupdate = db_row_alias_upsert_supported(
+		set.dbversion, mysql_get_server_version(&mysql));
 
 	/* get the cacti version from the database */
 	set.cacti_version = get_cacti_version(&mysql, LOCAL);
@@ -837,7 +838,7 @@ void read_config_options(void) {
 		remaining = sizeof(sqlbuf);
 		spine_appendf(&sqlp, &remaining, "SELECT SQL_NO_CACHE action FROM poller_item");
 		spine_appendf(&sqlp, &remaining, " WHERE action=%d", POLLER_ACTION_PHP_SCRIPT_SERVER);
-		sqlp += append_hostrange(sqlp, "host_id");
+		sqlp += append_hostrange(sqlp, remaining, "host_id");
 		remaining = sizeof(sqlbuf) - (size_t) (sqlp - sqlbuf);
 		spine_appendf(&sqlp, &remaining, " AND poller_id=%i", set.poller_id);
 		spine_appendf(&sqlp, &remaining, " LIMIT 1");
@@ -965,6 +966,12 @@ static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const cha
 
 	db_insert(mysqlr, REMOTE, sqlbuf);
 }
+
+#ifdef SPINE_REMOTE_PUSH_TESTING
+void push_flush_batch_test(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix) {
+	push_flush_batch(mysqlr, sqlbuf, sqlp, suffix);
+}
+#endif
 
 void poller_push_data_to_main(void) {
 	MYSQL      mysql;

@@ -88,6 +88,7 @@
 #include "spine.h"
 #include <spawn.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/wait.h>
 
 /* An instance of this struct is created for each popen() fd. */
@@ -115,27 +116,76 @@ static int	AbandonedCount;
 static void	close_cleanup(void *);
 static void	nft_sweep_abandoned(void);
 static struct pid *pid_list_close_and_take(int);
+#ifdef SPINE_NFT_PCLOSE_TESTING
+extern void nft_abandon_parked_test_hook(void);
+#endif
 
-/* nft_pclose() must not block a poller thread indefinitely. A script that
-   writes its value and then lingers, or that ignores SIGPIPE, would otherwise
-   pin the thread across polling cycles while holding its available_scripts
-   token. Poll with WNOHANG, then escalate to SIGKILL. */
-/* Budget to SIGKILL is about five seconds on both platforms. The counts differ
- * because the granularity does: everywhere else in the tree usleep() is simply
- * skipped under SOLAR_THREAD rather than replaced, so the coarsest wait
- * available there is a whole second and the attempt count scales to match.
- * Leaving the counts equal made the Solaris path roughly a hundred seconds,
- * longer than a polling cycle, while nft_pclose() holds an available_scripts
- * token throughout. */
+static void nft_pclose_abandon(pid_t pid, const char *reason,
+	int *cancel_held, int *cancel_state) {
+	if (!*cancel_held) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, cancel_state);
+		*cancel_held = TRUE;
+	}
+	nft_abandon_child(pid, reason);
+}
+
+/* nft_pclose() must not block a poller thread indefinitely. Give a child the
+ * configured script timeout to finish naturally after stdout closes, then use
+ * the same TERM -> grace -> KILL policy as the PHP script-server shutdown. */
 #define NFT_PCLOSE_REAP_USEC 50000
 #define NFT_PCLOSE_SPIN_USEC 200
 #define NFT_PCLOSE_SPIN_ATTEMPTS 10
+#define NFT_PCLOSE_MAX_GRACE_SECONDS 5
 #ifndef SOLAR_THREAD
-#define NFT_PCLOSE_TERM_ATTEMPTS 100
-#define NFT_PCLOSE_KILL_ATTEMPTS 20
+#define NFT_PCLOSE_ATTEMPTS_PER_SEC 20
+#define NFT_PCLOSE_SIGNAL_ATTEMPTS 30
 #else
-#define NFT_PCLOSE_TERM_ATTEMPTS 5
-#define NFT_PCLOSE_KILL_ATTEMPTS 2
+#define NFT_PCLOSE_ATTEMPTS_PER_SEC 1
+#define NFT_PCLOSE_SIGNAL_ATTEMPTS 2
+#endif
+
+static int nft_pclose_grace_attempts(void) {
+	int seconds = set.script_timeout;
+	int interval_ceiling;
+	#ifndef SOLAR_THREAD
+	int max_seconds;
+	#endif
+
+	if (seconds < 1) seconds = 1;
+	/* The script already received its full runtime budget before pclose. This
+	 * is only a short post-output cleanup grace: never consume more than a
+	 * tenth of the polling interval, and never exceed five seconds. A zero
+	 * interval means Cacti's default interval, for which the absolute ceiling
+	 * remains the conservative bound. */
+	interval_ceiling = set.poller_interval > 0 ? set.poller_interval / 10 :
+		NFT_PCLOSE_MAX_GRACE_SECONDS;
+	if (interval_ceiling < 1) interval_ceiling = 1;
+	if (interval_ceiling > NFT_PCLOSE_MAX_GRACE_SECONDS)
+		interval_ceiling = NFT_PCLOSE_MAX_GRACE_SECONDS;
+	if (seconds > interval_ceiling) seconds = interval_ceiling;
+	#ifndef SOLAR_THREAD
+	max_seconds = (INT_MAX - NFT_PCLOSE_SPIN_ATTEMPTS) /
+		NFT_PCLOSE_ATTEMPTS_PER_SEC;
+	if (seconds > max_seconds) seconds = max_seconds;
+
+	return NFT_PCLOSE_SPIN_ATTEMPTS +
+		(seconds * NFT_PCLOSE_ATTEMPTS_PER_SEC);
+	#else
+	return seconds;
+	#endif
+}
+
+#ifdef SPINE_NFT_PCLOSE_TESTING
+int nft_pclose_grace_attempts_for_test(void) {
+	return nft_pclose_grace_attempts();
+}
+#endif
+
+#ifdef SPINE_NFT_PCLOSE_TESTING
+extern int spine_reap_child_bounded_test(pid_t, int *, int);
+#define NFT_PCLOSE_REAP spine_reap_child_bounded_test
+#else
+#define NFT_PCLOSE_REAP spine_reap_child_bounded
 #endif
 
 /* Detach the entry for fd from PidList and hand the caller sole ownership.
@@ -226,6 +276,34 @@ int spine_open_pipe_cloexec(int pdes[2]) {
 	}
 
 	return TRUE;
+}
+
+int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr) {
+	sigset_t defaults;
+	int rc;
+
+	if (attr == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	rc = posix_spawnattr_init(attr);
+	if (rc != 0) {
+		errno = rc;
+		return -1;
+	}
+
+	sigemptyset(&defaults);
+	sigaddset(&defaults, SIGPIPE);
+	rc = posix_spawnattr_setsigdefault(attr, &defaults);
+	if (rc == 0) rc = posix_spawnattr_setflags(attr, POSIX_SPAWN_SETSIGDEF);
+	if (rc != 0) {
+		posix_spawnattr_destroy(attr);
+		errno = rc;
+		return -1;
+	}
+
+	return 0;
 }
 
 /*! \fn static int reap_child_bounded(pid_t pid, int *pstat, int attempts)
@@ -375,7 +453,11 @@ int nft_popen(const char * command, const char * type) {
 
 	/* Build file actions for posix_spawn to replace vfork+execve. */
 	posix_spawn_file_actions_t fa;
-	if (posix_spawn_file_actions_init(&fa) != 0) {
+	posix_spawnattr_t attr;
+	int fa_error;
+	int attr_valid = FALSE;
+	fa_error = posix_spawn_file_actions_init(&fa);
+	if (fa_error != 0) {
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn_file_actions_init failed"));
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
@@ -383,7 +465,23 @@ int nft_popen(const char * command, const char * type) {
 		free(command_copy);
 		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
+		errno = fa_error;
 		return -1;
+	}
+	if (spine_spawnattr_sigpipe_default(&attr) != 0) {
+		SPINE_LOG(("ERROR: SCRIPT: posix_spawnattr setup failed: %s", strerror(errno)));
+		goto spawn_failed;
+	}
+	attr_valid = TRUE;
+
+	/* File actions execute in order. Close every parent-side pipe belonging to
+	 * an older popen before installing this child's stdin/stdout. An older pipe
+	 * can occupy fd 0 or 1 when Spine starts with standard descriptors closed;
+	 * closing it after dup2 would instead close the new redirect, while skipping
+	 * it silently cross-wires two scripts. The new pdes[] and inherit_fd are all
+	 * simultaneously open in the parent, so none can share an older p->fd. */
+	for (p = PidList; p; p = p->next) {
+		posix_spawn_file_actions_addclose(&fa, p->fd);
 	}
 
 	/* The pipe ends are close-on-exec, which is the point: another thread
@@ -395,8 +493,9 @@ int nft_popen(const char * command, const char * type) {
 	 * no dup2 to clear anything and the child would exec with that descriptor
 	 * closed. That happens whenever stdin or stdout was closed before this
 	 * call, which for a daemon is not exotic, and the failure is silent: every
-	 * script data source records U. dup() the end to a fresh descriptor, which
-	 * does not carry the flag, and let the child dup2 from that. */
+	 * script data source records U. dup() the end to a fresh descriptor, mark
+	 * that temporary copy close-on-exec against concurrent spawns, and let this
+	 * child's file action dup2 from it (clearing the flag on the target). */
 	if (*type == 'r') {
 		posix_spawn_file_actions_addclose(&fa, pdes[0]);
 		if (pdes[1] != STDOUT_FILENO) {
@@ -407,7 +506,7 @@ int nft_popen(const char * command, const char * type) {
 		} else {
 			inherit_fd = dup(pdes[1]);
 
-			if (inherit_fd < 0) {
+			if (inherit_fd < 0 || spine_set_cloexec(inherit_fd) != 0) {
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
 				goto spawn_failed;
 			}
@@ -425,7 +524,7 @@ int nft_popen(const char * command, const char * type) {
 		} else {
 			inherit_fd = dup(pdes[0]);
 
-			if (inherit_fd < 0) {
+			if (inherit_fd < 0 || spine_set_cloexec(inherit_fd) != 0) {
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
 				goto spawn_failed;
 			}
@@ -436,10 +535,6 @@ int nft_popen(const char * command, const char * type) {
 		posix_spawn_file_actions_addclose(&fa, pdes[1]);
 	}
 
-	/* Close all other pipes in the child (Posix.2 requirement). */
-	for (p = PidList; p; p = p->next)
-		posix_spawn_file_actions_addclose(&fa, p->fd);
-
 	/* Spawn the child process with retry on EAGAIN/ENOMEM. */
 	#if defined(__CYGWIN__)
 	const char *spawn_shell = (set.cygwinshloc == 0) ? "sh.exe" : "/bin/sh";
@@ -449,7 +544,7 @@ int nft_popen(const char * command, const char * type) {
 
 	int spawn_err;
 	retry:
-	spawn_err = posix_spawn(&pid, spawn_shell, &fa, NULL, argv, environ);
+	spawn_err = posix_spawn(&pid, spawn_shell, &fa, &attr, argv, environ);
 
 	if (spawn_err != 0) {
 		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
@@ -467,6 +562,7 @@ spawn_failed:
 		 * nft_pclose() in every poller thread and the daemon stops collecting
 		 * script data until it is restarted. */
 		posix_spawn_file_actions_destroy(&fa);
+		if (attr_valid) posix_spawnattr_destroy(&attr);
 
 		if (inherit_fd != -1) {
 			(void)close(inherit_fd);
@@ -481,6 +577,8 @@ spawn_failed:
 		pthread_setcancelstate(cancel_state, NULL);
 		return -1;
 	}
+	posix_spawnattr_destroy(&attr);
+	attr_valid = FALSE;
 
 	posix_spawn_file_actions_destroy(&fa);
 
@@ -561,7 +659,8 @@ int nft_pchild(int fd) {
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *    EBADF	The fd is not an active popen() file descriptor.
- *    ECHILD	The waitpid() call failed.
+ *    ETIMEDOUT	The child outlived the TERM/KILL budgets.
+ *    otherwise	The errno reported by waitpid().
  *
  *  This call is cancellable.
  *
@@ -572,7 +671,11 @@ nft_pclose(int fd)
 {
 	struct pid *cur;
 	int		pstat;
+	int		reap_result;
+	int		reap_errno = ECHILD;
 	int		cancel_state;
+	int		abandon_cancel_state = PTHREAD_CANCEL_ENABLE;
+	int		abandon_cancel_held = FALSE;
 	pid_t	pid;
 
 	/* Detaching transfers exclusive ownership of the entry to this thread, so
@@ -595,31 +698,57 @@ nft_pclose(int fd)
 
 	pthread_setcancelstate(cancel_state, NULL);
 
-	/* end the process nicely and then forcefully */
-	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS)) {
+	/* Give the child the configured time to exit after its pipe closes. A
+	 * still-live child gets SIGTERM and another bounded grace period before
+	 * SIGKILL; ordinary successful scripts are never killed outright. */
+	reap_result = NFT_PCLOSE_REAP(cur->pid, &pstat, nft_pclose_grace_attempts());
+	if (reap_result < 0 && errno != 0) reap_errno = errno;
+	switch (reap_result) {
 	case 0:
 		pid = cur->pid;
 		break;
 	case 1:
-		(void)kill(cur->pid, SIGKILL);
-		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
+		(void)kill(cur->pid, SIGTERM);
+		reap_result = NFT_PCLOSE_REAP(cur->pid, &pstat, NFT_PCLOSE_SIGNAL_ATTEMPTS);
+		if (reap_result < 0 && errno != 0) reap_errno = errno;
+		if (reap_result == 0) {
 			pid = cur->pid;
+		} else if (reap_result == 1) {
+			(void)kill(cur->pid, SIGKILL);
+			reap_result = NFT_PCLOSE_REAP(cur->pid, &pstat, NFT_PCLOSE_SIGNAL_ATTEMPTS);
+			if (reap_result < 0 && errno != 0) reap_errno = errno;
+			if (reap_result == 0) {
+				pid = cur->pid;
+			} else {
+				nft_pclose_abandon(cur->pid,
+					reap_result == 1 ? "kill budget expired" : "waitpid failed after SIGKILL",
+					&abandon_cancel_held, &abandon_cancel_state);
+				errno = reap_result == 1 ? ETIMEDOUT : reap_errno;
+				pid = -1;
+			}
 		} else {
-			nft_abandon_child(cur->pid, "kill budget expired");
-			errno = ETIMEDOUT;
+			nft_pclose_abandon(cur->pid, "waitpid failed after SIGTERM",
+				&abandon_cancel_held, &abandon_cancel_state);
+			errno = reap_errno;
 			pid = -1;
 		}
 		break;
 	default:
-		nft_abandon_child(cur->pid, "waitpid failed");
+		nft_pclose_abandon(cur->pid, "waitpid failed",
+			&abandon_cancel_held, &abandon_cancel_state);
+		errno = reap_errno;
 		pid = -1;
 		break;
 	}
 
+	if (pid == -1) reap_errno = errno;
 	pthread_cleanup_pop(0);	/* Normal path: this thread still owns cur. */
 
 	SPINE_FREE(cur);
-
+	if (pid == -1) errno = reap_errno;
+	if (abandon_cancel_held) {
+		pthread_setcancelstate(abandon_cancel_state, NULL);
+	}
 	return (pid == -1 ? -1 : pstat);
 }
 
@@ -677,6 +806,16 @@ nft_abandoned_pending(void)
 	return remaining;
 }
 
+#ifdef SPINE_NFT_PCLOSE_TESTING
+void nft_fill_abandoned_for_test(pid_t pid) {
+	int i;
+	pthread_mutex_lock(&ListMutex);
+	for (i = 0; i < NFT_ABANDONED_MAX; i++) AbandonedPids[i] = pid;
+	AbandonedCount = NFT_ABANDONED_MAX;
+	pthread_mutex_unlock(&ListMutex);
+}
+#endif
+
 /*! ------------------------------------------------------------------------------
   * nft_abandon_child	- record a child that outlived its kill budget.
   *
@@ -707,6 +846,10 @@ nft_abandon_child(pid_t pid, const char *reason)
 
 	pthread_mutex_unlock(&ListMutex);
 
+	#ifdef SPINE_NFT_PCLOSE_TESTING
+	nft_abandon_parked_test_hook();
+	#endif
+
 	pthread_setcancelstate(oldstate, NULL);
 
 	if (parked) {
@@ -724,6 +867,8 @@ static void
 close_cleanup(void * arg)
 {
 	struct pid * cur = arg;
+	int status;
+	int reap_result;
 	pid_t pid;
 
 	/* Runs only when a cancel arrives after nft_pclose() detached the entry, so
@@ -741,10 +886,13 @@ close_cleanup(void * arg)
 
 	if (pid == 0) {
 		(void)kill(cur->pid, SIGKILL);
-
-		do {
-			pid = waitpid(cur->pid, NULL, 0);
-		} while (pid < 0 && errno == EINTR);
+		reap_result = spine_reap_child_bounded(cur->pid, &status,
+			NFT_PCLOSE_SIGNAL_ATTEMPTS);
+		if (reap_result != 0) {
+			nft_abandon_child(cur->pid,
+				reap_result == 1 ? "cancel cleanup kill budget expired" :
+				"cancel cleanup waitpid failed after SIGKILL");
+		}
 	}
 
 	SPINE_FREE(cur);

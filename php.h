@@ -39,4 +39,9 @@ extern int php_init(int php_process);
 extern void php_close(int php_process);
 extern int php_get_process(void);
 
+#ifdef SPINE_PHP_RUNTIME_TESTING
+extern ssize_t php_write_no_sigpipe_for_test(int fd, const void *buffer, size_t length);
+extern char *php_read_result_for_test(int php_process, char *command, int allow_restart);
+#endif
+
 #endif /* SPINE_PHP_H */

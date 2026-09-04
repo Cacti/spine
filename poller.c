@@ -694,8 +694,23 @@ int poller_process_snmp_results(host_t *host, target_t *poller_items,
  *    - anything else, stripped to its numeric part and then validated; a value
  *      that still does not validate becomes undefined
  *
+ *  After a successful outcome, output_regex is applied consistently to SNMP,
+ *  external-script and PHP script-server values. Because the regex selects the
+ *  matched substring, applying one to multipart output intentionally collapses
+ *  that line to the match; operators should use this only when that is desired.
+ *
  *  \return TRUE when the result was rejected, so the caller counts an error
  */
+static void poller_apply_output_regex(target_t *item) {
+	char regex_result[RESULTS_BUFFER];
+
+	if (strlen(item->output_regex)) {
+		snprintf(regex_result, sizeof(regex_result), "%s",
+			regex_replace(item->output_regex, item->result));
+		snprintf(item->result, RESULTS_BUFFER, "%s", regex_result);
+	}
+}
+
 int poller_store_result(target_t *item, char *poll_result, char *error_string,
 	int *buf_size, int *buf_errors, int host_id, int host_thread) {
 	char temp_result[RESULTS_BUFFER];
@@ -719,11 +734,13 @@ int poller_store_result(target_t *item, char *poll_result, char *error_string,
 
 	if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 		snprintf(item->result, RESULTS_BUFFER, "%s", poll_result);
+		poller_apply_output_regex(item);
 		return FALSE;
 	}
 
 	if (is_hexadecimal(poll_result, TRUE)) {
 		snprintf(item->result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+		poller_apply_output_regex(item);
 		return FALSE;
 	}
 
@@ -744,6 +761,8 @@ int poller_store_result(target_t *item, char *poll_result, char *error_string,
 		SET_UNDEFINED(item->result);
 		return TRUE;
 	}
+
+	poller_apply_output_regex(item);
 
 	return FALSE;
 }

@@ -50,6 +50,24 @@ jobs:
           sudo ./tests/unit/test_ping_icmp
           echo "raw ICMP cases executed rather than skipped"
 
+  net-snmp-no-md5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Simulate an MD5-disabled/FIPS net-snmp header. The explicit SHA-1
+      # fallback must configure and link without SNMP_DEFAULT_AUTH_PROTO.
+      - uses: ./.github/actions/build-spine
+        with:
+          configure-args: CPPFLAGS=-DNETSNMP_DISABLE_MD5
+
+      - name: Build without net-snmp MD5 auth
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+          make check
+
   # Coverage is reported, not gated.  The number is only meaningful once
   # something measures it; the threshold conversation comes after that.
   coverage:

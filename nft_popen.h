@@ -23,6 +23,8 @@
 
 #ifndef SPINE_NFT_POPEN_H
 #define SPINE_NFT_POPEN_H
+
+#include <spawn.h>
 /******************************************************************************
  ex: set tabstop=4 shiftwidth=4 autoindent:
  *
@@ -90,7 +92,8 @@ extern int	nft_pchild(int fd);
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *	EBADF	The fd is not an active popen() file descriptor.
- *	ECHILD	waitpid() failed.
+ *	ETIMEDOUT	The child outlived the TERM/KILL budgets.
+ *	otherwise	The errno reported by waitpid().
  */
 extern int	nft_pclose(int fd);
 
@@ -115,6 +118,10 @@ extern int	spine_set_cloexec(int fd);
  */
 extern int	spine_open_pipe_cloexec(int pdes[2]);
 
+/* Initialize spawn attributes that restore SIGPIPE's default disposition in
+ * posix_spawned children while Spine catches SIGPIPE in the parent. */
+extern int	spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
+
 /*!
  *  spine_reap_child_bounded
  *
@@ -137,8 +144,8 @@ extern int	spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
  *
  *  Record a child that outlived nft_pclose()'s kill budget. Nothing else in
  *  spine reaps, so a dropped child would stay a zombie for the daemon's
- *  lifetime; parked pids are swept on the next script poll. The pid and the
- *  reason are logged either way.
+ *  lifetime; parked pids are swept by the scheduler and on the next script
+ *  poll. The pid and reason are logged either way.
  */
 extern void	nft_abandon_child(pid_t pid, const char *reason);
 

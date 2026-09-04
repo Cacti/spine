@@ -18,8 +18,10 @@
 #include "common.h"
 #include "spine.h"
 #include "util.h"
+#include "sql.h"
 #include "ping.h"
 #include "nft_popen.h"
+#include "error.h"
 
 #include <wchar.h>
 #include <locale.h>
@@ -93,6 +95,16 @@ static void test_regex_replace_passes_through_on_no_match(void **state) {
 static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
+}
+
+static void test_regex_number_extracts_decimal_from_labelled_output(void **state) {
+	(void) state;
+	assert_string_equal(regex_replace(REGEX_NUMBER, "value=1.5 (avg)"), "1.5");
+}
+
+static void test_regex_number_stops_after_first_decimal_match(void **state) {
+	(void) state;
+	assert_string_equal(regex_replace(REGEX_NUMBER, "10.0.0.1"), "10.0");
 }
 
 
@@ -579,6 +591,114 @@ static void test_reap_reports_an_already_reaped_child(void **state) {
 	assert_int_equal(pstat, 0);
 }
 
+static void test_pclose_promptly_ends_a_child_writing_after_pipe_close(void **state) {
+	struct sigaction saved_sigpipe;
+	struct sigaction ignored_sigpipe;
+	char buf[32];
+	double started;
+	double elapsed;
+	int fd;
+
+	(void) state;
+	memset(&ignored_sigpipe, 0, sizeof(ignored_sigpipe));
+	ignored_sigpipe.sa_handler = SIG_IGN;
+	assert_int_equal(sigaction(SIGPIPE, &ignored_sigpipe, &saved_sigpipe), 0);
+
+	fd = nft_popen("printf 'first\\n'; while :; do printf 'more\\n'; done", "r");
+	assert_true(fd >= 0);
+	assert_true(read(fd, buf, sizeof(buf)) > 0);
+	started = get_time_as_double();
+	nft_pclose(fd);
+	elapsed = get_time_as_double() - started;
+
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+	assert_true(elapsed < 2.0);
+}
+
+static void test_signal_setup_turns_a_broken_pipe_into_epipe(void **state) {
+	struct sigaction saved_sigpipe;
+	struct sigaction default_sigpipe;
+	struct sigaction actual_sigpipe;
+	int pdes[2];
+
+	(void) state;
+	assert_int_equal(sigaction(SIGPIPE, NULL, &saved_sigpipe), 0);
+	memset(&default_sigpipe, 0, sizeof(default_sigpipe));
+	default_sigpipe.sa_handler = SIG_DFL;
+	assert_int_equal(sigaction(SIGPIPE, &default_sigpipe, NULL), 0);
+	install_spine_signal_handler();
+	assert_int_equal(sigaction(SIGPIPE, NULL, &actual_sigpipe), 0);
+	assert_true(actual_sigpipe.sa_handler != SIG_IGN);
+	assert_true(actual_sigpipe.sa_handler != SIG_DFL);
+
+	assert_int_equal(pipe(pdes), 0);
+	close(pdes[0]);
+	errno = 0;
+	assert_int_equal(write(pdes[1], "x", 1), -1);
+	assert_int_equal(errno, EPIPE);
+	/* The first signal must not reset the disposition and make the next broken
+	 * pipe fatal. */
+	errno = 0;
+	assert_int_equal(write(pdes[1], "x", 1), -1);
+	assert_int_equal(errno, EPIPE);
+	close(pdes[1]);
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+}
+
+#ifdef USING_TPOPEN
+static void test_libc_popen_child_observes_default_sigpipe(void **state) {
+	struct sigaction saved_sigpipe;
+	struct sigaction ignored_sigpipe;
+	char output[32];
+	FILE *child;
+	int status;
+
+	(void) state;
+	assert_int_equal(sigaction(SIGPIPE, NULL, &saved_sigpipe), 0);
+	/* Normalize an inherited ignore as well as SIG_DFL. SIG_IGN would survive
+	 * exec and reproduce the optional-popen regression. */
+	memset(&ignored_sigpipe, 0, sizeof(ignored_sigpipe));
+	ignored_sigpipe.sa_handler = SIG_IGN;
+	assert_int_equal(sigaction(SIGPIPE, &ignored_sigpipe, NULL), 0);
+	install_spine_signal_handler();
+
+	child = popen("kill -PIPE $$; printf survived", "r");
+	assert_non_null(child);
+	memset(output, 0, sizeof(output));
+	assert_null(fgets(output, sizeof(output), child));
+	status = pclose(child);
+	assert_true(status != 0);
+
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+}
+#endif
+
+static void test_spine_log_survives_a_closed_stdout_pipe(void **state) {
+	int status;
+	pid_t pid;
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+	if (pid == 0) {
+		int pdes[2];
+		signal(SIGPIPE, SIG_DFL);
+		install_spine_signal_handler();
+		if (pipe(pdes) != 0) _exit(2);
+		close(pdes[0]);
+		if (dup2(pdes[1], STDOUT_FILENO) < 0) _exit(3);
+		close(pdes[1]);
+		set.log_destination = LOGDEST_STDOUT;
+		spine_log("closed stdout must not terminate spine");
+		fflush(stdout);
+		_exit(0);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
 static void test_get_date_format_returns_cached_storage(void **state) {
 	char *fmt;
 	(void) state;
@@ -608,6 +728,51 @@ static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
 	assert_non_null(fmt);
 	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
 	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
+}
+
+static void test_append_hostrange_writes_the_configured_range(void **state) {
+	char out[64] = {0};
+	int written;
+	(void) state;
+
+	set.start_host_id = 12;
+	set.end_host_id = 34;
+	written = append_hostrange(out, sizeof out, "h.id");
+
+	assert_string_equal(out, " AND h.id BETWEEN 12 AND 34");
+	assert_int_equal(written, (int) strlen(out));
+}
+
+static void test_append_hostrange_truncates_without_advancing_past_the_buffer(void **state) {
+	struct {
+		char out[12];
+		unsigned char canary;
+	} bounded;
+	int written;
+	(void) state;
+
+	memset(&bounded, 0xA5, sizeof bounded);
+	set.start_host_id = 12345;
+	set.end_host_id = 67890;
+	written = append_hostrange(bounded.out, sizeof bounded.out, "host_id");
+
+	assert_int_equal(written, (int) sizeof bounded.out - 1);
+	assert_int_equal(bounded.out[sizeof bounded.out - 1], '\0');
+	assert_int_equal(bounded.canary, 0xA5);
+}
+
+static void test_append_hostrange_fits_at_the_exact_complete_boundary(void **state) {
+	static const char expected[] = " AND h.id BETWEEN 12 AND 34";
+	char out[sizeof expected];
+	int written;
+	(void) state;
+
+	set.start_host_id = 12;
+	set.end_host_id = 34;
+	written = append_hostrange(out, sizeof out, "h.id");
+
+	assert_string_equal(out, expected);
+	assert_int_equal(written, (int) strlen(expected));
 }
 
 /* db_escape() stands between a device-supplied poller result and the SQL text
@@ -723,6 +888,16 @@ static void test_db_escape_handles_a_degenerate_destination(void **state) {
 	memcpy(out, "abc", 4);
 	db_escape(escape_handle(), out, 0, "anything");
 	assert_string_equal(out, "abc");
+}
+
+static void test_row_alias_upsert_requires_mysql_8020(void **state) {
+	(void) state;
+	assert_int_equal(db_row_alias_upsert_supported("8.0.19", 80019), FALSE);
+	assert_int_equal(db_row_alias_upsert_supported("8.0.20", 80020), TRUE);
+	assert_int_equal(db_row_alias_upsert_supported("8.4.0", 80400), TRUE);
+	assert_int_equal(db_row_alias_upsert_supported("10.11.8-MariaDB", 101108), FALSE);
+	assert_int_equal(db_row_alias_upsert_supported("5.7.44", 50744), FALSE);
+	assert_int_equal(db_row_alias_upsert_supported(NULL, 80020), FALSE);
 }
 
 /* Cacti stores the literal "[None]" when no SNMPv3 protocol is selected, and an
@@ -1710,6 +1885,26 @@ static void test_store_keeps_multipart_output_verbatim(void **state) {
 	assert_string_equal(sr_item.result, "in:1000 out:2000");
 }
 
+static void test_store_applies_an_ere_output_regex_to_script_results(void **state) {
+	char v[] = "in:4242 out:7";
+	(void) state;
+
+	snprintf(sr_item.output_regex, sizeof(sr_item.output_regex), "%s", "[0-9]+");
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "4242");
+}
+
+static void test_store_pins_legacy_bre_style_output_regex(void **state) {
+	char v[] = "in:4242 out:7";
+	(void) state;
+
+	/* Under ERE the escaped BRE operators are literals, so the no-match
+	 * contract preserves the original script response. */
+	snprintf(sr_item.output_regex, sizeof(sr_item.output_regex), "%s", "\\([0-9]\\+\\)");
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "in:4242 out:7");
+}
+
 /* Anything else is stripped to its numeric part rather than rejected outright,
    which is what lets a device answering "42 packets" still record 42. */
 static void test_store_strips_a_value_wearing_units(void **state) {
@@ -1718,6 +1913,20 @@ static void test_store_strips_a_value_wearing_units(void **state) {
 	(void) state;
 	assert_false(store(v));
 	assert_string_equal(sr_item.result, "42");
+}
+
+static void test_store_pins_multi_dot_numeric_fallback(void **state) {
+	char ip[] = "10.0.0.1";
+	char oid[] = "1.3.6.1.4.1";
+	char version[] = "2.6.32";
+
+	(void) state;
+	assert_false(store(ip));
+	assert_string_equal(sr_item.result, "10.0");
+	assert_false(store(oid));
+	assert_string_equal(sr_item.result, "1.3");
+	assert_false(store(version));
+	assert_string_equal(sr_item.result, "2.6");
 }
 
 /* And a value with nothing numeric in it becomes undefined and counts. */
@@ -1861,6 +2070,18 @@ static void test_snmp_batch_applies_the_data_source_output_regex(void **state) {
 
 	assert_int_equal(run_batch(1, FALSE), 0);
 	assert_string_equal(sn_items[0].result, "4242");
+}
+
+static void test_snmp_batch_pins_legacy_bre_style_output_regex(void **state) {
+	(void) state;
+	/* Under BRE this selected the first run of digits. Under ERE the escaped
+	 * operators are literals, so the no-match contract preserves the original
+	 * multipart response. This pins the documented upgrade behavior. */
+	snprintf(sn_items[0].output_regex, sizeof(sn_items[0].output_regex), "%s", "\\([0-9]\\+\\)");
+	set_oid(0, "in:4242 out:7");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "in:4242 out:7");
 }
 
 /* spike_kill blanks a value when the agent has restarted, but leaves
@@ -2084,37 +2305,55 @@ static void test_store_matches_the_chain_it_replaced(void **state) {
 		"deadbeef", "0x1F", "42 packets", "connection refused",
 		"  7  ", "No Such Instance", "1e5", "4294967296"
 	};
+	static const char *regexes[] = { "", "[0-9]+" };
 	char a[RESULTS_BUFFER], b[RESULTS_BUFFER];
+	char expected[RESULTS_BUFFER];
 	target_t ia, ib;
 	char errs[DBL_BUFSIZE];
 	int bs, be;
-	size_t k;
+	int regex_differences = 0;
+	size_t k, r;
 
 	(void) state;
 
-	for (k = 0; k < sizeof(inputs) / sizeof(inputs[0]); k++) {
-		int want, got;
+	for (r = 0; r < sizeof(regexes) / sizeof(regexes[0]); r++) {
+		for (k = 0; k < sizeof(inputs) / sizeof(inputs[0]); k++) {
+			int want, got;
 
-		memset(&ia, 0, sizeof(ia)); memset(&ib, 0, sizeof(ib));
-		ia.local_data_id = ib.local_data_id = 5;
-		memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
+			memset(&ia, 0, sizeof(ia)); memset(&ib, 0, sizeof(ib));
+			ia.local_data_id = ib.local_data_id = 5;
+			snprintf(ib.output_regex, sizeof(ib.output_regex), "%s", regexes[r]);
+			memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
 
-		snprintf(a, sizeof(a), "%s", inputs[k]);
-		want = reference_store_result(&ia, a, errs, &bs, &be, 7, 1);
+			snprintf(a, sizeof(a), "%s", inputs[k]);
+			want = reference_store_result(&ia, a, errs, &bs, &be, 7, 1);
 
-		memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
-		snprintf(b, sizeof(b), "%s", inputs[k]);
-		got = poller_store_result(&ib, b, errs, &bs, &be, 7, 1);
+			memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
+			snprintf(b, sizeof(b), "%s", inputs[k]);
+			got = poller_store_result(&ib, b, errs, &bs, &be, 7, 1);
 
-		if (want != got) {
-			fail_msg("input '%s': chain said %d, function said %d", inputs[k], want, got);
-		}
+			if (want != got) {
+				fail_msg("regex '%s', input '%s': chain said %d, function said %d",
+					regexes[r], inputs[k], want, got);
+			}
 
-		if (strcmp(ia.result, ib.result) != 0) {
-			fail_msg("input '%s': chain stored '%s', function stored '%s'",
-				inputs[k], ia.result, ib.result);
+			snprintf(expected, sizeof(expected), "%s", ia.result);
+			if (!want && regexes[r][0] != '\0') {
+				snprintf(expected, sizeof(expected), "%s",
+					regex_replace(regexes[r], ia.result));
+				if (strcmp(ia.result, expected) != 0) regex_differences++;
+			}
+
+			if (strcmp(expected, ib.result) != 0) {
+				fail_msg("regex '%s', input '%s': expected '%s', function stored '%s'",
+					regexes[r], inputs[k], expected, ib.result);
+			}
 		}
 	}
+
+	/* Prove the regex dimension exercised the intentional extension rather than
+	 * merely repeating the old empty-regex comparison. */
+	assert_true(regex_differences > 0);
 }
 
 
@@ -2806,6 +3045,166 @@ static void test_nft_popen_does_not_leak_descriptors_in_the_collision_case(void 
 	assert_true(after <= before);
 }
 
+/* Keep a first popen registered on fd 1 while starting a second child. The
+ * PidList close actions run after the second child's stdout redirect; closing
+ * the old entry by number at that point used to close the new stdout. */
+static void test_overlapping_popen_preserves_the_new_child_stdout(void **state) {
+	int saved_stdout;
+	int first = -1;
+	int second = -1;
+	char buf[128] = {0};
+	ssize_t n = -1;
+	struct pollfd pfd;
+
+	(void) state;
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdout >= 0);
+
+	close(STDOUT_FILENO);
+	first = nft_popen("printf first", "r");
+	if (first >= 0) {
+		second = nft_popen("printf second-visible", "r");
+	}
+
+	if (second >= 0) {
+		pfd.fd = second;
+		pfd.events = POLLIN;
+		if (poll(&pfd, 1, 5000) > 0) {
+			n = read(second, buf, sizeof(buf) - 1);
+			if (n >= 0) buf[n] = '\0';
+		}
+		nft_pclose(second);
+	}
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdout);
+
+	assert_int_equal(first, STDOUT_FILENO);
+	assert_true(second >= 0);
+	assert_true(n > 0);
+	assert_non_null(strstr(buf, "second-visible"));
+}
+
+/* The symmetric collision occurs when an older registered read pipe occupies
+ * fd 0 and a new write-mode child installs its stdin there. */
+static void test_overlapping_popen_preserves_the_new_child_stdin(void **state) {
+	const char payload[] = "second-visible\n";
+	struct sigaction saved_sigpipe;
+	struct sigaction ignored_sigpipe;
+	int saved_stdin;
+	int first = -1;
+	int second = -1;
+	int status = -1;
+	ssize_t written = -1;
+
+	(void) state;
+	saved_stdin = dup(STDIN_FILENO);
+	assert_true(saved_stdin >= 0);
+	memset(&ignored_sigpipe, 0, sizeof(ignored_sigpipe));
+	ignored_sigpipe.sa_handler = SIG_IGN;
+	assert_int_equal(sigaction(SIGPIPE, &ignored_sigpipe, &saved_sigpipe), 0);
+
+	close(STDIN_FILENO);
+	first = nft_popen("printf first", "r");
+	if (first >= 0) {
+		second = nft_popen("IFS= read -r value; test \"$value\" = second-visible", "w");
+	}
+	if (second >= 0) {
+		written = write(second, payload, sizeof(payload) - 1);
+		status = nft_pclose(second);
+	}
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	close(saved_stdin);
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+
+	assert_int_equal(first, STDIN_FILENO);
+	assert_true(second >= 0);
+	assert_int_equal(written, (ssize_t)(sizeof(payload) - 1));
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
+/* An older write-mode parent fd can occupy stdout. A new write-mode child does
+ * not redirect stdout, so it must close that older fd before exec rather than
+ * sending its output into the first child's stdin. */
+static void test_overlapping_write_popen_does_not_crosswire_stdout(void **state) {
+	char command[SMALL_BUFSIZE];
+	char capture[64] = {0};
+	char path[128];
+	int saved_stdin;
+	int saved_stdout;
+	int first = -1;
+	int second = -1;
+	FILE *fp;
+
+	(void) state;
+	snprintf(path, sizeof(path), "/tmp/spine-popen-crosswire-%ld", (long)getpid());
+	unlink(path);
+	snprintf(command, sizeof(command), "cat > %s", path);
+	saved_stdin = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+	first = nft_popen(command, "w");
+	if (first >= 0) second = nft_popen("printf crosswired", "w");
+	if (second >= 0) nft_pclose(second);
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_int_equal(first, STDOUT_FILENO);
+	assert_true(second >= 0);
+	fp = fopen(path, "r");
+	assert_non_null(fp);
+	(void)fread(capture, 1, sizeof(capture) - 1, fp);
+	fclose(fp);
+	unlink(path);
+	assert_null(strstr(capture, "crosswired"));
+}
+
+/* The mirror case: an older read-mode parent fd can occupy stdin. A later
+ * read-mode child must not inherit it and consume the first script's output. */
+static void test_overlapping_read_popen_does_not_crosswire_stdin(void **state) {
+	char buf[128] = {0};
+	int saved_stdin;
+	int first = -1;
+	int second = -1;
+	ssize_t n = -1;
+	struct pollfd pfd;
+
+	(void) state;
+	saved_stdin = dup(STDIN_FILENO);
+	assert_true(saved_stdin >= 0);
+	close(STDIN_FILENO);
+	first = nft_popen("printf 'first-pipe-data\\n'", "r");
+	if (first >= 0) {
+		second = nft_popen("if IFS= read -r value; then printf 'stole:%s' \"$value\"; else printf no-input; fi", "r");
+	}
+	if (second >= 0) {
+		pfd.fd = second;
+		pfd.events = POLLIN;
+		if (poll(&pfd, 1, 5000) > 0) n = read(second, buf, sizeof(buf) - 1);
+		nft_pclose(second);
+	}
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	close(saved_stdin);
+	assert_int_equal(first, STDIN_FILENO);
+	assert_true(second >= 0);
+	assert_true(n > 0);
+	assert_non_null(strstr(buf, "no-input"));
+	assert_null(strstr(buf, "stole:"));
+}
+
 
 
 static sigjmp_buf nft_lock_timeout;
@@ -2927,6 +3326,8 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_regex_number_extracts_decimal_from_labelled_output),
+		cmocka_unit_test(test_regex_number_stops_after_first_decimal_match),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_is_numeric),
@@ -2979,13 +3380,26 @@ int main(void) {
 		cmocka_unit_test(test_nft_popen_reads_a_script_with_stdout_closed),
 		cmocka_unit_test(test_nft_popen_reaches_eof_with_stdio_closed),
 		cmocka_unit_test(test_nft_popen_does_not_leak_descriptors_in_the_collision_case),
+		cmocka_unit_test(test_overlapping_popen_preserves_the_new_child_stdout),
+		cmocka_unit_test(test_overlapping_popen_preserves_the_new_child_stdin),
+		cmocka_unit_test(test_overlapping_write_popen_does_not_crosswire_stdout),
+		cmocka_unit_test(test_overlapping_read_popen_does_not_crosswire_stdin),
 		cmocka_unit_test(test_nft_popen_releases_the_lock_when_dup_fails),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
+		cmocka_unit_test(test_pclose_promptly_ends_a_child_writing_after_pipe_close),
+		cmocka_unit_test(test_signal_setup_turns_a_broken_pipe_into_epipe),
+		#ifdef USING_TPOPEN
+		cmocka_unit_test(test_libc_popen_child_observes_default_sigpipe),
+		#endif
+		cmocka_unit_test(test_spine_log_survives_a_closed_stdout_pipe),
 		cmocka_unit_test(test_get_date_format_returns_cached_storage),
 		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
+		cmocka_unit_test(test_append_hostrange_writes_the_configured_range),
+		cmocka_unit_test(test_append_hostrange_truncates_without_advancing_past_the_buffer),
+		cmocka_unit_test(test_append_hostrange_fits_at_the_exact_complete_boundary),
 		cmocka_unit_test(test_db_escape_escapes_sql_metacharacters),
 		cmocka_unit_test(test_db_escape_clears_on_a_null_input),
 		cmocka_unit_test(test_db_escape_does_not_leak_the_previous_column),
@@ -2993,6 +3407,7 @@ int main(void) {
 		cmocka_unit_test(test_db_escape_survives_the_old_staging_boundary),
 		cmocka_unit_test(test_db_escape_truncates_into_a_small_destination),
 		cmocka_unit_test(test_db_escape_handles_a_degenerate_destination),
+		cmocka_unit_test(test_row_alias_upsert_requires_mysql_8020),
 		cmocka_unit_test(test_snmpv3_value_is_set_treats_none_as_unset),
 		cmocka_unit_test(test_snmpv3_level_is_noauth_without_a_protocol),
 		cmocka_unit_test(test_snmpv3_level_is_authnopriv_without_privacy),
@@ -3050,7 +3465,10 @@ int main(void) {
 		cmocka_unit_test_setup(test_store_rejects_undelimited_hex, store_reset),
 		cmocka_unit_test_setup(test_store_keeps_0x_prefixed_hex_as_text, store_reset),
 		cmocka_unit_test_setup(test_store_keeps_multipart_output_verbatim, store_reset),
+		cmocka_unit_test_setup(test_store_applies_an_ere_output_regex_to_script_results, store_reset),
+		cmocka_unit_test_setup(test_store_pins_legacy_bre_style_output_regex, store_reset),
 		cmocka_unit_test_setup(test_store_strips_a_value_wearing_units, store_reset),
+		cmocka_unit_test_setup(test_store_pins_multi_dot_numeric_fallback, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_a_value_with_no_number_in_it, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_an_empty_result, store_reset),
 		cmocka_unit_test_setup(test_store_rejects_null_arguments, store_reset),
@@ -3061,6 +3479,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_snmp_batch_blanks_everything_for_an_ignored_host, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_converts_a_delimited_octet_string, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_applies_the_data_source_output_regex, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_pins_legacy_bre_style_output_regex, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_spike_kill_blanks_a_scalar_but_not_multipart, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_handles_an_empty_batch, snmp_reset),
 		cmocka_unit_test_setup(test_snmp_batch_rejects_null_arguments, snmp_reset),

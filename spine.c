@@ -250,6 +250,9 @@ int main(int argc, char *argv[]) {
 	}
 
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
+		php_processes[i].php_pid = -1;
+		php_processes[i].php_read_fd = -1;
+		php_processes[i].php_write_fd = -1;
 		php_processes[i].php_state = PHP_BUSY;
 	}
 
@@ -665,7 +668,8 @@ int main(int argc, char *argv[]) {
 		spine_appendf(&qp, &remaining, " AND availability_method != %d", AVAIL_STREAM);
 
 		if (!strlen(set.host_id_list)) {
-			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
+			remaining = MEGA_BUFSIZE - (size_t) (qp - querybuf);
+			qp += append_hostrange(qp, remaining, "h.id");	/* AND id BETWEEN a AND b */
 		} else {
 			remaining = MEGA_BUFSIZE - (qp - querybuf);
 			spine_appendf(&qp, &remaining, " AND h.id IN(%s)", set.host_id_list);
@@ -777,6 +781,11 @@ int main(int argc, char *argv[]) {
 		double progress_time = 0;
 		int sem_err = 0;
 		int spine_timeout = FALSE;
+
+		/* Reap children a previous worker had to abandon even when no later
+		 * script item calls nft_popen(). This WNOHANG sweep never stalls the
+		 * scheduler. */
+		(void) nft_abandoned_pending();
 
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
@@ -1027,6 +1036,7 @@ int main(int argc, char *argv[]) {
  	 * using the mutex here as the semaphore will
      * show zero before the children are done */
 	while (a_threads_value < set.threads) {
+		(void) nft_abandoned_pending();
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {

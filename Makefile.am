@@ -68,9 +68,7 @@ check_PROGRAMS += \
 	tests/unit/test_linked \
 	tests/unit/test_log_newline_bound \
 	tests/unit/test_util_paths \
-	tests/unit/test_snmpv3_session \
-	tests/unit/test_ping_icmp \
-	tests/unit/test_php_runtime
+	tests/unit/test_ping_icmp
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime.  Keeping it as a real child makes the test cover
@@ -82,7 +80,12 @@ if HAVE_LD_WRAP
 check_PROGRAMS += \
 	tests/unit/test_poll_host_release \
 	tests/unit/test_poller_output \
-	tests/unit/test_sql_runtime
+	tests/unit/test_snmpv3_session \
+	tests/unit/test_php_runtime \
+	tests/unit/test_sql_runtime \
+	tests/unit/test_remote_push \
+	tests/unit/test_nft_pclose \
+	tests/unit/test_ping_resolver
 endif
 endif
 
@@ -111,7 +114,13 @@ if HAVE_LD_WRAP
 tests_unit_test_poll_host_release_SOURCES = tests/unit/test_poll_host_release.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_poll_host_release_LDADD   = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_poll_host_release_LDFLAGS = -Wl,--wrap=db_release_connection -Wl,--wrap=mysql_thread_end -Wl,--wrap=usleep
+tests_unit_test_poll_host_release_LDFLAGS = -Wl,--wrap=db_release_connection \
+	-Wl,--wrap=mysql_thread_end -Wl,--wrap=usleep -Wl,--wrap=pipe \
+	-Wl,--wrap=fcntl -Wl,--wrap=waitpid -Wl,--wrap=db_get_connection \
+	-Wl,--wrap=db_query -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
+	-Wl,--wrap=db_free_result -Wl,--wrap=db_insert -Wl,--wrap=db_escape \
+	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup \
+	-Wl,--wrap=snmp_get_multi
 endif
 
 if HAVE_LD_WRAP
@@ -128,6 +137,7 @@ endif
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_snmpv3_session_LDFLAGS = -Wl,--wrap=snmp_duplicate_objid
 
 # ping_icmp() needs a raw ICMP socket, so these skip where that is unavailable.
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
@@ -137,8 +147,13 @@ tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_php_runtime_LDFLAGS = \
+	-Wl,--wrap=posix_spawn -Wl,--wrap=dup -Wl,--wrap=fcntl \
+	-Wl,--wrap=pthread_sigmask -Wl,--wrap=write \
+	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
-	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/unit/php_test_server"'
+	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/unit/php_test_server"' \
+	-DSPINE_PHP_RUNTIME_TESTING
 tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
 
 if HAVE_LD_WRAP
@@ -154,6 +169,28 @@ tests_unit_test_sql_runtime_LDFLAGS = \
 	-Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_thread_id \
 	-Wl,--wrap=mysql_ping -Wl,--wrap=mysql_close \
 	-Wl,--wrap=usleep -Wl,--wrap=sleep
+
+tests_unit_test_remote_push_SOURCES = tests/unit/test_remote_push.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_remote_push_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_remote_push_CPPFLAGS = $(AM_CPPFLAGS) -DSPINE_REMOTE_PUSH_TESTING
+tests_unit_test_remote_push_LDFLAGS = \
+	-Wl,--wrap=db_connect -Wl,--wrap=db_disconnect -Wl,--wrap=db_insert \
+	-Wl,--wrap=db_query -Wl,--wrap=db_escape -Wl,--wrap=db_free_result \
+	-Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row
+
+tests_unit_test_nft_pclose_SOURCES = tests/unit/test_nft_pclose.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_nft_pclose_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_nft_pclose_CPPFLAGS = $(AM_CPPFLAGS) -DSPINE_NFT_PCLOSE_TESTING
+tests_unit_test_nft_pclose_LDFLAGS = -Wl,--wrap=kill -Wl,--wrap=spine_log \
+	-Wl,--wrap=posix_spawn_file_actions_init
+
+tests_unit_test_ping_resolver_SOURCES = tests/unit/test_ping_resolver.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_ping_resolver_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_ping_resolver_LDFLAGS = \
+	-Wl,--wrap=getaddrinfo -Wl,--wrap=freeaddrinfo -Wl,--wrap=usleep
 endif
 
 tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
