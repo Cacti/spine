@@ -69,12 +69,20 @@ check_PROGRAMS += \
 	tests/unit/test_log_newline_bound \
 	tests/unit/test_util_paths \
 	tests/unit/test_snmpv3_session \
-	tests/unit/test_ping_icmp
+	tests/unit/test_ping_icmp \
+	tests/unit/test_php_runtime
+
+# A small executable which speaks the subset of the PHP Script Server protocol
+# needed by test_php_runtime.  Keeping it as a real child makes the test cover
+# the shipped pipe, spawn, command, response, shutdown and reap paths.
+noinst_PROGRAMS = tests/unit/php_test_server
+tests_unit_php_test_server_SOURCES = tests/unit/php_test_server.c
 
 if HAVE_LD_WRAP
 check_PROGRAMS += \
 	tests/unit/test_poll_host_release \
-	tests/unit/test_poller_output
+	tests/unit/test_poller_output \
+	tests/unit/test_sql_runtime
 endif
 endif
 
@@ -126,6 +134,28 @@ tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
+tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/unit/php_test_server"'
+tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
+
+if HAVE_LD_WRAP
+# Exercise the production sql.c retry and pool paths with deterministic
+# Connector/C responses.  No live database is required, and sleeps are
+# interposed so retry tests remain fast.
+tests_unit_test_sql_runtime_SOURCES = tests/unit/test_sql_runtime.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_sql_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_sql_runtime_LDFLAGS = \
+	-Wl,--wrap=mysql_query -Wl,--wrap=mysql_errno -Wl,--wrap=mysql_error \
+	-Wl,--wrap=mysql_store_result -Wl,--wrap=mysql_num_rows \
+	-Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_thread_id \
+	-Wl,--wrap=mysql_ping -Wl,--wrap=mysql_close \
+	-Wl,--wrap=usleep -Wl,--wrap=sleep
+endif
+
 tests_unit_test_log_newline_bound_SOURCES = tests/unit/test_log_newline_bound.c
 tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
 
@@ -167,7 +197,7 @@ coverage:
 	fi
 	@$(MAKE) check >/dev/null 2>&1 || true
 	@echo "function coverage:"
-	@gcov -n -f $(srcdir)/poller.c $(srcdir)/util.c $(srcdir)/sql.c 2>/dev/null \
+	@gcov -n -f $(srcdir)/poller.c $(srcdir)/util.c $(srcdir)/sql.c $(srcdir)/php.c 2>/dev/null \
 		| grep -A1 "^Function" | paste - - - \
 		| sed "s/Function //; s/Lines executed://" \
 		| awk -F'\t' '{ printf "  %-38s %s\n", $$1, $$2 }' \
