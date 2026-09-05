@@ -245,22 +245,34 @@ if test -n "$MYSQL_CONFIG"; then
 else
   AC_MSG_NOTICE([no client config tool found; using header and library discovery])
 
+  mysql_header_prefix=
+
   for mysql_prefix in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
     for mysql_include_dir in include include/mysql include/mariadb mysql; do
       if test -f "$mysql_prefix/$mysql_include_dir/mysql.h"; then
         CFLAGS="-I$mysql_prefix/$mysql_include_dir $CFLAGS"
+        mysql_header_prefix=$mysql_prefix
         break 2
       fi
     done
   done
 
-  if test -n "$MYSQL_DIR"; then
+  dnl The header can turn up under a prefix the caller never named, so search
+  dnl for the library under that same prefix. Adding only the MYSQL_DIR paths
+  dnl leaves mysql_init unlinkable when the client lives anywhere else.
+  mysql_library_prefixes="$MYSQL_DIR"
+
+  if test -n "$mysql_header_prefix" && test "x$mysql_header_prefix" != "x$MYSQL_DIR"; then
+    mysql_library_prefixes="$mysql_library_prefixes $mysql_header_prefix"
+  fi
+
+  for mysql_prefix in $mysql_library_prefixes; do
     for mysql_library_dir in lib64 lib64/mysql lib lib/mysql; do
-      if test -d "$MYSQL_DIR/$mysql_library_dir"; then
-        LDFLAGS="-L$MYSQL_DIR/$mysql_library_dir $LDFLAGS"
+      if test -d "$mysql_prefix/$mysql_library_dir"; then
+        LDFLAGS="-L$mysql_prefix/$mysql_library_dir $LDFLAGS"
       fi
     done
-  fi
+  done
 fi
 
 AC_CHECK_HEADER([mysql.h], [],
