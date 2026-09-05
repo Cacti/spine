@@ -31,8 +31,105 @@
  +-------------------------------------------------------------------------+
 */
 
+#define _GNU_SOURCE
 #include "common.h"
 #include "spine.h"
+#include <fcntl.h>
+
+static pid_t php_orphan_pids[MAX_PHP_SERVERS];
+static time_t php_retry_after[MAX_PHP_SERVERS];
+static void php_drain_orphans(void);
+static void php_close_internal(int php_process, int send_quit);
+static pid_t php_get_pid(int server);
+static char *php_readpipe_until(int php_process, char *command, double deadline);
+
+static ssize_t php_write_no_sigpipe(int fd, const void *buffer, size_t length) {
+	const char *cursor = buffer;
+	int saved_errno = errno;
+	int sigpipe_was_pending;
+	sigset_t blocked;
+	sigset_t old_mask;
+	sigset_t pending;
+	ssize_t total = 0;
+	ssize_t written = 0;
+
+	sigemptyset(&blocked);
+	sigaddset(&blocked, SIGPIPE);
+	pthread_sigmask(SIG_BLOCK, &blocked, &old_mask);
+	sigpending(&pending);
+	sigpipe_was_pending = sigismember(&pending, SIGPIPE);
+
+	while ((size_t)total < length) {
+		written = write(fd, cursor + total, length - (size_t)total);
+		if (written > 0) {
+			total += written;
+			continue;
+		}
+		if (written < 0 && errno == EINTR) {
+			continue;
+		}
+
+		saved_errno = written == 0 ? EIO : errno;
+		total = -1;
+		break;
+	}
+
+	if (total < 0 && saved_errno == EPIPE && !sigpipe_was_pending) {
+		int received_signal;
+
+		/* Some platforms discard an ignored SIGPIPE instead of queuing it.
+		 * Consume the signal only when the failed write actually made it
+		 * pending, so this cleanup can never block. */
+		sigpending(&pending);
+		if (sigismember(&pending, SIGPIPE)) {
+			sigwait(&blocked, &received_signal);
+		}
+	}
+
+	pthread_sigmask(SIG_SETMASK, &old_mask, NULL);
+	errno = saved_errno;
+
+	return total;
+}
+
+static int php_set_cloexec(int fd) {
+	int flags = fcntl(fd, F_GETFD);
+
+	return flags >= 0 && fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0;
+}
+
+static int php_pipe_cloexec(int pipe_fds[2]) {
+	#ifdef HAVE_PIPE2
+	return pipe2(pipe_fds, O_CLOEXEC);
+	#else
+	thread_mutex_lock(LOCK_FORK);
+	if (pipe(pipe_fds) < 0) {
+		thread_mutex_unlock(LOCK_FORK);
+		return -1;
+	}
+	if (!php_set_cloexec(pipe_fds[0]) || !php_set_cloexec(pipe_fds[1])) {
+		int saved_errno = errno;
+		close(pipe_fds[0]);
+		close(pipe_fds[1]);
+		thread_mutex_unlock(LOCK_FORK);
+		errno = saved_errno;
+		return -1;
+	}
+	thread_mutex_unlock(LOCK_FORK);
+	return 0;
+	#endif
+}
+
+static void php_set_state(int php_process, int state) {
+	thread_mutex_lock(LOCK_PHP);
+	php_processes[php_process].php_state = state;
+	if (state == PHP_READY) {
+		php_retry_after[php_process] = 0;
+	} else {
+		php_retry_after[php_process] = time(NULL) + 30;
+	}
+	thread_mutex_unlock(LOCK_PHP);
+}
 
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
@@ -51,6 +148,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	char *result_string;
 	char command[BUFSIZE];
 	ssize_t bytes;
+	int write_fd;
 	int retries = 0;
 
 	assert(php_command != 0);
@@ -79,18 +177,24 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* send command to the script server */
 	retry:
-	bytes = write(php_processes[php_process].php_write_fd, command, strlen(command));
+	thread_mutex_lock(LOCK_PHP);
+	write_fd = php_processes[php_process].php_write_fd;
+	thread_mutex_unlock(LOCK_PHP);
+	bytes = php_write_no_sigpipe(write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
-		result_string = strdup("U");
+		STRDUP_OR_DIE(result_string, "U", "php_cmd result");
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
 
 		php_close(php_process);
-		php_init(php_process);
+		if (!php_init(php_process)) {
+			retries = 3;
+		}
 		/* increment and retry a few times on the next item */
 		retries++;
 		if (retries < 3) {
+			SPINE_FREE(result_string);
 			goto retry;
 		}
 	} else {
@@ -128,21 +232,47 @@ char *php_cmd(const char *php_command, int php_process) {
 /*!  \fn in php_get_process()
  *  \brief returns the next php script server process to utilize
  *
- *  This very simple function simply returns the next PHP Script Server
- *  process id to poll using a round robin algorithm.
+ *  Returns the next ready PHP Script Server using round robin. Busy slots are
+ *  skipped while another ready server is available.
  *
- *  \return the integer number of the next script server to use
+ *  \return the next ready script server, or -1 when the pool is unavailable
  *
  */
 int php_get_process(void) {
-	int i;
+	int attempts;
+	int i = -1;
+	time_t now = time(NULL);
 
 	thread_mutex_lock(LOCK_PHP);
-	if (set.php_current_server >= set.php_servers) {
-		set.php_current_server = 0;
+	for (attempts = 0; attempts < set.php_servers; attempts++) {
+		if (set.php_current_server >= set.php_servers) {
+			set.php_current_server = 0;
+		}
+
+		i = set.php_current_server++;
+		if (php_processes[i].php_state == PHP_READY) {
+			break;
+		}
+		i = -1;
 	}
-	i = set.php_current_server;
-	set.php_current_server++;
+
+	/* Give unavailable slots a bounded route back without attempting a
+	 * fork/exec for every script-server item in the cycle.  php_cmd() will
+	 * exercise the established close/restart path for the selected slot. */
+	if (i < 0 && set.php_initialized) {
+		for (attempts = 0; attempts < set.php_servers; attempts++) {
+			if (set.php_current_server >= set.php_servers) {
+				set.php_current_server = 0;
+			}
+
+			i = set.php_current_server++;
+			if (php_retry_after[i] <= now) {
+				php_retry_after[i] = now + 30;
+				break;
+			}
+			i = -1;
+		}
+	}
 	thread_mutex_unlock(LOCK_PHP);
 
 	return i;
@@ -160,6 +290,10 @@ int php_get_process(void) {
  *  \return a string pointer to the PHP Script Server response
  */
 char *php_readpipe(int php_process, char *command) {
+	return php_readpipe_until(php_process, command, get_time_as_double() + set.script_timeout);
+}
+
+static char *php_readpipe_until(int php_process, char *command, double deadline) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
@@ -168,6 +302,9 @@ char *php_readpipe(int php_process, char *command) {
 	char *result_string;
 
 	int  i;
+	int  read_fd;
+	int  reset_server = FALSE;
+	int  send_quit = TRUE;
 	char *cp;
 	char *bptr;
 
@@ -176,12 +313,28 @@ char *php_readpipe(int php_process, char *command) {
 	}
 	result_string[0] = '\0';
 
+	thread_mutex_lock(LOCK_PHP);
+	read_fd = php_processes[php_process].php_read_fd;
+	thread_mutex_unlock(LOCK_PHP);
+	if (read_fd < 0) {
+		SET_UNDEFINED(result_string);
+		php_close_internal(php_process, FALSE);
+		if (strcmp(command, "INIT") != 0) {
+			php_init(php_process);
+		}
+		return result_string;
+	}
+
 	/* record start time */
 	begin_time = get_time_as_double();
 
 	/* establish timeout value for the PHP script server to respond */
-	timeout.tv_sec = set.script_timeout;
-	timeout.tv_usec = 0;
+	remaining_usec = deadline - begin_time;
+	if (remaining_usec < 0) {
+		remaining_usec = 0;
+	}
+	timeout.tv_sec = (int)remaining_usec;
+	timeout.tv_usec = (int)((remaining_usec - timeout.tv_sec) * 1000000);
 
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
@@ -189,9 +342,9 @@ char *php_readpipe(int php_process, char *command) {
 
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
-	FD_SET(php_processes[php_process].php_read_fd,&fds);
+	FD_SET(read_fd,&fds);
 
-	switch (select(php_processes[php_process].php_read_fd+1, &fds, NULL, NULL, &timeout)) {
+	switch (select(read_fd+1, &fds, NULL, NULL, &timeout)) {
 	case -1:
 		switch (errno) {
 			case EBADF:
@@ -207,14 +360,12 @@ char *php_readpipe(int php_process, char *command) {
 				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
-				timeout.tv_sec  = rint(floor(set.script_timeout-(end_time-begin_time)));
-				remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
-
-				if (remaining_usec > 0) {
-					timeout.tv_usec = rint(remaining_usec * 1000000);
-				} else {
-					timeout.tv_usec = 0;
+				remaining_usec = deadline - end_time;
+				if (remaining_usec < 0) {
+					remaining_usec = 0;
 				}
+				timeout.tv_sec = (int)remaining_usec;
+				timeout.tv_usec = (int)((remaining_usec - timeout.tv_sec) * 1000000);
 
 				if (timeout.tv_sec + timeout.tv_usec > 0) {
 					goto retry;
@@ -238,7 +389,9 @@ char *php_readpipe(int php_process, char *command) {
 
 		/* kill script server because it is misbehaving */
 		php_close(php_process);
-		php_init(php_process);
+		if (strcmp(command, "INIT") != 0) {
+			php_init(php_process);
+		}
 		break;
 	case 0:
 		/* record end time */
@@ -248,17 +401,68 @@ char *php_readpipe(int php_process, char *command) {
 
 		/* kill script server because it is misbehaving */
 		php_close(php_process);
-		php_init(php_process);
+		if (strcmp(command, "INIT") != 0) {
+			php_init(php_process);
+		}
 		break;
 	default:
-		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
+		if (FD_ISSET(read_fd, &fds)) {
 			bptr = result_string;
 
 			while (1) {
-				i = read(php_processes[php_process].php_read_fd, bptr, RESULTS_BUFFER-(bptr-result_string));
+				size_t avail;
+				size_t used;
+
+				/* reserve one byte for the trailing '\0' written below */
+				used = (size_t)(bptr - result_string);
+
+				if (used >= RESULTS_BUFFER - 1) {
+					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+					SET_UNDEFINED(result_string);
+					reset_server = TRUE;
+					break;
+				}
+
+				/* A newline may require multiple reads.  Re-check readability
+				 * against the original command deadline before every one so a
+				 * partial line cannot hold this worker indefinitely. */
+				end_time = get_time_as_double();
+				remaining_usec = deadline - end_time;
+				if (remaining_usec <= 0) {
+					SPINE_LOG(("WARNING: SS[%i] The PHP Script Server stalled during a partial response", php_process));
+					SET_UNDEFINED(result_string);
+					reset_server = TRUE;
+					break;
+				}
+
+				timeout.tv_sec = (int)remaining_usec;
+				timeout.tv_usec = (int)((remaining_usec - timeout.tv_sec) * 1000000);
+				FD_ZERO(&fds);
+				FD_SET(read_fd, &fds);
+				i = select(read_fd + 1, &fds, NULL, NULL, &timeout);
+				if (i < 0 && errno == EINTR) {
+					continue;
+				}
+				if (i <= 0 || !FD_ISSET(read_fd, &fds)) {
+					SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not complete its response", php_process));
+					SET_UNDEFINED(result_string);
+					reset_server = TRUE;
+					break;
+				}
+
+				avail = (size_t)RESULTS_BUFFER - 1 - used;
+				i = read(read_fd, bptr, avail);
+
+				if (i < 0 && errno == EINTR) {
+					continue;
+				}
 
 				if (i <= 0) {
 					SET_UNDEFINED(result_string);
+					reset_server = TRUE;
+					if (i == 0) {
+						send_quit = FALSE;
+					}
 					break;
 				}
 
@@ -268,18 +472,24 @@ char *php_readpipe(int php_process, char *command) {
 				if ((cp = strstr(result_string,"\n")) != 0) {
 					break;
 				}
-
-				if (bptr >= result_string+BUFSIZE) {
-					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-					SET_UNDEFINED(result_string);
-				}
 			}
 		} else {
 			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
 			SET_UNDEFINED(result_string);
+			reset_server = TRUE;
 		}
 
-		php_processes[php_process].php_state = PHP_READY;
+		if (reset_server) {
+			/* The unread tail belongs to this response.  Reusing the pipe would
+			 * return it as the next command's result, so discard the process and
+			 * start with a fresh protocol stream. */
+			php_close_internal(php_process, send_quit);
+			if (strcmp(command, "INIT") != 0) {
+				php_init(php_process);
+			}
+		} else if (strcmp(command, "INIT") != 0) {
+			php_set_state(php_process, PHP_READY);
+		}
 	}
 
 	return result_string;
@@ -307,8 +517,19 @@ int php_init(int php_process) {
 	char *result_string = 0;
 	int num_processes;
 	int i;
+	int ready_count = 0;
 	int retry_count = 0;
-	char *command = strdup("INIT");
+	char *command;
+
+	/* php_init(PHP_INIT) runs before the main initialization block.  The
+	 * pthread_once-backed initializer is idempotent and makes the orphan-list
+	 * lock available both here and in later per-server restarts. */
+	init_mutexes();
+	command = strdup("INIT");
+	if (command == NULL) {
+		die("ERROR: Fatal malloc error: php.c php_init command!");
+	}
+	php_drain_orphans();
 
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
@@ -318,17 +539,41 @@ int php_init(int php_process) {
 	}
 
 	for (i=0; i < num_processes; i++) {
-		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", i));
+		double handshake_deadline;
+		int handshake_lines;
+		int server = (php_process == PHP_INIT) ? i : php_process;
+		retry_count = 0;
+		if (php_get_pid(server) > 1) {
+			SPINE_LOG(("WARNING: SS[%i] Refusing to replace an unreaped PHP Script Server", server));
+			php_set_state(server, PHP_BUSY);
+			if (php_process == PHP_INIT) {
+				continue;
+			}
+			SPINE_FREE(command);
+			return FALSE;
+		}
+
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", server));
 
 		/* create the output pipes from Spine to php*/
-		if (pipe(cacti2php_pdes) < 0) {
-			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
+		if (php_pipe_cloexec(cacti2php_pdes) < 0) {
+			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", server));
+			if (php_process == PHP_INIT) {
+				continue;
+			}
+			SPINE_FREE(command);
 			return FALSE;
 		}
 
 		/* create the input pipes from php to Spine */
-		if (pipe(php2cacti_pdes) < 0) {
-			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
+		if (php_pipe_cloexec(php2cacti_pdes) < 0) {
+			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", server));
+			close(cacti2php_pdes[0]);
+			close(cacti2php_pdes[1]);
+			if (php_process == PHP_INIT) {
+				continue;
+			}
+			SPINE_FREE(command);
 			return FALSE;
 		}
 
@@ -373,11 +618,15 @@ int php_init(int php_process) {
 		}
 
 		/* fork a child process */
-		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process", i));
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to FORK Child Process", server));
 
 		retry:
 
+		thread_mutex_lock(LOCK_FORK);
 		pid = vfork();
+		if (pid != 0) {
+			thread_mutex_unlock(LOCK_FORK);
+		}
 
 		/* check the pid status and process as required */
 		switch (pid) {
@@ -392,8 +641,9 @@ int php_init(int php_process) {
 						#endif
 						goto retry;
 					} else {
-						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Resources", i));
+						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Resources", server));
 					}
+					break;
 				case ENOMEM:
 					if (retry_count < 3) {
 						retry_count++;
@@ -403,10 +653,11 @@ int php_init(int php_process) {
 						#endif
 						goto retry;
 					} else {
-						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Memory", i));
+						SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Out of Memory", server));
 					}
+					break;
 				default:
-					SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Unknown Reason", i));
+					SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server Unknown Reason", server));
 				}
 
 				close(php2cacti_pdes[0]);
@@ -414,8 +665,12 @@ int php_init(int php_process) {
 				close(cacti2php_pdes[0]);
 				close(cacti2php_pdes[1]);
 
-				SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server", i));
+				SPINE_LOG(("ERROR: SS[%i] Could not fork PHP Script Server", server));
 				pthread_setcancelstate(cancel_state, NULL);
+				if (php_process == PHP_INIT) {
+					continue;
+				}
+				SPINE_FREE(command);
 
 				return FALSE;
 				/* NOTREACHED */
@@ -423,6 +678,8 @@ int php_init(int php_process) {
 				/* set the standard input/output channels of the new process.  */
 				dup2(cacti2php_pdes[0], STDIN_FILENO);
 				dup2(php2cacti_pdes[1], STDOUT_FILENO);
+				fcntl(STDIN_FILENO, F_SETFD, 0);
+				fcntl(STDOUT_FILENO, F_SETFD, 0);
 
 				/* close unneeded Pipes */
 				(void)close(php2cacti_pdes[0]);
@@ -435,7 +692,7 @@ int php_init(int php_process) {
 				_exit(127);
 				/* NOTREACHED */
 			default: /* I am the parent process */
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child FORK Success", i));
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child FORK Success", server));
 		}
 
 		/* Parent */
@@ -443,54 +700,211 @@ int php_init(int php_process) {
 		close(cacti2php_pdes[0]);
 		close(php2cacti_pdes[1]);
 
-		if (php_process == PHP_INIT) {
-			php_processes[i].php_pid = pid;
-			php_processes[i].php_write_fd = cacti2php_pdes[1];
-			php_processes[i].php_read_fd = php2cacti_pdes[0];
-		} else {
-			php_processes[php_process].php_pid = pid;
-			php_processes[php_process].php_write_fd = cacti2php_pdes[1];
-			php_processes[php_process].php_read_fd = php2cacti_pdes[0];
-		}
+		thread_mutex_lock(LOCK_PHP);
+		php_processes[server].php_pid      = pid;
+		php_processes[server].php_write_fd = cacti2php_pdes[1];
+		php_processes[server].php_read_fd  = php2cacti_pdes[0];
+		thread_mutex_unlock(LOCK_PHP);
 
 		/* restore caller's cancellation state. */
 		pthread_setcancelstate(cancel_state, NULL);
 
 		/* check pipe to insure startup took place */
-		if (php_process == PHP_INIT) {
-			result_string = php_readpipe(i, command);
-		} else {
-			result_string = php_readpipe(php_process, command);
+		/* PHP can emit a bounded number of startup notices before the banner.
+		 * Consume complete lines until the handshake arrives, but share one
+		 * script_timeout budget across the entire handshake. */
+		handshake_deadline = get_time_as_double() + set.script_timeout;
+		for (handshake_lines = 0; handshake_lines < 10; handshake_lines++) {
+			result_string = php_readpipe_until(server, command, handshake_deadline);
+
+			if (strstr(result_string, "Started")) {
+				break;
+			}
+
+			if (strcmp(result_string, "U") == 0) {
+				break;
+			}
+
+			SPINE_FREE(result_string);
 		}
 
-		if (strstr(result_string, "Started")) {
-			if (php_process == PHP_INIT) {
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", i, php2cacti_pdes[0], cacti2php_pdes[1]));
-
-				php_processes[i].php_state = PHP_READY;
-			} else {
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", php_process, php2cacti_pdes[0], cacti2php_pdes[1]));
-
-				php_processes[php_process].php_state = PHP_READY;
-			}
+		if (result_string != NULL && strstr(result_string, "Started")) {
+			SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", server, php2cacti_pdes[0], cacti2php_pdes[1]));
+			php_set_state(server, PHP_READY);
+			ready_count++;
 		} else {
-			if (php_process == PHP_INIT) {
-				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", i, result_string));
-
-				php_processes[i].php_state = PHP_BUSY;
-			} else {
-				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", php_process, result_string));
-
-				php_processes[php_process].php_state = PHP_BUSY;
-			}
+			SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", server, result_string != NULL ? result_string : "U"));
+			php_close_internal(server, TRUE);
+			php_set_state(server, PHP_BUSY);
 		}
 
-		free(result_string);
+		SPINE_FREE(result_string);
 	}
 
-	free(command);
+	SPINE_FREE(command);
 
-	return TRUE;
+	return ready_count > 0;
+}
+
+static void php_reap_delay(void) {
+	struct timeval delay;
+
+	do {
+		delay.tv_sec  = 0;
+		delay.tv_usec = 10000;
+	} while (select(0, NULL, NULL, NULL, &delay) < 0 && errno == EINTR);
+}
+
+static pid_t php_get_pid(int server) {
+	pid_t pid;
+
+	thread_mutex_lock(LOCK_PHP);
+	pid = php_processes[server].php_pid;
+	thread_mutex_unlock(LOCK_PHP);
+
+	return pid;
+}
+
+static int php_try_reap(int server) {
+	int reap_error = 0;
+	int status;
+	pid_t pid;
+	pid_t waited;
+
+	thread_mutex_lock(LOCK_PHP);
+	pid = php_processes[server].php_pid;
+	if (pid <= 1) {
+		thread_mutex_unlock(LOCK_PHP);
+		return TRUE;
+	}
+
+	do {
+		waited = waitpid(pid, &status, WNOHANG);
+	} while (waited < 0 && errno == EINTR);
+
+	if (waited == pid || (waited < 0 && errno == ECHILD)) {
+		php_processes[server].php_pid = -1;
+		thread_mutex_unlock(LOCK_PHP);
+		return TRUE;
+	}
+
+	if (waited < 0) {
+		reap_error = errno;
+	}
+	thread_mutex_unlock(LOCK_PHP);
+
+	if (reap_error != 0) {
+		SPINE_LOG(("WARNING: Unable to reap PHP Script Server PID[%ld]: %s", (long)pid, strerror(reap_error)));
+	}
+
+	return FALSE;
+}
+
+static void php_signal_servers(int first_process, int num_processes, int signal_number) {
+	int i;
+
+	for (i = 0; i < num_processes; i++) {
+		int signal_error = 0;
+		int server = first_process + i;
+		pid_t pid;
+
+		thread_mutex_lock(LOCK_PHP);
+		pid = php_processes[server].php_pid;
+		if (pid > 1 && kill(pid, signal_number) < 0 && errno != ESRCH) {
+			signal_error = errno;
+		}
+		thread_mutex_unlock(LOCK_PHP);
+
+		if (signal_error != 0) {
+			SPINE_LOG(("WARNING: Unable to signal PHP Script Server PID[%ld]: %s", (long)pid, strerror(signal_error)));
+		}
+	}
+}
+
+static void php_reap_servers(int first_process, int num_processes) {
+	int attempts;
+	int i;
+
+	/* Poll every child once per round.  All children receive their signal
+	 * before this runs, so the grace period is shared rather than multiplied
+	 * by the number of configured script servers. */
+	for (attempts = 0; attempts < 10; attempts++) {
+		int remaining = 0;
+
+		for (i = 0; i < num_processes; i++) {
+			if (!php_try_reap(first_process + i)) {
+				remaining++;
+			}
+		}
+
+		if (remaining == 0) {
+			return;
+		}
+
+		php_reap_delay();
+	}
+}
+
+static int php_park_orphan(int server, pid_t expected_pid) {
+	int i;
+	int parked = FALSE;
+
+	thread_mutex_lock(LOCK_PHP);
+	if (php_processes[server].php_pid == expected_pid) {
+		for (i = 0; i < MAX_PHP_SERVERS; i++) {
+			if (php_orphan_pids[i] <= 1) {
+				php_orphan_pids[i] = expected_pid;
+				php_processes[server].php_pid = -1;
+				parked = TRUE;
+				break;
+			}
+		}
+	}
+	thread_mutex_unlock(LOCK_PHP);
+
+	return parked;
+}
+
+static void php_drain_orphans(void) {
+	int i;
+	int reap_error = 0;
+	int signal_error = 0;
+	pid_t reap_error_pid = -1;
+	pid_t signal_error_pid = -1;
+
+	thread_mutex_lock(LOCK_PHP);
+	for (i = 0; i < MAX_PHP_SERVERS; i++) {
+		int status;
+		pid_t waited;
+
+		if (php_orphan_pids[i] <= 1) {
+			continue;
+		}
+
+		do {
+			waited = waitpid(php_orphan_pids[i], &status, WNOHANG);
+		} while (waited < 0 && errno == EINTR);
+
+		if (waited == php_orphan_pids[i] || (waited < 0 && errno == ECHILD)) {
+			php_orphan_pids[i] = -1;
+		} else if (waited < 0) {
+			reap_error_pid = php_orphan_pids[i];
+			reap_error = errno;
+		} else if (kill(php_orphan_pids[i], SIGKILL) < 0 && errno != ESRCH) {
+			/* A zero wait result proves this PID is still our live child.  With
+			 * SIGCHLD normalized to SIG_DFL it cannot be recycled until reaped. */
+			signal_error_pid = php_orphan_pids[i];
+			signal_error = errno;
+		}
+	}
+	thread_mutex_unlock(LOCK_PHP);
+
+	if (signal_error_pid > 1) {
+		SPINE_LOG(("WARNING: Unable to re-signal unreaped PHP Script Server PID[%ld]: %s", (long)signal_error_pid, strerror(signal_error)));
+	}
+	if (reap_error_pid > 1) {
+		SPINE_LOG(("WARNING: Unable to retry reap of PHP Script Server PID[%ld]: %s", (long)reap_error_pid, strerror(reap_error)));
+	}
 }
 
 /*! \fn void php_close(int php_process)
@@ -506,65 +920,102 @@ int php_init(int php_process) {
  *  where the child process is hung for one reason or another.
  *
  */
-void php_close(int php_process) {
+static void php_close_internal(int php_process, int send_quit) {
+	int first_process;
+	int had_write_pipe = FALSE;
 	int i;
 	int num_processes;
 	int len;
 
+	php_drain_orphans();
+
 	if (php_process == PHP_INIT) {
+		first_process = 0;
 		num_processes = set.php_servers;
 	} else {
+		first_process = php_process;
 		num_processes = 1;
 	}
 
-	for(i = 0; i < num_processes; i++) {
-		php_t *phpp;
+	for (i = 0; i < num_processes; i++) {
+		int server = first_process + i;
+		php_t *phpp = &php_processes[server];
+		int write_fd;
 
-		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started", i));
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Script Server Shutdown Started", server));
+
+		thread_mutex_lock(LOCK_PHP);
+		phpp->php_state = PHP_BUSY;
+		php_retry_after[server] = time(NULL) + 30;
+		write_fd = phpp->php_write_fd;
+		phpp->php_write_fd = -1;
+		thread_mutex_unlock(LOCK_PHP);
 
 		/* tell the script server to close */
-		if (php_process == PHP_INIT) {
-			phpp = &php_processes[i];
-		} else {
-			phpp = &php_processes[php_process];
-		}
-
 		/* If we still have a valid write pipe, tell PHP to close down
 		 * by sending a "quit" message, then closing the input channel
-		 * so it gets an EOF.
-		 *
-		 * Then we wait a moment before actually killing it to allow for
-		 * a clean shutdown.
+		 * so it gets an EOF.  Every server receives the request before
+		 * the shared grace period starts.
 		 */
-		if (phpp->php_write_fd >= 0) {
+		if (write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
 
-			len = write(phpp->php_write_fd, quit, strlen(quit));
+			len = send_quit ? php_write_no_sigpipe(write_fd, quit, strlen(quit)) : 0;
 
-			if (len >= 0) {
-				close(phpp->php_write_fd);
-				phpp->php_write_fd = -1;
+			if (len < 0) {
+				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Script Server quit write failed, closing anyway", server));
 			}
 
-			/* wait before killing php */
-			#ifndef SOLAR_THREAD
-			usleep(50000);			/* 50 msec */
-			#endif
+			close(write_fd);
+			had_write_pipe = TRUE;
 		}
+	}
 
-		/* only try to kill the process if the PID looks valid.
-		 * Trying to kill a negative number is bad news (it's
-	 	 * a process group leader), and PID 1 is "init".
-	  	 */
-		if (phpp->php_pid > 1) {
-			/* end the php script server process */
-			kill(phpp->php_pid, SIGTERM);
+	if (had_write_pipe) {
+		#ifndef SOLAR_THREAD
+		usleep(50000);			/* 50 msec */
+		#endif
+	}
 
-			/* reset this PID variable? */
+	/* Signal all children before waiting so shutdown latency is bounded by a
+	 * shared grace period instead of one grace period per server. */
+	php_signal_servers(first_process, num_processes, SIGTERM);
+	php_reap_servers(first_process, num_processes);
+	php_signal_servers(first_process, num_processes, SIGKILL);
+	php_reap_servers(first_process, num_processes);
+
+	for (i = 0; i < num_processes; i++) {
+		int server = first_process + i;
+		int read_fd;
+		pid_t pid = php_get_pid(server);
+
+		if (pid > 1) {
+			/* Move the handle out of the active slot so a replacement can
+			 * start while later closes keep retrying this reap. */
+			SPINE_LOG(("WARNING: PHP Script Server PID[%ld] did not exit after SIGKILL", (long)pid));
+			if (!php_park_orphan(server, pid)) {
+				php_drain_orphans();
+				if (!php_park_orphan(server, pid)) {
+					/* Leave the unreaped PID in its active slot.  php_init() will
+					 * refuse to overwrite it and the cooldown bounds retry churn. */
+					php_set_state(server, PHP_BUSY);
+					SPINE_LOG(("WARNING: Unable to retain PHP Script Server PID[%ld] for a later reap; slot remains unavailable", (long)pid));
+				}
+			}
 		}
 
 		/* close file descriptors */
-		close(phpp->php_read_fd);
-		phpp->php_read_fd  = -1;
+		thread_mutex_lock(LOCK_PHP);
+		read_fd = php_processes[server].php_read_fd;
+		php_processes[server].php_read_fd = -1;
+		thread_mutex_unlock(LOCK_PHP);
+
+		if (read_fd >= 0) {
+			close(read_fd);
+		}
 	}
+}
+
+void php_close(int php_process) {
+	php_close_internal(php_process, TRUE);
 }

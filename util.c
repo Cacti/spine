@@ -103,11 +103,12 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
 			}else{
+				db_free_result(result);
 				return strdup("");
 			}
 		}else{
@@ -195,11 +196,12 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
 			} else {
+				db_free_result(result);
 				return 0;
 			}
 		} else {
@@ -289,11 +291,12 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[1] != NULL) {
 				retval = strdup(mysql_row[1]);
 				db_free_result(result);
 				return retval;
 			} else {
+				db_free_result(result);
 				return 0;
 			}
 		} else {
@@ -1188,13 +1191,11 @@ void die(const char *format, ...) {
 
 	fprintf(stderr, "%s", flogmessage);
 
-	if (set.parent_fork == SPINE_PARENT) {
-		if (set.php_initialized) {
-			php_close(PHP_INIT);
-		}
+	if (set.parent_fork == SPINE_PARENT && set.php_initialized) {
+		php_close(PHP_INIT);
 	}
 
-	exit(set.exit_code);
+	exit(set.exit_code != 0 ? set.exit_code : EXIT_FAILURE);
 }
 
 char * get_date_format() {
@@ -1317,6 +1318,7 @@ int spine_log(const char *format, ...) {
 	int ulog_len   = strlen(ulogmessage);
 	int flog_len   = 0;
 
+	flogmessage[0] = '\0';
 	if ((flog_len = strftime(flogmessage, 50, log_fmt, now_ptr)) == (int) 0) {
 		#ifdef DISABLE_STDERR
 		fp = stdout;
@@ -1364,9 +1366,20 @@ int spine_log(const char *format, ...) {
 		closelog();
 	}
 
-	/* append a line feed to the log message if needed */
+	/* append a line feed to the log message if needed.  The strncat() calls
+	 * above are allowed to fill flogmessage exactly, so the newline only fits
+	 * when a byte is free; otherwise it replaces the last character rather
+	 * than running past the end. */
 	if (!strstr(flogmessage, "\n")) {
-		strcat(flogmessage, "\n");
+		size_t flog_used = strlen(flogmessage);
+
+		if (flog_used < LOGSIZE - 1) {
+			flogmessage[flog_used]     = '\n';
+			flogmessage[flog_used + 1] = '\0';
+		} else {
+			flogmessage[LOGSIZE - 2] = '\n';
+			flogmessage[LOGSIZE - 1] = '\0';
+		}
 	}
 
 	if ((IS_LOGGING_TO_FILE() &&
@@ -1683,26 +1696,30 @@ char *add_slashes(char *string) {
  *  \return pointer to destination string
  *
 */
-#pragma GCC diagnostic push
-#if (defined(__GNUC__) && (__GNUC__ > 7)) || (__GNUC__ == 7 && defined(__GNUC_MINOR__) && __GNUC_MINOR__ > 1)
-#pragma GCC diagnostic ignored "-Wstringop-overflow"
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
-#endif
 char *strncopy(char *dst, const char *src, size_t obuf) {
+	size_t copy_len;
+
 	assert(dst != 0);
 	assert(src != 0);
 
-	size_t len;
+	if (obuf == 0) return dst;
 
-	len = (strlen(src) < obuf) ? strlen(src) : obuf;
-	if (len) {
-		strncpy(dst, src, len);
+	/* Avoid strnlen here: older supported Solaris environments may not
+	 * provide it, and the bounded loop has the same copy semantics. */
+	copy_len = 0;
+	while (copy_len < obuf - 1 && src[copy_len] != '\0') {
+		copy_len++;
 	}
 
-	dst[len] = '\0';
+	if (copy_len) {
+		/* copy_len is the exact byte count and dst is terminated below, so
+		 * memcpy avoids the strncpy truncation diagnostic. */
+		memcpy(dst, src, copy_len);
+	}
+
+	dst[copy_len] = '\0';
 	return dst;
 }
-#pragma GCC diagnostic pop
 
 /*! \fn double get_time_as_double()
  *  \brief fetches system time as a double-precison value
@@ -2042,7 +2059,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 
@@ -2059,6 +2076,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 					return cacti_version;
 				}
 			}else{
+				db_free_result(result);
 				return 0;
 			}
 		}else{
@@ -2069,4 +2087,3 @@ int get_cacti_version(MYSQL *psql, int mode) {
 		return 0;
 	}
 }
-

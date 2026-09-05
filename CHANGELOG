@@ -1,5 +1,16 @@
 The Cacti Group | spine
 
+1.2.32
+-issue#447: Correct off-by-one OOB write in strncopy() when src fills the buffer
+-issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
+-issue#562: Batch PHP script server shutdown and retain unreaped child PIDs for later cleanup
+-issue#573: Preserve complete hostnames, including bare IPv6 literals, instead of running dead host:port parsing
+-issue#564: Check the remaining calloc() results in spine.c before they are dereferenced
+-issue#565: Keep the appended newline inside flogmessage when the log line fills LOGSIZE
+-issue#566: Free the result set when the settings helpers fetch no row
+-issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
+-issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
+
 1.2.31
 -issue#365: Removed Backtrace Support due to lack of OS support
 -issue#366: Prevent polling from stopping when sysDescr OID returns noSuchObject
