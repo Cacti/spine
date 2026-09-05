@@ -527,7 +527,9 @@ static void php_terminate_and_reap(pid_t pid) {
 			/* The delay is load-bearing: without it both phases burn twenty
 			 * WNOHANG polls in nanoseconds, so SIGKILL lands immediately and
 			 * the child is never reaped. */
+			#ifndef SOLAR_THREAD
 			usleep(50000);
+			#endif
 		}
 
 		signal_number = SIGKILL;
