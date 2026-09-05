@@ -55,6 +55,7 @@ verify: docker-dev
 cppcheck: docker-dev
 	docker run --rm spine-dev bash -c \
 		"cppcheck --enable=all --std=c11 --error-exitcode=1 \
+		-I. -Isrc/core \
 		--suppress=missingIncludeSystem --suppress=unusedFunction \
 		--suppress=checkersReport --suppress=toomanyconfigs $(spine_SOURCES)"
 
