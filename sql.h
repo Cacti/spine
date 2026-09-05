@@ -46,7 +46,7 @@ extern void db_release_connection(int type, int id);
 extern int  db_reconnect(MYSQL *mysql, int type, int error, const char *location);
 extern int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column);
 
-extern int append_hostrange(char *obuf, const char *colname);
+extern int append_hostrange(char *obuf, size_t obuf_size, const char *colname);
 
 #define MYSQL_SET_OPTION(opt, value, desc)	\
 {\

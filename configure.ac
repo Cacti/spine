@@ -110,6 +110,37 @@ AC_ARG_ENABLE(sanitizers,
   AC_MSG_RESULT(no)
 )
 
+dnl ThreadSanitizer is a separate build: it cannot be combined with
+dnl AddressSanitizer, and spine runs a thread per device with shared counters
+dnl and a process-wide effective uid, so a data race here is the failure mode
+dnl that costs the most to find any other way.
+AC_ARG_ENABLE(tsan,
+  [  --enable-tsan           Build with ThreadSanitizer. Not combinable with --enable-sanitizers.],
+  [if test "x$enableval" = "xyes"; then
+    AC_MSG_RESULT(adding -fsanitize=thread to CFLAGS.)
+    CFLAGS="$CFLAGS -fsanitize=thread -fno-omit-frame-pointer -g"
+    LDFLAGS="$LDFLAGS -fsanitize=thread"
+   fi
+  ],
+  AC_MSG_RESULT(no)
+)
+
+AS_IF([test "x$enable_sanitizers" = "xyes" && test "x$enable_tsan" = "xyes"],
+  [AC_MSG_ERROR([--enable-sanitizers and --enable-tsan cannot be used together])])
+
+dnl Coverage instrumentation, so `make check` and gcov agree on one build
+dnl rather than each caller inventing its own CFLAGS.
+AC_ARG_ENABLE(coverage,
+  [  --enable-coverage       Build with gcov instrumentation for coverage reports.],
+  [if test "x$enableval" = "xyes"; then
+    AC_MSG_RESULT(adding --coverage to CFLAGS.)
+    CFLAGS="$CFLAGS --coverage -O0 -g"
+    LDFLAGS="$LDFLAGS --coverage"
+   fi
+  ],
+  AC_MSG_RESULT(no)
+)
+
 AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
 AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])
@@ -378,6 +409,66 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ #include <net-snmp-config.h>
 AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session structure member exists)
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
+
+# ****************** Linker --wrap support (tests only) *********************
+dnl Several unit binaries interpose on libc, Connector/C and internal symbols
+dnl so otherwise destructive or external paths are deterministic. That needs
+dnl GNU ld or lld; Solaris ld has no equivalent. Probe rather than assume, or
+dnl the suite fails to link on a platform spine otherwise builds on.
+AC_MSG_CHECKING([whether the linker supports --wrap])
+spine_save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -Wl,--wrap=spine_ld_wrap_probe"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  int spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void) { return 0; }
+]], [[
+  return spine_ld_wrap_probe();
+]])],
+  [spine_ld_wrap=yes],
+  [spine_ld_wrap=no])
+LDFLAGS="$spine_save_LDFLAGS"
+AC_MSG_RESULT($spine_ld_wrap)
+AM_CONDITIONAL([HAVE_LD_WRAP], [test "x$spine_ld_wrap" = "xyes"])
+
+# ****************** DES privacy protocol availability **********************
+dnl SNMP_DEFAULT_PRIV_PROTO names usmDESPrivProtocol unless the header sets
+dnl NETSNMP_DISABLE_DES. Fedora once shipped a net-snmp where the header took
+dnl the DES branch while the library exported no such symbol, so spine failed
+dnl to link rather than degrading. Checking the macro is not enough, because
+dnl that packaging did not set it; the symbol itself has to be probed.
+AC_MSG_CHECKING([whether the net-snmp library exports usmDESPrivProtocol])
+spine_save_LIBS="$LIBS"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <net-snmp/net-snmp-config.h>
+  #include <net-snmp/net-snmp-includes.h>
+]], [[
+  const oid *p = usmDESPrivProtocol;
+  return p == NULL;
+]])],
+  [AC_DEFINE(HAVE_USM_DES_PRIV_PROTOCOL, 1, [Define if the net-snmp library exports usmDESPrivProtocol.])
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)])
+LIBS="$spine_save_LIBS"
+
+# ****************** SHA-1 auth protocol availability **********************
+dnl Do not use SNMP_DEFAULT_AUTH_PROTO as a last-resort fallback: on an MD5-
+dnl disabled/FIPS header it may name a symbol the linked library does not
+dnl export. Probe the explicit SHA-1 symbol, just as the privacy path probes
+dnl DES, and compile the fallback only when it links.
+AC_MSG_CHECKING([whether the net-snmp library exports usmHMACSHA1AuthProtocol])
+spine_save_LIBS="$LIBS"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <net-snmp/net-snmp-config.h>
+  #include <net-snmp/net-snmp-includes.h>
+]], [[
+  const oid *p = usmHMACSHA1AuthProtocol;
+  return p == NULL;
+]])],
+  [AC_DEFINE(HAVE_USM_HMACSHA1_AUTH_PROTOCOL, 1, [Define if the net-snmp library exports usmHMACSHA1AuthProtocol.])
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)])
+LIBS="$spine_save_LIBS"
 
 # ****************** SNMPv3 USM Error Constants Check ***********************
 AC_MSG_CHECKING([for SNMPv3 USM error constants])

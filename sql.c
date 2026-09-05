@@ -544,11 +544,11 @@ void db_release_connection(int type, int id) {
 	thread_mutex_unlock(LOCK_POOL);
 }
 
-/*! \fn int append_hostrange(char *obuf, const char *colname, const config_t *set)
+/*! \fn int append_hostrange(char *obuf, size_t obuf_size, const char *colname)
  *  \brief appends a host range to a sql select statement
  *  \param obuf the sql select statement to have the host range appended
+ *  \param obuf_size the number of writable bytes at obuf
  *  \param colname the sql column name that will have the host range checked
- *  \param set global runtime settings
  *
  *	Several places in the code need to limit the range of hosts to
  *	those with a certain ID range, but only if those range values
@@ -560,15 +560,23 @@ void db_release_connection(int type, int id) {
  *  \return the number of characters added to the end of the character buffer
  *
  */
-int append_hostrange(char *obuf, const char *colname) {
-	if (HOSTID_DEFINED(set.start_host_id) && HOSTID_DEFINED(set.end_host_id)) {
-		return snprintf(obuf, BUFSIZE, " AND %s BETWEEN %d AND %d",
-			colname,
-			set.start_host_id,
-			set.end_host_id);
-	} else {
+int append_hostrange(char *obuf, size_t obuf_size, const char *colname) {
+	char *cursor;
+	size_t remaining;
+
+	if (obuf == NULL || obuf_size == 0 || colname == NULL ||
+		!HOSTID_DEFINED(set.start_host_id) || !HOSTID_DEFINED(set.end_host_id)) {
 		return 0;
 	}
+
+	cursor = obuf;
+	remaining = obuf_size;
+	spine_appendf(&cursor, &remaining, " AND %s BETWEEN %d AND %d",
+		colname,
+		set.start_host_id,
+		set.end_host_id);
+
+	return (int) (cursor - obuf);
 }
 
 /*! \fn void db_escape(MYSQL *mysql, char *output, int max_size, const char *input)
@@ -584,22 +592,43 @@ int append_hostrange(char *obuf, const char *colname) {
  *
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
-	char input_trimmed[DBL_BUFSIZE];
-	int  max_escaped_input_size;
-	int  trim_limit;
+	size_t input_len;
+	size_t max_input;
 
-	if (input == NULL) return;
+	/* Callers reuse one stack buffer across nullable columns, so leaving it
+	   untouched here interpolates the previous column, or uninitialised stack
+	   on the first row. */
+	if (output == NULL) return;
 
-	max_escaped_input_size = (strlen(input) * 2) + 1;
-	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
+	if (input == NULL) {
+		if (max_size > 0) {
+			*output = '\0';
+		}
 
-	if (max_escaped_input_size > max_size) {
-		snprintf(input_trimmed, (trim_limit / 2) - 1, "%s", input);
-	} else {
-		snprintf(input_trimmed, trim_limit, "%s", input);
+		return;
 	}
 
-	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
+	if (max_size <= 1) {
+		if (max_size == 1) {
+			*output = '\0';
+		}
+
+		return;
+	}
+
+	/* Escaping can double every byte and the result is NUL terminated, so at
+	 * most (max_size - 1) / 2 input bytes fit. The previous implementation
+	 * staged the input through a fixed DBL_BUFSIZE buffer first, which capped
+	 * every caller at 1022 bytes regardless of the destination it supplied, so
+	 * a poller result of 1024 bytes or more was silently truncated. */
+	max_input = ((size_t) max_size - 1) / 2;
+	input_len = strlen(input);
+
+	if (input_len > max_input) {
+		input_len = max_input;
+	}
+
+	mysql_real_escape_string(mysql, output, input, (unsigned long) input_len);
 }
 
 void db_free_result(MYSQL_RES *result) {

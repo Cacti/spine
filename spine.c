@@ -245,13 +245,21 @@ int main(int argc, char *argv[]) {
 	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
-	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
+	if (!(php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t)))) {
+		die("ERROR: Fatal calloc error: spine.c php_processes!");
+	}
+
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
+		php_processes[i].php_pid = -1;
+		php_processes[i].php_read_fd = -1;
+		php_processes[i].php_write_fd = -1;
 		php_processes[i].php_state = PHP_BUSY;
 	}
 
 	/* create the array of debug devices */
-	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
+	if (!(debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int)))) {
+		die("ERROR: Fatal calloc error: spine.c debug_devices!");
+	}
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
@@ -552,7 +560,10 @@ int main(int argc, char *argv[]) {
 	db_connect(LOCAL, &mysql);
 
 	/* setup local connection pool for hosts */
-	db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t));
+	if (!(db_pool_local = (pool_t *) calloc(set.threads, sizeof(pool_t)))) {
+		die("ERROR: Fatal calloc error: spine.c db_pool_local!");
+	}
+
 	db_create_connection_pool(LOCAL);
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
@@ -560,7 +571,10 @@ int main(int argc, char *argv[]) {
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
-		db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t));
+		if (!(db_pool_remote = (pool_t *) calloc(set.threads, sizeof(pool_t)))) {
+			die("ERROR: Fatal calloc error: spine.c db_pool_remote!");
+		}
+
 		db_create_connection_pool(REMOTE);
 	} else {
 		mode = LOCAL;
@@ -645,25 +659,26 @@ int main(int argc, char *argv[]) {
 
 	/* obtain the list of hosts to poll */
 	{
-		int remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+		size_t remaining = MEGA_BUFSIZE - (qp - querybuf);
+		spine_appendf(&qp, &remaining, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " WHERE disabled = ''");
+		spine_appendf(&qp, &remaining, " WHERE disabled = ''");
 
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND availability_method != %d", AVAIL_STREAM);
+		spine_appendf(&qp, &remaining, " AND availability_method != %d", AVAIL_STREAM);
 
 		if (!strlen(set.host_id_list)) {
-			qp += append_hostrange(qp, "h.id");	/* AND id BETWEEN a AND b */
+			remaining = MEGA_BUFSIZE - (size_t) (qp - querybuf);
+			qp += append_hostrange(qp, remaining, "h.id");	/* AND id BETWEEN a AND b */
 		} else {
 			remaining = MEGA_BUFSIZE - (qp - querybuf);
-			qp += snprintf(qp, remaining, " AND h.id IN(%s)", set.host_id_list);
+			spine_appendf(&qp, &remaining, " AND h.id IN(%s)", set.host_id_list);
 		}
 
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " AND h.poller_id = %i", set.poller_id);
+		spine_appendf(&qp, &remaining, " AND h.poller_id = %i", set.poller_id);
 		remaining = MEGA_BUFSIZE - (qp - querybuf);
-		qp += snprintf(qp, remaining, " ORDER BY picount DESC");
+		spine_appendf(&qp, &remaining, " ORDER BY picount DESC");
 	}
 
 	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
@@ -684,7 +699,10 @@ int main(int argc, char *argv[]) {
 			die("ERROR: Fatal malloc error: spine.c threads!");
 		}
 
-		if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
+		/* calloc, not malloc: the device loop can exit early on a poller
+		   overrun, and both the NULL test below and the free loop at the end
+		   walk every slot up to num_rows. */
+		if (!(details = (poller_thread_t **)calloc(num_rows, sizeof(poller_thread_t*)))) {
 			die("ERROR: Fatal malloc error: spine.c details!");
 		}
 
@@ -763,6 +781,11 @@ int main(int argc, char *argv[]) {
 		double progress_time = 0;
 		int sem_err = 0;
 		int spine_timeout = FALSE;
+
+		/* Reap children a previous worker had to abandon even when no later
+		 * script item calls nft_popen(). This WNOHANG sweep never stalls the
+		 * scheduler. */
+		(void) nft_abandoned_pending();
 
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
@@ -1013,6 +1036,7 @@ int main(int argc, char *argv[]) {
  	 * using the mutex here as the semaphore will
      * show zero before the children are done */
 	while (a_threads_value < set.threads) {
+		(void) nft_abandoned_pending();
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {

@@ -23,6 +23,8 @@
 
 #ifndef SPINE_NFT_POPEN_H
 #define SPINE_NFT_POPEN_H
+
+#include <spawn.h>
 /******************************************************************************
  ex: set tabstop=4 shiftwidth=4 autoindent:
  *
@@ -90,8 +92,69 @@ extern int	nft_pchild(int fd);
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *	EBADF	The fd is not an active popen() file descriptor.
- *	ECHILD	waitpid() failed.
+ *	ETIMEDOUT	The child outlived the TERM/KILL budgets.
+ *	otherwise	The errno reported by waitpid().
  */
 extern int	nft_pclose(int fd);
+
+/*!
+ *  spine_set_cloexec
+ *
+ *  Mark a descriptor close-on-exec.
+ *
+ *  Returns 0 on success, -1 on failure with errno set by fcntl().
+ */
+extern int	spine_set_cloexec(int fd);
+
+/*!
+ *  spine_open_pipe_cloexec
+ *
+ *  Open a pipe whose descriptors are not inherited across exec. Spine spawns
+ *  children from several threads, so a descriptor left inheritable is held by
+ *  an unrelated child and the reader never sees EOF.
+ *
+ *  Returns TRUE on success. On failure the descriptors are closed and FALSE is
+ *  returned, so the caller owns nothing.
+ */
+extern int	spine_open_pipe_cloexec(int pdes[2]);
+
+/* Initialize spawn attributes that restore SIGPIPE's default disposition in
+ * posix_spawned children while Spine catches SIGPIPE in the parent. */
+extern int	spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
+
+/*!
+ *  spine_reap_child_bounded
+ *
+ *  Reap a child with WNOHANG, sleeping between attempts, so a wedged script
+ *  cannot pin a poller thread indefinitely.
+ *
+ *  Returns 0 when the child was reaped, 1 when it is still running after
+ *  attempts, and -1 on a waitpid() error other than EINTR or ECHILD.
+ */
+extern int	spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
+
+/*!
+ *  The cap on parked pids. Past it a child is logged and dropped, because an
+ *  unbounded list would trade a pid leak for a memory leak.
+ */
+#define NFT_ABANDONED_MAX 64
+
+/*!
+ *  nft_abandon_child
+ *
+ *  Record a child that outlived nft_pclose()'s kill budget. Nothing else in
+ *  spine reaps, so a dropped child would stay a zombie for the daemon's
+ *  lifetime; parked pids are swept by the scheduler and on the next script
+ *  poll. The pid and reason are logged either way.
+ */
+extern void	nft_abandon_child(pid_t pid, const char *reason);
+
+/*!
+ *  nft_abandoned_pending
+ *
+ *  Sweep the parked pids with WNOHANG and return how many are still running.
+ *  Zero means nothing is leaking.
+ */
+extern int	nft_abandoned_pending(void);
 
 #endif /* SPINE_NFT_POPEN_H */

@@ -18,7 +18,22 @@
 #include "common.h"
 #include "spine.h"
 #include "util.h"
+#include "sql.h"
 #include "ping.h"
+#include "nft_popen.h"
+#include "error.h"
+
+#include <wchar.h>
+#include <locale.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <dirent.h>
+#include <poll.h>
+#include <sys/resource.h>
+#include <signal.h>
+#include <setjmp.h>
+#include <unistd.h>
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -80,6 +95,16 @@ static void test_regex_replace_passes_through_on_no_match(void **state) {
 static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
+}
+
+static void test_regex_number_extracts_decimal_from_labelled_output(void **state) {
+	(void) state;
+	assert_string_equal(regex_replace(REGEX_NUMBER, "value=1.5 (avg)"), "1.5");
+}
+
+static void test_regex_number_stops_after_first_decimal_match(void **state) {
+	(void) state;
+	assert_string_equal(regex_replace(REGEX_NUMBER, "10.0.0.1"), "10.0");
 }
 
 
@@ -389,33 +414,7 @@ static void test_read_spine_config_reads_settings(void **state) {
 
 /* --- get_date_format(): every format and separator is owned by the caller -- */
 
-static void test_get_date_format_returns_owned_memory(void **state) {
-	char *fmt;
-	(void) state;
 
-	config_defaults();
-	fmt = get_date_format();
-
-	assert_non_null(fmt);
-	assert_true(strlen(fmt) > 0);
-	free(fmt);
-}
-
-static void test_get_date_format_clamps_an_out_of_range_format(void **state) {
-	char *fmt;
-	(void) state;
-
-	config_defaults();
-	set.log_datetime_format    = GD_MAX + 10;
-	set.log_datetime_separator = GDC_MAX + 10;
-
-	fmt = get_date_format();
-
-	assert_non_null(fmt);
-	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
-	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
-	free(fmt);
-}
 
 static void test_get_date_format_covers_each_supported_format(void **state) {
 	int fmt_value;
@@ -430,10 +429,10 @@ static void test_get_date_format_covers_each_supported_format(void **state) {
 			set.log_datetime_format    = fmt_value;
 			set.log_datetime_separator = sep_value;
 
+			set_date_format();
 			fmt = get_date_format();
 			assert_non_null(fmt);
 			assert_true(strlen(fmt) > 0);
-			free(fmt);
 		}
 	}
 }
@@ -457,6 +456,2867 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+static void test_cloexec_is_set_on_both_pipe_ends(void **state) {
+	int pdes[2];
+	int i;
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+
+	for (i = 0; i < 2; i++) {
+		int flags = fcntl(pdes[i], F_GETFD);
+
+		assert_true(flags >= 0);
+		assert_true((flags & FD_CLOEXEC) != 0);
+	}
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_cloexec_pipe_is_a_working_pipe(void **state) {
+	int pdes[2];
+	char buf[8];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	assert_int_equal(write(pdes[1], "ok", 2), 2);
+	assert_int_equal(read(pdes[0], buf, sizeof(buf)), 2);
+	assert_memory_equal(buf, "ok", 2);
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_pipe_is_not_inherited_across_exec(void **state) {
+	int pdes[2];
+	int status;
+	pid_t pid;
+	char fdarg[32];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+
+	/* Asserting the descriptor is absent from /proc/self/fd would also pass
+	   where /proc does not exist, which is the wrong reason. Check /proc is
+	   usable first, and skip rather than pass vacuously. */
+	if (access("/proc/self/fd", R_OK) != 0) {
+		close(pdes[0]);
+		close(pdes[1]);
+		print_message("no /proc/self/fd here; cannot observe the child's table\n");
+		return;
+	}
+
+	snprintf(fdarg, sizeof(fdarg), "/proc/self/fd/%d", pdes[1]);
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		/* 0 when the descriptor survived exec, 1 when it did not, and the
+		   parent has already confirmed /proc answers */
+		execl("/bin/sh", "sh", "-c", "test -e \"$0\"", fdarg, (char *) NULL);
+		_exit(127);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 1);
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_reap_returns_still_running_rather_than_blocking(void **state) {
+	int pstat = 0;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	/* the shipped code blocked here forever; two attempts must come back */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 1);
+
+	assert_int_equal(kill(pid, SIGKILL), 0);
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+}
+
+static void test_reap_collects_an_exited_child(void **state) {
+	int pstat = 0;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(3);
+	}
+
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 20), 0);
+	assert_true(WIFEXITED(pstat));
+	assert_int_equal(WEXITSTATUS(pstat), 3);
+}
+
+static void test_reap_reports_an_already_reaped_child(void **state) {
+	int pstat = 99;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(0);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+
+	/* ECHILD: someone else took the status, which is success with none */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 0);
+	assert_int_equal(pstat, 0);
+}
+
+static void test_pclose_promptly_ends_a_child_writing_after_pipe_close(void **state) {
+	struct sigaction saved_sigpipe;
+	struct sigaction ignored_sigpipe;
+	char buf[32];
+	double started;
+	double elapsed;
+	int fd;
+
+	(void) state;
+	memset(&ignored_sigpipe, 0, sizeof(ignored_sigpipe));
+	ignored_sigpipe.sa_handler = SIG_IGN;
+	assert_int_equal(sigaction(SIGPIPE, &ignored_sigpipe, &saved_sigpipe), 0);
+
+	fd = nft_popen("printf 'first\\n'; while :; do printf 'more\\n'; done", "r");
+	assert_true(fd >= 0);
+	assert_true(read(fd, buf, sizeof(buf)) > 0);
+	started = get_time_as_double();
+	nft_pclose(fd);
+	elapsed = get_time_as_double() - started;
+
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+	assert_true(elapsed < 2.0);
+}
+
+static void test_signal_setup_turns_a_broken_pipe_into_epipe(void **state) {
+	struct sigaction saved_sigpipe;
+	struct sigaction default_sigpipe;
+	struct sigaction actual_sigpipe;
+	int pdes[2];
+
+	(void) state;
+	assert_int_equal(sigaction(SIGPIPE, NULL, &saved_sigpipe), 0);
+	memset(&default_sigpipe, 0, sizeof(default_sigpipe));
+	default_sigpipe.sa_handler = SIG_DFL;
+	assert_int_equal(sigaction(SIGPIPE, &default_sigpipe, NULL), 0);
+	install_spine_signal_handler();
+	assert_int_equal(sigaction(SIGPIPE, NULL, &actual_sigpipe), 0);
+	assert_true(actual_sigpipe.sa_handler != SIG_IGN);
+	assert_true(actual_sigpipe.sa_handler != SIG_DFL);
+
+	assert_int_equal(pipe(pdes), 0);
+	close(pdes[0]);
+	errno = 0;
+	assert_int_equal(write(pdes[1], "x", 1), -1);
+	assert_int_equal(errno, EPIPE);
+	/* The first signal must not reset the disposition and make the next broken
+	 * pipe fatal. */
+	errno = 0;
+	assert_int_equal(write(pdes[1], "x", 1), -1);
+	assert_int_equal(errno, EPIPE);
+	close(pdes[1]);
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+}
+
+#ifdef USING_TPOPEN
+static void test_libc_popen_child_observes_default_sigpipe(void **state) {
+	struct sigaction saved_sigpipe;
+	struct sigaction ignored_sigpipe;
+	char output[32];
+	FILE *child;
+	int status;
+
+	(void) state;
+	assert_int_equal(sigaction(SIGPIPE, NULL, &saved_sigpipe), 0);
+	/* Normalize an inherited ignore as well as SIG_DFL. SIG_IGN would survive
+	 * exec and reproduce the optional-popen regression. */
+	memset(&ignored_sigpipe, 0, sizeof(ignored_sigpipe));
+	ignored_sigpipe.sa_handler = SIG_IGN;
+	assert_int_equal(sigaction(SIGPIPE, &ignored_sigpipe, NULL), 0);
+	install_spine_signal_handler();
+
+	child = popen("kill -PIPE $$; printf survived", "r");
+	assert_non_null(child);
+	memset(output, 0, sizeof(output));
+	assert_null(fgets(output, sizeof(output), child));
+	status = pclose(child);
+	assert_true(status != 0);
+
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+}
+#endif
+
+static void test_spine_log_survives_a_closed_stdout_pipe(void **state) {
+	int status;
+	pid_t pid;
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+	if (pid == 0) {
+		int pdes[2];
+		signal(SIGPIPE, SIG_DFL);
+		install_spine_signal_handler();
+		if (pipe(pdes) != 0) _exit(2);
+		close(pdes[0]);
+		if (dup2(pdes[1], STDOUT_FILENO) < 0) _exit(3);
+		close(pdes[1]);
+		set.log_destination = LOGDEST_STDOUT;
+		spine_log("closed stdout must not terminate spine");
+		fflush(stdout);
+		_exit(0);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
+static void test_get_date_format_returns_cached_storage(void **state) {
+	char *fmt;
+	(void) state;
+
+	config_defaults();
+	set_date_format();
+	fmt = get_date_format();
+
+	assert_non_null(fmt);
+	assert_true(strlen(fmt) > 0);
+
+	/* the buffer belongs to util.c and is handed out, not owned by us */
+	assert_ptr_equal(fmt, get_date_format());
+}
+
+static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
+	char *fmt;
+	(void) state;
+
+	config_defaults();
+	set.log_datetime_format    = GD_MAX + 10;
+	set.log_datetime_separator = GDC_MAX + 10;
+
+	set_date_format();
+	fmt = get_date_format();
+
+	assert_non_null(fmt);
+	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
+	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
+}
+
+static void test_append_hostrange_writes_the_configured_range(void **state) {
+	char out[64] = {0};
+	int written;
+	(void) state;
+
+	set.start_host_id = 12;
+	set.end_host_id = 34;
+	written = append_hostrange(out, sizeof out, "h.id");
+
+	assert_string_equal(out, " AND h.id BETWEEN 12 AND 34");
+	assert_int_equal(written, (int) strlen(out));
+}
+
+static void test_append_hostrange_truncates_without_advancing_past_the_buffer(void **state) {
+	struct {
+		char out[12];
+		unsigned char canary;
+	} bounded;
+	int written;
+	(void) state;
+
+	memset(&bounded, 0xA5, sizeof bounded);
+	set.start_host_id = 12345;
+	set.end_host_id = 67890;
+	written = append_hostrange(bounded.out, sizeof bounded.out, "host_id");
+
+	assert_int_equal(written, (int) sizeof bounded.out - 1);
+	assert_int_equal(bounded.out[sizeof bounded.out - 1], '\0');
+	assert_int_equal(bounded.canary, 0xA5);
+}
+
+static void test_append_hostrange_fits_at_the_exact_complete_boundary(void **state) {
+	static const char expected[] = " AND h.id BETWEEN 12 AND 34";
+	char out[sizeof expected];
+	int written;
+	(void) state;
+
+	set.start_host_id = 12;
+	set.end_host_id = 34;
+	written = append_hostrange(out, sizeof out, "h.id");
+
+	assert_string_equal(out, expected);
+	assert_int_equal(written, (int) strlen(expected));
+}
+
+/* db_escape() stands between a device-supplied poller result and the SQL text
+ * spine builds: it escapes the metacharacters and must never write past the
+ * destination. It used to stage the input through a fixed DBL_BUFSIZE buffer,
+ * which capped every caller at 1022 input bytes no matter how large a
+ * destination it passed, so poller results were silently truncated.
+ */
+static MYSQL *escape_handle(void) {
+	static MYSQL *handle = NULL;
+
+	if (handle == NULL) {
+		handle = mysql_init(NULL);
+	}
+
+	return handle;
+}
+
+static void test_db_escape_escapes_sql_metacharacters(void **state) {
+	char out[64];
+	(void) state;
+
+	db_escape(escape_handle(), out, sizeof out, "a'b");
+	assert_string_equal(out, "a\\'b");
+
+	db_escape(escape_handle(), out, sizeof out, "back\\slash");
+	assert_string_equal(out, "back\\\\slash");
+
+	db_escape(escape_handle(), out, sizeof out, "plain value");
+	assert_string_equal(out, "plain value");
+}
+
+/* A NULL column must clear the destination rather than leave it alone.
+   poller_push_data_to_main() reuses one tmpstr across a dozen nullable
+   columns without reinitialising it, so "leave it alone" means "emit the
+   previous column's value", and on the first row it means uninitialised
+   stack, inside a quoted SQL literal. */
+static void test_db_escape_clears_on_a_null_input(void **state) {
+	char out[16];
+	(void) state;
+
+	memcpy(out, "untouched", 10);
+	db_escape(escape_handle(), out, sizeof out, NULL);
+	assert_string_equal(out, "");
+}
+
+static void test_db_escape_does_not_leak_the_previous_column(void **state) {
+	char shared[32];
+	(void) state;
+
+	db_escape(escape_handle(), shared, sizeof shared, "sysDescr value");
+	assert_string_equal(shared, "sysDescr value");
+
+	db_escape(escape_handle(), shared, sizeof shared, NULL);
+	assert_string_equal(shared, "");
+}
+
+/* A result the size of the poller's own buffer has to survive when the
+ * destination is sized 2N+1 for it. This is the case that regressed. */
+static void test_db_escape_keeps_a_full_results_buffer(void **state) {
+	char input[RESULTS_BUFFER];
+	char out[(RESULTS_BUFFER * 2) + 1];
+	(void) state;
+
+	memset(input, 'x', sizeof input - 1);
+	input[sizeof input - 1] = '\0';
+
+	db_escape(escape_handle(), out, sizeof out, input);
+
+	assert_int_equal((int) strlen(out), (int) (sizeof input - 1));
+	assert_string_equal(out, input);
+}
+
+/* Walk across the old staging boundary to prove the cut is gone. */
+static void test_db_escape_survives_the_old_staging_boundary(void **state) {
+	const int sizes[] = { 1022, 1023, 1024, 1100, 2047 };
+	char      input[2048];
+	char      out[(2048 * 2) + 1];
+	size_t    i;
+	(void) state;
+
+	for (i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
+		memset(input, 'y', (size_t) sizes[i]);
+		input[sizes[i]] = '\0';
+
+		db_escape(escape_handle(), out, sizeof out, input);
+
+		assert_int_equal((int) strlen(out), sizes[i]);
+	}
+}
+
+/* When the destination genuinely cannot hold the escaped form the result is
+ * truncated rather than overflowing, and stays NUL terminated. */
+static void test_db_escape_truncates_into_a_small_destination(void **state) {
+	char out[11];
+	(void) state;
+
+	db_escape(escape_handle(), out, sizeof out, "0123456789abcdef");
+
+	/* (11 - 1) / 2 == 5 input bytes may be represented */
+	assert_int_equal((int) strlen(out), 5);
+	assert_string_equal(out, "01234");
+}
+
+static void test_db_escape_handles_a_degenerate_destination(void **state) {
+	char out[4];
+	(void) state;
+
+	memcpy(out, "abc", 4);
+	db_escape(escape_handle(), out, 1, "anything");
+	assert_string_equal(out, "");
+
+	memcpy(out, "abc", 4);
+	db_escape(escape_handle(), out, 0, "anything");
+	assert_string_equal(out, "abc");
+}
+
+static void test_row_alias_upsert_requires_mysql_8020(void **state) {
+	(void) state;
+	assert_int_equal(db_row_alias_upsert_supported("8.0.19", 80019), FALSE);
+	assert_int_equal(db_row_alias_upsert_supported("8.0.20", 80020), TRUE);
+	assert_int_equal(db_row_alias_upsert_supported("8.4.0", 80400), TRUE);
+	assert_int_equal(db_row_alias_upsert_supported("10.11.8-MariaDB", 101108), FALSE);
+	assert_int_equal(db_row_alias_upsert_supported("5.7.44", 50744), FALSE);
+	assert_int_equal(db_row_alias_upsert_supported(NULL, 80020), FALSE);
+}
+
+/* Cacti stores the literal "[None]" when no SNMPv3 protocol is selected, and an
+ * empty string for an absent passphrase. Treating either as an error made two
+ * of the three security levels unusable: noAuthNoPriv was refused before the
+ * session opened, and authNoPriv authenticated with a key that was never
+ * derived. cmd.php accepts both, so a device that polls under the PHP poller
+ * has to poll under spine.
+ */
+static void test_snmpv3_value_is_set_treats_none_as_unset(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_value_is_set(NULL), FALSE);
+	assert_int_equal(spine_snmpv3_value_is_set(""), FALSE);
+	assert_int_equal(spine_snmpv3_value_is_set("[None]"), FALSE);
+
+	assert_int_equal(spine_snmpv3_value_is_set("SHA"), TRUE);
+	assert_int_equal(spine_snmpv3_value_is_set("secret"), TRUE);
+	/* only the exact sentinel is unset */
+	assert_int_equal(spine_snmpv3_value_is_set("[None] "), TRUE);
+	assert_int_equal(spine_snmpv3_value_is_set("none"), TRUE);
+}
+
+static void test_snmpv3_level_is_noauth_without_a_protocol(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("[None]", "", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(spine_snmpv3_security_level(NULL, NULL, NULL, NULL),
+		SNMP_SEC_LEVEL_NOAUTH);
+	/* a protocol with no password cannot authenticate */
+	assert_int_equal(spine_snmpv3_security_level("SHA", "", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+	/* nor a password with no protocol */
+	assert_int_equal(spine_snmpv3_security_level("[None]", "secret", "[None]", ""),
+		SNMP_SEC_LEVEL_NOAUTH);
+}
+
+static void test_snmpv3_level_is_authnopriv_without_privacy(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "[None]", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(spine_snmpv3_security_level("MD5", "secret", "", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(spine_snmpv3_security_level("SHA-512", "secret", NULL, NULL),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+	/* a privacy protocol without its passphrase is not privacy */
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "AES", ""),
+		SNMP_SEC_LEVEL_AUTHNOPRIV);
+}
+
+static void test_snmpv3_level_is_authpriv_when_both_are_set(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("SHA", "secret", "AES", "privpass"),
+		SNMP_SEC_LEVEL_AUTHPRIV);
+	assert_int_equal(spine_snmpv3_security_level("SHA-256", "secret", "AES-192", "privpass"),
+		SNMP_SEC_LEVEL_AUTHPRIV);
+}
+
+/* Privacy without authentication is not a level SNMPv3 offers, so a privacy
+ * selection alone must not raise the level above noAuthNoPriv. */
+static void test_snmpv3_privacy_alone_does_not_raise_the_level(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_snmpv3_security_level("[None]", "", "AES", "privpass"),
+		SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(spine_snmpv3_security_level("SHA", "", "AES", "privpass"),
+		SNMP_SEC_LEVEL_NOAUTH);
+}
+
+struct guarded_buf {
+	char body[32];
+	char canary[8];
+};
+
+static void guarded_init(struct guarded_buf *g) {
+	memset(g->body, 0, sizeof(g->body));
+	memset(g->canary, 0x7e, sizeof(g->canary));
+}
+
+static void guarded_check(struct guarded_buf *g) {
+	size_t i;
+
+	for (i = 0; i < sizeof(g->canary); i++) {
+		assert_int_equal((unsigned char) g->canary[i], 0x7e);
+	}
+}
+
+static void test_appendf_writes_and_advances(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_true(spine_appendf(&p, &remaining, "abc"));
+	assert_int_equal(p - g.body, 3);
+	assert_int_equal(remaining, sizeof(g.body) - 3);
+	assert_string_equal(g.body, "abc");
+	guarded_check(&g);
+}
+
+static void test_appendf_accumulates(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_true(spine_appendf(&p, &remaining, "SELECT %d", 7));
+	assert_true(spine_appendf(&p, &remaining, " FROM %s", "t"));
+	assert_string_equal(g.body, "SELECT 7 FROM t");
+	assert_int_equal(remaining, sizeof(g.body) - strlen("SELECT 7 FROM t"));
+	guarded_check(&g);
+}
+
+/* The case the old idiom got wrong. */
+static void test_appendf_reports_truncation_and_stays_in_bounds(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_false(spine_appendf(&p, &remaining, "%s", "0123456789012345678901234567890123456789"));
+
+	/* cursor lands on the terminator, not past the end */
+	assert_true(p >= g.body);
+	assert_true(p < g.body + sizeof(g.body));
+	assert_int_equal(*p, '\0');
+	assert_int_equal(remaining, 1);
+	assert_int_equal(strlen(g.body), sizeof(g.body) - 1);
+	guarded_check(&g);
+}
+
+static void test_appendf_after_truncation_keeps_failing(void **state) {
+	struct guarded_buf g;
+	char *p;
+	size_t remaining;
+	char full[sizeof(g.body)];
+
+	(void) state;
+	guarded_init(&g);
+	p = g.body;
+	remaining = sizeof(g.body);
+
+	assert_false(spine_appendf(&p, &remaining, "%s", "0123456789012345678901234567890123456789"));
+	memcpy(full, g.body, sizeof(full));
+
+	/* a second append must not write anything, anywhere */
+	assert_false(spine_appendf(&p, &remaining, " AND poller_id=%d", 3));
+	assert_memory_equal(g.body, full, sizeof(full));
+	guarded_check(&g);
+}
+
+static void test_appendf_rejects_null_arguments(void **state) {
+	char buf[8] = "";
+	char *p = buf;
+	size_t remaining = sizeof(buf);
+	char *nullp = NULL;
+
+	(void) state;
+
+	assert_false(spine_appendf(NULL, &remaining, "x"));
+	assert_false(spine_appendf(&nullp, &remaining, "x"));
+	assert_false(spine_appendf(&p, NULL, "x"));
+}
+
+static void test_appendf_rejects_an_exhausted_buffer(void **state) {
+	char buf[8] = "";
+	char *p = buf;
+	size_t remaining = 0;
+
+	(void) state;
+
+	assert_false(spine_appendf(&p, &remaining, "x"));
+	assert_ptr_equal(p, buf);
+	assert_int_equal(buf[0], '\0');
+}
+
+static void test_old_idiom_overshoots_where_appendf_does_not(void **state) {
+	char buf[32];
+	char *p = buf;
+	ptrdiff_t old_offset;
+	char *q;
+	size_t remaining;
+	char longer[41];
+
+	(void) state;
+
+	/* built at run time: a literal here lets the compiler prove the truncation
+	   and warn about a case the test exists to demonstrate */
+	memset(longer, '7', sizeof(longer) - 1);
+	longer[sizeof(longer) - 1] = '\0';
+
+	p += snprintf(p, sizeof(buf), "%s", longer);
+	old_offset = p - buf;
+	assert_true(old_offset > (ptrdiff_t) sizeof(buf));
+	assert_true((ptrdiff_t) (sizeof(buf) - old_offset) < 0);
+
+	q = buf;
+	remaining = sizeof(buf);
+	assert_false(spine_appendf(&q, &remaining, "%s", longer));
+	assert_true(q - buf < (ptrdiff_t) sizeof(buf));
+}
+
+/* poller.c decides here whether a polled value is stored at all. A result that
+ * validate_result() rejects is discarded, so a mistake in either predicate
+ * silently drops data or accepts a malformed multi-value string. poller.c is
+ * the most frequently changed file in the tree and had no coverage of either.
+ */
+static void test_validate_result_accepts_numeric_forms(void **state) {
+	char integer[]  = "42";
+	char negative[] = "-17";
+	char decimal[]  = "3.14159";
+	char zero[]     = "0";
+	(void) state;
+
+	assert_int_equal(validate_result(integer), TRUE);
+	assert_int_equal(validate_result(negative), TRUE);
+	assert_int_equal(validate_result(decimal), TRUE);
+	assert_int_equal(validate_result(zero), TRUE);
+}
+
+static void test_validate_result_rejects_a_null_and_junk(void **state) {
+	char junk[]  = "not a value";
+	char empty[] = "";
+	(void) state;
+
+	assert_int_equal(validate_result(NULL), FALSE);
+	assert_int_equal(validate_result(junk), FALSE);
+	assert_int_equal(validate_result(empty), FALSE);
+}
+
+static void test_validate_result_accepts_multipart_output(void **state) {
+	char one[]  = "field:1";
+	char many[] = "in:100 out:200 errors:0";
+	(void) state;
+
+	assert_int_equal(validate_result(one), TRUE);
+	assert_int_equal(validate_result(many), TRUE);
+}
+
+/* trim() is asymmetric and the caller needs to know it. rtrim() writes a NUL
+ * over the trailing run, so it mutates the caller's buffer; ltrim() only walks
+ * a pointer forward and leaves the leading run in place. validate_result()
+ * therefore edits the buffer it is handed, but not into the string the
+ * predicate actually saw. Its trim set is also wider than whitespace: it
+ * includes quotes and a backslash.
+ */
+static void test_validate_result_trims_the_buffer_asymmetrically(void **state) {
+	char padded[] = "  field:1  ";
+	char quoted[] = "\"field:1\"";
+	(void) state;
+
+	assert_int_equal(validate_result(padded), TRUE);
+	/* rtrim removed the trailing run in place, ltrim did not touch the front */
+	assert_string_equal(padded, "  field:1");
+
+	assert_int_equal(validate_result(quoted), TRUE);
+	assert_string_equal(quoted, "\"field:1");
+}
+
+static void test_is_multipart_output_requires_a_delimiter(void **state) {
+	char colon[]    = "a:1";
+	char bang[]     = "a!1";
+	char no_delim[] = "abc";
+	(void) state;
+
+	assert_int_equal(is_multipart_output(colon), TRUE);
+	assert_int_equal(is_multipart_output(bang), TRUE);
+	assert_int_equal(is_multipart_output(no_delim), FALSE);
+	assert_int_equal(is_multipart_output(NULL), FALSE);
+}
+
+/* With spaces present the pair count has to line up: one more delimiter than
+ * spaces. That is what separates "a:1 b:2" from a value that merely contains
+ * a colon somewhere in free text.
+ */
+static void test_is_multipart_output_balances_spaces_against_delimiters(void **state) {
+	char balanced[]   = "a:1 b:2 c:3";
+	char unbalanced[] = "a:1 b:2 c";
+	char prose[]      = "time is 12:30 today";
+	(void) state;
+
+	assert_int_equal(is_multipart_output(balanced), TRUE);
+	assert_int_equal(is_multipart_output(unbalanced), FALSE);
+	assert_int_equal(is_multipart_output(prose), FALSE);
+}
+
+/* poll_host() built the same six queries twice, once for the main poller and
+ * once for a remote one, differing only in how each query is scoped. A column
+ * added to one copy would not have reached the other, and none of it was
+ * reachable from a test. These two helpers hold the scoping rule.
+ */
+static void test_poller_item_scope_filters_deleted_on_the_main_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	poller_item_scope(scope, sizeof scope, 0);
+	assert_string_equal(scope, " AND deleted = ''");
+}
+
+static void test_poller_item_scope_filters_by_owner_on_a_remote_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	poller_item_scope(scope, sizeof scope, 3);
+	assert_string_equal(scope, " AND poller_id = 3");
+
+	poller_item_scope(scope, sizeof scope, 1);
+	assert_string_equal(scope, " AND poller_id = 1");
+}
+
+/* The main poller does not constrain the ownership queries at all, so the
+ * fragment has to be empty rather than absent: the caller interpolates it
+ * unconditionally. */
+static void test_poller_owner_scope_is_empty_on_the_main_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	memcpy(scope, "stale", 6);
+	poller_owner_scope(scope, sizeof scope, 0);
+	assert_string_equal(scope, "");
+}
+
+static void test_poller_owner_scope_names_the_remote_poller(void **state) {
+	char scope[64];
+	(void) state;
+
+	poller_owner_scope(scope, sizeof scope, 7);
+	assert_string_equal(scope, " AND poller_id = 7");
+}
+
+/* Both helpers are handed fixed stack buffers by poll_host(), so a degenerate
+ * size must not write. */
+static void test_poller_scopes_refuse_a_degenerate_buffer(void **state) {
+	char scope[8];
+	(void) state;
+
+	memcpy(scope, "keep", 5);
+	poller_item_scope(scope, 0, 0);
+	assert_string_equal(scope, "keep");
+
+	poller_owner_scope(scope, 0, 4);
+	assert_string_equal(scope, "keep");
+
+	poller_item_scope(NULL, sizeof scope, 0);
+	poller_owner_scope(NULL, sizeof scope, 0);
+}
+
+static void build_profiles(poll_host_queries_t *q, int poller_id, int ports, int dbonupdate, int profiles) {
+	set.poller_id        = poller_id;
+	set.total_snmp_ports = ports;
+	set.dbonupdate       = dbonupdate;
+	set.poller_interval  = 60;
+	set.active_profiles  = profiles;
+
+	memset(q, 0, sizeof(*q));
+	poll_host_build_queries(q, 42, ", 'RE' AS re", "LIMIT 0,100");
+}
+
+static void build_with(poll_host_queries_t *q, int poller_id, int ports, int dbonupdate) {
+	set.poller_id        = poller_id;
+	set.total_snmp_ports = ports;
+	set.dbonupdate       = dbonupdate;
+	set.poller_interval  = 60;
+	set.active_profiles  = 1;
+
+	memset(q, 0, sizeof(*q));
+	poll_host_build_queries(q, 42, ", 'RE' AS re", "LIMIT 0,100");
+}
+
+static void test_build_queries_scopes_the_main_poller_by_deleted(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+
+	assert_non_null(strstr(q.query1, " AND deleted = ''"));
+	assert_null(strstr(q.query1, "poller_id"));
+	/* the ownership filter is absent, not defaulted to some poller */
+	assert_null(strstr(q.query5, "poller_id"));
+	assert_null(strstr(q.query9, "poller_id"));
+}
+
+static void test_build_queries_scopes_a_remote_poller_by_owner(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 7, 1, 0);
+
+	assert_non_null(strstr(q.query1, " AND poller_id = 7"));
+	assert_null(strstr(q.query1, "deleted"));
+	assert_non_null(strstr(q.query5, " AND poller_id = 7"));
+	assert_non_null(strstr(q.query9, " AND poller_id = 7"));
+	assert_non_null(strstr(q.query10, " AND poller_id = 7"));
+
+	/* the host row is filtered by deleted on both, never by owner */
+	assert_non_null(strstr(q.query2, " AND deleted = ''"));
+	assert_null(strstr(q.query2, "poller_id"));
+}
+
+static void test_build_queries_orders_by_port_only_for_multiple_ports(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+	assert_null(strstr(q.query1, "ORDER BY snmp_port"));
+
+	build_with(&q, 0, 2, 0);
+	assert_non_null(strstr(q.query1, "ORDER BY snmp_port"));
+}
+
+/* The upsert suffix follows the server the INSERT is sent to, not the one the
+   version was read from. set.dbonupdate describes the LOCAL connection, and a
+   main poller writes poller_output there, so the flag applies. */
+static void test_build_queries_upsert_follows_the_local_server(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+
+	build_with(&q, 0, 1, 0);
+	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
+	build_with(&q, 0, 1, 1);
+	assert_string_equal(q.posuffix, " AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+}
+
+/* A remote poller sends this INSERT to the main server over mysqlr, which may
+   be a different vendor from its own. MariaDB rejects the row-alias form, so a
+   MySQL 8 remote poller writing to a MariaDB main server would lose every
+   batch. It keeps the portable form regardless of its own version. */
+static void test_build_queries_remote_poller_keeps_the_portable_upsert(void **state) {
+	poll_host_queries_t q;
+	int saved_mode = set.mode;
+
+	(void) state;
+
+	set.mode = REMOTE_ONLINE;
+
+	build_with(&q, 7, 1, 1);
+	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
+	build_with(&q, 7, 1, 0);
+	assert_string_equal(q.posuffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)");
+
+	set.mode = saved_mode;
+}
+
+static void test_build_queries_caches_the_lengths_the_result_loop_uses(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+
+	assert_int_equal(q.query8_len, (int) strlen(q.query8));
+	assert_int_equal(q.query11_len, (int) strlen(q.query11));
+	assert_int_equal(q.posuffix_len, (int) strlen(q.posuffix));
+}
+
+static void test_build_queries_fills_every_buffer(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	build_with(&q, 0, 1, 0);
+
+	assert_true(strlen(q.query1) > 0);
+	assert_true(strlen(q.query2) > 0);
+	assert_true(strlen(q.query4) > 0);
+	assert_true(strlen(q.query5) > 0);
+	assert_true(strlen(q.query6) > 0);
+	assert_true(strlen(q.query8) > 0);
+	assert_true(strlen(q.query9) > 0);
+	assert_true(strlen(q.query10) > 0);
+	assert_true(strlen(q.query11) > 0);
+	assert_true(strlen(q.posuffix) > 0);
+}
+
+static void emit_one(FILE *f, const char *tag, poll_host_queries_t *q) {
+	fprintf(f, "### %s query1\n%s\n", tag, q->query1);
+	fprintf(f, "### %s query2\n%s\n", tag, q->query2);
+	fprintf(f, "### %s query4\n%s\n", tag, q->query4);
+	fprintf(f, "### %s query5\n%s\n", tag, q->query5);
+	fprintf(f, "### %s query6\n%s\n", tag, q->query6);
+	fprintf(f, "### %s query8\n%s\n", tag, q->query8);
+	fprintf(f, "### %s query9\n%s\n", tag, q->query9);
+	fprintf(f, "### %s query10\n%s\n", tag, q->query10);
+	fprintf(f, "### %s posuffix\n%s\n", tag, q->posuffix);
+}
+
+static void write_all(FILE *f) {
+	poll_host_queries_t q;
+	int saved_mode;
+	int ports[2] = {1, 2};
+	int onupd[2] = {0, 1};
+	int pid[2]   = {3, 7};
+	int i, j;
+
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < 2; j++) {
+			build_with(&q, 0, ports[i], onupd[j]);
+			fprintf(f, "== MAIN ports=%d onupd=%d ==\n", ports[i], onupd[j]);
+			emit_one(f, "main", &q);
+		}
+	}
+	/* A remote poller is poller_id > 1 AND mode REMOTE_ONLINE; the second half
+	   is what routes poller_output to the main server, and the upsert suffix
+	   depends on it. Setting only the id modelled a poller that writes
+	   locally, which is not the case this fixture exists to pin. */
+	saved_mode = set.mode;
+	set.mode = REMOTE_ONLINE;
+
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < 2; j++) {
+			build_with(&q, pid[j], ports[i], onupd[j]);
+			fprintf(f, "== REMOTE ports=%d onupd=%d pid=%d ==\n", ports[i], onupd[j], pid[j]);
+			emit_one(f, "remote", &q);
+		}
+	}
+
+	set.mode = saved_mode;
+}
+
+static void test_build_queries_matches_the_golden_capture(void **state) {
+	const char *path = getenv("SPINE_GOLDEN");
+	char fallback[512];
+	char actual[] = "/tmp/spine_golden_actual.XXXXXX";
+	FILE *f;
+	FILE *g;
+	int fd;
+	int line = 0;
+	char a[BIG_BUFSIZE];
+	char b[BIG_BUFSIZE];
+
+	(void) state;
+
+	if (path == NULL) {
+		/* automake runs from the build directory, which is not the source
+		   directory under `make distcheck` */
+		const char *dir = getenv("srcdir");
+
+		snprintf(fallback, sizeof(fallback), "%s/tests/golden/poll_host_queries.golden",
+			dir != NULL ? dir : ".");
+		path = fallback;
+	}
+
+	/* Regenerate rather than compare. Documented in tests/golden/README.md;
+	   read the diff before committing what it produces. */
+	if (getenv("SPINE_WRITE_GOLDEN") != NULL) {
+		FILE *w = fopen(path, "w");
+
+		if (w == NULL) {
+			fail_msg("cannot write the golden fixture to %s", path);
+		}
+
+		write_all(w);
+		fclose(w);
+		print_message("wrote %s\n", path);
+		return;
+	}
+
+	g = fopen(path, "r");
+	if (g == NULL) {
+		fail_msg("golden fixture %s is not readable; this test must run, not skip", path);
+	}
+
+	fd = mkstemp(actual);
+	assert_true(fd >= 0);
+	f = fdopen(fd, "w+");
+	assert_non_null(f);
+
+	write_all(f);
+	fflush(f);
+	rewind(f);
+
+	while (fgets(a, sizeof(a), g) != NULL) {
+		line++;
+		if (fgets(b, sizeof(b), f) == NULL) {
+			fclose(g);
+			fclose(f);
+			unlink(actual);
+			fail_msg("golden has more lines than produced, first missing at %d", line);
+		}
+		if (strcmp(a, b) != 0) {
+			print_message("line %d\n  golden: %s  actual: %s", line, a, b);
+			fclose(g);
+			fclose(f);
+			unlink(actual);
+			fail_msg("query construction diverged from the golden capture at line %d", line);
+		}
+	}
+
+	assert_null(fgets(b, sizeof(b), f));
+
+	fclose(g);
+	fclose(f);
+	unlink(actual);
+}
+
+static void test_assert_equal_compares_as_text(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed("=", "eth0", "eth0"));
+	assert_true(reindex_assert_failed("=", "eth0", "eth1"));
+
+	/* '=' is a string compare, so these differ even though atoll() agrees */
+	assert_true(reindex_assert_failed("=", "007", "7"));
+}
+
+static void test_assert_greater_compares_as_numbers(void **state) {
+	(void) state;
+
+	/* the assert is assert_value > poll_result; it fails when that is false */
+	assert_false(reindex_assert_failed(">", "100", "50"));
+	assert_true(reindex_assert_failed(">", "50", "100"));
+
+	/* unlike '=', these are numerically equal and so do not fail */
+	assert_false(reindex_assert_failed(">", "007", "7"));
+}
+
+static void test_assert_less_compares_as_numbers(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed("<", "50", "100"));
+	assert_true(reindex_assert_failed("<", "100", "50"));
+}
+
+/* Equality is not a violation of either ordering operator. */
+static void test_assert_equal_values_do_not_fail_an_ordering_assert(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed(">", "100", "100"));
+	assert_false(reindex_assert_failed("<", "100", "100"));
+}
+
+static void test_assert_zero_never_fails_a_less_than(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed("<", "0", "0"));
+	assert_false(reindex_assert_failed("<", "0", "999999"));
+
+	/* the guard is specific to '<'; it does not cover the other operators */
+	assert_true(reindex_assert_failed("=", "0", "1"));
+}
+
+static void test_assert_holds_when_the_device_gave_nothing_usable(void **state) {
+	(void) state;
+
+	/* 'U' is spine's undefined marker */
+	assert_false(reindex_assert_failed("=", "eth0", "U"));
+	assert_false(reindex_assert_failed(">", "100", "U"));
+	assert_false(reindex_assert_failed("<", "100", "U"));
+
+	/* SNMP says the instance is gone; that is a reindex trigger elsewhere,
+	   not an assert failure here */
+	assert_false(reindex_assert_failed("=", "eth0", "No Such Instance"));
+	assert_false(reindex_assert_failed("=", "eth0", "no such instance"));
+}
+
+static void test_assert_ignores_an_unknown_operator(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed(">=", "100", "50"));
+	assert_false(reindex_assert_failed("", "100", "50"));
+	assert_false(reindex_assert_failed("!=", "eth0", "eth1"));
+}
+
+static void test_assert_rejects_null_arguments(void **state) {
+	(void) state;
+
+	assert_false(reindex_assert_failed(NULL, "100", "50"));
+	assert_false(reindex_assert_failed("=", NULL, "50"));
+	assert_false(reindex_assert_failed("=", "100", NULL));
+}
+
+static void test_assert_handles_values_beyond_32_bits(void **state) {
+	(void) state;
+
+	assert_true(reindex_assert_failed("<", "4294967296", "4294967295"));
+	assert_false(reindex_assert_failed("<", "4294967295", "4294967296"));
+}
+
+static void test_build_queries_gates_on_rrd_next_step_for_multiple_profiles(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+
+	build_profiles(&q, 0, 1, 0, 1);
+	assert_null(strstr(q.query5, "rrd_next_step"));
+	assert_null(strstr(q.query10, "rrd_next_step"));
+
+	build_profiles(&q, 0, 1, 0, 2);
+	assert_non_null(strstr(q.query5, " AND rrd_next_step <= 0"));
+	assert_non_null(strstr(q.query10, " AND rrd_next_step <= 0"));
+
+	/* the guard is the profile count alone; poller_id does not change it */
+	build_profiles(&q, 2, 1, 0, 1);
+	assert_null(strstr(q.query5, "rrd_next_step"));
+	build_profiles(&q, 2, 1, 0, 3);
+	assert_non_null(strstr(q.query5, "rrd_next_step"));
+}
+
+static void test_build_queries_multiple_profiles_scope_a_remote_poller(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+
+	build_profiles(&q, 9, 1, 0, 2);
+	assert_non_null(strstr(q.query5, " AND poller_id = 9"));
+	assert_non_null(strstr(q.query10, " AND poller_id = 9"));
+
+	/* and the port ordering still keys off total_snmp_ports, not profiles */
+	build_profiles(&q, 9, 2, 0, 2);
+	assert_non_null(strstr(q.query5, "ORDER BY snmp_port"));
+}
+
+
+/* ---------------------------------------------------------------------------
+ * poller_item_from_row (poller.c)
+ *
+ * Maps one poller_item row onto a target. It was 62 lines in the middle of
+ * poll_host()'s result loop, so none of the defaults or the NULL handling was
+ * reachable. MYSQL_ROW is char **, so the rows here are ordinary arrays.
+ * ------------------------------------------------------------------------- */
+
+static char *full_row[] = {
+	"2",                    /*  0 action              */
+	"router1",              /*  1 hostname            */
+	"public",               /*  2 snmp_community      */
+	"3",                    /*  3 snmp_version        */
+	"snmpuser",             /*  4 snmp_username       */
+	"snmppass",             /*  5 snmp_password       */
+	"traffic_in",           /*  6 rrd_name            */
+	"/var/lib/rrd/1.rrd",   /*  7 rrd_path            */
+	"argument one",         /*  8 arg1                */
+	"argument two",         /*  9 arg2                */
+	"argument three",       /* 10 arg3                */
+	"77",                   /* 11 local_data_id       */
+	"4",                    /* 12 rrd_num             */
+	"1161",                 /* 13 snmp_port           */
+	"900",                  /* 14 snmp_timeout        */
+	"MD5",                  /* 15 snmp_auth_protocol  */
+	"privpass",             /* 16 snmp_priv_passphrase*/
+	"AES128",               /* 17 snmp_priv_protocol  */
+	"ctx",                  /* 18 snmp_context        */
+	"0x8000",               /* 19 snmp_engine_id      */
+	"^[0-9]+$"              /* 20 output_regex        */
+};
+
+static void test_item_from_row_maps_every_column(void **state) {
+	target_t item;
+
+	(void) state;
+	set.has_output_regex = TRUE;
+	poller_item_from_row(&item, full_row);
+
+	assert_int_equal(item.action, 2);
+	assert_string_equal(item.hostname, "router1");
+	assert_string_equal(item.snmp_community, "public");
+	assert_int_equal(item.snmp_version, 3);
+	assert_string_equal(item.snmp_username, "snmpuser");
+	assert_string_equal(item.snmp_password, "snmppass");
+	assert_string_equal(item.rrd_name, "traffic_in");
+	assert_string_equal(item.rrd_path, "/var/lib/rrd/1.rrd");
+	assert_string_equal(item.arg1, "argument one");
+	assert_string_equal(item.arg2, "argument two");
+	assert_string_equal(item.arg3, "argument three");
+	assert_int_equal(item.local_data_id, 77);
+	assert_int_equal(item.rrd_num, 4);
+	assert_int_equal(item.snmp_port, 1161);
+	assert_int_equal(item.snmp_timeout, 900);
+	assert_string_equal(item.snmp_auth_protocol, "MD5");
+	assert_string_equal(item.snmp_priv_passphrase, "privpass");
+	assert_string_equal(item.snmp_priv_protocol, "AES128");
+	assert_string_equal(item.snmp_context, "ctx");
+	assert_string_equal(item.snmp_engine_id, "0x8000");
+	assert_string_equal(item.output_regex, "^[0-9]+$");
+}
+
+/* A NULL column must leave the default in place. A device whose row is missing
+   snmp_port has to poll on 161, not 0. */
+static void test_item_from_row_keeps_defaults_for_null_columns(void **state) {
+	target_t item;
+	char *empty[21];
+	int i;
+
+	(void) state;
+	for (i = 0; i < 21; i++) empty[i] = NULL;
+	set.has_output_regex = TRUE;
+
+	poller_item_from_row(&item, empty);
+
+	assert_int_equal(item.action, -1);
+	assert_int_equal(item.snmp_version, 1);
+	assert_int_equal(item.snmp_port, 161);
+	assert_int_equal(item.snmp_timeout, 500);
+	assert_int_equal(item.local_data_id, 0);
+	assert_int_equal(item.rrd_num, 0);
+	assert_int_equal(item.hostname[0], '\0');
+	assert_int_equal(item.rrd_path[0], '\0');
+	assert_int_equal(item.output_regex[0], '\0');
+}
+
+/* output_regex arrived in Cacti 1.3.1. On an older schema the column is not in
+   the select, so the mapper must not read row[20] at all. */
+static void test_item_from_row_ignores_output_regex_on_an_old_schema(void **state) {
+	target_t item;
+
+	(void) state;
+
+	set.has_output_regex = FALSE;
+	poller_item_from_row(&item, full_row);
+	assert_int_equal(item.output_regex[0], '\0');
+
+	set.has_output_regex = TRUE;
+	poller_item_from_row(&item, full_row);
+	assert_string_equal(item.output_regex, "^[0-9]+$");
+}
+
+/* Every target starts undefined, so a data source that never answers reports
+   U rather than a stale value from the previous item in the array. */
+static void test_item_from_row_starts_the_result_undefined(void **state) {
+	target_t item;
+
+	(void) state;
+	memset(&item, 'x', sizeof(item));
+	set.has_output_regex = TRUE;
+
+	poller_item_from_row(&item, full_row);
+
+	assert_true(IS_UNDEFINED(item.result));
+}
+
+/* Reusing one target across rows must not leak the previous row's strings. */
+static void test_item_from_row_does_not_carry_state_between_rows(void **state) {
+	target_t item;
+	char *sparse[21];
+	int i;
+
+	(void) state;
+	set.has_output_regex = TRUE;
+
+	poller_item_from_row(&item, full_row);
+	assert_string_equal(item.hostname, "router1");
+
+	for (i = 0; i < 21; i++) sparse[i] = NULL;
+	poller_item_from_row(&item, sparse);
+
+	assert_int_equal(item.hostname[0], '\0');
+	assert_int_equal(item.snmp_community[0], '\0');
+	assert_int_equal(item.arg1[0], '\0');
+	assert_int_equal(item.snmp_port, 161);
+}
+
+static void test_item_from_row_rejects_null_arguments(void **state) {
+	target_t item;
+
+	(void) state;
+
+	poller_item_from_row(NULL, full_row);
+	poller_item_from_row(&item, NULL);
+}
+
+
+/* ---------------------------------------------------------------------------
+ * poller_store_result (poller.c)
+ *
+ * Decides what a polled value means and what gets stored. The same thirty-three
+ * lines ran after exec_poll() and after php_cmd(); they were identical, which is
+ * the only reason the script and script-server paths still agreed on what a
+ * valid result is.
+ * ------------------------------------------------------------------------- */
+
+static target_t sr_item;
+static char     sr_errstr[DBL_BUFSIZE];
+static int      sr_bufsize;
+static int      sr_buferrors;
+
+static int store_reset(void **state) {
+	(void) state;
+	memset(&sr_item, 0, sizeof(sr_item));
+	memset(sr_errstr, 0, sizeof(sr_errstr));
+	sr_bufsize = 0;
+	sr_buferrors = 0;
+	set.spine_log_level = 0;
+	sr_item.local_data_id = 42;
+	snprintf(sr_item.arg1, sizeof(sr_item.arg1), "%s", "/usr/bin/probe");
+	return 0;
+}
+
+static int store(char *value) {
+	return poller_store_result(&sr_item, value, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1);
+}
+
+static void test_store_keeps_a_numeric_result(void **state) {
+	char v[] = "4242";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "4242");
+}
+
+static void test_store_keeps_a_negative_and_a_float(void **state) {
+	char neg[] = "-17";
+	char flt[] = "3.14159";
+
+	(void) state;
+	assert_false(store(neg));
+	assert_string_equal(sr_item.result, "-17");
+	assert_false(store(flt));
+	assert_string_equal(sr_item.result, "3.14159");
+}
+
+/* 'U' is the poller reporting it got nothing usable. */
+static void test_store_reports_an_undefined_result_as_an_error(void **state) {
+	char v[] = "U";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+/* is_hexadecimal() wants a delimited octet string, at least three characters
+   long. Dashes and spaces reach it; a colon does not, because Cacti's own
+   multi-part "name:value" format is checked first and claims it. */
+static void test_store_converts_a_delimited_octet_string(void **state) {
+	char dashes[] = "de-ad-be-ef";
+	char spaces[] = "DE AD BE EF";
+
+	(void) state;
+
+	assert_false(store(spaces));
+	assert_string_equal(sr_item.result, "3735928559");
+
+	assert_false(store(dashes));
+	assert_string_equal(sr_item.result, "3735928559");
+}
+
+/* The colon form is multi-part output, not hex, and is stored as it arrived. */
+static void test_store_treats_colon_separated_hex_as_multipart(void **state) {
+	char colons[] = "DE:AD:BE:EF";
+
+	(void) state;
+	assert_false(store(colons));
+	assert_string_equal(sr_item.result, "DE:AD:BE:EF");
+}
+
+/* Undelimited hex is not an octet string, so it falls through to the strip and
+   validate path and is rejected rather than silently misread as decimal. */
+static void test_store_rejects_undelimited_hex(void **state) {
+	char v[] = "deadbeef";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+/* A 0x prefix is claimed earlier, by is_numeric(): strtod() accepts C99
+   hex-float literals, so "0x1F" parses whole and is stored as it arrived. */
+static void test_store_keeps_0x_prefixed_hex_as_text(void **state) {
+	char v[] = "0x1F";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "0x1F");
+}
+
+/* A multi-part line is name:value pairs and is stored verbatim for the caller
+   to split later. */
+static void test_store_keeps_multipart_output_verbatim(void **state) {
+	char v[] = "in:1000 out:2000";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "in:1000 out:2000");
+}
+
+static void test_store_applies_an_ere_output_regex_to_script_results(void **state) {
+	char v[] = "in:4242 out:7";
+	(void) state;
+
+	snprintf(sr_item.output_regex, sizeof(sr_item.output_regex), "%s", "[0-9]+");
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "4242");
+}
+
+static void test_store_pins_legacy_bre_style_output_regex(void **state) {
+	char v[] = "in:4242 out:7";
+	(void) state;
+
+	/* Under ERE the escaped BRE operators are literals, so the no-match
+	 * contract preserves the original script response. */
+	snprintf(sr_item.output_regex, sizeof(sr_item.output_regex), "%s", "\\([0-9]\\+\\)");
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "in:4242 out:7");
+}
+
+/* Anything else is stripped to its numeric part rather than rejected outright,
+   which is what lets a device answering "42 packets" still record 42. */
+static void test_store_strips_a_value_wearing_units(void **state) {
+	char v[] = "42 packets";
+
+	(void) state;
+	assert_false(store(v));
+	assert_string_equal(sr_item.result, "42");
+}
+
+static void test_store_pins_multi_dot_numeric_fallback(void **state) {
+	char ip[] = "10.0.0.1";
+	char oid[] = "1.3.6.1.4.1";
+	char version[] = "2.6.32";
+
+	(void) state;
+	assert_false(store(ip));
+	assert_string_equal(sr_item.result, "10.0");
+	assert_false(store(oid));
+	assert_string_equal(sr_item.result, "1.3");
+	assert_false(store(version));
+	assert_string_equal(sr_item.result, "2.6");
+}
+
+/* And a value with nothing numeric in it becomes undefined and counts. */
+static void test_store_rejects_a_value_with_no_number_in_it(void **state) {
+	char v[] = "connection refused";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+static void test_store_rejects_an_empty_result(void **state) {
+	char v[] = "";
+
+	(void) state;
+	assert_true(store(v));
+	assert_true(IS_UNDEFINED(sr_item.result));
+}
+
+static void test_store_rejects_null_arguments(void **state) {
+	char v[] = "1";
+
+	(void) state;
+	assert_false(poller_store_result(NULL, v, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1));
+	assert_false(poller_store_result(&sr_item, NULL, sr_errstr, &sr_bufsize, &sr_buferrors, 7, 1));
+}
+
+
+/* ---------------------------------------------------------------------------
+ * poller_process_snmp_results (poller.c)
+ *
+ * One multi-get batch of SNMP results normalised onto their targets. The same
+ * seventy-six lines ran in both places poll_host() flushes a batch: when it
+ * fills mid-loop, and for the remainder at the end. They differed only in
+ * indentation.
+ * ------------------------------------------------------------------------- */
+
+static host_t       sn_host;
+static target_t     sn_items[4];
+static snmp_oids_t  sn_oids[4];
+static char         sn_errstr[DBL_BUFSIZE];
+static int          sn_bufsize;
+static int          sn_buferrors;
+
+static int sn_debug_table[100];
+
+static int snmp_reset(void **state) {
+	int k;
+
+	(void) state;
+	/* is_debug_device() walks this global unguarded, and the batch loop calls
+	   it for every result */
+	memset(sn_debug_table, 0, sizeof(sn_debug_table));
+	debug_devices = sn_debug_table;
+	memset(&sn_host, 0, sizeof(sn_host));
+	memset(sn_items, 0, sizeof(sn_items));
+	memset(sn_oids, 0, sizeof(sn_oids));
+	memset(sn_errstr, 0, sizeof(sn_errstr));
+	sn_bufsize = 0;
+	sn_buferrors = 0;
+	set.spine_log_level = 0;
+	sn_host.snmp_version = 2;
+	snprintf(sn_host.hostname, sizeof(sn_host.hostname), "%s", "router1");
+
+	for (k = 0; k < 4; k++) {
+		sn_items[k].local_data_id = 100 + k;
+		sn_oids[k].array_position = k;
+	}
+	return 0;
+}
+
+static int run_batch(int n, int spike_kill) {
+	return poller_process_snmp_results(&sn_host, sn_items, sn_oids, n,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, spike_kill);
+}
+
+static void set_oid(int k, const char *value) {
+	snprintf(sn_oids[k].result, RESULTS_BUFFER, "%s", value);
+}
+
+static void test_snmp_batch_copies_numeric_results_to_their_targets(void **state) {
+	(void) state;
+	set_oid(0, "1000");
+	set_oid(1, "2000");
+
+	assert_int_equal(run_batch(2, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "1000");
+	assert_string_equal(sn_items[1].result, "2000");
+}
+
+/* array_position is what maps an OID back to its data source; the batch order
+   is not the target order. */
+static void test_snmp_batch_honours_array_position(void **state) {
+	(void) state;
+	sn_oids[0].array_position = 2;
+	sn_oids[1].array_position = 0;
+	set_oid(0, "111");
+	set_oid(1, "222");
+
+	assert_int_equal(run_batch(2, FALSE), 0);
+	assert_string_equal(sn_items[2].result, "111");
+	assert_string_equal(sn_items[0].result, "222");
+}
+
+static void test_snmp_batch_counts_undefined_results_as_rejected(void **state) {
+	(void) state;
+	set_oid(0, "1000");
+	set_oid(1, "U");
+	set_oid(2, "Nan");
+
+	assert_int_equal(run_batch(3, FALSE), 2);
+	assert_string_equal(sn_items[0].result, "1000");
+}
+
+/* An ignored host blanks the whole batch without counting errors: the device
+   is already known bad and each OID is not a separate failure. */
+static void test_snmp_batch_blanks_everything_for_an_ignored_host(void **state) {
+	(void) state;
+	sn_host.ignore_host = TRUE;
+	set_oid(0, "1000");
+	set_oid(1, "2000");
+
+	assert_int_equal(run_batch(2, FALSE), 0);
+	assert_true(IS_UNDEFINED(sn_oids[0].result));
+	assert_true(IS_UNDEFINED(sn_oids[1].result));
+}
+
+static void test_snmp_batch_converts_a_delimited_octet_string(void **state) {
+	(void) state;
+	set_oid(0, "DE AD BE EF");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "3735928559");
+}
+
+/* A data source with an output_regex has it applied after normalisation. */
+static void test_snmp_batch_applies_the_data_source_output_regex(void **state) {
+	(void) state;
+	snprintf(sn_items[0].output_regex, sizeof(sn_items[0].output_regex), "%s", "[0-9]+");
+	set_oid(0, "value=4242 units");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "4242");
+}
+
+static void test_snmp_batch_pins_legacy_bre_style_output_regex(void **state) {
+	(void) state;
+	/* Under BRE this selected the first run of digits. Under ERE the escaped
+	 * operators are literals, so the no-match contract preserves the original
+	 * multipart response. This pins the documented upgrade behavior. */
+	snprintf(sn_items[0].output_regex, sizeof(sn_items[0].output_regex), "%s", "\\([0-9]\\+\\)");
+	set_oid(0, "in:4242 out:7");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "in:4242 out:7");
+}
+
+/* spike_kill blanks a value when the agent has restarted, but leaves
+   multi-part output alone because a colon means it is not a single counter. */
+static void test_snmp_batch_spike_kill_blanks_a_scalar_but_not_multipart(void **state) {
+	(void) state;
+	set_oid(0, "1000");
+	set_oid(1, "in:1 out:2");
+
+	assert_int_equal(run_batch(2, TRUE), 0);
+	assert_true(IS_UNDEFINED(sn_items[0].result));
+	assert_string_equal(sn_items[1].result, "in:1 out:2");
+}
+
+static void test_snmp_batch_handles_an_empty_batch(void **state) {
+	(void) state;
+	assert_int_equal(run_batch(0, FALSE), 0);
+}
+
+static void test_snmp_batch_rejects_null_arguments(void **state) {
+	(void) state;
+	assert_int_equal(poller_process_snmp_results(NULL, sn_items, sn_oids, 1,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
+	assert_int_equal(poller_process_snmp_results(&sn_host, NULL, sn_oids, 1,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
+	assert_int_equal(poller_process_snmp_results(&sn_host, sn_items, NULL, 1,
+		sn_errstr, &sn_bufsize, &sn_buferrors, 7, 1, 0.0, FALSE), 0);
+}
+
+
+/* A value that survives stripping but still does not validate is the branch
+   that turns a plausible-looking response into an explicit failure. */
+static void test_snmp_batch_rejects_a_value_that_fails_validation(void **state) {
+	(void) state;
+	set_oid(0, "no such object");
+
+	assert_int_equal(run_batch(1, FALSE), 1);
+	assert_true(IS_UNDEFINED(sn_oids[0].result));
+}
+
+/* At log level 2 every rejection is logged individually. The logging is the
+   only thing that changes; the outcome must not. */
+static void test_snmp_batch_outcome_is_the_same_at_log_level_two(void **state) {
+	(void) state;
+	set.spine_log_level = 2;
+	set_oid(0, "U");
+	set_oid(1, "Nan");
+	set_oid(2, "no such object");
+	set_oid(3, "1000");
+
+	assert_int_equal(run_batch(4, FALSE), 3);
+	assert_string_equal(sn_items[3].result, "1000");
+}
+
+/* A device on the debug list takes the louder logging path. */
+static void test_snmp_batch_outcome_is_the_same_for_a_debug_device(void **state) {
+	(void) state;
+	sn_debug_table[0] = 7;
+	set_oid(0, "1000");
+
+	assert_int_equal(run_batch(1, FALSE), 0);
+	assert_string_equal(sn_items[0].result, "1000");
+}
+
+/* Same for the script path: level 2 logs each rejection, nothing else moves. */
+static void test_store_outcome_is_the_same_at_log_level_two(void **state) {
+	char undef[] = "U";
+	char junk[]  = "connection refused";
+	char good[]  = "42";
+
+	(void) state;
+	set.spine_log_level = 2;
+
+	assert_true(store(undef));
+	assert_true(IS_UNDEFINED(sr_item.result));
+	assert_true(store(junk));
+	assert_true(IS_UNDEFINED(sr_item.result));
+	assert_false(store(good));
+	assert_string_equal(sr_item.result, "42");
+}
+
+
+/* The remaining branch: vsnprintf reporting a formatting error rather than
+   truncation. In the C locale a wide character above ASCII cannot be converted,
+   so %ls returns -1 with EILSEQ. Probed at run time first, because a libc that
+   converts it anyway would otherwise fail this for the wrong reason. */
+static void test_appendf_reports_a_formatting_error(void **state) {
+	char buf[32];
+	char probe[8];
+	char *p = buf;
+	size_t remaining = sizeof(buf);
+	wchar_t wide[2];
+
+	(void) state;
+
+	wide[0] = 0x00E9;
+	wide[1] = 0;
+	setlocale(LC_ALL, "C");
+
+	if (snprintf(probe, sizeof(probe), "%ls", wide) >= 0) {
+		print_message("this libc converts %%ls in the C locale; branch not exercised\n");
+		return;
+	}
+
+	memset(buf, 'x', sizeof(buf));
+	p = buf;
+	remaining = sizeof(buf);
+
+	assert_false(spine_appendf(&p, &remaining, "%ls", wide));
+
+	/* the contract on failure: the buffer is left a valid string */
+	assert_int_equal(*p, '\0');
+	assert_true(p >= buf && p < buf + sizeof(buf));
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Differential check for reindex_assert_failed().
+ *
+ * That function replaced an if/else-if chain rather than moving it, so the
+ * tests above were written against the new shape and could have pinned a
+ * boundary I got wrong. This reproduces the original chain verbatim from
+ * before the change and compares the two over every combination that matters.
+ *
+ * The reference is deliberately a transcription, not a tidy version: the same
+ * order, the same operators, the same "0" guard sitting in the final else-if.
+ * ------------------------------------------------------------------------- */
+
+static int reference_assert_failed(const char *op, const char *assert_value, const char *poll_result) {
+	int assert_fail = FALSE;      /* the loop reset this per row */
+
+	if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+		assert_fail = FALSE;
+	} else if ((!strcmp(op, "=")) && (strcmp(assert_value, poll_result))) {
+		assert_fail = TRUE;
+	} else if ((!strcmp(op, ">")) && (atoll(assert_value) < atoll(poll_result))) {
+		assert_fail = TRUE;
+	} else if (strcmp(assert_value, "0")) {
+		if ((!strcmp(op, "<")) && (atoll(assert_value) > atoll(poll_result))) {
+			assert_fail = TRUE;
+		}
+	}
+
+	return assert_fail;
+}
+
+static void test_assert_matches_the_chain_it_replaced(void **state) {
+	static const char *ops[]    = { "=", ">", "<", ">=", "!=", "" };
+	static const char *values[] = {
+		"0", "1", "100", "007", "7", "-1", "4294967295", "4294967296",
+		"eth0", "", "U", "No Such Instance", "no such instance"
+	};
+	size_t o, a, p;
+	int checked = 0;
+
+	(void) state;
+
+	for (o = 0; o < sizeof(ops) / sizeof(ops[0]); o++) {
+		for (a = 0; a < sizeof(values) / sizeof(values[0]); a++) {
+			for (p = 0; p < sizeof(values) / sizeof(values[0]); p++) {
+				int want = reference_assert_failed(ops[o], values[a], values[p]);
+				int got  = reindex_assert_failed(ops[o], values[a], values[p]);
+
+				if (want != got) {
+					fail_msg("op '%s' assert '%s' result '%s': chain said %d, function said %d",
+						ops[o], values[a], values[p], want, got);
+				}
+
+				checked++;
+			}
+		}
+	}
+
+	assert_int_equal(checked, 6 * 13 * 13);
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Differential check for poller_store_result().
+ *
+ * Also a restructure rather than a move: the if/else-if chain became a series
+ * of early returns. This reproduces the original chain and compares both the
+ * error verdict and the value written to the target.
+ *
+ * Every call gets a fresh copy of the input, because trim(), strip_alpha() and
+ * hex2dec() all modify the string in place. Reusing one buffer would compare
+ * the function against a reference that saw different input.
+ * ------------------------------------------------------------------------- */
+
+static int reference_store_result(target_t *item, char *poll_result,
+	char *error_string, int *buf_size, int *buf_errors, int host_id, int host_thread) {
+	char temp_result[RESULTS_BUFFER];
+	int  failed = FALSE;
+
+	if (IS_UNDEFINED(poll_result)) {
+		SET_UNDEFINED(item->result);
+		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, item->local_data_id, false);
+		failed = TRUE;
+	} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
+		snprintf(item->result, RESULTS_BUFFER, "%s", poll_result);
+	} else if (is_hexadecimal(poll_result, TRUE)) {
+		snprintf(item->result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+	} else {
+		snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
+		snprintf(item->result, RESULTS_BUFFER, "%s", temp_result);
+
+		if (!validate_result(item->result)) {
+			buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, item->local_data_id, false);
+			failed = TRUE;
+			SET_UNDEFINED(item->result);
+		}
+	}
+
+	return failed;
+}
+
+static void test_store_matches_the_chain_it_replaced(void **state) {
+	static const char *inputs[] = {
+		"4242", "-17", "3.14159", "0", "007", "U", "",
+		"in:1000 out:2000", "DE:AD:BE:EF", "de-ad-be-ef", "DE AD BE EF",
+		"deadbeef", "0x1F", "42 packets", "connection refused",
+		"  7  ", "No Such Instance", "1e5", "4294967296"
+	};
+	static const char *regexes[] = { "", "[0-9]+" };
+	char a[RESULTS_BUFFER], b[RESULTS_BUFFER];
+	char expected[RESULTS_BUFFER];
+	target_t ia, ib;
+	char errs[DBL_BUFSIZE];
+	int bs, be;
+	int regex_differences = 0;
+	size_t k, r;
+
+	(void) state;
+
+	for (r = 0; r < sizeof(regexes) / sizeof(regexes[0]); r++) {
+		for (k = 0; k < sizeof(inputs) / sizeof(inputs[0]); k++) {
+			int want, got;
+
+			memset(&ia, 0, sizeof(ia)); memset(&ib, 0, sizeof(ib));
+			ia.local_data_id = ib.local_data_id = 5;
+			snprintf(ib.output_regex, sizeof(ib.output_regex), "%s", regexes[r]);
+			memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
+
+			snprintf(a, sizeof(a), "%s", inputs[k]);
+			want = reference_store_result(&ia, a, errs, &bs, &be, 7, 1);
+
+			memset(errs, 0, sizeof(errs)); bs = 0; be = 0;
+			snprintf(b, sizeof(b), "%s", inputs[k]);
+			got = poller_store_result(&ib, b, errs, &bs, &be, 7, 1);
+
+			if (want != got) {
+				fail_msg("regex '%s', input '%s': chain said %d, function said %d",
+					regexes[r], inputs[k], want, got);
+			}
+
+			snprintf(expected, sizeof(expected), "%s", ia.result);
+			if (!want && regexes[r][0] != '\0') {
+				snprintf(expected, sizeof(expected), "%s",
+					regex_replace(regexes[r], ia.result));
+				if (strcmp(ia.result, expected) != 0) regex_differences++;
+			}
+
+			if (strcmp(expected, ib.result) != 0) {
+				fail_msg("regex '%s', input '%s': expected '%s', function stored '%s'",
+					regexes[r], inputs[k], expected, ib.result);
+			}
+		}
+	}
+
+	/* Prove the regex dimension exercised the intentional extension rather than
+	 * merely repeating the old empty-regex comparison. */
+	assert_true(regex_differences > 0);
+}
+
+
+/* The failure path: a descriptor that cannot carry the flag must be reported,
+   not silently accepted. A pipe whose reader is inheritable is worse than no
+   pipe, so the helper refuses rather than continuing. */
+/* update_host_status() is the availability state machine: it decides when Cacti
+   marks a device down, when it calls it recovered, and what the alert says. It
+   is pure logic, no database and no sockets, and it had no coverage at all.
+
+   These are characterization tests. They record what the shipped code does so
+   the behaviour is pinned before anyone rearranges it, not what someone thinks
+   it ought to do. Where the current behaviour looks odd it is written down as
+   observed and called out rather than quietly corrected. */
+static void uhs_reset(host_t *host, ping_t *ping) {
+	memset(host, 0, sizeof(*host));
+	memset(ping, 0, sizeof(*ping));
+
+	host->id = 7;
+	host->min_time = 9999999.0;
+	snprintf(host->snmp_community, sizeof(host->snmp_community), "public");
+	host->snmp_version = 2;
+
+	snprintf(ping->ping_status,   sizeof(ping->ping_status),   "%s", "10.000");
+	snprintf(ping->ping_response, sizeof(ping->ping_response), "%s", "ok");
+	snprintf(ping->snmp_status,   sizeof(ping->snmp_status),   "%s", "20.000");
+	snprintf(ping->snmp_response, sizeof(ping->snmp_response), "%s", "snmp ok");
+
+	set.ping_failure_count  = 1;
+	set.ping_recovery_count = 1;
+	set.log_level = POLLER_VERBOSITY_NONE;
+
+	/* the HOST EVENT lines go to stderr regardless of level; keep them out of
+	   the test output rather than have every run print a wall of red herrings */
+	set.stderr_notty = TRUE;
+	set.stdout_notty = TRUE;
+}
+
+static void test_a_single_failure_downs_the_device_when_the_threshold_is_one(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 1);
+	assert_int_equal(host.failed_polls, 1);
+	assert_int_equal(host.total_polls, 1);
+	assert_true(strlen(host.status_fail_date) > 0);
+}
+
+static void test_the_device_stays_up_until_the_failure_threshold_is_reached(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	set.ping_failure_count = 3;
+	host.status = HOST_UP;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 1);
+	/* the first failure stamps the date even though no alert fires yet */
+	assert_true(strlen(host.status_fail_date) > 0);
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 2);
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 3);
+}
+
+static void test_a_failure_while_recovering_returns_the_device_to_down(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_RECOVERING;
+	host.status_event_count = 4;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 1);
+}
+
+static void test_an_unknown_device_that_fails_goes_down_with_a_zero_count(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UNKNOWN;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	assert_int_equal(host.status_event_count, 0);
+}
+
+static void test_a_device_already_down_keeps_counting_events(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_DOWN;
+	host.status_event_count = 5;
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_DOWN);
+	/* the counter is not capped while the device stays down */
+	assert_int_equal(host.status_event_count, 6);
+}
+
+static void test_a_down_device_recovers_in_one_step_when_the_threshold_is_one(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_DOWN;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 0);
+	assert_true(strlen(host.status_rec_date) > 0);
+}
+
+static void test_a_down_device_passes_through_recovering_when_the_threshold_is_higher(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	set.ping_recovery_count = 3;
+	host.status = HOST_DOWN;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_RECOVERING);
+	assert_int_equal(host.status_event_count, 1);
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_RECOVERING);
+	assert_int_equal(host.status_event_count, 2);
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_int_equal(host.status, HOST_UP);
+	assert_int_equal(host.status_event_count, 0);
+}
+
+static void test_availability_is_the_share_of_successful_polls(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	update_host_status(HOST_UP,   &host, &ping, AVAIL_PING);
+	update_host_status(HOST_UP,   &host, &ping, AVAIL_PING);
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	update_host_status(HOST_UP,   &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.total_polls, 4);
+	assert_int_equal(host.failed_polls, 1);
+	assert_true(host.availability > 74.9 && host.availability < 75.1);
+}
+
+static void test_the_ping_time_source_follows_the_availability_method(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+
+	/* ping only: the ping time */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+	assert_true(host.cur_time > 9.9 && host.cur_time < 10.1);
+
+	/* snmp only: the snmp time */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP);
+	assert_true(host.cur_time > 19.9 && host.cur_time < 20.1);
+
+	/* both: their mean */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP_AND_PING);
+	assert_true(host.cur_time > 14.9 && host.cur_time < 15.1);
+
+	/* none: no time at all */
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_UP, &host, &ping, AVAIL_NONE);
+	assert_true(host.cur_time < 0.001);
+}
+
+static void test_a_device_without_snmp_is_timed_by_ping_alone(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+
+	/* no community and version below 3 means SNMP does not apply to it */
+	uhs_reset(&host, &ping);
+	host.snmp_community[0] = '\0';
+	host.snmp_version = 1;
+	host.status = HOST_UP;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP_AND_PING);
+	assert_true(host.cur_time > 9.9 && host.cur_time < 10.1);
+
+	/* and under SNMP only there is nothing to time it by */
+	uhs_reset(&host, &ping);
+	host.snmp_community[0] = '\0';
+	host.snmp_version = 1;
+	host.status = HOST_UP;
+
+	update_host_status(HOST_UP, &host, &ping, AVAIL_SNMP);
+	assert_true(host.cur_time < 0.001);
+}
+
+static void test_the_recorded_error_follows_the_availability_method(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_string_equal(host.status_last_error, "ok");
+
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_SNMP);
+	assert_string_equal(host.status_last_error, "snmp ok");
+
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_SNMP_OR_PING);
+	assert_string_equal(host.status_last_error, "snmp ok, ok");
+
+	/* a device that does not speak SNMP, asked for by SNMP, says so */
+	uhs_reset(&host, &ping);
+	host.snmp_community[0] = '\0';
+	host.snmp_version = 1;
+	host.status = HOST_UP;
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_SNMP);
+	assert_string_equal(host.status_last_error, "Device does not require SNMP");
+}
+
+/* The running average divides by the successful polls, not by every poll. A
+   test with no failures cannot tell the two apart, so this one mixes a failure
+   in: 10 and 20 average to 15, a failed poll moves neither, and 30 then gives
+   (2*15 + 30) / 3 = 20. Dividing by total_polls instead would give 15. */
+static void test_the_average_ignores_failed_polls(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "10.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "20.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	update_host_status(HOST_DOWN, &host, &ping, AVAIL_PING);
+	assert_true(host.avg_time > 14.9 && host.avg_time < 15.1);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "30.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	assert_int_equal(host.total_polls, 4);
+	assert_int_equal(host.failed_polls, 1);
+	assert_true(host.avg_time > 19.9 && host.avg_time < 20.1);
+}
+
+static void test_min_and_max_track_the_extremes(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	uhs_reset(&host, &ping);
+	host.status = HOST_UP;
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "5.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "25.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	snprintf(ping.ping_status, sizeof(ping.ping_status), "%s", "15.000");
+	update_host_status(HOST_UP, &host, &ping, AVAIL_PING);
+
+	assert_true(host.min_time > 4.9  && host.min_time < 5.1);
+	assert_true(host.max_time > 24.9 && host.max_time < 25.1);
+	assert_true(host.avg_time > 14.9 && host.avg_time < 15.1);
+}
+
+/* spine_log() emits a log line with fputs() to a stdio stream. LOGSIZE is 65535
+   and BUFSIZ is 8192, so any message past 8KB leaves fputs() as several write()
+   calls, and a second thread's writes land between them. That is #298: a user
+   reported two poller stats lines spliced into one. The emit is serialised now,
+   so this writes messages far past the stdio buffer from several threads at
+   once and checks that every line came out whole.
+
+   Without the lock this fails within a handful of runs; the payload is one
+   repeated character per thread, so a spliced line shows two of them. */
+#define LOGRACE_THREADS 6
+#define LOGRACE_ROUNDS  25
+#define LOGRACE_PAYLOAD 12000
+
+static char lograce_path[256];
+
+static void *lograce_writer(void *arg) {
+	char *payload = malloc(LOGRACE_PAYLOAD + 1);
+	int   round;
+
+	assert_non_null(payload);
+	memset(payload, *(const char *) arg, LOGRACE_PAYLOAD);
+	payload[LOGRACE_PAYLOAD] = '\0';
+
+	for (round = 0; round < LOGRACE_ROUNDS; round++) {
+		spine_log("%s", payload);
+	}
+
+	free(payload);
+	return NULL;
+}
+
+static void test_concurrent_log_writes_are_not_spliced(void **state) {
+	pthread_t threads[LOGRACE_THREADS];
+	char      marks[LOGRACE_THREADS];
+	config_t  saved;
+	FILE     *fp;
+	char     *line = NULL;
+	size_t    cap = 0;
+	ssize_t   len;
+	int       i;
+	int       lines = 0;
+
+	(void) state;
+
+	saved = set;
+
+	snprintf(lograce_path, sizeof(lograce_path), "/tmp/spine_lograce_%d.log", (int) getpid());
+	unlink(lograce_path);
+
+	set.log_destination  = LOGDEST_FILE;
+	set.logfile_processed = TRUE;
+	set.log_level        = POLLER_VERBOSITY_LOW;
+	snprintf(set.path_logfile, sizeof(set.path_logfile), "%s", lograce_path);
+
+	for (i = 0; i < LOGRACE_THREADS; i++) {
+		marks[i] = (char) ('A' + i);
+		assert_int_equal(pthread_create(&threads[i], NULL, lograce_writer, &marks[i]), 0);
+	}
+
+	for (i = 0; i < LOGRACE_THREADS; i++) {
+		assert_int_equal(pthread_join(threads[i], NULL), 0);
+	}
+
+	set = saved;
+
+	fp = fopen(lograce_path, "r");
+	assert_non_null(fp);
+
+	while ((len = getline(&line, &cap, fp)) > 0) {
+		const char *run;
+		ssize_t     n = 0;
+
+		if (line[len - 1] == '\n') {
+			line[--len] = '\0';
+		}
+
+		/* the payload is the trailing run of one repeated letter */
+		run = line + len;
+		while (run > line && run[-1] >= 'A' && run[-1] < (char) ('A' + LOGRACE_THREADS)) {
+			run--;
+			n++;
+		}
+
+		assert_int_equal(n, LOGRACE_PAYLOAD);
+
+		while (n-- > 1) {
+			/* every byte of it is the same letter: a spliced line is not */
+			assert_int_equal(run[n], run[0]);
+		}
+
+		lines++;
+	}
+
+	free(line);
+	fclose(fp);
+	unlink(lograce_path);
+
+	assert_int_equal(lines, LOGRACE_THREADS * LOGRACE_ROUNDS);
+}
+
+/* pipe() itself failing: it does not write pdes, so the caller's array is
+   untouched. The cloexec branch is the one that had to be taught to clear it,
+   and that needs interposition; it lives in test_poll_host_release.c. */
+static void test_pipe_exhaustion_reports_failure(void **state) {
+	struct rlimit saved, tight;
+	int pdes[2] = { -1, -1 };
+	int rc;
+
+	(void) state;
+
+	assert_int_equal(getrlimit(RLIMIT_NOFILE, &saved), 0);
+
+	/* no room for a pipe */
+	tight = saved;
+	tight.rlim_cur = 3;
+
+	if (setrlimit(RLIMIT_NOFILE, &tight) != 0) {
+		skip();
+	}
+
+	rc = spine_open_pipe_cloexec(pdes);
+
+	assert_int_equal(setrlimit(RLIMIT_NOFILE, &saved), 0);
+
+	assert_false(rc);
+	assert_int_equal(pdes[0], -1);
+	assert_int_equal(pdes[1], -1);
+}
+
+static void test_cloexec_rejects_a_bad_descriptor(void **state) {
+	(void) state;
+
+	assert_int_equal(spine_set_cloexec(-1), -1);
+}
+
+static void test_cloexec_rejects_a_closed_descriptor(void **state) {
+	int pdes[2];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	close(pdes[0]);
+	close(pdes[1]);
+
+	/* both ends are gone, so fcntl cannot read their flags */
+	assert_int_equal(spine_set_cloexec(pdes[0]), -1);
+}
+
+
+static void test_build_queries_rejects_null_arguments(void **state) {
+	poll_host_queries_t q;
+
+	(void) state;
+	memset(&q, 0, sizeof(q));
+
+	poll_host_build_queries(NULL, 42, "", "");
+	poll_host_build_queries(&q, 42, NULL, "");
+	poll_host_build_queries(&q, 42, "", NULL);
+
+	/* nothing was written on any of those */
+	assert_int_equal(q.query1[0], '\0');
+	assert_int_equal(q.posuffix[0], '\0');
+}
+
+
+/* hex2dec() accepts '-', ':' and space as separators, matching what
+   is_hexadecimal() lets through. The colon form cannot arrive via
+   poller_store_result(), because is_multipart_output() claims anything with a
+   colon and no space first, so it is only reachable by calling directly. That
+   is exactly why it is worth a test: nothing else exercises it. */
+static void test_hex2dec_accepts_every_separator_is_hexadecimal_allows(void **state) {
+	char dashes[] = "de-ad-be-ef";
+	char colons[] = "de:ad:be:ef";
+	char spaces[] = "de ad be ef";
+	char mixed[]  = "DE-AD BE:EF";
+
+	(void) state;
+
+	assert_int_equal(hex2dec(dashes), 3735928559ULL);
+	assert_int_equal(hex2dec(colons), 3735928559ULL);
+	assert_int_equal(hex2dec(spaces), 3735928559ULL);
+	assert_int_equal(hex2dec(mixed),  3735928559ULL);
+}
+
+/* A separator it does not know still returns 0 rather than a partial value,
+   which is what keeps a malformed octet string out of the database. */
+static void test_hex2dec_rejects_an_unknown_separator(void **state) {
+	char slashes[] = "de/ad/be/ef";
+
+	(void) state;
+	assert_int_equal(hex2dec(slashes), 0);
+}
+
+
+/* nft_popen() sets close-on-exec on both pipe ends so a concurrent spawn
+   cannot inherit them. When the write end lands on the descriptor it is
+   destined for, there is no dup2 to clear the flag, and the child execs with
+   stdout closed: every script data source records U, silently.
+   That happens whenever stdout was closed before the call, which for a daemon
+   is not exotic. */
+static void test_nft_popen_reads_a_script_with_stdout_closed(void **state) {
+	int saved_stdin;
+	int saved_stdout;
+	int fd;
+	char buf[64];
+	ssize_t n;
+
+	(void) state;
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	/* Both, deliberately: pipe() hands out the lowest free descriptors, so the
+	   write end only lands on fd 1 when fd 0 is free as well. Closing stdout
+	   alone puts the read end there instead and the collision never happens. */
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	fd = nft_popen("echo spine-cloexec-probe", "r");
+
+	if (fd < 0) {
+		dup2(saved_stdin, STDIN_FILENO);
+		dup2(saved_stdout, STDOUT_FILENO);
+		close(saved_stdin);
+		close(saved_stdout);
+		fail_msg("nft_popen failed with stdin and stdout closed");
+	}
+
+	memset(buf, 0, sizeof(buf));
+	n = read(fd, buf, sizeof(buf) - 1);
+	nft_pclose(fd);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(n > 0);
+	assert_non_null(strstr(buf, "spine-cloexec-probe"));
+}
+
+
+static int open_fd_count(void) {
+	DIR *d = opendir("/proc/self/fd");
+	struct dirent *e;
+	int n = 0;
+
+	if (d == NULL) {
+		return -1;
+	}
+
+	while ((e = readdir(d)) != NULL) {
+		if (e->d_name[0] != '.') n++;
+	}
+
+	closedir(d);
+	return n;
+}
+
+/* Reading to EOF is the assertion that catches a write end still held by the
+   parent. A single read() returns the data and tells you nothing: the pipe
+   only fails to close when you ask for the next byte. exec_poll() waits for
+   that EOF, so a held copy stalls it to script_timeout on a script that
+   already answered. */
+static void test_nft_popen_reaches_eof_with_stdio_closed(void **state) {
+	int saved_stdin, saved_stdout, fd;
+	char buf[64];
+	ssize_t n, total = 0;
+
+	(void) state;
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	fd = nft_popen("echo spine-eof-probe", "r");
+
+	n = -1;
+
+	if (fd >= 0) {
+		struct pollfd pfd;
+
+		pfd.fd = fd;
+		pfd.events = POLLIN;
+
+		/* poll rather than block: a write end still held by the parent means
+		   this never becomes readable again, and a test that hangs is a worse
+		   signal than one that fails. */
+		for (;;) {
+			int ready = poll(&pfd, 1, 5000);
+
+			if (ready <= 0) {
+				n = -1;   /* timed out: EOF never arrived */
+				break;
+			}
+
+			n = read(fd, buf, sizeof(buf));
+
+			if (n <= 0) {
+				break;
+			}
+
+			total += n;
+		}
+
+		nft_pclose(fd);
+	}
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(fd >= 0);
+	if (n != 0) {
+		fail_msg("the pipe never reached EOF; the parent is still holding the write end");
+	}
+	assert_true(total > 0);
+}
+
+/* One descriptor per call would exhaust the process. The collision branch is
+   the one that dup()s, so it is the one that can leak. */
+static void test_nft_popen_does_not_leak_descriptors_in_the_collision_case(void **state) {
+	int saved_stdin, saved_stdout;
+	int before, after;
+	char buf[64];
+	int i;
+
+	(void) state;
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	before = open_fd_count();
+
+	for (i = 0; i < 12; i++) {
+		int fd;
+
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		fd = nft_popen("echo x", "r");
+
+		if (fd >= 0) {
+			struct pollfd pfd;
+
+			pfd.fd = fd;
+			pfd.events = POLLIN;
+
+			/* bounded, for the same reason as the EOF test above */
+			while (poll(&pfd, 1, 5000) > 0 && read(fd, buf, sizeof(buf)) > 0) { }
+
+			nft_pclose(fd);
+		}
+
+		dup2(saved_stdin, STDIN_FILENO);
+		dup2(saved_stdout, STDOUT_FILENO);
+	}
+
+	after = open_fd_count();
+
+	close(saved_stdin);
+	close(saved_stdout);
+
+	if (before < 0 || after < 0) {
+		print_message("no /proc/self/fd here; skipping the count\n");
+		skip();
+	}
+
+	assert_true(after <= before);
+}
+
+/* Keep a first popen registered on fd 1 while starting a second child. The
+ * PidList close actions run after the second child's stdout redirect; closing
+ * the old entry by number at that point used to close the new stdout. */
+static void test_overlapping_popen_preserves_the_new_child_stdout(void **state) {
+	int saved_stdout;
+	int first = -1;
+	int second = -1;
+	char buf[128] = {0};
+	ssize_t n = -1;
+	struct pollfd pfd;
+
+	(void) state;
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdout >= 0);
+
+	close(STDOUT_FILENO);
+	first = nft_popen("printf first", "r");
+	if (first >= 0) {
+		second = nft_popen("printf second-visible", "r");
+	}
+
+	if (second >= 0) {
+		pfd.fd = second;
+		pfd.events = POLLIN;
+		if (poll(&pfd, 1, 5000) > 0) {
+			n = read(second, buf, sizeof(buf) - 1);
+			if (n >= 0) buf[n] = '\0';
+		}
+		nft_pclose(second);
+	}
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdout);
+
+	assert_int_equal(first, STDOUT_FILENO);
+	assert_true(second >= 0);
+	assert_true(n > 0);
+	assert_non_null(strstr(buf, "second-visible"));
+}
+
+/* The symmetric collision occurs when an older registered read pipe occupies
+ * fd 0 and a new write-mode child installs its stdin there. */
+static void test_overlapping_popen_preserves_the_new_child_stdin(void **state) {
+	const char payload[] = "second-visible\n";
+	struct sigaction saved_sigpipe;
+	struct sigaction ignored_sigpipe;
+	int saved_stdin;
+	int first = -1;
+	int second = -1;
+	int status = -1;
+	ssize_t written = -1;
+
+	(void) state;
+	saved_stdin = dup(STDIN_FILENO);
+	assert_true(saved_stdin >= 0);
+	memset(&ignored_sigpipe, 0, sizeof(ignored_sigpipe));
+	ignored_sigpipe.sa_handler = SIG_IGN;
+	assert_int_equal(sigaction(SIGPIPE, &ignored_sigpipe, &saved_sigpipe), 0);
+
+	close(STDIN_FILENO);
+	first = nft_popen("printf first", "r");
+	if (first >= 0) {
+		second = nft_popen("IFS= read -r value; test \"$value\" = second-visible", "w");
+	}
+	if (second >= 0) {
+		written = write(second, payload, sizeof(payload) - 1);
+		status = nft_pclose(second);
+	}
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	close(saved_stdin);
+	sigaction(SIGPIPE, &saved_sigpipe, NULL);
+
+	assert_int_equal(first, STDIN_FILENO);
+	assert_true(second >= 0);
+	assert_int_equal(written, (ssize_t)(sizeof(payload) - 1));
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
+/* An older write-mode parent fd can occupy stdout. A new write-mode child does
+ * not redirect stdout, so it must close that older fd before exec rather than
+ * sending its output into the first child's stdin. */
+static void test_overlapping_write_popen_does_not_crosswire_stdout(void **state) {
+	char command[SMALL_BUFSIZE];
+	char capture[64] = {0};
+	char path[128];
+	int saved_stdin;
+	int saved_stdout;
+	int first = -1;
+	int second = -1;
+	FILE *fp;
+
+	(void) state;
+	snprintf(path, sizeof(path), "/tmp/spine-popen-crosswire-%ld", (long)getpid());
+	unlink(path);
+	snprintf(command, sizeof(command), "cat > %s", path);
+	saved_stdin = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+	first = nft_popen(command, "w");
+	if (first >= 0) second = nft_popen("printf crosswired", "w");
+	if (second >= 0) nft_pclose(second);
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_int_equal(first, STDOUT_FILENO);
+	assert_true(second >= 0);
+	fp = fopen(path, "r");
+	assert_non_null(fp);
+	(void)fread(capture, 1, sizeof(capture) - 1, fp);
+	fclose(fp);
+	unlink(path);
+	assert_null(strstr(capture, "crosswired"));
+}
+
+/* The mirror case: an older read-mode parent fd can occupy stdin. A later
+ * read-mode child must not inherit it and consume the first script's output. */
+static void test_overlapping_read_popen_does_not_crosswire_stdin(void **state) {
+	char buf[128] = {0};
+	int saved_stdin;
+	int first = -1;
+	int second = -1;
+	ssize_t n = -1;
+	struct pollfd pfd;
+
+	(void) state;
+	saved_stdin = dup(STDIN_FILENO);
+	assert_true(saved_stdin >= 0);
+	close(STDIN_FILENO);
+	first = nft_popen("printf 'first-pipe-data\\n'", "r");
+	if (first >= 0) {
+		second = nft_popen("if IFS= read -r value; then printf 'stole:%s' \"$value\"; else printf no-input; fi", "r");
+	}
+	if (second >= 0) {
+		pfd.fd = second;
+		pfd.events = POLLIN;
+		if (poll(&pfd, 1, 5000) > 0) n = read(second, buf, sizeof(buf) - 1);
+		nft_pclose(second);
+	}
+	if (first >= 0) nft_pclose(first);
+
+	dup2(saved_stdin, STDIN_FILENO);
+	close(saved_stdin);
+	assert_int_equal(first, STDIN_FILENO);
+	assert_true(second >= 0);
+	assert_true(n > 0);
+	assert_non_null(strstr(buf, "no-input"));
+	assert_null(strstr(buf, "stole:"));
+}
+
+
+
+static sigjmp_buf nft_lock_timeout;
+
+static void nft_lock_alarm(int sig) {
+	(void) sig;
+	siglongjmp(nft_lock_timeout, 1);
+}
+
+/* The dup() failure path inside nft_popen(). Reaching it needs a precise state:
+   the table full except for exactly two descriptors, and those two being 0 and
+   1 so the pipe lands there and the collision branch runs, leaving the dup()
+   with nothing to take.
+
+   Order matters. Filling the table first and only then closing stdin and stdout
+   is what leaves 0 and 1 as the two free slots; closing them first just means
+   the filler takes them and the collision never happens. An earlier version of
+   this test did that and passed against a deliberately reintroduced bug.
+
+   The assertion that matters is the second nft_popen(). A failure path that
+   returns still holding ListMutex leaves every later caller blocked forever,
+   and that mutex is process-global, so the daemon stops collecting script data
+   until it is restarted. */
+static void test_nft_popen_releases_the_lock_when_dup_fails(void **state) {
+	struct rlimit saved_limit, tight;
+	int saved_stdin, saved_stdout;
+	int held[512];
+	int count = 0;
+	int first, second;
+	char buf[64];
+
+	(void) state;
+
+	if (getrlimit(RLIMIT_NOFILE, &saved_limit) != 0) {
+		print_message("cannot read RLIMIT_NOFILE; skipping\n");
+		skip();
+	}
+
+	saved_stdin  = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0 && saved_stdout >= 0);
+
+	tight = saved_limit;
+	tight.rlim_cur = (rlim_t) (saved_stdout + 24);
+
+	if (setrlimit(RLIMIT_NOFILE, &tight) != 0) {
+		close(saved_stdin);
+		close(saved_stdout);
+		print_message("cannot lower RLIMIT_NOFILE; skipping\n");
+		skip();
+	}
+
+	/* fill first, with 0 and 1 still occupied by stdin and stdout */
+	while (count < 512) {
+		int fd = open("/dev/null", O_RDONLY);
+
+		if (fd < 0) {
+			break;
+		}
+
+		held[count++] = fd;
+	}
+
+	/* now the only free descriptors are 0 and 1 */
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	first = nft_popen("echo unreachable", "r");
+
+	if (first >= 0) {
+		nft_pclose(first);
+	}
+
+	while (count > 0) {
+		close(held[--count]);
+	}
+
+	setrlimit(RLIMIT_NOFILE, &saved_limit);
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	/* the setup must actually have defeated it, or this proves nothing */
+	if (first >= 0) {
+		fail_msg("nft_popen succeeded with the descriptor table full; the dup failure path was not exercised");
+	}
+
+	/* A leaked ListMutex blocks here rather than returning, and a hung suite
+	   is a worse signal than a failing one: it looks like a stuck CI job
+	   instead of a defect. Convert the hang into a failure. */
+	if (sigsetjmp(nft_lock_timeout, 1) != 0) {
+		fail_msg("nft_popen blocked after a failed dup; ListMutex was not released");
+	}
+
+	signal(SIGALRM, nft_lock_alarm);
+	alarm(10);
+
+	second = nft_popen("echo lock-still-usable", "r");
+
+	alarm(0);
+	signal(SIGALRM, SIG_DFL);
+
+	assert_true(second >= 0);
+
+	memset(buf, 0, sizeof(buf));
+	read(second, buf, sizeof(buf) - 1);
+	nft_pclose(second);
+
+	assert_non_null(strstr(buf, "lock-still-usable"));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
@@ -466,6 +3326,8 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_regex_number_extracts_decimal_from_labelled_output),
+		cmocka_unit_test(test_regex_number_stops_after_first_decimal_match),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_is_numeric),
@@ -478,6 +3340,8 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_hex2dec),
+		cmocka_unit_test(test_hex2dec_accepts_every_separator_is_hexadecimal_allows),
+		cmocka_unit_test(test_hex2dec_rejects_an_unknown_separator),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),
@@ -492,10 +3356,139 @@ int main(void) {
 		cmocka_unit_test(test_config_defaults_populates_the_set),
 		cmocka_unit_test(test_read_spine_config_rejects_a_missing_file),
 		cmocka_unit_test(test_read_spine_config_reads_settings),
-		cmocka_unit_test(test_get_date_format_returns_owned_memory),
-		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
+		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_a_single_failure_downs_the_device_when_the_threshold_is_one),
+		cmocka_unit_test(test_the_device_stays_up_until_the_failure_threshold_is_reached),
+		cmocka_unit_test(test_a_failure_while_recovering_returns_the_device_to_down),
+		cmocka_unit_test(test_an_unknown_device_that_fails_goes_down_with_a_zero_count),
+		cmocka_unit_test(test_a_device_already_down_keeps_counting_events),
+		cmocka_unit_test(test_a_down_device_recovers_in_one_step_when_the_threshold_is_one),
+		cmocka_unit_test(test_a_down_device_passes_through_recovering_when_the_threshold_is_higher),
+		cmocka_unit_test(test_availability_is_the_share_of_successful_polls),
+		cmocka_unit_test(test_the_ping_time_source_follows_the_availability_method),
+		cmocka_unit_test(test_a_device_without_snmp_is_timed_by_ping_alone),
+		cmocka_unit_test(test_the_recorded_error_follows_the_availability_method),
+		cmocka_unit_test(test_min_and_max_track_the_extremes),
+		cmocka_unit_test(test_the_average_ignores_failed_polls),
+		cmocka_unit_test(test_concurrent_log_writes_are_not_spliced),
+		cmocka_unit_test(test_pipe_exhaustion_reports_failure),
+		cmocka_unit_test(test_cloexec_rejects_a_bad_descriptor),
+		cmocka_unit_test(test_cloexec_rejects_a_closed_descriptor),
+		cmocka_unit_test(test_nft_popen_reads_a_script_with_stdout_closed),
+		cmocka_unit_test(test_nft_popen_reaches_eof_with_stdio_closed),
+		cmocka_unit_test(test_nft_popen_does_not_leak_descriptors_in_the_collision_case),
+		cmocka_unit_test(test_overlapping_popen_preserves_the_new_child_stdout),
+		cmocka_unit_test(test_overlapping_popen_preserves_the_new_child_stdin),
+		cmocka_unit_test(test_overlapping_write_popen_does_not_crosswire_stdout),
+		cmocka_unit_test(test_overlapping_read_popen_does_not_crosswire_stdin),
+		cmocka_unit_test(test_nft_popen_releases_the_lock_when_dup_fails),
+		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
+		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
+		cmocka_unit_test(test_reap_collects_an_exited_child),
+		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
+		cmocka_unit_test(test_pclose_promptly_ends_a_child_writing_after_pipe_close),
+		cmocka_unit_test(test_signal_setup_turns_a_broken_pipe_into_epipe),
+		#ifdef USING_TPOPEN
+		cmocka_unit_test(test_libc_popen_child_observes_default_sigpipe),
+		#endif
+		cmocka_unit_test(test_spine_log_survives_a_closed_stdout_pipe),
+		cmocka_unit_test(test_get_date_format_returns_cached_storage),
+		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
+		cmocka_unit_test(test_append_hostrange_writes_the_configured_range),
+		cmocka_unit_test(test_append_hostrange_truncates_without_advancing_past_the_buffer),
+		cmocka_unit_test(test_append_hostrange_fits_at_the_exact_complete_boundary),
+		cmocka_unit_test(test_db_escape_escapes_sql_metacharacters),
+		cmocka_unit_test(test_db_escape_clears_on_a_null_input),
+		cmocka_unit_test(test_db_escape_does_not_leak_the_previous_column),
+		cmocka_unit_test(test_db_escape_keeps_a_full_results_buffer),
+		cmocka_unit_test(test_db_escape_survives_the_old_staging_boundary),
+		cmocka_unit_test(test_db_escape_truncates_into_a_small_destination),
+		cmocka_unit_test(test_db_escape_handles_a_degenerate_destination),
+		cmocka_unit_test(test_row_alias_upsert_requires_mysql_8020),
+		cmocka_unit_test(test_snmpv3_value_is_set_treats_none_as_unset),
+		cmocka_unit_test(test_snmpv3_level_is_noauth_without_a_protocol),
+		cmocka_unit_test(test_snmpv3_level_is_authnopriv_without_privacy),
+		cmocka_unit_test(test_snmpv3_level_is_authpriv_when_both_are_set),
+		cmocka_unit_test(test_snmpv3_privacy_alone_does_not_raise_the_level),
+		cmocka_unit_test(test_appendf_writes_and_advances),
+		cmocka_unit_test(test_appendf_accumulates),
+		cmocka_unit_test(test_appendf_reports_truncation_and_stays_in_bounds),
+		cmocka_unit_test(test_appendf_after_truncation_keeps_failing),
+		cmocka_unit_test(test_appendf_rejects_null_arguments),
+		cmocka_unit_test(test_appendf_rejects_an_exhausted_buffer),
+		cmocka_unit_test(test_old_idiom_overshoots_where_appendf_does_not),
+		cmocka_unit_test(test_appendf_reports_a_formatting_error),
+		cmocka_unit_test(test_validate_result_accepts_numeric_forms),
+		cmocka_unit_test(test_validate_result_rejects_a_null_and_junk),
+		cmocka_unit_test(test_validate_result_accepts_multipart_output),
+		cmocka_unit_test(test_validate_result_trims_the_buffer_asymmetrically),
+		cmocka_unit_test(test_is_multipart_output_requires_a_delimiter),
+		cmocka_unit_test(test_is_multipart_output_balances_spaces_against_delimiters),
+		cmocka_unit_test(test_poller_item_scope_filters_deleted_on_the_main_poller),
+		cmocka_unit_test(test_poller_item_scope_filters_by_owner_on_a_remote_poller),
+		cmocka_unit_test(test_poller_owner_scope_is_empty_on_the_main_poller),
+		cmocka_unit_test(test_poller_owner_scope_names_the_remote_poller),
+		cmocka_unit_test(test_poller_scopes_refuse_a_degenerate_buffer),
+		cmocka_unit_test(test_build_queries_scopes_the_main_poller_by_deleted),
+		cmocka_unit_test(test_build_queries_scopes_a_remote_poller_by_owner),
+		cmocka_unit_test(test_build_queries_orders_by_port_only_for_multiple_ports),
+		cmocka_unit_test(test_build_queries_upsert_follows_the_local_server),
+		cmocka_unit_test(test_build_queries_remote_poller_keeps_the_portable_upsert),
+		cmocka_unit_test(test_build_queries_caches_the_lengths_the_result_loop_uses),
+		cmocka_unit_test(test_build_queries_fills_every_buffer),
+		cmocka_unit_test(test_build_queries_matches_the_golden_capture),
+		cmocka_unit_test(test_build_queries_rejects_null_arguments),
+		cmocka_unit_test(test_assert_equal_compares_as_text),
+		cmocka_unit_test(test_assert_greater_compares_as_numbers),
+		cmocka_unit_test(test_assert_less_compares_as_numbers),
+		cmocka_unit_test(test_assert_equal_values_do_not_fail_an_ordering_assert),
+		cmocka_unit_test(test_assert_zero_never_fails_a_less_than),
+		cmocka_unit_test(test_assert_holds_when_the_device_gave_nothing_usable),
+		cmocka_unit_test(test_assert_ignores_an_unknown_operator),
+		cmocka_unit_test(test_assert_rejects_null_arguments),
+		cmocka_unit_test(test_assert_handles_values_beyond_32_bits),
+		cmocka_unit_test(test_assert_matches_the_chain_it_replaced),
+		cmocka_unit_test(test_item_from_row_maps_every_column),
+		cmocka_unit_test(test_item_from_row_keeps_defaults_for_null_columns),
+		cmocka_unit_test(test_item_from_row_ignores_output_regex_on_an_old_schema),
+		cmocka_unit_test(test_item_from_row_starts_the_result_undefined),
+		cmocka_unit_test(test_item_from_row_does_not_carry_state_between_rows),
+		cmocka_unit_test(test_item_from_row_rejects_null_arguments),
+		cmocka_unit_test_setup(test_store_keeps_a_numeric_result, store_reset),
+		cmocka_unit_test_setup(test_store_keeps_a_negative_and_a_float, store_reset),
+		cmocka_unit_test_setup(test_store_reports_an_undefined_result_as_an_error, store_reset),
+		cmocka_unit_test_setup(test_store_converts_a_delimited_octet_string, store_reset),
+		cmocka_unit_test_setup(test_store_treats_colon_separated_hex_as_multipart, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_undelimited_hex, store_reset),
+		cmocka_unit_test_setup(test_store_keeps_0x_prefixed_hex_as_text, store_reset),
+		cmocka_unit_test_setup(test_store_keeps_multipart_output_verbatim, store_reset),
+		cmocka_unit_test_setup(test_store_applies_an_ere_output_regex_to_script_results, store_reset),
+		cmocka_unit_test_setup(test_store_pins_legacy_bre_style_output_regex, store_reset),
+		cmocka_unit_test_setup(test_store_strips_a_value_wearing_units, store_reset),
+		cmocka_unit_test_setup(test_store_pins_multi_dot_numeric_fallback, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_a_value_with_no_number_in_it, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_an_empty_result, store_reset),
+		cmocka_unit_test_setup(test_store_rejects_null_arguments, store_reset),
+		cmocka_unit_test_setup(test_store_matches_the_chain_it_replaced, store_reset),
+		cmocka_unit_test_setup(test_snmp_batch_copies_numeric_results_to_their_targets, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_honours_array_position, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_counts_undefined_results_as_rejected, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_blanks_everything_for_an_ignored_host, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_converts_a_delimited_octet_string, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_applies_the_data_source_output_regex, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_pins_legacy_bre_style_output_regex, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_spike_kill_blanks_a_scalar_but_not_multipart, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_handles_an_empty_batch, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_rejects_null_arguments, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_rejects_a_value_that_fails_validation, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_outcome_is_the_same_at_log_level_two, snmp_reset),
+		cmocka_unit_test_setup(test_snmp_batch_outcome_is_the_same_for_a_debug_device, snmp_reset),
+		cmocka_unit_test_setup(test_store_outcome_is_the_same_at_log_level_two, store_reset),
+		cmocka_unit_test(test_build_queries_gates_on_rrd_next_step_for_multiple_profiles),
+		cmocka_unit_test(test_build_queries_multiple_profiles_scope_a_remote_poller),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

@@ -24,23 +24,15 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-          mysql-server libmysqlclient-dev \
-          libsnmp-dev libssl-dev build-essential \
-          help2man autoconf automake libtool dos2unix libcmocka-dev
-
-      - name: Prepare for Spine Build
-        run: |
-          ./bootstrap
-          ./configure --enable-warnings
+      - uses: ./.github/actions/build-spine
+        with:
+          configure-args: --enable-warnings
 
       - name: Build Spine
         run: |
+          set -euo pipefail
           make -j"$(nproc)"
 
       - name: Run the unit tests
@@ -48,32 +40,33 @@ jobs:
           set -euo pipefail
           make check
 
-#  cppcheck:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-#
-#      - name: Install cppcheck
-#        run: |
-#          sudo apt-get update 
-#          sudo apt-get install -y cppcheck build-essential
-#
-#      - name: Run cppcheck
-#        run: |
-#          cppcheck \
-#            --enable=all \
-#            --std=c11 \
-#            --error-exitcode=1 \
-#            --suppress=missingIncludeSystem \
-#            --suppress=unusedFunction \
-#            --suppress=checkersReport \
-#            --suppress=variableScope \
-#            --suppress=unreadVariable \
-#            --suppress=shadowVariable \
-#            --suppress=constVariablePointer \
-#            --suppress=redundantAssignment \
-#            --suppress=toomanyconfigs \
-#            *.c *.h
+      # test_ping_icmp needs a raw ICMP socket, which the runner user cannot
+      # open, so under `make check` above it skips and reports nothing. Running
+      # it with privilege is the only way those cases actually execute, and
+      # ping_icmp() is a SUID-root path, so a silent skip is the wrong default.
+      - name: Run the privileged ping tests
+        run: |
+          set -euo pipefail
+          sudo ./tests/unit/test_ping_icmp
+          echo "raw ICMP cases executed rather than skipped"
+
+  net-snmp-no-md5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Simulate an MD5-disabled/FIPS net-snmp header. The explicit SHA-1
+      # fallback must configure and link without SNMP_DEFAULT_AUTH_PROTO.
+      - uses: ./.github/actions/build-spine
+        with:
+          configure-args: CPPFLAGS=-DNETSNMP_DISABLE_MD5
+
+      - name: Build without net-snmp MD5 auth
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+          make check
 
   # Coverage is reported, not gated.  The number is only meaningful once
   # something measures it; the threshold conversation comes after that.
@@ -81,25 +74,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y mysql-server libmysqlclient-dev libsnmp-dev \
-            libssl-dev build-essential help2man autoconf automake libtool \
-            dos2unix libcmocka-dev gcovr
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: gcovr
+          cflags: -g -O0 --coverage
+          ldflags: --coverage
 
       - name: Build instrumented
         run: |
           set -euo pipefail
-          ./bootstrap
-          ./configure CFLAGS="-g -O0 --coverage" LDFLAGS="--coverage"
           make -j"$(nproc)"
 
       - name: Run the unit tests
-        run: make check
+        run: |
+          set -euo pipefail
+          make check
 
       - name: Report coverage
         run: |
@@ -113,9 +104,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.x"
 
@@ -127,6 +118,7 @@ jobs:
       # informational so we have a baseline to chip away at.
       - name: Run flawfinder
         run: |
+          set -euo pipefail
           flawfinder \
             --minlevel=3 \
             --error-level=5 \
@@ -134,64 +126,58 @@ jobs:
             --context \
             . | tee flawfinder-report.txt
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: flawfinder-report
           path: flawfinder-report.txt
 
   # Spine is a threaded network daemon; ASan and UBSan are the checks most
-  # likely to catch a real defect here.
+  # likely to catch a real defect here.  The unit tests are what actually
+  # exercises the code, so they are what runs instrumented.
   sanitizers:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CC: clang
+      ASAN_OPTIONS: detect_leaks=1:exitcode=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y clang mysql-server libmysqlclient-dev libsnmp-dev \
-            libssl-dev build-essential help2man autoconf automake libtool dos2unix libcmocka-dev
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: clang
+          cflags: -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
+          ldflags: -fsanitize=address,undefined
 
       - name: Build with ASan and UBSan
-        env:
-          CC: clang
         run: |
           set -euo pipefail
-          ./bootstrap
-          ./configure \
-            CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1" \
-            LDFLAGS="-fsanitize=address,undefined"
           make -j"$(nproc)"
 
-      - name: Run the binary under the sanitizers
-        env:
-          ASAN_OPTIONS: detect_leaks=1:exitcode=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      - name: Run the unit tests under the sanitizers
+        run: |
+          set -euo pipefail
+          make check
+
+      - name: Smoke-test the binary under the sanitizers
         run: |
           set -euo pipefail
           ./spine --version
           ./spine --help > /dev/null
+
   # A release tarball that cannot be compiled is a release blocker, and the
   # only way to catch it is to build from the tarball the way a packager does.
   distcheck:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y mysql-server libmysqlclient-dev libsnmp-dev \
-            libssl-dev build-essential help2man autoconf automake libtool dos2unix libcmocka-dev
+      - uses: ./.github/actions/build-spine
 
       - name: make distcheck
         run: |
           set -euo pipefail
-          ./bootstrap
-          ./configure
           make distcheck

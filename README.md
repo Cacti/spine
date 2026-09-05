@@ -136,5 +136,20 @@ chmod +s /usr/local/spine/bin/spine
    thread safe. MySQL versions 5.0 and 5.1 require this flag. If you are using
    these version of MySQL, you must use the --with-reentrant configure flag.
 
+## Output Regex Compatibility
+
+Cacti `output_regex` patterns are compiled by Spine as POSIX extended regular
+expressions (ERE), consistently for SNMP, external-script, and PHP script-server
+results. Operators upgrading from a version that treated these as
+basic regular expressions should review custom patterns: unescaped `()`, `+`,
+`?`, and `|` are operators in ERE and must be escaped when they are intended as
+literal characters. This also makes Spine's built-in numeric expression work as
+intended; for example, `value=1.5 (avg)` yields `1.5`, while `10.0.0.1` yields
+the first numeric match, `10.0`. This built-in fallback means multi-dot values
+such as IP addresses, OIDs, and version strings that older Spine versions
+rejected as `U` can now record their first decimal component. Review affected
+data sources before upgrading so that this intentional acceptance change does
+not silently alter an RRD.
+
 -----------------------------------------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.

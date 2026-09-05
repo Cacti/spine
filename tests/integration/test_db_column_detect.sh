@@ -13,6 +13,32 @@
 # Usage: ./tests/integration/test_db_column_detect.sh
 set -euo pipefail
 
+
+# These need a prepared docker fixture and an in-tree build, neither of which
+# holds under `make distcheck`, where the tree is a read-only copy. Default to
+# skipping so `make check` stays meaningful everywhere; the integration
+# workflow sets SPINE_INTEGRATION=1 where the fixture is actually up.
+#
+# The earlier guard only checked whether docker existed. On a GitHub runner it
+# does, so these ran and failed rather than skipping.
+if [ "${SPINE_INTEGRATION:-0}" != "1" ]; then
+	echo "  SKIP: set SPINE_INTEGRATION=1 with the docker fixture running"
+	exit 77
+fi
+
+# Skip rather than fail where the fixture cannot run: 77 is the exit status
+# automake reads as SKIP, so `make check` stays green on a machine without
+# docker while still reporting the test as not run.
+if ! command -v docker >/dev/null 2>&1; then
+	echo "  SKIP: docker not installed"
+	exit 77
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+	echo "  SKIP: docker compose not available"
+	exit 77
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")

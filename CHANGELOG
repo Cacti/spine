@@ -26,6 +26,25 @@ The Cacti Group | spine
 -issue#552: Terminate die() output so consecutive fatal messages no longer run together
 -issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
 -issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
+-issue#564: Check the calloc() results in spine.c so an allocation failure dies instead of dereferencing NULL
+-issue#565: Bound the newline appended by spine_log() so a full log line cannot write past flogmessage
+-issue#566: Free the result set on the NULL-row branch of the util.c settings helpers
+-issue#567: Build the log timestamp format once at config load instead of rebuilding it on every log line
+-issue#600: Wipe the local SNMPv3 passphrase copies in snmp_host_init() before freeing them
+-issue#605: Refuse a script server descriptor at or past FD_SETSIZE instead of writing outside fd_set
+-issue#606: Allocate the undefined-value string in php_cmd() only once the retry budget is spent
+-issue#607: Catch SIGPIPE rather than treating it as fatal, while preserving default SIGPIPE behavior in executed scripts
+-issue: Compile output_regex patterns as POSIX extended regular expressions so REGEX_NUMBER works as intended, and apply configured patterns consistently to SNMP, script, and PHP script-server results; script and PHP script-server items previously ignored this field, and a match against multipart output now selects one substring rather than preserving every name:value pair
+-upgrade: output_regex now uses POSIX ERE syntax; escape literal parentheses and plus signs, and review patterns written for the former BRE behavior. Spine's built-in numeric fallback will also begin extracting the first decimal from responses it previously rejected as U (for example, 10.0.0.1 becomes 10.0, an OID such as 1.3.6.1 becomes 1.3, and a version such as 2.6.32 becomes 2.6), so review affected data sources before upgrading
+-issue: Give scripts the configured timeout to exit naturally, then escalate through SIGTERM and SIGKILL during nft_pclose
+-issue: Clear the destination in db_escape() when the column is NULL
+-issue: Zero the details array so an early poller exit cannot free uninitialised pointers
+-issue: Terminate error_string so the host_errors insert cannot read uninitialised heap
+-issue: Match last_snmp_community to the width of the field it is compared against
+-issue: Require MySQL 8.0.20 before emitting the row alias upsert form
+-issue#608: Bound the script server restart so a server that starts but never answers cannot recurse
+-issue#610: Detach the subprocess entry under ListMutex so nft_pclose() owns the child it reaps
+-issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
 -issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
 -issue: Restore the twelve headers and spine.conf.dist missing from the dist tarball so a release tarball can be compiled from

@@ -136,6 +136,13 @@
 #define MEDIUM_BUFSIZE 512
 #define BUFSIZE 1024
 #define DBL_BUFSIZE 2048
+
+/* A poller_output VALUES tuple holds both free-text columns after escaping.
+ * mysql_real_escape_string() can double every byte, so the result contributes
+ * twice RESULTS_BUFFER and the rrd_name contributes DBL_BUFSIZE; the rest is
+ * the literal text and the integer. Sizing the destination as
+ * RESULTS_BUFFER + SMALL_BUFSIZE truncated the row, silently. */
+#define POLLER_OUTPUT_TUPLE_MAX ((RESULTS_BUFFER * 2) + DBL_BUFSIZE + SMALL_BUFSIZE)
 #define LRG_BUFSIZE 8096
 #define BIG_BUFSIZE 65535
 #define MEGA_BUFSIZE 1024000
@@ -626,6 +633,51 @@ typedef struct db_connection {
 #include "error.h"
 
 /* Globals */
+extern int spine_snmpv3_value_is_set(const char *value);
+extern int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_password,
+	const char *priv_protocol, const char *priv_passphrase);
+
+/*! Every query poll_host() issues for one device.
+ *
+ *  Grouped so the construction can be built and inspected on its own; the
+ *  three lengths are cached because the result loop appends these fragments
+ *  once per data source. */
+typedef struct {
+	char   query1[BUFSIZE];      /* poller_item rows this poller owns */
+	char   query2[BIG_BUFSIZE];  /* host row, for the uptime checks */
+	char   query4[BUFSIZE];
+	char   query5[BUFSIZE];
+	char   query6[BUFSIZE];
+	char   query8[BUFSIZE];
+	char   query9[BUFSIZE];
+	char   query10[BUFSIZE];
+	char   query11[BUFSIZE];
+	char   posuffix[BUFSIZE];    /* upsert tail for poller_output */
+	int    query8_len;
+	int    query11_len;
+	int    posuffix_len;
+} poll_host_queries_t;
+
+extern void poll_host_release_connections(pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread);
+extern void poll_host_release(host_t **host, reindex_t **reindex, ping_t **ping,
+	char **error_string, int **buf_size, int **buf_errors,
+	pool_t *local_cnn, pool_t *remote_cnn, int host_id, int host_thread);
+extern void host_status_update_sql(char *out, size_t out_len, host_t *host,
+	int ignore_sysinfo, const char *escaped_last_error);
+extern void host_from_row(host_t *host, MYSQL_ROW row, MYSQL *mysql, int host_id, int host_thread);
+extern int poller_process_snmp_results(host_t *host, target_t *poller_items,
+	snmp_oids_t *snmp_oids, int num_oids,
+	char *error_string, int *buf_size, int *buf_errors,
+	int host_id, int host_thread, double thread_start, int spike_kill);
+extern int poller_store_result(target_t *item, char *poll_result, char *error_string,
+	int *buf_size, int *buf_errors, int host_id, int host_thread);
+extern int poller_output_tuple(char *out, size_t out_len, MYSQL *mysql, const target_t *item, const char *host_time);
+extern void poller_item_from_row(target_t *item, MYSQL_ROW row);
+extern int reindex_assert_failed(const char *op, const char *assert_value, const char *poll_result);
+extern void poll_host_build_queries(poll_host_queries_t *q, int host_id, const char *regex_col, const char *limits);
+extern void poller_item_scope(char *out, size_t len, int poller_id);
+extern void poller_owner_scope(char *out, size_t len, int poller_id);
+
 extern config_t set;
 extern php_t  *php_processes;
 extern char   start_datetime[20];
