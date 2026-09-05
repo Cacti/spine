@@ -15,14 +15,23 @@ concurrency:
 
 jobs:
   build:
+    name: Build (${{ matrix.compiler }}, ${{ matrix.client.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
+        client:
+          - name: MariaDB Connector/C
+            package: libmariadb-dev
+            config: mariadb_config
+          - name: MySQL Connector/C
+            package: libmysqlclient-dev
+            config: mysql_config
     env:
       CC: ${{ matrix.compiler }}
+      MYSQL_CONFIG: ${{ matrix.client.config }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
@@ -30,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-          mysql-server libmysqlclient-dev \
+          mysql-server ${{ matrix.client.package }} \
           libsnmp-dev libssl-dev build-essential \
           help2man autoconf automake libtool dos2unix libcmocka-dev
 

@@ -216,97 +216,72 @@ else
   AC_MSG_RESULT([no])
 fi
 
-# ****************** MySQL Checks ***********************
-AC_DEFUN([MYSQL_LIB_CHK],
-  [ str="$1/libmysqlclient.*"
-    for j in `echo $str`; do
-      if test -r $j; then
-        MYSQL_LIB_DIR=$1
+# ****************** MySQL-compatible client checks ***********************
+AC_ARG_VAR([MYSQL_CONFIG], [path to mariadb_config or mysql_config])
+
+if test -n "$MYSQL_DIR" && test -z "$MYSQL_CONFIG"; then
+  for mysql_config_candidate in mariadb_config mysql_config; do
+    if test -x "$MYSQL_DIR/bin/$mysql_config_candidate"; then
+      MYSQL_CONFIG="$MYSQL_DIR/bin/$mysql_config_candidate"
+      break
+    fi
+  done
+fi
+
+if test -z "$MYSQL_CONFIG"; then
+  AC_PATH_PROGS([MYSQL_CONFIG], [mariadb_config mysql_config])
+fi
+
+if test -n "$MYSQL_CONFIG"; then
+  AC_MSG_NOTICE([using $MYSQL_CONFIG for database client flags])
+  if ! MYSQL_CFLAGS=`"$MYSQL_CONFIG" --cflags`; then
+    AC_MSG_ERROR([$MYSQL_CONFIG --cflags failed])
+  fi
+  if ! MYSQL_LIBS=`"$MYSQL_CONFIG" --libs`; then
+    AC_MSG_ERROR([$MYSQL_CONFIG --libs failed])
+  fi
+  CFLAGS="$MYSQL_CFLAGS $CFLAGS"
+  LIBS="$MYSQL_LIBS $LIBS"
+else
+  AC_MSG_NOTICE([no client config tool found; using header and library discovery])
+
+  mysql_header_prefix=
+
+  for mysql_prefix in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
+    for mysql_include_dir in include include/mysql include/mariadb mysql; do
+      if test -f "$mysql_prefix/$mysql_include_dir/mysql.h"; then
+        CFLAGS="-I$mysql_prefix/$mysql_include_dir $CFLAGS"
+        mysql_header_prefix=$mysql_prefix
         break 2
       fi
     done
-  ]
-)
-
-# Determine MySQL installation paths
-MYSQL_SUB_DIR="include include/mysql include/mariadb mysql";
-for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
-  for d in $MYSQL_SUB_DIR; do
-    if [[ -f $i/$d/mysql.h ]]; then
-      MYSQL_INC_DIR=$i/$d
-      break;
-    fi
   done
 
-  if [[ ! -z $MYSQL_INC_DIR ]]; then
-    break;
+  dnl The header can turn up under a prefix the caller never named, so search
+  dnl for the library under that same prefix. Adding only the MYSQL_DIR paths
+  dnl leaves mysql_init unlinkable when the client lives anywhere else.
+  mysql_library_prefixes="$MYSQL_DIR"
+
+  if test -n "$mysql_header_prefix" && test "x$mysql_header_prefix" != "x$MYSQL_DIR"; then
+    mysql_library_prefixes="$mysql_library_prefixes $mysql_header_prefix"
   fi
-#  test -f $i/include/mysql.h          && MYSQL_INC_DIR=$i/include          && break
-#  test -f $i/include/mysql/mysql.h    && MYSQL_INC_DIR=$i/include/mysql    && break
-#  test -f $i/include/mariadb/mysql.h  && MYSQL_INC_DIR=$i/include/mariadb  && break
-#  test -f $i/mysql/include/mysql.h    && MYSQL_INC_DIR=$i/mysql/include    && break
-done
 
-if test -z "$MYSQL_INC_DIR"; then
-  if test "x$MYSQL_DIR" != "x"; then
-    AC_MSG_ERROR(Cannot find MySQL header files under $MYSQL_DIR)
-  else
-    AC_MSG_ERROR(Cannot find MySQL headers.  Use --with-mysql= to specify non-default path.)
-  fi
-fi
-
-for i in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
-  MYSQL_LIB_CHK($i/lib64)
-  MYSQL_LIB_CHK($i/lib64/mysql)
-  MYSQL_LIB_CHK($i/lib/x86_64-linux-gnu)
-  MYSQL_LIB_CHK($i/lib/x86_64-linux-gnu/mysql)
-  MYSQL_LIB_CHK($i/lib)
-  MYSQL_LIB_CHK($i/lib/mysql)
-done
-
-if test -n "$MYSQL_LIB_DIR" ; then
-  LDFLAGS="-L$MYSQL_LIB_DIR $LDFLAGS"
-fi
-  CFLAGS="-I$MYSQL_INC_DIR $CFLAGS"
-
-unamestr=$(uname)
-if test $unamestr = 'OpenBSD'; then
-  AC_CHECK_LIB(mysqlclient, mysql_init,
-    [ LIBS="-lmysqlclient -lexecinfo -lm $LIBS"
-      AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
-      HAVE_MYSQL=yes ],
-    [ HAVE_MYSQL=no ]
-  )
-else
-  AC_CHECK_LIB(mysqlclient, mysql_init,
-    [ LIBS="-lmysqlclient -lm -ldl $LIBS"
-      AC_DEFINE(HAVE_MYSQL, 1, MySQL Client API)
-      HAVE_MYSQL=yes ],
-    [ HAVE_MYSQL=no ]
-  )
-fi
-
-if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib; then
-  LIBS="-lmysqlclient_r -lm -ldl $LIBS"
-else
-  if test -f $MYSQL_LIB_DIR/libmysqlclient_r.a -o -f $MYSQL_LIB_DIR/libmysqlclient_r.$ShLib ; then
-    LIBS="-lmysqlclient_r -lm -ldl $LIBS"
-  else
-    if test "$HAVE_MYSQL" = "yes"; then
-      if test $unamestr = 'OpenBSD'; then
-        LIBS="-lmysqlclient -lm $LIBS"
-      else
-        LIBS="-lmysqlclient -lm -ldl $LIBS"
+  for mysql_prefix in $mysql_library_prefixes; do
+    for mysql_library_dir in lib64 lib64/mysql lib lib/mysql; do
+      if test -d "$mysql_prefix/$mysql_library_dir"; then
+        LDFLAGS="-L$mysql_prefix/$mysql_library_dir $LDFLAGS"
       fi
-    else
-      if test -f $MYSQL_LIB_DIR/libperconaserverclient.a -o -f $MYSQL_LIB_DIR/libperconaserverclient.$ShLib; then
-        LIBS="-lperconaserverclient -lm -ldl $LIBS"
-      else
-        LIBS="-lmariadbclient -lm -ldl $LIBS"
-      fi
-    fi
-  fi
+    done
+  done
 fi
+
+AC_CHECK_HEADER([mysql.h], [],
+  [AC_MSG_ERROR([Cannot find mysql.h. Install MariaDB Connector/C or MySQL Connector/C development files.])])
+
+AC_SEARCH_LIBS([mysql_init], [mariadb mysqlclient perconaserverclient],
+  [AC_DEFINE([HAVE_MYSQL], [1], [MySQL-compatible Client API])
+   HAVE_MYSQL=yes],
+  [AC_MSG_ERROR([Cannot link a MySQL-compatible client library.])])
 
 # ****************** Net-SNMP Checks ***********************
 if test "x$SNMP_DIR" != "x"; then
@@ -462,7 +437,7 @@ fi
 AC_MSG_CHECKING([if we can support mysql/mariadb retry count])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
-    #include "$MYSQL_INC_DIR/mysql.h"
+    #include <mysql.h>
   ]], [[
     if (MYSQL_OPT_RETRY_COUNT) {
       exit(0);
@@ -477,7 +452,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 AC_MSG_CHECKING([if we mysql/mariadb supports verify certificates])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
-    #include "$MYSQL_INC_DIR/mysql.h"
+    #include <mysql.h>
   ]], [[
     if (MYSQL_OPT_SSL_VERIFY_SERVER_CERT) {
       exit(0);
@@ -493,7 +468,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 AC_MSG_CHECKING([if we can support mysql/mariadb ssl keys])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <stdlib.h>
-    #include "$MYSQL_INC_DIR/mysql.h"
+    #include <mysql.h>
   ]], [[
     if (MYSQL_OPT_SSL_KEY) {
       exit(0);
