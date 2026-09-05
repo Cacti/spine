@@ -22,7 +22,8 @@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
-spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+spine_SOURCES = sql.c spine.c util.c snmp.c src/core/locks.c poller.c \
+	nft_popen.c php.c ping.c src/core/keywords.c error.c
 
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
@@ -33,8 +34,9 @@ man_MANS = spine.1
 
 # Headers are not referenced by any _SOURCES, so automake will not distribute
 # them unless they are listed. Without this the release tarball builds nothing.
-noinst_HEADERS = common.h error.h keywords.h locks.h nft_popen.h php.h \
-	ping.h poller.h snmp.h spine.h spine_sem.h sql.h uthash.h util.h
+noinst_HEADERS = common.h error.h src/core/keywords.h src/core/locks.h \
+	nft_popen.h php.h ping.h poller.h snmp.h spine.h spine_sem.h sql.h \
+	uthash.h util.h
 
 EXTRA_DIST = spine.1 spine.conf.dist
 
@@ -56,7 +58,7 @@ cppcheck: docker-dev
 		--suppress=missingIncludeSystem --suppress=unusedFunction \
 		--suppress=checkersReport --suppress=toomanyconfigs $(spine_SOURCES)"
 
-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_builddir)
+AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src/core -I$(top_builddir)
 
 check_PROGRAMS =
 
@@ -83,7 +85,8 @@ tests_unit_test_safety_fixes_LDADD   = $(CMOCKA_LIBS)
 # Everything except spine.c is linked as built; tests/fuzz/stubs.c supplies the
 # globals that spine.c would define.
 tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
-	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 TESTS = $(check_PROGRAMS)

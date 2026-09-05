@@ -24,10 +24,11 @@ NETSNMP_CFLAGS := $(filter -I% -D%, $(shell net-snmp-config --base-cflags 2>/dev
 NETSNMP_LIBS   := $(filter -l% -L%, $(shell net-snmp-config --libs 2>/dev/null))
 
 SPINE_SRC := $(addprefix $(SPINE_ROOT)/, \
-	ping.c util.c sql.c snmp.c locks.c poller.c nft_popen.c php.c keywords.c error.c)
+	ping.c util.c sql.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	src/core/keywords.c error.c)
 
 FUZZ_CFLAGS := $(SANITIZERS) -g -O1 -DHAVE_CONFIG_H \
-	-I$(SPINE_ROOT) -I$(SPINE_ROOT)/config \
+	-I$(SPINE_ROOT) -I$(SPINE_ROOT)/src/core -I$(SPINE_ROOT)/config \
 	$(NETSNMP_CFLAGS) \
 	$(shell mysql_config --include 2>/dev/null)
 
