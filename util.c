@@ -103,7 +103,7 @@ static const char *getsetting(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
@@ -196,7 +196,7 @@ static const char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 				return retval;
@@ -291,7 +291,7 @@ static const char *getglobalvariable(MYSQL *psql, int mode, const char *setting)
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[1] != NULL) {
 				retval = strdup(mysql_row[1]);
 				db_free_result(result);
 				return retval;
@@ -1191,13 +1191,11 @@ void die(const char *format, ...) {
 
 	fprintf(stderr, "%s", flogmessage);
 
-	if (set.parent_fork == SPINE_PARENT) {
-		if (set.php_initialized) {
-			php_close(PHP_INIT);
-		}
+	if (set.parent_fork == SPINE_PARENT && set.php_initialized) {
+		php_close(PHP_INIT);
 	}
 
-	exit(set.exit_code);
+	exit(set.exit_code != 0 ? set.exit_code : EXIT_FAILURE);
 }
 
 char * get_date_format() {
@@ -1320,6 +1318,7 @@ int spine_log(const char *format, ...) {
 	int ulog_len   = strlen(ulogmessage);
 	int flog_len   = 0;
 
+	flogmessage[0] = '\0';
 	if ((flog_len = strftime(flogmessage, 50, log_fmt, now_ptr)) == (int) 0) {
 		#ifdef DISABLE_STDERR
 		fp = stdout;
@@ -1705,9 +1704,12 @@ char *strncopy(char *dst, const char *src, size_t obuf) {
 
 	if (obuf == 0) return dst;
 
-	/* Cap the scan at obuf-1: no need to walk past the usable copy capacity,
-	 * and avoids a full strlen when src is large or unterminated near obuf. */
-	copy_len = strnlen(src, obuf - 1);
+	/* Avoid strnlen here: older supported Solaris environments may not
+	 * provide it, and the bounded loop has the same copy semantics. */
+	copy_len = 0;
+	while (copy_len < obuf - 1 && src[copy_len] != '\0') {
+		copy_len++;
+	}
 
 	if (copy_len) {
 		/* copy_len is the exact byte count and dst is terminated below, so
@@ -2057,7 +2059,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 		if (mysql_num_rows(result) > 0) {
 			mysql_row = mysql_fetch_row(result);
 
-			if (mysql_row != NULL) {
+			if (mysql_row != NULL && mysql_row[0] != NULL) {
 				retval = strdup(mysql_row[0]);
 				db_free_result(result);
 
@@ -2085,4 +2087,3 @@ int get_cacti_version(MYSQL *psql, int mode) {
 		return 0;
 	}
 }
-

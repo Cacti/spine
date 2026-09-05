@@ -71,6 +71,7 @@ DEFINE_SPINE_LOCK(php_proc_13)
 DEFINE_SPINE_LOCK(php_proc_14)
 DEFINE_SPINE_LOCK(thdet)
 DEFINE_SPINE_LOCK(host_time)
+DEFINE_SPINE_LOCK(fork)
 
 void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),        init_snmp_lock);
@@ -95,6 +96,7 @@ void init_mutexes() {
 	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_THDET_O),       init_thdet_lock);
 	pthread_once((pthread_once_t*) get_attr(LOCK_HOST_TIME_O),   init_host_time_lock);
+	pthread_once((pthread_once_t*) get_attr(LOCK_FORK_O),        init_fork_lock);
 }
 
 const char* get_name(int lock) {
@@ -121,6 +123,7 @@ const char* get_name(int lock) {
 		case LOCK_PHP_PROC_14: return "php_proc_14";
 		case LOCK_THDET:       return "thdet";
 		case LOCK_HOST_TIME:   return "host_time";
+		case LOCK_FORK:        return "fork";
 	}
 
 	return "Unknown lock";
@@ -152,6 +155,7 @@ pthread_cond_t* get_cond(int lock) {
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_cond; break;
 		case LOCK_THDET:       ret_val = &thdet_cond;       break;
 		case LOCK_HOST_TIME:   ret_val = &host_time_cond;   break;
+		case LOCK_FORK:        ret_val = &fork_cond;        break;
 	}
 
 	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning cond for %s", get_name(lock)));
@@ -185,6 +189,7 @@ pthread_mutex_t* get_lock(int lock) {
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_lock; break;
 		case LOCK_THDET:       ret_val = &thdet_lock;       break;
 		case LOCK_HOST_TIME:   ret_val = &host_time_lock;   break;
+		case LOCK_FORK:        ret_val = &fork_lock;        break;
 	}
 
 	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning lock for %s", get_name(lock)));
@@ -218,6 +223,7 @@ pthread_once_t* get_attr(int locko) {
 		case LOCK_PHP_PROC_14_O: ret_val = &php_proc_14_lock_o; break;
 		case LOCK_THDET_O:       ret_val = &thdet_lock_o;       break;
 		case LOCK_HOST_TIME_O:   ret_val = &host_time_lock_o;   break;
+		case LOCK_FORK_O:        ret_val = &fork_lock_o;        break;
 	}
 
 	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning attr for %s", get_name(locko)));
@@ -243,4 +249,3 @@ int thread_mutex_trylock(int mutex) {
 	SPINE_LOG_DEVDBG(("LOCKS: [END]   Mutex try lock for %s, result = %d", get_name(mutex), ret_val));
 	return ret_val;
 }
-

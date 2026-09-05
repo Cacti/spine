@@ -249,7 +249,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	for (i = 0; i < MAX_PHP_SERVERS; i++) {
-		php_processes[i].php_state = PHP_BUSY;
+		php_processes[i].php_state    = PHP_BUSY;
+		php_processes[i].php_read_fd  = -1;
+		php_processes[i].php_write_fd = -1;
+		php_processes[i].php_pid      = -1;
 	}
 
 	/* create the array of debug devices */
@@ -629,8 +632,10 @@ int main(int argc, char *argv[]) {
 
 	/* initialize the script server */
 	if (set.php_required && !set.ping_only) {
-		php_init(PHP_INIT);
-		set.php_initialized    = TRUE;
+		set.php_initialized = TRUE;
+		if (!php_init(PHP_INIT)) {
+			SPINE_LOG(("ERROR: Unable to initialize any PHP Script Server; script-server data sources will remain undefined"));
+		}
 		set.php_current_server = 0;
 	}
 
@@ -736,6 +741,9 @@ int main(int argc, char *argv[]) {
 	while (canexit == FALSE && device_counter < num_rows) {
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
+			if (mysql_row == NULL || mysql_row[0] == NULL || mysql_row[1] == NULL) {
+				die("ERROR: Unable to fetch the next device row");
+			}
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
 			current_thread  = 1;
@@ -756,10 +764,15 @@ int main(int argc, char *argv[]) {
 			}
 
 			tresult   = db_query(&mysql, LOCAL, querybuf);
-			mysql_row = mysql_fetch_row(tresult);
+			mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
+
+			if (mysql_row == NULL || mysql_row[0] == NULL) {
+				if (tresult != NULL) db_free_result(tresult);
+				die("ERROR: Device[%i] unable to determine the poller item count", host_id);
+			}
 
 			total_items = atoi(mysql_row[0]);
-			db_free_result(tresult);
+			if (tresult != NULL) db_free_result(tresult);
 
 			if (total_items && total_items < device_threads) {
 				device_threads = total_items;
@@ -780,11 +793,15 @@ int main(int argc, char *argv[]) {
 				}
 
 				tresult   = db_query(&mysql, LOCAL, querybuf);
-				mysql_row = mysql_fetch_row(tresult);
+				mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
+
+				if (mysql_row == NULL || mysql_row[0] == NULL) {
+					if (tresult != NULL) db_free_result(tresult);
+					die("ERROR: Device[%i] unable to determine the per-thread poller item count", host_id);
+				}
 
 				items_per_thread = atoi(mysql_row[0]);
-
-				db_free_result(tresult);
+				if (tresult != NULL) db_free_result(tresult);
 
 				sprintf(host_time, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
@@ -795,11 +812,15 @@ int main(int argc, char *argv[]) {
 		} else {
 			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
 			tresult   = db_query(&mysql, LOCAL, querybuf);
-			mysql_row = mysql_fetch_row(tresult);
+			mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
+
+			if (mysql_row == NULL || mysql_row[0] == NULL) {
+				if (tresult != NULL) db_free_result(tresult);
+				die("ERROR: Device[%i] unable to determine the poller item count", host_id);
+			}
 
 			items_per_thread = atoi(mysql_row[0]);
-
-			db_free_result(tresult);
+			if (tresult != NULL) db_free_result(tresult);
 
 			sprintf(host_time, "%lu", (unsigned long) time(NULL));
 			host_time_double = get_time_as_double();
