@@ -278,11 +278,6 @@ char *php_readpipe(int php_process, char *command) {
 				if ((cp = strstr(result_string,"\n")) != 0) {
 					break;
 				}
-
-				if (bptr >= result_string+BUFSIZE) {
-					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-					SET_UNDEFINED(result_string);
-				}
 			}
 		} else {
 			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
