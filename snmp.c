@@ -346,7 +346,14 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			 * default instead of the one it was configured with. */
 			auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
 			free(session.securityAuthProto);
-			session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
+			session.securityAuthProto = auth_proto == NULL ? NULL :
+				snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
+			if (session.securityAuthProto == NULL) {
+				SPINE_LOG(("SNMP: Device[%i] Error installing auth protocol %s.", host_id, snmp_auth_protocol));
+				free(session.peername);
+				free(session.localname);
+				return 0;
+			}
 		}
 
 		/* Privacy requires authentication in USM. A device configured with a
@@ -440,7 +447,15 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			priv_proto = sc_get_priv_oid(priv_type, &session.securityPrivProtoLen);
 			free(session.securityPrivProto);
-			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
+			session.securityPrivProto = priv_proto == NULL ? NULL :
+				snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
+			if (session.securityPrivProto == NULL) {
+				SPINE_LOG(("SNMP: Device[%i] Error installing privacy protocol %s.", host_id, snmp_priv_protocol));
+				free(session.peername);
+				free(session.securityAuthProto);
+				free(session.localname);
+				return 0;
+			}
 			/* security_level is AUTHPRIV here by construction: this branch is
 			 * only reached when it is. Assigning the computed value keeps one
 			 * predicate authoritative rather than two that can disagree. */
@@ -454,7 +469,21 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			free_passphrase(&Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
 
-			if (Apsz) {
+			/* authPriv cannot be constructed safely without both local copies.
+			 * Treat allocator failure like key-derivation failure instead of
+			 * handing net-snmp an authPriv session with an empty key. */
+			if (Apsz == NULL || Xpsz == NULL) {
+				SPINE_LOG(("SNMP: Device[%i] Error allocating SNMPv3 passphrase storage.", host_id));
+				free(session.peername);
+				free(session.securityAuthProto);
+				free(session.securityPrivProto);
+				free_passphrase(&Apsz);
+				free_passphrase(&Xpsz);
+				free(session.localname);
+				return 0;
+			}
+
+			{
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
 				if (session.securityAuthProto == NULL) {
 					/*
@@ -497,15 +526,19 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				free_passphrase(&Apsz);
 			}
 
-			if (Xpsz) {
+			{
 				session.securityPrivKeyLen = USM_PRIV_KU_LEN;
 				if (session.securityPrivProto == NULL) {
 					/*
 					 * get .conf set default
 					 */
 					const oid *def = get_default_privtype(&session.securityPrivProtoLen);
-					session.securityPrivProto =
-					snmp_duplicate_objid(def, session.securityPrivProtoLen);
+					if (def != NULL) {
+						session.securityPrivProto =
+							snmp_duplicate_objid(def, session.securityPrivProtoLen);
+					} else {
+						session.securityPrivProtoLen = 0;
+					}
 				}
 
 				if (session.securityPrivProto == NULL) {
