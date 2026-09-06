@@ -333,10 +333,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		security_level = spine_snmpv3_security_level(snmp_auth_protocol, snmp_password,
 			snmp_priv_protocol, snmp_priv_passphrase);
 
-		if (spine_snmpv3_protocol_is_set(snmp_auth_protocol) !=
-			spine_snmpv3_passphrase_is_set(snmp_password)) {
-			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; polling at noAuthNoPriv to match Cacti's effective security level.", host_id));
-		}
+		/* Refusals precede downgrade warnings so the log never promises that a
+		 * device will be polled when this function is about to reject it. */
 		if (spine_snmpv3_passphrase_is_set(snmp_password) &&
 			(snmp_auth_protocol == NULL || snmp_auth_protocol[0] == '\0')) {
 			SPINE_LOG(("SNMP: Device[%i] Error authentication password is set but the authentication protocol is empty.", host_id));
@@ -345,16 +343,33 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 		}
 
-		if (spine_snmpv3_protocol_is_set(snmp_priv_protocol) !=
-			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
-			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; polling without encryption to match Cacti's effective security level.", host_id));
-		}
 		if (spine_snmpv3_passphrase_is_set(snmp_priv_passphrase) &&
 			(snmp_priv_protocol == NULL || snmp_priv_protocol[0] == '\0')) {
 			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is set but the privacy protocol is empty.", host_id));
 			free(session.peername);
 			free(session.localname);
 			return 0;
+		}
+
+		/* Complete privacy credentials with no usable authentication cannot be
+		 * honoured by USM. Refuse that case before describing any downgrade. */
+		if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
+			spine_snmpv3_protocol_is_set(snmp_priv_protocol) &&
+			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is configured but authentication is unavailable; set an auth protocol and password, or clear the privacy passphrase.", host_id));
+			free(session.peername);
+			free(session.localname);
+			return 0;
+		}
+
+		if (spine_snmpv3_protocol_is_set(snmp_auth_protocol) !=
+			spine_snmpv3_passphrase_is_set(snmp_password)) {
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; polling at noAuthNoPriv to match Cacti's effective security level.", host_id));
+		}
+
+		if (spine_snmpv3_protocol_is_set(snmp_priv_protocol) !=
+			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; polling without encryption to match Cacti's effective security level.", host_id));
 		}
 
 		/* A protocol that is set but unrecognised is a configuration error at
@@ -386,19 +401,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				free(session.localname);
 				return 0;
 			}
-		}
-
-		/* Complete privacy credentials with no usable authentication cannot be
-		 * honoured by USM. Refuse that case; incomplete privacy fields follow
-		 * Cacti's lower effective level after the warning above. */
-		if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
-			spine_snmpv3_protocol_is_set(snmp_priv_protocol) &&
-			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
-			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is configured but authentication is unavailable; set an auth protocol and password, or clear the privacy passphrase.", host_id));
-			free(session.peername);
-			free(session.localname);
-			free(session.securityAuthProto);
-			return 0;
 		}
 
 		session.securityLevel = security_level;

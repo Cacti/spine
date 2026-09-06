@@ -180,8 +180,6 @@ static void test_auth_without_privacy_is_authnopriv(void **state) {
 	char pw[] = "authpass123";
 	char none[] = "[None]";
 	char empty[] = "";
-	const oid *expected;
-	size_t expected_len;
 	const oid *expected_priv;
 	size_t expected_priv_len;
 
@@ -192,16 +190,47 @@ static void test_auth_without_privacy_is_authnopriv(void **state) {
 	assert_int_equal(level_for(auth, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
 	assert_true(captured_auth_key_len > 0);
 	assert_true(contains_nonzero(captured_auth_key, captured_auth_key_len));
-	expected = sc_get_auth_oid(usm_lookup_auth_type(auth), &expected_len);
-	assert_non_null(expected);
-	assert_int_equal(captured_auth_proto_len, expected_len);
-	assert_int_equal(snmp_oid_compare(captured_auth_proto, captured_auth_proto_len,
-		expected, expected_len), 0);
 	expected_priv = usmNoPrivProtocol;
 	expected_priv_len = OID_LENGTH(usmNoPrivProtocol);
 	assert_int_equal(captured_priv_proto_len, expected_priv_len);
 	assert_int_equal(snmp_oid_compare(captured_priv_proto, captured_priv_proto_len,
 		expected_priv, expected_priv_len), 0);
+}
+
+static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) {
+	struct auth_case {
+		char *name;
+		const oid *expected;
+		size_t expected_len;
+	};
+	const struct auth_case cases[] = {
+		{ "MD5",    usmHMACMD5AuthProtocol,       OID_LENGTH(usmHMACMD5AuthProtocol) },
+		{ "SHA",    usmHMACSHA1AuthProtocol,      OID_LENGTH(usmHMACSHA1AuthProtocol) },
+		{ "SHA224", usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol) },
+		{ "SHA256", usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol) },
+		{ "SHA384", usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol) },
+		{ "SHA512", usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol) },
+	};
+	char password[] = "authpass123";
+	char none[] = "[None]";
+	char empty[] = "";
+	size_t i;
+	int exercised = 0;
+
+	(void) state;
+	for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		if (usm_lookup_auth_type(cases[i].name) <= 0) continue;
+
+		exercised++;
+		assert_int_equal(level_for(cases[i].name, password, none, empty),
+			SNMP_SEC_LEVEL_AUTHNOPRIV);
+		assert_int_equal(captured_auth_proto_len, cases[i].expected_len);
+		assert_int_equal(snmp_oid_compare(captured_auth_proto,
+			captured_auth_proto_len, cases[i].expected,
+			cases[i].expected_len), 0);
+	}
+
+	assert_true(exercised > 0);
 }
 
 static void test_auth_with_privacy_is_authpriv(void **state) {
@@ -412,6 +441,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_security_level_contract, session_reset),
 		cmocka_unit_test_setup(test_no_credentials_is_noauthnopriv, session_reset),
 		cmocka_unit_test_setup(test_auth_without_privacy_is_authnopriv, session_reset),
+		cmocka_unit_test_setup(test_auth_protocol_oids_match_the_selected_algorithms, session_reset),
 		cmocka_unit_test_setup(test_auth_with_privacy_is_authpriv, session_reset),
 		cmocka_unit_test_setup(test_privacy_without_auth_is_refused, session_reset),
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_even_without_a_password, session_reset),
