@@ -3,7 +3,7 @@ name: Integration
 on:
   pull_request:
     branches: [develop]
-    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/snmpv3/**', '.github/workflows/integration.yml']
+    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/snmpv3/**', 'tests/integration/test_script_server_reap.sh', '.github/workflows/integration.yml']
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,9 @@ jobs:
       # poll_host() and checks the value lands in poller_output.
       - name: Poll an SNMPv3 device end to end
         run: tests/snmpv3/scripts/run-integration.sh
+
+      - name: Reap a real PHP script-server process
+        run: tests/integration/test_script_server_reap.sh
 
       - name: Show container logs on failure
         if: failure()

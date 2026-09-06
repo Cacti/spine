@@ -14,11 +14,26 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "spine.h"
 #include "util.h"
 #include "ping.h"
+
+#if !defined(ICMP_DEST_UNREACH) && defined(ICMP_UNREACH)
+#define ICMP_DEST_UNREACH ICMP_UNREACH
+#endif
+#include "nft_popen.h"
+
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -457,7 +472,429 @@ static void test_is_debug_device_matches_only_listed_ids(void **state) {
 	debug_devices = saved;
 }
 
+/* --- nft_popen(): registry entries have exactly one closing owner -------- */
+
+struct close_result {
+	int fd;
+	int result;
+	int error;
+};
+
+static void *close_from_thread(void *arg) {
+	struct close_result *result = arg;
+
+	result->result = nft_pclose(result->fd);
+	result->error = errno;
+
+	return NULL;
+}
+
+static void test_nft_pclose_has_one_owner_per_registry_entry(void **state) {
+	static struct close_result results[2];
+	pthread_t threads[2];
+	int create_results[2] = {-1, -1};
+	int fd;
+	int successes = 0;
+	int bad_fds = 0;
+	int owner_result = -1;
+	int join_results[2] = {-1, -1};
+	int reap_error;
+	int reap_result;
+	pid_t child;
+	int i;
+	(void) state;
+
+	fd = nft_popen("exit 7", "r");
+	assert_true(fd >= 0);
+	child = nft_pchild(fd);
+	assert_true(child > 0);
+
+	for (i = 0; i < 2; i++) {
+		results[i].fd = fd;
+		results[i].result = -1;
+		results[i].error = 0;
+		create_results[i] = pthread_create(&threads[i], NULL, close_from_thread, &results[i]);
+	}
+
+	for (i = 0; i < 2; i++) {
+		if (create_results[i] == 0) {
+			join_results[i] = pthread_join(threads[i], NULL);
+		}
+
+		if (results[i].result >= 0) {
+			successes++;
+			owner_result = results[i].result;
+		} else if (results[i].error == EBADF) {
+			bad_fds++;
+		}
+	}
+
+	/* Avoid leaking the child if thread creation failed before either closer ran. */
+	if (successes == 0) {
+		(void)nft_pclose(fd);
+	}
+
+	assert_int_equal(create_results[0], 0);
+	assert_int_equal(create_results[1], 0);
+	assert_int_equal(join_results[0], 0);
+	assert_int_equal(join_results[1], 0);
+	assert_int_equal(successes, 1);
+	assert_int_equal(bad_fds, 1);
+	assert_true(WIFEXITED(owner_result));
+	assert_int_equal(WEXITSTATUS(owner_result), 7);
+
+	errno = 0;
+	reap_result = waitpid(child, NULL, WNOHANG);
+	reap_error = errno;
+	assert_int_equal(fcntl(fd, F_GETFD), -1);
+	assert_int_equal(errno, EBADF);
+	assert_int_equal(reap_result, -1);
+	assert_int_equal(reap_error, ECHILD);
+}
+
+static void test_nft_pclose_cancellation_releases_registry_entry(void **state) {
+	struct close_result result;
+	pthread_t thread;
+	void *thread_result = NULL;
+	pid_t child;
+	int cancel_result = -1;
+	int create_result;
+	int detached = 0;
+	int fd;
+	int i;
+	int join_result = -1;
+	int lookup_error;
+	int lookup_result;
+	char ready;
+	int status;
+	(void) state;
+
+	fd = nft_popen("printf x; kill -STOP $$", "r");
+	assert_true(fd >= 0);
+	child = nft_pchild(fd);
+	assert_true(child > 0);
+	assert_int_equal(read(fd, &ready, 1), 1);
+	assert_int_equal(ready, 'x');
+
+	result.fd = fd;
+	result.result = -1;
+	result.error = 0;
+	create_result = pthread_create(&thread, NULL, close_from_thread, &result);
+	if (create_result == 0) {
+		/* The registry transition, rather than elapsed time, proves the closer has
+		 * taken exclusive ownership and reached waitpid().
+		 */
+		for (i = 0; i < 5000; i++) {
+			errno = 0;
+			if (nft_pchild(fd) == -1 && errno == EBADF) {
+				detached = 1;
+				break;
+			}
+			usleep(1000);
+		}
+
+		if (detached) {
+			cancel_result = pthread_cancel(thread);
+		} else {
+			kill(child, SIGKILL);
+		}
+		join_result = pthread_join(thread, &thread_result);
+	}
+
+	errno = 0;
+	lookup_result = nft_pchild(fd);
+	lookup_error = errno;
+
+	/* Cancellation stops nft_pclose() before it can reap.  Clean up the child
+	 * before asserting because cmocka assertions longjmp.
+	 */
+	if (lookup_result > 0) {
+		kill(lookup_result, SIGKILL);
+		(void)nft_pclose(fd);
+	} else if (detached) {
+		kill(child, SIGKILL);
+		do {
+			status = waitpid(child, NULL, 0);
+		} while (status < 0 && errno == EINTR);
+	}
+
+	assert_int_equal(create_result, 0);
+	assert_true(detached);
+	assert_int_equal(cancel_result, 0);
+	assert_int_equal(join_result, 0);
+	assert_ptr_equal(thread_result, PTHREAD_CANCELED);
+	assert_int_equal(lookup_result, -1);
+	assert_int_equal(lookup_error, EBADF);
+}
+
+static void test_nft_pclose_early_error_preserves_cancellation_mode(void **state) {
+	int cancel_state_after;
+	int cancel_state_before;
+	(void) state;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state_before);
+	pthread_setcancelstate(cancel_state_before, NULL);
+
+	errno = 0;
+	assert_int_equal(nft_pclose(-1), -1);
+	assert_int_equal(errno, EBADF);
+	errno = 0;
+	assert_int_equal(nft_pchild(-1), -1);
+	assert_int_equal(errno, EBADF);
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state_after);
+	pthread_setcancelstate(cancel_state_after, NULL);
+
+	assert_int_equal(cancel_state_after, cancel_state_before);
+}
+
+/* ---------------------------------------------------------------------------
+ * Child process hardening (nft_popen.c)
+ *
+ * PR #542 removed the close-on-exec and bounded-reap code PR #557 had just
+ * added, and nothing failed, because the only guard was a shell script that
+ * grepped the source and was deleted in the same commit. These exercise the
+ * behaviour against the shipped object instead.
+ * ------------------------------------------------------------------------- */
+
+static void test_cloexec_is_set_on_both_pipe_ends(void **state) {
+	int pdes[2];
+	int i;
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+
+	for (i = 0; i < 2; i++) {
+		int flags = fcntl(pdes[i], F_GETFD);
+
+		assert_true(flags >= 0);
+		assert_true((flags & FD_CLOEXEC) != 0);
+	}
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_cloexec_pipe_is_a_working_pipe(void **state) {
+	int pdes[2];
+	char buf[8];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	assert_int_equal(write(pdes[1], "ok", 2), 2);
+	assert_int_equal(read(pdes[0], buf, sizeof(buf)), 2);
+	assert_memory_equal(buf, "ok", 2);
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_duplicated_descriptor_is_close_on_exec(void **state) {
+	int original;
+	int duplicate;
+	int flags;
+
+	(void) state;
+	original = open("/dev/null", O_RDONLY);
+	assert_true(original >= 0);
+	duplicate = spine_dup_cloexec(original);
+	assert_true(duplicate >= 0);
+	flags = fcntl(duplicate, F_GETFD);
+	assert_true(flags >= 0);
+	assert_true((flags & FD_CLOEXEC) != 0);
+	close(duplicate);
+	close(original);
+}
+
+static void test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect(void **state) {
+	int saved_stdin;
+	int saved_stdout;
+	int writer;
+	int reader;
+	int writer_status;
+	int reader_status;
+	ssize_t bytes;
+	char output[32] = {0};
+
+	(void) state;
+	saved_stdin = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0);
+	assert_true(saved_stdout >= 0);
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	/* The write-mode parent retains fd 1 in PidList. The following read-mode
+	 * child also redirects its new pipe onto fd 1. Its later PidList close walk
+	 * must not close that newly installed stdout. */
+	writer = nft_popen("cat >/dev/null", "w");
+	reader = nft_popen("printf second-child-visible", "r");
+	bytes = reader >= 0 ? read(reader, output, sizeof(output) - 1) : -1;
+	reader_status = reader >= 0 ? nft_pclose(reader) : -1;
+	writer_status = writer >= 0 ? nft_pclose(writer) : -1;
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(writer >= 0);
+	assert_true(reader >= 0);
+	assert_true(bytes > 0);
+	assert_string_equal(output, "second-child-visible");
+	assert_true(WIFEXITED(reader_status));
+	assert_int_equal(WEXITSTATUS(reader_status), 0);
+	assert_true(WIFEXITED(writer_status));
+	assert_int_equal(WEXITSTATUS(writer_status), 0);
+}
+
+static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **state) {
+	pid_t pids[NFT_ABANDONED_MAX + 1];
+	int i;
+	int created = 0;
+	int status;
+
+	(void) state;
+	for (i = 0; i < NFT_ABANDONED_MAX + 1; i++) {
+		pids[i] = fork();
+		if (pids[i] < 0)
+			break;
+		if (pids[i] == 0) {
+			pause();
+			_exit(0);
+		}
+		created++;
+		nft_abandon_child(pids[i], "unit test");
+	}
+
+	if (created != NFT_ABANDONED_MAX + 1) {
+		for (i = 0; i < created; i++) {
+			(void)kill(pids[i], SIGKILL);
+			(void)waitpid(pids[i], &status, 0);
+		}
+		(void)nft_abandoned_pending();
+		skip();
+	}
+
+	assert_int_equal(nft_abandoned_pending(), NFT_ABANDONED_MAX);
+	for (i = 0; i < created; i++) {
+		assert_int_equal(kill(pids[i], SIGKILL), 0);
+		assert_int_equal(waitpid(pids[i], &status, 0), pids[i]);
+	}
+	assert_int_equal(nft_abandoned_pending(), 0);
+}
+
+/* The descriptor must not survive an exec. A child that inherits the write end
+   keeps the pipe open, so the polling thread never sees EOF and blocks to
+   script_timeout for a data source that already answered. */
+static void test_pipe_is_not_inherited_across_exec(void **state) {
+	int pdes[2];
+	int status;
+	pid_t pid;
+	char fdarg[32];
+
+	(void) state;
+
+	assert_true(spine_open_pipe_cloexec(pdes));
+	snprintf(fdarg, sizeof(fdarg), "/proc/self/fd/%d", pdes[1]);
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		/* exits 0 when the descriptor survived exec, 1 when it did not */
+		execl("/bin/sh", "sh", "-c", "test -e \"$0\"", fdarg, (char *) NULL);
+		_exit(127);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 1);
+
+	close(pdes[0]);
+	close(pdes[1]);
+}
+
+static void test_reap_returns_still_running_rather_than_blocking(void **state) {
+	int pstat = 0;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	/* the shipped code blocked here forever; two attempts must come back */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 1);
+
+	assert_int_equal(kill(pid, SIGKILL), 0);
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+}
+
+static void test_reap_collects_an_exited_child(void **state) {
+	int pstat = 0;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(3);
+	}
+
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 20), 0);
+	assert_true(WIFEXITED(pstat));
+	assert_int_equal(WEXITSTATUS(pstat), 3);
+}
+
+static void test_reap_reports_an_already_reaped_child(void **state) {
+	int pstat = 99;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		_exit(0);
+	}
+
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+
+	/* ECHILD: someone else took the status, which is success with none */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 0);
+	assert_int_equal(pstat, 0);
+}
+
+static void test_nft_pclose_requests_graceful_termination_before_kill(void **state) {
+	char ready[6] = {0};
+	int fd;
+	int status;
+
+	(void) state;
+	fd = nft_popen("trap 'exit 0' TERM; printf ready; while :; do sleep 1; done", "r");
+	assert_true(fd >= 0);
+	assert_int_equal(read(fd, ready, 5), 5);
+	assert_string_equal(ready, "ready");
+	status = nft_pclose(fd);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
 int main(void) {
+
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_strncopy_truncates_within_the_buffer),
 		cmocka_unit_test(test_strncopy_copies_a_short_source_whole),
@@ -496,6 +933,19 @@ int main(void) {
 		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
+		cmocka_unit_test(test_nft_pclose_has_one_owner_per_registry_entry),
+		cmocka_unit_test(test_nft_pclose_cancellation_releases_registry_entry),
+		cmocka_unit_test(test_nft_pclose_early_error_preserves_cancellation_mode),
+		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
+		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_duplicated_descriptor_is_close_on_exec),
+		cmocka_unit_test(test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect),
+		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
+		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
+		cmocka_unit_test(test_reap_collects_an_exited_child),
+		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
+		cmocka_unit_test(test_nft_pclose_requests_graceful_termination_before_kill),
+		cmocka_unit_test(test_abandoned_children_are_swept_and_capacity_is_bounded),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
