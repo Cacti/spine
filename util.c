@@ -35,6 +35,10 @@
 #include "spine.h"
 #include "regex.h"
 
+#define SPINE_STRINGIFY_INNER(value) #value
+#define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
+#define CAPABILITY_PROTOCOL_LIST_MAX 480
+
 static int nopts = 0;
 
 /*! Override Options Structure
@@ -914,7 +918,10 @@ void read_config_options(void) {
 	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
 	#endif
 
-	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
+	/* Each source buffer can be BUFSIZE bytes. Bound both fields so the
+	 * combined capability document always fits in its destination. */
+	(void)format_spine_capabilities(spine_capabilities,
+		sizeof(spine_capabilities), spine_auth, spine_priv);
 
 	if (set.poller_id == 1) {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
@@ -1744,6 +1751,7 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 				if (ignore_special) {
 					break;
 				}
+				/* fall through */
 			default:
 				return FALSE;
 		}
@@ -2284,4 +2292,21 @@ const char *regex_replace(const char *exp, const char *value) {
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
+}
+
+int format_spine_capabilities(char *output, size_t output_size,
+		const char *auth_protocols, const char *priv_protocols) {
+	int written;
+
+	if (output == NULL || output_size == 0 ||
+	    auth_protocols == NULL || priv_protocols == NULL) {
+		return FALSE;
+	}
+
+	written = snprintf(output, output_size,
+		"{ authProtocols: \"%." SPINE_STRINGIFY(CAPABILITY_PROTOCOL_LIST_MAX)
+		"s\", privProtocols: \"%." SPINE_STRINGIFY(CAPABILITY_PROTOCOL_LIST_MAX) "s\" }",
+		auth_protocols, priv_protocols);
+
+	return written >= 0 && (size_t)written < output_size;
 }

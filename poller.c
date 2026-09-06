@@ -34,6 +34,27 @@
 #include "common.h"
 #include "spine.h"
 
+#define SPINE_STRINGIFY_INNER(value) #value
+#define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
+#define SQL_ESCAPED_RRD_NAME_MAX 60
+#define SQL_HOST_TIME_MAX 40
+#define SQL_ESCAPED_RESULT_MAX 2047
+
+int format_poller_output_row(char *output, size_t output_size,
+		int local_data_id, const char *escaped_rrd_name,
+		const char *host_time, const char *escaped_result) {
+	if (output == NULL || output_size == 0 || escaped_rrd_name == NULL ||
+	    host_time == NULL || escaped_result == NULL) {
+		return -1;
+	}
+
+	return snprintf(output, output_size,
+		" (%i, '%." SPINE_STRINGIFY(SQL_ESCAPED_RRD_NAME_MAX)
+		"s', FROM_UNIXTIME(%." SPINE_STRINGIFY(SQL_HOST_TIME_MAX)
+		"s), '%." SPINE_STRINGIFY(SQL_ESCAPED_RESULT_MAX) "s')",
+		local_data_id, escaped_rrd_name, host_time, escaped_result);
+}
+
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
@@ -1888,7 +1909,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
 			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
 
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
+			(void)format_poller_output_row(result_string, sizeof(result_string),
 				poller_items[i].local_data_id,
 				escaped_rrd_name,
 				host_time,

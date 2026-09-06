@@ -42,6 +42,9 @@ extern char *exec_poll(host_t *current_host, char *command, int id, const char *
 extern void get_system_information(host_t *host, MYSQL *mysql, int system);
 extern int is_multipart_output(char *result);
 extern int validate_result(char *result);
+extern int format_poller_output_row(char *output, size_t output_size,
+	int local_data_id, const char *escaped_rrd_name,
+	const char *host_time, const char *escaped_result);
 extern void buffer_output_errors(char * error_string, int * buf_size, int * buf_errors, int device_id, int thread_id, int local_data_id, bool flush);
 
 #endif /* SPINE_POLLER_H */
