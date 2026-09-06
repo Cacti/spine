@@ -31,8 +31,8 @@ stamp-h1
 **/*.la
 **/*.gcda
 **/*.gcno
-*.log
-*.tar.gz
+**/*.log
+**/*.tar.gz
 
 # the built binary itself
 /spine

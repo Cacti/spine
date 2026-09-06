@@ -53,11 +53,7 @@ verify: docker-dev
 	docker run --rm spine-dev
 
 cppcheck: docker-dev
-	docker run --rm spine-dev bash -c \
-		"cppcheck --enable=all --std=c11 --error-exitcode=1 \
-		-I. -Isrc/core \
-		--suppress=missingIncludeSystem --suppress=unusedFunction \
-		--suppress=checkersReport --suppress=toomanyconfigs $(spine_SOURCES)"
+	docker run --rm -e VERIFY_CPPCHECK_ONLY=1 spine-dev
 
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src/core -I$(top_builddir)
 
