@@ -963,7 +963,7 @@ void read_config_options(void) {
  *  \brief terminate the accumulated batch and send it to the main server
  *
  *  Refuses to send a statement that did not fit rather than shipping a
- *  truncated one, and says how much was lost.
+ *  truncated one.
  */
 static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix) {
 	size_t remaining = HUGE_BUFSIZE - (*sqlp - sqlbuf);
