@@ -327,26 +327,20 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		int security_level;
 		const oid *auth_proto;
 
-		/* Cacti stores "[None]" when no protocol is selected. Complete absent
-		 * pairs mean noAuthNoPriv; half-configured pairs are refused below so
-		 * that an intended security property cannot be silently discarded. */
+		/* Cacti stores "[None]" when no protocol is selected. Match cmd.php's
+		 * effective-level rules for incomplete pairs, but report the downgrade
+		 * explicitly so an operator does not mistake it for auth or privacy. */
 		security_level = spine_snmpv3_security_level(snmp_auth_protocol, snmp_password,
 			snmp_priv_protocol, snmp_priv_passphrase);
 
 		if (spine_snmpv3_protocol_is_set(snmp_auth_protocol) !=
 			spine_snmpv3_passphrase_is_set(snmp_password)) {
-			SPINE_LOG(("SNMP: Device[%i] Error incomplete authentication settings; both an authentication protocol and password are required.", host_id));
-			free(session.peername);
-			free(session.localname);
-			return 0;
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; polling at noAuthNoPriv to match Cacti's effective security level.", host_id));
 		}
 
 		if (spine_snmpv3_protocol_is_set(snmp_priv_protocol) !=
 			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
-			SPINE_LOG(("SNMP: Device[%i] Error incomplete privacy settings; both a privacy protocol and passphrase are required.", host_id));
-			free(session.peername);
-			free(session.localname);
-			return 0;
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; polling without encryption to match Cacti's effective security level.", host_id));
 		}
 
 		/* A protocol that is set but unrecognised is a configuration error at
@@ -380,9 +374,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		}
 
-		/* A privacy passphrase with no usable authentication cannot be
-		 * honoured by USM. Refuse that case; a stale protocol with no
-		 * passphrase remains compatible with the historical authNoPriv path. */
+		/* Complete privacy credentials with no usable authentication cannot be
+		 * honoured by USM. Refuse that case; incomplete privacy fields follow
+		 * Cacti's lower effective level after the warning above. */
 		if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
 			spine_snmpv3_protocol_is_set(snmp_priv_protocol) &&
 			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
