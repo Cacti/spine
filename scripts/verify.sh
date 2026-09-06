@@ -2,12 +2,22 @@
 set -euo pipefail
 
 echo "=== cppcheck ==="
+mapfile -d '' source_files < <(
+  find . \
+    -path './autom4te.cache' -prune -o \
+    -path './config' -prune -o \
+    -path './m4' -prune -o \
+    -path './spine-*' -prune -o \
+    -path './tests' -prune -o \
+    -type f \( -name '*.c' -o -name '*.h' \) -print0
+)
 cppcheck --enable=all --std=c11 --error-exitcode=1 \
+  -I. -Isrc/core \
   --suppress=missingIncludeSystem \
   --suppress=unusedFunction \
   --suppress=checkersReport \
   --suppress=toomanyconfigs \
-  -- *.c *.h 2>&1 | tee /tmp/cppcheck.txt
+  -- "${source_files[@]}" 2>&1 | tee /tmp/cppcheck.txt
 
 echo ""
 echo "=== scan-build ==="

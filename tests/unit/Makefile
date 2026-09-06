@@ -35,6 +35,7 @@ CFLAGS += \
 	-std=c99 \
 	-D_DEFAULT_SOURCE \
 	-I$(SPINE_ROOT) \
+	-I$(SPINE_ROOT)/src/core \
 	-I$(SPINE_ROOT)/config \
 	$(CMOCKA_CFLAGS) \
 	$(MYSQL_CFLAGS) \
