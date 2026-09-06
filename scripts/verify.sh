@@ -2,15 +2,20 @@
 set -euo pipefail
 
 echo "=== cppcheck ==="
-mapfile -d '' source_files < <(
-  find . \
-    -path './autom4te.cache' -prune -o \
-    -path './config' -prune -o \
-    -path './m4' -prune -o \
-    -path './spine-*' -prune -o \
-    -path './tests' -prune -o \
-    -type f \( -name '*.c' -o -name '*.h' \) -print0
-)
+source_list=$(mktemp)
+trap 'rm -f "$source_list"' EXIT
+find . \
+  -path './autom4te.cache' -prune -o \
+  -path './config' -prune -o \
+  -path './m4' -prune -o \
+  -path './spine-*' -prune -o \
+  -path './tests' -prune -o \
+  -type f \( -name '*.c' -o -name '*.h' \) -print0 > "$source_list"
+mapfile -d '' source_files < "$source_list"
+if (( ${#source_files[@]} == 0 )); then
+  echo "ERROR: no C sources or headers found" >&2
+  exit 1
+fi
 cppcheck --enable=all --std=c11 --error-exitcode=1 \
   -I. -Isrc/core \
   --suppress=missingIncludeSystem \

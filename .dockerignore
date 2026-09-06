@@ -23,14 +23,14 @@ configure
 configure~
 libtool
 stamp-h1
-.deps/
-.dirstamp
-.libs/
-*.o
-*.lo
-*.la
-*.gcda
-*.gcno
+**/.deps/
+**/.dirstamp
+**/.libs/
+**/*.o
+**/*.lo
+**/*.la
+**/*.gcda
+**/*.gcno
 *.log
 *.tar.gz
 
