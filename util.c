@@ -1410,7 +1410,7 @@ void die(const char *format, ...) {
  * read_config_options(), so it is built there, while spine is still single
  * threaded, and only read afterwards.  Rebuilding it per log line cost a
  * malloc/free pair and two switches on every message. */
-static char log_date_format[GD_FMT_SIZE] = "%Y/%m/%d %H:%M:%S - ";
+static char log_date_format[GD_FMT_SIZE] = "%Y/%b/%d %H:%M:%S - ";
 
 /*! \fn void set_date_format(void)
  *  \brief build the cached log timestamp format from the current settings

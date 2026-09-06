@@ -264,20 +264,11 @@ static void test_value_is_stable_until_rebuilt(void **state) {
 	assert_string_equal(get_date_format(), "%m/%d/%Y %H:%M:%S - ");
 }
 
-/* The default before read_config_options() runs, so early log lines still
- * have a usable format. */
-static void test_initial_value_is_usable(void **state) {
-	char out[64];
-	time_t now = 0;
-	struct tm tm_buf;
-
+/* This must run before any build() call. Early startup logging happens before
+ * read_config_options(), so the static value must match GD_DEFAULT. */
+static void test_initial_value_matches_the_default(void **state) {
 	(void) state;
-
-	build(GDC_SLASH, GD_Y_MO_D);
-
-	assert_true(gmtime_r(&now, &tm_buf) != NULL);
-	assert_true(strftime(out, sizeof(out), get_date_format(), &tm_buf) > 0);
-	assert_string_equal(out, "1970/01/01 00:00:00 - ");
+	assert_string_equal(get_date_format(), "%Y/%b/%d %H:%M:%S - ");
 }
 
 
@@ -566,13 +557,13 @@ static void test_spine_log_does_not_double_an_existing_newline(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_initial_value_matches_the_default),
 		cmocka_unit_test(test_each_format_code_is_distinct),
 		cmocka_unit_test(test_format_codes_produce_expected_strings),
 		cmocka_unit_test(test_every_separator_is_applied),
 		cmocka_unit_test(test_out_of_range_codes_clamp_to_defaults),
 		cmocka_unit_test(test_get_returns_the_same_storage),
 		cmocka_unit_test(test_value_is_stable_until_rebuilt),
-		cmocka_unit_test(test_initial_value_is_usable),
 		cmocka_unit_test(test_getsetting_frees_on_null_row),
 		cmocka_unit_test(test_getpsetting_frees_on_null_row),
 		cmocka_unit_test(test_getglobalvariable_frees_on_null_row),
