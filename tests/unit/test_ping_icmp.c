@@ -5,13 +5,12 @@
  * one cleanup label while the seteuid(0)/LOCK_SETEUID wrapper around close()
  * was removed. Nothing covered it.
  *
- * A raw ICMP socket needs privilege, so these run only where that succeeds and
- * skip otherwise rather than failing for the wrong reason.
+ * The live ICMP cases skip without raw-socket privilege. The ownership cases
+ * use controlled socket and allocation sinks, so they run everywhere.
  *
  * The FD_SETSIZE case is the one that mattered: that exit closed the socket and
- * returned without freeing the packet (#593). It is reachable by holding enough
- * descriptors open that the next socket lands at or above FD_SETSIZE, which is
- * what this does.
+ * returned without freeing the packet (#593). A controlled descriptor reaches
+ * that guard deterministically and lets the test observe the exact free.
  */
 
 #include <stdarg.h>
@@ -22,7 +21,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -34,6 +32,68 @@
 extern int *debug_devices;
 
 static int pi_debug_table[100];
+static int use_controlled_socket;
+static int controlled_socket_fd;
+static int controlled_socket_closed;
+static int track_packet;
+static size_t packet_size;
+static void *packet_allocation;
+static int packet_released;
+
+static int test_socket(int domain, int type, int protocol);
+static int test_close(int fd);
+static void *intercepted_malloc(size_t size);
+static void intercepted_free(void *ptr);
+
+/* Compile the shipped implementation into this test translation unit so its
+ * resource sinks can be observed without root or Linux-only linker wrapping. */
+#define socket test_socket
+#define close test_close
+#define malloc intercepted_malloc
+#define free intercepted_free
+#include "../../ping.c"
+#undef socket
+#undef close
+#undef malloc
+#undef free
+
+static int test_socket(int domain, int type, int protocol) {
+	if (use_controlled_socket) {
+		(void) domain;
+		(void) type;
+		(void) protocol;
+		return controlled_socket_fd;
+	}
+
+	return socket(domain, type, protocol);
+}
+
+static int test_close(int fd) {
+	if (use_controlled_socket && fd == controlled_socket_fd) {
+		controlled_socket_closed++;
+		return 0;
+	}
+
+	return close(fd);
+}
+
+static void *intercepted_malloc(size_t size) {
+	void *ptr = malloc(size);
+
+	if (track_packet && size == packet_size) {
+		packet_allocation = ptr;
+	}
+
+	return ptr;
+}
+
+static void intercepted_free(void *ptr) {
+	if (track_packet && ptr != NULL && ptr == packet_allocation) {
+		packet_released++;
+	}
+
+	free(ptr);
+}
 
 static int have_raw_socket(void) {
 	int s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
@@ -67,6 +127,13 @@ static int ping_reset(void **state) {
 	debug_devices = pi_debug_table;
 	set.ping_timeout = 400;
 	set.ping_retries = 1;
+	use_controlled_socket = 0;
+	controlled_socket_fd = -1;
+	controlled_socket_closed = 0;
+	track_packet = 0;
+	packet_size = ICMP_HDR_SIZE + strlen("cacti-monitoring-system");
+	packet_allocation = NULL;
+	packet_released = 0;
 	return 0;
 }
 
@@ -76,8 +143,7 @@ static void test_loopback_answers(void **state) {
 
 	(void) state;
 	if (!have_raw_socket()) {
-		print_message("no raw ICMP socket here; skipping\n");
-		return;
+		skip();
 	}
 
 	make_host(&host, "127.0.0.1");
@@ -96,8 +162,7 @@ static void test_repeated_pings_do_not_accumulate(void **state) {
 
 	(void) state;
 	if (!have_raw_socket()) {
-		print_message("no raw ICMP socket here; skipping\n");
-		return;
+		skip();
 	}
 
 	for (i = 0; i < 20; i++) {
@@ -107,59 +172,63 @@ static void test_repeated_pings_do_not_accumulate(void **state) {
 	}
 }
 
-/* The exit that leaked. Hold descriptors until a new socket would land at or
-   above FD_SETSIZE, then ping: the guard fires, and the packet must still be
-   released. */
+/* The exit that leaked. A controlled socket result reaches the guard without
+   requiring root or consuming the runner's descriptor table. Tracking the
+   packet free makes this fail against the unfixed implementation. */
 static void test_fd_setsize_guard_releases_the_packet(void **state) {
 	host_t host;
 	ping_t ping;
-	int *held;
-	int count = 0;
-	int i;
 	int rc;
 
 	(void) state;
-	if (!have_raw_socket()) {
-		print_message("no raw ICMP socket here; skipping\n");
-		return;
-	}
-
-	held = calloc(FD_SETSIZE + 16, sizeof(int));
-	assert_non_null(held);
-
-	/* consume descriptors up to the limit the guard tests */
-	while (count < FD_SETSIZE + 8) {
-		int fd = open("/dev/null", O_RDONLY);
-
-		if (fd < 0) {
-			break;
-		}
-
-		held[count++] = fd;
-
-		if (fd >= FD_SETSIZE) {
-			break;
-		}
-	}
-
-	if (count == 0 || held[count - 1] < FD_SETSIZE) {
-		for (i = 0; i < count; i++) close(held[i]);
-		free(held);
-		print_message("could not reach FD_SETSIZE descriptors here; skipping\n");
-		return;
-	}
+	use_controlled_socket = 1;
+	controlled_socket_fd = FD_SETSIZE;
+	track_packet = 1;
 
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 
 	rc = ping_icmp(&host, &ping);
 
-	for (i = 0; i < count; i++) close(held[i]);
-	free(held);
-
-	/* the guard reports the device down and names the reason */
 	assert_int_equal(rc, HOST_DOWN);
 	assert_non_null(strstr(ping.ping_response, "FD_SETSIZE"));
+	assert_non_null(packet_allocation);
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_empty_address_releases_packet_and_socket(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_controlled_socket = 1;
+	controlled_socket_fd = 42;
+	track_packet = 1;
+	make_host(&host, "");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "not specified"));
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_invalid_address_releases_packet_and_socket(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_controlled_socket = 1;
+	controlled_socket_fd = 43;
+	track_packet = 1;
+	make_host(&host, "invalid.invalid");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "hostname invalid"));
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
 }
 
 /* The socket() retry used to sleep and loop back with LOCK_SETEUID still held,
@@ -207,17 +276,17 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */
 	alarm(15);
 	rc = ping_icmp(&host, &ping);
-	alarm(0);
-
-	sigaction(SIGALRM, &prev, NULL);
 
 	/* it gave up rather than hanging, and said why */
 	assert_int_equal(rc, HOST_DOWN);
 	assert_non_null(strstr(ping.ping_response, "ICMP Socket"));
 
-	/* the lock is free: a thread that still owned it could not take it again */
-	thread_mutex_lock(LOCK_SETEUID);
+	/* Keep the alarm armed for the probe, and never block on a leaked lock. */
+	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
 	thread_mutex_unlock(LOCK_SETEUID);
+
+	alarm(0);
+	sigaction(SIGALRM, &prev, NULL);
 }
 
 int main(void) {
@@ -225,6 +294,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_loopback_answers, ping_reset),
 		cmocka_unit_test_setup(test_repeated_pings_do_not_accumulate, ping_reset),
 		cmocka_unit_test_setup(test_fd_setsize_guard_releases_the_packet, ping_reset),
+		cmocka_unit_test_setup(test_empty_address_releases_packet_and_socket, ping_reset),
+		cmocka_unit_test_setup(test_invalid_address_releases_packet_and_socket, ping_reset),
 		cmocka_unit_test_setup(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset),
 	};
 
