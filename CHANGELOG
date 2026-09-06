@@ -28,6 +28,7 @@ The Cacti Group | spine
 -issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
 -issue#593: Release the ICMP packet and socket through one cleanup path, including the FD_SETSIZE exit
 -issue#597: Pair one capability decision with each raw-socket lock/elevation block and release LOCK_SETEUID before retrying
+-issue#597: Release Linux capability handles on every probe path and log an absent optional CAP_NET_RAW capability as a warning
 -issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
 -issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
