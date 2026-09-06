@@ -14,9 +14,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dco:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Verify Developer Certificate of Origin trailers
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: scripts/check-dco.sh "origin/${BASE_REF}..HEAD"
+
   build:
     name: Build (${{ matrix.compiler }}, ${{ matrix.client.name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -32,29 +46,36 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
       MYSQL_CONFIG: ${{ matrix.client.config }}
+      # get_date_format() deliberately constructs the bounded strftime
+      # format; keep every other warning fatal.
+      STRICT_CFLAGS: -Wall -Wextra -Wformat=2 -Wno-format-nonliteral
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/build-spine
         with:
           mysql-client-package: ${{ matrix.client.package }}
-          configure-args: --enable-warnings
+          cflags: ${{ env.STRICT_CFLAGS }}
 
       - name: Build Spine
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          configured_cflags=$(sed -n 's/^CFLAGS = //p' Makefile)
+          make -j"$(nproc)" CFLAGS="$configured_cflags -Werror"
 
       - name: Run the unit tests
         run: |
           set -euo pipefail
-          make check
+          configured_cflags=$(sed -n 's/^CFLAGS = //p' Makefile)
+          # Test doubles and cmocka callbacks intentionally leave parameters
+          # unused; every other test-source warning remains fatal.
+          make check CFLAGS="$configured_cflags -Werror -Wno-unused-parameter"
 
   # Linux capabilities are opt-in at configure time. Keep one build on that
   # path so hasCaps() and the CAP_NET_RAW handling cannot silently rot behind
   # an otherwise-green default build.
   linux-capabilities:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,17 +95,86 @@ jobs:
           set -euo pipefail
           make check
 
-  # Coverage is reported, not gated.  The number is only meaningful once
-  # something measures it; the threshold conversation comes after that.
-  coverage:
-    runs-on: ubuntu-latest
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install autoconf automake libtool help2man \
+            mariadb-connector-c net-snmp openssl@3 cmocka
+
+      - name: Build and test
+        env:
+          CC: clang
+        run: |
+          set -euo pipefail
+          mariadb_prefix=$(brew --prefix mariadb-connector-c)
+          openssl_prefix=$(brew --prefix openssl@3)
+          net_snmp_prefix=$(brew --prefix net-snmp)
+          export MYSQL_CONFIG="$mariadb_prefix/bin/mariadb_config"
+          export PKG_CONFIG_PATH="$openssl_prefix/lib/pkgconfig:$net_snmp_prefix/lib/pkgconfig"
+          ./bootstrap
+          ./configure --enable-warnings
+          make -j"$(sysctl -n hw.ncpu)"
+          make check
+
+  cppcheck:
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Run cppcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+          cppcheck \
+            --enable=all \
+            --std=c11 \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress=checkersReport \
+            --suppress=variableScope \
+            --suppress=unreadVariable \
+            --suppress=shadowVariable \
+            --suppress=constVariablePointer \
+            --suppress=redundantAssignment \
+            --suppress=toomanyconfigs \
+            ./*.c ./*.h
+
+  shellcheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run shellcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          find scripts tests -type f -name '*.sh' -print0 \
+            | xargs -0 shellcheck
+
+  # Preserve the measured baseline and require stronger coverage on changed
+  # lines. Raise both thresholds as integration coverage grows.
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
       - uses: ./.github/actions/build-spine
         with:
-          extra-packages: gcovr
+          extra-packages: gcovr python3-pip
           cflags: -g -O0 --coverage
           ldflags: --coverage
 
@@ -104,10 +194,37 @@ jobs:
           # configure leaves instrumented conftest objects behind and gcovr
           # cannot resolve their sources
           rm -f ./*conftest*.gcno ./*conftest*.gcda
-          gcovr -r . --exclude 'tests/.*' --txt --print-summary
+          gcovr -r . \
+            --exclude 'tests/.*' \
+            --txt --print-summary \
+            --xml coverage.xml \
+            --html-details coverage.html \
+            --fail-under-line 7
+
+      - name: Enforce changed-line coverage
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --break-system-packages diff-cover==10.5.1
+          diff-cover coverage.xml \
+            --compare-branch="origin/${BASE_REF}" \
+            --fail-under=70
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.4.3
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            coverage.html
+            coverage.*.html
+          if-no-files-found: error
 
   flawfinder:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -142,7 +259,7 @@ jobs:
   # likely to catch a real defect here.  The unit tests are what actually
   # exercises the code, so they are what runs instrumented.
   sanitizers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CC: clang
@@ -173,10 +290,37 @@ jobs:
           ./spine --version
           ./spine --help > /dev/null
 
+  # Spine is highly concurrent. Keep race detection separate from ASan/UBSan
+  # because the sanitizer runtimes cannot be combined.
+  thread-sanitizer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CC: clang
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: clang
+          cflags: -fsanitize=thread -fno-omit-frame-pointer -g -O1
+          ldflags: -fsanitize=thread
+
+      - name: Build with ThreadSanitizer
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)"
+
+      - name: Run the unit tests under ThreadSanitizer
+        run: |
+          set -euo pipefail
+          make check
+
   # A release tarball that cannot be compiled is a release blocker, and the
   # only way to catch it is to build from the tarball the way a packager does.
   distcheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -187,3 +331,35 @@ jobs:
         run: |
           set -euo pipefail
           make distcheck
+
+  # Branch protection should require this stable name rather than every matrix
+  # child. Any failed, cancelled or unexpectedly skipped dependency fails it.
+  required:
+    name: CI / required
+    if: always()
+    needs:
+      - dco
+      - build
+      - linux-capabilities
+      - macos
+      - cppcheck
+      - shellcheck
+      - coverage
+      - flawfinder
+      - sanitizers
+      - thread-sanitizer
+      - distcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify every required job passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          failures=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$RESULTS")
+          if [ -n "$failures" ]; then
+            echo "Required CI jobs did not pass:"
+            echo "$failures"
+            exit 1
+          fi
