@@ -338,6 +338,19 @@ static void test_invalid_privacy_protocol_is_refused(void **state) {
 	assert_int_equal(level_for(auth, pw, bogus, ppass), -1);
 }
 
+static void test_invalid_privacy_protocol_is_refused_without_a_passphrase(void **state) {
+	char *auth = available_auth_protocol();
+	char pw[] = "authpass123";
+	char bogus[] = "ROT13";
+	char empty[] = "";
+
+	(void) state;
+	if (auth == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, bogus, empty), -1);
+}
+
 static void test_auth_key_matches_with_and_without_privacy(void **state) {
 	char *auth = available_auth_protocol();
 	char *priv = available_priv_protocol();
@@ -456,6 +469,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_none_auth_protocol_with_password_uses_noauth, session_reset),
 		cmocka_unit_test_setup(test_auth_protocol_without_password_uses_noauth, session_reset),
 		cmocka_unit_test_setup(test_invalid_privacy_protocol_is_refused, session_reset),
+		cmocka_unit_test_setup(test_invalid_privacy_protocol_is_refused_without_a_passphrase, session_reset),
 		cmocka_unit_test_setup(test_auth_key_matches_with_and_without_privacy, session_reset),
 		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_uses_authnopriv, session_reset),
 		cmocka_unit_test_setup(test_privacy_passphrase_without_protocol_uses_authnopriv, session_reset),
