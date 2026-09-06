@@ -364,6 +364,10 @@ static void test_remote_push_keeps_batch_boundary_rows(void **state) {
 	assert_int_equal(count_occurrences(item_inserts[0], " (10001, "), 0);
 	assert_int_equal(count_occurrences(item_inserts[1], " (10000, "), 0);
 	assert_int_equal(count_occurrences(item_inserts[1], " (10001, "), 1);
+	assert_null(strstr(host_inserts[0], " AS rs "));
+	assert_non_null(strstr(host_inserts[0], "VALUES(snmp_sysDescr)"));
+	assert_null(strstr(item_inserts[0], " AS rs "));
+	assert_non_null(strstr(item_inserts[0], "VALUES(rrd_next_step)"));
 
 	for (i = 0; i < 2; i++) {
 		free(host_inserts[i]);

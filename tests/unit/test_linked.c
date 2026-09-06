@@ -86,7 +86,7 @@ static void test_regex_replace_passes_through_on_no_match(void **state) {
 static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
-	assert_string_equal(regex_replace("[unclosed", "value"), "value");
+	assert_string_equal(regex_replace("*", "value"), "value");
 }
 
 static void test_spine_appendf_reports_truncation_and_guards(void **state) {
@@ -241,6 +241,8 @@ static void test_hex2dec(void **state) {
 	assert_false(hex2dec(overflow, &value));
 	assert_false(hex2dec(NULL, &value));
 	assert_false(hex2dec("ff", NULL));
+	assert_false(hex2dec("", &value));
+	assert_false(hex2dec(":::", &value));
 }
 
 static void test_poller_hex_overflow_is_undefined(void **state) {

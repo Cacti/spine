@@ -9,6 +9,9 @@
 #   make          -- build and run
 #   make build    -- build only
 #   make clean    -- remove build artefacts
+#
+# test_linked exercises the full production object set and is intentionally
+# driven by the top-level Automake suite, which supplies those dependencies.
 
 CC      ?= cc
 PKG_CONFIG ?= pkg-config

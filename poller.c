@@ -117,27 +117,8 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
- *  \brief core Spine function that polls a host
- *  \param host_id integer value for the host_id from the hosts table in Cacti
- *
- *	This function is core to Spine.  It will take a host_id and then poll it.
- *
- *  Prior to the poll, the system will ping the host to verify that it is up.
- *  In addition, the system will check to see if any reindexing of data query's
- *  is required.
- *
- *  If reindexing is required, the Cacti poller.php function will spawn that
- *  reindexing process.
- *
- *  In the case of hosts that require reindexing because of a sysUptime
- *  rollback, Spine will store an unknown (NaN) value for all objects to prevent
- *  spikes in the graphs.
- *
- *  With regard to snmp calls, if the host has multiple snmp agents running
- *  Spine will re-initialize the snmp session and poll under those new ports
- *  as the host poller_items table dictates.
- *
+/*! \fn int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors)
+ *  \brief convert a hexadecimal poll result and account for rejected values
  */
 int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors) {
 	unsigned long long value;
@@ -170,6 +151,13 @@ int poller_store_hex_result(char *result, size_t result_size, const char *hex, i
 	return TRUE;
 }
 
+/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
+ *  \brief core Spine function that polls a host
+ *  \param host_id integer value for the host_id from the hosts table in Cacti
+ *
+ *  This function is core to Spine. It takes a host_id and polls it, first
+ *  checking reachability and any required data-query reindexing.
+ */
 void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];

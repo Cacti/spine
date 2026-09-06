@@ -2078,6 +2078,7 @@ int char_count(const char *str, int chr) {
 int hex2dec(const char *str, unsigned long long *result) {
 	unsigned long long number = 0;
 	unsigned int digit;
+	int saw_digit = FALSE;
 
 	if (str == NULL || result == NULL) return FALSE;
 
@@ -2113,8 +2114,11 @@ int hex2dec(const char *str, unsigned long long *result) {
 		}
 
 		number = (number * 16) + digit;
+		saw_digit = TRUE;
 		str++;
 	}
+
+	if (!saw_digit) return FALSE;
 
 	*result = number;
 	return TRUE;
