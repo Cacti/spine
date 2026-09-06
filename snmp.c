@@ -34,6 +34,9 @@
 #include "common.h"
 #include "spine.h"
 
+#include <net-snmp/library/scapi.h>
+#include <net-snmp/library/snmpusm.h>
+
 /* resolve problems in debian */
 #ifndef NETSNMP_DS_LIB_DONT_PERSIST_STATE
  #define NETSNMP_DS_LIB_DONT_PERSIST_STATE 32
@@ -97,7 +100,7 @@ int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_pass
 	return SNMP_SEC_LEVEL_NOAUTH;
 }
 
-/*! \fn static void free_passphrase(char *psz)
+/*! \fn static void free_passphrase(char **psz)
  *  \brief Wipes a local passphrase copy, then releases it.
  *
  *  Only the copies snmp_host_init() makes are wiped. The caller's
@@ -107,24 +110,24 @@ int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_pass
  *  open session, so blanking them would tear down the SNMPv3 session and
  *  re-derive the USM keys for every remaining item on the device.
  */
-static void free_passphrase(char *psz) {
+static void free_passphrase(char **psz) {
 	volatile char *wipe;
 	size_t len;
 
-	if (psz != NULL) {
+	if (psz != NULL && *psz != NULL) {
 		/* Written through a volatile pointer on purpose. A plain memset() here
 		   is a dead store into memory that is about to be freed, and gcc -O2
 		   removes it outright, which leaves the passphrase in the heap for
 		   whatever allocates the block next. explicit_bzero() would say this
 		   more clearly but is absent on the Solaris and Cygwin builds. */
-		wipe = (volatile char *) psz;
-		len  = strlen(psz);
+		wipe = (volatile char *) *psz;
+		len  = strlen(*psz);
 
 		while (len-- > 0) {
 			*wipe++ = '\0';
 		}
 
-		free(psz);
+		SPINE_FREE(*psz);
 	}
 }
 
@@ -381,7 +384,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			 * so authNoPriv sessions authenticated with an empty key and every
 			 * such device failed with a USM authentication error. */
 			if (security_level == SNMP_SEC_LEVEL_AUTHNOPRIV) {
-				free_passphrase(Apsz);
+				free_passphrase(&Apsz);
 				Apsz = strdup(snmp_password);
 
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
@@ -411,8 +414,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
-					free_passphrase(Apsz);
-					free_passphrase(Xpsz);
+					free_passphrase(&Apsz);
+					free_passphrase(&Xpsz);
 					free(session.localname);
 					return 0;
 				}
@@ -420,8 +423,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				/* The privacy path releases this after deriving its key; this
 				 * one did not, so every authNoPriv session leaked the
 				 * passphrase copy. */
-				free_passphrase(Apsz);
-				Apsz = NULL;
+				free_passphrase(&Apsz);
 			}
 		} else {
 			const oid *priv_proto;
@@ -445,11 +447,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityLevel     = security_level;
 
 			// Auth Protocol Setup
-			free_passphrase(Apsz);
+			free_passphrase(&Apsz);
 			Apsz = strdup(snmp_password);
 
 			// Privacy Protocol Setup
-			free_passphrase(Xpsz);
+			free_passphrase(&Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
 
 			if (Apsz) {
@@ -483,8 +485,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
-					free_passphrase(Apsz);
-					free_passphrase(Xpsz);
+					free_passphrase(&Apsz);
+					free_passphrase(&Xpsz);
 					if (session.localname) {
 						free(session.localname);
 						session.localname = NULL;
@@ -492,8 +494,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					return 0;
 				}
 
-				free_passphrase(Apsz);
-				Apsz = NULL;
+				free_passphrase(&Apsz);
 			}
 
 			if (Xpsz) {
@@ -511,16 +512,19 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 #if defined(HAVE_USM_DES_PRIV_PROTOCOL)
 					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
 					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
-#else
+#elif defined(HAVE_USM_AES_PRIV_PROTOCOL)
 					/* The header names DES as the default but this library does
-					 * not export it, so the macro cannot be referenced. Every
-					 * net-snmp that omits DES provides AES. See #575. */
+					 * not export it, so the macro cannot be referenced. */
 					session.securityPrivProto = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
 					session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
+#else
+					SPINE_LOG(("SNMP: Device[%i] Error no supported default privacy protocol is available.", host_id));
+					session.securityPrivProtoLen = 0;
 #endif
 				}
 
-				if (generate_Ku(session.securityAuthProto,
+				if (session.securityPrivProto == NULL ||
+					generate_Ku(session.securityAuthProto,
 					session.securityAuthProtoLen,
 					(u_char *) Xpsz, strlen(Xpsz),
 					session.securityPrivKey,
@@ -529,7 +533,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
-					free_passphrase(Xpsz);
+					free_passphrase(&Xpsz);
 					if (session.localname) {
 						free(session.localname);
 						session.localname = NULL;
@@ -537,8 +541,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					return 0;
 				}
 
-				free_passphrase(Xpsz);
-				Xpsz = NULL;
+				free_passphrase(&Xpsz);
 			}
 		}
 

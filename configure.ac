@@ -399,6 +399,23 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   [AC_MSG_RESULT(no)])
 LIBS="$spine_save_LIBS"
 
+# ****************** AES privacy protocol availability **********************
+dnl A DES-disabled net-snmp normally provides AES, but packaging can remove
+dnl both. Probe the symbol before compiling the fallback reference.
+AC_MSG_CHECKING([whether the net-snmp library exports usmAESPrivProtocol])
+spine_save_LIBS="$LIBS"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <net-snmp/net-snmp-config.h>
+  #include <net-snmp/net-snmp-includes.h>
+]], [[
+  const oid *p = usmAESPrivProtocol;
+  return p == NULL;
+]])],
+  [AC_DEFINE(HAVE_USM_AES_PRIV_PROTOCOL, 1, [Define if the net-snmp library exports usmAESPrivProtocol.])
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)])
+LIBS="$spine_save_LIBS"
+
 # ****************** SHA-1 auth protocol availability **********************
 dnl Do not use SNMP_DEFAULT_AUTH_PROTO as a last-resort fallback: on an MD5-
 dnl disabled/FIPS header it may name a symbol the linked library does not
