@@ -255,6 +255,7 @@ int main(int argc, char *argv[]) {
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;
+	set.icmp_uses_caps = FALSE;
 
 	/* initialize number of threads */
 	set.threads = 1;
