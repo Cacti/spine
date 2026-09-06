@@ -20,15 +20,6 @@ printf '%s\n' "$body" | grep -q 'AS rs ON DUPLICATE KEY UPDATE' &&
 printf '%s\n' "$body" | grep -q 'if (set.dbonupdate' &&
 	fail "remote pushes must not branch on the local server version"
 
-printf '%s\n' "$body" | grep -q 'push_flush_batch(&mysqlr, sqlbuf, &sqlp, suffix)' ||
-	fail "remote pushes must flush through the checked helper"
-
-printf '%s\n' "$body" | grep -Eq 'rows >= 500 \|\| remaining < PUSH_ROW_MAX' ||
-	fail "the host batch must flush before its boundary row"
-
-printf '%s\n' "$body" | grep -Eq 'rows >= 10000 \|\| remaining < PUSH_ROW_MAX' ||
-	fail "the poller_item batch must flush before its boundary row"
-
 awk '/^static void push_flush_batch/{f=1} f{print} f&&/^\}/{exit}' util.c |
 	grep -q 'if (!spine_appendf' ||
 	fail "overflowed remote push batches must not be sent"

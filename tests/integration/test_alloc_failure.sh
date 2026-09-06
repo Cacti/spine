@@ -96,29 +96,25 @@ fi
 
 echo "Allocation failure guards:"
 
-# --help exits before the database connection, so only the two allocations at
-# the top of main() are reachable.  They are the first and second calloc() the
-# process makes.
+# Shared-library constructors can call calloc before main(), so the process-
+# wide ordinal is deliberately discovered rather than assumed. A matching
+# diagnostic proves the guarded allocation itself was the one that failed.
 check_guard() {
-	local nth="$1" want="$2" out
+	local want="$1" nth out
 
-	out="$(SPINE_FAIL_CALLOC_AT="$nth" LD_PRELOAD="$WORK/failcalloc.so" "$SPINE" --help 2>&1 || true)"
+	for nth in $(seq 1 256); do
+		out="$(SPINE_FAIL_CALLOC_AT="$nth" LD_PRELOAD="$WORK/failcalloc.so" "$SPINE" --help 2>&1 || true)"
+		if grep -q "Fatal calloc error: spine.c $want" <<<"$out"; then
+			pass "failing $want allocation exits through its guard (calloc #$nth)"
+			return
+		fi
+	done
 
-	if grep -q "Fatal calloc error: spine.c $want" <<<"$out"; then
-		pass "calloc #$nth failing reports $want"
-	else
-		fail "calloc #$nth failing did not report $want (got: ${out:0:120})"
-	fi
-
-	if grep -qiE 'segmentation fault|signal 11' <<<"$out"; then
-		fail "calloc #$nth failing crashed instead of exiting cleanly"
-	else
-		pass "calloc #$nth failing did not crash"
-	fi
+	fail "could not reach the $want allocation guard in the first 256 calloc calls"
 }
 
-check_guard 1 php_processes
-check_guard 2 debug_devices
+check_guard php_processes
+check_guard debug_devices
 
 echo
 echo "passed: $PASS, failed: $FAIL"
