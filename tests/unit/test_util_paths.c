@@ -79,7 +79,10 @@ MYSQL_ROW test_mysql_fetch_row(MYSQL_RES *res) {
 		}
 		cells[0] = id;
 		if (byte_boundary_mode) {
-			memset(wide, 'w', sizeof(wide) - 1);
+			/* Exercise db_escape() growth as well as wide source values. */
+			for (i = 0; i < (int) sizeof(wide) - 1; i++) {
+				wide[i] = (i % 2 == 0) ? '\'' : '\\';
+			}
 			wide[sizeof(wide) - 1] = '\0';
 			if (fake_query_kind == FAKE_QUERY_HOSTS) {
 				for (i = 1; i < 21; i++) {
@@ -135,8 +138,19 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	return 0;
 }
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
+	size_t in = 0;
+	size_t out = 0;
+
 	(void) mysql;
-	snprintf(output, (size_t) max_size, "%s", input);
+	if (max_size <= 0) return;
+
+	while (input[in] != '\0' && out + 1 < (size_t) max_size) {
+		if ((input[in] == '\'' || input[in] == '\\') && out + 2 < (size_t) max_size) {
+			output[out++] = '\\';
+		}
+		output[out++] = input[in++];
+	}
+	output[out] = '\0';
 }
 int append_hostrange(char *obuf, const char *colname) { return 0; }
 int parse_logdest(const char *res, int default_dest) { return 0; }

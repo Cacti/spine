@@ -237,6 +237,9 @@ static void test_hex2dec(void **state) {
 	strcpy(a, "00:1b:44:11:3a:b7");
 	assert_true(hex2dec(a, &value));
 	assert_int_equal(value, 0x001b44113ab7ULL);
+	strcpy(a, "- 0a:1B- 2c :3D ");
+	assert_true(hex2dec(a, &value));
+	assert_int_equal(value, 0x0a1b2c3dULL);
 	strcpy(a, "ff:ff:ff:ff:ff:ff:ff:ff");
 	assert_true(hex2dec(a, &value));
 	assert_int_equal(value, ULLONG_MAX);
