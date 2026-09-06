@@ -379,6 +379,26 @@ AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session str
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
 
+# ****************** Linker --wrap support (tests only) *********************
+dnl The PHP runtime suite interposes on process and descriptor operations so
+dnl destructive failure paths are deterministic. GNU ld and lld provide the
+dnl required --wrap option; probe it so other supported linkers skip cleanly.
+AC_MSG_CHECKING([whether the linker supports --wrap])
+spine_save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -Wl,--wrap=spine_ld_wrap_probe"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  int spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void) { return 0; }
+]], [[
+  return spine_ld_wrap_probe();
+]])],
+  [spine_ld_wrap=yes],
+  [spine_ld_wrap=no])
+LDFLAGS="$spine_save_LDFLAGS"
+AC_MSG_RESULT($spine_ld_wrap)
+AM_CONDITIONAL([HAVE_LD_WRAP], [test "x$spine_ld_wrap" = "xyes"])
+
 # ****************** SNMPv3 USM Error Constants Check ***********************
 AC_MSG_CHECKING([for SNMPv3 USM error constants])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[

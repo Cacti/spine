@@ -66,6 +66,16 @@ check_PROGRAMS += \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
 	tests/unit/test_linked
+
+# A small executable which speaks the subset of the PHP Script Server protocol
+# needed by test_php_runtime. Keeping it as a real child covers the shipped
+# pipe, spawn, command, response, shutdown and reap paths.
+noinst_PROGRAMS = tests/unit/php_test_server
+tests_unit_php_test_server_SOURCES = tests/unit/php_test_server.c
+
+if HAVE_LD_WRAP
+check_PROGRAMS += tests/unit/test_php_runtime
+endif
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
@@ -86,4 +96,19 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-TESTS = $(check_PROGRAMS)
+tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_php_runtime_LDFLAGS = \
+	-Wl,--wrap=posix_spawn -Wl,--wrap=dup -Wl,--wrap=fcntl \
+	-Wl,--wrap=pthread_sigmask -Wl,--wrap=write \
+	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
+tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/unit/php_test_server"' \
+	-DSPINE_PHP_RUNTIME_TESTING
+tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
+
+TEST_EXTENSIONS = .sh
+SH_LOG_COMPILER = $(SHELL)
+TESTS = $(check_PROGRAMS) tests/regression/test_child_process_safety.sh
+EXTRA_DIST += tests/regression/test_child_process_safety.sh
