@@ -646,18 +646,25 @@ nft_pclose(int fd)
 
 	pthread_setcancelstate(cancel_state, NULL);
 
-	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS)) {
+	/* Give a child a brief chance to observe pipe EOF, then request graceful
+	 * termination before escalating to SIGKILL. */
+	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS)) {
 	case 0:
 		pid = cur->pid;
 		break;
 	case 1:
-		(void)kill(cur->pid, SIGKILL);
-		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
+		(void)kill(cur->pid, SIGTERM);
+		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS) == 0) {
 			pid = cur->pid;
 		} else {
-			nft_abandon_child(cur->pid, "kill budget expired");
-			errno = ETIMEDOUT;
-			pid = -1;
+			(void)kill(cur->pid, SIGKILL);
+			if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
+				pid = cur->pid;
+			} else {
+				nft_abandon_child(cur->pid, "kill budget expired");
+				errno = ETIMEDOUT;
+				pid = -1;
+			}
 		}
 		break;
 	default:

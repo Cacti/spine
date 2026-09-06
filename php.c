@@ -181,9 +181,12 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	php_process_lock(php_process);
 
-	/* Validate under the same per-slot lock that protects close/restart. A
+	retry:
+	/* Validate every attempt under the same per-slot lock that protects
+	 * close/restart. A
 	 * check before the lock races a recovery and can use a descriptor after it
-	 * has been closed and reused by another thread. */
+	 * has been closed and reused by another thread. A failed restart may also
+	 * leave live descriptors in a BUSY slot, which must not receive a command. */
 	if (php_processes[php_process].php_state != PHP_READY ||
 	    php_processes[php_process].php_pid <= 1 ||
 	    php_processes[php_process].php_read_fd < 0 ||
@@ -194,7 +197,6 @@ char *php_cmd(const char *php_command, int php_process) {
 	}
 
 	/* send command to the script server */
-	retry:
 	bytes = php_write_no_sigpipe(php_processes[php_process].php_write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
@@ -202,10 +204,9 @@ char *php_cmd(const char *php_command, int php_process) {
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
 
 		php_close(php_process);
-		php_init(php_process);
-		/* increment and retry a few times on the next item */
 		retries++;
-		if (retries < 3) {
+		if (retries < 3 && php_init(php_process) == TRUE &&
+		    php_processes[php_process].php_state == PHP_READY) {
 			goto retry;
 		}
 
@@ -350,6 +351,7 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	double end_time = 0;
 	double remaining_usec = 0;
 	char *result_string;
+	int response_timeout;
 
 	ssize_t i;
 	char *cp;
@@ -364,7 +366,11 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	begin_time = get_time_as_double();
 
 	/* establish timeout value for the PHP script server to respond */
-	timeout.tv_sec = set.script_timeout;
+	/* Selection-path recovery runs this handshake while holding the slot lock.
+	 * Bound startup independently so a bad PHP configuration cannot pin every
+	 * selector for the full per-command timeout. */
+	response_timeout = allow_restart || set.script_timeout < 2 ? set.script_timeout : 2;
+	timeout.tv_sec = response_timeout;
 	timeout.tv_usec = 0;
 
 	/* check to see which pipe talked and take action
@@ -406,8 +412,8 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 				end_time = get_time_as_double();
 
 				/* re-establish new timeout value */
-				timeout.tv_sec  = rint(floor(set.script_timeout-(end_time-begin_time)));
-				remaining_usec  = set.script_timeout - timeout.tv_sec - (end_time - begin_time);
+					timeout.tv_sec = rint(floor(response_timeout - (end_time - begin_time)));
+					remaining_usec = response_timeout - timeout.tv_sec - (end_time - begin_time);
 
 				if (remaining_usec > 0) {
 					timeout.tv_usec = rint(remaining_usec * 1000000);
@@ -433,59 +439,58 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 				break;
 		}
 
-			SET_UNDEFINED(result_string);
-			php_fail_read(php_process, allow_restart);
-
-			break;
+		SET_UNDEFINED(result_string);
+		php_fail_read(php_process, allow_restart);
+		break;
 	case 0:
 		/* record end time */
 		end_time = get_time_as_double();
 		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - begin_time, command));
-			SET_UNDEFINED(result_string);
-			php_fail_read(php_process, allow_restart);
-			break;
-		default:
-			{
+		SET_UNDEFINED(result_string);
+		php_fail_read(php_process, allow_restart);
+		break;
+	default:
+		{
 			int read_ok = TRUE;
 
 			if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
-			bptr = result_string;
+				bptr = result_string;
 
-			while (1) {
-				/* reserve one byte for the trailing '\0' written below */
-				size_t used = (size_t)(bptr - result_string);
+				while (1) {
+					/* reserve one byte for the trailing '\0' written below */
+					size_t used = (size_t)(bptr - result_string);
 
-				if (used >= RESULTS_BUFFER - 1) {
+					if (used >= RESULTS_BUFFER - 1) {
 						SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 						SET_UNDEFINED(result_string);
 						read_ok = FALSE;
 						break;
-				}
+					}
 
-				size_t space = (size_t)RESULTS_BUFFER - 1 - used;
-				i = read(php_processes[php_process].php_read_fd, bptr, space);
+					size_t space = (size_t)RESULTS_BUFFER - 1 - used;
+					i = read(php_processes[php_process].php_read_fd, bptr, space);
 
 					if (i <= 0) {
 						SET_UNDEFINED(result_string);
 						read_ok = FALSE;
 						break;
-				}
+					}
 
-				bptr += i;
-				*bptr = '\0';	/* make what we've got into a string */
+					bptr += i;
+					*bptr = '\0';	/* make what we've got into a string */
 
-				if ((cp = strstr(result_string,"\n")) != 0) {
-					break;
-				}
+					if ((cp = strstr(result_string,"\n")) != 0) {
+						break;
+					}
 
-				if (bptr >= result_string + RESULTS_BUFFER - 1) {
+					if (bptr >= result_string + RESULTS_BUFFER - 1) {
 						SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
 						SET_UNDEFINED(result_string);
 						read_ok = FALSE;
 						break;
+					}
 				}
-			}
-		} else {
+			} else {
 				SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
 				SET_UNDEFINED(result_string);
 				read_ok = FALSE;
@@ -496,7 +501,8 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 			} else {
 				php_fail_read(php_process, allow_restart);
 			}
-			}
+		}
+		break;
 	}
 
 	return result_string;

@@ -253,6 +253,9 @@ int main(int argc, char *argv[]) {
 
 	/* create the array of debug devices */
 	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
+	if (debug_devices == NULL) {
+		die("ERROR: Fatal malloc error: spine.c debug_devices!");
+	}
 
 	/* initialize icmp_avail */
 	set.icmp_avail = TRUE;

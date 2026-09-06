@@ -972,6 +972,56 @@ static void test_readpipe_rejects_an_oversized_response(void **state) {
 	free(result);
 }
 
+static void prepare_broken_ready_slot(void) {
+	int pdes[2];
+
+	assert_int_equal(pipe(pdes), 0);
+	close(pdes[0]);
+	php_processes[0].php_pid = fork();
+	assert_true(php_processes[0].php_pid >= 0);
+	if (php_processes[0].php_pid == 0) {
+		pause();
+		_exit(0);
+	}
+	php_processes[0].php_state = PHP_READY;
+	php_processes[0].php_read_fd = open("/dev/null", O_RDONLY);
+	assert_true(php_processes[0].php_read_fd >= 0);
+	php_processes[0].php_write_fd = pdes[1];
+	track_write = TRUE;
+}
+
+static void test_failed_write_stops_when_restart_handshake_is_not_ready(void **state) {
+	char *result;
+
+	(void) state;
+	prepare_broken_ready_slot();
+	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "bad-start");
+	result = php_cmd("poll 9", 0);
+	track_write = FALSE;
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+	assert_int_equal(php_spawn_calls, 1);
+	assert_int_equal(write_calls, 2);
+	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
+}
+
+static void test_failed_write_stops_when_restart_spawn_fails(void **state) {
+	char *result;
+
+	(void) state;
+	prepare_broken_ready_slot();
+	fail_php_spawn_call = 1;
+	result = php_cmd("poll 9", 0);
+	track_write = FALSE;
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+	assert_int_equal(php_spawn_calls, 1);
+	assert_int_equal(write_calls, 2);
+	assert_int_equal(php_processes[0].php_pid, -1);
+}
+
 static void test_command_gives_up_after_three_failed_writes(void **state) {
 	struct sigaction saved_sigpipe;
 	struct sigaction default_sigpipe;
@@ -1037,6 +1087,8 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_startup_read_rejects_fd_at_fd_setsize_without_restart, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_retires_fd_at_fd_setsize, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_readpipe_rejects_an_oversized_response, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_failed_write_stops_when_restart_handshake_is_not_ready, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_failed_write_stops_when_restart_spawn_fails, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_gives_up_after_three_failed_writes, php_setup, php_teardown),
 	};
 

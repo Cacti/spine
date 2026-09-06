@@ -878,6 +878,21 @@ static void test_reap_reports_an_already_reaped_child(void **state) {
 	assert_int_equal(pstat, 0);
 }
 
+static void test_nft_pclose_requests_graceful_termination_before_kill(void **state) {
+	char ready[6] = {0};
+	int fd;
+	int status;
+
+	(void) state;
+	fd = nft_popen("trap 'exit 0' TERM; printf ready; while :; do sleep 1; done", "r");
+	assert_true(fd >= 0);
+	assert_int_equal(read(fd, ready, 5), 5);
+	assert_string_equal(ready, "ready");
+	status = nft_pclose(fd);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
 int main(void) {
 
 	const struct CMUnitTest tests[] = {
@@ -929,6 +944,7 @@ int main(void) {
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
+		cmocka_unit_test(test_nft_pclose_requests_graceful_termination_before_kill),
 		cmocka_unit_test(test_abandoned_children_are_swept_and_capacity_is_bounded),
 	};
 
