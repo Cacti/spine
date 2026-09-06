@@ -362,17 +362,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			return 0;
 		}
 
-		if (spine_snmpv3_protocol_is_set(snmp_priv_protocol)) {
-			priv_type = usm_lookup_priv_type(snmp_priv_protocol);
-
-			if (priv_type < 0) {
-				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
-				free(session.peername);
-				free(session.localname);
-				return 0;
-			}
-		}
-
 		if (spine_snmpv3_protocol_is_set(snmp_auth_protocol) !=
 			spine_snmpv3_passphrase_is_set(snmp_password)) {
 			SPINE_LOG_LOW(("SNMP: Device[%i] WARNING incomplete authentication settings; Cacti's effective security level is noAuthNoPriv.", host_id));
@@ -466,6 +455,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		} else {
 			const oid *priv_proto;
+
+			priv_type = usm_lookup_priv_type(snmp_priv_protocol);
+
+			if (priv_type < 0) {
+				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
+				free(session.peername);
+				free(session.securityAuthProto);
+				free(session.localname);
+				return 0;
+			}
 
 			priv_proto = sc_get_priv_oid(priv_type, &session.securityPrivProtoLen);
 			free(session.securityPrivProto);
