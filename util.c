@@ -35,6 +35,8 @@
 #include "spine.h"
 #include "regex.h"
 
+#include <limits.h>
+
 static int nopts = 0;
 
 /*! Override Options Structure
@@ -2060,89 +2062,43 @@ int char_count(const char *str, int chr) {
 }
 
 unsigned long long hex2dec(char *str) {
-	int i = 0;
 	unsigned long long number = 0;
+	unsigned int digit;
 
 	if (!str) return 0;
 
-	/* first revers the string */
-	reverse(str);
-
 	while (*str) {
 		switch (*str) {
-		case '0':
-			i++;
-			break;
-		case '1':
-			number += pow(16, i) * 1;
-			i++;
-			break;
-		case '2':
-			number += pow(16, i) * 2;
-			i++;
-			break;
-		case '3':
-			number += pow(16, i) * 3;
-			i++;
-			break;
-		case '4':
-			number += pow(16, i) * 4;
-			i++;
-			break;
-		case '5':
-			number += pow(16, i) * 5;
-			i++;
-			break;
-		case '6':
-			number += pow(16, i) * 6;
-			i++;
-			break;
-		case '7':
-			number += pow(16, i) * 7;
-			i++;
-			break;
-		case '8':
-			number += pow(16, i) * 8;
-			i++;
-			break;
-		case '9':
-			number += pow(16, i) * 9;
-			i++;
+		case '0': case '1': case '2': case '3': case '4':
+		case '5': case '6': case '7': case '8': case '9':
+			digit = (unsigned int) (*str - '0');
 			break;
 		case 'a': case 'A':
-			number += pow(16, i) * 10;
-			i++;
-			break;
 		case 'b': case 'B':
-			number += pow(16, i) * 11;
-			i++;
-			break;
 		case 'c': case 'C':
-			number += pow(16, i) * 12;
-			i++;
-			break;
 		case 'd': case 'D':
-			number += pow(16, i) * 13;
-			i++;
-			break;
 		case 'e': case 'E':
-			number += pow(16, i) * 14;
-			i++;
-			break;
 		case 'f': case 'F':
-			number += pow(16, i) * 15;
-			i++;
+			digit = (unsigned int) (tolower((unsigned char) *str) - 'a' + 10);
 			break;
 		/* separators. is_hexadecimal() accepts '-' and ':' as well as space,
 		 * so anything it lets through has to be convertible here; skipping
 		 * only space meant a dash-separated octet string validated and then
 		 * converted to zero. */
 		case '"': case ' ': case '\t': case '-': case ':':
-			break;
+			str++;
+			continue;
 		default:
 			return 0;
 		}
 
+		/* A device can return an arbitrarily long string. Refuse overflow
+		 * before multiplying rather than converting an out-of-range double. */
+		if (number > (ULLONG_MAX - digit) / 16) {
+			return 0;
+		}
+
+		number = (number * 16) + digit;
 		str++;
 	}
 

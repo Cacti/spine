@@ -200,11 +200,14 @@ static void test_add_slashes_passes_plain_text_through(void **state) {
 }
 
 static void test_hex2dec(void **state) {
-	char a[16], b[16];
+	char a[32], b[16], overflow[32];
 	(void) state;
 
 	strcpy(a, "FF");  assert_int_equal((int) hex2dec(a), 255);
 	strcpy(b, "00");  assert_int_equal((int) hex2dec(b), 0);
+	strcpy(a, "aa-bb"); assert_int_equal((int) hex2dec(a), 0xaabb);
+	strcpy(overflow, "10000000000000000");
+	assert_int_equal(hex2dec(overflow), 0);
 }
 
 /* --- misc ----------------------------------------------------------------- */
