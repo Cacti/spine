@@ -24,6 +24,10 @@
 #include "spine.h"
 #include "util.h"
 #include "ping.h"
+
+#if !defined(ICMP_DEST_UNREACH) && defined(ICMP_UNREACH)
+#define ICMP_DEST_UNREACH ICMP_UNREACH
+#endif
 #include "nft_popen.h"
 
 #include <fcntl.h>
