@@ -136,6 +136,9 @@ int poller_store_hex_result(char *result, size_t result_size, const char *hex, i
 	}
 
 	if (!hex2dec(hex, &value)) {
+		/* An over-wide or malformed OctetString is unusable poll data. Count it
+		 * like every other undefined result so host_errors reflects the failed
+		 * collection; callers also retain the affected local_data_id. */
 		SET_UNDEFINED(result);
 		if (errors != NULL) {
 			(*errors)++;
@@ -153,17 +156,6 @@ int poller_store_hex_result(char *result, size_t result_size, const char *hex, i
 	}
 
 	return TRUE;
-}
-
-const char *poller_output_upsert_suffix(int poller_id, int mode, int dbonupdate) {
-	/* set.dbonupdate describes the local connection. Remote writes must use
-	 * the cross-vendor form until the remote server is probed independently.
-	 * Preserve the existing VALUES() behavior for nonzero local poller IDs. */
-	if (mode == REMOTE || poller_id != 0 || !dbonupdate) {
-		return " ON DUPLICATE KEY UPDATE output=VALUES(output)";
-	}
-
-	return " AS rs ON DUPLICATE KEY UPDATE output=rs.output";
 }
 
 /*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
@@ -1925,8 +1917,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			mode   = LOCAL;
 		}
 
-		snprintf(posuffix, sizeof(posuffix), "%s",
-			poller_output_upsert_suffix(set.poller_id, mode, set.dbonupdate));
+		/* set.dbonupdate describes the local connection, while mysqlt can be
+		 * remote. VALUES() is accepted by both MySQL and MariaDB, so use it
+		 * until the remote server has its own version capability flag (#590). */
+		snprintf(posuffix, sizeof(posuffix),
+			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
 		posuffix_len = strlen(posuffix);
 
 		i = 0;
