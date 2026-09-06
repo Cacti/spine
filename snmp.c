@@ -325,6 +325,17 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		security_level = spine_snmpv3_security_level(snmp_auth_protocol, snmp_password,
 			snmp_priv_protocol, snmp_priv_passphrase);
 
+		if (spine_snmpv3_value_is_set(snmp_auth_protocol) !=
+			spine_snmpv3_value_is_set(snmp_password)) {
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; using noAuthNoPriv.", host_id));
+		}
+
+		if (spine_snmpv3_value_is_set(snmp_priv_protocol) !=
+			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; using security level %i.",
+				host_id, security_level));
+		}
+
 		/* A protocol that is set but unrecognised is a configuration error at
 		 * any security level. Deciding the level first and only validating on
 		 * the authenticated path would let a typo through as noAuthNoPriv,
@@ -383,6 +394,15 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol));
 			session.securityPrivProtoLen = OID_LENGTH(usmNoPrivProtocol);
 			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
+
+			if (session.securityPrivProto == NULL) {
+				session.securityPrivProtoLen = 0;
+				SPINE_LOG(("SNMP: Device[%i] Error installing the no-privacy protocol.", host_id));
+				free(session.peername);
+				free(session.securityAuthProto);
+				free(session.localname);
+				return 0;
+			}
 
 			/* set the security level to authenticate, but not encrypted */
 			session.securityLevel = security_level;
