@@ -75,7 +75,7 @@ unsigned long long hex2dec(char *str);
 
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
-#define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
+#define REGEX_NUMBER "^[-+]?[0-9]*[.]?[0-9]+$"
 const char *regex_replace(const char *exp, const char *value);
 const char *regex_replace_extended(const char *exp, const char *value);
 

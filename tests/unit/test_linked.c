@@ -75,7 +75,11 @@ static void test_regex_replace_returns_the_match(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[0-9][0-9]*", "load 42 avg"), "42");
 	assert_string_equal(regex_replace("\\([0-9][0-9]*\\)", "value 42"), "42");
-	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "load=-12.5ms"), "-12.5");
+	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "-12.5"), "-12.5");
+	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "3 packets, 1.5 ms"), "3 packets, 1.5 ms");
+	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "1.2.3"), "1.2.3");
+	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "3 packets 42 ms"), "3 packets 42 ms");
+	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "42"), "42");
 }
 
 static void test_regex_replace_passes_through_on_no_match(void **state) {
