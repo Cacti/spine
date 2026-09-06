@@ -138,7 +138,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
+/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, const char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -160,7 +160,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
+void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, const char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;

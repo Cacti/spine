@@ -520,7 +520,7 @@ void read_config_options(void) {
 	int        mode;
 	char       web_root[BUFSIZE];
 	char       sqlbuf[HUGE_BUFSIZE];
-	char       *sqlp = sqlbuf;
+	char       *sqlp;
 	char       *res;
 	char       spine_priv[BUFSIZE];
 	char       spine_auth[BUFSIZE];
@@ -1809,14 +1809,14 @@ char *strip_alpha(char *string) {
 	return string;
 }
 
-/*! \fn char *add_slashes(char *string)
+/*! \fn char *add_slashes(const char *string)
  *  \brief add escaping to back slashes on for Windows type commands.
  *  \param string the string to replace slashes
  *
  *  \return a pointer to the modified string. Variable must be freed by parent.
  *
  */
-char *add_slashes(char *string) {
+char *add_slashes(const char *string) {
 	int length;
 	int position;
 	int new_position;
@@ -1923,14 +1923,14 @@ char *trim(char *str) {
  */
 char *rtrim(char *str) {
 	char    *end;
-	const char *trim = " \"\'\\\t\n\r";
+	const char *trim_chars = " \"\'\\\t\n\r";
 
 	if (!str) return NULL;
 
 	end = str + strlen(str);
 
 	while (end-- > str) {
-		if (!strchr(trim, *end)) return str;
+		if (!strchr(trim_chars, *end)) return str;
 
 		*end = 0;
 	}
@@ -1945,12 +1945,12 @@ char *rtrim(char *str) {
  *  \return the trimmed string.
  */
 char *ltrim(char *str) {
-	const char *trim = " \"\'\\\t\n\r";
+	const char *trim_chars = " \"\'\\\t\n\r";
 
 	if (!str) return NULL;
 
 	while (*str) {
-		if (!strchr(trim, *str)) return str;
+		if (!strchr(trim_chars, *str)) return str;
 
 		++str;
 	}

@@ -21,6 +21,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # pull_request normally checks out GitHub's synthetic merge commit,
+          # which cannot carry the contributor's DCO trailer.
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify Developer Certificate of Origin trailers
         if: github.event_name == 'pull_request'
@@ -115,10 +118,12 @@ jobs:
           mariadb_prefix=$(brew --prefix mariadb-connector-c)
           openssl_prefix=$(brew --prefix openssl@3)
           net_snmp_prefix=$(brew --prefix net-snmp)
+          cmocka_prefix=$(brew --prefix cmocka)
           export MYSQL_CONFIG="$mariadb_prefix/bin/mariadb_config"
-          export PKG_CONFIG_PATH="$openssl_prefix/lib/pkgconfig:$net_snmp_prefix/lib/pkgconfig"
+          export CPPFLAGS="-I$openssl_prefix/include -I$net_snmp_prefix/include -I$cmocka_prefix/include"
+          export LDFLAGS="-L$mariadb_prefix/lib -L$openssl_prefix/lib -L$net_snmp_prefix/lib -L$cmocka_prefix/lib"
           ./bootstrap
-          ./configure --enable-warnings
+          ./configure --enable-warnings --with-snmp="$net_snmp_prefix"
           make -j"$(sysctl -n hw.ncpu)"
           make check
 
@@ -133,16 +138,24 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y cppcheck
+          # Project data structures are consumed across translation units;
+          # checking headers in isolation otherwise reports every member. A
+          # few externally visible helpers are deliberate unit-test seams.
           cppcheck \
             --enable=all \
             --std=c11 \
             --error-exitcode=1 \
+            --suppress=missingInclude \
             --suppress=missingIncludeSystem \
+            --suppress=normalCheckLevelMaxBranches \
+            --suppress=checkLevelNormal \
+            --suppress=unmatchedSuppression \
             --suppress=unusedFunction \
             --suppress=checkersReport \
             --suppress=variableScope \
             --suppress=unreadVariable \
-            --suppress=shadowVariable \
+            --suppress=unusedStructMember \
+            --suppress=staticFunction \
             --suppress=constVariablePointer \
             --suppress=redundantAssignment \
             --suppress=toomanyconfigs \

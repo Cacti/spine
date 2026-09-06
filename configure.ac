@@ -57,15 +57,10 @@ AC_ARG_WITH(snmp,
   [SNMP_DIR=$withval]
 )
 
-# if host_alias is empty, ac_cv_host_alias may still have the info
-if test -z "$host_alias"; then
-  host_alias=$ac_cv_host_alias
-fi
-
 # Platform-specific tweaks
 ShLib="so"
 
-case $host_alias in
+case $host in
 *sparc-sun-solaris2.8)
   CPPFLAGS="$CPPFLAGS -D_POSIX_PTHREAD_SEMANTICS"
   AC_DEFINE(SOLAR_THREAD, 1, [Correct issue around Solaris threading model]);;

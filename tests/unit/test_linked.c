@@ -316,7 +316,10 @@ static void test_icmp_classify_rejects_a_non_echo(void **state) {
 	const struct icmp *out = NULL;
 	(void) state;
 
-	build_ip_icmp(buf, sizeof buf, 1, 1, ICMP_DEST_UNREACH);
+	/* Type 3 is Destination Unreachable in RFC 792.  BSD names the symbol
+	 * ICMP_UNREACH while Linux names it ICMP_DEST_UNREACH, so keep the wire
+	 * value explicit in this platform-independent parser test. */
+	build_ip_icmp(buf, sizeof buf, 1, 1, 3);
 	assert_int_equal(spine_icmp_classify_reply(buf, sizeof buf, 1, 1, &out), SPINE_ICMP_REPLY_NOT_ECHO);
 	assert_null(out);
 }
