@@ -155,6 +155,17 @@ int poller_store_hex_result(char *result, size_t result_size, const char *hex, i
 	return TRUE;
 }
 
+const char *poller_output_upsert_suffix(int poller_id, int mode, int dbonupdate) {
+	/* set.dbonupdate describes the local connection. Remote writes must use
+	 * the cross-vendor form until the remote server is probed independently.
+	 * Preserve the existing VALUES() behavior for nonzero local poller IDs. */
+	if (mode == REMOTE || poller_id != 0 || !dbonupdate) {
+		return " ON DUPLICATE KEY UPDATE output=VALUES(output)";
+	}
+
+	return " AS rs ON DUPLICATE KEY UPDATE output=rs.output";
+}
+
 /*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
@@ -411,15 +422,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			"INSERT INTO poller_output"
 			" (local_data_id, rrd_name, time, output) VALUES");
 
-		/* query suffix to add rows to the poller output table */
-		if (set.dbonupdate == 0) {
-			snprintf(posuffix, BUFSIZE,
-				" ON DUPLICATE KEY UPDATE output=VALUES(output)");
-		} else {
-			snprintf(posuffix, BUFSIZE,
-				" AS rs ON DUPLICATE KEY UPDATE output=rs.output");
-		}
-
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
 			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
@@ -556,10 +558,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			"INSERT INTO poller_output"
 			" (local_data_id, rrd_name, time, output) VALUES");
 
-		/* query suffix to add rows to the poller output table */
-		snprintf(posuffix, BUFSIZE,
-			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
-
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
 			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
@@ -594,7 +592,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	query8_len   = strlen(query8);
 	query11_len  = strlen(query11);
-	posuffix_len = strlen(posuffix);
 
 	/* initialize the ping structure variables */
 	snprintf(ping->ping_status,   50,            "down");
@@ -1927,6 +1924,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			mysqlt = mysql;
 			mode   = LOCAL;
 		}
+
+		snprintf(posuffix, sizeof(posuffix), "%s",
+			poller_output_upsert_suffix(set.poller_id, mode, set.dbonupdate));
+		posuffix_len = strlen(posuffix);
 
 		i = 0;
 		while (i < rows_processed) {

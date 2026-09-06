@@ -292,6 +292,19 @@ static void test_poller_hex_overflow_is_undefined(void **state) {
 	assert_int_equal(errors, 5);
 }
 
+static void test_poller_output_upsert_uses_the_destination_dialect(void **state) {
+	(void) state;
+
+	assert_string_equal(poller_output_upsert_suffix(0, LOCAL, FALSE),
+		" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+	assert_string_equal(poller_output_upsert_suffix(0, LOCAL, TRUE),
+		" AS rs ON DUPLICATE KEY UPDATE output=rs.output");
+	assert_string_equal(poller_output_upsert_suffix(1, LOCAL, TRUE),
+		" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+	assert_string_equal(poller_output_upsert_suffix(2, REMOTE, TRUE),
+		" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+}
+
 static void test_row_alias_upsert_version_gate(void **state) {
 	(void) state;
 	assert_false(db_row_alias_upsert_supported(NULL, 80020));
@@ -585,6 +598,7 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_hex2dec),
 		cmocka_unit_test(test_poller_hex_overflow_is_undefined),
+		cmocka_unit_test(test_poller_output_upsert_uses_the_destination_dialect),
 		cmocka_unit_test(test_row_alias_upsert_version_gate),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
