@@ -117,27 +117,53 @@ void *child(void *arg) {
 	exit(0);
 }
 
+/*! \fn int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors)
+ *  \brief convert a hexadecimal poll result and account for rejected values
+ *
+ *  result must name at least two writable bytes so failures can be represented
+ *  by the normal undefined marker. Invalid output arguments are rejected
+ *  without modifying memory whose writable extent cannot be established.
+ */
+int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors) {
+	unsigned long long value;
+	int written;
+
+	if (result == NULL || result_size < 2 || hex == NULL) {
+		if (errors != NULL) {
+			(*errors)++;
+		}
+		return FALSE;
+	}
+
+	if (!hex2dec(hex, &value)) {
+		/* An over-wide or malformed OctetString is unusable poll data. Count it
+		 * like every other undefined result so host_errors reflects the failed
+		 * collection; callers also retain the affected local_data_id. */
+		SET_UNDEFINED(result);
+		if (errors != NULL) {
+			(*errors)++;
+		}
+		return FALSE;
+	}
+
+	written = snprintf(result, result_size, "%llu", value);
+	if (written < 0 || (size_t) written >= result_size) {
+		SET_UNDEFINED(result);
+		if (errors != NULL) {
+			(*errors)++;
+		}
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
- *	This function is core to Spine.  It will take a host_id and then poll it.
- *
- *  Prior to the poll, the system will ping the host to verify that it is up.
- *  In addition, the system will check to see if any reindexing of data query's
- *  is required.
- *
- *  If reindexing is required, the Cacti poller.php function will spawn that
- *  reindexing process.
- *
- *  In the case of hosts that require reindexing because of a sysUptime
- *  rollback, Spine will store an unknown (NaN) value for all objects to prevent
- *  spikes in the graphs.
- *
- *  With regard to snmp calls, if the host has multiple snmp agents running
- *  Spine will re-initialize the snmp session and poll under those new ports
- *  as the host poller_items table dictates.
- *
+ *  This function is core to Spine. It takes a host_id and polls it, first
+ *  checking reachability and any required data-query reindexing.
  */
 void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
@@ -388,15 +414,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			"INSERT INTO poller_output"
 			" (local_data_id, rrd_name, time, output) VALUES");
 
-		/* query suffix to add rows to the poller output table */
-		if (set.dbonupdate == 0) {
-			snprintf(posuffix, BUFSIZE,
-				" ON DUPLICATE KEY UPDATE output=VALUES(output)");
-		} else {
-			snprintf(posuffix, BUFSIZE,
-				" AS rs ON DUPLICATE KEY UPDATE output=rs.output");
-		}
-
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
 			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
@@ -533,10 +550,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			"INSERT INTO poller_output"
 			" (local_data_id, rrd_name, time, output) VALUES");
 
-		/* query suffix to add rows to the poller output table */
-		snprintf(posuffix, BUFSIZE,
-			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
-
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
 			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
@@ -571,7 +584,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	query8_len   = strlen(query8);
 	query11_len  = strlen(query11);
-	posuffix_len = strlen(posuffix);
 
 	/* initialize the ping structure variables */
 	snprintf(ping->ping_status,   50,            "down");
@@ -1448,7 +1460,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-								snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+								if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result, &errors)) {
+									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+									if (set.spine_log_level == 2) {
+										SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
+									}
+								}
 							} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1463,8 +1480,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 								/* is valid output, continue */
 							} else {
-								/* remove double or single quotes from string */
-								snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(snmp_oids[j].result)));
+								/* trim a non-numeric prefix or suffix, then validate below */
+								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(snmp_oids[j].result));
 								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 								/* detect erroneous non-numeric result */
@@ -1549,7 +1566,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-							snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+							if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result, &errors)) {
+								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+								if (set.spine_log_level == 2) {
+									SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
+								}
+							}
 						} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1564,8 +1586,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							/* is valid output, continue */
 						} else {
-							/* remove double or single quotes from string */
-							snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(snmp_oids[j].result)));
+							/* trim a non-numeric prefix or suffix, then validate below */
+							snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(snmp_oids[j].result));
 							snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 							/* detect erroneous non-numeric result */
@@ -1644,10 +1666,15 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result, &errors)) {
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
+						if (set.spine_log_level == 2) {
+							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i] SCRIPT: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
+						}
+					}
 				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
+					/* trim a non-numeric prefix or suffix, then validate below */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(poll_result));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -1710,10 +1737,15 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result, &errors)) {
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
+						if (set.spine_log_level == 2) {
+							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i] SCRIPT: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
+						}
+					}
 				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(poll_result)));
+					/* trim a non-numeric prefix or suffix, then validate below */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(poll_result));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -1782,7 +1814,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-					snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+					if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result, &errors)) {
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+						if (set.spine_log_level == 2) {
+							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
+						}
+					}
 				} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1797,8 +1834,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 					/* is valid output, continue */
 				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace(REGEX_NUMBER, strip_alpha(snmp_oids[j].result)));
+					/* trim a non-numeric prefix or suffix, then validate below */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(snmp_oids[j].result));
 					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous non-numeric result */
@@ -1879,6 +1916,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			mysqlt = mysql;
 			mode   = LOCAL;
 		}
+
+		/* set.dbonupdate describes the local connection, while mysqlt can be
+		 * remote. VALUES() is accepted by both MySQL and MariaDB, so use it
+		 * until the remote server has its own version capability flag (#590). */
+		snprintf(posuffix, sizeof(posuffix),
+			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
+		posuffix_len = strlen(posuffix);
 
 		i = 0;
 		while (i < rows_processed) {

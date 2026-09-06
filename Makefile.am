@@ -65,11 +65,12 @@ check_PROGRAMS += \
 	tests/unit/test_util_strings \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
-	tests/unit/test_linked
+	tests/unit/test_linked \
+	tests/unit/test_util_paths
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
-# the same libraries spine links against.  The other two are self-contained.
+# the same libraries spine links against.  The others are self-contained.
 tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
 tests_unit_test_util_strings_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
@@ -86,4 +87,10 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-TESTS = $(check_PROGRAMS)
+# includes util.c, so it needs the same libraries spine links against
+tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
+tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh
+TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
+EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh

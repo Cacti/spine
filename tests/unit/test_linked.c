@@ -14,11 +14,16 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #include "common.h"
 #include "spine.h"
 #include "util.h"
 #include "ping.h"
+
+#if !defined(ICMP_DEST_UNREACH) && defined(ICMP_UNREACH)
+#define ICMP_DEST_UNREACH ICMP_UNREACH
+#endif
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -70,6 +75,7 @@ static void test_strncopy_terminates_an_exact_fit(void **state) {
 static void test_regex_replace_returns_the_match(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[0-9][0-9]*", "load 42 avg"), "42");
+	assert_string_equal(regex_replace("\\([0-9][0-9]*\\)", "value 42"), "42");
 }
 
 static void test_regex_replace_passes_through_on_no_match(void **state) {
@@ -80,6 +86,34 @@ static void test_regex_replace_passes_through_on_no_match(void **state) {
 static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
+	assert_string_equal(regex_replace("*", "value"), "value");
+}
+
+static void test_spine_appendf_reports_truncation_and_guards(void **state) {
+	char buffer[8] = "";
+	char success[8] = "";
+	char *cursor = buffer;
+	char *success_cursor = success;
+	char *null_cursor = NULL;
+	size_t remaining = sizeof(buffer);
+	size_t success_remaining = sizeof(success);
+	size_t zero = 0;
+	(void) state;
+
+	assert_true(spine_appendf(&success_cursor, &success_remaining, "%s", "abc"));
+	assert_int_equal(success_cursor - success, 3);
+	assert_int_equal(success_remaining, sizeof(success) - 3);
+	assert_string_equal(success, "abc");
+	assert_false(spine_appendf(&cursor, &remaining, "%s", "0123456789"));
+	assert_int_equal(cursor - buffer, 7);
+	assert_int_equal(remaining, 1);
+	assert_int_equal(buffer[7], '\0');
+	assert_false(spine_appendf(&cursor, &remaining, "%s", "x"));
+	assert_string_equal(buffer, "0123456");
+	assert_false(spine_appendf(NULL, &remaining, "%s", "x"));
+	assert_false(spine_appendf(&null_cursor, &remaining, "%s", "x"));
+	assert_false(spine_appendf(&cursor, NULL, "%s", "x"));
+	assert_false(spine_appendf(&cursor, &zero, "%s", "x"));
 }
 
 
@@ -194,11 +228,79 @@ static void test_add_slashes_passes_plain_text_through(void **state) {
 }
 
 static void test_hex2dec(void **state) {
-	char a[16], b[16];
+	char a[32], b[16], overflow[160];
+	unsigned long long value;
 	(void) state;
 
-	strcpy(a, "FF");  assert_int_equal((int) hex2dec(a), 255);
-	strcpy(b, "00");  assert_int_equal((int) hex2dec(b), 0);
+	strcpy(a, "FF");  assert_true(hex2dec(a, &value)); assert_int_equal(value, 255);
+	strcpy(b, "00");  assert_true(hex2dec(b, &value)); assert_int_equal(value, 0);
+	strcpy(a, "00:1b:44:11:3a:b7");
+	assert_true(hex2dec(a, &value));
+	assert_int_equal(value, 0x001b44113ab7ULL);
+	strcpy(a, "- 0a:1B- 2c :3D ");
+	assert_true(hex2dec(a, &value));
+	assert_int_equal(value, 0x0a1b2c3dULL);
+	strcpy(a, "ff:ff:ff:ff:ff:ff:ff:ff");
+	assert_true(hex2dec(a, &value));
+	assert_int_equal(value, ULLONG_MAX);
+	strcpy(overflow, "10000000000000000");
+	assert_false(hex2dec(overflow, &value));
+	strcpy(overflow, "80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88");
+	assert_false(hex2dec(overflow, &value));
+	strcpy(overflow, "ffff ffff ffff ffff ffff ffff ffff ffff");
+	assert_false(hex2dec(overflow, &value));
+	assert_false(hex2dec(NULL, &value));
+	assert_false(hex2dec("ff", NULL));
+	assert_false(hex2dec("", &value));
+	assert_false(hex2dec(":::", &value));
+}
+
+static void test_poller_hex_overflow_is_undefined(void **state) {
+	char result[RESULTS_BUFFER];
+	char exact[4] = "ff";
+	char tiny[2] = "f";
+	char too_small[3] = "ff";
+	char empty[1] = "";
+	char long_hex[RESULTS_BUFFER + 16];
+	int errors = 0;
+
+	(void) state;
+	assert_true(poller_store_hex_result(exact, sizeof(exact), exact, &errors));
+	assert_string_equal(exact, "255");
+	strcpy(result, "ff:ff:ff:ff:ff:ff:ff:ff");
+	assert_true(poller_store_hex_result(result, sizeof(result), result, &errors));
+	assert_string_equal(result, "18446744073709551615");
+	assert_int_equal(errors, 0);
+
+	strcpy(result, "1:00:00:00:00:00:00:00:00");
+	assert_false(poller_store_hex_result(result, sizeof(result), result, &errors));
+	assert_true(IS_UNDEFINED(result));
+	assert_int_equal(errors, 1);
+	assert_false(poller_store_hex_result(NULL, 0, "ff", &errors));
+	assert_false(poller_store_hex_result(empty, 0, "ff", &errors));
+	assert_false(poller_store_hex_result(tiny, 1, "ff", &errors));
+	assert_false(poller_store_hex_result(too_small, sizeof(too_small), too_small, &errors));
+	assert_true(IS_UNDEFINED(too_small));
+	assert_int_equal(errors, 5);
+
+	memset(long_hex, ' ', sizeof(long_hex));
+	long_hex[sizeof(long_hex) - 3] = 'f';
+	long_hex[sizeof(long_hex) - 2] = 'f';
+	long_hex[sizeof(long_hex) - 1] = '\0';
+	assert_true(poller_store_hex_result(result, sizeof(result), long_hex, &errors));
+	assert_string_equal(result, "255");
+	assert_int_equal(errors, 5);
+}
+
+static void test_row_alias_upsert_version_gate(void **state) {
+	(void) state;
+	assert_false(db_row_alias_upsert_supported(NULL, 80020));
+	assert_false(db_row_alias_upsert_supported("8.0.19", 80019));
+	assert_true(db_row_alias_upsert_supported("8.0.20", 80020));
+	assert_true(db_row_alias_upsert_supported("8.4.0", 80400));
+	assert_true(db_row_alias_upsert_supported("9.1.0", 90100));
+	assert_false(db_row_alias_upsert_supported("10.11.6-MariaDB", 101106));
+	assert_false(db_row_alias_upsert_supported("5.5.5-10.11.6-MariaDB-log", 50505));
 }
 
 /* --- misc ----------------------------------------------------------------- */
@@ -387,21 +489,24 @@ static void test_read_spine_config_reads_settings(void **state) {
 	remove(path);
 }
 
-/* --- get_date_format(): every format and separator is owned by the caller -- */
+/* --- get_date_format(): cached storage, rebuilt by set_date_format() ------ */
 
-static void test_get_date_format_returns_owned_memory(void **state) {
+static void test_get_date_format_returns_cached_storage(void **state) {
 	char *fmt;
 	(void) state;
 
 	config_defaults();
+	set_date_format();
 	fmt = get_date_format();
 
 	assert_non_null(fmt);
 	assert_true(strlen(fmt) > 0);
-	free(fmt);
+
+	/* the buffer belongs to util.c and is handed out, not owned by us */
+	assert_ptr_equal(fmt, get_date_format());
 }
 
-static void test_get_date_format_clamps_an_out_of_range_format(void **state) {
+static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
 	char *fmt;
 	(void) state;
 
@@ -409,12 +514,12 @@ static void test_get_date_format_clamps_an_out_of_range_format(void **state) {
 	set.log_datetime_format    = GD_MAX + 10;
 	set.log_datetime_separator = GDC_MAX + 10;
 
+	set_date_format();
 	fmt = get_date_format();
 
 	assert_non_null(fmt);
 	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
 	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
-	free(fmt);
 }
 
 static void test_get_date_format_covers_each_supported_format(void **state) {
@@ -430,10 +535,10 @@ static void test_get_date_format_covers_each_supported_format(void **state) {
 			set.log_datetime_format    = fmt_value;
 			set.log_datetime_separator = sep_value;
 
+			set_date_format();
 			fmt = get_date_format();
 			assert_non_null(fmt);
 			assert_true(strlen(fmt) > 0);
-			free(fmt);
 		}
 	}
 }
@@ -466,6 +571,7 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_is_numeric),
@@ -478,6 +584,8 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_hex2dec),
+		cmocka_unit_test(test_poller_hex_overflow_is_undefined),
+		cmocka_unit_test(test_row_alias_upsert_version_gate),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),
@@ -492,8 +600,8 @@ int main(void) {
 		cmocka_unit_test(test_config_defaults_populates_the_set),
 		cmocka_unit_test(test_read_spine_config_rejects_a_missing_file),
 		cmocka_unit_test(test_read_spine_config_reads_settings),
-		cmocka_unit_test(test_get_date_format_returns_owned_memory),
-		cmocka_unit_test(test_get_date_format_clamps_an_out_of_range_format),
+		cmocka_unit_test(test_get_date_format_returns_cached_storage),
+		cmocka_unit_test(test_set_date_format_clamps_an_out_of_range_format),
 		cmocka_unit_test(test_get_date_format_covers_each_supported_format),
 		cmocka_unit_test(test_is_debug_device_matches_only_listed_ids),
 	};

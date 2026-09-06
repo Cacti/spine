@@ -9,6 +9,9 @@
 #   make          -- build and run
 #   make build    -- build only
 #   make clean    -- remove build artefacts
+#
+# test_linked exercises the full production object set and is intentionally
+# driven by the top-level Automake suite, which supplies those dependencies.
 
 CC      ?= cc
 PKG_CONFIG ?= pkg-config
@@ -22,6 +25,7 @@ SPINE_ROOT := ../..
 # headers.  Discover them the same way configure does rather than hardcoding
 # a prefix.
 MYSQL_CFLAGS   := $(shell mysql_config --include 2>/dev/null)
+MYSQL_LIBS     := $(shell mysql_config --libs 2>/dev/null)
 NETSNMP_CFLAGS := $(shell net-snmp-config --base-cflags 2>/dev/null)
 
 CMOCKA_CFLAGS := $(shell $(PKG_CONFIG) --cflags cmocka 2>/dev/null)
@@ -43,12 +47,13 @@ CFLAGS += \
 	-Wextra \
 	-Wno-unused-parameter
 
-LDLIBS := $(CMOCKA_LIBS)
+LDLIBS := $(CMOCKA_LIBS) $(MYSQL_LIBS)
 
 BUILD_FIXES   := $(BINDIR)/test_build_fixes
 SAFETY_FIXES  := $(BINDIR)/test_safety_fixes
 STRINGS       := $(BINDIR)/test_util_strings
-TARGETS       := $(BUILD_FIXES) $(SAFETY_FIXES) $(STRINGS)
+UTIL_PATHS    := $(BINDIR)/test_util_paths
+TARGETS       := $(BUILD_FIXES) $(SAFETY_FIXES) $(STRINGS) $(UTIL_PATHS)
 
 .PHONY: all build run clean
 

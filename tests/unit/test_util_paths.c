@@ -1,0 +1,581 @@
+/*
+ * Coverage for the util.c paths changed by #578: the cached log timestamp
+ * format (issue#567), the bounded newline append in spine_log() (issue#565)
+ * and the result-set release on the NULL-row branch of the settings helpers
+ * (issue#566).
+ *
+ * Unlike the self-contained suites, this one includes util.c the way
+ * test_util_strings.c does, so set_date_format() and get_date_format() are
+ * the shipped functions rather than a copy.  That matters here: the point of
+ * the change is that the format is built once and then handed out, and a
+ * copied routine could not demonstrate the caching at all.
+ */
+
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#define UNIT_TESTING
+#include "../../common.h"
+#include "../../spine.h"
+
+config_t set;
+double start_time;
+char config_paths[CONFIG_PATHS][BUFSIZE];
+int *debug_devices = NULL;
+
+/* Reachability for the NULL-row branch: db_query() hands back a non-NULL
+ * handle and mysql_num_rows() reports a row, but mysql_fetch_row() yields
+ * nothing.  That is the combination that used to leak the result set. */
+static int   fake_result;
+static MYSQL fake_mysql;
+static int   rows_to_report;
+static int   row_is_null;
+static int   frees_seen;
+enum fake_query_kind { FAKE_QUERY_DEFAULT, FAKE_QUERY_HOSTS, FAKE_QUERY_ITEMS };
+static enum fake_query_kind fake_query_kind;
+static int fake_row_index;
+static int byte_boundary_mode;
+static char *host_inserts[8];
+static char *item_inserts[8];
+static int host_insert_count;
+static int item_insert_count;
+static int total_insert_count;
+
+#define mysql_num_rows test_mysql_num_rows
+#define mysql_get_server_version test_mysql_get_server_version
+#define mysql_fetch_row test_mysql_fetch_row
+
+my_ulonglong test_mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
+unsigned long test_mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+
+MYSQL_ROW test_mysql_fetch_row(MYSQL_RES *res) {
+	static char *cells[21];
+	static char  v0[] = "value";
+	static char  v1[] = "value";
+	static char  zero[] = "0";
+	static char  wide[DBL_BUFSIZE];
+	static char  id[32];
+	int i;
+
+	(void) res;
+
+	if (row_is_null) {
+		return NULL;
+	}
+
+	if (fake_query_kind == FAKE_QUERY_HOSTS || fake_query_kind == FAKE_QUERY_ITEMS) {
+		if (fake_row_index >= rows_to_report) {
+			return NULL;
+		}
+
+		snprintf(id, sizeof(id), "%d", ++fake_row_index);
+		for (i = 0; i < 21; i++) {
+			cells[i] = zero;
+		}
+		cells[0] = id;
+		if (byte_boundary_mode) {
+			/* Exercise db_escape() growth as well as wide source values. */
+			for (i = 0; i < (int) sizeof(wide) - 1; i++) {
+				wide[i] = (i % 2 == 0) ? '\'' : '\\';
+			}
+			wide[sizeof(wide) - 1] = '\0';
+			if (fake_query_kind == FAKE_QUERY_HOSTS) {
+				for (i = 1; i < 21; i++) {
+					cells[i] = wide;
+				}
+			} else {
+				cells[2] = wide;
+			}
+		}
+
+		return cells;
+	}
+
+	cells[0] = v0;
+	cells[1] = v1;
+
+	return cells;
+}
+
+void db_connect(int type, MYSQL *mysql) {}
+void db_disconnect(MYSQL *mysql) {}
+MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
+	(void) mysql; (void) type;
+
+	if (strstr(query, "FROM host ") != NULL) {
+		fake_query_kind = FAKE_QUERY_HOSTS;
+		rows_to_report = byte_boundary_mode ? 60 : 501;
+		fake_row_index = 0;
+	} else if (strstr(query, "FROM poller_item ") != NULL) {
+		fake_query_kind = FAKE_QUERY_ITEMS;
+		rows_to_report = byte_boundary_mode ? 1100 : 10001;
+		fake_row_index = 0;
+	}
+
+	return (MYSQL_RES *) &fake_result;
+}
+
+void db_free_result(MYSQL_RES *result) { (void) result; frees_seen++; }
+int db_insert(MYSQL *mysql, int type, const char *query) {
+	(void) mysql; (void) type;
+	total_insert_count++;
+
+	if (strncmp(query, "INSERT INTO host ", strlen("INSERT INTO host ")) == 0) {
+		assert_true(host_insert_count < 8);
+		host_inserts[host_insert_count++] = strdup(query);
+		assert_non_null(host_inserts[host_insert_count - 1]);
+	} else if (strncmp(query, "INSERT INTO poller_item ", strlen("INSERT INTO poller_item ")) == 0) {
+		assert_true(item_insert_count < 8);
+		item_inserts[item_insert_count++] = strdup(query);
+		assert_non_null(item_inserts[item_insert_count - 1]);
+	}
+
+	return 0;
+}
+void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
+	size_t in = 0;
+	size_t out = 0;
+
+	(void) mysql;
+	if (max_size <= 0) return;
+
+	while (input[in] != '\0' && out + 1 < (size_t) max_size) {
+		if ((input[in] == '\'' || input[in] == '\\') && out + 2 < (size_t) max_size) {
+			output[out++] = '\\';
+		}
+		output[out++] = input[in++];
+	}
+	output[out] = '\0';
+}
+int append_hostrange(char *obuf, const char *colname) { return 0; }
+int parse_logdest(const char *res, int default_dest) { return 0; }
+const char *printable_logdest(int dest) { return ""; }
+void php_close(int php_process) {}
+
+#include "../../util.c"
+
+#undef mysql_num_rows
+#undef mysql_get_server_version
+#undef mysql_fetch_row
+
+static char *build(int sep_code, int fmt_code) {
+	set.log_datetime_separator = sep_code;
+	set.log_datetime_format    = fmt_code;
+	set_date_format();
+
+	return get_date_format();
+}
+
+/* Every format code must produce a distinct string.  This is the regression
+ * guard for the missing-break bug: with the breaks gone every code fell
+ * through to the default and they all collapsed to one value. */
+static void test_each_format_code_is_distinct(void **state) {
+	const int codes[] = { GD_MO_D_Y, GD_MN_D_Y, GD_D_MO_Y, GD_D_MN_Y, GD_Y_MO_D, GD_Y_MN_D };
+	char seen[6][GD_FMT_SIZE];
+	int i, j;
+
+	(void) state;
+
+	for (i = 0; i < 6; i++) {
+		snprintf(seen[i], GD_FMT_SIZE, "%s", build(GDC_SLASH, codes[i]));
+	}
+
+	for (i = 0; i < 6; i++) {
+		for (j = i + 1; j < 6; j++) {
+			assert_string_not_equal(seen[i], seen[j]);
+		}
+	}
+}
+
+static void test_format_codes_produce_expected_strings(void **state) {
+	(void) state;
+
+	assert_string_equal(build(GDC_SLASH, GD_MO_D_Y), "%m/%d/%Y %H:%M:%S - ");
+	assert_string_equal(build(GDC_SLASH, GD_MN_D_Y), "%b/%d/%Y %H:%M:%S - ");
+	assert_string_equal(build(GDC_SLASH, GD_D_MO_Y), "%d/%m/%Y %H:%M:%S - ");
+	assert_string_equal(build(GDC_SLASH, GD_D_MN_Y), "%d/%b/%Y %H:%M:%S - ");
+	assert_string_equal(build(GDC_SLASH, GD_Y_MO_D), "%Y/%m/%d %H:%M:%S - ");
+	assert_string_equal(build(GDC_SLASH, GD_Y_MN_D), "%Y/%b/%d %H:%M:%S - ");
+}
+
+static void test_every_separator_is_applied(void **state) {
+	(void) state;
+
+	assert_string_equal(build(GDC_SLASH,  GD_Y_MO_D), "%Y/%m/%d %H:%M:%S - ");
+	assert_string_equal(build(GDC_DOT,    GD_Y_MO_D), "%Y.%m.%d %H:%M:%S - ");
+	assert_string_equal(build(GDC_HYPHEN, GD_Y_MO_D), "%Y-%m-%d %H:%M:%S - ");
+}
+
+static void test_out_of_range_codes_clamp_to_defaults(void **state) {
+	const char *from_default;
+	char expected[GD_FMT_SIZE];
+
+	(void) state;
+
+	snprintf(expected, GD_FMT_SIZE, "%s", build(GDC_DEFAULT, GD_DEFAULT));
+
+	from_default = build(GDC_MAX + 7, GD_MAX + 7);
+	assert_string_equal(from_default, expected);
+	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
+	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
+
+	from_default = build(GDC_MIN - 3, GD_MIN - 3);
+	assert_string_equal(from_default, expected);
+}
+
+/* The caching contract: the same storage is handed out every time, and the
+ * value survives repeated reads.  Before this change each call returned a
+ * fresh malloc that the caller had to free. */
+static void test_get_returns_the_same_storage(void **state) {
+	char *first, *second;
+
+	(void) state;
+
+	first  = build(GDC_HYPHEN, GD_Y_MO_D);
+	second = get_date_format();
+
+	assert_ptr_equal(first, second);
+	assert_ptr_equal(second, get_date_format());
+	assert_string_equal(second, "%Y-%m-%d %H:%M:%S - ");
+}
+
+static void test_value_is_stable_until_rebuilt(void **state) {
+	char *p;
+	int i;
+
+	(void) state;
+
+	p = build(GDC_DOT, GD_D_MO_Y);
+
+	for (i = 0; i < 100; i++) {
+		assert_string_equal(get_date_format(), "%d.%m.%Y %H:%M:%S - ");
+	}
+
+	assert_ptr_equal(p, get_date_format());
+
+	/* a later rebuild replaces the contents in place */
+	build(GDC_SLASH, GD_MO_D_Y);
+	assert_ptr_equal(p, get_date_format());
+	assert_string_equal(get_date_format(), "%m/%d/%Y %H:%M:%S - ");
+}
+
+/* This must run before any build() call. Early startup logging happens before
+ * read_config_options(), so the static value must match GD_DEFAULT. */
+static void test_initial_value_matches_the_default(void **state) {
+	(void) state;
+	assert_string_equal(get_date_format(), "%Y/%b/%d %H:%M:%S - ");
+}
+
+
+/* ---- issue#566: the result set is released on the NULL-row branch ---- */
+
+static void expect_freed(const char *what, int before) {
+	if (frees_seen == before) {
+		fail_msg("%s did not free the result set on the NULL-row branch", what);
+	}
+}
+
+static void test_getsetting_frees_on_null_row(void **state) {
+	char *r;
+	int before;
+
+	(void) state;
+
+	rows_to_report = 1;
+	row_is_null    = 1;
+	before         = frees_seen;
+
+	r = getsetting(&fake_mysql, LOCAL, "anything");
+	expect_freed("getsetting()", before);
+	free(r);
+}
+
+static void test_getpsetting_frees_on_null_row(void **state) {
+	char *r;
+	int before;
+
+	(void) state;
+
+	rows_to_report = 1;
+	row_is_null    = 1;
+	before         = frees_seen;
+
+	r = getpsetting(&fake_mysql, LOCAL, "anything");
+	expect_freed("getpsetting()", before);
+	free(r);
+}
+
+static void test_getglobalvariable_frees_on_null_row(void **state) {
+	char *r;
+	int before;
+
+	(void) state;
+
+	rows_to_report = 1;
+	row_is_null    = 1;
+	before         = frees_seen;
+
+	r = getglobalvariable(&fake_mysql, LOCAL, "anything");
+	expect_freed("getglobalvariable()", before);
+	free(r);
+}
+
+static void test_get_cacti_version_frees_on_null_row(void **state) {
+	int before;
+
+	(void) state;
+
+	rows_to_report = 1;
+	row_is_null    = 1;
+	before         = frees_seen;
+
+	assert_int_equal(get_cacti_version(&fake_mysql, LOCAL), 0);
+	expect_freed("get_cacti_version()", before);
+}
+
+/* The success path still frees exactly once, so the new call did not double
+ * up with the one that was already there. */
+static void test_success_path_frees_once(void **state) {
+	char *r;
+	int before;
+
+	(void) state;
+
+	rows_to_report = 1;
+	row_is_null    = 0;
+	before         = frees_seen;
+
+	r = getsetting(&fake_mysql, LOCAL, "anything");
+	assert_int_equal(frees_seen - before, 1);
+	free(r);
+}
+
+/* ---- issue#588: a row that crosses a batch boundary is still sent once -- */
+
+static int count_occurrences(const char *haystack, const char *needle) {
+	int count = 0;
+	size_t needle_len = strlen(needle);
+
+	while ((haystack = strstr(haystack, needle)) != NULL) {
+		count++;
+		haystack += needle_len;
+	}
+
+	return count;
+}
+
+static void test_push_flush_drops_suffix_overflow(void **state) {
+	char *sqlbuf;
+	char *cursor;
+	MYSQL mysql;
+	int before;
+
+	(void) state;
+	sqlbuf = malloc(HUGE_BUFSIZE);
+	assert_non_null(sqlbuf);
+	memset(sqlbuf, 'x', HUGE_BUFSIZE - 1);
+	sqlbuf[HUGE_BUFSIZE - 1] = '\0';
+	cursor = sqlbuf + HUGE_BUFSIZE - 1;
+	before = total_insert_count;
+
+	push_flush_batch(&mysql, sqlbuf, &cursor, " suffix");
+
+	assert_int_equal(total_insert_count, before);
+	assert_ptr_equal(cursor, sqlbuf + HUGE_BUFSIZE - 1);
+	free(sqlbuf);
+}
+
+static void test_remote_push_keeps_batch_boundary_rows(void **state) {
+	int i;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 0;
+	host_insert_count = 0;
+	item_insert_count = 0;
+
+	poller_push_data_to_main();
+
+	assert_int_equal(host_insert_count, 2);
+	assert_int_equal(item_insert_count, 2);
+	assert_int_equal(count_occurrences(host_inserts[0], " (500, "), 1);
+	assert_int_equal(count_occurrences(host_inserts[0], " (501, "), 0);
+	assert_int_equal(count_occurrences(host_inserts[1], " (500, "), 0);
+	assert_int_equal(count_occurrences(host_inserts[1], " (501, "), 1);
+	assert_int_equal(count_occurrences(item_inserts[0], " (10000, "), 1);
+	assert_int_equal(count_occurrences(item_inserts[0], " (10001, "), 0);
+	assert_int_equal(count_occurrences(item_inserts[1], " (10000, "), 0);
+	assert_int_equal(count_occurrences(item_inserts[1], " (10001, "), 1);
+	assert_null(strstr(host_inserts[0], " AS rs "));
+	assert_non_null(strstr(host_inserts[0], "VALUES(snmp_sysDescr)"));
+	assert_null(strstr(item_inserts[0], " AS rs "));
+	assert_non_null(strstr(item_inserts[0], "VALUES(rrd_next_step)"));
+
+	for (i = 0; i < 2; i++) {
+		free(host_inserts[i]);
+		free(item_inserts[i]);
+		host_inserts[i] = NULL;
+		item_inserts[i] = NULL;
+	}
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
+
+static void test_remote_push_flushes_wide_rows_before_overflow(void **state) {
+	int i;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 1;
+	host_insert_count = 0;
+	item_insert_count = 0;
+
+	poller_push_data_to_main();
+
+	assert_true(host_insert_count > 1);
+	assert_true(item_insert_count > 1);
+	for (i = 0; i < host_insert_count; i++) {
+		assert_non_null(strstr(host_inserts[i], "ON DUPLICATE KEY UPDATE"));
+		free(host_inserts[i]);
+		host_inserts[i] = NULL;
+	}
+	for (i = 0; i < item_insert_count; i++) {
+		assert_non_null(strstr(item_inserts[i], "ON DUPLICATE KEY UPDATE"));
+		free(item_inserts[i]);
+		item_inserts[i] = NULL;
+	}
+	byte_boundary_mode = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
+
+
+/* ---- issue#565: spine_log() appends the newline without overrunning ---- */
+
+static char log_path[256];
+
+static void route_log_to_a_file(void) {
+	snprintf(log_path, sizeof(log_path), "/tmp/spine_log_test_%d.log", (int) getpid());
+	unlink(log_path);
+
+	set.log_destination  = LOGDEST_FILE;
+	set.log_level        = POLLER_VERBOSITY_DEBUG;
+	set.logfile_processed = TRUE;
+	set.poller_id        = 1;
+	snprintf(set.path_logfile, sizeof(set.path_logfile), "%s", log_path);
+}
+
+static char *read_log(size_t *len) {
+	FILE *f = fopen(log_path, "r");
+	static char buf[LOGSIZE * 2];
+	size_t n;
+
+	if (f == NULL) {
+		*len = 0;
+		return NULL;
+	}
+
+	n = fread(buf, 1, sizeof(buf) - 1, f);
+	fclose(f);
+	buf[n] = '\0';
+	*len = n;
+
+	return buf;
+}
+
+static void test_spine_log_appends_a_newline(void **state) {
+	char *out;
+	size_t n;
+
+	(void) state;
+
+	route_log_to_a_file();
+	spine_log("a short message");
+
+	out = read_log(&n);
+	assert_non_null(out);
+	assert_true(n > 0);
+	assert_int_equal(out[n - 1], '\n');
+	assert_non_null(strstr(out, "a short message"));
+
+	unlink(log_path);
+}
+
+/* The regression guard: a message long enough to fill flogmessage exactly.
+ * Before the fix the unconditional strcat() wrote the terminator one byte
+ * past the buffer, which ASan reports as a stack-buffer-overflow. */
+static void test_spine_log_survives_a_full_line(void **state) {
+	char *big;
+	char *out;
+	size_t n;
+
+	(void) state;
+
+	big = malloc(LOGSIZE);
+	assert_non_null(big);
+	memset(big, 'y', LOGSIZE - 1);
+	big[LOGSIZE - 1] = '\0';
+
+	route_log_to_a_file();
+	spine_log("%s", big);
+
+	out = read_log(&n);
+	assert_non_null(out);
+	assert_int_equal(n, LOGSIZE - 1);
+	assert_int_equal(out[n - 1], 'y');
+
+	free(big);
+	unlink(log_path);
+}
+
+static void test_spine_log_does_not_double_an_existing_newline(void **state) {
+	char *out;
+	size_t n;
+
+	(void) state;
+
+	route_log_to_a_file();
+	spine_log("ends with a newline\n");
+
+	out = read_log(&n);
+	assert_non_null(out);
+	assert_true(n >= 2);
+	assert_int_equal(out[n - 1], '\n');
+	assert_int_not_equal(out[n - 2], '\n');
+
+	unlink(log_path);
+}
+
+int main(void) {
+	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_initial_value_matches_the_default),
+		cmocka_unit_test(test_each_format_code_is_distinct),
+		cmocka_unit_test(test_format_codes_produce_expected_strings),
+		cmocka_unit_test(test_every_separator_is_applied),
+		cmocka_unit_test(test_out_of_range_codes_clamp_to_defaults),
+		cmocka_unit_test(test_get_returns_the_same_storage),
+		cmocka_unit_test(test_value_is_stable_until_rebuilt),
+		cmocka_unit_test(test_getsetting_frees_on_null_row),
+		cmocka_unit_test(test_getpsetting_frees_on_null_row),
+		cmocka_unit_test(test_getglobalvariable_frees_on_null_row),
+		cmocka_unit_test(test_get_cacti_version_frees_on_null_row),
+		cmocka_unit_test(test_success_path_frees_once),
+		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
+		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
+		cmocka_unit_test(test_push_flush_drops_suffix_overflow),
+		cmocka_unit_test(test_spine_log_appends_a_newline),
+		cmocka_unit_test(test_spine_log_survives_a_full_line),
+		cmocka_unit_test(test_spine_log_does_not_double_an_existing_newline),
+	};
+
+	return cmocka_run_group_tests(tests, NULL, NULL);
+}
