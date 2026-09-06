@@ -248,23 +248,32 @@ static void test_poller_hex_overflow_is_undefined(void **state) {
 	char tiny[2] = "f";
 	char too_small[3] = "ff";
 	char empty[1] = "";
+	char long_hex[RESULTS_BUFFER + 16];
 	int errors = 0;
 
 	(void) state;
 	strcpy(result, "ff:ff:ff:ff:ff:ff:ff:ff");
-	assert_true(poller_store_hex_result(result, sizeof(result), &errors));
+	assert_true(poller_store_hex_result(result, sizeof(result), result, &errors));
 	assert_string_equal(result, "18446744073709551615");
 	assert_int_equal(errors, 0);
 
 	strcpy(result, "1:00:00:00:00:00:00:00:00");
-	assert_false(poller_store_hex_result(result, sizeof(result), &errors));
+	assert_false(poller_store_hex_result(result, sizeof(result), result, &errors));
 	assert_true(IS_UNDEFINED(result));
 	assert_int_equal(errors, 1);
-	assert_false(poller_store_hex_result(NULL, 0, &errors));
-	assert_false(poller_store_hex_result(empty, 0, &errors));
-	assert_false(poller_store_hex_result(tiny, 1, &errors));
-	assert_false(poller_store_hex_result(too_small, sizeof(too_small), &errors));
+	assert_false(poller_store_hex_result(NULL, 0, "ff", &errors));
+	assert_false(poller_store_hex_result(empty, 0, "ff", &errors));
+	assert_false(poller_store_hex_result(tiny, 1, "ff", &errors));
+	assert_false(poller_store_hex_result(too_small, sizeof(too_small), too_small, &errors));
 	assert_true(IS_UNDEFINED(too_small));
+	assert_int_equal(errors, 5);
+
+	memset(long_hex, ' ', sizeof(long_hex));
+	long_hex[sizeof(long_hex) - 3] = 'f';
+	long_hex[sizeof(long_hex) - 2] = 'f';
+	long_hex[sizeof(long_hex) - 1] = '\0';
+	assert_true(poller_store_hex_result(result, sizeof(result), long_hex, &errors));
+	assert_string_equal(result, "255");
 	assert_int_equal(errors, 5);
 }
 

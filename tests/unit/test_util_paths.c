@@ -446,8 +446,8 @@ static void test_spine_log_survives_a_full_line(void **state) {
 
 	out = read_log(&n);
 	assert_non_null(out);
-	assert_true(n > 0);
-	assert_true(n <= LOGSIZE);
+	assert_int_equal(n, LOGSIZE - 1);
+	assert_int_equal(out[n - 1], 'y');
 
 	free(big);
 	unlink(log_path);

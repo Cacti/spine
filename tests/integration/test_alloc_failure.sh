@@ -32,7 +32,9 @@ pass() { echo "  PASS: $*"; PASS=$((PASS+1)); }
 fail() { echo "  FAIL: $*"; FAIL=$((FAIL+1)); }
 
 SPINE=""
-if [[ -x "$REPO_ROOT/spine" ]]; then
+if [[ -n "${top_builddir:-}" && -x "$top_builddir/spine" ]]; then
+	SPINE="$top_builddir/spine"
+elif [[ -x "$REPO_ROOT/spine" ]]; then
 	SPINE="$REPO_ROOT/spine"
 elif command -v spine >/dev/null 2>&1; then
 	SPINE="$(command -v spine)"
@@ -40,6 +42,11 @@ fi
 
 if [[ -z "$SPINE" ]]; then
 	echo "no spine binary found; skipping"
+	exit 77
+fi
+
+if [[ -u "$SPINE" ]]; then
+	echo "the spine binary is setuid and the loader will ignore LD_PRELOAD; skipping"
 	exit 77
 fi
 

@@ -139,18 +139,18 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-int poller_store_hex_result(char *result, size_t result_size, int *errors) {
+int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors) {
 	unsigned long long value;
 	int written;
 
-	if (result == NULL || result_size < 2) {
+	if (result == NULL || result_size < 2 || hex == NULL) {
 		if (errors != NULL) {
 			(*errors)++;
 		}
 		return FALSE;
 	}
 
-	if (!hex2dec(result, &value)) {
+	if (!hex2dec(hex, &value)) {
 		SET_UNDEFINED(result);
 		if (errors != NULL) {
 			(*errors)++;
@@ -1479,7 +1479,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-								if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, &errors)) {
+								if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result, &errors)) {
 									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 									if (set.spine_log_level == 2) {
 										SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
@@ -1585,7 +1585,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-							if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, &errors)) {
+							if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result, &errors)) {
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 								if (set.spine_log_level == 2) {
 									SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
@@ -1685,8 +1685,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, &errors)) {
+					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result, &errors)) {
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						if (set.spine_log_level == 2) {
 							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i] SCRIPT: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
@@ -1757,8 +1756,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, &errors)) {
+					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result, &errors)) {
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
 						if (set.spine_log_level == 2) {
 							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i] SCRIPT: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
@@ -1835,7 +1833,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-					if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, &errors)) {
+					if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result, &errors)) {
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
 						if (set.spine_log_level == 2) {
 							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
