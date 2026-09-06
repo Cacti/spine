@@ -1,0 +1,20 @@
+services:
+  db:
+    image: mysql:8.4
+    # The Cacti 1.x schema intentionally uses zero-date sentinel values.
+    command: ["--sql-mode=NO_ENGINE_SUBSTITUTION"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: cacti
+      MYSQL_USER: spine
+      MYSQL_PASSWORD: spine
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  verify:
+    image: mysql:8.4
+    environment:
+      DB_CLIENT: mysql

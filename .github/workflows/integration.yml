@@ -15,21 +15,34 @@ concurrency:
 
 jobs:
   snmpv3:
-    runs-on: ubuntu-latest
+    name: SNMPv3 integration (${{ matrix.database }})
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [mariadb, mysql]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Brings up MariaDB and an snmpd, then polls a real device through
       # poll_host() and checks the value lands in poller_output.
       - name: Poll an SNMPv3 device end to end
+        env:
+          SPINE_TEST_DATABASE: ${{ matrix.database }}
         run: |
           set -euo pipefail
           tests/snmpv3/scripts/run-integration.sh
 
       - name: Show container logs on failure
         if: failure()
+        env:
+          SPINE_TEST_DATABASE: ${{ matrix.database }}
         run: |
           set -euo pipefail
           cd tests/snmpv3
-          docker compose logs --no-color || true
+          compose=(docker compose)
+          if [[ "$SPINE_TEST_DATABASE" == mysql ]]; then
+            compose+=(-f docker-compose.yml -f docker-compose.mysql.yml)
+          fi
+          "${compose[@]}" logs --no-color || true

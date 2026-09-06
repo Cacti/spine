@@ -42,6 +42,8 @@ echo "=== Phase 2: skew snmpd clock +200s to trigger notInTimeWindow ==="
 "${COMPOSE[@]}" ps snmpd 2>/dev/null | grep -qw "healthy" \
   || { echo "  SKIP: snmpd not healthy, skipping clock-skew phase"; exit 0; }
 
+# Expansion must happen inside the container.
+# shellcheck disable=SC2016
 "${COMPOSE[@]}" exec -T snmpd /bin/sh -c \
     'date -s "$(date -d "+200 seconds" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || date -v+200S +%Y-%m-%dT%H:%M:%S)" 2>/dev/null' \
   || { echo "  SKIP: SYS_TIME capability not available, skipping clock-skew phase"; exit 0; }

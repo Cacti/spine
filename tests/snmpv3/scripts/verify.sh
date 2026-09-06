@@ -5,7 +5,8 @@
 # to. Every check here is something a regression in poll_host() would break.
 set -eu
 
-Q="mariadb -h db -u spine -pspine cacti -N -B -e"
+DB_CLIENT=${DB_CLIENT:-mariadb}
+Q="$DB_CLIENT -h db -u spine -pspine cacti -N -B -e"
 
 fail() { echo "FAIL: $1"; exit 1; }
 ok()   { echo "ok: $1"; }
@@ -32,7 +33,6 @@ status=$($Q "SELECT status FROM host WHERE id = 1;")
 ok "host 1 recorded as up"
 
 # 5. availability accounting ran
-fails=$($Q "SELECT status_fail_date FROM host WHERE id = 1;")
 errs=$($Q "SELECT COUNT(*) FROM host_errors WHERE host_id = 1;")
 [ "$errs" = "0" ] || fail "host_errors has $errs row(s) for host 1"
 ok "no host errors recorded"

@@ -22,6 +22,7 @@ SANITIZERS := -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -fno-l
 # hardening options that clash with the sanitizer build. Keep only the includes.
 NETSNMP_CFLAGS := $(filter -I% -D%, $(shell net-snmp-config --base-cflags 2>/dev/null))
 NETSNMP_LIBS   := $(filter -l% -L%, $(shell net-snmp-config --libs 2>/dev/null))
+DB_CONFIG      ?= $(shell command -v mariadb_config 2>/dev/null || command -v mysql_config 2>/dev/null)
 
 SPINE_SRC := $(addprefix $(SPINE_ROOT)/, \
 	ping.c util.c sql.c snmp.c locks.c poller.c nft_popen.c php.c keywords.c error.c)
@@ -29,11 +30,11 @@ SPINE_SRC := $(addprefix $(SPINE_ROOT)/, \
 FUZZ_CFLAGS := $(SANITIZERS) -g -O1 -DHAVE_CONFIG_H \
 	-I$(SPINE_ROOT) -I$(SPINE_ROOT)/config \
 	$(NETSNMP_CFLAGS) \
-	$(shell mysql_config --include 2>/dev/null)
+	$(shell $(DB_CONFIG) --include 2>/dev/null)
 
-FUZZ_LDLIBS := $(NETSNMP_LIBS) $(filter -l% -L%, $(shell mysql_config --libs 2>/dev/null))
+FUZZ_LDLIBS := $(NETSNMP_LIBS) $(filter -l% -L%, $(shell $(DB_CONFIG) --libs 2>/dev/null))
 
-TARGETS := $(BINDIR)/fuzz_namebyhost
+TARGETS := $(BINDIR)/fuzz_namebyhost $(BINDIR)/fuzz_output_parser
 
 .PHONY: all run clean
 
