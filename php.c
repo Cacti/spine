@@ -778,7 +778,7 @@ cleanup:
 
 	return rc;
 }
-static void php_terminate_and_reap(pid_t pid) {
+static int php_terminate_and_reap(pid_t pid) {
 	int attempts;
 	int phase;
 	int status;
@@ -796,12 +796,12 @@ static void php_terminate_and_reap(pid_t pid) {
 			} while (waited < 0 && errno == EINTR);
 
 			if (waited == pid || (waited < 0 && errno == ECHILD)) {
-				return;
+				return TRUE;
 			}
 
 			if (waited < 0) {
 				SPINE_LOG(("WARNING: Unable to reap PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
-				return;
+				return FALSE;
 			}
 
 			/* The delay is load-bearing: without it both phases burn twenty
@@ -813,7 +813,7 @@ static void php_terminate_and_reap(pid_t pid) {
 		signal_number = SIGKILL;
 	}
 
-	SPINE_LOG(("WARNING: PHP Script Server PID[%ld] did not exit after SIGKILL", (long)pid));
+	return FALSE;
 }
 
 /*! \fn void php_close(int php_process)
@@ -882,7 +882,9 @@ void php_close(int php_process) {
 	 	 * a process group leader), and PID 1 is "init".
 	  	 */
 		if (phpp->php_pid > 1) {
-			php_terminate_and_reap(phpp->php_pid);
+			if (!php_terminate_and_reap(phpp->php_pid)) {
+				nft_abandon_child(phpp->php_pid, "PHP child survived shutdown budget");
+			}
 
 			phpp->php_pid = -1;
 		}
