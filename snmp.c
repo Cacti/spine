@@ -1207,6 +1207,21 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 		size_t          name_len;
 	} *name, *namep;
 
+	/* A per-item credential change can fail to rebuild the session after the
+	 * caller's earlier NULL check. Fail the pending group as one host error
+	 * instead of passing NULL into net-snmp. */
+	if (current_host == NULL || current_host->snmp_session == NULL) {
+		if (current_host != NULL) {
+			current_host->ignore_host = TRUE;
+		}
+		if (snmp_oids != NULL) {
+			for (i = 0; i < num_oids; i++) {
+				SET_UNDEFINED(snmp_oids[i].result);
+			}
+		}
+		return;
+	}
+
 	/* load up oids */
 	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
 	if (name == NULL) {

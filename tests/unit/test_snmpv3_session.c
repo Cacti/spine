@@ -454,6 +454,23 @@ static void test_authnopriv_does_not_modify_caller_password(void **state) {
 	assert_string_equal(pw, "authpass123");
 }
 
+static void test_multi_get_refuses_a_missing_session(void **state) {
+	host_t host;
+	target_t item;
+	snmp_oids_t request;
+
+	(void) state;
+	memset(&host, 0, sizeof(host));
+	memset(&item, 0, sizeof(item));
+	memset(&request, 0, sizeof(request));
+	strcpy(request.result, "pending");
+
+	snmp_get_multi(&host, &item, &request, 1);
+
+	assert_true(host.ignore_host);
+	assert_true(IS_UNDEFINED(request.result));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_value_presence_contract, session_reset),
@@ -477,6 +494,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_stale_privacy_passphrase_without_auth_uses_noauth, session_reset),
 		cmocka_unit_test_setup(test_session_construction_does_not_modify_caller_passphrases, session_reset),
 		cmocka_unit_test_setup(test_authnopriv_does_not_modify_caller_password, session_reset),
+		cmocka_unit_test_setup(test_multi_get_refuses_a_missing_session, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
