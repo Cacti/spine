@@ -330,6 +330,17 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; using noAuthNoPriv.", host_id));
 		}
 
+		/* A password with no selected protocol was rejected by the historical
+		 * path. Preserve that fail-closed boundary rather than silently sending
+		 * an unauthenticated request that carries no usable password. */
+		if (!spine_snmpv3_value_is_set(snmp_auth_protocol) &&
+			spine_snmpv3_value_is_set(snmp_password)) {
+			SPINE_LOG(("SNMP: Device[%i] Error authentication password is configured but no authentication protocol is selected.", host_id));
+			free(session.peername);
+			free(session.localname);
+			return 0;
+		}
+
 		if (spine_snmpv3_value_is_set(snmp_priv_protocol) !=
 			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
 			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; ignoring privacy and sending SNMP payloads without encryption.", host_id));
