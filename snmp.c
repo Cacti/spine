@@ -370,6 +370,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		 * honoured by USM. Refuse that case; a stale protocol with no
 		 * passphrase remains compatible with the historical authNoPriv path. */
 		if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
+			spine_snmpv3_value_is_set(snmp_priv_protocol) &&
 			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
 			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is configured but authentication is unavailable; set an auth protocol and password, or clear the privacy passphrase.", host_id));
 			free(session.peername);

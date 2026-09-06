@@ -379,62 +379,6 @@ AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session str
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
 
-# ****************** DES privacy protocol availability **********************
-dnl SNMP_DEFAULT_PRIV_PROTO names usmDESPrivProtocol unless the header sets
-dnl NETSNMP_DISABLE_DES. Fedora once shipped a net-snmp where the header took
-dnl the DES branch while the library exported no such symbol, so spine failed
-dnl to link rather than degrading. Checking the macro is not enough, because
-dnl that packaging did not set it; the symbol itself has to be probed.
-AC_MSG_CHECKING([whether the net-snmp library exports usmDESPrivProtocol])
-spine_save_LIBS="$LIBS"
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-  #include <net-snmp/net-snmp-config.h>
-  #include <net-snmp/net-snmp-includes.h>
-]], [[
-  const oid *p = usmDESPrivProtocol;
-  return p == NULL;
-]])],
-  [AC_DEFINE(HAVE_USM_DES_PRIV_PROTOCOL, 1, [Define if the net-snmp library exports usmDESPrivProtocol.])
-   AC_MSG_RESULT(yes)],
-  [AC_MSG_RESULT(no)])
-LIBS="$spine_save_LIBS"
-
-# ****************** AES privacy protocol availability **********************
-dnl A DES-disabled net-snmp normally provides AES, but packaging can remove
-dnl both. Probe the symbol before compiling the fallback reference.
-AC_MSG_CHECKING([whether the net-snmp library exports usmAESPrivProtocol])
-spine_save_LIBS="$LIBS"
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-  #include <net-snmp/net-snmp-config.h>
-  #include <net-snmp/net-snmp-includes.h>
-]], [[
-  const oid *p = usmAESPrivProtocol;
-  return p == NULL;
-]])],
-  [AC_DEFINE(HAVE_USM_AES_PRIV_PROTOCOL, 1, [Define if the net-snmp library exports usmAESPrivProtocol.])
-   AC_MSG_RESULT(yes)],
-  [AC_MSG_RESULT(no)])
-LIBS="$spine_save_LIBS"
-
-# ****************** SHA-1 auth protocol availability **********************
-dnl Do not use SNMP_DEFAULT_AUTH_PROTO as a last-resort fallback: on an MD5-
-dnl disabled/FIPS header it may name a symbol the linked library does not
-dnl export. Probe the explicit SHA-1 symbol, just as the privacy path probes
-dnl DES, and compile the fallback only when it links.
-AC_MSG_CHECKING([whether the net-snmp library exports usmHMACSHA1AuthProtocol])
-spine_save_LIBS="$LIBS"
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-  #include <net-snmp/net-snmp-config.h>
-  #include <net-snmp/net-snmp-includes.h>
-]], [[
-  const oid *p = usmHMACSHA1AuthProtocol;
-  return p == NULL;
-]])],
-  [AC_DEFINE(HAVE_USM_HMACSHA1_AUTH_PROTOCOL, 1, [Define if the net-snmp library exports usmHMACSHA1AuthProtocol.])
-   AC_MSG_RESULT(yes)],
-  [AC_MSG_RESULT(no)])
-LIBS="$spine_save_LIBS"
-
 # ****************** SNMPv3 USM Error Constants Check ***********************
 AC_MSG_CHECKING([for SNMPv3 USM error constants])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[

@@ -274,6 +274,19 @@ static void test_privacy_passphrase_without_protocol_uses_authnopriv(void **stat
 	assert_int_equal(level_for(auth, pw, none, ppass), SNMP_SEC_LEVEL_AUTHNOPRIV);
 }
 
+static void test_stale_privacy_passphrase_without_auth_uses_noauth(void **state) {
+	char *auth = available_auth_protocol();
+	char empty[] = "";
+	char none[] = "[None]";
+	char ppass[] = "privpass123";
+
+	(void) state;
+	if (auth == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, empty, none, ppass), SNMP_SEC_LEVEL_NOAUTH);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_value_presence_contract, session_reset),
@@ -287,6 +300,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_empty_auth_protocol_with_password_downgrades, session_reset),
 		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_uses_authnopriv, session_reset),
 		cmocka_unit_test_setup(test_privacy_passphrase_without_protocol_uses_authnopriv, session_reset),
+		cmocka_unit_test_setup(test_stale_privacy_passphrase_without_auth_uses_noauth, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
