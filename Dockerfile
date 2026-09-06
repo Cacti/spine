@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmariadb3 \
         libsnmp40 \
         libssl3 \
+        php-cli \
+        procps \
         zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
