@@ -703,7 +703,7 @@ int main(int argc, char *argv[]) {
 		   overrun, and both the NULL test below and the free loop at the end
 		   walk every slot up to num_rows. */
 		if (!(details = (poller_thread_t **)calloc(num_rows, sizeof(poller_thread_t*)))) {
-			die("ERROR: Fatal malloc error: spine.c details!");
+			die("ERROR: Fatal calloc error: spine.c details!");
 		}
 
 		if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
