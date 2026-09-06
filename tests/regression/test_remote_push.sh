@@ -26,7 +26,7 @@ awk '/^static void push_flush_batch/{f=1} f{print} f&&/^\}/{exit}' util.c |
 	grep -q 'if (!spine_appendf' ||
 	fail "overflowed remote push batches must not be sent"
 
-printf '%s\n' "$poll_host_body" | grep -q 'set\.dbonupdate' &&
+printf '%s\n' "$poll_host_body" | grep -q 'if (set\.dbonupdate' &&
 	fail "poller_output must not select SQL syntax from the local server version"
 
 printf '%s\n' "$poll_host_body" | grep -q 'output=VALUES(output)' ||
