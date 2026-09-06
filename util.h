@@ -77,6 +77,7 @@ unsigned long long hex2dec(char *str);
 #define MAX_MATCHES 5
 #define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
 const char *regex_replace(const char *exp, const char *value);
+const char *regex_replace_extended(const char *exp, const char *value);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))

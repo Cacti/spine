@@ -2309,7 +2309,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	}
 }
 
-const char *regex_replace(const char *exp, const char *value) {
+static const char *regex_replace_flags(const char *exp, const char *value, int flags) {
 	regex_t regex;
 	int reti;
 	/* Thread-local storage: each polling thread gets its own buffer, so
@@ -2321,10 +2321,9 @@ const char *regex_replace(const char *exp, const char *value) {
 	regmatch_t matches[MAX_MATCHES];
 	size_t match_len;
 
-	/* Compile regular expression */
-	/* REGEX_NUMBER is an extended regex: without REG_EXTENDED the parens and
-	   the + are literals and it never matches. */
-	reti = regcomp(&regex, exp, REG_EXTENDED);
+	/* Stored output_regex values retain the historical basic-regex dialect;
+	 * only the internal REGEX_NUMBER expression opts into ERE. */
+	reti = regcomp(&regex, exp, flags);
 	if (reti) {
 		return value;
 	}
@@ -2344,6 +2343,14 @@ const char *regex_replace(const char *exp, const char *value) {
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
+}
+
+const char *regex_replace(const char *exp, const char *value) {
+	return regex_replace_flags(exp, value, 0);
+}
+
+const char *regex_replace_extended(const char *exp, const char *value) {
+	return regex_replace_flags(exp, value, REG_EXTENDED);
 }
 
 /*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
