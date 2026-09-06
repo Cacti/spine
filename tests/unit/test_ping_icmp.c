@@ -34,6 +34,7 @@ extern int *debug_devices;
 static int pi_debug_table[100];
 static int use_controlled_socket;
 static int controlled_socket_fd;
+static int controlled_socket_type;
 static int controlled_socket_closed;
 static int socket_failures_remaining;
 static int socket_calls;
@@ -130,16 +131,19 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 	struct ip *ip_reply;
 	struct icmp *icmp_reply;
 	struct sockaddr_in *source;
-	size_t reply_length = sizeof(struct ip) + sizeof(struct icmp);
+	size_t ip_length = controlled_socket_type == SOCK_DGRAM ? 0 : sizeof(struct ip);
+	size_t reply_length = ip_length + sizeof(struct icmp);
 
 	if (!controlled_reply) {
 		return recvfrom(fd, buffer, length, flags, address, address_len);
 	}
 	assert_true(length >= reply_length);
 	memset(buffer, 0, reply_length);
-	ip_reply = buffer;
-	ip_reply->ip_hl = sizeof(struct ip) >> 2;
-	icmp_reply = (struct icmp *)((unsigned char *) buffer + sizeof(struct ip));
+	if (ip_length != 0) {
+		ip_reply = buffer;
+		ip_reply->ip_hl = sizeof(struct ip) >> 2;
+	}
+	icmp_reply = (struct icmp *)((unsigned char *) buffer + ip_length);
 	icmp_reply->icmp_type = ICMP_ECHOREPLY;
 	icmp_reply->icmp_id = sent_icmp_id;
 	icmp_reply->icmp_seq = sent_icmp_seq;
@@ -163,8 +167,8 @@ static int test_socket(int domain, int type, int protocol) {
 
 	if (use_controlled_socket) {
 		(void) domain;
-		(void) type;
 		(void) protocol;
+		controlled_socket_type = type;
 		return controlled_socket_fd;
 	}
 
@@ -221,6 +225,7 @@ static int ping_reset(void **state) {
 	set.ping_retries = 1;
 	use_controlled_socket = 0;
 	controlled_socket_fd = -1;
+	controlled_socket_type = 0;
 	controlled_socket_closed = 0;
 	socket_failures_remaining = 0;
 	socket_calls = 0;
