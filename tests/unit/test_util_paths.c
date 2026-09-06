@@ -45,6 +45,7 @@ static int host_insert_count;
 static int item_insert_count;
 
 my_ulonglong mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
+unsigned long mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
 
 MYSQL_ROW mysql_fetch_row(MYSQL_RES *res) {
 	static char *cells[21];

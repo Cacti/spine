@@ -22,6 +22,7 @@ SPINE_ROOT := ../..
 # headers.  Discover them the same way configure does rather than hardcoding
 # a prefix.
 MYSQL_CFLAGS   := $(shell mysql_config --include 2>/dev/null)
+MYSQL_LIBS     := $(shell mysql_config --libs 2>/dev/null)
 NETSNMP_CFLAGS := $(shell net-snmp-config --base-cflags 2>/dev/null)
 
 CMOCKA_CFLAGS := $(shell $(PKG_CONFIG) --cflags cmocka 2>/dev/null)
@@ -43,7 +44,7 @@ CFLAGS += \
 	-Wextra \
 	-Wno-unused-parameter
 
-LDLIBS := $(CMOCKA_LIBS)
+LDLIBS := $(CMOCKA_LIBS) $(MYSQL_LIBS)
 
 BUILD_FIXES   := $(BINDIR)/test_build_fixes
 SAFETY_FIXES  := $(BINDIR)/test_safety_fixes

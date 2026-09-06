@@ -245,15 +245,27 @@ static void test_hex2dec(void **state) {
 
 static void test_poller_hex_overflow_is_undefined(void **state) {
 	char result[RESULTS_BUFFER];
+	char tiny[2] = "f";
+	char too_small[3] = "ff";
+	char empty[1] = "";
+	int errors = 0;
 
 	(void) state;
 	strcpy(result, "ff:ff:ff:ff:ff:ff:ff:ff");
-	assert_true(poller_store_hex_result(result, sizeof(result)));
+	assert_true(poller_store_hex_result(result, sizeof(result), &errors));
 	assert_string_equal(result, "18446744073709551615");
+	assert_int_equal(errors, 0);
 
 	strcpy(result, "1:00:00:00:00:00:00:00:00");
-	assert_false(poller_store_hex_result(result, sizeof(result)));
+	assert_false(poller_store_hex_result(result, sizeof(result), &errors));
 	assert_true(IS_UNDEFINED(result));
+	assert_int_equal(errors, 1);
+	assert_false(poller_store_hex_result(NULL, 0, &errors));
+	assert_false(poller_store_hex_result(empty, 0, &errors));
+	assert_false(poller_store_hex_result(tiny, 1, &errors));
+	assert_false(poller_store_hex_result(too_small, sizeof(too_small), &errors));
+	assert_true(IS_UNDEFINED(too_small));
+	assert_int_equal(errors, 5);
 }
 
 static void test_row_alias_upsert_version_gate(void **state) {
@@ -262,7 +274,9 @@ static void test_row_alias_upsert_version_gate(void **state) {
 	assert_false(db_row_alias_upsert_supported("8.0.19", 80019));
 	assert_true(db_row_alias_upsert_supported("8.0.20", 80020));
 	assert_true(db_row_alias_upsert_supported("8.4.0", 80400));
+	assert_true(db_row_alias_upsert_supported("9.1.0", 90100));
 	assert_false(db_row_alias_upsert_supported("10.11.6-MariaDB", 101106));
+	assert_false(db_row_alias_upsert_supported("5.5.5-10.11.6-MariaDB-log", 50505));
 }
 
 /* --- misc ----------------------------------------------------------------- */

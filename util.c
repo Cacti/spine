@@ -514,11 +514,19 @@ static void read_availability_settings(MYSQL *psql) {
  *
  */
 int db_row_alias_upsert_supported(const char *version, unsigned long version_number) {
-	if (version == NULL || STRIMATCH(version, "mariadb")) {
+	const char *p;
+
+	if (version == NULL) {
 		return FALSE;
 	}
 
-	return strpos(version, "8.") == 0 && version_number >= 80020;
+	for (p = version; *p != '\0'; p++) {
+		if (strncasecmp(p, "mariadb", 7) == 0) {
+			return FALSE;
+		}
+	}
+
+	return version_number >= 80020 && version_number < 100000;
 }
 
 void read_config_options(void) {

@@ -139,18 +139,34 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-int poller_store_hex_result(char *result, size_t result_size) {
+int poller_store_hex_result(char *result, size_t result_size, int *errors) {
 	unsigned long long value;
+	int written;
 
-	if (result == NULL || result_size < 2 || !hex2dec(result, &value)) {
-		SPINE_LOG(("WARNING: Hexadecimal poller output exceeds the supported 64-bit range"));
-		if (result != NULL && result_size >= 2) {
-			SET_UNDEFINED(result);
+	if (result == NULL || result_size < 2) {
+		if (errors != NULL) {
+			(*errors)++;
 		}
 		return FALSE;
 	}
 
-	snprintf(result, result_size, "%llu", value);
+	if (!hex2dec(result, &value)) {
+		SET_UNDEFINED(result);
+		if (errors != NULL) {
+			(*errors)++;
+		}
+		return FALSE;
+	}
+
+	written = snprintf(result, result_size, "%llu", value);
+	if (written < 0 || (size_t) written >= result_size) {
+		SET_UNDEFINED(result);
+		if (errors != NULL) {
+			(*errors)++;
+		}
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -1463,7 +1479,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-								poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER);
+								if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, &errors)) {
+									buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+									if (set.spine_log_level == 2) {
+										SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
+									}
+								}
 							} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1564,7 +1585,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-							poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER);
+							if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, &errors)) {
+								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+								if (set.spine_log_level == 2) {
+									SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
+								}
+							}
 						} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1660,7 +1686,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-					poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER);
+					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, &errors)) {
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
+						if (set.spine_log_level == 2) {
+							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i] SCRIPT: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
+						}
+					}
 				} else {
 					/* trim a non-numeric prefix or suffix, then validate below */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(poll_result));
@@ -1727,7 +1758,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
-					poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER);
+					if (!poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER, &errors)) {
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
+						if (set.spine_log_level == 2) {
+							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i] SCRIPT: %s", host_id, host_thread, poller_items[i].local_data_id, poller_items[i].arg1));
+						}
+					}
 				} else {
 					/* trim a non-numeric prefix or suffix, then validate below */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(poll_result));
@@ -1799,7 +1835,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-					poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER);
+					if (!poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER, &errors)) {
+						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
+						if (set.spine_log_level == 2) {
+							SPINE_LOG(("WARNING: Hexadecimal Response Exceeds 64 Bits, Device[%i] HT[%i] DS[%i]", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id));
+						}
+					}
 				} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);

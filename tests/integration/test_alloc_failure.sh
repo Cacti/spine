@@ -18,6 +18,11 @@
 # Usage: ./tests/integration/test_alloc_failure.sh
 set -euo pipefail
 
+if [[ "$(uname -s)" != "Linux" ]]; then
+	echo "LD_PRELOAD allocation interposition is only supported by this test on Linux; skipping"
+	exit 77
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PASS=0
