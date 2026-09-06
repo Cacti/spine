@@ -101,7 +101,19 @@ static struct pid
 /* Serialize access to PidList. */
 static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Children nft_pclose() gave up waiting for. Nothing else in spine reaps: there
+   is no SIGCHLD handler and no waitpid(-1), so a child dropped here would stay
+   a zombie for the daemon's lifetime and accumulate once per affected script
+   per cycle against RLIMIT_NPROC. SA_NOCLDWAIT would fix the leak but auto-reap
+   every child, and spine reads exit status to tell a failed script from a silent
+   one, so the pids are parked here and swept with WNOHANG instead. Bounded: past
+   the cap the pid is logged and dropped, because an unbounded list trades a pid
+   leak for a memory leak. */
+static pid_t	AbandonedPids[NFT_ABANDONED_MAX];
+static int	AbandonedCount;
+
 static void	close_cleanup(void *);
+static void	nft_sweep_abandoned(void);
 
 /* Close and remove an entry from the shared registry, then transfer exclusive
  * ownership to the caller.  Closing under ListMutex preserves the invariant
@@ -138,19 +150,39 @@ static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd)
    writes its value and then lingers, or that ignores SIGPIPE, would otherwise
    pin the thread across polling cycles while holding its available_scripts
    token. Poll with WNOHANG, then escalate to SIGKILL. */
+/* Budget to SIGKILL is about five seconds on both platforms. The counts differ
+ * because the granularity does: everywhere else in the tree usleep() is simply
+ * skipped under SOLAR_THREAD rather than replaced, so the coarsest wait
+ * available there is a whole second and the attempt count scales to match.
+ * Leaving the counts equal made the Solaris path roughly a hundred seconds,
+ * longer than a polling cycle, while nft_pclose() holds an available_scripts
+ * token throughout. */
 #define NFT_PCLOSE_REAP_USEC 50000
+#define NFT_PCLOSE_SPIN_USEC 200
+#define NFT_PCLOSE_SPIN_ATTEMPTS 10
+#ifndef SOLAR_THREAD
 #define NFT_PCLOSE_TERM_ATTEMPTS 100
 #define NFT_PCLOSE_KILL_ATTEMPTS 20
+#else
+#define NFT_PCLOSE_TERM_ATTEMPTS 5
+#define NFT_PCLOSE_KILL_ATTEMPTS 2
+#endif
 
 int spine_set_cloexec(int fd) {
 	int flags;
 
 	flags = fcntl(fd, F_GETFD);
 	if (flags < 0) {
+		SPINE_LOG(("ERROR: Unable to read descriptor flags on fd %d: %s", fd, strerror(errno)));
 		return -1;
 	}
 
-	return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
+		SPINE_LOG(("ERROR: Unable to set close-on-exec on fd %d: %s", fd, strerror(errno)));
+		return -1;
+	}
+
+	return 0;
 }
 
 /*! \fn static int open_pipe_cloexec(int pdes[2])
@@ -170,12 +202,23 @@ int spine_set_cloexec(int fd) {
  */
 int spine_open_pipe_cloexec(int pdes[2]) {
 	if (pipe(pdes) < 0) {
+		SPINE_LOG(("ERROR: Unable to create a pipe: %s", strerror(errno)));
 		return FALSE;
 	}
 
+	/* spine_set_cloexec() has already said which descriptor failed and why;
+	 * a descriptor that stays inheritable is worse than no pipe at all, so
+	 * this fails rather than continuing without the flag. */
 	if (spine_set_cloexec(pdes[0]) != 0 || spine_set_cloexec(pdes[1]) != 0) {
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
+
+		/* the caller owns nothing on failure, so do not leave it holding two
+		   descriptor numbers that now belong to whoever opens next; a caller
+		   with one cleanup path would close them a second time */
+		pdes[0] = -1;
+		pdes[1] = -1;
+
 		return FALSE;
 	}
 
@@ -188,6 +231,10 @@ int spine_open_pipe_cloexec(int pdes[2]) {
 int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 	int attempt;
 	pid_t waited;
+
+	if (pstat == NULL) {
+		return -1;
+	}
 
 	for (attempt = 0; attempt < attempts; attempt++) {
 		do {
@@ -205,13 +252,26 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		}
 
 		if (waited < 0) {
+			/* leave errno as waitpid set it; nft_pclose() reports it */
 			return -1;
 		}
 
 		/* The delay is load-bearing: without it the attempts are spent in
-		   nanoseconds and SIGKILL lands before the child can exit. */
+		   nanoseconds and SIGKILL lands before the child can exit.
+
+		   Starting at the full 50ms charged that to every script that exits a
+		   moment after closing stdout, which is the common case for anything
+		   that flushes or tears down an interpreter. nft_pclose() runs while
+		   the caller still holds an available_scripts token, so that delay
+		   costs poller capacity rather than one thread. Spin briefly first,
+		   then settle. The attempt count and so the time to SIGKILL are
+		   unchanged. */
 		#ifndef SOLAR_THREAD
-		usleep(NFT_PCLOSE_REAP_USEC);
+		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
+			usleep(NFT_PCLOSE_SPIN_USEC);
+		} else {
+			usleep(NFT_PCLOSE_REAP_USEC);
+		}
 		#else
 		sleep(1);
 		#endif
@@ -249,6 +309,7 @@ int nft_popen(const char * command, const char * type) {
 	struct pid *cur;
 	struct pid *p;
 	int    pdes[2];
+	int     inherit_fd = -1;
 	int    fd, twoway;
 	pid_t  pid;
 	char   *argv[4];
@@ -304,6 +365,11 @@ int nft_popen(const char * command, const char * type) {
 	 */
 	pthread_mutex_lock(&ListMutex);
 
+	/* Drain anything a previous nft_pclose() gave up on. Doing it here means the
+	   list empties on the next script poll rather than waiting for another
+	   failure to trigger a sweep. */
+	nft_sweep_abandoned();
+
 	/* Build file actions for posix_spawn to replace vfork+execve. */
 	posix_spawn_file_actions_t fa;
 	if (posix_spawn_file_actions_init(&fa) != 0) {
@@ -317,6 +383,17 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
+	/* The pipe ends are close-on-exec, which is the point: another thread
+	 * spawning in this window must not inherit them. The child needs its own
+	 * end, and dup2 clears the flag on its target, so the usual paths are
+	 * fine.
+	 *
+	 * When the end already sits on the descriptor it is destined for, there is
+	 * no dup2 to clear anything and the child would exec with that descriptor
+	 * closed. That happens whenever stdin or stdout was closed before this
+	 * call, which for a daemon is not exotic, and the failure is silent: every
+	 * script data source records U. dup() the end to a fresh descriptor, which
+	 * does not carry the flag, and let the child dup2 from that. */
 	if (*type == 'r') {
 		posix_spawn_file_actions_addclose(&fa, pdes[0]);
 		if (pdes[1] != STDOUT_FILENO) {
@@ -324,13 +401,34 @@ int nft_popen(const char * command, const char * type) {
 			posix_spawn_file_actions_addclose(&fa, pdes[1]);
 			if (twoway)
 				posix_spawn_file_actions_adddup2(&fa, STDOUT_FILENO, STDIN_FILENO);
-		} else if (twoway && (pdes[1] != STDIN_FILENO)) {
-			posix_spawn_file_actions_adddup2(&fa, pdes[1], STDIN_FILENO);
+		} else {
+			inherit_fd = dup(pdes[1]);
+
+			if (inherit_fd < 0) {
+				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
+				goto spawn_failed;
+			}
+
+			posix_spawn_file_actions_adddup2(&fa, inherit_fd, STDOUT_FILENO);
+			posix_spawn_file_actions_addclose(&fa, inherit_fd);
+
+			if (twoway)
+				posix_spawn_file_actions_adddup2(&fa, STDOUT_FILENO, STDIN_FILENO);
 		}
 	} else {
 		if (pdes[0] != STDIN_FILENO) {
 			posix_spawn_file_actions_adddup2(&fa, pdes[0], STDIN_FILENO);
 			posix_spawn_file_actions_addclose(&fa, pdes[0]);
+		} else {
+			inherit_fd = dup(pdes[0]);
+
+			if (inherit_fd < 0) {
+				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
+				goto spawn_failed;
+			}
+
+			posix_spawn_file_actions_adddup2(&fa, inherit_fd, STDIN_FILENO);
+			posix_spawn_file_actions_addclose(&fa, inherit_fd);
 		}
 		posix_spawn_file_actions_addclose(&fa, pdes[1]);
 	}
@@ -358,7 +456,20 @@ int nft_popen(const char * command, const char * type) {
 		}
 
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", strerror(spawn_err)));
+
+spawn_failed:
+		/* One teardown for every failure after the file actions exist and the
+		 * list mutex is held. ListMutex is process-global, so a path that
+		 * returns still holding it wedges every later nft_popen() and
+		 * nft_pclose() in every poller thread and the daemon stops collecting
+		 * script data until it is restarted. */
 		posix_spawn_file_actions_destroy(&fa);
+
+		if (inherit_fd != -1) {
+			(void)close(inherit_fd);
+			inherit_fd = -1;
+		}
+
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		pthread_mutex_unlock(&ListMutex);
@@ -369,6 +480,15 @@ int nft_popen(const char * command, const char * type) {
 	}
 
 	posix_spawn_file_actions_destroy(&fa);
+
+	/* The child holds its own duplicate. Keeping this one would hold the pipe's
+	 * write end open, so the reader never sees EOF and exec_poll() blocks to
+	 * script_timeout on a script that already answered. That is the failure the
+	 * close-on-exec work exists to prevent. */
+	if (inherit_fd != -1) {
+		(void)close(inherit_fd);
+		inherit_fd = -1;
+	}
 
 	/* Parent. */
 	if (*type == 'r') {
@@ -478,11 +598,13 @@ nft_pclose(int fd)
 		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
 			pid = cur->pid;
 		} else {
+			nft_abandon_child(cur->pid, "kill budget expired");
 			errno = ETIMEDOUT;
 			pid = -1;
 		}
 		break;
 	default:
+		nft_abandon_child(cur->pid, "waitpid failed");
 		pid = -1;
 		break;
 	}
@@ -490,6 +612,99 @@ nft_pclose(int fd)
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 
 	return (pid == -1 ? -1 : pstat);
+}
+
+/*! ------------------------------------------------------------------------------
+  * nft_sweep_abandoned	- reap any child a previous nft_pclose() gave up on.
+  *
+  * Called with ListMutex held. WNOHANG only: this runs on a poller thread and
+  * must never block on a child that is still stuck.
+  *------------------------------------------------------------------------------
+ */
+static void
+nft_sweep_abandoned(void)
+{
+	int	i = 0;
+	int	status;
+	pid_t	waited;
+
+	while (i < AbandonedCount) {
+		do {
+			waited = waitpid(AbandonedPids[i], &status, WNOHANG);
+		} while (waited < 0 && errno == EINTR);
+
+		if (waited == AbandonedPids[i] || (waited < 0 && errno == ECHILD)) {
+			SPINE_LOG_DEBUG(("DEBUG: Reaped abandoned script child pid %ld", (long) AbandonedPids[i]));
+			AbandonedPids[i] = AbandonedPids[AbandonedCount - 1];
+			AbandonedCount--;
+		} else {
+			i++;
+		}
+	}
+}
+
+/*! ------------------------------------------------------------------------------
+  * nft_abandoned_pending	- sweep, then report how many pids are still parked.
+  *
+  * Takes ListMutex itself, so a caller that already holds it uses
+  * nft_sweep_abandoned() directly.
+  *------------------------------------------------------------------------------
+ */
+int
+nft_abandoned_pending(void)
+{
+	int	remaining;
+	int	oldstate;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	pthread_mutex_lock(&ListMutex);
+
+	nft_sweep_abandoned();
+	remaining = AbandonedCount;
+
+	pthread_mutex_unlock(&ListMutex);
+	pthread_setcancelstate(oldstate, NULL);
+
+	return remaining;
+}
+
+/*! ------------------------------------------------------------------------------
+  * nft_abandon_child	- record a child that outlived its kill budget.
+  *
+  * The pid and the reason are logged either way. A silent drop leaves PID
+  * exhaustion with nothing in the log pointing at its cause.
+  *------------------------------------------------------------------------------
+ */
+void
+nft_abandon_child(pid_t pid, const char *reason)
+{
+	int	parked;
+	int	oldstate;
+
+	/* nft_pclose() calls this inside its pthread_cleanup_push() region, and
+	   close_cleanup() takes ListMutex. A cancel delivered while this held the
+	   lock would run the handler straight into it, so hold it uncancellable. */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+
+	pthread_mutex_lock(&ListMutex);
+
+	nft_sweep_abandoned();
+
+	parked = (AbandonedCount < NFT_ABANDONED_MAX);
+
+	if (parked) {
+		AbandonedPids[AbandonedCount++] = pid;
+	}
+
+	pthread_mutex_unlock(&ListMutex);
+
+	pthread_setcancelstate(oldstate, NULL);
+
+	if (parked) {
+		SPINE_LOG(("WARNING: SCRIPT: pid %ld survived SIGKILL (%s); parked for reaping", (long) pid, reason));
+	} else {
+		SPINE_LOG(("ERROR: SCRIPT: pid %ld survived SIGKILL (%s) and the abandoned list is full; it will remain a zombie", (long) pid, reason));
+	}
 }
 
 /*! ------------------------------------------------------------------------------

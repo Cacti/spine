@@ -121,9 +121,6 @@ static void spine_signal_handler(int spine_signal) {
 		case SIGQUIT:
 			message = "FATAL: Spine Encountered a Keyboard Quit Command\n";
 			break;
-		case SIGPIPE:
-			message = "FATAL: Spine Encountered a Broken Pipe\n";
-			break;
 		default:
 			break;
 	}
@@ -149,7 +146,6 @@ static void spine_signal_handler(int spine_signal) {
 
 static int spine_fatal_signals[] = {
 	SIGINT,
-	SIGPIPE,
 	SIGSEGV,
 	SIGBUS,
 	SIGFPE,
@@ -169,6 +165,13 @@ void install_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa;
 	void (*ohandler)(int);
+
+	/* A broken pipe is a normal condition here, not a fatal one: a script
+	   server or popen child can exit at any time. The handler reset itself to
+	   SIG_DFL on entry and never re-armed, so the second dead child spine wrote
+	   to terminated the poller. Both write() call sites check their return, so
+	   ignoring the signal lets them see EPIPE and handle it. */
+	signal(SIGPIPE, SIG_IGN);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -199,6 +202,8 @@ void uninstall_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa;
 	void (*ohandler)(int);
+
+	signal(SIGPIPE, SIG_DFL);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);

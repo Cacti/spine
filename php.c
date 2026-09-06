@@ -38,6 +38,34 @@
 
 extern char **environ;
 
+/*! \fn static int php_addclose_unless_std(posix_spawn_file_actions_t *fa, int fd)
+ *  \brief queue a close for a pipe end unless it is stdin or stdout
+ *
+ *  After the dup2 redirects, descriptors 0 and 1 hold the child's ends. Closing
+ *  them here would undo the redirect that was just set up.
+ */
+/*! \fn static void php_close_fd(int *fd)
+ *  \brief close a descriptor once and mark it gone
+ *
+ *  php_init() has one cleanup path for six descriptors, some of which are
+ *  handed to php_processes[] on the way out. Clearing as it closes is what
+ *  keeps the shared teardown from closing a descriptor the parent still owns,
+ *  or one that another thread has since been given.
+ */
+static void php_close_fd(int *fd) {
+	if (*fd >= 0) {
+		(void) close(*fd);
+		*fd = -1;
+	}
+}
+
+static int php_addclose_unless_std(posix_spawn_file_actions_t *fa, int fd) {
+	if (fd == STDIN_FILENO || fd == STDOUT_FILENO) {
+		return 0;
+	}
+
+	return posix_spawn_file_actions_addclose(fa, fd);
+}
 
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
@@ -88,7 +116,6 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
-		result_string = strdup("U");
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
 
 		php_close(php_process);
@@ -98,6 +125,10 @@ char *php_cmd(const char *php_command, int php_process) {
 		if (retries < 3) {
 			goto retry;
 		}
+
+		/* allocated only once the retry budget is spent: a successful retry
+		   reassigns result_string below and would orphan an earlier copy */
+		result_string = strdup("U");
 	} else {
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process, command);
@@ -164,7 +195,17 @@ int php_get_process(void) {
  *
  *  \return a string pointer to the PHP Script Server response
  */
-char *php_readpipe(int php_process, char *command) {
+/*! \fn static char *php_read_result(int php_process, char *command, int allow_restart)
+ *  \brief reads one script server response.
+ *
+ *  allow_restart is FALSE for the startup handshake. php_init() calls this to
+ *  confirm the server it just spawned is answering, and a restart from inside
+ *  that read would call php_init() again, which reads again: a server that
+ *  starts but never answers put a poller thread into unbounded mutual
+ *  recursion, spawning a fresh server at every level. Refusing the restart on
+ *  the handshake bounds the depth at one by construction.
+ */
+static char *php_read_result(int php_process, char *command, int allow_restart) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
@@ -191,6 +232,16 @@ char *php_readpipe(int php_process, char *command) {
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
 	retry:
+
+	/* FD_SET on a descriptor at or past FD_SETSIZE writes outside fds, which is
+	   a stack object here. ping_icmp() guards its socket the same way. */
+	if (php_processes[php_process].php_read_fd >= FD_SETSIZE) {
+		SPINE_LOG(("ERROR: SS[%i] Script server descriptor %d exceeds FD_SETSIZE %d", php_process, php_processes[php_process].php_read_fd, FD_SETSIZE));
+
+		SET_UNDEFINED(result_string);
+
+		return result_string;
+	}
 
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
@@ -242,8 +293,10 @@ char *php_readpipe(int php_process, char *command) {
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
-		php_close(php_process);
-		php_init(php_process);
+		if (allow_restart) {
+			php_close(php_process);
+			php_init(php_process);
+		}
 		break;
 	case 0:
 		/* record end time */
@@ -252,8 +305,10 @@ char *php_readpipe(int php_process, char *command) {
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */
-		php_close(php_process);
-		php_init(php_process);
+		if (allow_restart) {
+			php_close(php_process);
+			php_init(php_process);
+		}
 		break;
 	default:
 		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
@@ -301,6 +356,16 @@ char *php_readpipe(int php_process, char *command) {
 	return result_string;
 }
 
+/*! \fn char *php_readpipe(int php_process, char *command)
+ *  \brief reads a script server response, restarting a server that stops
+ *         answering.
+ *
+ *  \return a string pointer to the PHP Script Server response
+ */
+char *php_readpipe(int php_process, char *command) {
+	return php_read_result(php_process, command, TRUE);
+}
+
 /*! \fn int php_init(int php_process)
  *  \brief initialize either a specific PHP Script Server or all of them.
  *  \param php_process the process number to start or PHP_INIT
@@ -313,8 +378,8 @@ char *php_readpipe(int php_process, char *command) {
  *  \return TRUE if the PHP Script Server is know running or FALSE otherwise
  */
 int php_init(int php_process) {
-	int  cacti2php_pdes[2];
-	int  php2cacti_pdes[2];
+	int  cacti2php_pdes[2] = { -1, -1 };
+	int  php2cacti_pdes[2] = { -1, -1 };
 	pid_t  pid;
 	char poller_id[TINY_BUFSIZE];
 	char *argv[7];
@@ -323,12 +388,25 @@ int php_init(int php_process) {
 	char arg_environ_spine[] = "--environ=spine";
 	char arg_mode_online[] = "--mode=online";
 	char arg_mode_offline[] = "--mode=offline";
-	int  cancel_state;
-	char *result_string = 0;
+	posix_spawn_file_actions_t fa;
+	int  fa_valid    = FALSE;
+	int  cancel_state = 0;
+	int  cancel_held = FALSE;
+	int  child_stdin;
+	int  child_stdout;
+	int  dup_stdin  = -1;
+	int  dup_stdout = -1;
+	char *result_string = NULL;
 	int num_processes;
+	int slot;
 	int i;
-	int retry_count = 0;
+	int rc = FALSE;
 	char *command = strdup("INIT");
+
+	if (command == NULL) {
+		SPINE_LOG(("ERROR: Fatal malloc error: php.c php_init!"));
+		return FALSE;
+	}
 
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
@@ -338,24 +416,31 @@ int php_init(int php_process) {
 	}
 
 	for (i=0; i < num_processes; i++) {
+		/* the spawn retry budget is per server. Sharing one counter across the
+		   loop meant that once the first server spent it on EAGAIN, every
+		   server after it got none, under exactly the resource pressure the
+		   retry exists to ride out. */
+		int retry_count = 0;
+
+		slot = (php_process == PHP_INIT) ? i : php_process;
+
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Routine Starting", i));
 
 		/* create the output pipes from Spine to php*/
 		if (!spine_open_pipe_cloexec(cacti2php_pdes)) {
 			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
-			return FALSE;
+			goto cleanup;
 		}
 
 		/* create the input pipes from php to Spine */
 		if (!spine_open_pipe_cloexec(php2cacti_pdes)) {
-			close(cacti2php_pdes[0]);
-			close(cacti2php_pdes[1]);
 			SPINE_LOG(("ERROR: SS[%i] Could not allocate php server pipes", i));
-			return FALSE;
+			goto cleanup;
 		}
 
 		/* disable thread cancellation from this point forward. */
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
+		cancel_held = TRUE;
 
 		/* establish arguments for script server execution */
 		if (set.cacti_version <= 1222) {
@@ -397,35 +482,51 @@ int php_init(int php_process) {
 		SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server About to spawn Child Process", i));
 
 		{
-			posix_spawn_file_actions_t fa;
 			int spawn_err;
 
 			if (posix_spawn_file_actions_init(&fa) != 0) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions_init failed", i));
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
-				pthread_setcancelstate(cancel_state, NULL);
-				return FALSE;
+				goto cleanup;
 			}
 
+			fa_valid = TRUE;
+
 			/* wire cacti->php read end to child stdin, php->cacti write end to child stdout */
-			if (posix_spawn_file_actions_adddup2(&fa, cacti2php_pdes[0], STDIN_FILENO) != 0 ||
-			    posix_spawn_file_actions_adddup2(&fa, php2cacti_pdes[1], STDOUT_FILENO) != 0 ||
-			    /* close all four pipe ends in the child after dup2 redirects are in place */
-			    posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[0]) != 0 ||
-			    posix_spawn_file_actions_addclose(&fa, cacti2php_pdes[1]) != 0 ||
-			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[0]) != 0 ||
-			    posix_spawn_file_actions_addclose(&fa, php2cacti_pdes[1]) != 0) {
+			/* The pipe ends are close-on-exec, and dup2 clears that on its target, so
+			 * the usual case is fine. When an end already sits on the descriptor it is
+			 * destined for, dup2(fd, fd) is a no-op that clears nothing and the
+			 * unconditional close below would then shut the child's stdin or stdout.
+			 * The script server would exec with it closed, never answer, and every
+			 * script-server data source would record U with no diagnostic. Reaching it
+			 * needs spine to start with fd 0 or 1 closed, which a daemon can do.
+			 * Same treatment as nft_popen(): dup() to a fresh descriptor, which does
+			 * not carry the flag. */
+			child_stdin  = cacti2php_pdes[0];
+			child_stdout = php2cacti_pdes[1];
+
+			if (child_stdin == STDIN_FILENO) {
+				dup_stdin = dup(child_stdin);
+				child_stdin = dup_stdin;
+			}
+
+			if (child_stdout == STDOUT_FILENO) {
+				dup_stdout = dup(child_stdout);
+				child_stdout = dup_stdout;
+			}
+
+			if (child_stdin < 0 || child_stdout < 0 ||
+			    posix_spawn_file_actions_adddup2(&fa, child_stdin, STDIN_FILENO) != 0 ||
+			    posix_spawn_file_actions_adddup2(&fa, child_stdout, STDOUT_FILENO) != 0 ||
+			    /* close the pipe ends the child does not need. Skip fd 0 and 1: after
+			       the redirects above they hold the copies the child polls on. */
+			    php_addclose_unless_std(&fa, cacti2php_pdes[0]) != 0 ||
+			    php_addclose_unless_std(&fa, cacti2php_pdes[1]) != 0 ||
+			    php_addclose_unless_std(&fa, php2cacti_pdes[0]) != 0 ||
+			    php_addclose_unless_std(&fa, php2cacti_pdes[1]) != 0 ||
+			    (dup_stdin  != -1 && posix_spawn_file_actions_addclose(&fa, dup_stdin)  != 0) ||
+			    (dup_stdout != -1 && posix_spawn_file_actions_addclose(&fa, dup_stdout) != 0)) {
 				SPINE_LOG(("ERROR: SS[%i] posix_spawn_file_actions setup failed", i));
-				posix_spawn_file_actions_destroy(&fa);
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
-				pthread_setcancelstate(cancel_state, NULL);
-				return FALSE;
+				goto cleanup;
 			}
 
 			do {
@@ -441,6 +542,11 @@ int php_init(int php_process) {
 			} while (1);
 
 			posix_spawn_file_actions_destroy(&fa);
+			fa_valid = FALSE;
+
+			/* the child holds its own copies now */
+			php_close_fd(&dup_stdin);
+			php_close_fd(&dup_stdout);
 
 			if (spawn_err != 0) {
 				if (spawn_err == EAGAIN) {
@@ -451,15 +557,8 @@ int php_init(int php_process) {
 					SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server Unknown Reason", i));
 				}
 
-				close(php2cacti_pdes[0]);
-				close(php2cacti_pdes[1]);
-				close(cacti2php_pdes[0]);
-				close(cacti2php_pdes[1]);
-
 				SPINE_LOG(("ERROR: SS[%i] Could not spawn PHP Script Server", i));
-				pthread_setcancelstate(cancel_state, NULL);
-
-				return FALSE;
+				goto cleanup;
 			}
 
 			SPINE_LOG_DEBUG(("DEBUG: SS[%i] PHP Script Server Child spawn Success", i));
@@ -467,59 +566,64 @@ int php_init(int php_process) {
 
 		/* Parent */
 		/* close unneeded pipes */
-		close(cacti2php_pdes[0]);
-		close(php2cacti_pdes[1]);
+		php_close_fd(&cacti2php_pdes[0]);
+		php_close_fd(&php2cacti_pdes[1]);
 
-		if (php_process == PHP_INIT) {
-			php_processes[i].php_pid = pid;
-			php_processes[i].php_write_fd = cacti2php_pdes[1];
-			php_processes[i].php_read_fd = php2cacti_pdes[0];
-		} else {
-			php_processes[php_process].php_pid = pid;
-			php_processes[php_process].php_write_fd = cacti2php_pdes[1];
-			php_processes[php_process].php_read_fd = php2cacti_pdes[0];
-		}
+		php_processes[slot].php_pid = pid;
+		php_processes[slot].php_write_fd = cacti2php_pdes[1];
+		php_processes[slot].php_read_fd = php2cacti_pdes[0];
+
+		/* php_processes[] owns these now; the cleanup below must not close them */
+		cacti2php_pdes[1] = -1;
+		php2cacti_pdes[0] = -1;
 
 		/* restore caller's cancellation state. */
 		pthread_setcancelstate(cancel_state, NULL);
+		cancel_held = FALSE;
 
 		/* check pipe to insure startup took place */
-		if (php_process == PHP_INIT) {
-			result_string = php_readpipe(i, command);
-		} else {
-			result_string = php_readpipe(php_process, command);
-		}
+		result_string = php_read_result(slot, command, FALSE);
 
 		if (strstr(result_string, "Started")) {
-			if (php_process == PHP_INIT) {
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", i, php2cacti_pdes[0], cacti2php_pdes[1]));
+			SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", slot, php_processes[slot].php_read_fd, php_processes[slot].php_write_fd));
 
-				php_processes[i].php_state = PHP_READY;
-			} else {
-				SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", php_process, php2cacti_pdes[0], cacti2php_pdes[1]));
-
-				php_processes[php_process].php_state = PHP_READY;
-			}
+			php_processes[slot].php_state = PHP_READY;
 		} else {
-			if (php_process == PHP_INIT) {
-				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", i, result_string));
+			SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", slot, result_string));
 
-				php_processes[i].php_state = PHP_BUSY;
-			} else {
-				SPINE_LOG(("ERROR: SS[%i] Script Server did not start properly return message was: '%s'", php_process, result_string));
-
-				php_processes[php_process].php_state = PHP_BUSY;
-			}
+			php_processes[slot].php_state = PHP_BUSY;
 		}
 
-		free(result_string);
+		SPINE_FREE(result_string);
 	}
 
+	rc = TRUE;
+
+cleanup:
+	/* One owner for everything this function allocates. The five exits used to
+	 * spell their own teardown out and they had already drifted: every one of
+	 * them leaked `command`, and each carried a slightly different subset of
+	 * the closes. See ping_icmp() and #593 for the same shape. */
+	if (fa_valid) {
+		posix_spawn_file_actions_destroy(&fa);
+	}
+
+	php_close_fd(&dup_stdin);
+	php_close_fd(&dup_stdout);
+	php_close_fd(&cacti2php_pdes[0]);
+	php_close_fd(&cacti2php_pdes[1]);
+	php_close_fd(&php2cacti_pdes[0]);
+	php_close_fd(&php2cacti_pdes[1]);
+
+	if (cancel_held) {
+		pthread_setcancelstate(cancel_state, NULL);
+	}
+
+	SPINE_FREE(result_string);
 	free(command);
 
-	return TRUE;
+	return rc;
 }
-
 static void php_terminate_and_reap(pid_t pid) {
 	int attempts;
 	int phase;

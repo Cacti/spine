@@ -126,4 +126,28 @@ extern int	spine_open_pipe_cloexec(int pdes[2]);
  */
 extern int	spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
 
+/*!
+ *  The cap on parked pids. Past it a child is logged and dropped, because an
+ *  unbounded list would trade a pid leak for a memory leak.
+ */
+#define NFT_ABANDONED_MAX 64
+
+/*!
+ *  nft_abandon_child
+ *
+ *  Record a child that outlived nft_pclose()'s kill budget. Nothing else in
+ *  spine reaps, so a dropped child would stay a zombie for the daemon's
+ *  lifetime; parked pids are swept on the next script poll. The pid and the
+ *  reason are logged either way.
+ */
+extern void	nft_abandon_child(pid_t pid, const char *reason);
+
+/*!
+ *  nft_abandoned_pending
+ *
+ *  Sweep the parked pids with WNOHANG and return how many are still running.
+ *  Zero means nothing is leaking.
+ */
+extern int	nft_abandoned_pending(void);
+
 #endif /* SPINE_NFT_POPEN_H */
