@@ -84,6 +84,34 @@ static int contains_nonzero(const unsigned char *value, size_t length) {
 	return FALSE;
 }
 
+static char *available_auth_protocol(void) {
+	static char sha[] = "SHA";
+	static char md5[] = "MD5";
+
+	if (usm_lookup_auth_type(sha) > 0) {
+		return sha;
+	}
+	if (usm_lookup_auth_type(md5) > 0) {
+		return md5;
+	}
+
+	return NULL;
+}
+
+static char *available_priv_protocol(void) {
+	static char aes[] = "AES";
+	static char des[] = "DES";
+
+	if (usm_lookup_priv_type(aes) >= 0) {
+		return aes;
+	}
+	if (usm_lookup_priv_type(des) >= 0) {
+		return des;
+	}
+
+	return NULL;
+}
+
 /* Returns the securityLevel of the session spine builds, or -1 when it
    refuses to build one. */
 static int level_for(char *auth_protocol, char *auth_password,
@@ -134,28 +162,38 @@ static void test_no_credentials_is_noauthnopriv(void **state) {
 /* Authentication without privacy is authNoPriv. This was also unusable before
    #582, because the key was only derived on the privacy path. */
 static void test_auth_without_privacy_is_authnopriv(void **state) {
-	char sha[] = "SHA";
+	char *auth = available_auth_protocol();
 	char pw[] = "authpass123";
 	char none[] = "[None]";
 	char empty[] = "";
+	const oid *expected;
+	size_t expected_len;
 
 	(void) state;
-	assert_int_equal(level_for(sha, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
+	if (auth == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
 	assert_true(captured_auth_key_len > 0);
 	assert_true(contains_nonzero(captured_auth_key, captured_auth_key_len));
-	assert_int_equal(captured_auth_proto_len, USM_AUTH_PROTO_SHA_LEN);
+	expected = sc_get_auth_oid(usm_lookup_auth_type(auth), &expected_len);
+	assert_non_null(expected);
+	assert_int_equal(captured_auth_proto_len, expected_len);
 	assert_int_equal(snmp_oid_compare(captured_auth_proto, captured_auth_proto_len,
-		usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN), 0);
+		expected, expected_len), 0);
 }
 
 static void test_auth_with_privacy_is_authpriv(void **state) {
-	char sha[] = "SHA";
+	char *auth = available_auth_protocol();
 	char pw[] = "authpass123";
-	char aes[] = "AES";
+	char *priv = available_priv_protocol();
 	char ppass[] = "privpass123";
 
 	(void) state;
-	assert_int_equal(level_for(sha, pw, aes, ppass), SNMP_SEC_LEVEL_AUTHPRIV);
+	if (auth == NULL || priv == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, priv, ppass), SNMP_SEC_LEVEL_AUTHPRIV);
 	assert_true(captured_auth_key_len > 0);
 	assert_true(contains_nonzero(captured_auth_key, captured_auth_key_len));
 	assert_true(captured_priv_key_len > 0);
@@ -167,13 +205,16 @@ static void test_auth_with_privacy_is_authpriv(void **state) {
    refused. The old code also refused, but by failing key derivation with a
    message about passphrase length that named neither cause nor remedy. */
 static void test_privacy_without_auth_is_refused(void **state) {
-	char sha[] = "SHA";
+	char *auth = available_auth_protocol();
 	char empty[] = "";
-	char aes[] = "AES";
+	char *priv = available_priv_protocol();
 	char ppass[] = "privpass123";
 
 	(void) state;
-	assert_int_equal(level_for(sha, empty, aes, ppass), -1);
+	if (auth == NULL || priv == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, empty, priv, ppass), -1);
 }
 
 /* An unrecognised protocol is a configuration error at any level. Deciding the
@@ -207,14 +248,30 @@ static void test_empty_auth_protocol_with_password_downgrades(void **state) {
 	assert_int_equal(level_for(empty, pw, none, empty), SNMP_SEC_LEVEL_NOAUTH);
 }
 
-static void test_privacy_protocol_without_passphrase_is_refused(void **state) {
-	char sha[] = "SHA";
+static void test_privacy_protocol_without_passphrase_uses_authnopriv(void **state) {
+	char *auth = available_auth_protocol();
 	char pw[] = "authpass123";
-	char aes[] = "AES";
+	char *priv = available_priv_protocol();
 	char empty[] = "";
 
 	(void) state;
-	assert_int_equal(level_for(sha, pw, aes, empty), -1);
+	if (auth == NULL || priv == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, priv, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
+}
+
+static void test_privacy_passphrase_without_protocol_uses_authnopriv(void **state) {
+	char *auth = available_auth_protocol();
+	char pw[] = "authpass123";
+	char none[] = "[None]";
+	char ppass[] = "privpass123";
+
+	(void) state;
+	if (auth == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, none, ppass), SNMP_SEC_LEVEL_AUTHNOPRIV);
 }
 
 int main(void) {
@@ -228,7 +285,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_even_without_a_password, session_reset),
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_with_a_password, session_reset),
 		cmocka_unit_test_setup(test_empty_auth_protocol_with_password_downgrades, session_reset),
-		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_is_refused, session_reset),
+		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_uses_authnopriv, session_reset),
+		cmocka_unit_test_setup(test_privacy_passphrase_without_protocol_uses_authnopriv, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

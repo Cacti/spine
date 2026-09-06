@@ -330,6 +330,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; using noAuthNoPriv.", host_id));
 		}
 
+		if (spine_snmpv3_value_is_set(snmp_priv_protocol) !=
+			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; ignoring privacy and sending SNMP payloads without encryption.", host_id));
+		}
+
 		/* A protocol that is set but unrecognised is a configuration error at
 		 * any security level. Deciding the level first and only validating on
 		 * the authenticated path would let a typo through as noAuthNoPriv,
@@ -361,16 +366,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			}
 		}
 
-		/* Privacy requires authentication in USM. A device configured with a
-		 * privacy protocol and passphrase but no auth passphrase cannot have
-		 * what it asked for, and quietly opening it as noAuthNoPriv would
-		 * leave the operator believing the traffic is encrypted. Refuse and
-		 * say why: the old code also refused, but by failing key derivation
-		 * with "passphrase below the length requirements of the USM". */
-		if (security_level != SNMP_SEC_LEVEL_AUTHPRIV &&
-			(spine_snmpv3_value_is_set(snmp_priv_protocol) ||
-			 spine_snmpv3_value_is_set(snmp_priv_passphrase))) {
-			SPINE_LOG(("SNMP: Device[%i] Error privacy requires authentication; set an auth protocol and password, or clear the privacy settings.", host_id));
+		/* A privacy passphrase with no usable authentication cannot be
+		 * honoured by USM. Refuse that case; a stale protocol with no
+		 * passphrase remains compatible with the historical authNoPriv path. */
+		if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
+			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is configured but authentication is unavailable; set an auth protocol and password, or clear the privacy passphrase.", host_id));
 			free(session.peername);
 			free(session.localname);
 			free(session.securityAuthProto);
@@ -398,9 +399,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				return 0;
 			}
 
-			/* set the security level to authenticate, but not encrypted */
-			session.securityLevel = security_level;
-
 			/* The authentication key was only ever derived on the privacy path,
 			 * so authNoPriv sessions authenticated with an empty key and every
 			 * such device failed with a USM authentication error. */
@@ -409,22 +407,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				Apsz = strdup(snmp_password);
 
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-				if (session.securityAuthProto == NULL) {
-					const oid *def = get_default_authtype(&session.securityAuthProtoLen);
-					if (def != NULL) {
-						session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
-					} else {
-						session.securityAuthProtoLen = 0;
-					}
-				}
-
-				if (session.securityAuthProto == NULL) {
-					#if defined(HAVE_USM_HMACSHA1_AUTH_PROTOCOL)
-					session.securityAuthProto = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
-					session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
-					#endif
-				}
-
 				if (Apsz == NULL || session.securityAuthProto == NULL ||
 					generate_Ku(session.securityAuthProto,
 					session.securityAuthProtoLen,
@@ -499,25 +481,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			{
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-				if (session.securityAuthProto == NULL) {
-					/*
-					 * get .conf set default
-					 */
-					const oid *def = get_default_authtype(&session.securityAuthProtoLen);
-					if (def != NULL) {
-						session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
-					} else {
-						session.securityAuthProtoLen = 0;
-					}
-				}
-
-				if (session.securityAuthProto == NULL) {
-					#if defined(HAVE_USM_HMACSHA1_AUTH_PROTOCOL)
-					session.securityAuthProto = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
-					session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
-					#endif
-				}
-
 				if (session.securityAuthProto == NULL ||
 					generate_Ku(session.securityAuthProto,
 					session.securityAuthProtoLen,
@@ -542,34 +505,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 
 			{
 				session.securityPrivKeyLen = USM_PRIV_KU_LEN;
-				if (session.securityPrivProto == NULL) {
-					/*
-					 * get .conf set default
-					 */
-					const oid *def = get_default_privtype(&session.securityPrivProtoLen);
-					if (def != NULL) {
-						session.securityPrivProto =
-							snmp_duplicate_objid(def, session.securityPrivProtoLen);
-					} else {
-						session.securityPrivProtoLen = 0;
-					}
-				}
-
-				if (session.securityPrivProto == NULL) {
-#if defined(HAVE_USM_DES_PRIV_PROTOCOL)
-					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
-					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
-#elif defined(HAVE_USM_AES_PRIV_PROTOCOL)
-					/* The header names DES as the default but this library does
-					 * not export it, so the macro cannot be referenced. */
-					session.securityPrivProto = snmp_duplicate_objid(usmAESPrivProtocol, USM_PRIV_PROTO_AES_LEN);
-					session.securityPrivProtoLen = USM_PRIV_PROTO_AES_LEN;
-#else
-					SPINE_LOG(("SNMP: Device[%i] Error no supported default privacy protocol is available.", host_id));
-					session.securityPrivProtoLen = 0;
-#endif
-				}
-
 				if (session.securityPrivProto == NULL ||
 					generate_Ku(session.securityAuthProto,
 					session.securityAuthProtoLen,
