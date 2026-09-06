@@ -513,6 +513,14 @@ static void read_availability_settings(MYSQL *psql) {
  *  load default values from the database for poller processing
  *
  */
+int db_row_alias_upsert_supported(const char *version, unsigned long version_number) {
+	if (version == NULL || STRIMATCH(version, "mariadb")) {
+		return FALSE;
+	}
+
+	return strpos(version, "8.") == 0 && version_number >= 80020;
+}
+
 void read_config_options(void) {
 	MYSQL      mysql;
 	MYSQL      mysqlr;
@@ -553,17 +561,9 @@ void read_config_options(void) {
 		free(res);
 	}
 
-	if (STRIMATCH(set.dbversion, "mariadb")) {
-		set.dbonupdate = 0;
-	} else if (strpos(set.dbversion, "8.") == 0) {
-		/* The row alias form, INSERT ... AS rs, is a syntax error before
-		   8.0.20, and the string test matches every 8.0.x. Ask the client
-		   library for the numeric version instead, so an older 8.0 keeps the
-		   VALUES() form rather than failing every poller_output insert. */
-		set.dbonupdate = (mysql_get_server_version(&mysql) >= 80020) ? 1 : 0;
-	} else {
-		set.dbonupdate = 0;
-	}
+	/* The row alias form, INSERT ... AS rs, is a syntax error before
+	   MySQL 8.0.20 and is not MariaDB syntax. */
+	set.dbonupdate = db_row_alias_upsert_supported(set.dbversion, mysql_get_server_version(&mysql));
 
 	/* get the cacti version from the database */
 	set.cacti_version = get_cacti_version(&mysql, LOCAL);
@@ -1460,20 +1460,6 @@ char *get_date_format(void) {
 	return log_date_format;
 }
 
-/* Serialises the log emit below.
- *
- * Not one of the locks.c mutexes, for two reasons. thread_mutex_lock() itself
- * calls SPINE_LOG_DEVDBG, which is a runtime level check rather than a compiled
- * out one, so routing the logger through it would recurse at the highest
- * verbosity. And init_mutexes() runs well into main(), after this function has
- * already been called nineteen times, so a lock that needs initialising would
- * be used uninitialised first. A static initialiser has neither problem.
- *
- * The tearing this prevents is not hypothetical: LOGSIZE is 65535 and stdio's
- * BUFSIZ is 8192, so any message over 8KB leaves fputs() as several write()
- * calls that another thread can interleave with. See #298. */
-static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 /*! \fn void spine_log(const char *format, ...)
  *  \brief output's log information to the desired cacti logfile.
  *  \param *logmessage a pointer to the pre-formatted log message.
@@ -1482,7 +1468,6 @@ static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 int spine_log(const char *format, ...) {
 	va_list	args;
 
-	FILE *log_file = NULL;
 	FILE *fp = NULL;
 
 	/* variables for time display */
@@ -1614,23 +1599,28 @@ int spine_log(const char *format, ...) {
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
+			int log_fd;
 			int oldstate;
+			size_t message_len;
+			ssize_t bytes_written;
 
-			/* a cancel delivered here would leave every other thread's logging
-			   blocked on a mutex nothing will release */
+			/* O_APPEND selects the end atomically, and one write() keeps a message
+			 * from being split into stdio-sized chunks another thread can splice
+			 * into. Reopening per message preserves log rotation. */
 			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
-			pthread_mutex_lock(&log_mutex);
+			log_fd = open(set.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0666);
 
-			/* "a" creates the file when it is absent, which is all the
-			   file_exists() test and the "w" mode were doing, minus a stat and
-			   the window between the two. Reopening per message is deliberate:
-			   it is what lets an operator rotate the log out from under a
-			   running poller. */
-			log_file = fopen(set.path_logfile, "a");
+			if (log_fd >= 0) {
+				message_len = strlen(flogmessage);
+				bytes_written = write(log_fd, flogmessage, message_len);
+				close(log_fd);
 
-			if (log_file) {
-				fputs(flogmessage, log_file);
-				fclose(log_file);
+				if (bytes_written < 0 || (size_t) bytes_written != message_len) {
+					if (!log_error) {
+						printf("ERROR: Spine Log File Write Was Incomplete\n");
+						log_error = TRUE;
+					}
+				}
 			} else {
 				if (!log_error) {
 					printf("ERROR: Spine Log File Could Not Be Opened/Created\n");
@@ -1638,7 +1628,6 @@ int spine_log(const char *format, ...) {
 				}
 			}
 
-			pthread_mutex_unlock(&log_mutex);
 			pthread_setcancelstate(oldstate, NULL);
 		}
 	}
@@ -2078,11 +2067,11 @@ int char_count(const char *str, int chr) {
 	return count;
 }
 
-unsigned long long hex2dec(char *str) {
+int hex2dec(const char *str, unsigned long long *result) {
 	unsigned long long number = 0;
 	unsigned int digit;
 
-	if (!str) return 0;
+	if (str == NULL || result == NULL) return FALSE;
 
 	while (*str) {
 		switch (*str) {
@@ -2106,20 +2095,21 @@ unsigned long long hex2dec(char *str) {
 			str++;
 			continue;
 		default:
-			return 0;
+			return FALSE;
 		}
 
 		/* A device can return an arbitrarily long string. Refuse overflow
 		 * before multiplying rather than converting an out-of-range double. */
 		if (number > (ULLONG_MAX - digit) / 16) {
-			return 0;
+			return FALSE;
 		}
 
 		number = (number * 16) + digit;
 		str++;
 	}
 
-	return number;
+	*result = number;
+	return TRUE;
 }
 
 int hasCaps(void) {
@@ -2282,7 +2272,7 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	}
 }
 
-static const char *regex_replace_flags(const char *exp, const char *value, int flags) {
+const char *regex_replace(const char *exp, const char *value) {
 	regex_t regex;
 	int reti;
 	/* Thread-local storage: each polling thread gets its own buffer, so
@@ -2294,9 +2284,8 @@ static const char *regex_replace_flags(const char *exp, const char *value, int f
 	regmatch_t matches[MAX_MATCHES];
 	size_t match_len;
 
-	/* Stored output_regex values retain the historical basic-regex dialect;
-	 * only the internal REGEX_NUMBER expression opts into ERE. */
-	reti = regcomp(&regex, exp, flags);
+	/* Stored output_regex values use the historical basic-regex dialect. */
+	reti = regcomp(&regex, exp, 0);
 	if (reti) {
 		return value;
 	}
@@ -2316,14 +2305,6 @@ static const char *regex_replace_flags(const char *exp, const char *value, int f
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
-}
-
-const char *regex_replace(const char *exp, const char *value) {
-	return regex_replace_flags(exp, value, 0);
-}
-
-const char *regex_replace_extended(const char *exp, const char *value) {
-	return regex_replace_flags(exp, value, REG_EXTENDED);
 }
 
 /*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)

@@ -14,6 +14,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #include "common.h"
 #include "spine.h"
@@ -75,11 +76,6 @@ static void test_regex_replace_returns_the_match(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[0-9][0-9]*", "load 42 avg"), "42");
 	assert_string_equal(regex_replace("\\([0-9][0-9]*\\)", "value 42"), "42");
-	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "-12.5"), "-12.5");
-	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "3 packets, 1.5 ms"), "3 packets, 1.5 ms");
-	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "1.2.3"), "1.2.3");
-	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "3 packets 42 ms"), "3 packets 42 ms");
-	assert_string_equal(regex_replace_extended(REGEX_NUMBER, "42"), "42");
 }
 
 static void test_regex_replace_passes_through_on_no_match(void **state) {
@@ -90,7 +86,7 @@ static void test_regex_replace_passes_through_on_no_match(void **state) {
 static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
-	assert_string_equal(regex_replace_extended("[unclosed", "value"), "value");
+	assert_string_equal(regex_replace("[unclosed", "value"), "value");
 }
 
 static void test_spine_appendf_reports_truncation_and_guards(void **state) {
@@ -226,18 +222,47 @@ static void test_add_slashes_passes_plain_text_through(void **state) {
 
 static void test_hex2dec(void **state) {
 	char a[32], b[16], overflow[160];
+	unsigned long long value;
 	(void) state;
 
-	strcpy(a, "FF");  assert_int_equal((int) hex2dec(a), 255);
-	strcpy(b, "00");  assert_int_equal((int) hex2dec(b), 0);
+	strcpy(a, "FF");  assert_true(hex2dec(a, &value)); assert_int_equal(value, 255);
+	strcpy(b, "00");  assert_true(hex2dec(b, &value)); assert_int_equal(value, 0);
 	strcpy(a, "00:1b:44:11:3a:b7");
-	assert_int_equal(hex2dec(a), 0x001b44113ab7ULL);
+	assert_true(hex2dec(a, &value));
+	assert_int_equal(value, 0x001b44113ab7ULL);
+	strcpy(a, "ff:ff:ff:ff:ff:ff:ff:ff");
+	assert_true(hex2dec(a, &value));
+	assert_int_equal(value, ULLONG_MAX);
 	strcpy(overflow, "10000000000000000");
-	assert_int_equal(hex2dec(overflow), 0);
+	assert_false(hex2dec(overflow, &value));
 	strcpy(overflow, "80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88");
-	assert_int_equal(hex2dec(overflow), 0);
+	assert_false(hex2dec(overflow, &value));
 	strcpy(overflow, "ffff ffff ffff ffff ffff ffff ffff ffff");
-	assert_int_equal(hex2dec(overflow), 0);
+	assert_false(hex2dec(overflow, &value));
+	assert_false(hex2dec(NULL, &value));
+	assert_false(hex2dec("ff", NULL));
+}
+
+static void test_poller_hex_overflow_is_undefined(void **state) {
+	char result[RESULTS_BUFFER];
+
+	(void) state;
+	strcpy(result, "ff:ff:ff:ff:ff:ff:ff:ff");
+	assert_true(poller_store_hex_result(result, sizeof(result)));
+	assert_string_equal(result, "18446744073709551615");
+
+	strcpy(result, "1:00:00:00:00:00:00:00:00");
+	assert_false(poller_store_hex_result(result, sizeof(result)));
+	assert_true(IS_UNDEFINED(result));
+}
+
+static void test_row_alias_upsert_version_gate(void **state) {
+	(void) state;
+	assert_false(db_row_alias_upsert_supported(NULL, 80020));
+	assert_false(db_row_alias_upsert_supported("8.0.19", 80019));
+	assert_true(db_row_alias_upsert_supported("8.0.20", 80020));
+	assert_true(db_row_alias_upsert_supported("8.4.0", 80400));
+	assert_false(db_row_alias_upsert_supported("10.11.6-MariaDB", 101106));
 }
 
 /* --- misc ----------------------------------------------------------------- */
@@ -521,6 +546,8 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_hex2dec),
+		cmocka_unit_test(test_poller_hex_overflow_is_undefined),
+		cmocka_unit_test(test_row_alias_upsert_version_gate),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),

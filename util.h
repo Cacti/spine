@@ -70,14 +70,12 @@ extern char *reverse(char *str);
 extern int strpos(const char *haystack, const char *needle);
 extern int char_count(const char *str, int chr);
 
-/* custom hex2dec that returns a string instead of a number */
-unsigned long long hex2dec(char *str);
+/* convert a delimited hexadecimal value without conflating overflow with 0 */
+int hex2dec(const char *str, unsigned long long *result);
 
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
-#define REGEX_NUMBER "^[-+]?[0-9]*[.]?[0-9]+$"
 const char *regex_replace(const char *exp, const char *value);
-const char *regex_replace_extended(const char *exp, const char *value);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))
@@ -106,6 +104,9 @@ extern char *get_date_format(void);
 
 /* remote/main server synchronization */
 extern void poller_push_data_to_main(void);
+
+/* MySQL supports INSERT row aliases from 8.0.20; MariaDB does not. */
+extern int db_row_alias_upsert_supported(const char *version, unsigned long version_number);
 
 /* start time for spine */
 extern double start_time;

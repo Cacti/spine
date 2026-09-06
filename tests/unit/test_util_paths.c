@@ -36,18 +36,42 @@ static MYSQL fake_mysql;
 static int   rows_to_report;
 static int   row_is_null;
 static int   frees_seen;
+enum fake_query_kind { FAKE_QUERY_DEFAULT, FAKE_QUERY_HOSTS, FAKE_QUERY_ITEMS };
+static enum fake_query_kind fake_query_kind;
+static int fake_row_index;
+static char *host_inserts[2];
+static char *item_inserts[2];
+static int host_insert_count;
+static int item_insert_count;
 
 my_ulonglong mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
 
 MYSQL_ROW mysql_fetch_row(MYSQL_RES *res) {
-	static char *cells[2];
+	static char *cells[21];
 	static char  v0[] = "value";
 	static char  v1[] = "value";
+	static char  zero[] = "0";
+	static char  id[32];
+	int i;
 
 	(void) res;
 
 	if (row_is_null) {
 		return NULL;
+	}
+
+	if (fake_query_kind == FAKE_QUERY_HOSTS || fake_query_kind == FAKE_QUERY_ITEMS) {
+		if (fake_row_index >= rows_to_report) {
+			return NULL;
+		}
+
+		snprintf(id, sizeof(id), "%d", ++fake_row_index);
+		for (i = 0; i < 21; i++) {
+			cells[i] = zero;
+		}
+		cells[0] = id;
+
+		return cells;
 	}
 
 	cells[0] = v0;
@@ -59,13 +83,41 @@ MYSQL_ROW mysql_fetch_row(MYSQL_RES *res) {
 void db_connect(int type, MYSQL *mysql) {}
 void db_disconnect(MYSQL *mysql) {}
 MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
-	(void) mysql; (void) type; (void) query;
+	(void) mysql; (void) type;
+
+	if (strstr(query, "FROM host ") != NULL) {
+		fake_query_kind = FAKE_QUERY_HOSTS;
+		rows_to_report = 501;
+		fake_row_index = 0;
+	} else if (strstr(query, "FROM poller_item ") != NULL) {
+		fake_query_kind = FAKE_QUERY_ITEMS;
+		rows_to_report = 10001;
+		fake_row_index = 0;
+	}
+
 	return (MYSQL_RES *) &fake_result;
 }
 
 void db_free_result(MYSQL_RES *result) { (void) result; frees_seen++; }
-int db_insert(MYSQL *mysql, int type, const char *query) { return 0; }
-void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {}
+int db_insert(MYSQL *mysql, int type, const char *query) {
+	(void) mysql; (void) type;
+
+	if (strncmp(query, "INSERT INTO host ", strlen("INSERT INTO host ")) == 0) {
+		assert_true(host_insert_count < 2);
+		host_inserts[host_insert_count++] = strdup(query);
+		assert_non_null(host_inserts[host_insert_count - 1]);
+	} else if (strncmp(query, "INSERT INTO poller_item ", strlen("INSERT INTO poller_item ")) == 0) {
+		assert_true(item_insert_count < 2);
+		item_inserts[item_insert_count++] = strdup(query);
+		assert_non_null(item_inserts[item_insert_count - 1]);
+	}
+
+	return 0;
+}
+void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
+	(void) mysql;
+	snprintf(output, (size_t) max_size, "%s", input);
+}
 int append_hostrange(char *obuf, const char *colname) { return 0; }
 int parse_logdest(const char *res, int default_dest) { return 0; }
 const char *printable_logdest(int dest) { return ""; }
@@ -274,6 +326,53 @@ static void test_success_path_frees_once(void **state) {
 	free(r);
 }
 
+/* ---- issue#588: a row that crosses a batch boundary is still sent once -- */
+
+static int count_occurrences(const char *haystack, const char *needle) {
+	int count = 0;
+	size_t needle_len = strlen(needle);
+
+	while ((haystack = strstr(haystack, needle)) != NULL) {
+		count++;
+		haystack += needle_len;
+	}
+
+	return count;
+}
+
+static void test_remote_push_keeps_batch_boundary_rows(void **state) {
+	int i;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	host_insert_count = 0;
+	item_insert_count = 0;
+
+	poller_push_data_to_main();
+
+	assert_int_equal(host_insert_count, 2);
+	assert_int_equal(item_insert_count, 2);
+	assert_int_equal(count_occurrences(host_inserts[0], " (500, "), 1);
+	assert_int_equal(count_occurrences(host_inserts[0], " (501, "), 0);
+	assert_int_equal(count_occurrences(host_inserts[1], " (500, "), 0);
+	assert_int_equal(count_occurrences(host_inserts[1], " (501, "), 1);
+	assert_int_equal(count_occurrences(item_inserts[0], " (10000, "), 1);
+	assert_int_equal(count_occurrences(item_inserts[0], " (10001, "), 0);
+	assert_int_equal(count_occurrences(item_inserts[1], " (10000, "), 0);
+	assert_int_equal(count_occurrences(item_inserts[1], " (10001, "), 1);
+
+	for (i = 0; i < 2; i++) {
+		free(host_inserts[i]);
+		free(item_inserts[i]);
+		host_inserts[i] = NULL;
+		item_inserts[i] = NULL;
+	}
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
+
 
 /* ---- issue#565: spine_log() appends the newline without overrunning ---- */
 
@@ -385,6 +484,7 @@ int main(void) {
 		cmocka_unit_test(test_getglobalvariable_frees_on_null_row),
 		cmocka_unit_test(test_get_cacti_version_frees_on_null_row),
 		cmocka_unit_test(test_success_path_frees_once),
+		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
 		cmocka_unit_test(test_spine_log_appends_a_newline),
 		cmocka_unit_test(test_spine_log_survives_a_full_line),
 		cmocka_unit_test(test_spine_log_does_not_double_an_existing_newline),

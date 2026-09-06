@@ -139,6 +139,21 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
+int poller_store_hex_result(char *result, size_t result_size) {
+	unsigned long long value;
+
+	if (result == NULL || result_size < 2 || !hex2dec(result, &value)) {
+		SPINE_LOG(("WARNING: Hexadecimal poller output exceeds the supported 64-bit range"));
+		if (result != NULL && result_size >= 2) {
+			SET_UNDEFINED(result);
+		}
+		return FALSE;
+	}
+
+	snprintf(result, result_size, "%llu", value);
+	return TRUE;
+}
+
 void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
@@ -1448,7 +1463,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-								snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+								poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER);
 							} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 								buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1463,8 +1478,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 								/* is valid output, continue */
 							} else {
-								/* remove double or single quotes from string */
-								snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace_extended(REGEX_NUMBER, strip_alpha(snmp_oids[j].result)));
+								/* trim a non-numeric prefix or suffix, then validate below */
+								snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(snmp_oids[j].result));
 								snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 								/* detect erroneous non-numeric result */
@@ -1549,7 +1564,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-							snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+							poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER);
 						} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 							buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1564,8 +1579,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							/* is valid output, continue */
 						} else {
-							/* remove double or single quotes from string */
-							snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace_extended(REGEX_NUMBER, strip_alpha(snmp_oids[j].result)));
+							/* trim a non-numeric prefix or suffix, then validate below */
+							snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(snmp_oids[j].result));
 							snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 							/* detect erroneous non-numeric result */
@@ -1644,10 +1659,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
+					poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER);
 				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace_extended(REGEX_NUMBER, strip_alpha(poll_result)));
+					/* trim a non-numeric prefix or suffix, then validate below */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(poll_result));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -1710,10 +1726,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
+					poller_store_hex_result(poller_items[i].result, RESULTS_BUFFER);
 				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace_extended(REGEX_NUMBER, strip_alpha(poll_result)));
+					/* trim a non-numeric prefix or suffix, then validate below */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(poll_result));
 					snprintf(poller_items[i].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous result. can be non-numeric */
@@ -1782,7 +1799,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-					snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+					poller_store_hex_result(snmp_oids[j].result, RESULTS_BUFFER);
 				} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 					buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, false);
@@ -1797,8 +1814,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 					/* is valid output, continue */
 				} else {
-					/* remove double or single quotes from string */
-					snprintf(temp_result, RESULTS_BUFFER, "%s", regex_replace_extended(REGEX_NUMBER, strip_alpha(snmp_oids[j].result)));
+					/* trim a non-numeric prefix or suffix, then validate below */
+					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(snmp_oids[j].result));
 					snprintf(snmp_oids[j].result , RESULTS_BUFFER, "%s", temp_result);
 
 					/* detect erroneous non-numeric result */
