@@ -34,25 +34,42 @@
 #include "common.h"
 #include "spine.h"
 
-#define SPINE_STRINGIFY_INNER(value) #value
-#define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
-#define SQL_ESCAPED_RRD_NAME_MAX 60
-#define SQL_HOST_TIME_MAX 40
-#define SQL_ESCAPED_RESULT_MAX 2047
-
 int format_poller_output_row(char *output, size_t output_size,
 		int local_data_id, const char *escaped_rrd_name,
 		const char *host_time, const char *escaped_result) {
+	const char *timep;
+	int decimal_points = 0;
+	int digits = 0;
+	int written;
+
 	if (output == NULL || output_size == 0 || escaped_rrd_name == NULL ||
-	    host_time == NULL || escaped_result == NULL) {
-		return -1;
+	    host_time == NULL || host_time[0] == '\0' || escaped_result == NULL) {
+		return FALSE;
 	}
 
-	return snprintf(output, output_size,
-		" (%i, '%." SPINE_STRINGIFY(SQL_ESCAPED_RRD_NAME_MAX)
-		"s', FROM_UNIXTIME(%." SPINE_STRINGIFY(SQL_HOST_TIME_MAX)
-		"s), '%." SPINE_STRINGIFY(SQL_ESCAPED_RESULT_MAX) "s')",
+	/* host_time is emitted outside SQL quotes. Accept the integer timestamps
+	 * Spine generates and a single fractional part, but no SQL syntax. */
+	for (timep = host_time; *timep != '\0'; timep++) {
+		if (*timep == '.') {
+			decimal_points++;
+			if (decimal_points > 1) {
+				return FALSE;
+			}
+		} else if (!isdigit((unsigned char)*timep)) {
+			return FALSE;
+		} else {
+			digits++;
+		}
+	}
+	if (digits == 0) {
+		return FALSE;
+	}
+
+	written = snprintf(output, output_size,
+		" (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 		local_data_id, escaped_rrd_name, host_time, escaped_result);
+
+	return written >= 0 && (size_t)written < output_size;
 }
 
 void child_cleanup(void *arg) {
@@ -1909,11 +1926,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
 			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
 
-			(void)format_poller_output_row(result_string, sizeof(result_string),
+			if (!format_poller_output_row(result_string, sizeof(result_string),
 				poller_items[i].local_data_id,
 				escaped_rrd_name,
 				host_time,
-				escaped_result);
+				escaped_result)) {
+				SPINE_LOG(("Device[%i] HT[%i] ERROR: Poller output for DS[%i] "
+					"exceeds the configured result buffer and was skipped",
+					host_id, host_thread, poller_items[i].local_data_id));
+				i++;
+				continue;
+			}
 
 			result_length = strlen(result_string);
 

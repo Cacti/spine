@@ -76,6 +76,7 @@ unsigned long long hex2dec(char *str);
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
 #define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
+#define CAPABILITY_PROTOCOL_LIST_MAX 480
 const char *regex_replace(const char *exp, const char *value);
 int format_spine_capabilities(char *output, size_t output_size,
 	const char *auth_protocols, const char *priv_protocols);

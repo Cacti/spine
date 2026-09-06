@@ -20,41 +20,33 @@
 #include "util.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-	char expression[257];
 	char value[1025];
-	const uint8_t *separator;
+	char row[RESULTS_BUFFER + SMALL_BUFSIZE];
 	const char *result;
-	size_t expression_len;
+	static const char *expressions[] = {
+		REGEX_NUMBER,
+		"[0-9][0-9]*",
+		"[a-zA-Z][a-zA-Z0-9_.:-]*",
+		".*"
+	};
 	size_t value_len;
 
-	if (data == NULL || size == 0 || size > 1280) {
+	if (data == NULL || size == 0 || size > sizeof(value)) {
 		return 0;
 	}
 
-	separator = memchr(data, '\n', size);
-	if (separator != NULL) {
-		expression_len = (size_t)(separator - data);
-		value_len = size - expression_len - 1;
-	} else {
-		expression_len = size / 2;
-		value_len = size - expression_len;
-	}
-
-	if (expression_len > sizeof(expression) - 1 ||
-	    value_len > sizeof(value) - 1) {
-		return 0;
-	}
-
-	memcpy(expression, data, expression_len);
-	expression[expression_len] = '\0';
-	memcpy(value, data + size - value_len, value_len);
+	value_len = size - 1;
+	memcpy(value, data + 1, value_len);
 	value[value_len] = '\0';
 
-	result = regex_replace(expression, value);
-	if (result == NULL || strnlen(result, sizeof(value)) >= sizeof(value)) {
+	result = regex_replace(expressions[data[0] %
+		(sizeof(expressions) / sizeof(expressions[0]))], value);
+	if (result == NULL) {
 		abort();
 	}
 
+	(void)format_poller_output_row(row, sizeof(row), 1,
+		"fuzz", "1700000000", result);
 	(void)is_multipart_output(value);
 	(void)validate_result(value);
 

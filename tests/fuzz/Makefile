@@ -13,6 +13,8 @@
 # fuzzer is always built with a clang that supports -fsanitize=fuzzer.
 FUZZ_CC      ?= clang
 FUZZ_SECONDS ?= 60
+FUZZ_TIMEOUT ?= 5
+FUZZ_RSS_MB  ?= 2048
 SPINE_ROOT   := ../..
 BINDIR       := bin
 
@@ -51,7 +53,9 @@ run: $(TARGETS)
 		name=$$(basename $$t); \
 		echo "== $$name ($(FUZZ_SECONDS)s)"; \
 		mkdir -p corpus/$$name; \
-		$$t corpus/$$name -max_total_time=$(FUZZ_SECONDS) -print_final_stats=1 || rc=1; \
+		$$t corpus/$$name -max_total_time=$(FUZZ_SECONDS) \
+			-timeout=$(FUZZ_TIMEOUT) -rss_limit_mb=$(FUZZ_RSS_MB) \
+			-print_final_stats=1 || rc=1; \
 	done; exit $$rc
 
 clean:

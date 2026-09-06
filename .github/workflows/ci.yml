@@ -86,7 +86,9 @@ jobs:
       - uses: ./.github/actions/build-spine
         with:
           extra-packages: libcap-dev
-          configure-args: --enable-lcap --enable-warnings
+          # Exercise the supported low-buffer configuration as well as the
+          # Linux-capability path; formatter tests must not assume defaults.
+          configure-args: --enable-lcap --enable-warnings --with-results-buffer=512
 
       - name: Build Spine with Linux capabilities
         run: |

@@ -37,7 +37,6 @@
 
 #define SPINE_STRINGIFY_INNER(value) #value
 #define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
-#define CAPABILITY_PROTOCOL_LIST_MAX 480
 
 static int nopts = 0;
 
@@ -920,10 +919,13 @@ void read_config_options(void) {
 
 	/* Each source buffer can be BUFSIZE bytes. Bound both fields so the
 	 * combined capability document always fits in its destination. */
-	(void)format_spine_capabilities(spine_capabilities,
-		sizeof(spine_capabilities), spine_auth, spine_priv);
+	if (!format_spine_capabilities(spine_capabilities,
+			sizeof(spine_capabilities), spine_auth, spine_priv)) {
+		SPINE_LOG(("ERROR: Unable to format Spine SNMP capabilities"));
+		spine_capabilities[0] = '\0';
+	}
 
-	if (set.poller_id == 1) {
+	if (set.poller_id == 1 && spine_capabilities[0] != '\0') {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
 	}
 

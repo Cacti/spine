@@ -85,9 +85,13 @@ static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 
 static void test_bounded_formatters(void **state) {
 	char capabilities[BUFSIZE];
-	char row[RESULTS_BUFFER + SMALL_BUFSIZE];
+	char row[DBL_BUFSIZE + SMALL_BUFSIZE];
+	char small[32];
 	char long_value[DBL_BUFSIZE];
-	int written;
+	const char *auth_start;
+	const char *auth_end;
+	const char *priv_start;
+	const char *priv_end;
 	(void) state;
 
 	memset(long_value, '7', sizeof(long_value) - 1);
@@ -96,16 +100,33 @@ static void test_bounded_formatters(void **state) {
 	assert_true(format_spine_capabilities(capabilities,
 		sizeof(capabilities), long_value, long_value));
 	assert_true(strlen(capabilities) < sizeof(capabilities));
+	auth_start = strstr(capabilities, "authProtocols: \"");
+	assert_non_null(auth_start);
+	auth_start += strlen("authProtocols: \"");
+	auth_end = strchr(auth_start, '"');
+	assert_non_null(auth_end);
+	priv_start = strstr(capabilities, "privProtocols: \"");
+	assert_non_null(priv_start);
+	priv_start += strlen("privProtocols: \"");
+	priv_end = strchr(priv_start, '"');
+	assert_non_null(priv_end);
+	assert_int_equal(auth_end - auth_start, CAPABILITY_PROTOCOL_LIST_MAX);
+	assert_int_equal(priv_end - priv_start, CAPABILITY_PROTOCOL_LIST_MAX);
+	assert_string_equal(priv_end, "\" }");
+	assert_false(format_spine_capabilities(small,
+		sizeof(small), long_value, long_value));
 	assert_false(format_spine_capabilities(NULL, 0, long_value, long_value));
 
-	written = format_poller_output_row(row, sizeof(row), 17,
-		"traffic_in", "1700000000.25", long_value);
-	assert_true(written > 0);
-	assert_true((size_t)written < sizeof(row));
+	assert_true(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", "1700000000.25", long_value));
 	assert_non_null(strstr(row,
 		"(17, 'traffic_in', FROM_UNIXTIME(1700000000.25)"));
-	assert_int_equal(format_poller_output_row(NULL, 0, 17,
-		"traffic_in", "1700000000.25", long_value), -1);
+	assert_false(format_poller_output_row(small, sizeof(small), 17,
+		"traffic_in", "1700000000.25", long_value));
+	assert_false(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", "1700000000); DROP TABLE host", long_value));
+	assert_false(format_poller_output_row(NULL, 0, 17,
+		"traffic_in", "1700000000.25", long_value));
 }
 
 
@@ -147,6 +168,7 @@ static void test_is_hexadecimal(void **state) {
 	assert_int_equal(is_hexadecimal("AA BB CC", 0), TRUE);
 	assert_int_equal(is_hexadecimal("AA\tBB", 0), FALSE);
 	assert_int_equal(is_hexadecimal("AA\tBB", 1), FALSE);
+	assert_int_equal(is_hexadecimal("AA\tBB:CC", 1), TRUE);
 	assert_int_equal(is_hexadecimal("zz", 0), FALSE);
 	assert_int_equal(is_hexadecimal("", 0), FALSE);
 }
