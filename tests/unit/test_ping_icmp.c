@@ -41,12 +41,17 @@ static void *packet_allocation;
 static int packet_released;
 static int alternate_has_caps;
 static int has_caps_calls;
+static int controlled_pair[2] = {-1, -1};
+static int resolver_mode;
+static int resolver_calls;
 
 static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
 static void *intercepted_malloc(size_t size);
 static void intercepted_free(void *ptr);
 static int test_has_caps(void);
+static int test_getaddrinfo(const char *node, const char *service,
+	const struct addrinfo *hints, struct addrinfo **res);
 
 /* Compile the shipped implementation into this test translation unit so its
  * resource sinks can be observed without root or Linux-only linker wrapping. */
@@ -55,12 +60,14 @@ static int test_has_caps(void);
 #define malloc intercepted_malloc
 #define free intercepted_free
 #define hasCaps test_has_caps
+#define getaddrinfo test_getaddrinfo
 #include "../../ping.c"
 #undef socket
 #undef close
 #undef malloc
 #undef free
 #undef hasCaps
+#undef getaddrinfo
 
 static int test_has_caps(void) {
 	if (alternate_has_caps) {
@@ -68,6 +75,21 @@ static int test_has_caps(void) {
 	}
 
 	return hasCaps();
+}
+
+static int test_getaddrinfo(const char *node, const char *service,
+	const struct addrinfo *hints, struct addrinfo **res) {
+	resolver_calls++;
+	if (resolver_mode == 1) {
+		*res = NULL;
+		return EAI_NONAME;
+	}
+	if (resolver_mode == 2) {
+		*res = NULL;
+		return EAI_AGAIN;
+	}
+
+	return getaddrinfo(node, service, hints, res);
 }
 
 static int test_socket(int domain, int type, int protocol) {
@@ -93,7 +115,7 @@ static int test_close(int fd) {
 static void *intercepted_malloc(size_t size) {
 	void *ptr = malloc(size);
 
-	if (track_packet && size == packet_size) {
+	if (track_packet && size == packet_size && packet_allocation == NULL) {
 		packet_allocation = ptr;
 	}
 
@@ -149,7 +171,28 @@ static int ping_reset(void **state) {
 	packet_released = 0;
 	alternate_has_caps = 0;
 	has_caps_calls = 0;
+	controlled_pair[0] = -1;
+	controlled_pair[1] = -1;
+	resolver_mode = 0;
+	resolver_calls = 0;
 	return 0;
+}
+
+static int ping_teardown(void **state) {
+	(void) state;
+	if (controlled_pair[0] != -1) {
+		close(controlled_pair[0]);
+	}
+	if (controlled_pair[1] != -1) {
+		close(controlled_pair[1]);
+	}
+	return 0;
+}
+
+static void use_owned_controlled_socket(void) {
+	assert_int_equal(socketpair(AF_UNIX, SOCK_DGRAM, 0, controlled_pair), 0);
+	use_controlled_socket = 1;
+	controlled_socket_fd = controlled_pair[0];
 }
 
 static void test_loopback_answers(void **state) {
@@ -234,13 +277,15 @@ static void test_invalid_address_releases_packet_and_socket(void **state) {
 	ping_t ping;
 
 	(void) state;
-	use_controlled_socket = 1;
-	controlled_socket_fd = 43;
+	use_owned_controlled_socket();
 	track_packet = 1;
+	resolver_mode = 1;
 	make_host(&host, "invalid.invalid");
 	memset(&ping, 0, sizeof(ping));
 
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "hostname invalid"));
+	assert_int_equal(resolver_calls, 1);
 	assert_int_equal(packet_released, 1);
 	assert_int_equal(controlled_socket_closed, 1);
 }
@@ -250,8 +295,7 @@ static void test_timeout_releases_packet_and_socket(void **state) {
 	ping_t ping;
 
 	(void) state;
-	use_controlled_socket = 1;
-	controlled_socket_fd = 44;
+	use_owned_controlled_socket();
 	track_packet = 1;
 	make_host(&host, "127.0.0.1");
 	host.ping_timeout = 1;
@@ -262,6 +306,16 @@ static void test_timeout_releases_packet_and_socket(void **state) {
 	assert_non_null(strstr(ping.ping_response, "timed out"));
 	assert_int_equal(packet_released, 1);
 	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_temporary_resolver_failure_retries_four_times(void **state) {
+	struct sockaddr_in address;
+
+	(void) state;
+	resolver_mode = 2;
+	memset(&address, 0, sizeof(address));
+	assert_false(init_sockaddr(&address, "ignored.example", 7));
+	assert_int_equal(resolver_calls, 4);
 }
 
 static void test_capability_decision_pairs_lock_and_unlock(void **state) {
@@ -326,6 +380,8 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */
 	alarm(15);
 	rc = ping_icmp(&host, &ping);
+	alarm(0);
+	sigaction(SIGALRM, &prev, NULL);
 
 	/* it gave up rather than hanging, and said why */
 	assert_int_equal(rc, HOST_DOWN);
@@ -335,20 +391,19 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
 	thread_mutex_unlock(LOCK_SETEUID);
 
-	alarm(0);
-	sigaction(SIGALRM, &prev, NULL);
 }
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
-		cmocka_unit_test_setup(test_loopback_answers, ping_reset),
-		cmocka_unit_test_setup(test_repeated_pings_do_not_accumulate, ping_reset),
-		cmocka_unit_test_setup(test_fd_setsize_guard_releases_the_packet, ping_reset),
-		cmocka_unit_test_setup(test_empty_address_releases_packet_and_socket, ping_reset),
-		cmocka_unit_test_setup(test_invalid_address_releases_packet_and_socket, ping_reset),
-		cmocka_unit_test_setup(test_timeout_releases_packet_and_socket, ping_reset),
-		cmocka_unit_test_setup(test_capability_decision_pairs_lock_and_unlock, ping_reset),
-		cmocka_unit_test_setup(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset),
+		cmocka_unit_test_setup_teardown(test_loopback_answers, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_repeated_pings_do_not_accumulate, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_fd_setsize_guard_releases_the_packet, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_empty_address_releases_packet_and_socket, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_invalid_address_releases_packet_and_socket, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_timeout_releases_packet_and_socket, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_temporary_resolver_failure_retries_four_times, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_capability_decision_pairs_lock_and_unlock, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset, ping_teardown),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

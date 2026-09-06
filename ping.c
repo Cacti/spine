@@ -377,6 +377,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_socket = -1;
 	int    icmp_dgram;
 	int    rc = HOST_DOWN;
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	const int needs_seteuid = (hasCaps() != TRUE);
+	#endif
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -424,10 +427,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	 * the thread that already owned it. That deadlocks this thread at euid 0
 	 * in a SUID root binary and takes every other thread that needs the lock
 	 * down with it, on nothing worse than a transient socket() failure. */
-	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	const int needs_seteuid = (hasCaps() != TRUE);
-	#endif
-
 	retry_count = 0;
 	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
