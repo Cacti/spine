@@ -22,6 +22,12 @@
 #include "spine.h"
 
 static int captured_security_level;
+static size_t captured_auth_key_len;
+static size_t captured_priv_key_len;
+static size_t captured_auth_proto_len;
+static unsigned char captured_auth_key[USM_AUTH_KU_LEN];
+static unsigned char captured_priv_key[USM_PRIV_KU_LEN];
+static oid captured_auth_proto[MAX_OID_LEN];
 
 static void *capture_snmp_sess_open(struct snmp_session *session);
 
@@ -31,6 +37,23 @@ static void *capture_snmp_sess_open(struct snmp_session *session);
 
 static void *capture_snmp_sess_open(struct snmp_session *session) {
 	captured_security_level = session->securityLevel;
+	captured_auth_key_len = session->securityAuthKeyLen;
+	captured_priv_key_len = session->securityPrivKeyLen;
+	captured_auth_proto_len = session->securityAuthProtoLen;
+	assert_true(captured_auth_key_len <= sizeof(captured_auth_key));
+	assert_true(captured_priv_key_len <= sizeof(captured_priv_key));
+	assert_true(captured_auth_proto_len <= MAX_OID_LEN);
+	if (captured_auth_key_len > 0) {
+		memcpy(captured_auth_key, session->securityAuthKey, captured_auth_key_len);
+	}
+	if (captured_priv_key_len > 0) {
+		memcpy(captured_priv_key, session->securityPrivKey, captured_priv_key_len);
+	}
+	if (captured_auth_proto_len > 0) {
+		assert_non_null(session->securityAuthProto);
+		memcpy(captured_auth_proto, session->securityAuthProto,
+			captured_auth_proto_len * sizeof(*captured_auth_proto));
+	}
 	return (void *)(uintptr_t) 1;
 }
 
@@ -40,7 +63,25 @@ static int session_reset(void **state) {
 	init_mutexes();
 	set.snmp_retries = 1;
 	captured_security_level = -1;
+	captured_auth_key_len = 0;
+	captured_priv_key_len = 0;
+	captured_auth_proto_len = 0;
+	memset(captured_auth_key, 0, sizeof(captured_auth_key));
+	memset(captured_priv_key, 0, sizeof(captured_priv_key));
+	memset(captured_auth_proto, 0, sizeof(captured_auth_proto));
 	return 0;
+}
+
+static int contains_nonzero(const unsigned char *value, size_t length) {
+	size_t i;
+
+	for (i = 0; i < length; i++) {
+		if (value[i] != 0) {
+			return TRUE;
+		}
+	}
+
+	return FALSE;
 }
 
 /* Returns the securityLevel of the session spine builds, or -1 when it
@@ -100,6 +141,11 @@ static void test_auth_without_privacy_is_authnopriv(void **state) {
 
 	(void) state;
 	assert_int_equal(level_for(sha, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_true(captured_auth_key_len > 0);
+	assert_true(contains_nonzero(captured_auth_key, captured_auth_key_len));
+	assert_int_equal(captured_auth_proto_len, USM_AUTH_PROTO_SHA_LEN);
+	assert_int_equal(snmp_oid_compare(captured_auth_proto, captured_auth_proto_len,
+		usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN), 0);
 }
 
 static void test_auth_with_privacy_is_authpriv(void **state) {
@@ -110,6 +156,10 @@ static void test_auth_with_privacy_is_authpriv(void **state) {
 
 	(void) state;
 	assert_int_equal(level_for(sha, pw, aes, ppass), SNMP_SEC_LEVEL_AUTHPRIV);
+	assert_true(captured_auth_key_len > 0);
+	assert_true(contains_nonzero(captured_auth_key, captured_auth_key_len));
+	assert_true(captured_priv_key_len > 0);
+	assert_true(contains_nonzero(captured_priv_key, captured_priv_key_len));
 }
 
 /* USM has no privacy without authentication. Opening this as noAuthNoPriv
@@ -157,14 +207,14 @@ static void test_empty_auth_protocol_with_password_downgrades(void **state) {
 	assert_int_equal(level_for(empty, pw, none, empty), SNMP_SEC_LEVEL_NOAUTH);
 }
 
-static void test_privacy_protocol_without_passphrase_downgrades(void **state) {
+static void test_privacy_protocol_without_passphrase_is_refused(void **state) {
 	char sha[] = "SHA";
 	char pw[] = "authpass123";
 	char aes[] = "AES";
 	char empty[] = "";
 
 	(void) state;
-	assert_int_equal(level_for(sha, pw, aes, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_int_equal(level_for(sha, pw, aes, empty), -1);
 }
 
 int main(void) {
@@ -178,7 +228,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_even_without_a_password, session_reset),
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_with_a_password, session_reset),
 		cmocka_unit_test_setup(test_empty_auth_protocol_with_password_downgrades, session_reset),
-		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_downgrades, session_reset),
+		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_is_refused, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

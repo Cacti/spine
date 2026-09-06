@@ -330,12 +330,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; using noAuthNoPriv.", host_id));
 		}
 
-		if (spine_snmpv3_value_is_set(snmp_priv_protocol) !=
-			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
-			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; using security level %i.",
-				host_id, security_level));
-		}
-
 		/* A protocol that is set but unrecognised is a configuration error at
 		 * any security level. Deciding the level first and only validating on
 		 * the authenticated path would let a typo through as noAuthNoPriv,
@@ -374,8 +368,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		 * say why: the old code also refused, but by failing key derivation
 		 * with "passphrase below the length requirements of the USM". */
 		if (security_level != SNMP_SEC_LEVEL_AUTHPRIV &&
-			spine_snmpv3_value_is_set(snmp_priv_protocol) &&
-			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
+			(spine_snmpv3_value_is_set(snmp_priv_protocol) ||
+			 spine_snmpv3_value_is_set(snmp_priv_passphrase))) {
 			SPINE_LOG(("SNMP: Device[%i] Error privacy requires authentication; set an auth protocol and password, or clear the privacy settings.", host_id));
 			free(session.peername);
 			free(session.localname);
