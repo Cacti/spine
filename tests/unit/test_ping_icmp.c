@@ -41,9 +41,6 @@ static int track_packet;
 static size_t packet_size;
 static void *packet_allocation;
 static int packet_released;
-static int alternate_has_caps;
-static int force_no_caps;
-static int has_caps_calls;
 static int controlled_pair[2] = {-1, -1};
 static int resolver_mode;
 static int resolver_calls;
@@ -56,7 +53,6 @@ static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
 static void *intercepted_malloc(size_t size);
 static void intercepted_free(void *ptr);
-static int test_has_caps(void);
 static int test_getaddrinfo(const char *node, const char *service,
 	const struct addrinfo *hints, struct addrinfo **res);
 static void test_freeaddrinfo(struct addrinfo *res);
@@ -73,7 +69,6 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 #define close test_close
 #define malloc intercepted_malloc
 #define free intercepted_free
-#define hasCaps test_has_caps
 #define getaddrinfo test_getaddrinfo
 #define freeaddrinfo test_freeaddrinfo
 #define sendto test_sendto
@@ -84,24 +79,11 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 #undef close
 #undef malloc
 #undef free
-#undef hasCaps
 #undef getaddrinfo
 #undef freeaddrinfo
 #undef sendto
 #undef select
 #undef recvfrom
-
-static int test_has_caps(void) {
-	has_caps_calls++;
-	if (force_no_caps) {
-		return FALSE;
-	}
-	if (alternate_has_caps) {
-		return (has_caps_calls == 1) ? FALSE : TRUE;
-	}
-
-	return hasCaps();
-}
 
 static int test_getaddrinfo(const char *node, const char *service,
 	const struct addrinfo *hints, struct addrinfo **res) {
@@ -246,9 +228,7 @@ static int ping_reset(void **state) {
 	packet_size = ICMP_HDR_SIZE + strlen("cacti-monitoring-system");
 	packet_allocation = NULL;
 	packet_released = 0;
-	alternate_has_caps = 0;
-	force_no_caps = 0;
-	has_caps_calls = 0;
+	set.icmp_uses_caps = FALSE;
 	controlled_pair[0] = -1;
 	controlled_pair[1] = -1;
 	resolver_mode = 0;
@@ -375,7 +355,6 @@ static void test_matching_reply_releases_resources(void **state) {
 	use_owned_controlled_socket();
 	track_packet = 1;
 	controlled_reply = 1;
-	force_no_caps = 1;
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 
@@ -387,19 +366,19 @@ static void test_matching_reply_releases_resources(void **state) {
 	thread_mutex_unlock(LOCK_SETEUID);
 }
 
-static void test_capability_decision_pairs_lock_and_unlock(void **state) {
+static void test_cached_capability_path_releases_resources(void **state) {
 	host_t host;
 	ping_t ping;
 
 	(void) state;
 	use_controlled_socket = 1;
 	controlled_socket_fd = FD_SETSIZE;
-	alternate_has_caps = 1;
+	set.icmp_uses_caps = TRUE;
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
-	assert_int_equal(has_caps_calls, 1);
+	assert_int_equal(geteuid(), getuid());
 	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
 	thread_mutex_unlock(LOCK_SETEUID);
 }
@@ -412,13 +391,12 @@ static void test_socket_retry_can_succeed_after_one_failure(void **state) {
 	use_controlled_socket = 1;
 	controlled_socket_fd = FD_SETSIZE;
 	socket_failures_remaining = 1;
-	alternate_has_caps = 1;
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
 	assert_int_equal(socket_calls, 2);
-	assert_int_equal(has_caps_calls, 2);
+	assert_int_equal(geteuid(), getuid());
 	assert_int_equal(controlled_socket_closed, 1);
 	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
 	thread_mutex_unlock(LOCK_SETEUID);
@@ -461,7 +439,6 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 	socket_failures_remaining = 5;
-	force_no_caps = 1;
 
 	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */
 	alarm(15);
@@ -487,7 +464,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_timeout_releases_packet_and_socket, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_temporary_resolver_failure_retries_four_times, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_matching_reply_releases_resources, ping_reset, ping_teardown),
-		cmocka_unit_test_setup_teardown(test_capability_decision_pairs_lock_and_unlock, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_cached_capability_path_releases_resources, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_can_succeed_after_one_failure, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset, ping_teardown),
 	};

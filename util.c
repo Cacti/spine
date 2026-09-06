@@ -2127,6 +2127,7 @@ int hasCaps(void) {
 }
 
 void checkAsRoot(void) {
+	set.icmp_uses_caps = FALSE;
 	#ifndef __CYGWIN__
 	#ifdef SOLAR_PRIV
 	priv_set_t *privset;
@@ -2204,6 +2205,7 @@ void checkAsRoot(void) {
 	} else {
 		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));
 		set.icmp_avail = TRUE;
+		set.icmp_uses_caps = TRUE;
 	}
 	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.icmp_avail?"":"not "));
 	#endif

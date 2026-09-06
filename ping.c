@@ -379,7 +379,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    rc = HOST_DOWN;
 	int    socket_errno = 0;
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	int    needs_seteuid;
+	const int needs_seteuid = (set.icmp_uses_caps != TRUE);
 	#endif
 
 	double begin_time, end_time, total_time;
@@ -431,12 +431,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	retry_count = 0;
 	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		/* Serialize the capability sample with the process-wide euid transition.
-		 * Sampling before this lock can observe another thread's brief elevated
-		 * state and incorrectly skip elevation for this socket attempt. */
-		thread_mutex_lock(LOCK_SETEUID);
-		needs_seteuid = (hasCaps() != TRUE);
 		if (needs_seteuid) {
+			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
 			}
@@ -451,8 +447,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			if (seteuid(getuid()) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 			}
+			thread_mutex_unlock(LOCK_SETEUID);
 		}
-		thread_mutex_unlock(LOCK_SETEUID);
 		#endif
 
 		if (icmp_socket != -1) {
