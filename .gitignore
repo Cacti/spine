@@ -31,3 +31,4 @@ libtool
 *.o
 *.m4
 tests/unit/bin/
+test-artifacts/

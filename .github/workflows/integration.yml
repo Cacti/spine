@@ -3,7 +3,7 @@ name: Integration
 on:
   pull_request:
     branches: [develop]
-    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/snmpv3/**', '.github/workflows/integration.yml']
+    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/integration/**', 'tests/test-harness.sh', 'tests/snmpv3/**', '.github/workflows/integration.yml']
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,28 @@ jobs:
           set -euo pipefail
           tests/snmpv3/scripts/run-integration.sh
 
+      - name: Exercise concurrent host polling
+        if: matrix.database == 'mariadb'
+        env:
+          SPINE_TEST_DATABASE: mariadb
+          SPINE_TEST_HOSTS: 24
+          SPINE_TEST_THREAD_COUNTS: "1 4 12"
+          SPINE_TEST_REPEATS: 1
+          SPINE_TEST_TIMEOUT_SECONDS: 120
+          SPINE_TEST_ARTIFACT_DIR: test-artifacts/concurrency
+        run: |
+          set -euo pipefail
+          tests/integration/test_concurrency.sh
+
+      - name: Exercise SNMP packet loss and recovery
+        if: matrix.database == 'mariadb'
+        env:
+          SPINE_TEST_TIMEOUT_SECONDS: 120
+          SPINE_TEST_ARTIFACT_DIR: test-artifacts/network-faults
+        run: |
+          set -euo pipefail
+          tests/integration/test_network_faults.sh
+
       - name: Show container logs on failure
         if: failure()
         env:
@@ -46,3 +68,12 @@ jobs:
             compose+=(-f docker-compose.yml -f docker-compose.mysql.yml)
           fi
           "${compose[@]}" logs --no-color || true
+
+      - name: Upload integration diagnostics
+        if: always() && matrix.database == 'mariadb'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.4.3
+        with:
+          name: integration-diagnostics-${{ matrix.database }}
+          path: test-artifacts
+          if-no-files-found: warn
+          retention-days: 14
