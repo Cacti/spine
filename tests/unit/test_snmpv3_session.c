@@ -204,12 +204,18 @@ static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) 
 		size_t expected_len;
 	};
 	const struct auth_case cases[] = {
+		#ifndef NETSNMP_DISABLE_MD5
 		{ "MD5",    usmHMACMD5AuthProtocol,       OID_LENGTH(usmHMACMD5AuthProtocol) },
+		#endif
 		{ "SHA",    usmHMACSHA1AuthProtocol,      OID_LENGTH(usmHMACSHA1AuthProtocol) },
+		#ifdef HAVE_EVP_SHA224
 		{ "SHA224", usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol) },
 		{ "SHA256", usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol) },
+		#endif
+		#ifdef HAVE_EVP_SHA384
 		{ "SHA384", usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol) },
 		{ "SHA512", usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol) },
+		#endif
 	};
 	char password[] = "authpass123";
 	char none[] = "[None]";
