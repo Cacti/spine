@@ -65,7 +65,7 @@ awk '/^int spine_open_pipe_cloexec/,/^}/' nft_popen.c |
 # every one of them leaked the command buffer.
 php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' php.c)
 
-printf '%s\n' "$php_init_body" | grep -cE '^\s+return FALSE;' | grep -qx '1' ||
+printf '%s\n' "$php_init_body" | grep -cE '^[[:space:]]+return FALSE;' | grep -qx '1' ||
 	fail "php_init() must reach its teardown by goto, not by a return that skips it"
 
 printf '%s\n' "$php_init_body" | grep -q '^cleanup:' ||

@@ -185,6 +185,24 @@ int spine_set_cloexec(int fd) {
 	return 0;
 }
 
+int spine_dup_cloexec(int fd) {
+	int duplicate;
+	int saved_errno;
+
+	duplicate = dup(fd);
+	if (duplicate < 0)
+		return -1;
+
+	if (spine_set_cloexec(duplicate) != 0) {
+		saved_errno = errno;
+		(void)close(duplicate);
+		errno = saved_errno;
+		return -1;
+	}
+
+	return duplicate;
+}
+
 /*! \fn static int open_pipe_cloexec(int pdes[2])
  *  \brief open a pipe whose descriptors are not inherited across exec
  *
@@ -420,8 +438,10 @@ int nft_popen(const char * command, const char * type) {
 	 * no dup2 to clear anything and the child would exec with that descriptor
 	 * closed. That happens whenever stdin or stdout was closed before this
 	 * call, which for a daemon is not exotic, and the failure is silent: every
-	 * script data source records U. dup() the end to a fresh descriptor, which
-	 * does not carry the flag, and let the child dup2 from that. */
+	 * script data source records U. Duplicate the end to a fresh descriptor,
+	 * explicitly mark that duplicate close-on-exec so concurrent children
+	 * cannot inherit it, and let this child dup2 from it. dup2 clears the flag
+	 * on its target. */
 	if (*type == 'r') {
 		posix_spawn_file_actions_addclose(&fa, pdes[0]);
 		if (pdes[1] != STDOUT_FILENO) {
@@ -430,7 +450,7 @@ int nft_popen(const char * command, const char * type) {
 			if (twoway)
 				posix_spawn_file_actions_adddup2(&fa, STDOUT_FILENO, STDIN_FILENO);
 		} else {
-			inherit_fd = dup(pdes[1]);
+			inherit_fd = spine_dup_cloexec(pdes[1]);
 
 			if (inherit_fd < 0) {
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
@@ -448,7 +468,7 @@ int nft_popen(const char * command, const char * type) {
 			posix_spawn_file_actions_adddup2(&fa, pdes[0], STDIN_FILENO);
 			posix_spawn_file_actions_addclose(&fa, pdes[0]);
 		} else {
-			inherit_fd = dup(pdes[0]);
+			inherit_fd = spine_dup_cloexec(pdes[0]);
 
 			if (inherit_fd < 0) {
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));

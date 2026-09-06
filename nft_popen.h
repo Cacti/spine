@@ -105,6 +105,10 @@ extern int	nft_pclose(int fd);
  */
 extern int	spine_set_cloexec(int fd);
 
+/* Duplicate a descriptor and mark the duplicate close-on-exec. On failure,
+ * no descriptor is returned and errno describes dup() or fcntl(). */
+extern int	spine_dup_cloexec(int fd);
+
 /*!
  *  spine_open_pipe_cloexec
  *

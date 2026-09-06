@@ -691,6 +691,44 @@ static void test_cloexec_pipe_is_a_working_pipe(void **state) {
 	close(pdes[1]);
 }
 
+static void test_duplicated_descriptor_is_close_on_exec(void **state) {
+	int original;
+	int duplicate;
+	int flags;
+
+	(void) state;
+	original = open("/dev/null", O_RDONLY);
+	assert_true(original >= 0);
+	duplicate = spine_dup_cloexec(original);
+	assert_true(duplicate >= 0);
+	flags = fcntl(duplicate, F_GETFD);
+	assert_true(flags >= 0);
+	assert_true((flags & FD_CLOEXEC) != 0);
+	close(duplicate);
+	close(original);
+}
+
+static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **state) {
+	pid_t pid;
+	int i;
+	int status;
+
+	(void) state;
+	pid = fork();
+	assert_true(pid >= 0);
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	for (i = 0; i < NFT_ABANDONED_MAX + 1; i++)
+		nft_abandon_child(pid, "unit test");
+	assert_int_equal(nft_abandoned_pending(), NFT_ABANDONED_MAX);
+	assert_int_equal(kill(pid, SIGKILL), 0);
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+	assert_int_equal(nft_abandoned_pending(), 0);
+}
+
 /* The descriptor must not survive an exec. A child that inherits the write end
    keeps the pipe open, so the polling thread never sees EOF and blocks to
    script_timeout for a data source that already answered. */
@@ -828,10 +866,12 @@ int main(void) {
 		cmocka_unit_test(test_nft_pclose_early_error_preserves_cancellation_mode),
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
+		cmocka_unit_test(test_duplicated_descriptor_is_close_on_exec),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
+		cmocka_unit_test(test_abandoned_children_are_swept_and_capacity_is_bounded),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

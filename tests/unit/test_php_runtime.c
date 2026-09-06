@@ -32,6 +32,7 @@ static int shell_spawn_reached;
 static int release_shell_spawn;
 static int fail_next_dup;
 static int fail_duplicated_cloexec;
+static int fail_next_cloexec;
 static __thread int duplicated_fd = -1;
 static int fail_next_setsigdefault;
 static int track_spawnattr_destroy;
@@ -75,7 +76,9 @@ int __wrap_fcntl(int fd, int command, ...) {
 	va_list args;
 	int argument;
 
-	if (fail_duplicated_cloexec && fd == duplicated_fd && command == F_SETFD) {
+	if ((fail_next_cloexec || (fail_duplicated_cloexec && fd == duplicated_fd)) &&
+	    command == F_SETFD) {
+		fail_next_cloexec = FALSE;
 		fail_duplicated_cloexec = FALSE;
 		errno = EIO;
 		return -1;
@@ -157,6 +160,7 @@ static int php_setup(void **state) {
 	release_shell_spawn = FALSE;
 	fail_next_dup = FALSE;
 	fail_duplicated_cloexec = FALSE;
+	fail_next_cloexec = FALSE;
 	duplicated_fd = -1;
 	fail_next_setsigdefault = FALSE;
 	track_spawnattr_destroy = FALSE;
@@ -737,6 +741,53 @@ static void test_stdio_collision_cloexec_failure_is_clean(void **state) {
 	assert_stdio_collision_failure_is_clean(FALSE, TRUE);
 }
 
+static void assert_nft_collision_failure_is_clean(const char *type, int fail_dup, int fail_cloexec) {
+	int saved_stdin = dup(STDIN_FILENO);
+	int saved_stdout = dup(STDOUT_FILENO);
+	int result;
+
+	assert_true(saved_stdin >= 0);
+	assert_true(saved_stdout >= 0);
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+	fail_next_dup = fail_dup;
+	fail_duplicated_cloexec = fail_cloexec;
+	result = nft_popen("exit 0", type);
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+	assert_int_equal(result, -1);
+}
+
+static void test_nft_read_collision_cloexec_failure_is_clean(void **state) {
+	(void) state;
+	assert_nft_collision_failure_is_clean("r", FALSE, TRUE);
+}
+
+static void test_nft_write_collision_cloexec_failure_is_clean(void **state) {
+	(void) state;
+	assert_nft_collision_failure_is_clean("w", FALSE, TRUE);
+}
+
+static void test_cloexec_pipe_failure_releases_both_descriptors(void **state) {
+	int pdes[2] = {-2, -2};
+	int first_reused;
+	int second_reused;
+
+	(void) state;
+	fail_next_cloexec = TRUE;
+	assert_false(spine_open_pipe_cloexec(pdes));
+	assert_int_equal(pdes[0], -1);
+	assert_int_equal(pdes[1], -1);
+	first_reused = open("/dev/null", O_RDONLY);
+	second_reused = open("/dev/null", O_RDONLY);
+	assert_true(first_reused >= 0);
+	assert_true(second_reused >= 0);
+	close(first_reused);
+	close(second_reused);
+}
+
 static void test_init_timeout_does_not_recurse(void **state) {
 	(void) state;
 	set.script_timeout = 0;
@@ -935,6 +986,9 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_php_init_later_failure_preserves_earlier_server, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_stdio_collision_dup_failure_is_clean, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_stdio_collision_cloexec_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_nft_read_collision_cloexec_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_nft_write_collision_cloexec_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_cloexec_pipe_failure_releases_both_descriptors, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_init_timeout_does_not_recurse, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawn_failure_releases_every_resource, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_rejects_a_writable_poisoned_slot, php_setup, php_teardown),
