@@ -95,4 +95,5 @@ tests_unit_test_log_newline_bound_LDADD   = $(CMOCKA_LIBS)
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-TESTS = $(check_PROGRAMS)
+TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh
+EXTRA_DIST += tests/regression/test_remote_push.sh

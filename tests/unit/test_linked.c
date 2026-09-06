@@ -86,6 +86,27 @@ static void test_regex_replace_passes_through_on_no_match(void **state) {
 static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	(void) state;
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
+	assert_string_equal(regex_replace_extended("[unclosed", "value"), "value");
+}
+
+static void test_spine_appendf_reports_truncation_and_guards(void **state) {
+	char buffer[8] = "";
+	char *cursor = buffer;
+	char *null_cursor = NULL;
+	size_t remaining = sizeof(buffer);
+	size_t zero = 0;
+	(void) state;
+
+	assert_false(spine_appendf(&cursor, &remaining, "%s", "0123456789"));
+	assert_int_equal(cursor - buffer, 7);
+	assert_int_equal(remaining, 1);
+	assert_int_equal(buffer[7], '\0');
+	assert_false(spine_appendf(&cursor, &remaining, "%s", "x"));
+	assert_string_equal(buffer, "0123456");
+	assert_false(spine_appendf(NULL, &remaining, "%s", "x"));
+	assert_false(spine_appendf(&null_cursor, &remaining, "%s", "x"));
+	assert_false(spine_appendf(&cursor, NULL, "%s", "x"));
+	assert_false(spine_appendf(&cursor, &zero, "%s", "x"));
 }
 
 
@@ -200,13 +221,18 @@ static void test_add_slashes_passes_plain_text_through(void **state) {
 }
 
 static void test_hex2dec(void **state) {
-	char a[32], b[16], overflow[32];
+	char a[32], b[16], overflow[160];
 	(void) state;
 
 	strcpy(a, "FF");  assert_int_equal((int) hex2dec(a), 255);
 	strcpy(b, "00");  assert_int_equal((int) hex2dec(b), 0);
-	strcpy(a, "aa-bb"); assert_int_equal((int) hex2dec(a), 0xaabb);
+	strcpy(a, "00:1b:44:11:3a:b7");
+	assert_int_equal(hex2dec(a), 0x001b44113ab7ULL);
 	strcpy(overflow, "10000000000000000");
+	assert_int_equal(hex2dec(overflow), 0);
+	strcpy(overflow, "80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88");
+	assert_int_equal(hex2dec(overflow), 0);
+	strcpy(overflow, "ffff ffff ffff ffff ffff ffff ffff ffff");
 	assert_int_equal(hex2dec(overflow), 0);
 }
 
@@ -478,6 +504,7 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_is_numeric),
