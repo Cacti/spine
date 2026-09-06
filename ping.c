@@ -424,10 +424,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	 * the thread that already owned it. That deadlocks this thread at euid 0
 	 * in a SUID root binary and takes every other thread that needs the lock
 	 * down with it, on nothing worse than a transient socket() failure. */
+	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+	const int needs_seteuid = (hasCaps() != TRUE);
+	#endif
+
 	retry_count = 0;
 	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (hasCaps() != TRUE) {
+		if (needs_seteuid) {
 			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
@@ -438,7 +442,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (hasCaps() != TRUE) {
+		if (needs_seteuid) {
 			if (seteuid(getuid()) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 			}

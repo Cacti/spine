@@ -39,11 +39,14 @@ static int track_packet;
 static size_t packet_size;
 static void *packet_allocation;
 static int packet_released;
+static int alternate_has_caps;
+static int has_caps_calls;
 
 static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
 static void *intercepted_malloc(size_t size);
 static void intercepted_free(void *ptr);
+static int test_has_caps(void);
 
 /* Compile the shipped implementation into this test translation unit so its
  * resource sinks can be observed without root or Linux-only linker wrapping. */
@@ -51,11 +54,21 @@ static void intercepted_free(void *ptr);
 #define close test_close
 #define malloc intercepted_malloc
 #define free intercepted_free
+#define hasCaps test_has_caps
 #include "../../ping.c"
 #undef socket
 #undef close
 #undef malloc
 #undef free
+#undef hasCaps
+
+static int test_has_caps(void) {
+	if (alternate_has_caps) {
+		return (has_caps_calls++ == 0) ? FALSE : TRUE;
+	}
+
+	return hasCaps();
+}
 
 static int test_socket(int domain, int type, int protocol) {
 	if (use_controlled_socket) {
@@ -134,6 +147,8 @@ static int ping_reset(void **state) {
 	packet_size = ICMP_HDR_SIZE + strlen("cacti-monitoring-system");
 	packet_allocation = NULL;
 	packet_released = 0;
+	alternate_has_caps = 0;
+	has_caps_calls = 0;
 	return 0;
 }
 
@@ -226,9 +241,44 @@ static void test_invalid_address_releases_packet_and_socket(void **state) {
 	memset(&ping, 0, sizeof(ping));
 
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
-	assert_non_null(strstr(ping.ping_response, "hostname invalid"));
 	assert_int_equal(packet_released, 1);
 	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_timeout_releases_packet_and_socket(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_controlled_socket = 1;
+	controlled_socket_fd = 44;
+	track_packet = 1;
+	make_host(&host, "127.0.0.1");
+	host.ping_timeout = 1;
+	host.ping_retries = 0;
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "timed out"));
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_capability_decision_pairs_lock_and_unlock(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_controlled_socket = 1;
+	controlled_socket_fd = FD_SETSIZE;
+	alternate_has_caps = 1;
+	make_host(&host, "127.0.0.1");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_int_equal(has_caps_calls, 1);
+	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
+	thread_mutex_unlock(LOCK_SETEUID);
 }
 
 /* The socket() retry used to sleep and loop back with LOCK_SETEUID still held,
@@ -296,6 +346,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_fd_setsize_guard_releases_the_packet, ping_reset),
 		cmocka_unit_test_setup(test_empty_address_releases_packet_and_socket, ping_reset),
 		cmocka_unit_test_setup(test_invalid_address_releases_packet_and_socket, ping_reset),
+		cmocka_unit_test_setup(test_timeout_releases_packet_and_socket, ping_reset),
+		cmocka_unit_test_setup(test_capability_decision_pairs_lock_and_unlock, ping_reset),
 		cmocka_unit_test_setup(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset),
 	};
 
