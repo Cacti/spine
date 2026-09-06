@@ -119,6 +119,10 @@ void *child(void *arg) {
 
 /*! \fn int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors)
  *  \brief convert a hexadecimal poll result and account for rejected values
+ *
+ *  result must name at least two writable bytes so failures can be represented
+ *  by the normal undefined marker. Invalid output arguments are rejected
+ *  without modifying memory whose writable extent cannot be established.
  */
 int poller_store_hex_result(char *result, size_t result_size, const char *hex, int *errors) {
 	unsigned long long value;

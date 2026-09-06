@@ -646,6 +646,10 @@ void read_config_options(void) {
 		}
 	}
 
+	/* The remaining option reads can log at debug verbosity. Refresh the
+	 * cached format before any of those messages are emitted. */
+	set_date_format();
+
 	/* determine log file, syslog or both, default is 1 or log file only */
 	if ((res = getsetting(&mysql, LOCAL, "log_destination")) != 0) {
 		set.log_destination = parse_logdest(res, LOGDEST_FILE);
@@ -948,8 +952,6 @@ void read_config_options(void) {
 	}
 
 	settings_cache_free();
-
-	set_date_format();
 }
 
 /* An upper bound on one row of either batch below. Every column is a number or
