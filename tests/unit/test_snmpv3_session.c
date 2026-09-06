@@ -463,7 +463,7 @@ static void test_multi_get_refuses_a_missing_session(void **state) {
 	memset(&host, 0, sizeof(host));
 	memset(&item, 0, sizeof(item));
 	memset(&request, 0, sizeof(request));
-	strcpy(request.result, "pending");
+	snprintf(request.result, sizeof(request.result), "pending");
 
 	snmp_get_multi(&host, &item, &request, 1);
 
