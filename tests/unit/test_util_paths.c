@@ -39,19 +39,26 @@ static int   frees_seen;
 enum fake_query_kind { FAKE_QUERY_DEFAULT, FAKE_QUERY_HOSTS, FAKE_QUERY_ITEMS };
 static enum fake_query_kind fake_query_kind;
 static int fake_row_index;
-static char *host_inserts[2];
-static char *item_inserts[2];
+static int byte_boundary_mode;
+static char *host_inserts[8];
+static char *item_inserts[8];
 static int host_insert_count;
 static int item_insert_count;
+static int total_insert_count;
 
-my_ulonglong mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
-unsigned long mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+#define mysql_num_rows test_mysql_num_rows
+#define mysql_get_server_version test_mysql_get_server_version
+#define mysql_fetch_row test_mysql_fetch_row
 
-MYSQL_ROW mysql_fetch_row(MYSQL_RES *res) {
+my_ulonglong test_mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
+unsigned long test_mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+
+MYSQL_ROW test_mysql_fetch_row(MYSQL_RES *res) {
 	static char *cells[21];
 	static char  v0[] = "value";
 	static char  v1[] = "value";
 	static char  zero[] = "0";
+	static char  wide[DBL_BUFSIZE];
 	static char  id[32];
 	int i;
 
@@ -71,6 +78,17 @@ MYSQL_ROW mysql_fetch_row(MYSQL_RES *res) {
 			cells[i] = zero;
 		}
 		cells[0] = id;
+		if (byte_boundary_mode) {
+			memset(wide, 'w', sizeof(wide) - 1);
+			wide[sizeof(wide) - 1] = '\0';
+			if (fake_query_kind == FAKE_QUERY_HOSTS) {
+				for (i = 1; i < 21; i++) {
+					cells[i] = wide;
+				}
+			} else {
+				cells[2] = wide;
+			}
+		}
 
 		return cells;
 	}
@@ -88,11 +106,11 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 	if (strstr(query, "FROM host ") != NULL) {
 		fake_query_kind = FAKE_QUERY_HOSTS;
-		rows_to_report = 501;
+		rows_to_report = byte_boundary_mode ? 60 : 501;
 		fake_row_index = 0;
 	} else if (strstr(query, "FROM poller_item ") != NULL) {
 		fake_query_kind = FAKE_QUERY_ITEMS;
-		rows_to_report = 10001;
+		rows_to_report = byte_boundary_mode ? 1100 : 10001;
 		fake_row_index = 0;
 	}
 
@@ -102,13 +120,14 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 void db_free_result(MYSQL_RES *result) { (void) result; frees_seen++; }
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	(void) mysql; (void) type;
+	total_insert_count++;
 
 	if (strncmp(query, "INSERT INTO host ", strlen("INSERT INTO host ")) == 0) {
-		assert_true(host_insert_count < 2);
+		assert_true(host_insert_count < 8);
 		host_inserts[host_insert_count++] = strdup(query);
 		assert_non_null(host_inserts[host_insert_count - 1]);
 	} else if (strncmp(query, "INSERT INTO poller_item ", strlen("INSERT INTO poller_item ")) == 0) {
-		assert_true(item_insert_count < 2);
+		assert_true(item_insert_count < 8);
 		item_inserts[item_insert_count++] = strdup(query);
 		assert_non_null(item_inserts[item_insert_count - 1]);
 	}
@@ -125,6 +144,10 @@ const char *printable_logdest(int dest) { return ""; }
 void php_close(int php_process) {}
 
 #include "../../util.c"
+
+#undef mysql_num_rows
+#undef mysql_get_server_version
+#undef mysql_fetch_row
 
 static char *build(int sep_code, int fmt_code) {
 	set.log_datetime_separator = sep_code;
@@ -341,6 +364,27 @@ static int count_occurrences(const char *haystack, const char *needle) {
 	return count;
 }
 
+static void test_push_flush_drops_suffix_overflow(void **state) {
+	char *sqlbuf;
+	char *cursor;
+	MYSQL mysql;
+	int before;
+
+	(void) state;
+	sqlbuf = malloc(HUGE_BUFSIZE);
+	assert_non_null(sqlbuf);
+	memset(sqlbuf, 'x', HUGE_BUFSIZE - 1);
+	sqlbuf[HUGE_BUFSIZE - 1] = '\0';
+	cursor = sqlbuf + HUGE_BUFSIZE - 1;
+	before = total_insert_count;
+
+	push_flush_batch(&mysql, sqlbuf, &cursor, " suffix");
+
+	assert_int_equal(total_insert_count, before);
+	assert_ptr_equal(cursor, sqlbuf + HUGE_BUFSIZE - 1);
+	free(sqlbuf);
+}
+
 static void test_remote_push_keeps_batch_boundary_rows(void **state) {
 	int i;
 
@@ -349,6 +393,7 @@ static void test_remote_push_keeps_batch_boundary_rows(void **state) {
 	set.poller_id = 2;
 	row_is_null = 0;
 	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 0;
 	host_insert_count = 0;
 	item_insert_count = 0;
 
@@ -375,6 +420,36 @@ static void test_remote_push_keeps_batch_boundary_rows(void **state) {
 		host_inserts[i] = NULL;
 		item_inserts[i] = NULL;
 	}
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
+
+static void test_remote_push_flushes_wide_rows_before_overflow(void **state) {
+	int i;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 1;
+	host_insert_count = 0;
+	item_insert_count = 0;
+
+	poller_push_data_to_main();
+
+	assert_true(host_insert_count > 1);
+	assert_true(item_insert_count > 1);
+	for (i = 0; i < host_insert_count; i++) {
+		assert_non_null(strstr(host_inserts[i], "ON DUPLICATE KEY UPDATE"));
+		free(host_inserts[i]);
+		host_inserts[i] = NULL;
+	}
+	for (i = 0; i < item_insert_count; i++) {
+		assert_non_null(strstr(item_inserts[i], "ON DUPLICATE KEY UPDATE"));
+		free(item_inserts[i]);
+		item_inserts[i] = NULL;
+	}
+	byte_boundary_mode = 0;
 	fake_query_kind = FAKE_QUERY_DEFAULT;
 }
 
@@ -490,6 +565,8 @@ int main(void) {
 		cmocka_unit_test(test_get_cacti_version_frees_on_null_row),
 		cmocka_unit_test(test_success_path_frees_once),
 		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
+		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
+		cmocka_unit_test(test_push_flush_drops_suffix_overflow),
 		cmocka_unit_test(test_spine_log_appends_a_newline),
 		cmocka_unit_test(test_spine_log_survives_a_full_line),
 		cmocka_unit_test(test_spine_log_does_not_double_an_existing_newline),

@@ -91,12 +91,19 @@ static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 
 static void test_spine_appendf_reports_truncation_and_guards(void **state) {
 	char buffer[8] = "";
+	char success[8] = "";
 	char *cursor = buffer;
+	char *success_cursor = success;
 	char *null_cursor = NULL;
 	size_t remaining = sizeof(buffer);
+	size_t success_remaining = sizeof(success);
 	size_t zero = 0;
 	(void) state;
 
+	assert_true(spine_appendf(&success_cursor, &success_remaining, "%s", "abc"));
+	assert_int_equal(success_cursor - success, 3);
+	assert_int_equal(success_remaining, sizeof(success) - 3);
+	assert_string_equal(success, "abc");
 	assert_false(spine_appendf(&cursor, &remaining, "%s", "0123456789"));
 	assert_int_equal(cursor - buffer, 7);
 	assert_int_equal(remaining, 1);
@@ -247,6 +254,7 @@ static void test_hex2dec(void **state) {
 
 static void test_poller_hex_overflow_is_undefined(void **state) {
 	char result[RESULTS_BUFFER];
+	char exact[4] = "ff";
 	char tiny[2] = "f";
 	char too_small[3] = "ff";
 	char empty[1] = "";
@@ -254,6 +262,8 @@ static void test_poller_hex_overflow_is_undefined(void **state) {
 	int errors = 0;
 
 	(void) state;
+	assert_true(poller_store_hex_result(exact, sizeof(exact), exact, &errors));
+	assert_string_equal(exact, "255");
 	strcpy(result, "ff:ff:ff:ff:ff:ff:ff:ff");
 	assert_true(poller_store_hex_result(result, sizeof(result), result, &errors));
 	assert_string_equal(result, "18446744073709551615");
