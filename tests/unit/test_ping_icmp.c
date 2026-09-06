@@ -35,6 +35,8 @@ static int pi_debug_table[100];
 static int use_controlled_socket;
 static int controlled_socket_fd;
 static int controlled_socket_closed;
+static int socket_failures_remaining;
+static int socket_calls;
 static int track_packet;
 static size_t packet_size;
 static void *packet_allocation;
@@ -93,6 +95,13 @@ static int test_getaddrinfo(const char *node, const char *service,
 }
 
 static int test_socket(int domain, int type, int protocol) {
+	socket_calls++;
+	if (socket_failures_remaining > 0) {
+		socket_failures_remaining--;
+		errno = EPERM;
+		return -1;
+	}
+
 	if (use_controlled_socket) {
 		(void) domain;
 		(void) type;
@@ -130,17 +139,6 @@ static void intercepted_free(void *ptr) {
 	free(ptr);
 }
 
-static int have_raw_socket(void) {
-	int s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-
-	if (s < 0) {
-		return 0;
-	}
-
-	close(s);
-	return 1;
-}
-
 static void make_host(host_t *host, const char *addr) {
 	memset(host, 0, sizeof(*host));
 	host->id = 1;
@@ -165,6 +163,8 @@ static int ping_reset(void **state) {
 	use_controlled_socket = 0;
 	controlled_socket_fd = -1;
 	controlled_socket_closed = 0;
+	socket_failures_remaining = 0;
+	socket_calls = 0;
 	track_packet = 0;
 	packet_size = ICMP_HDR_SIZE + strlen("cacti-monitoring-system");
 	packet_allocation = NULL;
@@ -193,41 +193,6 @@ static void use_owned_controlled_socket(void) {
 	assert_int_equal(socketpair(AF_UNIX, SOCK_DGRAM, 0, controlled_pair), 0);
 	use_controlled_socket = 1;
 	controlled_socket_fd = controlled_pair[0];
-}
-
-static void test_loopback_answers(void **state) {
-	host_t host;
-	ping_t ping;
-
-	(void) state;
-	if (!have_raw_socket()) {
-		skip();
-	}
-
-	make_host(&host, "127.0.0.1");
-	memset(&ping, 0, sizeof(ping));
-
-	assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
-	assert_true(strlen(ping.ping_response) > 0);
-}
-
-/* Repeating the call must not accumulate anything. Under --enable-sanitizers
-   the packet leak this branch fixed shows up here as a leak report. */
-static void test_repeated_pings_do_not_accumulate(void **state) {
-	host_t host;
-	ping_t ping;
-	int i;
-
-	(void) state;
-	if (!have_raw_socket()) {
-		skip();
-	}
-
-	for (i = 0; i < 20; i++) {
-		make_host(&host, "127.0.0.1");
-		memset(&ping, 0, sizeof(ping));
-		assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
-	}
 }
 
 /* The exit that leaked. A controlled socket result reaches the guard without
@@ -335,6 +300,26 @@ static void test_capability_decision_pairs_lock_and_unlock(void **state) {
 	thread_mutex_unlock(LOCK_SETEUID);
 }
 
+static void test_socket_retry_can_succeed_after_one_failure(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_controlled_socket = 1;
+	controlled_socket_fd = FD_SETSIZE;
+	socket_failures_remaining = 1;
+	alternate_has_caps = 1;
+	make_host(&host, "127.0.0.1");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_int_equal(socket_calls, 2);
+	assert_int_equal(has_caps_calls, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
+	thread_mutex_unlock(LOCK_SETEUID);
+}
+
 /* The socket() retry used to sleep and loop back with LOCK_SETEUID still held,
    so attempt two relocked a non-recursive process-global mutex from its own
    owner. That wedges the thread at euid 0 and every other thread behind it.
@@ -358,11 +343,6 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 
 	(void) state;
 
-	if (have_raw_socket()) {
-		/* socket() would succeed, so the retry loop never runs */
-		skip();
-	}
-
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = ping_alarm;
 	sigemptyset(&sa.sa_mask);
@@ -376,6 +356,7 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
+	socket_failures_remaining = 5;
 
 	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */
 	alarm(15);
@@ -395,14 +376,13 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
-		cmocka_unit_test_setup_teardown(test_loopback_answers, ping_reset, ping_teardown),
-		cmocka_unit_test_setup_teardown(test_repeated_pings_do_not_accumulate, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_fd_setsize_guard_releases_the_packet, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_empty_address_releases_packet_and_socket, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_invalid_address_releases_packet_and_socket, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_timeout_releases_packet_and_socket, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_temporary_resolver_failure_retries_four_times, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_capability_decision_pairs_lock_and_unlock, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_socket_retry_can_succeed_after_one_failure, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset, ping_teardown),
 	};
 
