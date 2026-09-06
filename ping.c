@@ -808,6 +808,8 @@ static void apply_ipv6_scope_id(struct sockaddr_in6 *name) {
  */
 static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 	int    icmp_socket;
+	int    socket_errno = 0;
+	const int needs_seteuid = (set.icmp_uses_caps != TRUE);
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -858,9 +860,9 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		icmp_dgram = TRUE;
 	}
 
-	/* get ICMPv6 socket */
+	/* Each raw-socket attempt owns one complete privilege transition. */
 	while (icmp_socket == -1) {
-		if (hasCaps() != TRUE) {
+		if (needs_seteuid) {
 			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
@@ -868,8 +870,9 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		}
 
 		icmp_socket = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+		socket_errno = errno;
 
-		if (hasCaps() != TRUE) {
+		if (needs_seteuid) {
 			if (seteuid(getuid()) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 			}
@@ -879,6 +882,9 @@ static int ping_icmp_ipv6(host_t *host, ping_t *ping) {
 		if (icmp_socket != -1) {
 			break;
 		}
+
+		SPINE_LOG_MEDIUM(("WARNING: Device[%i] raw ICMPv6 socket creation failed: %s",
+			host->id, strerror(socket_errno)));
 
 		usleep(500000);
 		retry_count++;
