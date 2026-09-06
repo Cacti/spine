@@ -708,6 +708,48 @@ static void test_duplicated_descriptor_is_close_on_exec(void **state) {
 	close(original);
 }
 
+static void test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect(void **state) {
+	int saved_stdin;
+	int saved_stdout;
+	int writer;
+	int reader;
+	int writer_status;
+	int reader_status;
+	ssize_t bytes;
+	char output[32] = {0};
+
+	(void) state;
+	saved_stdin = dup(STDIN_FILENO);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert_true(saved_stdin >= 0);
+	assert_true(saved_stdout >= 0);
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+
+	/* The write-mode parent retains fd 1 in PidList. The following read-mode
+	 * child also redirects its new pipe onto fd 1. Its later PidList close walk
+	 * must not close that newly installed stdout. */
+	writer = nft_popen("cat >/dev/null", "w");
+	reader = nft_popen("printf second-child-visible", "r");
+	bytes = reader >= 0 ? read(reader, output, sizeof(output) - 1) : -1;
+	reader_status = reader >= 0 ? nft_pclose(reader) : -1;
+	writer_status = writer >= 0 ? nft_pclose(writer) : -1;
+
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(writer >= 0);
+	assert_true(reader >= 0);
+	assert_true(bytes > 0);
+	assert_string_equal(output, "second-child-visible");
+	assert_true(WIFEXITED(reader_status));
+	assert_int_equal(WEXITSTATUS(reader_status), 0);
+	assert_true(WIFEXITED(writer_status));
+	assert_int_equal(WEXITSTATUS(writer_status), 0);
+}
+
 static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **state) {
 	pid_t pid;
 	int i;
@@ -867,6 +909,7 @@ int main(void) {
 		cmocka_unit_test(test_cloexec_is_set_on_both_pipe_ends),
 		cmocka_unit_test(test_cloexec_pipe_is_a_working_pipe),
 		cmocka_unit_test(test_duplicated_descriptor_is_close_on_exec),
+		cmocka_unit_test(test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
 		cmocka_unit_test(test_reap_collects_an_exited_child),

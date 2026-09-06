@@ -482,8 +482,17 @@ int nft_popen(const char * command, const char * type) {
 	}
 
 	/* Close all other pipes in the child (Posix.2 requirement). */
-	for (p = PidList; p; p = p->next)
+	for (p = PidList; p; p = p->next) {
+		/* File actions run in order. Do not close a standard descriptor after
+		 * this spawn has redirected a fresh pipe onto it merely because an
+		 * older parent-side pipe happens to use the same descriptor number. */
+		if ((*type == 'r' && p->fd == STDOUT_FILENO) ||
+		    (*type == 'r' && twoway && p->fd == STDIN_FILENO) ||
+		    (*type == 'w' && p->fd == STDIN_FILENO)) {
+			continue;
+		}
 		posix_spawn_file_actions_addclose(&fa, p->fd);
+	}
 
 	/* Spawn the child process with retry on EAGAIN/ENOMEM. */
 	#if defined(__CYGWIN__)
