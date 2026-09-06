@@ -49,6 +49,8 @@
  ******************************************************************************
  */
 
+#include <spawn.h>
+
 /*!
  *  The nft_popen() function forks a command in a child process, and returns
  *  a pipe that is connected to the child's standard input and output. It is
@@ -114,6 +116,10 @@ extern int	spine_set_cloexec(int fd);
  *  returned, so the caller owns nothing.
  */
 extern int	spine_open_pipe_cloexec(int pdes[2]);
+
+/* Restore SIGPIPE's default disposition in posix_spawned children while the
+ * Spine parent handles broken pipes itself. */
+extern int	spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
 
 /*!
  *  spine_reap_child_bounded

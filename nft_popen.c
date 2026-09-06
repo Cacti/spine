@@ -225,6 +225,34 @@ int spine_open_pipe_cloexec(int pdes[2]) {
 	return TRUE;
 }
 
+int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr) {
+	sigset_t defaults;
+	int rc;
+
+	if (attr == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	rc = posix_spawnattr_init(attr);
+	if (rc != 0) {
+		errno = rc;
+		return -1;
+	}
+
+	sigemptyset(&defaults);
+	sigaddset(&defaults, SIGPIPE);
+	rc = posix_spawnattr_setsigdefault(attr, &defaults);
+	if (rc == 0) rc = posix_spawnattr_setflags(attr, POSIX_SPAWN_SETSIGDEF);
+	if (rc != 0) {
+		posix_spawnattr_destroy(attr);
+		errno = rc;
+		return -1;
+	}
+
+	return 0;
+}
+
 /*! \fn static int reap_child_bounded(pid_t pid, int *pstat, int attempts)
  *  \return 0 when reaped, 1 when still running after attempts, -1 on error
  */
