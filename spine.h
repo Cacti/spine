@@ -626,7 +626,8 @@ typedef struct db_connection {
 #include "error.h"
 
 /* Globals */
-extern int spine_snmpv3_value_is_set(const char *value);
+extern int spine_snmpv3_protocol_is_set(const char *value);
+extern int spine_snmpv3_passphrase_is_set(const char *value);
 extern int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_password,
 	const char *priv_protocol, const char *priv_passphrase);
 

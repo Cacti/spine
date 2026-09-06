@@ -44,13 +44,12 @@
 
 #define OIDSIZE(p) (sizeof(p)/sizeof(oid))
 
-/*! \fn int spine_snmpv3_value_is_set(const char *value)
- *  \brief Whether a Cacti-supplied SNMPv3 field selects anything.
+/*! \fn int spine_snmpv3_protocol_is_set(const char *value)
+ *  \brief Whether a Cacti-supplied SNMPv3 protocol field selects anything.
  *
- *  Cacti stores the literal "[None]" when the user picks no protocol, and an
- *  empty string when a passphrase is absent. Both mean "not selected".
+ *  Cacti stores the literal "[None]" when the user picks no protocol.
  */
-int spine_snmpv3_value_is_set(const char *value) {
+int spine_snmpv3_protocol_is_set(const char *value) {
 	if (value == NULL) {
 		return FALSE;
 	}
@@ -66,13 +65,23 @@ int spine_snmpv3_value_is_set(const char *value) {
 	return TRUE;
 }
 
+/*! \fn int spine_snmpv3_passphrase_is_set(const char *value)
+ *  \brief Whether a Cacti-supplied SNMPv3 passphrase is nonempty.
+ *
+ *  Unlike protocol fields, passphrases do not use the "[None]" sentinel. That
+ *  text is therefore a valid (if weak) passphrase and must not be discarded.
+ */
+int spine_snmpv3_passphrase_is_set(const char *value) {
+	return value != NULL && value[0] != '\0';
+}
+
 /*! \fn int spine_snmpv3_security_level(...)
  *  \brief Pick the SNMPv3 security level from the values Cacti stores.
  *
  *  Authentication needs both a protocol and a password; privacy additionally
  *  needs a privacy protocol and passphrase, and is only meaningful on top of
- *  authentication. Anything not selected leaves the level lower rather than
- *  making the device an error, which is what Cacti's own poller does.
+ *  authentication. The session builder separately refuses half-configured
+ *  credential pairs before using this computed level.
  *
  *  \return SNMP_SEC_LEVEL_NOAUTH, SNMP_SEC_LEVEL_AUTHNOPRIV or
  *          SNMP_SEC_LEVEL_AUTHPRIV
@@ -82,12 +91,12 @@ int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_pass
 	int authenticates;
 	int encrypts;
 
-	authenticates = spine_snmpv3_value_is_set(auth_protocol) &&
-		spine_snmpv3_value_is_set(auth_password);
+	authenticates = spine_snmpv3_protocol_is_set(auth_protocol) &&
+		spine_snmpv3_passphrase_is_set(auth_password);
 
 	encrypts = authenticates &&
-		spine_snmpv3_value_is_set(priv_protocol) &&
-		spine_snmpv3_value_is_set(priv_passphrase);
+		spine_snmpv3_protocol_is_set(priv_protocol) &&
+		spine_snmpv3_passphrase_is_set(priv_passphrase);
 
 	if (encrypts) {
 		return SNMP_SEC_LEVEL_AUTHPRIV;
@@ -318,39 +327,33 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		int security_level;
 		const oid *auth_proto;
 
-		/* Cacti stores "[None]" when no protocol is selected, and an absent
-		 * passphrase means the same thing. Neither is an error: the device is
-		 * simply noAuthNoPriv, which is what cmd.php does with the same values.
-		 * Only a protocol that is set and unrecognised is invalid. */
+		/* Cacti stores "[None]" when no protocol is selected. Complete absent
+		 * pairs mean noAuthNoPriv; half-configured pairs are refused below so
+		 * that an intended security property cannot be silently discarded. */
 		security_level = spine_snmpv3_security_level(snmp_auth_protocol, snmp_password,
 			snmp_priv_protocol, snmp_priv_passphrase);
 
-		if (spine_snmpv3_value_is_set(snmp_auth_protocol) !=
-			spine_snmpv3_value_is_set(snmp_password)) {
-			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; using noAuthNoPriv.", host_id));
-		}
-
-		/* A password with no selected protocol was rejected by the historical
-		 * path. Preserve that fail-closed boundary rather than silently sending
-		 * an unauthenticated request that carries no usable password. */
-		if (!spine_snmpv3_value_is_set(snmp_auth_protocol) &&
-			spine_snmpv3_value_is_set(snmp_password)) {
-			SPINE_LOG(("SNMP: Device[%i] Error authentication password is configured but no authentication protocol is selected.", host_id));
+		if (spine_snmpv3_protocol_is_set(snmp_auth_protocol) !=
+			spine_snmpv3_passphrase_is_set(snmp_password)) {
+			SPINE_LOG(("SNMP: Device[%i] Error incomplete authentication settings; both an authentication protocol and password are required.", host_id));
 			free(session.peername);
 			free(session.localname);
 			return 0;
 		}
 
-		if (spine_snmpv3_value_is_set(snmp_priv_protocol) !=
-			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
-			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; ignoring privacy and sending SNMP payloads without encryption.", host_id));
+		if (spine_snmpv3_protocol_is_set(snmp_priv_protocol) !=
+			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
+			SPINE_LOG(("SNMP: Device[%i] Error incomplete privacy settings; both a privacy protocol and passphrase are required.", host_id));
+			free(session.peername);
+			free(session.localname);
+			return 0;
 		}
 
 		/* A protocol that is set but unrecognised is a configuration error at
 		 * any security level. Deciding the level first and only validating on
 		 * the authenticated path would let a typo through as noAuthNoPriv,
 		 * because a device with no passphrase never reaches the check. */
-		if (spine_snmpv3_value_is_set(snmp_auth_protocol)) {
+		if (spine_snmpv3_protocol_is_set(snmp_auth_protocol)) {
 			auth_type = usm_lookup_auth_type(snmp_auth_protocol);
 
 			if (auth_type <= 0) {
@@ -381,8 +384,8 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 		 * honoured by USM. Refuse that case; a stale protocol with no
 		 * passphrase remains compatible with the historical authNoPriv path. */
 		if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
-			spine_snmpv3_value_is_set(snmp_priv_protocol) &&
-			spine_snmpv3_value_is_set(snmp_priv_passphrase)) {
+			spine_snmpv3_protocol_is_set(snmp_priv_protocol) &&
+			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
 			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is configured but authentication is unavailable; set an auth protocol and password, or clear the privacy passphrase.", host_id));
 			free(session.peername);
 			free(session.localname);
