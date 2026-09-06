@@ -385,8 +385,24 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				Apsz = strdup(snmp_password);
 
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+				if (session.securityAuthProto == NULL) {
+					const oid *def = get_default_authtype(&session.securityAuthProtoLen);
+					if (def != NULL) {
+						session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
+					} else {
+						session.securityAuthProtoLen = 0;
+					}
+				}
 
-				if (Apsz == NULL || generate_Ku(session.securityAuthProto,
+				if (session.securityAuthProto == NULL) {
+					#if defined(HAVE_USM_HMACSHA1_AUTH_PROTOCOL)
+					session.securityAuthProto = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
+					session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
+					#endif
+				}
+
+				if (Apsz == NULL || session.securityAuthProto == NULL ||
+					generate_Ku(session.securityAuthProto,
 					session.securityAuthProtoLen,
 					(u_char *) Apsz, strlen(Apsz),
 					session.securityAuthKey,
@@ -443,15 +459,22 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					 * get .conf set default
 					 */
 					const oid *def = get_default_authtype(&session.securityAuthProtoLen);
-					session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
+					if (def != NULL) {
+						session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
+					} else {
+						session.securityAuthProtoLen = 0;
+					}
 				}
 
 				if (session.securityAuthProto == NULL) {
-					session.securityAuthProto    = snmp_duplicate_objid(SNMP_DEFAULT_AUTH_PROTO, SNMP_DEFAULT_AUTH_PROTOLEN);
-					session.securityAuthProtoLen = SNMP_DEFAULT_AUTH_PROTOLEN;
+					#if defined(HAVE_USM_HMACSHA1_AUTH_PROTOCOL)
+					session.securityAuthProto = snmp_duplicate_objid(usmHMACSHA1AuthProtocol, USM_AUTH_PROTO_SHA_LEN);
+					session.securityAuthProtoLen = USM_AUTH_PROTO_SHA_LEN;
+					#endif
 				}
 
-				if (generate_Ku(session.securityAuthProto,
+				if (session.securityAuthProto == NULL ||
+					generate_Ku(session.securityAuthProto,
 					session.securityAuthProtoLen,
 					(u_char *) Apsz, strlen(Apsz),
 					session.securityAuthKey,
@@ -485,7 +508,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				}
 
 				if (session.securityPrivProto == NULL) {
-#if defined(HAVE_USM_DES_PRIV_PROTOCOL) || defined(NETSNMP_DISABLE_DES)
+#if defined(HAVE_USM_DES_PRIV_PROTOCOL)
 					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
 					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
 #else
