@@ -2095,7 +2095,6 @@ unsigned long long hex2dec(char *str) {
 int hasCaps(void) {
 	#ifdef HAVE_LCAP
 	cap_t caps;
-	cap_value_t capval;
 	cap_flag_value_t capflag;
 
 	/* Recommended caps: cap_net_raw=eip */

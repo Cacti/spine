@@ -377,6 +377,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_socket = -1;
 	int    icmp_dgram;
 	int    rc = HOST_DOWN;
+	int    socket_errno = 0;
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 	int    needs_seteuid;
 	#endif
@@ -430,11 +431,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	retry_count = 0;
 	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		/* Capabilities can be added or removed while a retry sleeps. Make the
-		 * decision for the attempt whose lock/euid pair it controls. */
+		/* Serialize the capability sample with the process-wide euid transition.
+		 * Sampling before this lock can observe another thread's brief elevated
+		 * state and incorrectly skip elevation for this socket attempt. */
+		thread_mutex_lock(LOCK_SETEUID);
 		needs_seteuid = (hasCaps() != TRUE);
 		if (needs_seteuid) {
-			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
 			}
@@ -442,19 +444,24 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		#endif
 
 		icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+		socket_errno = errno;
 
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
 		if (needs_seteuid) {
 			if (seteuid(getuid()) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
 			}
-			thread_mutex_unlock(LOCK_SETEUID);
 		}
+		thread_mutex_unlock(LOCK_SETEUID);
 		#endif
 
 		if (icmp_socket != -1) {
 			break;
 		}
+
+		SPINE_LOG_MEDIUM(("WARNING: Device[%i] raw ICMP socket creation failed: %s",
+			host->id, strerror(socket_errno)));
+
 		retry_count++;
 
 		if (retry_count > 4) {
@@ -1451,7 +1458,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	struct addrinfo hints, *hostinfo = NULL;
 	int rv, retry_count;
 
-	// Initialize the hints structure
+	/* Initialize the hints structure */
 	memset(&hints, 0, sizeof hints);
 
 	hints.ai_family = AF_INET;
@@ -1502,12 +1509,12 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 		SPINE_LOG(("WARNING: Unknown host %s", hostname));
 		return FALSE;
 	} else {
-		// Copy socket details
+		/* Copy socket details */
 		name->sin_family = hostinfo->ai_family;
 		name->sin_addr = ((struct sockaddr_in *)hostinfo->ai_addr)->sin_addr;
 		name->sin_port = htons(port);
 
-		// Free results var
+		/* Free results var */
 		freeaddrinfo(hostinfo);
 		return TRUE;
 	}
