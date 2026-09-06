@@ -246,9 +246,10 @@ int main(int argc, char *argv[]) {
 
 	/* establish php processes and initialize space */
 	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
-	for (i = 0; i < MAX_PHP_SERVERS; i++) {
-		php_processes[i].php_state = PHP_BUSY;
+	if (php_processes == NULL) {
+		die("ERROR: Fatal malloc error: spine.c php_processes!");
 	}
+	php_processes_initialize(php_processes, MAX_PHP_SERVERS);
 
 	/* create the array of debug devices */
 	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));

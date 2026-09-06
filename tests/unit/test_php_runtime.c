@@ -133,8 +133,6 @@ int __wrap_posix_spawnattr_destroy(posix_spawnattr_t *attr) {
 }
 
 static int php_setup(void **state) {
-	int i;
-
 	(void) state;
 	memset(&set, 0, sizeof(set));
 	init_mutexes();
@@ -142,12 +140,7 @@ static int php_setup(void **state) {
 
 	php_processes = calloc(MAX_PHP_SERVERS, sizeof(*php_processes));
 	assert_non_null(php_processes);
-	for (i = 0; i < MAX_PHP_SERVERS; i++) {
-		php_processes[i].php_state = PHP_BUSY;
-		php_processes[i].php_pid = -1;
-		php_processes[i].php_read_fd = -1;
-		php_processes[i].php_write_fd = -1;
-	}
+	php_processes_initialize(php_processes, MAX_PHP_SERVERS);
 
 	set.php_servers = 2;
 	set.script_timeout = 1;
@@ -213,6 +206,20 @@ static void test_round_robin_wraps_at_server_count(void **state) {
 	assert_int_equal(php_get_process(), 0);
 	php_processes[0].php_pid = php_processes[0].php_read_fd = php_processes[0].php_write_fd = -1;
 	php_processes[1].php_pid = php_processes[1].php_read_fd = php_processes[1].php_write_fd = -1;
+}
+
+static void test_process_slot_initialization_invalidates_zero_descriptors(void **state) {
+	php_t slots[3] = {{0}};
+	int i;
+
+	(void) state;
+	php_processes_initialize(slots, 3);
+	for (i = 0; i < 3; i++) {
+		assert_int_equal(slots[i].php_state, PHP_BUSY);
+		assert_int_equal(slots[i].php_pid, -1);
+		assert_int_equal(slots[i].php_read_fd, -1);
+		assert_int_equal(slots[i].php_write_fd, -1);
+	}
 }
 
 static void test_round_robin_rejects_failed_slots(void **state) {
@@ -966,6 +973,7 @@ static void test_command_gives_up_after_three_failed_writes(void **state) {
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_round_robin_wraps_at_server_count, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_process_slot_initialization_invalidates_zero_descriptors, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_round_robin_rejects_failed_slots, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_round_robin_returns_a_healthy_slot_when_all_are_contended, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_dead_slot_is_recovered_while_another_slot_is_contended, php_setup, php_teardown),

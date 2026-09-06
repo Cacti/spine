@@ -180,7 +180,9 @@ void install_spine_signal_handler(void) {
 	sa.sa_handler = spine_sigpipe_handler;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
-	sigaction(SIGPIPE, &sa, NULL);
+	if (sigaction(SIGPIPE, &sa, NULL) != 0) {
+		SPINE_LOG(("ERROR: Unable to install SIGPIPE handler: %s", strerror(errno)));
+	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -212,12 +214,15 @@ void uninstall_spine_signal_handler(void) {
 	struct sigaction sa;
 	void (*ohandler)(int);
 
-	sigaction(SIGPIPE, NULL, &sa);
-	if (sa.sa_handler == spine_sigpipe_handler) {
+	if (sigaction(SIGPIPE, NULL, &sa) != 0) {
+		SPINE_LOG(("WARNING: Unable to inspect SIGPIPE handler during shutdown: %s", strerror(errno)));
+	} else if (sa.sa_handler == spine_sigpipe_handler) {
 		sa.sa_handler = SIG_DFL;
 		sigemptyset(&sa.sa_mask);
 		sa.sa_flags = 0;
-		sigaction(SIGPIPE, &sa, NULL);
+		if (sigaction(SIGPIPE, &sa, NULL) != 0) {
+			SPINE_LOG(("WARNING: Unable to restore the default SIGPIPE handler: %s", strerror(errno)));
+		}
 	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {

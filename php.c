@@ -75,6 +75,20 @@ static void php_process_unlock(int php_process) {
 	thread_mutex_unlock(LOCK_PHP_PROC_0 + php_process);
 }
 
+void php_processes_initialize(php_t *processes, int count) {
+	int i;
+
+	if (processes == NULL || count <= 0)
+		return;
+
+	for (i = 0; i < count; i++) {
+		processes[i].php_state = PHP_BUSY;
+		processes[i].php_pid = -1;
+		processes[i].php_read_fd = -1;
+		processes[i].php_write_fd = -1;
+	}
+}
+
 static char *php_read_result(int php_process, char *command, int allow_restart);
 
 /* Block SIGPIPE in the calling thread around Spine's two pipe writes. The
