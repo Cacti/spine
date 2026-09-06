@@ -42,10 +42,15 @@ static size_t packet_size;
 static void *packet_allocation;
 static int packet_released;
 static int alternate_has_caps;
+static int force_no_caps;
 static int has_caps_calls;
 static int controlled_pair[2] = {-1, -1};
 static int resolver_mode;
 static int resolver_calls;
+static int freeaddrinfo_calls;
+static int controlled_reply;
+static uint16_t sent_icmp_id;
+static uint16_t sent_icmp_seq;
 
 static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
@@ -54,6 +59,13 @@ static void intercepted_free(void *ptr);
 static int test_has_caps(void);
 static int test_getaddrinfo(const char *node, const char *service,
 	const struct addrinfo *hints, struct addrinfo **res);
+static void test_freeaddrinfo(struct addrinfo *res);
+static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
+	const struct sockaddr *address, socklen_t address_len);
+static int test_select(int nfds, fd_set *readfds, fd_set *writefds,
+	fd_set *exceptfds, struct timeval *timeout);
+static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
+	struct sockaddr *address, socklen_t *address_len);
 
 /* Compile the shipped implementation into this test translation unit so its
  * resource sinks can be observed without root or Linux-only linker wrapping. */
@@ -63,6 +75,10 @@ static int test_getaddrinfo(const char *node, const char *service,
 #define free intercepted_free
 #define hasCaps test_has_caps
 #define getaddrinfo test_getaddrinfo
+#define freeaddrinfo test_freeaddrinfo
+#define sendto test_sendto
+#define select test_select
+#define recvfrom test_recvfrom
 #include "../../ping.c"
 #undef socket
 #undef close
@@ -70,10 +86,18 @@ static int test_getaddrinfo(const char *node, const char *service,
 #undef free
 #undef hasCaps
 #undef getaddrinfo
+#undef freeaddrinfo
+#undef sendto
+#undef select
+#undef recvfrom
 
 static int test_has_caps(void) {
+	has_caps_calls++;
+	if (force_no_caps) {
+		return FALSE;
+	}
 	if (alternate_has_caps) {
-		return (has_caps_calls++ == 0) ? FALSE : TRUE;
+		return (has_caps_calls == 1) ? FALSE : TRUE;
 	}
 
 	return hasCaps();
@@ -83,15 +107,68 @@ static int test_getaddrinfo(const char *node, const char *service,
 	const struct addrinfo *hints, struct addrinfo **res) {
 	resolver_calls++;
 	if (resolver_mode == 1) {
-		*res = NULL;
+		*res = (struct addrinfo *)(uintptr_t) 1;
 		return EAI_NONAME;
 	}
 	if (resolver_mode == 2) {
-		*res = NULL;
+		*res = (struct addrinfo *)(uintptr_t) 1;
 		return EAI_AGAIN;
 	}
 
 	return getaddrinfo(node, service, hints, res);
+}
+
+static void test_freeaddrinfo(struct addrinfo *res) {
+	freeaddrinfo_calls++;
+	freeaddrinfo(res);
+}
+
+static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
+		const struct sockaddr *address, socklen_t address_len) {
+	const struct icmp *request = buffer;
+
+	if (!controlled_reply) {
+		return sendto(fd, buffer, length, flags, address, address_len);
+	}
+	sent_icmp_id = request->icmp_id;
+	sent_icmp_seq = request->icmp_seq;
+	return (ssize_t) length;
+}
+
+static int test_select(int nfds, fd_set *readfds, fd_set *writefds,
+		fd_set *exceptfds, struct timeval *timeout) {
+	if (controlled_reply) {
+		return 1;
+	}
+	return select(nfds, readfds, writefds, exceptfds, timeout);
+}
+
+static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
+		struct sockaddr *address, socklen_t *address_len) {
+	struct ip *ip_reply;
+	struct icmp *icmp_reply;
+	struct sockaddr_in *source;
+	size_t reply_length = sizeof(struct ip) + sizeof(struct icmp);
+
+	if (!controlled_reply) {
+		return recvfrom(fd, buffer, length, flags, address, address_len);
+	}
+	assert_true(length >= reply_length);
+	memset(buffer, 0, reply_length);
+	ip_reply = buffer;
+	ip_reply->ip_hl = sizeof(struct ip) >> 2;
+	icmp_reply = (struct icmp *)((unsigned char *) buffer + sizeof(struct ip));
+	icmp_reply->icmp_type = ICMP_ECHOREPLY;
+	icmp_reply->icmp_id = sent_icmp_id;
+	icmp_reply->icmp_seq = sent_icmp_seq;
+	if (address != NULL && address_len != NULL && *address_len >= sizeof(*source)) {
+		source = (struct sockaddr_in *) address;
+		memset(source, 0, sizeof(*source));
+		source->sin_family = AF_INET;
+		source->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		*address_len = sizeof(*source);
+	}
+	return (ssize_t) reply_length;
 }
 
 static int test_socket(int domain, int type, int protocol) {
@@ -170,11 +247,16 @@ static int ping_reset(void **state) {
 	packet_allocation = NULL;
 	packet_released = 0;
 	alternate_has_caps = 0;
+	force_no_caps = 0;
 	has_caps_calls = 0;
 	controlled_pair[0] = -1;
 	controlled_pair[1] = -1;
 	resolver_mode = 0;
 	resolver_calls = 0;
+	freeaddrinfo_calls = 0;
+	controlled_reply = 0;
+	sent_icmp_id = 0;
+	sent_icmp_seq = 0;
 	return 0;
 }
 
@@ -251,6 +333,7 @@ static void test_invalid_address_releases_packet_and_socket(void **state) {
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
 	assert_non_null(strstr(ping.ping_response, "hostname invalid"));
 	assert_int_equal(resolver_calls, 1);
+	assert_int_equal(freeaddrinfo_calls, 0);
 	assert_int_equal(packet_released, 1);
 	assert_int_equal(controlled_socket_closed, 1);
 }
@@ -281,6 +364,27 @@ static void test_temporary_resolver_failure_retries_four_times(void **state) {
 	memset(&address, 0, sizeof(address));
 	assert_false(init_sockaddr(&address, "ignored.example", 7));
 	assert_int_equal(resolver_calls, 4);
+	assert_int_equal(freeaddrinfo_calls, 0);
+}
+
+static void test_matching_reply_releases_resources(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	track_packet = 1;
+	controlled_reply = 1;
+	force_no_caps = 1;
+	make_host(&host, "127.0.0.1");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
+	assert_non_null(strstr(ping.ping_response, "Alive"));
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
+	thread_mutex_unlock(LOCK_SETEUID);
 }
 
 static void test_capability_decision_pairs_lock_and_unlock(void **state) {
@@ -314,7 +418,7 @@ static void test_socket_retry_can_succeed_after_one_failure(void **state) {
 
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
 	assert_int_equal(socket_calls, 2);
-	assert_int_equal(has_caps_calls, 1);
+	assert_int_equal(has_caps_calls, 2);
 	assert_int_equal(controlled_socket_closed, 1);
 	assert_int_equal(thread_mutex_trylock(LOCK_SETEUID), 0);
 	thread_mutex_unlock(LOCK_SETEUID);
@@ -357,6 +461,7 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 	socket_failures_remaining = 5;
+	force_no_caps = 1;
 
 	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */
 	alarm(15);
@@ -381,6 +486,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_invalid_address_releases_packet_and_socket, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_timeout_releases_packet_and_socket, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_temporary_resolver_failure_retries_four_times, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_matching_reply_releases_resources, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_capability_decision_pairs_lock_and_unlock, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_can_succeed_after_one_failure, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset, ping_teardown),

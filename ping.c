@@ -378,7 +378,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_dgram;
 	int    rc = HOST_DOWN;
 	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	const int needs_seteuid = (hasCaps() != TRUE);
+	int    needs_seteuid;
 	#endif
 
 	double begin_time, end_time, total_time;
@@ -430,6 +430,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	retry_count = 0;
 	while (icmp_socket == -1) {
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+		/* Capabilities can be added or removed while a retry sleeps. Make the
+		 * decision for the attempt whose lock/euid pair it controls. */
+		needs_seteuid = (hasCaps() != TRUE);
 		if (needs_seteuid) {
 			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
