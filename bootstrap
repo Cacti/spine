@@ -22,6 +22,8 @@
 
 #
 # ----------------------------------------------------------
+
+set -eu
 # Name: bootstrap
 #
 # Function: build spine from scratch
@@ -49,7 +51,7 @@ display_help () {
 }
 
 # Check for parameters
-if [ "${1}" = "--help" -o "${1}" = "-h" ]; then
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   display_help
   exit 0
 fi
@@ -61,22 +63,28 @@ echo "INFO: Removing cache directories"
 rm -rf autom4te.cache .deps
 
 # Make sure all files are unix formatted files
-which dos2unix > /dev/null 2>&1
-if [ $? -eq 0 ]; then
-  for e in $(echo "ac am c h in md mdlrc rb sh yml"); do
+if command -v dos2unix > /dev/null 2>&1; then
+  for e in ac am c h in md mdlrc rb sh yml; do
     echo "INFO: Ensuring UNIX format for *.$e"
-    find . -type f -name \*.$e -exec dos2unix --d2u \{\} \; > /dev/null 2>&1
+    find . -type f -name "*.${e}" -exec dos2unix --d2u {} \; > /dev/null 2>&1
   done
 fi
 
 # Prepare a build state
 echo "INFO: Running auto-tools to verify buildability"
-aclocal --install
-libtoolize
-autoheader
-automake --add-missing
+mkdir -p config m4
+
+if command -v libtoolize > /dev/null 2>&1; then
+  LIBTOOLIZE=libtoolize
+elif command -v glibtoolize > /dev/null 2>&1; then
+  LIBTOOLIZE=glibtoolize
+else
+  echo "ERROR: GNU libtoolize (or glibtoolize on macOS) is required" >&2
+  exit 1
+fi
+export LIBTOOLIZE
+
 autoreconf --force --install
-[ $? -ne 0 ] && echo "ERROR: 'autoreconf' exited with errors" && exit -1
 
 
 # Provide some meaningful notes

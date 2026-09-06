@@ -59,7 +59,7 @@ extern int is_hexadecimal(const char * str, const short ignore_special);
 extern int is_debug_device(int device_id);
 
 /* string and file functions */
-extern char *add_slashes(char *string);
+extern char *add_slashes(const char *string);
 extern int file_exists(const char *filename);
 extern char *strip_alpha(char *string);
 extern char *strncopy(char *dst, const char *src, size_t n);
@@ -76,7 +76,10 @@ unsigned long long hex2dec(char *str);
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
 #define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
+#define CAPABILITY_PROTOCOL_LIST_MAX 480
 const char *regex_replace(const char *exp, const char *value);
+int format_spine_capabilities(char *output, size_t output_size,
+	const char *auth_protocols, const char *priv_protocols);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))

@@ -19,6 +19,7 @@
 #include "spine.h"
 #include "util.h"
 #include "ping.h"
+#include "poller.h"
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
@@ -82,6 +83,52 @@ static void test_regex_replace_passes_through_on_bad_pattern(void **state) {
 	assert_string_equal(regex_replace("[unclosed", "value"), "value");
 }
 
+static void test_bounded_formatters(void **state) {
+	char capabilities[BUFSIZE];
+	char row[DBL_BUFSIZE + SMALL_BUFSIZE];
+	char small[32];
+	char long_value[DBL_BUFSIZE];
+	const char *auth_start;
+	const char *auth_end;
+	const char *priv_start;
+	const char *priv_end;
+	(void) state;
+
+	memset(long_value, '7', sizeof(long_value) - 1);
+	long_value[sizeof(long_value) - 1] = '\0';
+
+	assert_true(format_spine_capabilities(capabilities,
+		sizeof(capabilities), long_value, long_value));
+	assert_true(strlen(capabilities) < sizeof(capabilities));
+	auth_start = strstr(capabilities, "authProtocols: \"");
+	assert_non_null(auth_start);
+	auth_start += strlen("authProtocols: \"");
+	auth_end = strchr(auth_start, '"');
+	assert_non_null(auth_end);
+	priv_start = strstr(capabilities, "privProtocols: \"");
+	assert_non_null(priv_start);
+	priv_start += strlen("privProtocols: \"");
+	priv_end = strchr(priv_start, '"');
+	assert_non_null(priv_end);
+	assert_int_equal(auth_end - auth_start, CAPABILITY_PROTOCOL_LIST_MAX);
+	assert_int_equal(priv_end - priv_start, CAPABILITY_PROTOCOL_LIST_MAX);
+	assert_string_equal(priv_end, "\" }");
+	assert_false(format_spine_capabilities(small,
+		sizeof(small), long_value, long_value));
+	assert_false(format_spine_capabilities(NULL, 0, long_value, long_value));
+
+	assert_true(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", "1700000000.25", long_value));
+	assert_non_null(strstr(row,
+		"(17, 'traffic_in', FROM_UNIXTIME(1700000000.25)"));
+	assert_false(format_poller_output_row(small, sizeof(small), 17,
+		"traffic_in", "1700000000.25", long_value));
+	assert_false(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", "1700000000); DROP TABLE host", long_value));
+	assert_false(format_poller_output_row(NULL, 0, 17,
+		"traffic_in", "1700000000.25", long_value));
+}
+
 
 /* --- predicates ----------------------------------------------------------- */
 
@@ -119,6 +166,9 @@ static void test_is_numeric(void **state) {
 static void test_is_hexadecimal(void **state) {
 	(void) state;
 	assert_int_equal(is_hexadecimal("AA BB CC", 0), TRUE);
+	assert_int_equal(is_hexadecimal("AA\tBB", 0), FALSE);
+	assert_int_equal(is_hexadecimal("AA\tBB", 1), FALSE);
+	assert_int_equal(is_hexadecimal("AA\tBB:CC", 1), TRUE);
 	assert_int_equal(is_hexadecimal("zz", 0), FALSE);
 	assert_int_equal(is_hexadecimal("", 0), FALSE);
 }
@@ -288,7 +338,10 @@ static void test_icmp_classify_rejects_a_non_echo(void **state) {
 	const struct icmp *out = NULL;
 	(void) state;
 
-	build_ip_icmp(buf, sizeof buf, 1, 1, ICMP_DEST_UNREACH);
+	/* Type 3 is Destination Unreachable in RFC 792.  BSD names the symbol
+	 * ICMP_UNREACH while Linux names it ICMP_DEST_UNREACH, so keep the wire
+	 * value explicit in this platform-independent parser test. */
+	build_ip_icmp(buf, sizeof buf, 1, 1, 3);
 	assert_int_equal(spine_icmp_classify_reply(buf, sizeof buf, 1, 1, &out), SPINE_ICMP_REPLY_NOT_ECHO);
 	assert_null(out);
 }
@@ -466,6 +519,7 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_bounded_formatters),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_is_numeric),

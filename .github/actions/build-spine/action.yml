@@ -1,0 +1,64 @@
+name: Build Spine
+description: Install the build dependencies, then bootstrap and configure Spine.
+
+inputs:
+  mysql-client-package:
+    description: MySQL-compatible client development package to install.
+    required: false
+    default: libmysqlclient-dev
+  extra-packages:
+    description: Additional apt packages, beyond the set every Spine build needs.
+    required: false
+    default: ''
+  configure-args:
+    description: Arguments passed through to ./configure.
+    required: false
+    default: ''
+  cflags:
+    description: CFLAGS for ./configure.
+    required: false
+    default: ''
+  ldflags:
+    description: LDFLAGS for ./configure.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # mysql-server is deliberately absent: configure only needs the selected
+    # client headers and library, and no job starts or connects to a server.
+    - name: Install build dependencies
+      shell: bash
+      env:
+        MYSQL_CLIENT_PACKAGE: ${{ inputs.mysql-client-package }}
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        # shellcheck disable=SC2086
+        sudo apt-get install -y \
+          autoconf automake libtool build-essential help2man dos2unix \
+          "$MYSQL_CLIENT_PACKAGE" libsnmp-dev libssl-dev libcmocka-dev \
+          $EXTRA_PACKAGES
+
+    - name: Bootstrap and configure
+      shell: bash
+      env:
+        CONFIGURE_ARGS: ${{ inputs.configure-args }}
+        IN_CFLAGS: ${{ inputs.cflags }}
+        IN_LDFLAGS: ${{ inputs.ldflags }}
+      run: |
+        set -euo pipefail
+        ./bootstrap
+        args=()
+        if [ -n "$CONFIGURE_ARGS" ]; then
+          read -ra args <<< "$CONFIGURE_ARGS"
+        fi
+        if [ -n "$IN_CFLAGS" ]; then
+          args+=("CFLAGS=$IN_CFLAGS")
+        fi
+        if [ -n "$IN_LDFLAGS" ]; then
+          args+=("LDFLAGS=$IN_LDFLAGS")
+        fi
+        ./configure ${args[@]+"${args[@]}"}
