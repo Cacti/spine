@@ -2104,15 +2104,15 @@ int hasCaps(void) {
 		return FALSE;
 	}
 
-    /* check if cap_net_raw is in effective set */
+	/* check if cap_net_raw is in effective set */
 	if (cap_get_flag(caps, CAP_NET_RAW, CAP_EFFECTIVE, &capflag)) {
-		SPINE_LOG(("ERROR: cap_get_flag for CAP_NET_RAW failed. ICMP ping will not work as non-root user."));
+		SPINE_LOG(("ERROR: cap_get_flag for CAP_NET_RAW failed. Attempting the setuid-root ICMP fallback when available."));
 		cap_free(caps);
 		return FALSE;
 	}
 
 	if (capflag != CAP_SET) {
-		SPINE_LOG_MEDIUM(("WARNING: Capability CAP_NET_RAW is not set. ICMP ping will not work as non-root user."));
+		SPINE_LOG_MEDIUM(("WARNING: Capability CAP_NET_RAW is not set. Attempting the setuid-root ICMP fallback when available."));
 		cap_free(caps);
 		return FALSE;
 	}
