@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <poll.h>
 
@@ -42,6 +43,32 @@ static int fail_php_spawn_call;
 static int fail_next_sigmask;
 static int track_write;
 static int write_calls;
+static struct rlimit saved_nofile;
+static int restore_nofile;
+
+static int duplicate_at_fdsetsize(int fd) {
+	struct rlimit limit;
+	struct rlimit raised;
+	int duplicate;
+
+	if (getrlimit(RLIMIT_NOFILE, &limit) == 0 && limit.rlim_cur <= FD_SETSIZE &&
+	    limit.rlim_max > FD_SETSIZE) {
+		raised = limit;
+		raised.rlim_cur = FD_SETSIZE + 1;
+		if (raised.rlim_cur > raised.rlim_max)
+			raised.rlim_cur = raised.rlim_max;
+		if (setrlimit(RLIMIT_NOFILE, &raised) == 0) {
+			saved_nofile = limit;
+			restore_nofile = TRUE;
+		}
+	}
+
+	duplicate = fcntl(fd, F_DUPFD, FD_SETSIZE);
+	if (duplicate < FD_SETSIZE)
+		skip();
+
+	return duplicate;
+}
 
 int __real_pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 int __wrap_pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
@@ -163,6 +190,7 @@ static int php_setup(void **state) {
 	fail_next_sigmask = FALSE;
 	track_write = FALSE;
 	write_calls = 0;
+	restore_nofile = FALSE;
 	snprintf(set.path_php, sizeof(set.path_php), "%s", PHP_TEST_SERVER_PATH);
 	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "normal");
 	return 0;
@@ -186,6 +214,10 @@ static int php_teardown(void **state) {
 		}
 		free(php_processes);
 		php_processes = NULL;
+	}
+	if (restore_nofile) {
+		(void)setrlimit(RLIMIT_NOFILE, &saved_nofile);
+		restore_nofile = FALSE;
 	}
 	return 0;
 }
@@ -841,8 +873,7 @@ static void test_readpipe_rejects_fd_at_fd_setsize(void **state) {
 
 	(void) state;
 	assert_int_equal(pipe(pdes), 0);
-	oversized_fd = fcntl(pdes[0], F_DUPFD, FD_SETSIZE);
-	assert_true(oversized_fd >= FD_SETSIZE);
+	oversized_fd = duplicate_at_fdsetsize(pdes[0]);
 	close(pdes[0]);
 	close(pdes[1]);
 	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
@@ -865,8 +896,7 @@ static void test_startup_read_rejects_fd_at_fd_setsize_without_restart(void **st
 	(void) state;
 
 	assert_int_equal(pipe(pdes), 0);
-	oversized_fd = fcntl(pdes[0], F_DUPFD, FD_SETSIZE);
-	assert_true(oversized_fd >= FD_SETSIZE);
+	oversized_fd = duplicate_at_fdsetsize(pdes[0]);
 	close(pdes[0]);
 	close(pdes[1]);
 	php_processes[0].php_state = PHP_READY;
@@ -891,8 +921,7 @@ static void test_command_retires_fd_at_fd_setsize(void **state) {
 
 	(void) state;
 	assert_int_equal(pipe(pdes), 0);
-	oversized_fd = fcntl(pdes[0], F_DUPFD, FD_SETSIZE);
-	assert_true(oversized_fd >= FD_SETSIZE);
+	oversized_fd = duplicate_at_fdsetsize(pdes[0]);
 	close(pdes[0]);
 
 	php_processes[0].php_pid = fork();
@@ -935,8 +964,12 @@ static void test_readpipe_rejects_an_oversized_response(void **state) {
 	assert_non_null(result);
 	assert_string_equal(result, "U");
 	free(result);
-	close(pdes[0]);
-	php_processes[0].php_read_fd = -1;
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+	assert_true(php_processes[0].php_pid > 1);
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "42\n");
+	free(result);
 }
 
 static void test_command_gives_up_after_three_failed_writes(void **state) {

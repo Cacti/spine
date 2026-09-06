@@ -85,7 +85,11 @@ printf '%s\n' "$php_init_body" | grep -q 'php_readpipe(' &&
 	fail "php_init() must not call php_readpipe(), which may restart the server"
 
 awk '/^static char \*php_read_result/,/^\}/' php.c |
+	grep -q 'php_fail_read(php_process, allow_restart)' ||
+	fail "php_read_result() must route failures through the guarded restart helper"
+
+awk '/^static void php_fail_read/,/^\}/' php.c |
 	grep -q 'if (allow_restart) {' ||
-	fail "php_read_result() must gate the server restart on allow_restart"
+	fail "php_fail_read() must gate the server restart on allow_restart"
 
 exit 0

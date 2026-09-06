@@ -75,6 +75,23 @@ static void php_process_unlock(int php_process) {
 	thread_mutex_unlock(LOCK_PHP_PROC_0 + php_process);
 }
 
+static char *php_undefined_result(void) {
+	char *result = strdup("U");
+
+	if (result == NULL)
+		die("ERROR: Fatal malloc error: php.c php_cmd!");
+
+	return result;
+}
+
+static void php_fail_read(int php_process, int allow_restart) {
+	php_processes[php_process].php_state = PHP_BUSY;
+	if (allow_restart) {
+		php_close(php_process);
+		php_init(php_process);
+	}
+}
+
 void php_processes_initialize(php_t *processes, int count) {
 	int i;
 
@@ -156,7 +173,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	if (php_processes == NULL || php_process < 0 || php_process >= set.php_servers ||
 	    php_process >= MAX_PHP_SERVERS) {
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server slot is unavailable", php_process));
-		return strdup("U");
+		return php_undefined_result();
 	}
 
 	/* pad command with CR-LF */
@@ -173,7 +190,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	    php_processes[php_process].php_write_fd < 0) {
 		php_process_unlock(php_process);
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server slot is unavailable", php_process));
-		return strdup("U");
+		return php_undefined_result();
 	}
 
 	/* send command to the script server */
@@ -194,7 +211,7 @@ char *php_cmd(const char *php_command, int php_process) {
 
 		/* allocated only once the retry budget is spent: a successful retry
 		   reassigns result_string below and would orphan an earlier copy */
-		result_string = strdup("U");
+		result_string = php_undefined_result();
 	} else {
 		/* read the result from the php_command */
 		result_string = php_readpipe(php_process, command);
@@ -364,11 +381,7 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 		 * Mark it unhealthy even during the startup handshake, where restarting
 		 * recursively is deliberately disabled, so the scheduler cannot keep
 		 * handing out a permanently poisoned READY slot. */
-		php_processes[php_process].php_state = PHP_BUSY;
-		if (allow_restart) {
-			php_close(php_process);
-			php_init(php_process);
-		}
+		php_fail_read(php_process, allow_restart);
 
 		return result_string;
 	}
@@ -420,28 +433,22 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 				break;
 		}
 
-		SET_UNDEFINED(result_string);
+			SET_UNDEFINED(result_string);
+			php_fail_read(php_process, allow_restart);
 
-		/* kill script server because it is misbehaving */
-		if (allow_restart) {
-			php_close(php_process);
-			php_init(php_process);
-		}
-		break;
+			break;
 	case 0:
 		/* record end time */
 		end_time = get_time_as_double();
 		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - begin_time, command));
-		SET_UNDEFINED(result_string);
+			SET_UNDEFINED(result_string);
+			php_fail_read(php_process, allow_restart);
+			break;
+		default:
+			{
+			int read_ok = TRUE;
 
-		/* kill script server because it is misbehaving */
-		if (allow_restart) {
-			php_close(php_process);
-			php_init(php_process);
-		}
-		break;
-	default:
-		if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
+			if (FD_ISSET(php_processes[php_process].php_read_fd, &fds)) {
 			bptr = result_string;
 
 			while (1) {
@@ -449,17 +456,19 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 				size_t used = (size_t)(bptr - result_string);
 
 				if (used >= RESULTS_BUFFER - 1) {
-					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-					SET_UNDEFINED(result_string);
-					break;
+						SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+						SET_UNDEFINED(result_string);
+						read_ok = FALSE;
+						break;
 				}
 
 				size_t space = (size_t)RESULTS_BUFFER - 1 - used;
 				i = read(php_processes[php_process].php_read_fd, bptr, space);
 
-				if (i <= 0) {
-					SET_UNDEFINED(result_string);
-					break;
+					if (i <= 0) {
+						SET_UNDEFINED(result_string);
+						read_ok = FALSE;
+						break;
 				}
 
 				bptr += i;
@@ -470,17 +479,24 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 				}
 
 				if (bptr >= result_string + RESULTS_BUFFER - 1) {
-					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-					SET_UNDEFINED(result_string);
-					break;
+						SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+						SET_UNDEFINED(result_string);
+						read_ok = FALSE;
+						break;
 				}
 			}
 		} else {
-			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
-			SET_UNDEFINED(result_string);
-		}
+				SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
+				SET_UNDEFINED(result_string);
+				read_ok = FALSE;
+			}
 
-		php_processes[php_process].php_state = PHP_READY;
+			if (read_ok) {
+				php_processes[php_process].php_state = PHP_READY;
+			} else {
+				php_fail_read(php_process, allow_restart);
+			}
+			}
 	}
 
 	return result_string;
