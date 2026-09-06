@@ -337,10 +337,24 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			spine_snmpv3_passphrase_is_set(snmp_password)) {
 			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete authentication settings; polling at noAuthNoPriv to match Cacti's effective security level.", host_id));
 		}
+		if (spine_snmpv3_passphrase_is_set(snmp_password) &&
+			(snmp_auth_protocol == NULL || snmp_auth_protocol[0] == '\0')) {
+			SPINE_LOG(("SNMP: Device[%i] Error authentication password is set but the authentication protocol is empty.", host_id));
+			free(session.peername);
+			free(session.localname);
+			return 0;
+		}
 
 		if (spine_snmpv3_protocol_is_set(snmp_priv_protocol) !=
 			spine_snmpv3_passphrase_is_set(snmp_priv_passphrase)) {
 			SPINE_LOG(("SNMP: Device[%i] WARNING incomplete privacy settings; polling without encryption to match Cacti's effective security level.", host_id));
+		}
+		if (spine_snmpv3_passphrase_is_set(snmp_priv_passphrase) &&
+			(snmp_priv_protocol == NULL || snmp_priv_protocol[0] == '\0')) {
+			SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is set but the privacy protocol is empty.", host_id));
+			free(session.peername);
+			free(session.localname);
+			return 0;
 		}
 
 		/* A protocol that is set but unrecognised is a configuration error at

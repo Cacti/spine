@@ -260,13 +260,13 @@ static void test_unknown_auth_protocol_is_refused_with_a_password(void **state) 
 	assert_int_equal(level_for(bogus, pw, none, empty), -1);
 }
 
-static void test_empty_auth_protocol_with_password_uses_noauth(void **state) {
+static void test_empty_auth_protocol_with_password_is_refused(void **state) {
 	char empty[] = "";
 	char pw[] = "authpass123";
 	char none[] = "[None]";
 
 	(void) state;
-	assert_int_equal(level_for(empty, pw, none, empty), SNMP_SEC_LEVEL_NOAUTH);
+	assert_int_equal(level_for(empty, pw, none, empty), -1);
 }
 
 static void test_none_auth_protocol_with_password_uses_noauth(void **state) {
@@ -351,6 +351,19 @@ static void test_privacy_passphrase_without_protocol_uses_authnopriv(void **stat
 	assert_int_equal(level_for(auth, pw, none, ppass), SNMP_SEC_LEVEL_AUTHNOPRIV);
 }
 
+static void test_privacy_passphrase_with_empty_protocol_is_refused(void **state) {
+	char *auth = available_auth_protocol();
+	char pw[] = "authpass123";
+	char empty[] = "";
+	char ppass[] = "privpass123";
+
+	(void) state;
+	if (auth == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, empty, ppass), -1);
+}
+
 static void test_stale_privacy_passphrase_without_auth_uses_noauth(void **state) {
 	char *auth = available_auth_protocol();
 	char empty[] = "";
@@ -379,6 +392,20 @@ static void test_session_construction_does_not_modify_caller_passphrases(void **
 	assert_string_equal(ppass, "privpass123");
 }
 
+static void test_authnopriv_does_not_modify_caller_password(void **state) {
+	char *auth = available_auth_protocol();
+	char pw[] = "authpass123";
+	char none[] = "[None]";
+	char empty[] = "";
+
+	(void) state;
+	if (auth == NULL) {
+		skip();
+	}
+	assert_int_equal(level_for(auth, pw, none, empty), SNMP_SEC_LEVEL_AUTHNOPRIV);
+	assert_string_equal(pw, "authpass123");
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_value_presence_contract, session_reset),
@@ -389,15 +416,17 @@ int main(void) {
 		cmocka_unit_test_setup(test_privacy_without_auth_is_refused, session_reset),
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_even_without_a_password, session_reset),
 		cmocka_unit_test_setup(test_unknown_auth_protocol_is_refused_with_a_password, session_reset),
-		cmocka_unit_test_setup(test_empty_auth_protocol_with_password_uses_noauth, session_reset),
+		cmocka_unit_test_setup(test_empty_auth_protocol_with_password_is_refused, session_reset),
 		cmocka_unit_test_setup(test_none_auth_protocol_with_password_uses_noauth, session_reset),
 		cmocka_unit_test_setup(test_auth_protocol_without_password_uses_noauth, session_reset),
 		cmocka_unit_test_setup(test_invalid_privacy_protocol_is_refused, session_reset),
 		cmocka_unit_test_setup(test_auth_key_matches_with_and_without_privacy, session_reset),
 		cmocka_unit_test_setup(test_privacy_protocol_without_passphrase_uses_authnopriv, session_reset),
 		cmocka_unit_test_setup(test_privacy_passphrase_without_protocol_uses_authnopriv, session_reset),
+		cmocka_unit_test_setup(test_privacy_passphrase_with_empty_protocol_is_refused, session_reset),
 		cmocka_unit_test_setup(test_stale_privacy_passphrase_without_auth_uses_noauth, session_reset),
 		cmocka_unit_test_setup(test_session_construction_does_not_modify_caller_passphrases, session_reset),
+		cmocka_unit_test_setup(test_authnopriv_does_not_modify_caller_password, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
