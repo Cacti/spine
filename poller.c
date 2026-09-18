@@ -1145,9 +1145,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							/* update 'poller_reindex' with the correct information if:
 							 * 1) the assert fails
-							 * 2) the OP code is > or < meaning the current value could have changed without causing
-							 *     the assert to fail */
-							if ((assert_fail) || (!strcmp(reindex->op, "<"))) {
+							 *
+							 * or
+							 *
+							 * 2) the OP code is < for uptime goes backward where we have to track the previous uptime
+							 */
+							if (assert_fail || !strcmp(reindex->op, "<")) {
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
 									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
@@ -1160,8 +1163,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									memset(query3, 0, LRG_BUFSIZE);
 								}
 
-								if ((assert_fail) &&
-									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1, ".1.3.6.1.2.1.1.3.0") && !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")))) {
+								if (assert_fail &&
+									(!strcmp(reindex->op, "<") || !strcmp(reindex->arg1, ".1.3.6.1.2.1.1.3.0") || !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0"))) {
 									spike_kill = TRUE;
 
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
