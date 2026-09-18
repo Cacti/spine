@@ -205,6 +205,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int ignore_sysinfo          = TRUE;
 	int buf_length              = 0;
 
+	/* uptime values */
+	unsigned long long previous_uptime = 0;
+	unsigned long long curr_uptime     = 0;
+
 	extern poller_thread_t** details;
 
 	pool_t *local_cnn = NULL;
@@ -1073,19 +1077,19 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							/* assume ok if host is up and result wasn't obtained */
 							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								assert_fail = FALSE;
 							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value, poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								if (host_thread == 1) {
@@ -1103,47 +1107,23 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
-							} else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) < atoll(poll_result))) {
-								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-								} else {
-									if (set.spine_log_level == 1) {
-										errors++;
-									}
+							} else {
+								previous_uptime = atoll(reindex->assert_value);
+								curr_uptime     = atoll(poll_result);
 
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-								}
-
-								if (host_thread == 1) {
-									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) ValueS (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-
-									if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-										db_insert(&mysqlr, REMOTE, query3);
-									} else {
-										db_insert(&mysql, LOCAL, query3);
-									}
-
-									/* set zeros */
-									memset(query3, 0, LRG_BUFSIZE);
-								}
-
-								assert_fail = TRUE;
-								previous_assert_failure = TRUE;
-							/* if uptime is set to '0' don't fail out */
-							} else if (strcmp(reindex->assert_value, "0")) {
-								if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) > atoll(poll_result))) {
+								if ((!strcmp(reindex->op, ">")) && (previous_uptime < curr_uptime)) {
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu < %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 									} else {
 										if (set.spine_log_level == 1) {
 											errors++;
 										}
 
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu < %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 									}
 
 									if (host_thread == 1) {
-										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) ValueS (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
 										if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 											db_insert(&mysqlr, REMOTE, query3);
@@ -1157,6 +1137,35 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 									assert_fail = TRUE;
 									previous_assert_failure = TRUE;
+								} else if (strcmp(reindex->assert_value, "0")) {
+									/* if uptime is set to '0' don't fail out */
+									if ((!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime)) {
+										if (is_debug_device(host->id) || set.spine_log_level == 2) {
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
+										} else {
+											if (set.spine_log_level == 1) {
+												errors++;
+											}
+
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
+										}
+
+										if (host_thread == 1) {
+											snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
+
+											if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+												db_insert(&mysqlr, REMOTE, query3);
+											} else {
+												db_insert(&mysql, LOCAL, query3);
+											}
+
+											/* set zeros */
+											memset(query3, 0, LRG_BUFSIZE);
+										}
+
+										assert_fail = TRUE;
+										previous_assert_failure = TRUE;
+									}
 								}
 							}
 

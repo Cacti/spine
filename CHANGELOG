@@ -1,5 +1,8 @@
 The Cacti Group | spine
 
+1.2.32
+-issue#623: RECACHE Event and ASSERT FAILED
+
 1.2.31
 -issue#365: Removed Backtrace Support due to lack of OS support
 -issue#366: Prevent polling from stopping when sysDescr OID returns noSuchObject
