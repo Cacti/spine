@@ -158,6 +158,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int posuffix_len = 0;
 
 	char sysUptime[BUFSIZE];
+	int  uptime_use_engine_oid = FALSE; /* pins uptime-goes-backward checks to the seconds granularity engine OID once found */
 	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
@@ -609,6 +610,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				SPINE_FREE(buf_size);
 				SPINE_FREE(buf_errors);
 
+				mysql_thread_end();
+
 				return;
 			}
 
@@ -969,33 +972,50 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									poll_result[0] = '\0';
 
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") ||
+									strstr(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")) {
 								     // Ensure uptime is empty to start with
 								     sysUptime[0] = '\0';
 
-									// Check the legacy poll result first
-									poll_result = snmp_get(host, reindex->arg1);
-
-									if (poll_result && is_numeric(poll_result)) {
-										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
-									}
-
-									if (is_debug_device(host->id)) {
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
-									} else {
-										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
-									}
-
-									SPINE_FREE(poll_result);
-
-									/* check the modern snmp engine uptime in seconds */
+									/* Pin the uptime-goes-backward calculation to a single OID for this poll.
+									   Previously the legacy (centisecond) and modern (second) OIDs could each
+									   supply the value on different reindex rows or different poll cycles,
+									   and a mismatch between the two caused false "uptime went backward"
+									   detections and constant reindexing. Prefer the modern engine OID, since
+									   it offers seconds granularity, and only fall back to the legacy OID
+									   when the engine OID isn't present with numeric data. */
 									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
-									if (poll_result && is_numeric(poll_result)) {
+									uptime_use_engine_oid = (poll_result != NULL && is_numeric(poll_result));
+
+									if (uptime_use_engine_oid) {
 										snprintf(sysUptime, BUFSIZE, "%lld", atoll(poll_result) * 100);
 									}
 
 									SPINE_FREE(poll_result);
+
+									if (is_debug_device(host->id)) {
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Engine Uptime OID Present: %d", host->id, host_thread, reindex->data_query_id, uptime_use_engine_oid));
+									} else {
+										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Engine Uptime OID Present: %d", host->id, host_thread, reindex->data_query_id, uptime_use_engine_oid));
+									}
+
+									if (!uptime_use_engine_oid) {
+										// Engine OID unavailable, fall back to the legacy sysUpTime OID
+										poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+
+										if (poll_result && is_numeric(poll_result)) {
+											snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+										}
+
+										if (is_debug_device(host->id)) {
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+										} else {
+											SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+										}
+
+										SPINE_FREE(poll_result);
+									}
 
 									/* allocate and populate with whichever uptime was valid */
 									if (!(poll_result = (char *) malloc(BUFSIZE))) {
@@ -1051,13 +1071,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 
 							break;
-						case POLLER_ACTION_SNMP_COUNT: /* snmp; count items */
+						case POLLER_ACTION_SNMP_COUNT: { /* snmp; count items */
+							int snmp_items;
+
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
 
-							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
+							snmp_items = snmp_count(host, reindex->arg1);
+							if (snmp_items < 0) {
+								SET_UNDEFINED(poll_result);
+							} else {
+								snprintf(poll_result, BUFSIZE, "%d", snmp_items);
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1066,6 +1093,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 
 							break;
+						}
 						case POLLER_ACTION_SCRIPT_COUNT: /* script (popen); count items by counting line feeds */
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
@@ -1882,17 +1910,27 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while (i < rows_processed) {
-			char escaped_result[DBL_BUFSIZE];
+			/* poller_items[i].result is RESULTS_BUFFER bytes and escaping can
+			 * double it, so size the destination to match rather than the
+			 * fixed DBL_BUFSIZE, which silently truncated any result of 1024
+			 * bytes or more regardless of --with-results-buffer. */
+			char escaped_result[RESULTS_BUFFER * 2 + 1];
 			char escaped_rrd_name[DBL_BUFSIZE];
 
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
 			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
 
+			/* escaped_result can now legitimately exceed result_string's capacity for a
+			 * very large result; snprintf's own bound below still truncates it safely.
+			 * Silently-truncated large rows are the separate, already-tracked gap in #598. */
+			#pragma GCC diagnostic push
+			#pragma GCC diagnostic ignored "-Wformat-truncation"
 			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 				poller_items[i].local_data_id,
 				escaped_rrd_name,
 				host_time,
 				escaped_result);
+			#pragma GCC diagnostic pop
 
 			result_length = strlen(result_string);
 
@@ -2153,18 +2191,18 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_LOG_MEDIUM(("Device[%d] Updating Full System Information Table", host->id));
 		}
 
-		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0');", host->id));
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.1.0");
-		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.1.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.1.0');", host->id));
+		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.2.1.1.1.0");
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.1.0'); [complete]", host->id));
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysDescr, sizeof(host->snmp_sysDescr), poll_result);
 			SPINE_FREE(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0');", host->id));
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.2.0");
-		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.2.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.2.0');", host->id));
+		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.2.1.1.2.0");
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.2.0'); [complete]", host->id));
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysObjectID, sizeof(host->snmp_sysObjectID), poll_result);
@@ -2172,18 +2210,18 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		}
 
 		// Get the legacy system uptime instance first
-		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0');", host->id));
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
-		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.3.0');", host->id));
+		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.2.1.1.3.0");
+		SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
 		if (poll_result && is_numeric(poll_result)) {
 			host->snmp_sysUpTimeInstance = atoll(poll_result);
 			SPINE_FREE(poll_result);
 
 			// Attempt to get the more modern version
-			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0');", host->id));
-			poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
-			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
+			SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.6.3.10.2.1.3.0');", host->id));
+			poll_result = snmp_get_allow_fail(host, ".1.3.6.1.6.3.10.2.1.3.0");
+			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
 			if (poll_result && is_numeric(poll_result)) {
 				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
@@ -2193,27 +2231,27 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			SPINE_FREE(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0');", host->id));
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.4.0');", host->id));
+		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.2.1.1.4.0");
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.4.0'); [complete]", host->id));
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysContact, sizeof(host->snmp_sysContact), poll_result);
 			SPINE_FREE(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0');", host->id));
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.5.0");
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.5.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.5.0');", host->id));
+		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.2.1.1.5.0");
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.5.0'); [complete]", host->id));
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysName, sizeof(host->snmp_sysName), poll_result);
 			SPINE_FREE(poll_result);
 		}
 
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0');", host->id));
-		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
-		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.6.0'); [complete]", host->id));
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.6.0');", host->id));
+		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.2.1.1.6.0");
+		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.2.1.1.6.0'); [complete]", host->id));
 
 		if (poll_result) {
 			db_escape(mysql, host->snmp_sysLocation, sizeof(host->snmp_sysLocation), poll_result);

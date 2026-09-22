@@ -379,7 +379,7 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 
 	/* FD_SET on a descriptor at or past FD_SETSIZE writes outside fds, which is
 	   a stack object here. ping_icmp() guards its socket the same way. */
-	if (php_processes[php_process].php_read_fd >= FD_SETSIZE) {
+	if (php_processes[php_process].php_read_fd < 0 || php_processes[php_process].php_read_fd >= FD_SETSIZE) {
 		SPINE_LOG(("ERROR: SS[%i] Script server descriptor %d exceeds FD_SETSIZE %d", php_process, php_processes[php_process].php_read_fd, FD_SETSIZE));
 
 		SET_UNDEFINED(result_string);
