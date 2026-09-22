@@ -995,11 +995,16 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
 							poll_result = exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ");
 							if (poll_result == NULL) {
-								die("ERROR: Script command returned no allocated result");
-							}
-							command_result = trim(poll_result);
-							if (command_result != poll_result) {
-								memmove(poll_result, command_result, strlen(command_result) + 1);
+								/* A missing result means the script could not be run, not that Spine is
+								   out of memory. Mark this one reindex check undefined instead of killing
+								   every polling thread over a single failed script. */
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s returned no result, marking undefined", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+								STRDUP_OR_DIE(poll_result, "U", "poll_host recache script result");
+							} else {
+								command_result = trim(poll_result);
+								if (command_result != poll_result) {
+									memmove(poll_result, command_result, strlen(command_result) + 1);
+								}
 							}
 
 							if (is_debug_device(host->id)) {
@@ -1018,11 +1023,16 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								STRDUP_OR_DIE(poll_result, "U", "unavailable PHP Script Server pool");
 							}
 							if (poll_result == NULL) {
-								die("ERROR: PHP Script Server returned no allocated result");
-							}
-							command_result = trim(poll_result);
-							if (command_result != poll_result) {
-								memmove(poll_result, command_result, strlen(command_result) + 1);
+								/* A missing result means the script server could not be reached, not that
+								   Spine is out of memory. Mark this one reindex check undefined instead of
+								   killing every polling thread over a single unavailable script server. */
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s returned no result, marking undefined", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+								STRDUP_OR_DIE(poll_result, "U", "poll_host recache php result");
+							} else {
+								command_result = trim(poll_result);
+								if (command_result != poll_result) {
+									memmove(poll_result, command_result, strlen(command_result) + 1);
+								}
 							}
 
 							if (is_debug_device(host->id)) {
