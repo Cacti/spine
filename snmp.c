@@ -255,21 +255,16 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
 			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
 
-			// Auth Protocol Setup: Apsz/Xpsz are this module's own heap copies, safe to scrub.
-			// snmp_password/snmp_priv_passphrase are host_t-owned and reused for later session
-			// rebuilds on this same host, so they are left intact rather than zeroed in place.
-			if (Apsz) {
-				memset(Apsz, 0x0, strlen(Apsz));
-			}
-
+			// Auth Protocol Setup: Apsz/Xpsz are this module's own heap copies. The live
+			// passphrase they hold is scrubbed immediately before each of their frees
+			// below, not here, since neither is assigned yet on entry to this block.
+			// snmp_password/snmp_priv_passphrase are host_t-owned and reused for later
+			// session rebuilds on this same host, so they are left intact rather than
+			// zeroed in place.
 			free(Apsz);
 			Apsz = strdup(snmp_password);
 
 			// Privacy Protocol Setup
-			if (Xpsz) {
-				memset(Xpsz, 0x0, strlen(Xpsz));
-			}
-
 			free(Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
 
@@ -294,9 +289,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					session.securityAuthKey,
 					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
 					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
+					if (Apsz) memset(Apsz, 0x0, strlen(Apsz));
+					if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
 					return 0;
 				}
 
+				if (Apsz) memset(Apsz, 0x0, strlen(Apsz));
 				free(Apsz);
 				Apsz = NULL;
 			}
@@ -332,9 +330,11 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					session.securityPrivKey,
 					&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
 					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
+					if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
 					return 0;
 				}
 
+				if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
 				free(Xpsz);
 				Xpsz = NULL;
 			}

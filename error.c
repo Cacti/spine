@@ -44,7 +44,15 @@
  *
  */
 static void spine_signal_handler(int spine_signal) {
-	signal(spine_signal, SIG_DFL);
+	/* A real fault (SIGSEGV/SIGBUS/...) resets to SIG_DFL and returns so the
+	 * faulting instruction re-executes and dies with a core. SIGPIPE is a
+	 * routine, recurring condition instead, and signal dispositions are
+	 * process-wide: dropping it to SIG_DFL here, even briefly, would let a
+	 * broken-pipe write on any other thread terminate the process during
+	 * that window. Leave this handler permanently installed for SIGPIPE. */
+	if (spine_signal != SIGPIPE) {
+		signal(spine_signal, SIG_DFL);
+	}
 
 	set.exit_code = spine_signal;
 
@@ -90,14 +98,6 @@ static void spine_signal_handler(int spine_signal) {
 		default:
 			fprintf(stderr, "%s FATAL: Spine Encountered An Unhandled Exception Signal Number: '%d'\n", logtime, spine_signal);
 			break;
-	}
-
-	/* Unlike a genuine fault (SIGSEGV/SIGBUS/...), where resetting to SIG_DFL and
-	 * returning lets the faulting instruction re-execute and die with a core,
-	 * a broken pipe is a routine, recurring condition. Re-arm only this signal so
-	 * a second SIGPIPE is logged and survived rather than killing the poller. */
-	if (spine_signal == SIGPIPE) {
-		signal(SIGPIPE, spine_signal_handler);
 	}
 }
 
