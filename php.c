@@ -340,6 +340,20 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 	 * should only be the READ pipe */
 	retry:
 
+	/* FD_SET() does not range check; a descriptor at or above FD_SETSIZE
+	 * would write past the end of the on-stack fd_set below. */
+	if (php_processes[php_process].php_read_fd < 0 || php_processes[php_process].php_read_fd >= FD_SETSIZE) {
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server read descriptor %i is outside of FD_SETSIZE %i", php_process, php_processes[php_process].php_read_fd, FD_SETSIZE));
+
+		SET_UNDEFINED(result_string);
+
+		/* kill script server because it is misbehaving */
+		php_close(php_process);
+		php_init(php_process);
+
+		return result_string;
+	}
+
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(read_fd,&fds);

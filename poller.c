@@ -593,6 +593,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				SPINE_FREE(buf_size);
 				SPINE_FREE(buf_errors);
 
+				mysql_thread_end();
+
 				return;
 			}
 
