@@ -7,10 +7,8 @@
 # data source (poller_item.action = POLLER_ACTION_PHP_SCRIPT_SERVER = 2) and
 # asserts no zombie php child survives the run.
 #
-# Requires: docker compose AND a spine runtime image that bundles PHP plus a
-# script_server.php the poller can exec.  The default snmpv3 fixture image is
-# debian-slim with no PHP, so this test skips (exit 77) there with the exact
-# additions needed.  Wire it up in CI where the full Cacti image is available.
+# Requires docker compose. The checked-in fixture supplies PHP and the minimal
+# script-server protocol needed to exercise the real Spine process lifecycle.
 #
 # Usage: ./tests/integration/test_script_server_reap.sh
 set -euo pipefail
@@ -24,29 +22,22 @@ FAIL=0
 pass() { echo "  PASS: $*"; PASS=$((PASS+1)); }
 fail() { echo "  FAIL: $*"; FAIL=$((FAIL+1)); }
 
-skip() {
-	echo "  SKIP: $1"
-	exit 77
-}
-
 # ---------------------------------------------------------------------------
 # Preconditions: docker, the compose fixture, and a PHP-capable spine image.
 # ---------------------------------------------------------------------------
-command -v docker >/dev/null 2>&1 || skip "docker not installed"
-docker compose version >/dev/null 2>&1 || skip "docker compose plugin not available"
+command -v docker >/dev/null 2>&1 || { echo "FAIL: docker not installed"; exit 1; }
+docker compose version >/dev/null 2>&1 || { echo "FAIL: docker compose plugin not available"; exit 1; }
 
 echo ""
 echo "=== Setup: build spine image and probe for PHP ==="
 "${COMPOSE[@]}" build spine >/dev/null 2>&1 \
-	|| skip "spine image failed to build (build env not available)"
+	|| { echo "FAIL: spine image failed to build"; exit 1; }
 
 # The script server execs PHP; without it the action=2 path cannot run.
 if ! "${COMPOSE[@]}" run --rm --no-deps --entrypoint sh spine \
 		-c 'command -v php >/dev/null 2>&1'; then
-	skip "spine runtime image has no PHP. To run this test, extend
-        tests/snmpv3/Dockerfile (or use the full Cacti image) to install
-        php-cli and provide a script_server.php, then seed a poller_item with
-        action=2 (POLLER_ACTION_PHP_SCRIPT_SERVER)."
+	echo "FAIL: spine runtime image has no PHP" >&2
+	exit 1
 fi
 
 cleanup() {
@@ -68,6 +59,14 @@ while [[ $elapsed -lt 120 ]]; do
 done
 [[ "$count" -gt 0 ]] || { fail "database did not start"; exit 1; }
 pass "infrastructure ready"
+
+"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+INSERT INTO settings (name, value) VALUES
+  ('path_webroot', '/opt/cacti'),
+  ('path_php_binary', '/usr/bin/php')
+ON DUPLICATE KEY UPDATE value = VALUES(value);
+" 2>/dev/null
+pass "PHP script-server settings seeded"
 
 # ---------------------------------------------------------------------------
 # Seed a script-server data source (action=2) for host 1.
@@ -91,14 +90,19 @@ pass "script-server poller_item seeded"
 echo ""
 echo "=== Poll and check for zombie php children ==="
 
+set +e
 poll_out=$("${COMPOSE[@]}" run --rm --entrypoint sh spine -c '
 	/usr/local/bin/spine --conf=/etc/spine/spine.conf -f 1 -l 1 -S
 	echo "---PROCTABLE---"
 	ps -eo pid,ppid,stat,comm 2>/dev/null || true
-' 2>&1 || true)
+' 2>&1)
+poll_status=$?
+set -e
 echo "$poll_out"
 
-if echo "$poll_out" | grep -qi "segfault\|SIGSEGV\|Aborted"; then
+if [[ $poll_status -ne 0 ]]; then
+	fail "spine exited with status $poll_status during script-server poll"
+elif echo "$poll_out" | grep -qi "segfault\|SIGSEGV\|Aborted"; then
 	fail "spine crashed during script-server poll"
 else
 	pass "spine completed script-server poll without crash"
@@ -110,6 +114,14 @@ if echo "$proctable" | grep -Ei '<defunct>|[[:space:]]Z[[:space:]+]*[[:space:]]p
 	fail "zombie php child remained after poll (php_close reap regression)"
 else
 	pass "no zombie php child after poll"
+fi
+
+value=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -N -B \
+	-e "SELECT output FROM poller_output WHERE local_data_id = 900 LIMIT 1;" 2>/dev/null)
+if [[ $value == 42 ]]; then
+	pass "script-server command returned and stored 42"
+else
+	fail "script-server command did not store 42 (got '$value')"
 fi
 
 # ---------------------------------------------------------------------------
