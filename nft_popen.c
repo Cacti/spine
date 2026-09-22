@@ -84,8 +84,42 @@
  * SUCH DAMAGE.
  */
 
+#define _GNU_SOURCE
 #include "common.h"
 #include "spine.h"
+#include <fcntl.h>
+
+static int nft_pipe_cloexec(int pipe_fds[2]) {
+	#ifdef HAVE_PIPE2
+	return pipe2(pipe_fds, O_CLOEXEC);
+	#else
+	int flags;
+
+	thread_mutex_lock(LOCK_FORK);
+	if (pipe(pipe_fds) < 0) {
+		thread_mutex_unlock(LOCK_FORK);
+		return -1;
+	}
+	flags = fcntl(pipe_fds[0], F_GETFD);
+	if (flags < 0 || fcntl(pipe_fds[0], F_SETFD, flags | FD_CLOEXEC) < 0) {
+		goto failure;
+	}
+	flags = fcntl(pipe_fds[1], F_GETFD);
+	if (flags < 0 || fcntl(pipe_fds[1], F_SETFD, flags | FD_CLOEXEC) < 0) {
+		goto failure;
+	}
+	thread_mutex_unlock(LOCK_FORK);
+	return 0;
+
+	failure:
+	flags = errno;
+	close(pipe_fds[0]);
+	close(pipe_fds[1]);
+	thread_mutex_unlock(LOCK_FORK);
+	errno = flags;
+	return -1;
+	#endif
+}
 
 /* An instance of this struct is created for each popen() fd. */
 static struct pid
@@ -146,7 +180,7 @@ int nft_popen(const char * command, const char * type) {
 		}
 	}
 
-	if (pipe(pdes) < 0)
+	if (nft_pipe_cloexec(pdes) < 0)
 		return -1;
 
 	/* Disable thread cancellation from this point forward. */
@@ -171,7 +205,12 @@ int nft_popen(const char * command, const char * type) {
 
 	/* Fork. */
 	retry:
-	switch (pid = vfork()) {
+	thread_mutex_lock(LOCK_FORK);
+	pid = vfork();
+	if (pid != 0) {
+		thread_mutex_unlock(LOCK_FORK);
+	}
+	switch (pid) {
 	case -1:		/* Error. */
 		switch (errno) {
 		case EAGAIN:
@@ -185,6 +224,7 @@ int nft_popen(const char * command, const char * type) {
 			}else{
 				SPINE_LOG(("ERROR: SCRIPT: Cound not fork. Out of Resources nft_popen.c"));
 			}
+			break;
 		case ENOMEM:
 			if (retry_count < 3) {
 				retry_count++;
@@ -196,6 +236,7 @@ int nft_popen(const char * command, const char * type) {
 			}else{
 				SPINE_LOG(("ERROR: SCRIPT Cound not fork. Out of Memory nft_popen.c"));
 			}
+			break;
 		default:
 			SPINE_LOG(("ERROR: SCRIPT Cound not fork. Unknown Reason nft_popen.c"));
 		}
@@ -237,6 +278,8 @@ int nft_popen(const char * command, const char * type) {
 		 */
 		for (p = PidList; p; p = p->next)
 			(void)close(p->fd);
+		(void)fcntl(STDIN_FILENO, F_SETFD, 0);
+		(void)fcntl(STDOUT_FILENO, F_SETFD, 0);
 
 		/* Execute the command. */
 		#if defined(__CYGWIN__)
@@ -398,4 +441,3 @@ close_cleanup(void * arg)
 
 	free(cur);
 }
-

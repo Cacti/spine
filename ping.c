@@ -33,6 +33,18 @@
 
 #include "common.h"
 #include "spine.h"
+#include <fcntl.h>
+
+#ifdef __CYGWIN__
+static void icmp_discard_reply(int icmp_socket, char *buffer) {
+	while (recvfrom(icmp_socket, buffer, BUFSIZE, 0, NULL, NULL) < 0 && errno == EINTR) {
+		/* interrupted before the peeked datagram was removed; retry */
+	}
+}
+#define ICMP_DISCARD_PEEKED(sock, buf) icmp_discard_reply((sock), (buf))
+#else
+#define ICMP_DISCARD_PEEKED(sock, buf) ((void)0)
+#endif
 
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
@@ -268,6 +280,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct sockaddr_in fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
+	int    fd_error;
+	int    elevate_euid;
+	int    fork_locked;
+	int    socket_type = SOCK_RAW;
+	int    ihl;
 	char   *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	socklen_t    fromlen;
@@ -289,8 +306,30 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	/* get ICMP socket */
 	retry_count = 0;
 	while (TRUE) {
+		fd_error = 0;
+		elevate_euid = FALSE;
+		fork_locked = FALSE;
+		#if defined(HAVE_DECL_SOCK_CLOEXEC) && HAVE_DECL_SOCK_CLOEXEC
+		socket_type = SOCK_RAW | SOCK_CLOEXEC;
+		#else
+		/* Without atomic SOCK_CLOEXEC, serialize socket creation through
+		 * FD_CLOEXEC publication with every process spawn. */
+		fork_locked = TRUE;
+		#endif
 		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (hasCaps() != TRUE) {
+		elevate_euid = hasCaps() != TRUE;
+		if (elevate_euid) {
+			fork_locked = TRUE;
+		}
+		#endif
+
+		/* Effective UID changes are process-wide.  Exclude every fork/exec
+		 * from the complete elevated interval. */
+		if (fork_locked) {
+			thread_mutex_lock(LOCK_FORK);
+		}
+		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+		if (elevate_euid) {
 			thread_mutex_lock(LOCK_SETEUID);
 			if (seteuid(0) == -1) {
 				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
@@ -298,39 +337,50 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		}
 		#endif
 
-		if ((icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
-			usleep(500000);
-			retry_count++;
-
-			if (retry_count > 4) {
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
-				snprintf(ping->ping_status, 50, "down");
-				#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-				if (hasCaps() != TRUE) {
-					if (seteuid(getuid()) == -1) {
-						SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-					}
-					thread_mutex_unlock(LOCK_SETEUID);
-				}
-				#endif
-
-				return HOST_DOWN;
-
-				break;
-			}
+		if ((icmp_socket = socket(AF_INET, socket_type, IPPROTO_ICMP)) == -1) {
+			fd_error = errno;
 		} else {
+			int fd_flags = fcntl(icmp_socket, F_GETFD);
+			if (fd_flags < 0 || fcntl(icmp_socket, F_SETFD, fd_flags | FD_CLOEXEC) < 0) {
+				fd_error = errno;
+				close(icmp_socket);
+				icmp_socket = -1;
+			}
+		}
+
+		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
+		if (elevate_euid) {
+			if (seteuid(getuid()) == -1) {
+				/* Try an irreversible privilege drop before giving up.  Normal
+				 * cleanup is unsafe if both calls fail because it would execute
+				 * complex shutdown code while the process still has euid 0. */
+				if (setuid(getuid()) == -1) {
+					SPINE_LOG(("ERROR: Spine unable to drop root privileges; terminating immediately."));
+					_exit(EXIT_FAILURE);
+				}
+			}
+			thread_mutex_unlock(LOCK_SETEUID);
+		}
+		#endif
+		if (fork_locked) {
+			thread_mutex_unlock(LOCK_FORK);
+		}
+
+		if (icmp_socket != -1) {
 			break;
 		}
-	}
 
-	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	if (hasCaps() != TRUE) {
-		if (seteuid(getuid()) == -1) {
-			SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
+		if (fd_error != 0) {
+			SPINE_LOG(("WARNING: Unable to create or secure ICMP socket: %s", strerror(fd_error)));
 		}
-		thread_mutex_unlock(LOCK_SETEUID);
+		usleep(500000);
+		retry_count++;
+		if (retry_count > 4) {
+			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping unable to create ICMP Socket");
+			snprintf(ping->ping_status, 50, "down");
+			return HOST_DOWN;
+		}
 	}
-	#endif
 
 	/* convert the host timeout to a double precision number in seconds */
 	host_timeout = host->ping_timeout;
@@ -382,7 +432,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
 					snprintf(ping->ping_status, 50, "down");
-					free(packet);
+					SPINE_FREE(packet);
 					close(icmp_socket);
 					return HOST_DOWN;
 				}
@@ -436,51 +486,57 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
-						ip  = (struct ip *) socket_reply;
-						pkt = (struct icmp *) (socket_reply + (ip->ip_hl << 2));
-
-						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-							if (pkt->icmp_type == ICMP_ECHOREPLY) {
-								if (is_debug_device(host->id)) {
-									SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-								} else {
-									SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-								}
-								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
-								snprintf(ping->ping_status, 50, "%.5f", total_time);
-								free(packet);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
-									thread_mutex_lock(LOCK_SETEUID);
-									if (seteuid(0) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-									}
-								}
-								#endif
-								close(icmp_socket);
-								#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-								if (hasCaps() != TRUE) {
-									if (seteuid(getuid()) == -1) {
-										SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-									}
-									thread_mutex_unlock(LOCK_SETEUID);
-								}
-								#endif
-
-								return HOST_UP;
-							} else {
-								/* received a response other than an echo reply */
-								if (total_time > host_timeout) {
-									retry_count++;
-									total_time = 0;
-								}
-
-								continue;
-							}
-						} else {
-							/* another host responded */
+						if (return_code < (ssize_t) sizeof(struct ip)) {
+							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
+
+						ip  = (struct ip *) socket_reply;
+						ihl = ip->ip_hl << 2;
+						if (ihl < (int) sizeof(struct ip) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
+							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+							goto keep_listening;
+						}
+
+						pkt = (struct icmp *) (socket_reply + ihl);
+
+						if (fromname.sin_addr.s_addr != recvname.sin_addr.s_addr) {
+							/* another host responded */
+							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+							goto keep_listening;
+						}
+
+						if (pkt->icmp_type == ICMP_ECHOREPLY) {
+							/* Only echo replies carry our identifier and sequence in
+							 * the outer ICMP header.  Error responses carry the
+							 * triggering packet there instead. */
+							if (pkt->icmp_id != icmp->icmp_id || pkt->icmp_seq != icmp->icmp_seq) {
+								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+								goto keep_listening;
+							}
+
+							if (is_debug_device(host->id)) {
+								SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+							} else {
+								SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+							}
+							snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
+							snprintf(ping->ping_status, 50, "%.5f", total_time);
+							SPINE_FREE(packet);
+							close(icmp_socket);
+
+							return HOST_UP;
+						}
+
+						/* A correlated ICMP error requires parsing the embedded
+						 * IP packet.  Keep listening until that
+						 * correlation is available; never report the host up. */
+						ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+						if (total_time > host_timeout) {
+							retry_count++;
+							total_time = 0;
+						}
+						continue;
 					}
 				} else {
 					if (is_debug_device(host->id)) {
@@ -499,48 +555,16 @@ int ping_icmp(host_t *host, ping_t *ping) {
 		} else {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination hostname invalid");
 			snprintf(ping->ping_status, 50, "down");
-			free(packet);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				thread_mutex_lock(LOCK_SETEUID);
-				if (seteuid(0) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-				}
-			}
-			#endif
+			SPINE_FREE(packet);
 			close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				if (seteuid(getuid()) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-				}
-				thread_mutex_unlock(LOCK_SETEUID);
-			}
-			#endif
 			return HOST_DOWN;
 		}
 	} else {
 		snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Destination address not specified");
 		snprintf(ping->ping_status, 50, "down");
-		free(packet);
+		SPINE_FREE(packet);
 		if (icmp_socket != -1) {
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				thread_mutex_lock(LOCK_SETEUID);
-				if (seteuid(0) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-				}
-			}
-			#endif
 			close(icmp_socket);
-			#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-			if (hasCaps() != TRUE) {
-				if (seteuid(getuid()) == -1) {
-					SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-				}
-				thread_mutex_unlock(LOCK_SETEUID);
-			}
-			#endif
 		}
 		return HOST_DOWN;
 	}
@@ -968,9 +992,9 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 }
 
 /*! \fn name_t *get_namebyhost(char *hostname, name_t *name)
- *  \brief splits the hostname into method, name and port
+ *  \brief copies the complete hostname into a name result
  *
- *  \return name_t containing a trimmed hostname, port, and optional method
+ *  \return name_t containing the complete hostname
  *
  */
 name_t *get_namebyhost(char *hostname, name_t *name) {
@@ -984,85 +1008,10 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		memset(name, '\0', sizeof(name_t));
 	}
 
-	int tokens = 0;
-	char *stack = NULL;
-	char *token = NULL;
-
-	if (!(stack = (char *) malloc(strlen(hostname)+1))) {
-		die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
-	}
-
-	memset(stack, '\0', strlen(hostname)+1);
-	strncopy(stack, hostname, strlen(stack));
-	token = strtok(stack, ":");
-
-	if (token == NULL) {
-		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No delimiter, assume full hostname", hostname));
-		strncopy(name->hostname, hostname, SMALL_BUFSIZE);
-	}
-
-	while (token != NULL && tokens <= 3) {
-		tokens++;
-		SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Token #%i - %s", hostname, tokens, token));
-		if (tokens == 1) {
-			if (strlen(token) && token[0] == '[') {
-				SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
-				strncpy(name->hostname, hostname, sizeof(name->hostname)-1);
-				break;
-			} else if (strlen(token) == 3) {
-				if (strncasecmp(token, "TCP", 3)) {
-					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv4 method", hostname));
-					name->method = 1;
-				} else if (strncasecmp(hostname, "UDP", 3)) {
-					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv4 method", hostname));
-					name->method = 2;
-				} else {
-					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No matching method for 3 chars: %s", hostname, token));
-					// assume we have had a method
-					tokens++;
-				}
-			} else if (strlen(token) == 4) {
-				if (strncasecmp(token, "TCP6", 3)) {
-					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
-					name->method = 3;
-				} else if (strncasecmp(hostname, "UDP6", 3)) {
-					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have UDPv6 method", hostname));
-					name->method = 4;
-				} else {
-					SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - No matching method for 4 chars: %s", hostname, token));
-
-					// assume we have had a method
-					tokens++;
-				}
-			} else {
-				SPINE_LOG_DEBUG(("DEBUG: get_hostbyname(%s) - No matching method for %li chars: %s", hostname, strlen(token), token));
-
-				// assume we have had a method
-				tokens++;
-			}
-		}
-
-		if (tokens == 2) {
-			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting hostname: %s", hostname, token));
-			strncpy(name->hostname, token, sizeof(name->hostname)-1);
-			name->hostname[strlen(token)] = '\0';
-		}
-
-		if (tokens == 3 && strlen(token)) {
-			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Setting port: %s", hostname, token));
-			name->port = atoi(token);
-		}
-
-		if (tokens > 3) {
-			SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Unexpected token: %i", hostname, tokens));
-		}
-		token = strtok(NULL, ":");
-	}
-
-	if (stack != NULL) {
-		free(stack);
-		stack = NULL;
-	}
+	/* The database supplies ping method and port in separate columns, and the
+	 * caller overwrites both parsed values immediately.  Preserve the complete
+	 * hostname here; splitting on ':' silently truncates bare IPv6 literals. */
+	STRNCOPY(name->hostname, hostname);
 
 	return name;
 }
