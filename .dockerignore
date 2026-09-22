@@ -23,16 +23,16 @@ configure
 configure~
 libtool
 stamp-h1
-.deps/
-.dirstamp
-.libs/
-*.o
-*.lo
-*.la
-*.gcda
-*.gcno
-*.log
-*.tar.gz
+**/.deps/
+**/.dirstamp
+**/.libs/
+**/*.o
+**/*.lo
+**/*.la
+**/*.gcda
+**/*.gcno
+**/*.log
+**/*.tar.gz
 
 # the built binary itself
 /spine

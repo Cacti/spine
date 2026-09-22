@@ -30,7 +30,7 @@ AC_CONFIG_SRCDIR(spine.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 
-AM_INIT_AUTOMAKE([foreign])
+AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_SILENT_RULES([yes])
 AC_CONFIG_HEADERS(config/config.h)
 
@@ -379,6 +379,26 @@ AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session str
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
 
+# ****************** Linker --wrap support (tests only) *********************
+dnl The PHP runtime suite interposes on process and descriptor operations so
+dnl destructive failure paths are deterministic. GNU ld and lld provide the
+dnl required --wrap option; probe it so other supported linkers skip cleanly.
+AC_MSG_CHECKING([whether the linker supports --wrap])
+spine_save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -Wl,--wrap=spine_ld_wrap_probe"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  int spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void);
+  int __wrap_spine_ld_wrap_probe(void) { return 0; }
+]], [[
+  return spine_ld_wrap_probe();
+]])],
+  [spine_ld_wrap=yes],
+  [spine_ld_wrap=no])
+LDFLAGS="$spine_save_LDFLAGS"
+AC_MSG_RESULT($spine_ld_wrap)
+AM_CONDITIONAL([HAVE_LD_WRAP], [test "x$spine_ld_wrap" = "xyes"])
+
 # ****************** SNMPv3 USM Error Constants Check ***********************
 AC_MSG_CHECKING([for SNMPv3 USM error constants])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
@@ -397,6 +417,24 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 ]])],
   [AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no (USM error decoding disabled)])]
+)
+
+# ****************** USM DES Privacy Protocol Symbol Check ***********************
+# Some distributions (e.g. Fedora) ship a net-snmp-config.h that advertises DES
+# as the default privacy protocol (SNMP_DEFAULT_PRIV_PROTO expands to
+# usmDESPrivProtocol) while the shipped libnetsnmp does not export that symbol,
+# so referencing the header's own default fails to link. Probe for the actual
+# symbol rather than trusting the header.
+AC_MSG_CHECKING([for usmDESPrivProtocol in libnetsnmp])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <net-snmp/net-snmp-config.h>
+  #include <net-snmp/net-snmp-includes.h>
+]], [[
+  return usmDESPrivProtocol[0];
+]])],
+  [AC_MSG_RESULT([yes])
+   AC_DEFINE(HAVE_USM_DES_PRIV_PROTOCOL, 1, [Define if libnetsnmp exports usmDESPrivProtocol])],
+  [AC_MSG_RESULT([no])]
 )
 
 # ****************** Spine Result Buffer Check ***********************

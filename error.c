@@ -98,7 +98,15 @@ static void spine_signal_handler(int spine_signal) {
 	const char *message = NULL;
 	int saved_errno = errno;
 
-	signal(spine_signal, SIG_DFL);
+	/* A real fault (SIGSEGV/SIGBUS/...) resets to SIG_DFL and returns so the
+	 * faulting instruction re-executes and dies with a core. SIGPIPE is a
+	 * routine, recurring condition instead, and signal dispositions are
+	 * process-wide: dropping it to SIG_DFL here, even briefly, would let a
+	 * broken-pipe write on any other thread terminate the process during
+	 * that window. Leave this handler permanently installed for SIGPIPE. */
+	if (spine_signal != SIGPIPE) {
+		signal(spine_signal, SIG_DFL);
+	}
 
 	set.exit_code = spine_signal;
 
@@ -120,9 +128,6 @@ static void spine_signal_handler(int spine_signal) {
 			break;
 		case SIGQUIT:
 			message = "FATAL: Spine Encountered a Keyboard Quit Command\n";
-			break;
-		case SIGPIPE:
-			message = "FATAL: Spine Encountered a Broken Pipe\n";
 			break;
 		default:
 			break;
@@ -149,7 +154,6 @@ static void spine_signal_handler(int spine_signal) {
 
 static int spine_fatal_signals[] = {
 	SIGINT,
-	SIGPIPE,
 	SIGSEGV,
 	SIGBUS,
 	SIGFPE,
@@ -158,6 +162,13 @@ static int spine_fatal_signals[] = {
 	SIGABRT,
 	0
 };
+
+/* A caught disposition is reset to SIG_DFL by exec(), unlike SIG_IGN. Keep
+ * broken pipes non-fatal in Spine while preserving normal SIGPIPE semantics
+ * for operator scripts launched through either posix_spawn() or libc popen(). */
+static void spine_sigpipe_handler(int spine_signal) {
+	(void) spine_signal;
+}
 
 /*! \fn void install_spine_signal_handler(void)
  *  \brief installs the spine signal handler to stop certain calls from
@@ -169,6 +180,17 @@ void install_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa;
 	void (*ohandler)(int);
+
+	/* Broken pipes are ordinary runtime failures for database sockets, script
+	 * pipes and redirected logs. A caught handler makes write() return EPIPE,
+	 * and exec'd children automatically regain SIG_DFL. */
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = spine_sigpipe_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	if (sigaction(SIGPIPE, &sa, NULL) != 0) {
+		SPINE_LOG(("ERROR: Unable to install SIGPIPE handler: %s", strerror(errno)));
+	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -199,6 +221,17 @@ void uninstall_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa;
 	void (*ohandler)(int);
+
+	if (sigaction(SIGPIPE, NULL, &sa) != 0) {
+		SPINE_LOG(("WARNING: Unable to inspect SIGPIPE handler during shutdown: %s", strerror(errno)));
+	} else if (sa.sa_handler == spine_sigpipe_handler) {
+		sa.sa_handler = SIG_DFL;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = 0;
+		if (sigaction(SIGPIPE, &sa, NULL) != 0) {
+			SPINE_LOG(("WARNING: Unable to restore the default SIGPIPE handler: %s", strerror(errno)));
+		}
+	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);

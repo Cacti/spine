@@ -245,16 +245,15 @@ int main(int argc, char *argv[]) {
 	install_spine_signal_handler();
 
 	/* establish php processes and initialize space */
-	if (!(php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t)))) {
+	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
+	if (php_processes == NULL) {
 		die("ERROR: Fatal calloc error: spine.c php_processes!");
 	}
-
-	for (i = 0; i < MAX_PHP_SERVERS; i++) {
-		php_processes[i].php_state = PHP_BUSY;
-	}
+	php_processes_initialize(php_processes, MAX_PHP_SERVERS);
 
 	/* create the array of debug devices */
-	if (!(debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int)))) {
+	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
+	if (debug_devices == NULL) {
 		die("ERROR: Fatal calloc error: spine.c debug_devices!");
 	}
 
