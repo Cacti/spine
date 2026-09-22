@@ -964,7 +964,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									uptime_use_engine_oid = (poll_result != NULL && is_numeric(poll_result));
 
 									if (uptime_use_engine_oid) {
-										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
+										snprintf(sysUptime, BUFSIZE, "%llu", (unsigned long long) (atoll(poll_result) * 100));
 									}
 
 									SPINE_FREE(poll_result);
