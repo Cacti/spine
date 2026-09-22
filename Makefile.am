@@ -28,6 +28,21 @@ spine_SOURCES = sql.c spine.c util.c snmp.c src/core/locks.c poller.c \
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
 
+# Seed a live config on first install without ever overwriting an existing one.
+install-data-hook:
+	if [ ! -f "$(DESTDIR)$(configdir)/spine.conf" ]; then \
+		$(INSTALL_DATA) "$(srcdir)/spine.conf.dist" "$(DESTDIR)$(configdir)/spine.conf"; \
+	fi
+
+# Mirror image of the hook above: only remove spine.conf if it was never
+# customized (still identical to the .dist it was seeded from), so a real
+# uninstall never discards a live config, while distcheck's install/uninstall
+# symmetry check still passes against its untouched sandbox copy.
+uninstall-hook:
+	if cmp -s "$(DESTDIR)$(configdir)/spine.conf" "$(srcdir)/spine.conf.dist" 2>/dev/null; then \
+		rm -f "$(DESTDIR)$(configdir)/spine.conf"; \
+	fi
+
 bin_PROGRAMS = spine
 
 man_MANS = spine.1
