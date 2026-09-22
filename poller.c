@@ -158,6 +158,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int posuffix_len = 0;
 
 	char sysUptime[BUFSIZE];
+	int  uptime_use_engine_oid = FALSE; /* pins uptime-goes-backward checks to the seconds granularity engine OID once found */
 	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
@@ -969,33 +970,50 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									poll_result[0] = '\0';
 
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") ||
+									strstr(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")) {
 								     // Ensure uptime is empty to start with
 								     sysUptime[0] = '\0';
 
-									// Check the legacy poll result first
-									poll_result = snmp_get(host, reindex->arg1);
-
-									if (poll_result && is_numeric(poll_result)) {
-										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
-									}
-
-									if (is_debug_device(host->id)) {
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
-									} else {
-										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
-									}
-
-									SPINE_FREE(poll_result);
-
-									/* check the modern snmp engine uptime in seconds */
+									/* Pin the uptime-goes-backward calculation to a single OID for this poll.
+									   Previously the legacy (centisecond) and modern (second) OIDs could each
+									   supply the value on different reindex rows or different poll cycles,
+									   and a mismatch between the two caused false "uptime went backward"
+									   detections and constant reindexing. Prefer the modern engine OID, since
+									   it offers seconds granularity, and only fall back to the legacy OID
+									   when the engine OID isn't present with numeric data. */
 									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
-									if (poll_result && is_numeric(poll_result)) {
+									uptime_use_engine_oid = (poll_result != NULL && is_numeric(poll_result));
+
+									if (uptime_use_engine_oid) {
 										snprintf(sysUptime, BUFSIZE, "%lld", atoll(poll_result) * 100);
 									}
 
 									SPINE_FREE(poll_result);
+
+									if (is_debug_device(host->id)) {
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Engine Uptime OID Present: %d", host->id, host_thread, reindex->data_query_id, uptime_use_engine_oid));
+									} else {
+										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Engine Uptime OID Present: %d", host->id, host_thread, reindex->data_query_id, uptime_use_engine_oid));
+									}
+
+									if (!uptime_use_engine_oid) {
+										// Engine OID unavailable, fall back to the legacy sysUpTime OID
+										poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+
+										if (poll_result && is_numeric(poll_result)) {
+											snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+										}
+
+										if (is_debug_device(host->id)) {
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+										} else {
+											SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+										}
+
+										SPINE_FREE(poll_result);
+									}
 
 									/* allocate and populate with whichever uptime was valid */
 									if (!(poll_result = (char *) malloc(BUFSIZE))) {
