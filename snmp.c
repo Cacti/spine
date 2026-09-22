@@ -893,7 +893,7 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 		/* parse input parm to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
-			return count;
+			return -1;
 		}
 		memmove(anOID, root, rootlen * sizeof(oid));
 		anOID_len = rootlen;
@@ -944,8 +944,12 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 							ok = 0;
 						}
 					}
+				} else if (response->errstat == SNMP_ERR_NOSUCHNAME) {
+					/* SNMPv1 has no endOfMibView variable type; it reports the normal
+					 * end of a GETNEXT walk as a PDU-level noSuchName instead. */
+					ok = 0;
 				} else {
-					SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error in snmp_count for OID %s", current_host->id, snmp_oid));
+					SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error %ld in snmp_count for OID %s", current_host->id, response->errstat, snmp_oid));
 					ok = 0;
 					error_occurred = 1;
 				}
@@ -965,13 +969,16 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 		}
 	} else {
 		status = STAT_DESCRIP_ERROR;
+		error_occurred = 1;
 	}
 
 	if (status != STAT_SUCCESS) {
 		current_host->ignore_host = TRUE;
 	}
 
-	return count;
+	/* A negative count tells the caller this walk never produced a usable
+	 * result, so it is not mistaken for a legitimate zero-item count. */
+	return error_occurred ? -1 : count;
 }
 
 /*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
