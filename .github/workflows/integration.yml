@@ -56,6 +56,9 @@ jobs:
           set -euo pipefail
           tests/integration/test_network_faults.sh
 
+      - name: Reap a real PHP script-server process
+        run: tests/integration/test_script_server_reap.sh
+
       - name: Show container logs on failure
         if: failure()
         env:
