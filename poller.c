@@ -1069,13 +1069,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 
 							break;
-						case POLLER_ACTION_SNMP_COUNT: /* snmp; count items */
+						case POLLER_ACTION_SNMP_COUNT: { /* snmp; count items */
+							int snmp_items;
+
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
 
-							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
+							snmp_items = snmp_count(host, reindex->arg1);
+							if (snmp_items < 0) {
+								SET_UNDEFINED(poll_result);
+							} else {
+								snprintf(poll_result, BUFSIZE, "%d", snmp_items);
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1084,6 +1091,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 
 							break;
+						}
 						case POLLER_ACTION_SCRIPT_COUNT: /* script (popen); count items by counting line feeds */
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
