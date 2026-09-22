@@ -584,22 +584,31 @@ int append_hostrange(char *obuf, const char *colname) {
  *
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
-	char input_trimmed[DBL_BUFSIZE];
+	char *input_trimmed;
 	int  max_escaped_input_size;
-	int  trim_limit;
 
 	if (input == NULL) return;
+	if (max_size <= 0) return;
+
+	/* input_trimmed only ever needs to hold what can fit escaped into
+	 * output, so size it to the caller's max_size instead of a fixed
+	 * DBL_BUFSIZE. The previous fixed cap meant a larger max_size never
+	 * actually admitted a longer input, silently truncating it anyway. */
+	if (!(input_trimmed = (char *) malloc(max_size))) {
+		die("ERROR: Fatal malloc error: sql.c db_escape!");
+	}
 
 	max_escaped_input_size = (strlen(input) * 2) + 1;
-	trim_limit = (max_size < DBL_BUFSIZE) ? max_size : DBL_BUFSIZE;
 
 	if (max_escaped_input_size > max_size) {
-		snprintf(input_trimmed, (trim_limit / 2) - 1, "%s", input);
+		snprintf(input_trimmed, (max_size / 2) - 1, "%s", input);
 	} else {
-		snprintf(input_trimmed, trim_limit, "%s", input);
+		snprintf(input_trimmed, max_size, "%s", input);
 	}
 
 	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
+
+	free(input_trimmed);
 }
 
 void db_free_result(MYSQL_RES *result) {

@@ -1,0 +1,50 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  schedule:
+    - cron: '30 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4
+        with:
+          languages: c-cpp
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+          mysql-server libmysqlclient-dev \
+          libsnmp-dev libssl-dev build-essential \
+          help2man autoconf automake libtool dos2unix libcmocka-dev
+
+      - name: Build spine
+        run: |
+          ./bootstrap
+          ./configure --enable-warnings
+          make -j"$(nproc)"
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4
+        with:
+          category: '/language:c-cpp'

@@ -610,6 +610,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				SPINE_FREE(buf_size);
 				SPINE_FREE(buf_errors);
 
+				mysql_thread_end();
+
 				return;
 			}
 
@@ -1900,17 +1902,27 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 		i = 0;
 		while (i < rows_processed) {
-			char escaped_result[DBL_BUFSIZE];
+			/* poller_items[i].result is RESULTS_BUFFER bytes and escaping can
+			 * double it, so size the destination to match rather than the
+			 * fixed DBL_BUFSIZE, which silently truncated any result of 1024
+			 * bytes or more regardless of --with-results-buffer. */
+			char escaped_result[RESULTS_BUFFER * 2 + 1];
 			char escaped_rrd_name[DBL_BUFSIZE];
 
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
 			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
 
+			/* escaped_result can now legitimately exceed result_string's capacity for a
+			 * very large result; snprintf's own bound below still truncates it safely.
+			 * Silently-truncated large rows are the separate, already-tracked gap in #598. */
+			#pragma GCC diagnostic push
+			#pragma GCC diagnostic ignored "-Wformat-truncation"
 			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
 				poller_items[i].local_data_id,
 				escaped_rrd_name,
 				host_time,
 				escaped_result);
+			#pragma GCC diagnostic pop
 
 			result_length = strlen(result_string);
 

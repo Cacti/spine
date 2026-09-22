@@ -144,6 +144,14 @@ static void spine_signal_handler(int spine_signal) {
 		_exit(1);
 	}
 
+	/* Unlike a genuine fault (SIGSEGV/SIGBUS/...), where resetting to SIG_DFL and
+	 * returning lets the faulting instruction re-execute and die with a core,
+	 * a broken pipe is a routine, recurring condition. Re-arm only this signal so
+	 * a second SIGPIPE is logged and survived rather than killing the poller. */
+	if (spine_signal == SIGPIPE) {
+		signal(SIGPIPE, spine_signal_handler);
+	}
+
 	errno = saved_errno;
 }
 
