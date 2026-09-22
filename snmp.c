@@ -128,7 +128,6 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
 	int    priv_type;
-	int    zero_sensitive = 0;
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
@@ -270,29 +269,18 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
 			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
 
-			// Auth Protocol Setup
-			if (Apsz && zero_sensitive) {
-				memset(Apsz, 0x0, strlen(Apsz));
-			}
-
+			// Auth Protocol Setup: Apsz/Xpsz are this module's own heap copies. The live
+			// passphrase they hold is scrubbed immediately before each of their frees
+			// below, not here, since neither is assigned yet on entry to this block.
+			// snmp_password/snmp_priv_passphrase are host_t-owned and reused for later
+			// session rebuilds on this same host, so they are left intact rather than
+			// zeroed in place.
 			free(Apsz);
 			Apsz = strdup(snmp_password);
 
-			if (zero_sensitive) {
-	            memset(snmp_password, 0x0, strlen(snmp_password));
-			}
-
 			// Privacy Protocol Setup
-			if (Xpsz && zero_sensitive) {
-				memset(Xpsz, 0x0, strlen(Xpsz));
-			}
-
 			free(Xpsz);
 			Xpsz = strdup(snmp_priv_passphrase);
-
-			if (zero_sensitive) {
-				memset(snmp_priv_passphrase, 0x0, strlen(snmp_priv_passphrase));
-			}
 
 			if (Apsz) {
 				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
@@ -318,7 +306,9 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
+					if (Apsz) memset(Apsz, 0x0, strlen(Apsz));
 					free(Apsz);
+					if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
 					free(Xpsz);
 					if (session.localname) {
 						free(session.localname);
@@ -327,6 +317,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					return 0;
 				}
 
+				if (Apsz) memset(Apsz, 0x0, strlen(Apsz));
 				free(Apsz);
 				Apsz = NULL;
 			}
@@ -343,8 +334,17 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 				}
 
 				if (session.securityPrivProto == NULL) {
+					#ifdef HAVE_USM_DES_PRIV_PROTOCOL
 					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
 					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
+					#else
+					/* The header's default macro expands to usmDESPrivProtocol, but some
+					 * distributions (e.g. Fedora) ship a net-snmp-config.h that advertises it
+					 * without libnetsnmp actually exporting the symbol, which fails to link.
+					 * Fall back to AES, which configure confirmed libnetsnmp provides. */
+					session.securityPrivProto = snmp_duplicate_objid(usmAESPrivProtocol, OID_LENGTH(usmAESPrivProtocol));
+					session.securityPrivProtoLen = OID_LENGTH(usmAESPrivProtocol);
+					#endif
 				}
 
 				if (generate_Ku(session.securityAuthProto,
@@ -356,6 +356,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					free(session.peername);
 					free(session.securityAuthProto);
 					free(session.securityPrivProto);
+					if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
 					free(Xpsz);
 					if (session.localname) {
 						free(session.localname);
@@ -364,6 +365,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 					return 0;
 				}
 
+				if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
 				free(Xpsz);
 				Xpsz = NULL;
 			}
@@ -895,7 +897,7 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 		/* parse input parm to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
-			return count;
+			return -1;
 		}
 		memmove(anOID, root, rootlen * sizeof(oid));
 		anOID_len = rootlen;
@@ -946,8 +948,12 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 							ok = 0;
 						}
 					}
+				} else if (response->errstat == SNMP_ERR_NOSUCHNAME) {
+					/* SNMPv1 has no endOfMibView variable type; it reports the normal
+					 * end of a GETNEXT walk as a PDU-level noSuchName instead. */
+					ok = 0;
 				} else {
-					SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error in snmp_count for OID %s", current_host->id, snmp_oid));
+					SPINE_LOG(("ERROR: Device[%i] internal Net-SNMP error %ld in snmp_count for OID %s", current_host->id, response->errstat, snmp_oid));
 					ok = 0;
 					error_occurred = 1;
 				}
@@ -967,13 +973,16 @@ int snmp_count(host_t *current_host, const char *snmp_oid) {
 		}
 	} else {
 		status = STAT_DESCRIP_ERROR;
+		error_occurred = 1;
 	}
 
 	if (status != STAT_SUCCESS) {
 		current_host->ignore_host = TRUE;
 	}
 
-	return count;
+	/* A negative count tells the caller this walk never produced a usable
+	 * result, so it is not mistaken for a legitimate zero-item count. */
+	return error_occurred ? -1 : count;
 }
 
 /*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)

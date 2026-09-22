@@ -191,6 +191,24 @@ char *php_readpipe(int php_process, char *command) {
 	 * should only be the READ pipe */
 	retry:
 
+	/* FD_SET() does not range check; a descriptor at or above FD_SETSIZE
+	 * would write past the end of the on-stack fd_set below. */
+	if (php_processes[php_process].php_read_fd < 0 || php_processes[php_process].php_read_fd >= FD_SETSIZE) {
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server read descriptor %i is outside of FD_SETSIZE %i", php_process, php_processes[php_process].php_read_fd, FD_SETSIZE));
+
+		SET_UNDEFINED(result_string);
+
+		/* Close the misbehaving server only. php_init() validates a new
+		 * server by calling back into this function, and a replacement
+		 * descriptor handed out under the same descriptor-table exhaustion
+		 * can land >= FD_SETSIZE again, recursing without bound. Mark the
+		 * slot busy and leave the restart to the next independent call. */
+		php_close(php_process);
+		php_processes[php_process].php_state = PHP_BUSY;
+
+		return result_string;
+	}
+
 	/* initialize file descriptors to review for input/output */
 	FD_ZERO(&fds);
 	FD_SET(php_processes[php_process].php_read_fd,&fds);

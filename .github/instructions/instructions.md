@@ -72,3 +72,9 @@ GNU autotools.
   changes.
 - PR descriptions: state what changed, why, and what was tested.
   No AI-generated boilerplate.
+- Add a `CHANGELOG` entry for every bug fix or feature under the
+  current unreleased version header, in the existing
+  `-issue#NNN: <summary>` / `-feature#NNN: <summary>` format. Use
+  `-issue: <summary>` / `-feature: <summary>` (no number) only when no
+  GitHub issue exists. Reference the issue the PR closes, not the PR
+  number.
