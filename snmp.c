@@ -627,7 +627,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
  *	This function will poll a specific snmp OID for a host.  The host snmp
  *  session must already be established.
  *
- *  \return returns count of table entries
+ *  \return count of table entries, or -1 when the walk is incomplete
  *
  */
 int snmp_count(host_t *current_host, char *snmp_oid) {
@@ -656,7 +656,9 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 		/* parse input parm to an array for use with snmp functions */
 		if (!snmp_parse_oid(snmp_oid, root, &rootlen)) {
 			SPINE_LOG(("Device[%i] ERROR: SNMP Count Problems parsing SNMP OID %s", current_host->id, snmp_oid));
-			return count;
+			/* This is a local configuration error, not evidence that the
+			 * device is unavailable; leave host status unchanged. */
+			return -1;
 		}
 		memmove(anOID, root, rootlen * sizeof(oid));
 		anOID_len = rootlen;
@@ -669,13 +671,21 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 			/* do the request, use thread safe call */
 			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
 
-			/* add status to host structure */
-			current_host->snmp_status = status;
-
 			//SPINE_LOG_DEBUG(("TRACE: Status %i Response %i", status, response->errstat));
 
 			if (status == STAT_SUCCESS) {
-				if (response->errstat == SNMP_ERR_NOERROR) {
+				if (response == NULL) {
+					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+					status = STAT_ERROR;
+					ok = 0;
+					error_occurred = 1;
+					count = -1;
+				} else if (response->errstat == SNMP_ERR_NOERROR) {
+					if (response->variables == NULL) {
+						SPINE_LOG_DEBUG(("DEBUG: Empty Net-SNMP response ended Cacti snmp_count walk"));
+						ok = 0;
+					}
+
 					/* check resulting variables */
 					for (vars = response->variables; vars; vars	= vars->next_variable) {
 						if ((vars->name_length < rootlen) || (memcmp(root, vars->name, rootlen * sizeof(oid)) != 0)) {
@@ -704,7 +714,17 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 						}
 					}
 				} else {
-					SPINE_LOG(("ERROR: An internal Net-Snmp error condition detected in Cacti snmp_count"));
+					ok = 0;
+
+					/* SNMPv1 reports the normal end of a GETNEXT walk as
+					 * noSuchName rather than an endOfMibView variable. */
+					if (response->errstat != SNMP_ERR_NOSUCHNAME) {
+						SPINE_LOG(("ERROR: Net-SNMP error %ld detected in Cacti snmp_count", response->errstat));
+						error_occurred = 1;
+						count = -1;
+						/* The walk result is unusable, but a valid SNMP response
+						 * still proves that the device is reachable. */
+					}
 				}
 			} else if (status == STAT_TIMEOUT) {
 				SPINE_LOG(("ERROR: Timeout detected in Cacti snmp_count"));
@@ -718,17 +738,21 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 
 			if (response) {
 				snmp_free_pdu(response);
+				response = NULL;
 			}
 		}
 	} else {
 		status = STAT_DESCRIP_ERROR;
+		count = -1;
 	}
+
+	current_host->snmp_status = status;
 
 	if (status != STAT_SUCCESS) {
 		current_host->ignore_host = TRUE;
 	}
 
-	return count;
+	return error_occurred ? -1 : count;
 }
 
 /*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
@@ -782,7 +806,12 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 	} *name, *namep;
 
 	/* load up oids */
-	namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name));
+	if (num_oids <= 0) {
+		return;
+	}
+	if (!(namep = name = (struct nameStruct *) calloc(num_oids, sizeof(*name)))) {
+		die("ERROR: Fatal malloc error: snmp.c snmp_get_multi!");
+	}
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
 	for (i = 0; i < num_oids; i++) {
 		namep->name_len = MAX_OID_LEN;
@@ -804,9 +833,6 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 	/* execute the multi-get request */
 	retry:
 	status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
-
-	/* add status to host structure */
-	current_host->snmp_status = status;
 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {
@@ -873,6 +899,9 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 			SET_UNDEFINED(snmp_oids[i].result);
 		}
 	}
+
+	/* Record the final classified result, including response-level errors. */
+	current_host->snmp_status = status;
 
 	if (response != NULL) {
 		snmp_free_pdu(response);

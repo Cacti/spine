@@ -105,6 +105,9 @@ static int spine_fatal_signals[] = {
 	0
 };
 
+static struct sigaction previous_sigchld;
+static int previous_sigchld_saved = FALSE;
+
 /*! \fn void install_spine_signal_handler(void)
  *  \brief installs the spine signal handler to stop certain calls from
  *         abending Spine.
@@ -115,6 +118,17 @@ void install_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa;
 	void (*ohandler)(int);
+
+	/* Child lifecycle code retains PIDs until waitpid() reaps them.  Normalize
+	 * an inherited SIG_IGN disposition so children remain zombies and their
+	 * PIDs cannot be recycled before Spine observes their exit. */
+	if (sigaction(SIGCHLD, NULL, &previous_sigchld) == 0) {
+		previous_sigchld_saved = TRUE;
+	}
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGCHLD, &sa, NULL);
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
@@ -145,6 +159,11 @@ void uninstall_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa;
 	void (*ohandler)(int);
+
+	if (previous_sigchld_saved) {
+		sigaction(SIGCHLD, &previous_sigchld, NULL);
+		previous_sigchld_saved = FALSE;
+	}
 
 	for (i=0; spine_fatal_signals[i]; ++i) {
 		sigaction(spine_fatal_signals[i], NULL, &sa);
