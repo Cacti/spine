@@ -179,6 +179,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int    php_process;
 
 	char *poll_result = NULL;
+	char *command_result = NULL;
 	char update_sql[BIG_BUFSIZE];
 	char temp_poll_result[BUFSIZE];
 	char temp_arg1[BUFSIZE];
@@ -1021,7 +1022,19 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							break;
 						case POLLER_ACTION_SCRIPT: /* script (popen) */
-							poll_result = trim(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"));
+							poll_result = exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ");
+							if (poll_result == NULL) {
+								/* A missing result means the script could not be run, not that Spine is
+								   out of memory. Mark this one reindex check undefined instead of killing
+								   every polling thread over a single failed script. */
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s returned no result, marking undefined", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+								STRDUP_OR_DIE(poll_result, "U", "poll_host recache script result");
+							} else {
+								command_result = trim(poll_result);
+								if (command_result != poll_result) {
+									memmove(poll_result, command_result, strlen(command_result) + 1);
+								}
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1033,7 +1046,23 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 						case POLLER_ACTION_PHP_SCRIPT_SERVER: /* script (php script server) */
 							php_process = php_get_process();
 
-							poll_result = trim(php_cmd(reindex->arg1, php_process));
+							if (php_process >= 0) {
+								poll_result = php_cmd(reindex->arg1, php_process);
+							} else {
+								STRDUP_OR_DIE(poll_result, "U", "unavailable PHP Script Server pool");
+							}
+							if (poll_result == NULL) {
+								/* A missing result means the script server could not be reached, not that
+								   Spine is out of memory. Mark this one reindex check undefined instead of
+								   killing every polling thread over a single unavailable script server. */
+								SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s returned no result, marking undefined", host->id, host_thread, reindex->data_query_id, reindex->arg1));
+								STRDUP_OR_DIE(poll_result, "U", "poll_host recache php result");
+							} else {
+								command_result = trim(poll_result);
+								if (command_result != poll_result) {
+									memmove(poll_result, command_result, strlen(command_result) + 1);
+								}
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1042,13 +1071,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 
 							break;
-						case POLLER_ACTION_SNMP_COUNT: /* snmp; count items */
+						case POLLER_ACTION_SNMP_COUNT: { /* snmp; count items */
+							int snmp_items;
+
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
 
-							snprintf(poll_result, BUFSIZE, "%d", snmp_count(host, reindex->arg1));
+							snmp_items = snmp_count(host, reindex->arg1);
+							if (snmp_items < 0) {
+								SET_UNDEFINED(poll_result);
+							} else {
+								snprintf(poll_result, BUFSIZE, "%d", snmp_items);
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE OID COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1057,13 +1093,20 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							}
 
 							break;
+						}
 						case POLLER_ACTION_SCRIPT_COUNT: /* script (popen); count items by counting line feeds */
 							if (!(poll_result = (char *) malloc(BUFSIZE))) {
 								die("ERROR: Fatal malloc error: poller.c poll_result");
 							}
 							poll_result[0] = '\0';
 
-							snprintf(poll_result, BUFSIZE, "%d", char_count(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"), '\n'));
+							command_result = exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ");
+							if (command_result == NULL || IS_UNDEFINED(command_result)) {
+								SET_UNDEFINED(poll_result);
+							} else {
+								snprintf(poll_result, BUFSIZE, "%d", char_count(command_result, '\n'));
+							}
+							SPINE_FREE(command_result);
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1080,7 +1123,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 							php_process = php_get_process();
 
-							sprintf(poll_result, "%d", char_count(php_cmd(reindex->arg1, php_process), '\n'));
+							if (php_process < 0) {
+								SET_UNDEFINED(poll_result);
+							} else {
+								command_result = php_cmd(reindex->arg1, php_process);
+								if (command_result == NULL || IS_UNDEFINED(command_result)) {
+									SET_UNDEFINED(poll_result);
+								} else {
+									snprintf(poll_result, BUFSIZE, "%d", char_count(command_result, '\n'));
+								}
+								SPINE_FREE(command_result);
+							}
 
 							if (is_debug_device(host->id)) {
 								SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
@@ -1175,7 +1228,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							 *
 							 * 2) the OP code is < for uptime goes backward where we have to track the previous uptime
 							 */
-							if (assert_fail || !strcmp(reindex->op, "<")) {
+							if (poll_result != NULL && !IS_UNDEFINED(poll_result) &&
+								(assert_fail || !strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
 									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
@@ -1633,7 +1687,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
 				php_process = php_get_process();
 
-				poll_result = php_cmd(poller_items[i].arg1, php_process);
+				if (php_process >= 0) {
+					poll_result = php_cmd(poller_items[i].arg1, php_process);
+				} else {
+					STRDUP_OR_DIE(poll_result, "U", "unavailable PHP Script Server pool");
+				}
 
 				/* process the output */
 				if (IS_UNDEFINED(poll_result)) {
@@ -2196,7 +2254,9 @@ int validate_result(char *result) {
  */
 char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int cmd_fd;
+	#ifndef USING_TPOPEN
 	int pid;
+	#endif
 
 	#ifdef USING_TPOPEN
 	int close_fd = TRUE;
@@ -2291,8 +2351,12 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 		if (access(executable, X_OK | F_OK) != -1) {
 			#ifdef USING_TPOPEN
+			/* libc popen() forks internally.  Serialize that fork with every
+			 * process-wide effective-UID elevation. */
+			thread_mutex_lock(LOCK_FORK);
 			fd = popen((char *)proc_command, "r");
-			cmd_fd = fileno(fd);
+			thread_mutex_unlock(LOCK_FORK);
+			cmd_fd = fd != NULL ? fileno(fd) : -1;
 			if (is_debug_device(current_host->id)) {
 				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			} else {
@@ -2436,3 +2500,4 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 	return result_string;
 }
+
