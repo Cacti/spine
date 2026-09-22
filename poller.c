@@ -156,6 +156,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int posuffix_len = 0;
 
 	char sysUptime[BUFSIZE];
+	int  uptime_use_engine_oid = FALSE; /* pins uptime-goes-backward checks to the seconds granularity engine OID once found */
 	char result_string[RESULTS_BUFFER+SMALL_BUFSIZE];
 	int  result_length;
 	char temp_result[RESULTS_BUFFER];
@@ -205,6 +206,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 	int new_buffer              = TRUE;
 	int ignore_sysinfo          = TRUE;
 	int buf_length              = 0;
+
+	/* uptime values */
+	unsigned long long previous_uptime = 0;
+	unsigned long long curr_uptime     = 0;
 
 	extern poller_thread_t** details;
 
@@ -943,34 +948,56 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									poll_result[0] = '\0';
 
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
-								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0")) {
+								} else if (strstr(reindex->arg1, ".1.3.6.1.2.1.1.3.0") ||
+									strstr(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")) {
 								     // Ensure uptime is empty to start with
 								     sysUptime[0] = '\0';
 
-									// Check the legacy poll result first
-									poll_result = snmp_get(host, reindex->arg1);
+									/* Pin the uptime-goes-backward calculation to a single OID for this poll.
+									   Previously the legacy (centisecond) and modern (second) OIDs could each
+									   supply the value on different reindex rows or different poll cycles,
+									   and a mismatch between the two caused false "uptime went backward"
+									   detections and constant reindexing. Prefer the modern engine OID, since
+									   it offers seconds granularity, and only fall back to the legacy OID
+									   when the engine OID isn't present with numeric data. */
+									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
-									if (poll_result && is_numeric(poll_result)) {
-										snprintf(sysUptime, BUFSIZE, "%s", poll_result);
-									}
+									uptime_use_engine_oid = (poll_result != NULL && is_numeric(poll_result));
 
-									if (is_debug_device(host->id)) {
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
-									} else {
-										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+									if (uptime_use_engine_oid) {
+										snprintf(sysUptime, BUFSIZE, "%llu", (unsigned long long) (atoll(poll_result) * 100));
 									}
 
 									SPINE_FREE(poll_result);
 
-									// Check the modern uptimeInsance second
-									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
+									if (is_debug_device(host->id)) {
+										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Engine Uptime OID Present: %d", host->id, host_thread, reindex->data_query_id, uptime_use_engine_oid));
+									} else {
+										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Engine Uptime OID Present: %d", host->id, host_thread, reindex->data_query_id, uptime_use_engine_oid));
+									}
 
-									if (poll_result && is_numeric(poll_result)) {
-										snprintf(sysUptime, BUFSIZE, "%llu", atoll(poll_result) * 100);
+									if (!uptime_use_engine_oid) {
+										// Engine OID unavailable, fall back to the legacy sysUpTime OID
+										poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
+
+										if (poll_result && is_numeric(poll_result)) {
+											snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+										}
+
+										if (is_debug_device(host->id)) {
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+										} else {
+											SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
+										}
+
+										SPINE_FREE(poll_result);
 									}
 
 									// Use the primed uptime to repopulate the poll_result
 									// This ensures whichever response was valid gets used
+									if (!(poll_result = (char *) malloc(BUFSIZE))) {
+										die("ERROR: Fatal malloc error: poller.c poll_result");
+									}
 									snprintf(poll_result, BUFSIZE, "%s", sysUptime);
 
 									if (is_debug_device(host->id)) {
@@ -1126,19 +1153,19 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 							/* assume ok if host is up and result wasn't obtained */
 							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								assert_fail = FALSE;
 							} else if ((!strcmp(reindex->op, "=")) && (strcmp(reindex->assert_value, poll_result))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								} else {
 									if (set.spine_log_level == 1) {
 										errors++;
 									}
 
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s=%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
 
 								if (host_thread == 1) {
@@ -1156,69 +1183,51 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
-							} else if ((!strcmp(reindex->op, ">")) && (atoll(reindex->assert_value) < atoll(poll_result))) {
-								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-								} else {
-									if (set.spine_log_level == 1) {
-										errors++;
-									}
+							} else {
+								previous_uptime = atoll(reindex->assert_value);
+								curr_uptime     = atoll(poll_result);
 
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s>%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-								}
-
-								if (host_thread == 1) {
-									snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) ValueS (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-
-									if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-										db_insert(&mysqlr, REMOTE, query3);
-									} else {
-										db_insert(&mysql, LOCAL, query3);
-									}
-
-									/* set zeros */
-									memset(query3, 0, LRG_BUFSIZE);
-								}
-
-								assert_fail = TRUE;
-								previous_assert_failure = TRUE;
-							/* if uptime is set to '0' don't fail out */
-							} else if (strcmp(reindex->assert_value, "0")) {
-								if ((!strcmp(reindex->op, "<")) && (atoll(reindex->assert_value) > atoll(poll_result))) {
-									if (is_debug_device(host->id) || set.spine_log_level == 2) {
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-									} else {
-										if (set.spine_log_level == 1) {
-											errors++;
-										}
-
-										SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s<%s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
-									}
-
-									if (host_thread == 1) {
-										snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
-
-										if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
-											db_insert(&mysqlr, REMOTE, query3);
+								/* if uptime is set to '0' don't fail out */
+								if (strcmp(reindex->assert_value, "0")) {
+									if ((!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime)) {
+										if (is_debug_device(host->id) || set.spine_log_level == 2) {
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 										} else {
-											db_insert(&mysql, LOCAL, query3);
+											if (set.spine_log_level == 1) {
+												errors++;
+											}
+
+											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 										}
 
-										/* set zeros */
-										memset(query3, 0, LRG_BUFSIZE);
-									}
+										if (host_thread == 1) {
+											snprintf(query3, LRG_BUFSIZE, "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller_id, POLLER_COMMAND_REINDEX, host->id, reindex->data_query_id);
 
-									assert_fail = TRUE;
-									previous_assert_failure = TRUE;
+											if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
+												db_insert(&mysqlr, REMOTE, query3);
+											} else {
+												db_insert(&mysql, LOCAL, query3);
+											}
+
+											/* set zeros */
+											memset(query3, 0, LRG_BUFSIZE);
+										}
+
+										assert_fail = TRUE;
+										previous_assert_failure = TRUE;
+									}
 								}
 							}
 
 							/* update 'poller_reindex' with the correct information if:
 							 * 1) the assert fails
-							 * 2) the OP code is > or < meaning the current value could have changed without causing
-							 *     the assert to fail */
+							 *
+							 * or
+							 *
+							 * 2) the OP code is < for uptime goes backward where we have to track the previous uptime
+							 */
 							if (poll_result != NULL && !IS_UNDEFINED(poll_result) &&
-								((assert_fail) || (!strcmp(reindex->op, ">")) || (!strcmp(reindex->op, "<")))) {
+								(assert_fail || !strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
 									db_escape(&mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
 									db_escape(&mysql, temp_arg1, sizeof(temp_arg1), reindex->arg1);
@@ -1231,8 +1240,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									memset(query3, 0, LRG_BUFSIZE);
 								}
 
-								if ((assert_fail) &&
-									((!strcmp(reindex->op, "<")) || (!strcmp(reindex->arg1,".1.3.6.1.2.1.1.3.0") && !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0")))) {
+								if (assert_fail &&
+									(!strcmp(reindex->op, "<") || !strcmp(reindex->arg1, ".1.3.6.1.2.1.1.3.0") || !strcmp(reindex->arg1, ".1.3.6.1.6.3.10.2.1.3.0"))) {
 									spike_kill = TRUE;
 
 									if (is_debug_device(host->id) || set.spine_log_level == 2) {
@@ -2489,3 +2498,4 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 	return result_string;
 }
+
