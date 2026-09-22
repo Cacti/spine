@@ -584,8 +584,9 @@ int append_hostrange(char *obuf, const char *colname) {
  *
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
-	char *input_trimmed;
-	int  max_escaped_input_size;
+	char   *input_trimmed;
+	size_t max_escaped_input_size;
+	size_t trim_len;
 
 	if (input == NULL) return;
 	if (max_size <= 0) return;
@@ -594,16 +595,24 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	 * output, so size it to the caller's max_size instead of a fixed
 	 * DBL_BUFSIZE. The previous fixed cap meant a larger max_size never
 	 * actually admitted a longer input, silently truncating it anyway. */
-	if (!(input_trimmed = (char *) malloc(max_size))) {
+	if (!(input_trimmed = (char *) malloc((size_t) max_size))) {
 		die("ERROR: Fatal malloc error: sql.c db_escape!");
 	}
 
 	max_escaped_input_size = (strlen(input) * 2) + 1;
 
-	if (max_escaped_input_size > max_size) {
-		snprintf(input_trimmed, (max_size / 2) - 1, "%s", input);
+	/* Escaping can double every byte, so input_trimmed may hold at most
+	 * (max_size - 1) / 2 characters and the escaped result still fits within
+	 * max_size, including the terminator. This is always >= 1 for any
+	 * max_size >= 1, so the terminator is always reserved: max_size of 1-3
+	 * previously drove this to 0 (an unterminated output) or -1 (converted
+	 * to a huge size_t that let snprintf overflow the allocation). */
+	trim_len = ((size_t) max_size - 1) / 2 + 1;
+
+	if (max_escaped_input_size > (size_t) max_size) {
+		snprintf(input_trimmed, trim_len, "%s", input);
 	} else {
-		snprintf(input_trimmed, max_size, "%s", input);
+		snprintf(input_trimmed, (size_t) max_size, "%s", input);
 	}
 
 	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));

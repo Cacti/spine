@@ -198,9 +198,13 @@ char *php_readpipe(int php_process, char *command) {
 
 		SET_UNDEFINED(result_string);
 
-		/* kill script server because it is misbehaving */
+		/* Close the misbehaving server only. php_init() validates a new
+		 * server by calling back into this function, and a replacement
+		 * descriptor handed out under the same descriptor-table exhaustion
+		 * can land >= FD_SETSIZE again, recursing without bound. Mark the
+		 * slot busy and leave the restart to the next independent call. */
 		php_close(php_process);
-		php_init(php_process);
+		php_processes[php_process].php_state = PHP_BUSY;
 
 		return result_string;
 	}
