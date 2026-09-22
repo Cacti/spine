@@ -103,6 +103,7 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
-	sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c keywords.c error.c
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	src/core/keywords.c error.c
 tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 TESTS = $(check_PROGRAMS)
