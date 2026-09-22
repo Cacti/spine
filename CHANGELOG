@@ -2,6 +2,11 @@ The Cacti Group | spine
 
 1.2.32
 -issue#622: RECACHE Event and ASSERT FAILED
+-issue#594: Call mysql_thread_end() on the device-row-missing exit path in poll_host()
+-issue#600: Make SNMPv3 passphrase scrubbing in snmp_host_init() actually run
+-issue#605: Guard php_readpipe() against an FD_SET() write past FD_SETSIZE
+-issue#607: Re-arm the signal handler for SIGPIPE so a second one does not kill the poller
+-issue#575: Probe for usmDESPrivProtocol instead of assuming the header's advertised default
 
 1.2.31
 -issue#365: Removed Backtrace Support due to lack of OS support
