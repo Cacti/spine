@@ -394,6 +394,24 @@ AC_DEFINE_UNQUOTED(SNMP_LOCALNAME, $havelocalname, If snmp localname session str
 
 AC_CHECK_LIB(netsnmp, snmp_timeout)
 
+# ****************** USM DES Privacy Protocol Symbol Check ***********************
+# Some distributions (e.g. Fedora) ship a net-snmp-config.h that advertises DES
+# as the default privacy protocol (SNMP_DEFAULT_PRIV_PROTO expands to
+# usmDESPrivProtocol) while the shipped libnetsnmp does not export that symbol,
+# so referencing the header's own default fails to link. Probe for the actual
+# symbol rather than trusting the header.
+AC_MSG_CHECKING([for usmDESPrivProtocol in libnetsnmp])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <net-snmp/net-snmp-config.h>
+  #include <net-snmp/net-snmp-includes.h>
+]], [[
+  return usmDESPrivProtocol[0];
+]])],
+  [AC_MSG_RESULT([yes])
+   AC_DEFINE(HAVE_USM_DES_PRIV_PROTOCOL, 1, [Define if libnetsnmp exports usmDESPrivProtocol])],
+  [AC_MSG_RESULT([no])]
+)
+
 # ****************** Spine Result Buffer Check ***********************
 # Check for the default spine output buffer size
 results_buffer=2048
