@@ -27,6 +27,12 @@ spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c p
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
 
+# Seed a live config on first install without ever overwriting an existing one.
+install-data-hook:
+	if [ ! -f "$(DESTDIR)$(configdir)/spine.conf" ]; then \
+		$(INSTALL_DATA) "$(srcdir)/spine.conf.dist" "$(DESTDIR)$(configdir)/spine.conf"; \
+	fi
+
 bin_PROGRAMS = spine
 
 man_MANS = spine.1
