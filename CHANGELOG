@@ -34,6 +34,10 @@ The Cacti Group | spine
 -issue#590: Use the cross-vendor VALUES() upsert form for remote pushes until the main-server version is known
 -issue: Convert delimited hexadecimal OctetStrings exactly, rejecting values wider than 64 bits instead of storing zero
 -issue: Emit each file log message with one O_APPEND write so concurrent workers cannot splice stdio chunks
+-issue#593: Release the ICMP packet and socket through one cleanup path, including the FD_SETSIZE exit
+-issue#597: Pair one capability decision with each raw-socket lock/elevation block and release LOCK_SETEUID before retrying
+-issue#597: Release Linux capability handles on every probe path and log an absent optional CAP_NET_RAW capability as a warning
+-issue#611: Leave hostinfo untouched when getaddrinfo() fails in init_sockaddr()
 -issue#610: Give nft_pclose exclusive ownership of subprocess registry entries
 -issue#575: Probe for usmDESPrivProtocol instead of assuming the header's advertised default
 -issue#583: Size escaped_result and db_escape()'s trim buffer to the caller's max_size instead of a fixed DBL_BUFSIZE
