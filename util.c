@@ -970,13 +970,13 @@ void read_config_options(void) {
    checking, so a statement cut inside a quoted value reached the server. */
 #define PUSH_ROW_MAX (24 * DBL_BUFSIZE)
 
-/*! \fn static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix)
+/*! \fn static void push_flush_batch(MYSQL *mysqlr, const char *sqlbuf, char **sqlp, const char *suffix)
  *  \brief terminate the accumulated batch and send it to the main server
  *
  *  Refuses to send a statement that did not fit rather than shipping a
  *  truncated one.
  */
-static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix) {
+static void push_flush_batch(MYSQL *mysqlr, const char *sqlbuf, char **sqlp, const char *suffix) {
 	size_t remaining = HUGE_BUFSIZE - (*sqlp - sqlbuf);
 
 	if (!spine_appendf(sqlp, &remaining, "%s", suffix)) {

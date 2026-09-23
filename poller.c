@@ -304,16 +304,16 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	//db_connect(LOCAL, &mysql);
 	local_cnn = db_get_connection(LOCAL);
-	if (local_cnn == NULL) {
+	if (local_cnn == NULL) { // GCOVR_EXCL_START: pool exhaustion is not reachable in tests
 		die("ERROR: Fatal error: poller.c could not obtain a local database connection!");
-	}
+	} // GCOVR_EXCL_STOP
 	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
-		if (remote_cnn == NULL) {
+		if (remote_cnn == NULL) { // GCOVR_EXCL_START: pool exhaustion is not reachable in tests
 			die("ERROR: Fatal error: poller.c could not obtain a remote database connection!");
-		}
+		} // GCOVR_EXCL_STOP
 		mysqlr = remote_cnn->mysql;
 	}
 
