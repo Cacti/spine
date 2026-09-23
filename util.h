@@ -70,12 +70,11 @@ extern char *reverse(char *str);
 extern int strpos(const char *haystack, const char *needle);
 extern int char_count(const char *str, int chr);
 
-/* custom hex2dec that returns a string instead of a number */
-unsigned long long hex2dec(char *str);
+/* convert a delimited hexadecimal value without conflating overflow with 0 */
+int hex2dec(const char *str, unsigned long long *result);
 
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
-#define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
 const char *regex_replace(const char *exp, const char *value);
 
 /* macro to copy string to string with an ending null */
@@ -100,15 +99,36 @@ extern int hasCaps(void);
 extern void checkAsRoot(void);
 
 /* log format */
+extern void set_date_format(void);
 extern char *get_date_format(void);
 
 /* remote/main server synchronization */
 extern void poller_push_data_to_main(void);
+
+/* MySQL supports INSERT row aliases from 8.0.20; MariaDB does not. */
+extern int db_row_alias_upsert_supported(const char *version, unsigned long version_number);
 
 /* start time for spine */
 extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+/*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
+ *  \brief append to a bounded buffer without walking off the end
+ *
+ *  snprintf() returns the length it would have written, so `p += snprintf(p,
+ *  remaining, ...)` moves the cursor past the buffer the first time a value is
+ *  truncated. The next `remaining` is then negative, and as a size_t it is
+ *  effectively unbounded, at a destination already out of bounds.
+ *
+ *  This advances the cursor by what was actually written, stops on the
+ *  terminator when the text does not fit, and says so.
+ *
+ *  \return TRUE when the whole string was appended, FALSE on truncation or a
+ *          formatting error, in which case the buffer stays NUL-terminated
+ */
+extern int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
+	__attribute__((format(printf, 3, 4)));
 
 #endif /* SPINE_UTIL_H */

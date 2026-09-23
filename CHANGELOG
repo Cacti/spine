@@ -26,6 +26,14 @@ The Cacti Group | spine
 -issue#552: Terminate die() output so consecutive fatal messages no longer run together
 -issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
 -issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
+-issue#564: Check the calloc() results in spine.c so an allocation failure dies instead of dereferencing NULL
+-issue#565: Bound the newline appended by spine_log() so a full log line cannot write past flogmessage
+-issue#566: Free the result set on the NULL-row branch of the util.c settings helpers
+-issue#567: Build the log timestamp format once at config load instead of rebuilding it on every log line
+-issue#588: Replace advancing snprintf pointers with a bounded append helper
+-issue#590: Use the cross-vendor VALUES() upsert form for remote pushes until the main-server version is known
+-issue: Convert delimited hexadecimal OctetStrings exactly, rejecting values wider than 64 bits instead of storing zero
+-issue: Emit each file log message with one O_APPEND write so concurrent workers cannot splice stdio chunks
 -issue#593: Release the ICMP packet and socket through one cleanup path, including the FD_SETSIZE exit
 -issue#597: Pair one capability decision with each raw-socket lock/elevation block and release LOCK_SETEUID before retrying
 -issue#597: Release Linux capability handles on every probe path and log an absent optional CAP_NET_RAW capability as a warning
