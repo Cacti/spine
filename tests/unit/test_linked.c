@@ -25,15 +25,13 @@
 #include "util.h"
 #include "ping.h"
 
-#if !defined(ICMP_DEST_UNREACH) && defined(ICMP_UNREACH)
-#define ICMP_DEST_UNREACH ICMP_UNREACH
-#endif
 #include "nft_popen.h"
 
 #include <fcntl.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <unistd.h>
+
+#if !defined(ICMP_DEST_UNREACH) && defined(ICMP_UNREACH)
+#define ICMP_DEST_UNREACH ICMP_UNREACH
+#endif
 
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
