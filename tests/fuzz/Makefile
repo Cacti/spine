@@ -37,7 +37,7 @@ FUZZ_CFLAGS := $(SANITIZERS) -g -O1 -DHAVE_CONFIG_H \
 
 FUZZ_LDLIBS := $(NETSNMP_LIBS) $(filter -l% -L%, $(shell $(DB_CONFIG) --libs 2>/dev/null))
 
-TARGETS := $(BINDIR)/fuzz_namebyhost $(BINDIR)/fuzz_output_parser
+TARGETS := $(BINDIR)/fuzz_namebyhost $(BINDIR)/fuzz_output_parser $(BINDIR)/fuzz_icmp_reply
 
 .PHONY: all run clean
 
