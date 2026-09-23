@@ -34,7 +34,7 @@ The Cacti Group | spine
 -issue#575: Probe for usmDESPrivProtocol instead of assuming the header's advertised default
 -issue#583: Size escaped_result and db_escape()'s trim buffer to the caller's max_size instead of a fixed DBL_BUFSIZE
 -issue#594: Call mysql_thread_end() on the device-row-missing exit path in poll_host()
--issue#600: Make SNMPv3 passphrase scrubbing in snmp_host_init() actually run
+-issue#597: Restore SNMPv3 noAuthNoPriv and authNoPriv sessions, validate privacy/authentication combinations, refuse passwords paired with blank protocol fields, and wipe local passphrase copies
 -issue#605: Guard php_readpipe() against an FD_SET() write past FD_SETSIZE
 -issue#607: Re-arm the signal handler for SIGPIPE so a second one does not kill the poller
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts

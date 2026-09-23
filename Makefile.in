@@ -118,6 +118,7 @@ check_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
 @HAVE_CMOCKA_TRUE@	tests/unit/test_build_fixes \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_safety_fixes \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_linked \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp
 
 @HAVE_CMOCKA_TRUE@noinst_PROGRAMS =  \
@@ -146,6 +147,7 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_build_fixes$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_safety_fixes$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_linked$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__EXEEXT_2 = tests/unit/test_php_runtime$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
@@ -214,6 +216,16 @@ am_tests_unit_test_safety_fixes_OBJECTS =  \
 tests_unit_test_safety_fixes_OBJECTS =  \
 	$(am_tests_unit_test_safety_fixes_OBJECTS)
 tests_unit_test_safety_fixes_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am_tests_unit_test_snmpv3_session_OBJECTS =  \
+	tests/unit/test_snmpv3_session.$(OBJEXT) \
+	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
+	src/core/locks.$(OBJEXT) poller.$(OBJEXT) nft_popen.$(OBJEXT) \
+	php.$(OBJEXT) ping.$(OBJEXT) src/core/keywords.$(OBJEXT) \
+	error.$(OBJEXT)
+tests_unit_test_snmpv3_session_OBJECTS =  \
+	$(am_tests_unit_test_snmpv3_session_OBJECTS)
+tests_unit_test_snmpv3_session_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_tests_unit_test_util_strings_OBJECTS =  \
 	tests/unit/test_util_strings.$(OBJEXT)
 tests_unit_test_util_strings_OBJECTS =  \
@@ -258,6 +270,7 @@ am__depfiles_remade = ./$(DEPDIR)/error.Po ./$(DEPDIR)/nft_popen.Po \
 	tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po \
 	tests/unit/$(DEPDIR)/test_ping_icmp.Po \
 	tests/unit/$(DEPDIR)/test_safety_fixes.Po \
+	tests/unit/$(DEPDIR)/test_snmpv3_session.Po \
 	tests/unit/$(DEPDIR)/test_util_strings.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
@@ -284,6 +297,7 @@ SOURCES = $(spine_SOURCES) $(tests_unit_php_test_server_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
 	$(tests_unit_test_ping_icmp_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
+	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_util_strings_SOURCES)
 DIST_SOURCES = $(spine_SOURCES) \
 	$(am__tests_unit_php_test_server_SOURCES_DIST) \
@@ -292,6 +306,7 @@ DIST_SOURCES = $(spine_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
 	$(tests_unit_test_ping_icmp_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
+	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_util_strings_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
@@ -707,6 +722,11 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	src/core/keywords.c error.c
 
 tests_unit_test_linked_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
+	sql.c util.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
+
+tests_unit_test_snmpv3_session_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
 	src/core/keywords.c error.c
@@ -921,6 +941,12 @@ tests/unit/test_safety_fixes.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_safety_fixes$(EXEEXT): $(tests_unit_test_safety_fixes_OBJECTS) $(tests_unit_test_safety_fixes_DEPENDENCIES) $(EXTRA_tests_unit_test_safety_fixes_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_safety_fixes$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_safety_fixes_OBJECTS) $(tests_unit_test_safety_fixes_LDADD) $(LIBS)
+tests/unit/test_snmpv3_session.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_snmpv3_session$(EXEEXT): $(tests_unit_test_snmpv3_session_OBJECTS) $(tests_unit_test_snmpv3_session_DEPENDENCIES) $(EXTRA_tests_unit_test_snmpv3_session_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_snmpv3_session$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_snmpv3_session_OBJECTS) $(tests_unit_test_snmpv3_session_LDADD) $(LIBS)
 tests/unit/test_util_strings.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -966,6 +992,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_ping_icmp.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_safety_fixes.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_session.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_strings.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -1468,6 +1495,13 @@ tests/unit/test_linked.log: tests/unit/test_linked$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_snmpv3_session.log: tests/unit/test_snmpv3_session$(EXEEXT)
+	@p='tests/unit/test_snmpv3_session$(EXEEXT)'; \
+	b='tests/unit/test_snmpv3_session'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/unit/test_ping_icmp.log: tests/unit/test_ping_icmp$(EXEEXT)
 	@p='tests/unit/test_ping_icmp$(EXEEXT)'; \
 	b='tests/unit/test_ping_icmp'; \
@@ -1753,6 +1787,7 @@ distclean: distclean-am
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_icmp.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
+	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_strings.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -1831,6 +1866,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_icmp.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
+	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_strings.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
