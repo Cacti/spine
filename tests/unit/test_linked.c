@@ -406,6 +406,18 @@ static void test_namebyhost_is_reentrant_across_calls(void **state) {
 	free(nb);
 }
 
+static void test_namebyhost_tcpv6_method_keeps_the_full_hostname(void **state) {
+	char host[64];
+	name_t *n;
+	(void) state;
+
+	strcpy(host, "[fe80::1]:161");
+	n = get_namebyhost(host, NULL);
+	assert_non_null(n);
+	assert_string_equal(n->hostname, "[fe80::1]:161");
+	free(n);
+}
+
 
 /* --- configuration: defaults, the file parser, and set_option() ----------- */
 
@@ -978,6 +990,7 @@ int main(void) {
 		cmocka_unit_test(test_icmp_classify_rejects_a_null_buffer),
 		cmocka_unit_test(test_namebyhost_plain_hostname),
 		cmocka_unit_test(test_namebyhost_is_reentrant_across_calls),
+		cmocka_unit_test(test_namebyhost_tcpv6_method_keeps_the_full_hostname),
 		cmocka_unit_test(test_config_defaults_populates_the_set),
 		cmocka_unit_test(test_read_spine_config_rejects_a_missing_file),
 		cmocka_unit_test(test_read_spine_config_reads_settings),
