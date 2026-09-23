@@ -1530,8 +1530,15 @@ int spine_log(const char *format, ...) {
 		ulog_len = LOGSIZE - flog_len - prefix_len - 1;
 	}
 
-	strncat(flogmessage, logprefix,   prefix_len);
-	strncat(flogmessage, ulogmessage, ulog_len);
+	/* strncat() here trips -Wstringop-truncation: prefix_len/ulog_len are
+	 * runtime-clamped just above to fit, but GCC can't prove that across the
+	 * branches. memcpy() plus an explicit terminator is exactly as safe and
+	 * doesn't trigger the false positive. */
+	memcpy(flogmessage + flog_len, logprefix, (size_t) prefix_len);
+	flog_len += prefix_len;
+	memcpy(flogmessage + flog_len, ulogmessage, (size_t) ulog_len);
+	flog_len += ulog_len;
+	flogmessage[flog_len] = '\0';
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {
