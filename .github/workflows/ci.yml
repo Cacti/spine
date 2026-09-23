@@ -75,7 +75,9 @@ jobs:
           # helpers specifically to exercise their truncation behavior, which
           # -Wstringop-truncation flags on principle even though it's the
           # scenario under test. Every other test-source warning stays fatal.
-          make check CFLAGS="$configured_cflags -Werror -Wno-unused-parameter -Wno-stringop-truncation"
+          # -Wstringop-truncation is GCC-only; -Wno-unknown-warning-option
+          # keeps clang from erroring on it under -Werror.
+          make check CFLAGS="$configured_cflags -Werror -Wno-unused-parameter -Wno-unknown-warning-option -Wno-stringop-truncation"
 
   # Linux capabilities are opt-in at configure time. Keep one build on that
   # path so hasCaps() and the CAP_NET_RAW handling cannot silently rot behind
