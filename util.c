@@ -540,7 +540,7 @@ void read_config_options(void) {
 	int        mode;
 	char       web_root[BUFSIZE];
 	char       sqlbuf[HUGE_BUFSIZE];
-	char       *sqlp = sqlbuf;
+	char       *sqlp;
 	size_t     remaining;
 	char       *res;
 	char       spine_priv[BUFSIZE];

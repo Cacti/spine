@@ -851,7 +851,7 @@ int main(int argc, char *argv[]) {
 
 				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
-			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
+			} else if (host_time_double == 0) {
 				snprintf(host_time, SMALL_BUFSIZE, "%lu", (unsigned long) time(NULL));
 				host_time_double = get_time_as_double();
 			}

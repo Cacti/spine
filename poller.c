@@ -304,10 +304,16 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	//db_connect(LOCAL, &mysql);
 	local_cnn = db_get_connection(LOCAL);
+	if (local_cnn == NULL) {
+		die("ERROR: Fatal error: poller.c could not obtain a local database connection!");
+	}
 	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
+		if (remote_cnn == NULL) {
+			die("ERROR: Fatal error: poller.c could not obtain a remote database connection!");
+		}
 		mysqlr = remote_cnn->mysql;
 	}
 
