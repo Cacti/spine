@@ -84,6 +84,8 @@ check_PROGRAMS += \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
 	tests/unit/test_linked \
+	tests/unit/test_util_paths \
+	tests/unit/test_snmpv3_session \
 	tests/unit/test_ping_icmp
 
 # A small executable which speaks the subset of the PHP Script Server protocol
@@ -98,7 +100,7 @@ endif
 endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
-# the same libraries spine links against.  The other two are self-contained.
+# the same libraries spine links against.  The others are self-contained.
 tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
 tests_unit_test_util_strings_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
@@ -115,6 +117,15 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+# includes util.c, so it needs the same libraries spine links against
+tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
+tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
+	sql.c util.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
+tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
@@ -136,5 +147,6 @@ tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
-TESTS = $(check_PROGRAMS) tests/regression/test_child_process_safety.sh
-EXTRA_DIST += tests/regression/test_child_process_safety.sh
+TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh
+TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
+EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh

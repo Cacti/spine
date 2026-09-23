@@ -27,6 +27,14 @@ The Cacti Group | spine
 -issue#552: Terminate die() output so consecutive fatal messages no longer run together
 -issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string
 -issue#562: Escalate PHP script server shutdown to SIGKILL after a bounded grace period so a stuck child is not orphaned
+-issue#564: Check the calloc() results in spine.c so an allocation failure dies instead of dereferencing NULL
+-issue#565: Bound the newline appended by spine_log() so a full log line cannot write past flogmessage
+-issue#566: Free the result set on the NULL-row branch of the util.c settings helpers
+-issue#567: Build the log timestamp format once at config load instead of rebuilding it on every log line
+-issue#588: Replace advancing snprintf pointers with a bounded append helper
+-issue#590: Use the cross-vendor VALUES() upsert form for remote pushes until the main-server version is known
+-issue: Convert delimited hexadecimal OctetStrings exactly, rejecting values wider than 64 bits instead of storing zero
+-issue: Emit each file log message with one O_APPEND write so concurrent workers cannot splice stdio chunks
 -issue#593: Release the ICMP packet and socket through one cleanup path, including the FD_SETSIZE exit
 -issue#597: Pair one capability decision with each raw-socket lock/elevation block and release LOCK_SETEUID before retrying
 -issue#597: Release Linux capability handles on every probe path and log an absent optional CAP_NET_RAW capability as a warning
@@ -35,7 +43,7 @@ The Cacti Group | spine
 -issue#575: Probe for usmDESPrivProtocol instead of assuming the header's advertised default
 -issue#583: Size escaped_result and db_escape()'s trim buffer to the caller's max_size instead of a fixed DBL_BUFSIZE
 -issue#594: Call mysql_thread_end() on the device-row-missing exit path in poll_host()
--issue#600: Make SNMPv3 passphrase scrubbing in snmp_host_init() actually run
+-issue#597: Restore SNMPv3 noAuthNoPriv and authNoPriv sessions, validate privacy/authentication combinations, refuse passwords paired with blank protocol fields, and wipe local passphrase copies
 -issue#605: Guard php_readpipe() against an FD_SET() write past FD_SETSIZE
 -issue#607: Re-arm the signal handler for SIGPIPE so a second one does not kill the poller
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
