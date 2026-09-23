@@ -397,6 +397,7 @@ typedef struct config_struct {
 	int    log_datetime_format;
 	/* ping settings */
 	int    icmp_avail;
+	int    icmp_uses_caps;
 	int    availability_method;
 	int    ping_method;
 	int    ping_retries;

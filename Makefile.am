@@ -80,7 +80,8 @@ check_PROGRAMS += \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
 	tests/unit/test_linked \
-	tests/unit/test_snmpv3_session
+	tests/unit/test_snmpv3_session \
+	tests/unit/test_ping_icmp
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
@@ -116,6 +117,11 @@ tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/
 	sql.c util.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	src/core/keywords.c error.c
+tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
