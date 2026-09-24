@@ -118,6 +118,14 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	src/core/keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
+# waitpid() failing with anything other than ECHILD/EINTR has no reachable
+# real-syscall trigger (WNOHANG is always a valid options value), so covering
+# nft_pclose()'s defensive "waitpid itself failed" path needs a wrapped call.
+if HAVE_LD_WRAP
+tests_unit_test_linked_LDFLAGS = -Wl,--wrap=waitpid
+tests_unit_test_linked_CPPFLAGS = $(AM_CPPFLAGS) -DSPINE_TEST_WRAP_WAITPID
+endif
+
 # includes util.c, so it needs the same libraries spine links against
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
