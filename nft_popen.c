@@ -145,28 +145,19 @@ static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd)
 
 	return cur;
 }
-
-/* nft_pclose() must not block a poller thread indefinitely. A script that
-   writes its value and then lingers, or that ignores SIGPIPE, would otherwise
-   pin the thread across polling cycles while holding its available_scripts
-   token. Poll with WNOHANG, then escalate to SIGKILL. */
-/* Budget to SIGKILL is about five seconds on both platforms. The counts differ
- * because the granularity does: everywhere else in the tree usleep() is simply
- * skipped under SOLAR_THREAD rather than replaced, so the coarsest wait
- * available there is a whole second and the attempt count scales to match.
- * Leaving the counts equal made the Solaris path roughly a hundred seconds,
- * longer than a polling cycle, while nft_pclose() holds an available_scripts
- * token throughout. */
+/* nft_pclose() must not block a poller thread: a script that writes its
+   value and then lingers, or that ignores signals, would otherwise pin the
+   thread across polling cycles while holding its available_scripts token.
+   It gets a brief (~20ms), non-escalating WNOHANG allowance via
+   spine_reap_child_bounded() below - just enough to absorb ordinary
+   fork/exec/exit scheduling latency (measured flaky under virtualized/loaded
+   CI at the original 2ms budget), not to wait out a script that is actually
+   still working. Anything still running past that is killed outright and
+   handed to nft_abandon_child() so nft_sweep_abandoned() reaps it on a
+   later, unrelated nft_popen() call instead of this thread waiting for it. */
 #define NFT_PCLOSE_REAP_USEC 50000
 #define NFT_PCLOSE_SPIN_USEC 200
-#define NFT_PCLOSE_SPIN_ATTEMPTS 10
-#ifndef SOLAR_THREAD
-#define NFT_PCLOSE_TERM_ATTEMPTS 100
-#define NFT_PCLOSE_KILL_ATTEMPTS 20
-#else
-#define NFT_PCLOSE_TERM_ATTEMPTS 5
-#define NFT_PCLOSE_KILL_ATTEMPTS 2
-#endif
+#define NFT_PCLOSE_SPIN_ATTEMPTS 100
 
 int spine_set_cloexec(int fd) {
 	int flags;
@@ -303,15 +294,13 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		}
 
 		/* The delay is load-bearing: without it the attempts are spent in
-		   nanoseconds and SIGKILL lands before the child can exit.
+		   nanoseconds and the caller's kill lands before the child can exit.
 
 		   Starting at the full 50ms charged that to every script that exits a
 		   moment after closing stdout, which is the common case for anything
-		   that flushes or tears down an interpreter. nft_pclose() runs while
-		   the caller still holds an available_scripts token, so that delay
-		   costs poller capacity rather than one thread. Spin briefly first,
-		   then settle. The attempt count and so the time to SIGKILL are
-		   unchanged. */
+		   that flushes or tears down an interpreter. Spin briefly first, then
+		   settle, so a caller that opts into this bounded wait does not pay
+		   the full interval on every reap. */
 		#ifndef SOLAR_THREAD
 		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
 			usleep(NFT_PCLOSE_SPIN_USEC);
@@ -609,7 +598,10 @@ int nft_pchild(int fd) {
  *
  *  nft_pclose
  *
- *  Close the pipe and wait for the status of the child process.
+ *  Close the pipe and check the child's status with a brief (~20ms),
+ *  non-escalating bounded waitpid(). A child still running past that point
+ *  is killed and handed to the abandoned-pid sweep rather than waited for
+ *  here, so this call never blocks the caller on a lingering script.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
@@ -646,26 +638,22 @@ nft_pclose(int fd)
 
 	pthread_setcancelstate(cancel_state, NULL);
 
-	/* Give a child a brief chance to observe pipe EOF, then request graceful
-	 * termination before escalating to SIGKILL. */
+	/* The script already had its one chance to write and its pipe is now
+	 * closed. Give it a brief (~20ms), non-escalating allowance to catch the
+	 * common case where it has already exited or is about to on seeing EOF -
+	 * without it, ordinary fork/exec/exit scheduling latency would flag a
+	 * script that is not actually misbehaving. Anything still running past
+	 * that is killed and handed to the abandoned-pid sweep instead of this
+	 * thread waiting for it. */
 	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS)) {
 	case 0:
 		pid = cur->pid;
 		break;
 	case 1:
-		(void)kill(cur->pid, SIGTERM);
-		if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_TERM_ATTEMPTS) == 0) {
-			pid = cur->pid;
-		} else {
-			(void)kill(cur->pid, SIGKILL);
-			if (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_KILL_ATTEMPTS) == 0) {
-				pid = cur->pid;
-			} else {
-				nft_abandon_child(cur->pid, "kill budget expired");
-				errno = ETIMEDOUT;
-				pid = -1;
-			}
-		}
+		(void)kill(cur->pid, SIGKILL);
+		nft_abandon_child(cur->pid, "did not exit before pipe close");
+		errno = ETIMEDOUT;
+		pid = -1;
 		break;
 	default:
 		nft_abandon_child(cur->pid, "waitpid failed");

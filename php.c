@@ -801,38 +801,26 @@ cleanup:
 	return rc;
 }
 static int php_terminate_and_reap(pid_t pid) {
-	int attempts;
-	int phase;
 	int status;
-	int signal_number = SIGTERM;
 	pid_t waited;
 
-	for (phase = 0; phase < 2; phase++) {
-		if (kill(pid, signal_number) < 0 && errno != ESRCH) {
-			SPINE_LOG(("WARNING: Unable to signal PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
-		}
+	do {
+		waited = waitpid(pid, &status, WNOHANG);
+	} while (waited < 0 && errno == EINTR);
 
-		for (attempts = 0; attempts < 20; attempts++) {
-			do {
-				waited = waitpid(pid, &status, WNOHANG);
-			} while (waited < 0 && errno == EINTR);
+	if (waited == pid || (waited < 0 && errno == ECHILD)) {
+		return TRUE;
+	}
 
-			if (waited == pid || (waited < 0 && errno == ECHILD)) {
-				return TRUE;
-			}
+	if (waited < 0) {
+		SPINE_LOG(("WARNING: Unable to reap PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
+		return FALSE;
+	}
 
-			if (waited < 0) {
-				SPINE_LOG(("WARNING: Unable to reap PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
-				return FALSE;
-			}
-
-			/* The delay is load-bearing: without it both phases burn twenty
-			 * WNOHANG polls in nanoseconds, so SIGKILL lands immediately and
-			 * the child is never reaped. */
-			usleep(50000);
-		}
-
-		signal_number = SIGKILL;
+	/* Still running after its grace period: kill outright rather than
+	 * waiting to see whether a gentler signal works. */
+	if (kill(pid, SIGKILL) < 0 && errno != ESRCH) {
+		SPINE_LOG(("WARNING: Unable to signal PHP Script Server PID[%ld]: %s", (long)pid, strerror(errno)));
 	}
 
 	return FALSE;
@@ -847,8 +835,11 @@ static int php_terminate_and_reap(pid_t pid) {
  *  information is will close and/or terminate the child PHP Script Server
  *  process and then return to the calling function.
  *
-	 *  Child shutdown is bounded: SIGTERM receives a grace period before SIGKILL.
-	 *  Both phases use non-blocking reaping so a wedged child cannot hang Spine.
+	 *  Shutdown gives the server one grace period (the "quit" write plus a
+	 *  fixed delay below) to exit on its own, then checks once with a
+	 *  non-blocking waitpid(). A child still running at that point is killed
+	 *  outright and handed to the abandoned-pid sweep instead of waiting for
+	 *  it here.
  */
 void php_close(int php_process) {
 	int i;

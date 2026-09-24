@@ -48,6 +48,23 @@ if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' php.c; then
 	fail "php_close() must not block in waitpid()"
 fi
 
+# PR #614 replaced the blocking waitpid() above with a bounded-but-still-
+# blocking spin/sleep/SIGTERM/SIGKILL escalation, which reproduced the same
+# poller slowdown this guard exists to prevent. nft_pclose() must reap with a
+# single non-blocking check and hand anything still running to the abandoned-
+# pid sweep instead of spinning/sleeping in the calling thread.
+nft_pclose_body=$(awk '/^nft_pclose\(int fd\)/,/^}/' nft_popen.c)
+
+printf '%s\n' "$nft_pclose_body" | grep -qE 'usleep|NFT_PCLOSE_(TERM|KILL)_ATTEMPTS' &&
+	fail "nft_pclose() must not spin/sleep waiting for a child to exit"
+
+# php_terminate_and_reap() must hold the same invariant: one non-blocking
+# check, then kill and move on.
+php_terminate_body=$(awk '/^static int php_terminate_and_reap/,/^}/' php.c)
+
+printf '%s\n' "$php_terminate_body" | grep -qE 'usleep|for \(' &&
+	fail "php_terminate_and_reap() must not spin/sleep waiting for a child to exit"
+
 echo "PASS: child process safety invariants"
 
 # php_init() has one cleanup path that closes every descriptor it still holds,
