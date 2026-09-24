@@ -156,11 +156,16 @@ static void nft_sweep_abandoned(void) {
 	int	i = 0;
 	int	status;
 	pid_t	waited;
+	int	eintr_budget;
 
 	while (i < AbandonedCount) {
+		/* Bounded so a stream of caught signals cannot spin this loop
+		 * forever while ListMutex is held; an exhausted budget just leaves
+		 * the pid for the next sweep. */
+		eintr_budget = 1000;
 		do {
 			waited = waitpid(AbandonedPids[i], &status, WNOHANG);
-		} while (waited < 0 && errno == EINTR);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
 
 		if (waited == AbandonedPids[i] || (waited < 0 && errno == ECHILD)) {
 			SPINE_LOG_DEBUG(("DEBUG: Reaped abandoned script child pid %ld", (long) AbandonedPids[i]));
@@ -429,15 +434,18 @@ int nft_pchild(int fd) {
  *  nft_pclose
  *
  *  Close the pipe and check the child's status with a brief (~20ms),
- *  non-escalating bounded waitpid(). A child still running past that point
- *  is killed and handed to the abandoned-pid sweep rather than waited for
- *  here, so this call never blocks the caller on a lingering script.
+ *  non-escalating bounded waitpid(). A child still running past that point,
+ *  or one whose waitpid() call itself failed, is killed and handed to the
+ *  abandoned-pid sweep rather than waited for here, so this call never
+ *  blocks the caller on a lingering script.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *    EBADF	The fd is not an active popen() file descriptor.
  *    ECHILD	The waitpid() call failed.
+ *    ETIMEDOUT	The child had not exited by the end of the bounded check; it
+ *    		has been killed and parked for the abandoned-pid sweep to reap.
  *
  *  This call is cancellable.
  *
@@ -451,6 +459,7 @@ nft_pclose(int fd)
 	pid_t	pid;
 	pid_t	waited;
 	int		attempt;
+	int		eintr_budget;
 	int		reap_state;	/* 0 reaped, 1 still running, -1 waitpid() error */
 
 	/* Find the appropriate file descriptor. */
@@ -486,9 +495,10 @@ nft_pclose(int fd)
 	 * thread waiting for it; this used to block here indefinitely. */
 	reap_state = 1;
 	for (attempt = 0; attempt < 100; attempt++) {
+		eintr_budget = 1000;
 		do {
 			waited = waitpid(cur->pid, &pstat, WNOHANG);
-		} while (waited < 0 && errno == EINTR);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
 
 		if (waited == cur->pid) {
 			reap_state = 0;
@@ -518,8 +528,13 @@ nft_pclose(int fd)
 		errno = ETIMEDOUT;
 		pid = -1;
 	} else {
-		/* leave errno as waitpid() set it */
+		/* waitpid() itself failed, so whether the child exited is unknown;
+		 * kill it before parking so a still-running child is not left
+		 * outside the sweep's reach. Preserve waitpid()'s errno. */
+		int saved_errno = errno;
+		(void)kill(cur->pid, SIGKILL);
 		nft_abandon_child(cur->pid, "waitpid failed");
+		errno = saved_errno;
 		pid = -1;
 	}
 
