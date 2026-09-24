@@ -1,0 +1,41 @@
+name: Concurrency soak
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spine-concurrency-soak
+  cancel-in-progress: false
+
+jobs:
+  concurrency-soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run repeated many-host polling
+        env:
+          SPINE_TEST_DATABASE: mariadb
+          SPINE_TEST_HOSTS: 100
+          SPINE_TEST_THREAD_COUNTS: "1 8 32"
+          SPINE_TEST_REPEATS: 5
+          SPINE_TEST_TIMEOUT_SECONDS: 180
+          SPINE_TEST_ARTIFACT_DIR: test-artifacts/concurrency-soak
+        run: |
+          set -euo pipefail
+          tests/integration/test_concurrency.sh
+
+      - name: Upload soak diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.4.3
+        with:
+          name: concurrency-soak
+          path: test-artifacts/concurrency-soak
+          if-no-files-found: error
+          retention-days: 30

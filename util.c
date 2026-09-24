@@ -37,6 +37,9 @@
 
 #include <limits.h>
 
+#define SPINE_STRINGIFY_INNER(value) #value
+#define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
+
 static int nopts = 0;
 
 /*! Override Options Structure
@@ -537,7 +540,7 @@ void read_config_options(void) {
 	int        mode;
 	char       web_root[BUFSIZE];
 	char       sqlbuf[HUGE_BUFSIZE];
-	char       *sqlp = sqlbuf;
+	char       *sqlp;
 	size_t     remaining;
 	char       *res;
 	char       spine_priv[BUFSIZE];
@@ -939,9 +942,15 @@ void read_config_options(void) {
 	strcat(spine_priv, (strlen(spine_priv) > 0 ? ",AES256":"AES256"));
 	#endif
 
-	snprintf(spine_capabilities, BUFSIZE, "{ authProtocols: \"%s\", privProtocols: \"%s\" }", spine_auth, spine_priv);
+	/* Each source buffer can be BUFSIZE bytes. Bound both fields so the
+	 * combined capability document always fits in its destination. */
+	if (!format_spine_capabilities(spine_capabilities,
+			sizeof(spine_capabilities), spine_auth, spine_priv)) {
+		SPINE_LOG(("ERROR: Unable to format Spine SNMP capabilities"));
+		spine_capabilities[0] = '\0';
+	}
 
-	if (set.poller_id == 1) {
+	if (set.poller_id == 1 && spine_capabilities[0] != '\0') {
 		putsetting(&mysql, LOCAL, "spine_capabilities", spine_capabilities);
 	}
 
@@ -961,13 +970,13 @@ void read_config_options(void) {
    checking, so a statement cut inside a quoted value reached the server. */
 #define PUSH_ROW_MAX (24 * DBL_BUFSIZE)
 
-/*! \fn static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix)
+/*! \fn static void push_flush_batch(MYSQL *mysqlr, const char *sqlbuf, char **sqlp, const char *suffix)
  *  \brief terminate the accumulated batch and send it to the main server
  *
  *  Refuses to send a statement that did not fit rather than shipping a
  *  truncated one.
  */
-static void push_flush_batch(MYSQL *mysqlr, char *sqlbuf, char **sqlp, const char *suffix) {
+static void push_flush_batch(MYSQL *mysqlr, const char *sqlbuf, char **sqlp, const char *suffix) {
 	size_t remaining = HUGE_BUFSIZE - (*sqlp - sqlbuf);
 
 	if (!spine_appendf(sqlp, &remaining, "%s", suffix)) {
@@ -1571,8 +1580,15 @@ int spine_log(const char *format, ...) {
 		ulog_len = LOGSIZE - flog_len - prefix_len - 1;
 	}
 
-	strncat(flogmessage, logprefix,   prefix_len);
-	strncat(flogmessage, ulogmessage, ulog_len);
+	/* strncat() here trips -Wstringop-truncation: prefix_len/ulog_len are
+	 * runtime-clamped just above to fit, but GCC can't prove that across the
+	 * branches. memcpy() plus an explicit terminator is exactly as safe and
+	 * doesn't trigger the false positive. */
+	memcpy(flogmessage + flog_len, logprefix, (size_t) prefix_len);
+	flog_len += prefix_len;
+	memcpy(flogmessage + flog_len, ulogmessage, (size_t) ulog_len);
+	flog_len += ulog_len;
+	flogmessage[flog_len] = '\0';
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {
@@ -1815,6 +1831,7 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 				if (ignore_special) {
 					break;
 				}
+				/* fall through */
 			default:
 				return FALSE;
 		}
@@ -1872,14 +1889,14 @@ char *strip_alpha(char *string) {
 	return string;
 }
 
-/*! \fn char *add_slashes(char *string)
+/*! \fn char *add_slashes(const char *string)
  *  \brief add escaping to back slashes on for Windows type commands.
  *  \param string the string to replace slashes
  *
  *  \return a pointer to the modified string. Variable must be freed by parent.
  *
  */
-char *add_slashes(char *string) {
+char *add_slashes(const char *string) {
 	int length;
 	int position;
 	int new_position;
@@ -1986,14 +2003,14 @@ char *trim(char *str) {
  */
 char *rtrim(char *str) {
 	char    *end;
-	const char *trim = " \"\'\\\t\n\r";
+	const char *trim_chars = " \"\'\\\t\n\r";
 
 	if (!str) return NULL;
 
 	end = str + strlen(str);
 
 	while (end-- > str) {
-		if (!strchr(trim, *end)) return str;
+		if (!strchr(trim_chars, *end)) return str;
 
 		*end = 0;
 	}
@@ -2008,12 +2025,12 @@ char *rtrim(char *str) {
  *  \return the trimmed string.
  */
 char *ltrim(char *str) {
-	const char *trim = " \"\'\\\t\n\r";
+	const char *trim_chars = " \"\'\\\t\n\r";
 
 	if (!str) return NULL;
 
 	while (*str) {
-		if (!strchr(trim, *str)) return str;
+		if (!strchr(trim_chars, *str)) return str;
 
 		++str;
 	}
@@ -2335,6 +2352,23 @@ const char *regex_replace(const char *exp, const char *value) {
 	regfree(&regex);
 
 	return (reti) ? value : msgbuf;
+}
+
+int format_spine_capabilities(char *output, size_t output_size,
+		const char *auth_protocols, const char *priv_protocols) {
+	int written;
+
+	if (output == NULL || output_size == 0 ||
+	    auth_protocols == NULL || priv_protocols == NULL) {
+		return FALSE;
+	}
+
+	written = snprintf(output, output_size,
+		"{ authProtocols: \"%." SPINE_STRINGIFY(CAPABILITY_PROTOCOL_LIST_MAX)
+		"s\", privProtocols: \"%." SPINE_STRINGIFY(CAPABILITY_PROTOCOL_LIST_MAX) "s\" }",
+		auth_protocols, priv_protocols);
+
+	return written >= 0 && (size_t)written < output_size;
 }
 
 /*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)

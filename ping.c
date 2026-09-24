@@ -399,7 +399,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	static   unsigned int seq = 0;
 	struct   icmp  *icmp;
-	struct   icmp  *pkt;
 	unsigned char  *packet = NULL;
 
 	if (is_debug_device(host->id)) {
@@ -610,8 +609,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
-
-						pkt = (struct icmp *) reply_pkt;
 
 						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
 							if (verdict == SPINE_ICMP_REPLY_OK) {
@@ -1564,7 +1561,7 @@ name_t *get_namebyhost(char *hostname, name_t *name) {
 		if (tokens == 1) {
 			if (strlen(token) && token[0] == '[') {
 				SPINE_LOG_DEBUG(("DEBUG: get_namebyhost(%s) - Have TCPv6 method", hostname));
-				strncpy(name->hostname, hostname, sizeof(name->hostname));
+				strncopy(name->hostname, hostname, sizeof(name->hostname));
 				break;
 			} else if (strlen(token) == 3) {
 				if (strncasecmp(token, "TCP", 3) == 0) {

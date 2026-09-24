@@ -50,6 +50,31 @@ if [[ -u "$SPINE" ]]; then
 	exit 77
 fi
 
+# ASan/UBSan/TSan install their own allocator interceptors ahead of anything
+# LD_PRELOAD can add, so a preloaded calloc() never sees (and cannot fail)
+# the process's real allocations under those runtimes. Detect a sanitized
+# binary by its exported runtime-init symbols and skip rather than silently
+# testing nothing (or, worse, forcing the sanitizer runtime's own bootstrap
+# allocation to fail and hang instead of exercising the guard at all).
+#
+# The symbol table is captured into a variable before grep runs against it
+# (rather than piping straight into `grep -q`) because grep -q exits as soon
+# as it finds a match, which under `set -o pipefail` can SIGPIPE the still-
+# writing nm/strings process and make the pipeline look like it failed even
+# though the match was found.
+if command -v nm >/dev/null 2>&1; then
+	spine_symbols="$(nm -D "$SPINE" 2>/dev/null || true)"
+elif command -v strings >/dev/null 2>&1; then
+	spine_symbols="$(strings "$SPINE" 2>/dev/null || true)"
+else
+	spine_symbols=""
+fi
+
+if grep -qE '__asan_init|__tsan_init|__msan_init|__ubsan_(handle|default_options)' <<<"$spine_symbols"; then
+	echo "the spine binary is built with a sanitizer runtime, which takes over calloc() ahead of LD_PRELOAD; skipping"
+	exit 77
+fi
+
 if ! command -v cc >/dev/null 2>&1; then
 	echo "no compiler available for the interposer; skipping"
 	exit 77

@@ -19,8 +19,7 @@ services:
     build: ./snmpd
     cap_add:
       - SYS_TIME   # allows date -s inside container for clock-skew test
-    ports:
-      - "127.0.0.1:10161:1161/udp"
+      - NET_ADMIN  # allows tc netem in the network-fault integration test
     healthcheck:
       test: ["CMD", "snmpget", "-v3", "-u", "testuser", "-l", "authPriv",
              "-a", "SHA-256", "-A", "authpass1234",

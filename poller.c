@@ -34,6 +34,44 @@
 #include "common.h"
 #include "spine.h"
 
+int format_poller_output_row(char *output, size_t output_size,
+		int local_data_id, const char *escaped_rrd_name,
+		const char *host_time, const char *escaped_result) {
+	const char *timep;
+	int decimal_points = 0;
+	int digits = 0;
+	int written;
+
+	if (output == NULL || output_size == 0 || escaped_rrd_name == NULL ||
+	    host_time == NULL || host_time[0] == '\0' || escaped_result == NULL) {
+		return FALSE;
+	}
+
+	/* host_time is emitted outside SQL quotes. Accept the integer timestamps
+	 * Spine generates and a single fractional part, but no SQL syntax. */
+	for (timep = host_time; *timep != '\0'; timep++) {
+		if (*timep == '.') {
+			decimal_points++;
+			if (decimal_points > 1) {
+				return FALSE;
+			}
+		} else if (!isdigit((unsigned char)*timep)) {
+			return FALSE;
+		} else {
+			digits++;
+		}
+	}
+	if (digits == 0) {
+		return FALSE;
+	}
+
+	written = snprintf(output, output_size,
+		" (%i, '%s', FROM_UNIXTIME(%s), '%s')",
+		local_data_id, escaped_rrd_name, host_time, escaped_result);
+
+	return written >= 0 && (size_t)written < output_size;
+}
+
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
@@ -158,14 +196,14 @@ int poller_store_hex_result(char *result, size_t result_size, const char *hex, i
 	return TRUE;
 }
 
-/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
+/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, const char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
  *  This function is core to Spine. It takes a host_id and polls it, first
  *  checking reachability and any required data-query reindexing.
  */
-void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
+void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, const char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
@@ -266,10 +304,16 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	//db_connect(LOCAL, &mysql);
 	local_cnn = db_get_connection(LOCAL);
+	if (local_cnn == NULL) { // GCOVR_EXCL_START: pool exhaustion is not reachable in tests
+		die("ERROR: Fatal error: poller.c could not obtain a local database connection!");
+	} // GCOVR_EXCL_STOP
 	mysql = local_cnn->mysql;
 
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
+		if (remote_cnn == NULL) { // GCOVR_EXCL_START: pool exhaustion is not reachable in tests
+			die("ERROR: Fatal error: poller.c could not obtain a remote database connection!");
+		} // GCOVR_EXCL_STOP
 		mysqlr = remote_cnn->mysql;
 	}
 
@@ -1964,17 +2008,17 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			db_escape(&mysqlt, escaped_result, sizeof(escaped_result), poller_items[i].result);
 			db_escape(&mysqlt, escaped_rrd_name, sizeof(escaped_rrd_name), poller_items[i].rrd_name);
 
-			/* escaped_result can now legitimately exceed result_string's capacity for a
-			 * very large result; snprintf's own bound below still truncates it safely.
-			 * Silently-truncated large rows are the separate, already-tracked gap in #598. */
-			#pragma GCC diagnostic push
-			#pragma GCC diagnostic ignored "-Wformat-truncation"
-			snprintf(result_string, RESULTS_BUFFER+SMALL_BUFSIZE, " (%i, '%s', FROM_UNIXTIME(%s), '%s')",
+			if (!format_poller_output_row(result_string, sizeof(result_string),
 				poller_items[i].local_data_id,
 				escaped_rrd_name,
 				host_time,
-				escaped_result);
-			#pragma GCC diagnostic pop
+				escaped_result)) {
+				SPINE_LOG(("Device[%i] HT[%i] ERROR: Poller output for DS[%i] "
+					"exceeds the configured result buffer and was skipped",
+					host_id, host_thread, poller_items[i].local_data_id));
+				i++;
+				continue;
+			}
 
 			result_length = strlen(result_string);
 

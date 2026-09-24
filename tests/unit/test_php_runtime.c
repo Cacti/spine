@@ -495,6 +495,22 @@ static void test_full_script_server_lifecycle(void **state) {
 	assert_int_equal(php_processes[0].php_write_fd, -1);
 }
 
+static void test_legacy_cacti_version_uses_positional_poller_id(void **state) {
+	(void) state;
+	set.cacti_version = 1222;
+	assert_int_equal(php_init(0), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+	php_close(0);
+}
+
+static void test_remote_poller_id_uses_environ_argument(void **state) {
+	(void) state;
+	set.poller_id = 2;
+	assert_int_equal(php_init(0), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+	php_close(0);
+}
+
 static void test_php_child_restores_sigpipe_default(void **state) {
 	(void) state;
 	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "check-sigpipe");
@@ -1066,6 +1082,8 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_preexisting_pending_sigpipe_is_preserved, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawnattr_sigpipe_failure_destroys_initialized_attr, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_full_script_server_lifecycle, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_legacy_cacti_version_uses_positional_poller_id, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_remote_poller_id_uses_environ_argument, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_php_child_restores_sigpipe_default, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_script_server_lifecycle_with_stdio_closed, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_php_spawn_does_not_inherit_an_nft_collision_descriptor, php_setup, php_teardown),

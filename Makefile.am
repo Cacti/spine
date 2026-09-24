@@ -53,7 +53,11 @@ noinst_HEADERS = common.h error.h src/core/keywords.h src/core/locks.h \
 	nft_popen.h php.h ping.h poller.h snmp.h spine.h spine_sem.h sql.h \
 	uthash.h util.h
 
-EXTRA_DIST = spine.1 spine.conf.dist
+EXTRA_DIST = spine.1 spine.conf.dist \
+	tests/README.md \
+	tests/test-harness.sh \
+	tests/integration/test_concurrency.sh \
+	tests/integration/test_network_faults.sh
 
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
