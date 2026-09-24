@@ -63,6 +63,8 @@ The Cacti Group | spine
 -feature: Add the unit, fuzz and integration test suites
 -feature: Make spine work with Stream feature
 -feature: Seed spine.conf from spine.conf.dist on first install without overwriting an existing config
+-issue#632: Reap nft_pclose() and php_terminate_and_reap() with a single bounded non-blocking check, killing and handing off to the abandoned-pid sweep instead of a blocking spin/SIGTERM/SIGKILL escalation that could pin a poller thread for seconds
+-issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
 
 1.2.31
 -issue#365: Removing Backtrace Support
