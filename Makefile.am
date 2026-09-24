@@ -121,9 +121,16 @@ tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
 # real-syscall trigger (WNOHANG is always a valid options value), so covering
 # nft_pclose()'s defensive "waitpid itself failed" path needs a wrapped call.
+#
+# The base assignment must stay unconditional: once a target defines its own
+# _CPPFLAGS anywhere, automake stops falling back to AM_CPPFLAGS for it on
+# every configuration, including ones where HAVE_LD_WRAP is false (e.g.
+# macOS's linker doesn't support --wrap) - that dropped the -I flags spine.h
+# needs to find locks.h there.
+tests_unit_test_linked_CPPFLAGS = $(AM_CPPFLAGS)
 if HAVE_LD_WRAP
 tests_unit_test_linked_LDFLAGS = -Wl,--wrap=waitpid
-tests_unit_test_linked_CPPFLAGS = $(AM_CPPFLAGS) -DSPINE_TEST_WRAP_WAITPID
+tests_unit_test_linked_CPPFLAGS += -DSPINE_TEST_WRAP_WAITPID
 endif
 
 # includes util.c, so it needs the same libraries spine links against
