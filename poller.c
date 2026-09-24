@@ -2254,14 +2254,7 @@ int validate_result(char *result) {
  */
 char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int cmd_fd;
-	#ifndef USING_TPOPEN
 	int pid;
-	#endif
-
-	#ifdef USING_TPOPEN
-	int close_fd = TRUE;
-	FILE *fd;
-	#endif
 
 	int bytes_read;
 	fd_set fds;
@@ -2350,26 +2343,12 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		SPINE_LOG_DEBUG(("The executable is '%s' in \'%s\'", executable, proc_command));
 
 		if (access(executable, X_OK | F_OK) != -1) {
-			#ifdef USING_TPOPEN
-			/* libc popen() forks internally.  Serialize that fork with every
-			 * process-wide effective-UID elevation. */
-			thread_mutex_lock(LOCK_FORK);
-			fd = popen((char *)proc_command, "r");
-			thread_mutex_unlock(LOCK_FORK);
-			cmd_fd = fd != NULL ? fileno(fd) : -1;
-			if (is_debug_device(current_host->id)) {
-				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-			} else {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
-			}
-			#else
 			cmd_fd = nft_popen((char *)proc_command, "r");
 			if (is_debug_device(current_host->id)) {
 				SPINE_LOG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			} else {
 				SPINE_LOG_DEBUG(("DEBUG: Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 			}
-			#endif
 
 			if (cmd_fd > 0) {
 				retry:
@@ -2386,9 +2365,6 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 								SPINE_LOG(("Device[%i] ERROR: One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor.", current_host->id));
 								SET_UNDEFINED(result_string);
 
-								#ifdef USING_TPOPEN
-								close_fd = FALSE;
-								#endif
 								break;
 							case EINTR:
 								#ifndef SOLAR_THREAD
@@ -2416,44 +2392,26 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 								} else {
 									SPINE_LOG(("WARNING: A script timed out while processing EINTR's."));
 									SET_UNDEFINED(result_string);
-
-									#ifdef USING_TPOPEN
-									close_fd = FALSE;
-									#endif
 								}
 								break;
 							case EINVAL:
 								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
 								SET_UNDEFINED(result_string);
 
-								#ifdef USING_TPOPEN
-								close_fd = FALSE;
-								#endif
-
 								break;
 							default:
 								SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
 								SET_UNDEFINED(result_string);
-
-								#ifdef USING_TPOPEN
-								close_fd = FALSE;
-								#endif
 
 								break;
 						}
 
 						break;
 				case 0:
-					#ifdef USING_TPOPEN
-					SPINE_LOG_MEDIUM(("Device[%i] ERROR: The POPEN timed out", current_host->id));
-
-					close_fd = FALSE;
-					#else
 					SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", current_host->id));
 
 					pid = nft_pchild(cmd_fd);
 					kill(pid, SIGKILL);
-					#endif
 
 					SET_UNDEFINED(result_string);
 					break;
@@ -2473,14 +2431,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 				}
 
 				/* close pipe */
-				#ifdef USING_TPOPEN
-				/* we leave the old fd open if it timed out. It will have to exit on it's own */
-				if (close_fd) {
-					pclose(fd);
-				}
-				#else
 				nft_pclose(cmd_fd);
-				#endif
 			} else {
 				SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
 				SET_UNDEFINED(result_string);

@@ -132,7 +132,79 @@ static struct pid
 /* Serialize access to PidList. */
 static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Children nft_pclose() gave up waiting for. Nothing else in spine reaps: there
+   is no SIGCHLD handler and no waitpid(-1), so a child dropped here would stay
+   a zombie for the daemon's lifetime and accumulate once per affected script
+   per cycle against RLIMIT_NPROC. The pids are parked here and swept with
+   WNOHANG instead, opportunistically at the top of nft_popen(). Bounded: past
+   the cap the pid is logged and dropped, because an unbounded list trades a
+   pid leak for a memory leak. */
+#define NFT_ABANDONED_MAX 64
+static pid_t	AbandonedPids[NFT_ABANDONED_MAX];
+static int	AbandonedCount;
+
 static void	close_cleanup(void *);
+
+/*! ------------------------------------------------------------------------------
+  * nft_sweep_abandoned	- reap any child a previous nft_pclose() gave up on.
+  *
+  * Called with ListMutex held. WNOHANG only: this runs on a poller thread and
+  * must never block on a child that is still stuck.
+  *------------------------------------------------------------------------------
+ */
+static void nft_sweep_abandoned(void) {
+	int	i = 0;
+	int	status;
+	pid_t	waited;
+	int	eintr_budget;
+
+	while (i < AbandonedCount) {
+		/* Bounded so a stream of caught signals cannot spin this loop
+		 * forever while ListMutex is held; an exhausted budget just leaves
+		 * the pid for the next sweep. */
+		eintr_budget = 1000;
+		do {
+			waited = waitpid(AbandonedPids[i], &status, WNOHANG);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
+
+		if (waited == AbandonedPids[i] || (waited < 0 && errno == ECHILD)) {
+			SPINE_LOG_DEBUG(("DEBUG: Reaped abandoned script child pid %ld", (long) AbandonedPids[i]));
+			AbandonedPids[i] = AbandonedPids[AbandonedCount - 1];
+			AbandonedCount--;
+		} else {
+			i++;
+		}
+	}
+}
+
+/*! ------------------------------------------------------------------------------
+  * nft_abandon_child	- record a child that outlived its kill budget.
+  *
+  * The pid and the reason are logged either way. A silent drop leaves PID
+  * exhaustion with nothing in the log pointing at its cause.
+  *------------------------------------------------------------------------------
+ */
+static void nft_abandon_child(pid_t pid, const char *reason) {
+	int	parked;
+
+	pthread_mutex_lock(&ListMutex);
+
+	nft_sweep_abandoned();
+
+	parked = (AbandonedCount < NFT_ABANDONED_MAX);
+
+	if (parked) {
+		AbandonedPids[AbandonedCount++] = pid;
+	}
+
+	pthread_mutex_unlock(&ListMutex);
+
+	if (parked) {
+		SPINE_LOG(("WARNING: SCRIPT: pid %ld survived SIGKILL (%s); parked for reaping", (long) pid, reason));
+	} else {
+		SPINE_LOG(("ERROR: SCRIPT: pid %ld survived SIGKILL (%s) and the abandoned list is full; it will remain a zombie", (long) pid, reason));
+	}
+}
 
 /*! ------------------------------------------------------------------------------
  *
@@ -202,6 +274,11 @@ int nft_popen(const char * command, const char * type) {
 	 * the child process sees PidList in a consistent list state.
 	 */
 	pthread_mutex_lock(&ListMutex);
+
+	/* Drain anything a previous nft_pclose() gave up on. Doing it here means
+	   the list empties on the next script poll rather than waiting for
+	   another failure to trigger a sweep. */
+	nft_sweep_abandoned();
 
 	/* Fork. */
 	retry:
@@ -356,13 +433,19 @@ int nft_pchild(int fd) {
  *
  *  nft_pclose
  *
- *  Close the pipe and wait for the status of the child process.
+ *  Close the pipe and check the child's status with a brief (~20ms),
+ *  non-escalating bounded waitpid(). A child still running past that point,
+ *  or one whose waitpid() call itself failed, is killed and handed to the
+ *  abandoned-pid sweep rather than waited for here, so this call never
+ *  blocks the caller on a lingering script.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *    EBADF	The fd is not an active popen() file descriptor.
  *    ECHILD	The waitpid() call failed.
+ *    ETIMEDOUT	The child had not exited by the end of the bounded check; it
+ *    		has been killed and parked for the abandoned-pid sweep to reap.
  *
  *  This call is cancellable.
  *
@@ -374,6 +457,10 @@ nft_pclose(int fd)
 	struct pid *cur;
 	int		pstat;
 	pid_t	pid;
+	pid_t	waited;
+	int		attempt;
+	int		eintr_budget;
+	int		reap_state;	/* 0 reaped, 1 still running, -1 waitpid() error */
 
 	/* Find the appropriate file descriptor. */
 	pthread_mutex_lock(&ListMutex);
@@ -388,7 +475,7 @@ nft_pclose(int fd)
 		return -1;
 	}
 
-	/* The close and waitpid calls below are cancellation points.
+	/* The close call below is a cancellation point.
 	 * We want to ensure that the fd is closed and the PidList
 	 * entry freed despite cancellation, so push a cleanup handler.
 	 */
@@ -399,8 +486,57 @@ nft_pclose(int fd)
 
 	cur->fd = -1;		/* Prevent the fd being closed twice. */
 
-	do { pid = waitpid(cur->pid, &pstat, 0);
-	} while (pid == -1 && errno == EINTR);
+	/* The script already had its one chance to write and its pipe is now
+	 * closed. Give it a brief (~20ms), non-escalating allowance to catch the
+	 * common case where it has already exited or is about to on seeing EOF -
+	 * without it, ordinary fork/exec/exit scheduling latency would flag a
+	 * script that is not actually misbehaving. Anything still running past
+	 * that is killed and handed to the abandoned-pid sweep instead of this
+	 * thread waiting for it; this used to block here indefinitely. */
+	reap_state = 1;
+	for (attempt = 0; attempt < 100; attempt++) {
+		eintr_budget = 1000;
+		do {
+			waited = waitpid(cur->pid, &pstat, WNOHANG);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
+
+		if (waited == cur->pid) {
+			reap_state = 0;
+			break;
+		}
+
+		if (waited < 0 && errno == ECHILD) {
+			/* someone else reaped it, so no status is available */
+			pstat = 0;
+			reap_state = 0;
+			break;
+		}
+
+		if (waited < 0) {
+			reap_state = -1;
+			break;
+		}
+
+		usleep(200);
+	}
+
+	if (reap_state == 0) {
+		pid = cur->pid;
+	} else if (reap_state == 1) {
+		(void)kill(cur->pid, SIGKILL);
+		nft_abandon_child(cur->pid, "did not exit before pipe close");
+		errno = ETIMEDOUT;
+		pid = -1;
+	} else {
+		/* waitpid() itself failed, so whether the child exited is unknown;
+		 * kill it before parking so a still-running child is not left
+		 * outside the sweep's reach. Preserve waitpid()'s errno. */
+		int saved_errno = errno;
+		(void)kill(cur->pid, SIGKILL);
+		nft_abandon_child(cur->pid, "waitpid failed");
+		errno = saved_errno;
+		pid = -1;
+	}
 
 	pthread_cleanup_pop(1);	/* Execute the cleanup handler. */
 
