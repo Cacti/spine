@@ -63,6 +63,35 @@ GNU autotools.
   locally and fix all errors (warnings are informational).
 - flawfinder level-5 hits fail CI; lower levels are informational.
 
+## Script and process execution design principles (do not regress)
+
+These constraints exist because they were each violated once and caused a
+measurable poller slowdown (PR #614, and a long-standing bug in 1.2.x's
+`nft_pclose()`). Any change touching script or PHP Script Server execution
+must preserve all three:
+
+- **One shot, no EOF wait.** A script or PHP Script Server command gets
+  exactly one read attempt within `script_timeout`. Never loop reading
+  until EOF or read a second response after the first read (or timeout)
+  completes. See `exec_poll()` in `poller.c` and `php_read_result()` in
+  `php.c`.
+- **Never block the polling thread on `waitpid()`.** After a script's
+  pipe is closed, reap with a single non-blocking `waitpid(..., WNOHANG)`
+  and stop there. Do not spin/`usleep()`/retry waiting for the child to
+  exit, and do not escalate SIGTERM/SIGKILL synchronously in the calling
+  thread — hand off anything not immediately reaped to the async sweep
+  (`AbandonedPids`/`nft_sweep_abandoned()` in `nft_popen.c`). This applies
+  to both `nft_pclose()` and `php_close()`.
+- **Script timeouts must go through `nft_popen()`/`nft_pchild()`.**
+  Killing a timed-out script requires the real child pid, which is only
+  tracked by `nft_popen()`. Do not reintroduce a native `popen()`/`pclose()`
+  code path (`USING_TPOPEN`/`--enable-popen`) — it cannot expose a pid to
+  kill on timeout and abandons the process/descriptor instead of
+  terminating it.
+
+`tests/regression/test_child_process_safety.sh` guards these invariants
+structurally; keep it passing and extend it rather than relaxing it.
+
 ## Commits and PRs
 
 - Conventional Commits: `fix(scope):`, `feat(scope):`, `build:`,
