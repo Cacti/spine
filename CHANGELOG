@@ -16,6 +16,8 @@ The Cacti Group | spine
 -issue#605: Guard php_readpipe() against an FD_SET() write past FD_SETSIZE
 -issue#607: Re-arm the signal handler for SIGPIPE so a second one does not kill the poller
 -issue#575: Probe for usmDESPrivProtocol instead of assuming the header's advertised default
+-issue#632: Reap nft_pclose() with a single bounded non-blocking check, killing and parking anything still running for a later sweep instead of the previous unbounded blocking waitpid()
+-issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
 
 1.2.31
 -issue#365: Removed Backtrace Support due to lack of OS support
