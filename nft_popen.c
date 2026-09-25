@@ -267,6 +267,7 @@ int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr) {
  */
 int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 	int attempt;
+	int eintr_budget;
 	pid_t waited;
 
 	if (pstat == NULL) {
@@ -274,9 +275,12 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 	}
 
 	for (attempt = 0; attempt < attempts; attempt++) {
+		/* Bounded so a stream of caught signals cannot spin this call
+		 * forever instead of returning within its attempt budget. */
+		eintr_budget = 1000;
 		do {
 			waited = waitpid(pid, pstat, WNOHANG);
-		} while (waited < 0 && errno == EINTR);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
 
 		if (waited == pid) {
 			return 0;
@@ -300,15 +304,18 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		   moment after closing stdout, which is the common case for anything
 		   that flushes or tears down an interpreter. Spin briefly first, then
 		   settle, so a caller that opts into this bounded wait does not pay
-		   the full interval on every reap. */
+		   the full interval on every reap.
+
+		   usleep() is skipped rather than replaced under SOLAR_THREAD, same as
+		   everywhere else in the tree - a flat sleep(1) here would blow the
+		   ~20ms budget nft_pclose() relies on (attempts * 1s), so an
+		   un-delayed retry is the correct bounded behavior on that platform. */
 		#ifndef SOLAR_THREAD
 		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
 			usleep(NFT_PCLOSE_SPIN_USEC);
 		} else {
 			usleep(NFT_PCLOSE_REAP_USEC);
 		}
-		#else
-		sleep(1);
 		#endif
 	}
 
@@ -599,15 +606,20 @@ int nft_pchild(int fd) {
  *  nft_pclose
  *
  *  Close the pipe and check the child's status with a brief (~20ms),
- *  non-escalating bounded waitpid(). A child still running past that point
- *  is killed and handed to the abandoned-pid sweep rather than waited for
- *  here, so this call never blocks the caller on a lingering script.
+ *  non-escalating bounded waitpid(). A child still running past that point,
+ *  or one whose waitpid() call itself failed, is killed and handed to the
+ *  abandoned-pid sweep rather than waited for here, so this call never
+ *  blocks the caller on a lingering script.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *    EBADF	The fd is not an active popen() file descriptor.
- *    ECHILD	The waitpid() call failed.
+ *    ETIMEDOUT	The child had not exited by the end of the bounded check; it
+ *    		has been killed and parked for the abandoned-pid sweep to reap.
+ *    (other)	The waitpid() call itself failed for a reason other than
+ *    		ECHILD, which is treated as a successful reap; may be EINTR if
+ *    		the bounded EINTR retry budget was exhausted.
  *
  *  This call is cancellable.
  *
@@ -656,7 +668,15 @@ nft_pclose(int fd)
 		pid = -1;
 		break;
 	default:
-		nft_abandon_child(cur->pid, "waitpid failed");
+		/* waitpid() itself failed, so whether the child exited is unknown;
+		 * kill it before parking so a still-running child is not left
+		 * outside the sweep's reach. Preserve waitpid()'s errno. */
+		{
+			int saved_errno = errno;
+			(void)kill(cur->pid, SIGKILL);
+			nft_abandon_child(cur->pid, "waitpid failed");
+			errno = saved_errno;
+		}
 		pid = -1;
 		break;
 	}
@@ -679,11 +699,13 @@ nft_sweep_abandoned(void)
 	int	i = 0;
 	int	status;
 	pid_t	waited;
+	int	eintr_budget;
 
 	while (i < AbandonedCount) {
+		eintr_budget = 1000;
 		do {
 			waited = waitpid(AbandonedPids[i], &status, WNOHANG);
-		} while (waited < 0 && errno == EINTR);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
 
 		if (waited == AbandonedPids[i] || (waited < 0 && errno == ECHILD)) {
 			SPINE_LOG_DEBUG(("DEBUG: Reaped abandoned script child pid %ld", (long) AbandonedPids[i]));
