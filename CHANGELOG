@@ -65,7 +65,7 @@ The Cacti Group | spine
 -feature: Seed spine.conf from spine.conf.dist on first install without overwriting an existing config
 -issue#632: Reap nft_pclose() and php_terminate_and_reap() with a single bounded non-blocking check, killing and handing off to the abandoned-pid sweep instead of a blocking spin/SIGTERM/SIGKILL escalation that could pin a poller thread for seconds
 -issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
--issue#632: Cap NFT_PCLOSE_SPIN_ATTEMPTS on SOLAR_THREAD builds so nft_pclose() cannot sleep up to ~100s instead of its intended brief allowance
+-issue#632: Stop spine_reap_child_bounded() from sleeping a flat second per attempt on SOLAR_THREAD builds, which could block nft_pclose() for seconds instead of its intended ~20ms brief allowance
 -issue#632: Bound the EINTR retry loops in spine_reap_child_bounded() and nft_sweep_abandoned(), and SIGKILL a child before parking it when waitpid() itself errors
 
 1.2.31

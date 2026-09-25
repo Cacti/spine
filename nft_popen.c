@@ -157,15 +157,7 @@ static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd)
    later, unrelated nft_popen() call instead of this thread waiting for it. */
 #define NFT_PCLOSE_REAP_USEC 50000
 #define NFT_PCLOSE_SPIN_USEC 200
-/* Under SOLAR_THREAD, spine_reap_child_bounded() below has no usleep()-paced
- * spin phase and takes a flat sleep(1) per attempt instead, so this budget
- * must stay small there - 100 attempts would sleep up to ~100s instead of
- * the ~20ms this is meant to be. */
-#ifndef SOLAR_THREAD
 #define NFT_PCLOSE_SPIN_ATTEMPTS 100
-#else
-#define NFT_PCLOSE_SPIN_ATTEMPTS 2
-#endif
 
 int spine_set_cloexec(int fd) {
 	int flags;
@@ -312,15 +304,18 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		   moment after closing stdout, which is the common case for anything
 		   that flushes or tears down an interpreter. Spin briefly first, then
 		   settle, so a caller that opts into this bounded wait does not pay
-		   the full interval on every reap. */
+		   the full interval on every reap.
+
+		   usleep() is skipped rather than replaced under SOLAR_THREAD, same as
+		   everywhere else in the tree - a flat sleep(1) here would blow the
+		   ~20ms budget nft_pclose() relies on (attempts * 1s), so an
+		   un-delayed retry is the correct bounded behavior on that platform. */
 		#ifndef SOLAR_THREAD
 		if (attempt < NFT_PCLOSE_SPIN_ATTEMPTS) {
 			usleep(NFT_PCLOSE_SPIN_USEC);
 		} else {
 			usleep(NFT_PCLOSE_REAP_USEC);
 		}
-		#else
-		sleep(1);
 		#endif
 	}
 
@@ -620,9 +615,11 @@ int nft_pchild(int fd) {
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *    EBADF	The fd is not an active popen() file descriptor.
- *    ECHILD	The waitpid() call failed.
  *    ETIMEDOUT	The child had not exited by the end of the bounded check; it
  *    		has been killed and parked for the abandoned-pid sweep to reap.
+ *    (other)	The waitpid() call itself failed for a reason other than
+ *    		ECHILD, which is treated as a successful reap; may be EINTR if
+ *    		the bounded EINTR retry budget was exhausted.
  *
  *  This call is cancellable.
  *

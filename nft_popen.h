@@ -95,9 +95,11 @@ extern int	nft_pchild(int fd);
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *     EBADF	The fd is not an active popen() file descriptor.
- *     ECHILD	waitpid() failed.
  *     ETIMEDOUT	The child had not exited by the end of the bounded
  *     		check; it has been killed and parked for later reaping.
+ *     (other)	The waitpid() call itself failed for a reason other than
+ *     		ECHILD, which is treated as a successful reap; may be EINTR
+ *     		if the bounded EINTR retry budget was exhausted.
  */
 extern int	nft_pclose(int fd);
 
