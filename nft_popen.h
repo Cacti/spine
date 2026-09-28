@@ -138,8 +138,12 @@ extern int	spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
  *  Reap a child with WNOHANG, sleeping between attempts, so a wedged script
  *  cannot pin a poller thread indefinitely.
  *
- *  Returns 0 when the child was reaped, 1 when it is still running after
- *  attempts, and -1 on a waitpid() error other than EINTR or ECHILD.
+ *  Returns 0 when the child was reaped - including ECHILD, where another
+ *  waiter already collected it and pstat is set to 0 - and 1 when it is
+ *  still running after attempts. Returns -1 on a waitpid() error, leaving
+ *  errno as waitpid() set it; EINTR is retried within a bounded per-attempt
+ *  budget, so it too surfaces as -1 with errno == EINTR once that budget is
+ *  exhausted.
  */
 extern int	spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
 
