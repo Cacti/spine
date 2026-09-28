@@ -86,13 +86,20 @@ extern int	nft_pchild(int fd);
 /*!
  *  nft_pclose
  *
- *  Close the pipe and wait for the status of the child process.
+ *  Close the pipe and check the child's status with a brief, bounded,
+ *  non-blocking waitpid(). A child still running past that point, or one
+ *  whose waitpid() call itself failed, is killed and parked for later,
+ *  asynchronous reaping rather than waited for here.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
- *	EBADF	The fd is not an active popen() file descriptor.
- *	ECHILD	waitpid() failed.
+ *     EBADF	The fd is not an active popen() file descriptor.
+ *     ETIMEDOUT	The child had not exited by the end of the bounded
+ *     		check; it has been killed and parked for later reaping.
+ *     (other)	The waitpid() call itself failed for a reason other than
+ *     		ECHILD, which is treated as a successful reap; may be EINTR
+ *     		if the bounded EINTR retry budget was exhausted.
  */
 extern int	nft_pclose(int fd);
 
@@ -131,8 +138,12 @@ extern int	spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
  *  Reap a child with WNOHANG, sleeping between attempts, so a wedged script
  *  cannot pin a poller thread indefinitely.
  *
- *  Returns 0 when the child was reaped, 1 when it is still running after
- *  attempts, and -1 on a waitpid() error other than EINTR or ECHILD.
+ *  Returns 0 when the child was reaped - including ECHILD, where another
+ *  waiter already collected it and pstat is set to 0 - and 1 when it is
+ *  still running after attempts. Returns -1 on a waitpid() error, leaving
+ *  errno as waitpid() set it; EINTR is retried within a bounded per-attempt
+ *  budget, so it too surfaces as -1 with errno == EINTR once that budget is
+ *  exhausted.
  */
 extern int	spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
 

@@ -38,6 +38,23 @@
 /* provided by tests/fuzz/stubs.c, as spine.c would */
 extern int *debug_devices;
 
+#ifdef SPINE_TEST_WRAP_WAITPID
+/* Arms __wrap_waitpid() to fail every call for one pid; -1/unset disables it
+ * so every other test in this binary keeps hitting the real waitpid(). */
+static pid_t forced_waitpid_error_pid = -1;
+static int   forced_waitpid_error_errno = 0;
+
+extern pid_t __real_waitpid(pid_t pid, int *status, int options);
+
+pid_t __wrap_waitpid(pid_t pid, int *status, int options) {
+	if (pid == forced_waitpid_error_pid) {
+		errno = forced_waitpid_error_errno;
+		return -1;
+	}
+	return __real_waitpid(pid, status, options);
+}
+#endif
+
 /* --- strncopy(): issue#447, the off-by-one when src fills the destination -- */
 
 static void test_strncopy_truncates_within_the_buffer(void **state) {
@@ -950,6 +967,55 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	assert_int_equal(nft_abandoned_pending(), 0);
 }
 
+#ifdef SPINE_TEST_WRAP_WAITPID
+/* waitpid() failing with anything other than ECHILD/EINTR (never true for a
+ * real call with WNOHANG) must still kill the child before parking it,
+ * rather than leaving a still-running process outside the sweep's reach. */
+static void test_nft_pclose_kills_child_when_waitpid_errors(void **state) {
+	int fd;
+	int status;
+	pid_t child;
+	pid_t reaped;
+	int real_status;
+	int attempts;
+
+	(void) state;
+	fd = nft_popen("printf x; while :; do sleep 1; done", "r");
+	assert_true(fd >= 0);
+	child = nft_pchild(fd);
+	assert_true(child > 0);
+
+	forced_waitpid_error_pid = child;
+	forced_waitpid_error_errno = EINVAL;
+
+	errno = 0;
+	status = nft_pclose(fd);
+
+	forced_waitpid_error_pid = -1;
+
+	assert_int_equal(status, -1);
+	assert_int_equal(errno, EINVAL);
+
+	/* Reap for real (bypassing the wrap) to prove the child was killed
+	 * rather than merely parked. */
+	reaped = -1;
+	for (attempts = 0; attempts < 100 && reaped != child; attempts++) {
+		reaped = __real_waitpid(child, &real_status, WNOHANG);
+		if (reaped == 0) {
+			usleep(10000);
+			reaped = -1;
+		}
+	}
+	assert_int_equal(reaped, child);
+	assert_true(WIFSIGNALED(real_status));
+	assert_int_equal(WTERMSIG(real_status), SIGKILL);
+
+	/* nft_abandon_child() still parked it; sweep it back out so it does not
+	 * leak into a later test's nft_abandoned_pending() count. */
+	assert_int_equal(nft_abandoned_pending(), 0);
+}
+#endif
+
 /* The descriptor must not survive an exec. A child that inherits the write end
    keeps the pipe open, so the polling thread never sees EOF and blocks to
    script_timeout for a data source that already answered. */
@@ -1129,6 +1195,9 @@ int main(void) {
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
 		cmocka_unit_test(test_nft_pclose_does_not_block_on_a_lingering_child),
 		cmocka_unit_test(test_abandoned_children_are_swept_and_capacity_is_bounded),
+#ifdef SPINE_TEST_WRAP_WAITPID
+		cmocka_unit_test(test_nft_pclose_kills_child_when_waitpid_errors),
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
