@@ -174,7 +174,7 @@ fi
 # ---------------------------------------------------------------------------
 # Test 4: the regex is applied to the trailing multi-get batch
 #
-# poller.c drains SNMP OIDs in two places: inside the item loop once MAX_OIDS
+# src/poller/poller.c drains SNMP OIDs in two places: inside the item loop once MAX_OIDS
 # have accumulated, and once more after the loop for whatever is left over.
 # Only the in-loop drain applied output_regex, so a host whose OID count did
 # not land on a MAX_OIDS boundary stored raw values.  A single data source is

@@ -45,8 +45,8 @@ done
 
 mkdir -p "$ARTIFACT_ROOT"
 export SPINE_TEST_ARTIFACT_DIR=$ARTIFACT_ROOT
-# shellcheck source=tests/test-harness.sh
-source "$REPO_ROOT/tests/test-harness.sh"
+# shellcheck source=tests/support/test-harness.sh
+source "$REPO_ROOT/tests/support/test-harness.sh"
 harness_init "Spine memory soak"
 
 SERIES="$ARTIFACT_ROOT/rss-series.csv"

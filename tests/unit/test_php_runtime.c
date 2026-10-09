@@ -21,9 +21,9 @@
 #include <unistd.h>
 #include <poll.h>
 
-#include "common.h"
-#include "spine.h"
-#include "php.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "script/server.h"
 
 static pthread_mutex_t spawn_barrier_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t spawn_barrier_cond = PTHREAD_COND_INITIALIZER;

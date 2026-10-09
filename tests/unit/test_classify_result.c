@@ -12,9 +12,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "common.h"
-#include "spine.h"
-#include "util.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "internal/util.h"
 
 typedef struct {
 	const char *raw;

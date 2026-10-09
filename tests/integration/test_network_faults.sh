@@ -23,8 +23,8 @@ export COMPOSE_PROJECT_NAME=$PROJECT
 COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")
 mkdir -p "$ARTIFACT_ROOT"
 export SPINE_TEST_ARTIFACT_DIR=$ARTIFACT_ROOT
-# shellcheck source=tests/test-harness.sh
-source "$REPO_ROOT/tests/test-harness.sh"
+# shellcheck source=tests/support/test-harness.sh
+source "$REPO_ROOT/tests/support/test-harness.sh"
 harness_init "Spine SNMP network-fault integration"
 
 cleanup() {

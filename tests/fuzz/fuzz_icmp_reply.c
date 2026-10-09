@@ -10,9 +10,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
-#include "ping.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "ping/ping.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	const struct icmp *pkt = NULL;

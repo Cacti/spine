@@ -27,28 +27,29 @@ NETSNMP_LIBS   := $(filter -l% -L%, $(shell net-snmp-config --libs 2>/dev/null))
 DB_CONFIG      ?= $(shell command -v mariadb_config 2>/dev/null || command -v mysql_config 2>/dev/null)
 
 SPINE_SRC := $(addprefix $(SPINE_ROOT)/, \
-	ping.c \
+	src/poller/availability.c \
 	src/ping/icmp_shared.c \
 	src/ping/icmp4.c \
 	src/ping/icmp6.c \
-	src/ping/transport.c \
-	src/ping/address.c util.c \
+	src/ping/udp.c src/ping/tcp.c \
+	src/ping/address.c src/app/buffer.c src/platform/clock.c src/platform/socket.c src/platform/thread.c src/platform/descriptor.c src/config/text.c src/config/validate.c src/log/debug.c src/log/sanitize.c src/script/escape.c \
 	src/config/settings.c \
 	src/config/options.c \
 	src/config/file.c \
 	src/database/transfer.c \
-	src/core/log.c \
-	src/core/result.c \
-	src/core/privileges.c \
-	src/core/regex.c sql.c \
+	src/log/log.c \
+	src/poller/result.c \
+	src/platform/privileges.c \
+	src/poller/regex.c src/database/sql.c \
 	src/database/connection.c \
-	src/database/pool.c snmp.c \
-	src/snmp/session.c src/core/locks.c poller.c \
-	src/poller/script.c src/poller/query.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c nft_popen.c src/process/fd.c php.c src/php/read.c src/php/process.c \
-	src/core/keywords.c error.c)
+	src/database/pool.c src/snmp/requests.c src/snmp/response.c \
+	src/snmp/session.c src/platform/locks.c src/poller/poller.c \
+	src/script/external.c src/database/cacti_query.c src/database/persistence.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c src/process/nft_popen.c src/process/fd.c src/script/protocol.c src/script/read.c src/script/server.c \
+	src/config/keywords.c src/app/signals.c)
 
 FUZZ_CFLAGS := $(SANITIZERS) -g -O1 -DHAVE_CONFIG_H \
-	-I$(SPINE_ROOT) -I$(SPINE_ROOT)/src/core -I$(SPINE_ROOT)/config \
+	-I$(SPINE_ROOT) -I$(SPINE_ROOT)/src -I$(SPINE_ROOT)/vendor/uthash \
+	-I$(SPINE_ROOT)/config \
 	$(NETSNMP_CFLAGS) \
 	$(shell $(DB_CONFIG) --include 2>/dev/null)
 

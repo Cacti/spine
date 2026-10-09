@@ -7,7 +7,7 @@ Files: *
 Copyright: 2004-2026 The Cacti Group
 License: GPL-2.0-or-later
 
-Files: nft_popen.c nft_popen.h
+Files: src/process/nft_popen.c nft_popen.h
 Copyright: 1993 The Regents of the University of California
 License: BSD-4-Clause
 

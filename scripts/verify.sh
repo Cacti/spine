@@ -4,10 +4,8 @@ set -euo pipefail
 echo "=== cppcheck ==="
 source_list=$(mktemp)
 trap 'rm -f "$source_list"' EXIT
-find . -maxdepth 1 -type f \( -name '*.c' -o -name '*.h' \) \
-  -print0 > "$source_list"
 find src -type f \( -name '*.c' -o -name '*.h' \) \
-  -print0 >> "$source_list"
+  -print0 > "$source_list"
 source_files=()
 while IFS= read -r -d '' source_file; do
   source_files+=("$source_file")
@@ -17,7 +15,7 @@ if (( ${#source_files[@]} == 0 )); then
   exit 1
 fi
 cppcheck --enable=all --std=c11 --error-exitcode=1 \
-  -I. -Isrc/core \
+  -I. -Isrc -Ivendor/uthash \
   --suppress=missingIncludeSystem \
   --suppress=unusedFunction \
   --suppress=checkersReport \

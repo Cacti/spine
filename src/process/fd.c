@@ -84,47 +84,15 @@
  * SUCH DAMAGE.
  */
 
-#include "common.h"
-#include "spine.h"
-#include "src/process/process_internal.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "process/process_internal.h"
 #include <spawn.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 
-int spine_set_cloexec(int fd) {
-	int flags;
 
-	flags = fcntl(fd, F_GETFD);
-	if (flags < 0) {
-		SPINE_LOG(("ERROR: Unable to read descriptor flags on fd %d: %s", fd, strerror(errno)));
-		return -1;
-	}
 
-	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
-		SPINE_LOG(("ERROR: Unable to set close-on-exec on fd %d: %s", fd, strerror(errno)));
-		return -1;
-	}
-
-	return 0;
-}
-
-int spine_dup_cloexec(int fd) {
-	int duplicate;
-	int saved_errno;
-
-	duplicate = dup(fd);
-	if (duplicate < 0)
-		return -1;
-
-	if (spine_set_cloexec(duplicate) != 0) {
-		saved_errno = errno;
-		(void) close(duplicate);
-		errno = saved_errno;
-		return -1;
-	}
-
-	return duplicate;
-}
 
 /*! \fn static int open_pipe_cloexec(int pdes[2])
  *  \brief open a pipe whose descriptors are not inherited across exec

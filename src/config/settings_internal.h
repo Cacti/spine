@@ -34,8 +34,8 @@
 #ifndef SPINE_SETTINGS_INTERNAL_H
 #define SPINE_SETTINGS_INTERNAL_H
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 void settings_cache_free(void);
 void settings_cache_load(MYSQL *mysql, int mode);
 char *getsetting(MYSQL *mysql, int mode, const char *setting);

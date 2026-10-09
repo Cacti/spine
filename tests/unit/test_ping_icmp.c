@@ -26,9 +26,9 @@
 #include <netinet/in.h>
 #include <signal.h>
 
-#include "common.h"
-#include "spine.h"
-#include "ping.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "ping/ping.h"
 
 extern int *debug_devices;
 
@@ -89,11 +89,12 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 #define sendto test_sendto
 #define select test_select
 #define recvfrom test_recvfrom
-#include "../../ping.c"
+#include "../../src/poller/availability.c"
 #include "../../src/ping/icmp_shared.c"
 #include "../../src/ping/icmp4.c"
 #include "../../src/ping/icmp6.c"
-#include "../../src/ping/transport.c"
+#include "../../src/ping/udp.c"
+#include "../../src/ping/tcp.c"
 #include "../../src/ping/address.c"
 
 #undef socket

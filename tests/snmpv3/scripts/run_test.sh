@@ -185,7 +185,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # 6. ICMP availability — drives the ping path so the new ICMP reply-length
-#    guard (ping.c) runs against a live reply.  Host 1 is repointed to ICMP
+#    guard (src/poller/availability.c) runs against a live reply.  Host 1 is repointed to ICMP
 #    ping for one run; spine must not crash on the reply and the host must
 #    stay UP (AVAIL_SNMP_OR_PING falls back to SNMP if raw sockets are denied).
 #

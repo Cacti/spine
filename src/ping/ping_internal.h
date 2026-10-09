@@ -34,8 +34,8 @@
 #ifndef SPINE_PING_INTERNAL_H
 #define SPINE_PING_INTERNAL_H
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 typedef struct {
 	int fd;
 	int reading;
@@ -69,4 +69,11 @@ extern const char icmp6_payload[];
 int icmp6_reply_matches(const unsigned char *reply, ssize_t length, uint16_t id, uint16_t seq, int check_id);
 int ping_icmp_ipv6(const host_t *host, ping_t *ping);
 #endif
+/* Shared private probe outcome; caller owns ping result storage. */
+static inline int ping_down(ping_t *ping, const char *message) {
+	snprintf(ping->ping_status, 50, "down");
+	strncopy(ping->ping_response, message, SMALL_BUFSIZE);
+	return HOST_DOWN;
+}
+
 #endif

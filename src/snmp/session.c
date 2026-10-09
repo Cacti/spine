@@ -31,8 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 #include <limits.h>
 #include <net-snmp/library/scapi.h>
 #include <net-snmp/library/snmpusm.h>

@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	char   *input;

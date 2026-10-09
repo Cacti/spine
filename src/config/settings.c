@@ -31,8 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 #include "settings_internal.h"
 #include <limits.h>
 

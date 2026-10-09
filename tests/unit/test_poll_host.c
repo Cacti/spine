@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 #define HOST_COLUMNS 37
 #define REINDEX_COLUMNS 5
