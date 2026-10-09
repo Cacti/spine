@@ -1,7 +1,7 @@
 services:
 
   db:
-    image: mariadb:11
+    image: mirror.gcr.io/library/mariadb:11
     environment:
       MARIADB_ROOT_PASSWORD: root
       MARIADB_DATABASE: cacti
@@ -51,7 +51,7 @@ services:
   # Asserts on the database spine wrote to. Without this the fixture only
   # proves spine exited 0, which a broken poll would also do.
   verify:
-    image: mariadb:11
+    image: mirror.gcr.io/library/mariadb:11
     depends_on:
       db:
         condition: service_healthy

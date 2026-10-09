@@ -424,6 +424,8 @@ static void build_ip_icmp(unsigned char *buf, size_t len, uint16_t id, uint16_t 
 	iph = (struct ip *) buf;
 	iph->ip_hl = sizeof(struct ip) / 4;
 	iph->ip_v  = 4;
+	/* a raw ICMP socket only delivers ICMP datagrams; the classifier checks it */
+	iph->ip_p  = IPPROTO_ICMP;
 
 	pkt = (struct icmp *) (buf + sizeof(struct ip));
 	pkt->icmp_type = type;
@@ -542,10 +544,10 @@ static void test_config_defaults_populates_the_set(void **state) {
 	memset(&set, 0, sizeof set);
 	config_defaults();
 
-	assert_int_equal(set.threads, DEFAULT_THREADS);
-	assert_int_equal(set.db_port, DEFAULT_DB_PORT);
-	assert_string_equal(set.db_host, DEFAULT_DB_HOST);
-	assert_string_equal(set.db_db,   DEFAULT_DB_DB);
+	assert_int_equal(set.poller.threads, DEFAULT_THREADS);
+	assert_int_equal(set.database.port, DEFAULT_DB_PORT);
+	assert_string_equal(set.database.host, DEFAULT_DB_HOST);
+	assert_string_equal(set.database.database,   DEFAULT_DB_DB);
 }
 
 static void test_read_spine_config_rejects_a_missing_file(void **state) {
@@ -572,10 +574,10 @@ static void test_read_spine_config_reads_settings(void **state) {
 	config_defaults();
 	assert_int_equal(read_spine_config(path), 0);
 
-	assert_string_equal(set.db_host, "testhost");
-	assert_string_equal(set.db_db,   "testdb");
-	assert_string_equal(set.db_user, "testuser");
-	assert_int_equal(set.db_port, 3399);
+	assert_string_equal(set.database.host, "testhost");
+	assert_string_equal(set.database.database,   "testdb");
+	assert_string_equal(set.database.user, "testuser");
+	assert_int_equal(set.database.port, 3399);
 
 	remove(path);
 }
@@ -602,15 +604,15 @@ static void test_set_date_format_clamps_an_out_of_range_format(void **state) {
 	(void) state;
 
 	config_defaults();
-	set.log_datetime_format    = GD_MAX + 10;
-	set.log_datetime_separator = GDC_MAX + 10;
+	set.logging.log_datetime_format    = GD_MAX + 10;
+	set.logging.log_datetime_separator = GDC_MAX + 10;
 
 	set_date_format();
 	fmt = get_date_format();
 
 	assert_non_null(fmt);
-	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
-	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
+	assert_int_equal(set.logging.log_datetime_format, GD_DEFAULT);
+	assert_int_equal(set.logging.log_datetime_separator, GDC_DEFAULT);
 }
 
 static void test_get_date_format_covers_each_supported_format(void **state) {
@@ -623,8 +625,8 @@ static void test_get_date_format_covers_each_supported_format(void **state) {
 
 	for (fmt_value = GD_MIN; fmt_value <= GD_MAX; fmt_value++) {
 		for (sep_value = GDC_MIN; sep_value <= GDC_MAX; sep_value++) {
-			set.log_datetime_format    = fmt_value;
-			set.log_datetime_separator = sep_value;
+			set.logging.log_datetime_format    = fmt_value;
+			set.logging.log_datetime_separator = sep_value;
 
 			set_date_format();
 			fmt = get_date_format();

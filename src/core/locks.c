@@ -72,32 +72,32 @@ DEFINE_SPINE_LOCK(php_proc_14)
 DEFINE_SPINE_LOCK(thdet)
 DEFINE_SPINE_LOCK(host_time)
 
-void init_mutexes(void) {
-	pthread_once((pthread_once_t*) get_attr(LOCK_SNMP_O),        init_snmp_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_SETEUID_O),     init_seteuid_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_GHBN_O),        init_ghbn_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_POOL_O),        init_pool_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_O),         init_php_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_0_O),  init_php_proc_0_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_1_O),  init_php_proc_1_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_2_O),  init_php_proc_2_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_3_O),  init_php_proc_3_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_4_O),  init_php_proc_4_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_5_O),  init_php_proc_5_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_6_O),  init_php_proc_6_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_7_O),  init_php_proc_7_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_8_O),  init_php_proc_8_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_9_O),  init_php_proc_9_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_10_O), init_php_proc_10_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_11_O), init_php_proc_11_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_12_O), init_php_proc_12_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_13_O), init_php_proc_13_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_THDET_O),       init_thdet_lock);
-	pthread_once((pthread_once_t*) get_attr(LOCK_HOST_TIME_O),   init_host_time_lock);
+void init_mutexes() {
+	pthread_once(get_attr(LOCK_SNMP_O),        init_snmp_lock);
+	pthread_once(get_attr(LOCK_SETEUID_O),     init_seteuid_lock);
+	pthread_once(get_attr(LOCK_GHBN_O),        init_ghbn_lock);
+	pthread_once(get_attr(LOCK_POOL_O),        init_pool_lock);
+	pthread_once(get_attr(LOCK_PHP_O),         init_php_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_0_O),  init_php_proc_0_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_1_O),  init_php_proc_1_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_2_O),  init_php_proc_2_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_3_O),  init_php_proc_3_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_4_O),  init_php_proc_4_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_5_O),  init_php_proc_5_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_6_O),  init_php_proc_6_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_7_O),  init_php_proc_7_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_8_O),  init_php_proc_8_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_9_O),  init_php_proc_9_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_10_O), init_php_proc_10_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_11_O), init_php_proc_11_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_12_O), init_php_proc_12_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_13_O), init_php_proc_13_lock);
+	pthread_once(get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
+	pthread_once(get_attr(LOCK_THDET_O),       init_thdet_lock);
+	pthread_once(get_attr(LOCK_HOST_TIME_O),   init_host_time_lock);
 }
 
-static const char *get_name(int lock) {
+const char *get_name(int lock) {
 	switch (lock) {
 		case LOCK_SNMP:        return "snmp";
 		case LOCK_SETEUID:     return "seteuid";
@@ -121,9 +121,9 @@ static const char *get_name(int lock) {
 		case LOCK_PHP_PROC_14: return "php_proc_14";
 		case LOCK_THDET:       return "thdet";
 		case LOCK_HOST_TIME:   return "host_time";
+		default: return "Unknown lock";
 	}
 
-	return "Unknown lock";
 }
 
 pthread_cond_t* get_cond(int lock) {
@@ -152,6 +152,7 @@ pthread_cond_t* get_cond(int lock) {
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_cond; break;
 		case LOCK_THDET:       ret_val = &thdet_cond;       break;
 		case LOCK_HOST_TIME:   ret_val = &host_time_cond;   break;
+		default: break;
 	}
 
 	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning cond for %s", get_name(lock)));
@@ -185,6 +186,7 @@ pthread_mutex_t* get_lock(int lock) {
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_lock; break;
 		case LOCK_THDET:       ret_val = &thdet_lock;       break;
 		case LOCK_HOST_TIME:   ret_val = &host_time_lock;   break;
+		default: break;
 	}
 
 	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning lock for %s", get_name(lock)));
@@ -218,6 +220,7 @@ pthread_once_t* get_attr(int locko) {
 		case LOCK_PHP_PROC_14_O: ret_val = &php_proc_14_lock_o; break;
 		case LOCK_THDET_O:       ret_val = &thdet_lock_o;       break;
 		case LOCK_HOST_TIME_O:   ret_val = &host_time_lock_o;   break;
+		default: break;
 	}
 
 	SPINE_LOG_DEVDBG(("LOCKS: [RET]   Returning attr for %s", get_name(locko)));

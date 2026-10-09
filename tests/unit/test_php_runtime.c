@@ -169,11 +169,11 @@ static int php_setup(void **state) {
 	assert_non_null(php_processes);
 	php_processes_initialize(php_processes, MAX_PHP_SERVERS);
 
-	set.php_servers = 2;
-	set.script_timeout = 1;
+	set.php.php_servers = 2;
+	set.php.script_timeout = 1;
 	set.cacti_version = 1300;
-	set.poller_id = 1;
-	set.log_destination = LOGDEST_STDOUT;
+	set.poller.poller_id = 1;
+	set.logging.log_destination = LOGDEST_STDOUT;
 	block_shell_spawn = FALSE;
 	block_php_spawn = FALSE;
 	shell_spawn_reached = FALSE;
@@ -191,8 +191,8 @@ static int php_setup(void **state) {
 	track_write = FALSE;
 	write_calls = 0;
 	restore_nofile = FALSE;
-	snprintf(set.path_php, sizeof(set.path_php), "%s", PHP_TEST_SERVER_PATH);
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "normal");
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", PHP_TEST_SERVER_PATH);
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "normal");
 	return 0;
 }
 
@@ -232,7 +232,7 @@ static void test_round_robin_wraps_at_server_count(void **state) {
 	php_processes[1].php_pid = 12;
 	php_processes[1].php_read_fd = 12;
 	php_processes[1].php_write_fd = 13;
-	set.php_current_server = set.php_servers;
+	set.php.php_current_server = set.php.php_servers;
 	assert_int_equal(php_get_process(), 0);
 	assert_int_equal(php_get_process(), 1);
 	assert_int_equal(php_get_process(), 0);
@@ -256,7 +256,7 @@ static void test_process_slot_initialization_invalidates_zero_descriptors(void *
 
 static void test_round_robin_rejects_failed_slots(void **state) {
 	(void) state;
-	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
 	assert_int_equal(php_get_process(), -1);
 }
 
@@ -264,7 +264,7 @@ static void test_round_robin_returns_a_healthy_slot_when_all_are_contended(void 
 	int i;
 	(void) state;
 
-	for (i = 0; i < set.php_servers; i++) {
+	for (i = 0; i < set.php.php_servers; i++) {
 		php_processes[i].php_state = PHP_READY;
 		php_processes[i].php_pid = 100 + i;
 		php_processes[i].php_read_fd = 20 + (i * 2);
@@ -272,10 +272,10 @@ static void test_round_robin_returns_a_healthy_slot_when_all_are_contended(void 
 		thread_mutex_lock(LOCK_PHP_PROC_0 + i);
 	}
 
-	set.php_current_server = 0;
+	set.php.php_current_server = 0;
 	assert_int_equal(php_get_process(), 0);
 
-	for (i = 0; i < set.php_servers; i++) {
+	for (i = 0; i < set.php.php_servers; i++) {
 		thread_mutex_unlock(LOCK_PHP_PROC_0 + i);
 		php_processes[i].php_pid = -1;
 		php_processes[i].php_read_fd = -1;
@@ -308,7 +308,7 @@ static void test_dead_slot_is_recovered_while_another_slot_is_contended(void **s
 	php_processes[0].php_pid = 100;
 	php_processes[0].php_read_fd = 20;
 	php_processes[0].php_write_fd = 21;
-	set.php_current_server = 0;
+	set.php.php_current_server = 0;
 	assert_int_equal(pthread_create(&holder, NULL, hold_php_slot, &held_slot), 0);
 	pthread_mutex_lock(&spawn_barrier_mutex);
 	while (!shell_spawn_reached) {
@@ -340,8 +340,8 @@ static void test_failed_recovery_falls_back_to_the_contended_slot(void **state) 
 	php_processes[0].php_pid = 100;
 	php_processes[0].php_read_fd = 20;
 	php_processes[0].php_write_fd = 21;
-	set.php_current_server = 0;
-	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
+	set.php.php_current_server = 0;
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
 	assert_int_equal(pthread_create(&holder, NULL, hold_php_slot, &held_slot), 0);
 	pthread_mutex_lock(&spawn_barrier_mutex);
 	while (!shell_spawn_reached) {
@@ -505,7 +505,7 @@ static void test_legacy_cacti_version_uses_positional_poller_id(void **state) {
 
 static void test_remote_poller_id_uses_environ_argument(void **state) {
 	(void) state;
-	set.poller_id = 2;
+	set.poller.poller_id = 2;
 	assert_int_equal(php_init(0), TRUE);
 	assert_int_equal(php_processes[0].php_state, PHP_READY);
 	php_close(0);
@@ -513,7 +513,7 @@ static void test_remote_poller_id_uses_environ_argument(void **state) {
 
 static void test_php_child_restores_sigpipe_default(void **state) {
 	(void) state;
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "check-sigpipe");
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "check-sigpipe");
 	assert_int_equal(php_init(0), TRUE);
 	assert_int_equal(php_processes[0].php_state, PHP_READY);
 }
@@ -628,7 +628,7 @@ static void test_php_spawn_does_not_inherit_an_nft_collision_descriptor(void **s
 
 static void test_init_marks_an_unexpected_handshake_busy(void **state) {
 	(void) state;
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "bad-start");
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "bad-start");
 	assert_int_equal(php_init(0), TRUE);
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
@@ -639,7 +639,7 @@ static void test_busy_handshake_is_recovered_on_the_next_poll(void **state) {
 	pid_t failed_pid;
 
 	(void) state;
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "bad-start");
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "bad-start");
 	assert_int_equal(php_init(0), TRUE);
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 	failed_pid = php_processes[0].php_pid;
@@ -647,7 +647,7 @@ static void test_busy_handshake_is_recovered_on_the_next_poll(void **state) {
 	assert_true(php_processes[0].php_read_fd >= 0);
 	assert_true(php_processes[0].php_write_fd >= 0);
 
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "normal");
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "normal");
 	process = php_get_process();
 	assert_int_equal(process, 0);
 	assert_true(php_processes[0].php_pid > 1);
@@ -691,7 +691,7 @@ static void test_recovery_and_command_share_the_slot_lock(void **state) {
 	pthread_t command_thread;
 	(void) state;
 
-	set.php_servers = 1;
+	set.php.php_servers = 1;
 	block_php_spawn = TRUE;
 	command_finished = FALSE;
 	assert_int_equal(pthread_create(&recovery_thread, NULL, get_php_process_thread, &recovery), 0);
@@ -727,9 +727,9 @@ static void test_recovery_attempts_only_one_failed_slot_per_call(void **state) {
 	double elapsed;
 	(void) state;
 
-	set.php_servers = 3;
-	set.script_timeout = 1;
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "silent");
+	set.php.php_servers = 3;
+	set.php.script_timeout = 1;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "silent");
 	started = get_time_as_double();
 	assert_int_equal(php_get_process(), -1);
 	elapsed = get_time_as_double() - started;
@@ -739,7 +739,7 @@ static void test_recovery_attempts_only_one_failed_slot_per_call(void **state) {
 
 static void test_child_exit_during_startup_fails_closed_without_restart(void **state) {
 	(void) state;
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "exit-before-start");
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "exit-before-start");
 	assert_int_equal(php_init(0), TRUE);
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
@@ -750,7 +750,7 @@ static void test_php_init_later_failure_preserves_earlier_server(void **state) {
 	int first_write_fd;
 	(void) state;
 
-	set.php_servers = 2;
+	set.php.php_servers = 2;
 	fail_php_spawn_call = 2;
 	assert_int_equal(php_init(PHP_INIT), FALSE);
 
@@ -845,8 +845,8 @@ static void test_cloexec_pipe_failure_releases_both_descriptors(void **state) {
 
 static void test_init_timeout_does_not_recurse(void **state) {
 	(void) state;
-	set.script_timeout = 0;
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "silent");
+	set.php.script_timeout = 0;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "silent");
 	assert_int_equal(php_init(0), TRUE);
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
@@ -856,7 +856,7 @@ static void test_spawn_failure_releases_every_resource(void **state) {
 	/* calloc-like zeroes reproduce the process-wide initialization that used to
 	 * let a failed slot masquerade as stdin. php_init() must replace them. */
 	memset(&php_processes[0], 0, sizeof(php_processes[0]));
-	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
 	assert_int_equal(php_init(0), FALSE);
 	assert_int_equal(php_processes[0].php_pid, -1);
 	assert_int_equal(php_processes[0].php_read_fd, -1);
@@ -892,7 +892,7 @@ static void test_readpipe_rejects_fd_at_fd_setsize(void **state) {
 	oversized_fd = duplicate_at_fdsetsize(pdes[0]);
 	close(pdes[0]);
 	close(pdes[1]);
-	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
 	php_processes[0].php_state = PHP_READY;
 	php_processes[0].php_read_fd = oversized_fd;
 	result = php_readpipe(0, command);
@@ -946,8 +946,8 @@ static void test_command_retires_fd_at_fd_setsize(void **state) {
 		pause();
 		_exit(0);
 	}
-	set.php_servers = 1;
-	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
+	set.php.php_servers = 1;
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
 	php_processes[0].php_state = PHP_READY;
 	php_processes[0].php_read_fd = oversized_fd;
 	php_processes[0].php_write_fd = pdes[1];
@@ -1011,7 +1011,7 @@ static void test_failed_write_stops_when_restart_handshake_is_not_ready(void **s
 
 	(void) state;
 	prepare_broken_ready_slot();
-	snprintf(set.path_php_server, sizeof(set.path_php_server), "%s", "bad-start");
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "bad-start");
 	result = php_cmd("poll 9", 0);
 	track_write = FALSE;
 	assert_non_null(result);
@@ -1056,7 +1056,7 @@ static void test_command_gives_up_after_three_failed_writes(void **state) {
 	}
 	php_processes[0].php_read_fd = pdes[0];
 	php_processes[0].php_write_fd = pdes[1];
-	snprintf(set.path_php, sizeof(set.path_php), "%s", "/does/not/exist/spine-php-test");
+	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
 	assert_int_equal(sigaction(SIGPIPE, NULL, &saved_sigpipe), 0);
 	memset(&default_sigpipe, 0, sizeof(default_sigpipe));
 	default_sigpipe.sa_handler = SIG_DFL;

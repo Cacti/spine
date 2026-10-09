@@ -22,6 +22,7 @@ cppcheck --enable=all --std=c11 --error-exitcode=1 \
   --suppress=unusedFunction \
   --suppress=checkersReport \
   --suppress=toomanyconfigs \
+  --library=scripts/cppcheck/spine.cfg \
   -- "${source_files[@]}" 2>&1 | tee /tmp/cppcheck.txt
 
 if [[ "${VERIFY_CPPCHECK_ONLY:-0}" == "1" ]]; then

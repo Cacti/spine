@@ -170,7 +170,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	int retries = 0;
 
 	assert(php_command != 0);
-	if (php_processes == NULL || php_process < 0 || php_process >= set.php_servers ||
+	if (php_processes == NULL || php_process < 0 || php_process >= set.php.php_servers ||
 	    php_process >= MAX_PHP_SERVERS) {
 		SPINE_LOG(("ERROR: SS[%i] PHP Script Server slot is unavailable", php_process));
 		return php_undefined_result();
@@ -245,15 +245,15 @@ int php_get_process(void) {
 	int start_candidate;
 	int server_count;
 
-	if (php_processes == NULL || set.php_servers <= 0) return -1;
-	server_count = set.php_servers > MAX_PHP_SERVERS ? MAX_PHP_SERVERS : set.php_servers;
+	if (php_processes == NULL || set.php.php_servers <= 0) return -1;
+	server_count = set.php.php_servers > MAX_PHP_SERVERS ? MAX_PHP_SERVERS : set.php.php_servers;
 
 	/* LOCK_PHP protects only the round-robin cursor. A startup handshake can
 	 * wait for script_timeout, so it must never run under this process-global
 	 * lock. */
 	thread_mutex_lock(LOCK_PHP);
-	if (set.php_current_server >= server_count) set.php_current_server = 0;
-	start_candidate = set.php_current_server++;
+	if (set.php.php_current_server >= server_count) set.php.php_current_server = 0;
+	start_candidate = set.php.php_current_server++;
 	thread_mutex_unlock(LOCK_PHP);
 
 	/* Prefer any ready slot. Each snapshot uses the same per-slot mutex as
@@ -352,6 +352,7 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	double remaining_usec = 0;
 	char *result_string;
 	int response_timeout;
+	double read_deadline;
 
 	ssize_t i;
 	char *cp;
@@ -369,9 +370,13 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	/* Selection-path recovery runs this handshake while holding the slot lock.
 	 * Bound startup independently so a bad PHP configuration cannot pin every
 	 * selector for the full per-command timeout. */
-	response_timeout = allow_restart || set.script_timeout < 2 ? set.script_timeout : 2;
+	response_timeout = allow_restart || set.php.script_timeout < 2 ? set.php.script_timeout : 2;
 	timeout.tv_sec = response_timeout;
 	timeout.tv_usec = 0;
+
+	/* select() only says the first bytes arrived. A server that writes part of
+	 * a line and stalls must not hold this thread past the same deadline. */
+	read_deadline = spine_monotonic_time() + response_timeout;
 
 	/* check to see which pipe talked and take action
 	 * should only be the READ pipe */
@@ -468,7 +473,23 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 					}
 
 					size_t space = (size_t)RESULTS_BUFFER - 1 - used;
+
+					if (used > 0) {
+						int ready = spine_wait_readable(php_processes[php_process].php_read_fd, read_deadline);
+
+						if (ready <= 0) {
+							SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent a partial response and %s, Command[%s]", php_process, ready == 0 ? "timed out" : "failed", command));
+							SET_UNDEFINED(result_string);
+							read_ok = FALSE;
+							break;
+						}
+					}
+
 					i = read(php_processes[php_process].php_read_fd, bptr, space);
+
+					if (i < 0 && errno == EINTR) {
+						continue;
+					}
 
 					if (i <= 0) {
 						SET_UNDEFINED(result_string);
@@ -562,9 +583,16 @@ int php_init(int php_process) {
 		return FALSE;
 	}
 
+	/* An out-of-range slot would index past php_processes. */
+	if (php_processes == NULL || set.php.php_servers < 0 || set.php.php_servers > MAX_PHP_SERVERS ||
+	    (php_process != PHP_INIT && (php_process < 0 || php_process >= set.php.php_servers))) {
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server slot is unavailable", php_process));
+		goto cleanup;
+	}
+
 	/* special code to start all PHP Servers */
 	if (php_process == PHP_INIT) {
-		num_processes = set.php_servers;
+		num_processes = set.php.php_servers;
 	} else {
 		num_processes = 1;
 	}
@@ -598,23 +626,23 @@ int php_init(int php_process) {
 
 		/* establish arguments for script server execution */
 		if (set.cacti_version <= 1222) {
-			argv[0] = set.path_php;
+			argv[0] = set.php.path_php;
 			argv[1] = arg_q;
-			argv[2] = set.path_php_server;
+			argv[2] = set.php.path_php_server;
 			argv[3] = arg_spine;
-			snprintf(poller_id, SMALL_BUFSIZE, "%d", set.poller_id);
+			snprintf(poller_id, SMALL_BUFSIZE, "%d", set.poller.poller_id);
 			argv[4] = poller_id;
 			argv[5] = NULL;
-		} else if (set.poller_id > 1) {
-			argv[0] = set.path_php;
+		} else if (set.poller.poller_id > 1) {
+			argv[0] = set.php.path_php;
 			argv[1] = arg_q;
-			argv[2] = set.path_php_server;
+			argv[2] = set.php.path_php_server;
 			argv[3] = arg_environ_spine;
 
-			snprintf(poller_id, SMALL_BUFSIZE, "--poller=%d", set.poller_id);
+			snprintf(poller_id, SMALL_BUFSIZE, "--poller=%d", set.poller.poller_id);
 			argv[4] = poller_id;
 
-			if (set.mode == REMOTE_ONLINE) {
+			if (set.poller.mode == REMOTE_ONLINE) {
 				argv[5] = arg_mode_online;
 			} else {
 				argv[5] = arg_mode_offline;
@@ -622,11 +650,11 @@ int php_init(int php_process) {
 
 			argv[6] = NULL;
 		} else {
-			argv[0] = set.path_php;
+			argv[0] = set.php.path_php;
 			argv[1] = arg_q;
-			argv[2] = set.path_php_server;
+			argv[2] = set.php.path_php_server;
 			argv[3] = arg_environ_spine;
-			snprintf(poller_id, SMALL_BUFSIZE, "--poller=%d", set.poller_id);
+			snprintf(poller_id, SMALL_BUFSIZE, "--poller=%d", set.poller.poller_id);
 			argv[4] = poller_id;
 
 			argv[5] = NULL;
@@ -846,8 +874,14 @@ void php_close(int php_process) {
 	int num_processes;
 	int len;
 
+	/* An out-of-range slot would index past php_processes. */
+	if (php_processes == NULL || set.php.php_servers < 0 || set.php.php_servers > MAX_PHP_SERVERS ||
+	    (php_process != PHP_INIT && (php_process < 0 || php_process >= set.php.php_servers))) {
+		return;
+	}
+
 	if (php_process == PHP_INIT) {
-		num_processes = set.php_servers;
+		num_processes = set.php.php_servers;
 	} else {
 		num_processes = 1;
 	}
@@ -873,6 +907,13 @@ void php_close(int php_process) {
 		 */
 		if (phpp->php_write_fd >= 0) {
 			static const char quit[] = "quit\r\n";
+			/* A hung server can leave the request pipe full; the quit message
+			 * is best effort and must not block shutdown. */
+			int flags = fcntl(phpp->php_write_fd, F_GETFL);
+
+			if (flags >= 0) {
+				(void)fcntl(phpp->php_write_fd, F_SETFL, flags | O_NONBLOCK);
+			}
 
 			len = php_write_no_sigpipe(phpp->php_write_fd, quit, strlen(quit));
 

@@ -206,11 +206,11 @@ static void make_host(host_t *host, const char *addr) {
 	memset(host, 0, sizeof(*host));
 	host->id = 1;
 	snprintf(host->hostname, sizeof(host->hostname), "%s", addr);
-	host->ping_timeout = 400;
-	host->ping_retries = 1;
-	host->ping_port    = 33439;
-	host->availability_method = AVAIL_PING;
-	host->ping_method  = PING_ICMP;
+	host->availability.timeout = 400;
+	host->availability.retries = 1;
+	host->availability.port    = 33439;
+	host->availability.method = AVAIL_PING;
+	host->availability.ping_method  = PING_ICMP;
 }
 
 static int ping_reset(void **state) {
@@ -221,8 +221,8 @@ static int ping_reset(void **state) {
 	/* is_debug_device() walks this global unguarded and ping_icmp() calls it */
 	memset(pi_debug_table, 0, sizeof(pi_debug_table));
 	debug_devices = pi_debug_table;
-	set.ping_timeout = 400;
-	set.ping_retries = 1;
+	set.availability.ping_timeout = 400;
+	set.availability.ping_retries = 1;
 	use_controlled_socket = 0;
 	controlled_socket_fd = -1;
 	controlled_socket_type = 0;
@@ -233,7 +233,7 @@ static int ping_reset(void **state) {
 	packet_size = ICMP_HDR_SIZE + strlen("cacti-monitoring-system");
 	packet_allocation = NULL;
 	packet_released = 0;
-	set.icmp_uses_caps = FALSE;
+	set.availability.icmp_uses_caps = FALSE;
 	controlled_pair[0] = -1;
 	controlled_pair[1] = -1;
 	resolver_mode = 0;
@@ -331,8 +331,8 @@ static void test_timeout_releases_packet_and_socket(void **state) {
 	use_owned_controlled_socket();
 	track_packet = 1;
 	make_host(&host, "127.0.0.1");
-	host.ping_timeout = 1;
-	host.ping_retries = 0;
+	host.availability.timeout = 1;
+	host.availability.retries = 0;
 	memset(&ping, 0, sizeof(ping));
 
 	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
@@ -378,7 +378,7 @@ static void test_cached_capability_path_releases_resources(void **state) {
 	(void) state;
 	use_controlled_socket = 1;
 	controlled_socket_fd = FD_SETSIZE;
-	set.icmp_uses_caps = TRUE;
+	set.availability.icmp_uses_caps = TRUE;
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
 

@@ -70,7 +70,7 @@ static int session_reset(void **state) {
 	(void) state;
 	config_defaults();
 	init_mutexes();
-	set.snmp_retries = 1;
+	set.snmp.snmp_retries = 1;
 	captured_security_level = -1;
 	captured_auth_key_len = 0;
 	captured_priv_key_len = 0;
@@ -133,8 +133,14 @@ static int level_for(char *auth_protocol, char *auth_password,
 	char eid[]  = "";
 	void *sessp;
 
-	sessp = snmp_host_init(1, host, 3, NULL, user, auth_password, auth_protocol,
-		priv_passphrase, priv_protocol, ctx, eid, 161, 500);
+	const snmp_connection_t options = {
+		.host_id = 1, .hostname = host, .snmp_version = 3, .snmp_community = NULL,
+		.snmp_username = user, .snmp_password = auth_password, .snmp_auth_protocol = auth_protocol,
+		.snmp_priv_passphrase = priv_passphrase, .snmp_priv_protocol = priv_protocol,
+		.snmp_context = ctx, .snmp_engine_id = eid, .snmp_port = 161, .snmp_timeout = 500
+	};
+
+	sessp = snmp_host_init(&options);
 
 	if (sessp == NULL) {
 		return -1;

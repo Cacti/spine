@@ -8,8 +8,8 @@
 #include "spine.h"
 #include "php.h"
 
-spine_sem_t available_threads;
-spine_sem_t available_scripts;
+spine_permits_t available_threads;
+spine_permits_t available_scripts;
 double      start_time;
 double      total_time;
 config_t    set;
@@ -18,4 +18,4 @@ int        *debug_devices;
 pool_t     *db_pool_local;
 pool_t     *db_pool_remote;
 php_t      *php_processes;
-poller_thread_t *details;
+poller_thread_t **details;

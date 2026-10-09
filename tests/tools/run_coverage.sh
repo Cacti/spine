@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 The Cacti Group
+# Licensed under the GNU Lesser General Public License, version 2.1 or later.
+# Run only against isolated regression services; database tests mutate fixtures.
+set -euo pipefail
+: "${SPINE_TEST_DB_HOST:?Set the isolated regression database host}"
+: "${SPINE_TEST_SNMP_HOST:?Set the isolated regression SNMP host}"
+coverage_base="${SPINE_COVERAGE_DIRECTORY:-coverage}"
+mkdir -p "$coverage_base"
+coverage_base="$(cd "$coverage_base" && pwd -P)"
+source_dir="$(pwd -P)"
+coverage_dir="$(mktemp -d "$coverage_base/run.XXXXXX")"
+printf '%s\n' incomplete > "$coverage_dir/status.txt"
+printf '%s\n' "$coverage_dir" > "$coverage_base/latest-run.txt"
+coverage_complete=0
+capability_added=0
+finish() {
+    status=$?
+    if [[ "$capability_added" -eq 1 ]]; then
+        if [[ "$(id -u)" -eq 0 ]]; then setcap -r ./test_spine_regressions; else sudo setcap -r ./test_spine_regressions; fi
+    fi
+    if [[ "$coverage_complete" -eq 1 ]] && [[ "$status" -eq 0 ]]; then
+        printf '%s\n' success > "$coverage_dir/status.txt"
+    else
+        printf '%s\n' incomplete > "$coverage_dir/status.txt"
+    fi
+}
+trap finish EXIT
+for tool in gcc gcov lcov sha256sum tar; do command -v "$tool" >/dev/null; done
+# Exclude only the owned evidence directory, never an untested production unit.
+coverage_find_path='/not-in-source-tree'
+[[ "$coverage_base" != "$source_dir" ]]
+case "$coverage_base" in
+    "$source_dir"/*) coverage_find_path="./${coverage_base#"$source_dir"/}";;
+    *) ;;
+esac
+find . -path "$coverage_find_path" -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile.am' -o -name 'configure.ac' -o -name 'copyright_year.sh' -o -path './tests/fixtures/*' -o -path './tests/tools/*' -o -path './.github/workflows/*.yml' \) -not -path './.git/*' -not -path './config/config.h' -print0 | sort -z > "$coverage_dir/source-inputs.nul"
+xargs -0 sha256sum < "$coverage_dir/source-inputs.nul" > "$coverage_dir/source.sha256"
+tar -czf "$coverage_dir/source-inputs.tar.gz" --null -T "$coverage_dir/source-inputs.nul"
+# Autoreconf replaces this tracked template. Preserve its original bytes and
+# hash the generated template actually used by configure separately below.
+cp Makefile.in "$coverage_dir/source-Makefile.in"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git rev-parse HEAD > "$coverage_dir/revision.txt"
+    git status --porcelain > "$coverage_dir/worktree-status.txt"
+else
+    : "${SPINE_SOURCE_REVISION:?Set the exact source revision for a copied build tree}"
+    printf '%s\n' "$SPINE_SOURCE_REVISION" > "$coverage_dir/revision.txt"
+    printf '%s\n' 'Copied build tree: source.sha256 is authoritative; repository status unavailable.' > "$coverage_dir/worktree-status.txt"
+fi
+gcc --version > "$coverage_dir/compiler.txt"
+gcc -dumpmachine >> "$coverage_dir/compiler.txt"
+if command -v dpkg-query >/dev/null; then
+    dpkg-query -W gcc libc6-dev libmariadb-dev libsnmp-dev libssl-dev snmpd lcov autoconf automake libtool > "$coverage_dir/dependencies.txt"
+else
+    printf '%s\n' 'Package version inventory unavailable: dpkg-query is not installed.' > "$coverage_dir/dependencies.txt"
+fi
+gcov --version > "$coverage_dir/gcov.txt"
+lcov --version > "$coverage_dir/lcov.txt"
+mkdir -p config m4
+autoreconf -fi > "$coverage_dir/build.log" 2>&1
+./configure CC=gcc CFLAGS="-std=gnu11 -g -O0 -UNDEBUG --coverage -fprofile-update=atomic -include $source_dir/tests/tools/coverage_process_exit.h" LDFLAGS='--coverage' >> "$coverage_dir/build.log" 2>&1
+make --no-print-directory coverage-source-list > "$coverage_dir/production-sources.txt"
+make --no-print-directory coverage-test-source-list > "$coverage_dir/test-sources.txt"
+make --no-print-directory coverage-fault-source-list > "$coverage_dir/fault-sources.txt"
+mapfile -t production_sources < "$coverage_dir/production-sources.txt"
+mapfile -t test_sources < "$coverage_dir/test-sources.txt"
+mapfile -t fault_sources < "$coverage_dir/fault-sources.txt"
+[[ "${#production_sources[@]}" -gt 0 ]]
+[[ "${#test_sources[@]}" -gt "${#production_sources[@]}" ]]
+[[ "${#fault_sources[@]}" -gt 0 ]]
+# subdir-objects places each object beside its source, so a producer is the
+# source directory plus the per-target object prefix and the unit name.
+producer_path() {
+    local directory
+    directory="$(dirname "$1")"
+    if [[ "$directory" = . ]]; then printf '%s%s' "$2" "$(basename "${1%.c}")"
+    else printf '%s/%s%s' "$directory" "$2" "$(basename "${1%.c}")"; fi
+}
+producer_units=()
+for source in "${production_sources[@]}"; do
+    case "$source" in *.c) ;; *) printf 'Unsupported production source: %s\n' "$source" >&2; exit 1;; esac
+    [[ -s "$source" ]]
+    producer_units+=("$(producer_path "$source" "")")
+    grep -Fxq "$source" "$coverage_dir/test-sources.txt"
+    # The fault binary reuses the registered renamed spine globals object.
+    if [[ "$source" != spine.c ]]; then grep -Fxq "$source" "$coverage_dir/fault-sources.txt"; fi
+done
+for source in "${test_sources[@]}"; do
+    case "$source" in *.c) ;; *) printf 'Unsupported test source: %s\n' "$source" >&2; exit 1;; esac
+    [[ -s "$source" ]]
+    producer_units+=("$(producer_path "$source" test_spine_regressions-)")
+done
+for source in "${fault_sources[@]}"; do
+    case "$source" in *.c) ;; *) printf 'Unsupported fault source: %s\n' "$source" >&2; exit 1;; esac
+    [[ -s "$source" ]]
+    producer_units+=("$(producer_path "$source" test_spine_faults-)")
+done
+printf '%s\n' "${producer_units[@]}" > "$coverage_dir/producers.txt"
+[[ "$(sort -u "$coverage_dir/producers.txt" | wc -l)" -eq "${#producer_units[@]}" ]]
+make clean >> "$coverage_dir/build.log" 2>&1
+find . -path "$coverage_find_path" -prune -o -name '*.gcda' -type f -exec rm -f {} +
+make -j2 spine test_spine_regressions test_spine_faults >> "$coverage_dir/build.log" 2>&1
+sha256sum config/config.h Makefile.in > "$coverage_dir/generated-config.sha256"
+cp config/config.h "$coverage_dir/generated-config.h"
+cp Makefile.in "$coverage_dir/generated-Makefile.in"
+sha256sum spine test_spine_regressions test_spine_faults > "$coverage_dir/binaries.sha256"
+cp config.log "$coverage_dir/config.log"
+notes=()
+for producer in "${producer_units[@]}"; do [[ -s "$producer.gcno" ]]; notes+=("$producer.gcno"); done
+tests/tools/verify_coverage.sh --producers "$source_dir" "$coverage_dir/producers.txt" gcno
+sha256sum "${notes[@]}" > "$coverage_dir/notes.sha256"
+./test_spine_regressions > "$coverage_dir/default.log" 2>&1
+grep -Fq 'production regression tests passed' "$coverage_dir/default.log"
+grep -Fq 'production SNMPv3 key and timeout boundary regressions passed' "$coverage_dir/default.log"
+grep -Fq 'production CLI alias regressions passed' "$coverage_dir/default.log"
+grep -Fq 'production script stream regressions passed' "$coverage_dir/default.log"
+grep -Fq 'production config structure bindings passed' "$coverage_dir/default.log"
+grep -Fq 'production numeric error-list boundary regressions passed' "$coverage_dir/default.log"
+grep -Fq 'production additional contracts passed' "$coverage_dir/default.log"
+./test_spine_regressions --database > "$coverage_dir/database.log" 2>&1
+grep -Fq 'production settings write outcome regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production database configuration regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production output write failure and retry regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production output recollection retains incomplete historical samples passed' "$coverage_dir/database.log"
+grep -Fq 'production simultaneous output failure ordering regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production remote output destination failure and recollection regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production nullable SNMP profile handoff passed' "$coverage_dir/database.log"
+grep -Fq 'production live SNMP and PHP reindex contracts passed' "$coverage_dir/database.log"
+./test_spine_regressions --snmp-agent > "$coverage_dir/snmp.log" 2>&1
+grep -Fq 'production SNMP agent regressions passed' "$coverage_dir/snmp.log"
+grep -Fq 'production local silent UDP SNMP multi timeout regressions passed' "$coverage_dir/snmp.log"
+SPINE_SNMPV3_EVIDENCE_DIR="$coverage_dir" tests/tools/run_snmpv3.sh > "$coverage_dir/snmpv3.log" 2>&1
+grep -Fq 'production live SNMPv3 authentication and privacy regressions passed' "$coverage_dir/snmpv3.log"
+./test_spine_faults > "$coverage_dir/fault-default.log" 2>&1
+grep -Fq 'production logger date-format failure regressions passed' "$coverage_dir/fault-default.log"
+grep -Fq 'production process creation failure regressions passed' "$coverage_dir/fault-default.log"
+grep -Fq 'production linker fault regressions passed' "$coverage_dir/fault-default.log"
+./test_spine_faults --database > "$coverage_dir/fault-database.log" 2>&1
+grep -Fq 'production real lost-connection retry regressions passed' "$coverage_dir/fault-database.log"
+grep -Fq 'production ping-only SNMP session ownership regressions passed' "$coverage_dir/fault-database.log"
+grep -Fq 'production actual main worker launch failure and retry regressions passed' "$coverage_dir/fault-database.log"
+grep -Fq 'production linker fault regressions passed' "$coverage_dir/fault-database.log"
+profiles=()
+for producer in "${producer_units[@]}"; do [[ -s "$producer.gcda" ]]; profiles+=("$producer.gcda"); done
+tests/tools/verify_coverage.sh --producers "$source_dir" "$coverage_dir/producers.txt" gcda
+if [[ "$(id -u)" -eq 0 ]]; then
+    chmod a+rw "${profiles[@]}"
+    setpriv --reuid=65534 --regid=65534 --clear-groups ./test_spine_regressions --icmp-no-capability > "$coverage_dir/icmp-denied.log" 2>&1
+    setcap cap_net_raw+ep ./test_spine_regressions
+    capability_added=1
+    setpriv --reuid=65534 --regid=65534 --clear-groups ./test_spine_regressions --raw-icmp > "$coverage_dir/icmp-capability.log" 2>&1
+else
+    ./test_spine_regressions --icmp-no-capability > "$coverage_dir/icmp-denied.log" 2>&1
+    sudo setcap cap_net_raw+ep ./test_spine_regressions
+    capability_added=1
+    ./test_spine_regressions --raw-icmp > "$coverage_dir/icmp-capability.log" 2>&1
+fi
+grep -Fq 'production ICMP socket-failure regression passed' "$coverage_dir/icmp-denied.log"
+grep -Fq 'production ICMP loopback regression passed' "$coverage_dir/icmp-capability.log"
+lcov_args=()
+for source in "${production_sources[@]}"; do lcov_args+=(--include "$source_dir/$source"); done
+lcov --capture --directory . --output-file "$coverage_dir/production.info" --rc branch_coverage=1 "${lcov_args[@]}" > "$coverage_dir/capture.log" 2>&1
+tests/tools/test_coverage_verifier.sh > "$coverage_dir/verifier-self-test.log"
+tests/tools/verify_coverage.sh "$coverage_dir/production.info" "$source_dir" "$coverage_dir/production-sources.txt"
+lcov --summary "$coverage_dir/production.info" --rc branch_coverage=1 > "$coverage_dir/summary.txt" 2>&1
+# Bind every producer and scenario to this immutable tested source snapshot.
+sha256sum "${profiles[@]}" > "$coverage_dir/profiles.sha256"
+mkdir -p "$coverage_dir/profiles" "$coverage_dir/bin"
+cp --parents -- "${notes[@]}" "${profiles[@]}" "$coverage_dir/profiles/"
+cp -- spine test_spine_regressions test_spine_faults "$coverage_dir/bin/"
+(cd "$coverage_dir" && find profiles bin -type f -print0 | sort -z | xargs -0 sha256sum) > "$coverage_dir/saved-producers.sha256"
+{
+    sha256sum --check "$coverage_dir/source.sha256"
+    sha256sum --check "$coverage_dir/generated-config.sha256"
+    sha256sum --check "$coverage_dir/binaries.sha256"
+    sha256sum --check "$coverage_dir/notes.sha256"
+} > "$coverage_dir/source-verification.log"
+printf '%s\n' default numeric-error-boundaries config-bindings script-streams cli-aliases additional-contracts database settings-write-outcome output-write-failure-retry output-recollection-new-timestamp simultaneous-output-failure-ordering remote-output-destination-failure-recollection output-sql-batch-boundary nullable-snmp-profile live-reindex snmp local-silent-udp-snmp-multi-timeout snmpv3-key-timeout snmpv3-live fault-default fault-logger fault-process fault-database-retry fault-ping-only-session worker-launch-admitted worker-launch-rejected worker-launch-eagain-retry icmp-denied icmp-capability > "$coverage_dir/scenarios.txt"
+(cd "$coverage_dir" && sha256sum default.log database.log snmp.log snmpv3.log snmpv3-agent.log fault-default.log fault-database.log icmp-denied.log icmp-capability.log scenarios.txt production.info summary.txt source.sha256 generated-config.sha256 binaries.sha256 notes.sha256 profiles.sha256 production-sources.txt test-sources.txt fault-sources.txt producers.txt revision.txt worktree-status.txt compiler.txt dependencies.txt gcov.txt lcov.txt source-Makefile.in generated-Makefile.in generated-config.h source-inputs.nul source-inputs.tar.gz saved-producers.sha256) > "$coverage_dir/evidence.sha256"
+cat "$coverage_dir/summary.txt"
+coverage_complete=1
