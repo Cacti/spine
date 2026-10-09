@@ -158,6 +158,24 @@ extern int spine_permits_destroy(spine_permits_t *permits);
 extern int spine_permits_try_acquire(spine_permits_t *permits);
 extern int spine_permits_release(spine_permits_t *permits);
 extern int spine_permits_available(spine_permits_t *permits);
+
+/* Stack for every thread spine creates.  The deepest worker path, child()
+ * through poll_host() into the SNMP, script, ping and logging code, peaked at
+ * 179,024 bytes (glibc, gcc ASan, live MariaDB and snmpd) and sums to 175,856
+ * bytes statically (gcc 15 -fcallgraph-info=su on musl).  About five results
+ * buffers of that grow with --with-results-buffer.  musl's 128 KiB default
+ * overflows on entry to poll_host().  Reserve twice 180 KiB plus five results
+ * buffers, rounded up to 64 KiB so the size is a page multiple everywhere:
+ * 384 KiB with the default 2048-byte results buffer. */
+#define SPINE_THREAD_STACK_SIZE \
+	(((size_t) 2 * ((size_t) 180 * 1024 + 5 * (size_t) RESULTS_BUFFER) + 65535) & ~(size_t) 65535)
+
+/*! \fn int spine_thread_attr_init(pthread_attr_t *attributes)
+ *  \brief initialize thread attributes with at least SPINE_THREAD_STACK_SIZE
+ *  \return 0, or the pthread error; on error nothing is left to destroy
+ */
+extern int spine_thread_attr_init(pthread_attr_t *attributes);
+
 /*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
  *  \brief append to a bounded buffer without walking off the end
  *

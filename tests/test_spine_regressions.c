@@ -33,6 +33,15 @@ extern void test_reindex_result_contracts(MYSQL *mysql);
 extern void test_additional_snmp_session_boundaries(void);
 extern void test_snmpv3_agent_contracts(void);
 
+/* Threads that run poll_host() need the stack production workers get. */
+void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument) {
+	pthread_attr_t attributes;
+
+	assert(spine_thread_attr_init(&attributes) == 0);
+	assert(pthread_create(worker, &attributes, start, argument) == 0);
+	assert(pthread_attr_destroy(&attributes) == 0);
+}
+
 static void test_copy_bounds(void) {
 	struct { char text[8]; unsigned char guard; } output;
 	memset(&output, 0xa5, sizeof output);
@@ -1864,7 +1873,7 @@ static void test_reindex_pipeline(MYSQL *mysql, test_poll_work_t *work) {
 			work->thread.threads_complete = 0;
 			work->errors = 0;
 			pthread_t worker;
-			assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+			start_test_worker(&worker, test_poll_worker, work);
 			assert(pthread_join(worker, NULL) == 0);
 			assert(work->thread.complete && work->thread.threads_complete == 1);
 			int expected_errors = 1;
@@ -1898,7 +1907,7 @@ static void test_reindex_queue_failure(MYSQL *mysql, test_poll_work_t *work) {
 	work->thread.threads_complete = 0;
 	work->errors = 0;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+	start_test_worker(&worker, test_poll_worker, work);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(db_insert(mysql, LOCAL, "RENAME TABLE poller_command_regression_hidden TO poller_command"));
 	long long kept = (long long)database_count(mysql, "SELECT COUNT(*) FROM poller_reindex WHERE (data_query_id=7 AND assert_value='122') OR (data_query_id=8 AND assert_value='122')");
@@ -1918,7 +1927,7 @@ static void test_reindex_query_shortcut(MYSQL *mysql, test_poll_work_t *work) {
 	work->thread.threads_complete = 0;
 	work->errors = 0;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+	start_test_worker(&worker, test_poll_worker, work);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(work->thread.complete && work->thread.threads_complete == 1 && work->errors == 1);
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_command") == 2);
@@ -1947,14 +1956,14 @@ static void test_profile_schedule_completion(MYSQL *mysql, test_poll_work_t *agg
 	test_poll_work_t second = *aggregate;
 	second.thread.host_thread = 2;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, test_poll_worker, &second) == 0);
+	start_test_worker(&worker, test_poll_worker, &second);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(aggregate->thread.threads_complete == 1 && !aggregate->thread.complete);
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_item WHERE host_id=43 AND rrd_next_step=0") == 2);
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE local_data_id=602 AND output='U'") == 1);
 	test_poll_work_t first = *aggregate;
 	first.thread.host_thread = 1;
-	assert(pthread_create(&worker, NULL, test_poll_worker, &first) == 0);
+	start_test_worker(&worker, test_poll_worker, &first);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(aggregate->thread.threads_complete == 2 && aggregate->thread.complete);
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE (local_data_id=601 AND output='123') OR (local_data_id=602 AND output='U')") == 2);
@@ -1991,7 +2000,7 @@ static void test_poll_database_failure(MYSQL *mysql, test_poll_work_t *aggregate
 		aggregate->thread.poll_failed = FALSE;
 		set.exit.exit_code = EXIT_SUCCESS;
 		pthread_t worker;
-		assert(pthread_create(&worker, NULL, test_poll_worker, aggregate) == 0);
+		start_test_worker(&worker, test_poll_worker, aggregate);
 		assert(pthread_join(worker, NULL) == 0);
 		assert(aggregate->thread.threads_complete == 1);
 		assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);
@@ -2060,7 +2069,7 @@ static void test_snmp_item_pipeline(MYSQL *mysql, test_poll_work_t *work, const 
 		work->thread.threads_complete = 0;
 		work->errors = 0;
 		pthread_t worker;
-		assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+		start_test_worker(&worker, test_poll_worker, work);
 		assert(pthread_join(worker, NULL) == 0);
 		assert(work->thread.complete && work->thread.threads_complete == 1);
 		assert(work->errors == (spike ? 0 : 1));
@@ -2102,7 +2111,7 @@ static void test_snmp_flush_contracts(MYSQL *mysql, test_poll_work_t *work, cons
 		work->thread.threads_complete = 0;
 		work->errors = 0;
 		pthread_t worker;
-		assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+		start_test_worker(&worker, test_poll_worker, work);
 		assert(pthread_join(worker, NULL) == 0);
 		assert(work->thread.complete && work->thread.threads_complete == 1);
 		const char *expected = spike ? "output='U'" : "output REGEXP '^[0-9]$'";
@@ -2126,7 +2135,7 @@ static void test_snmp_flush_contracts(MYSQL *mysql, test_poll_work_t *work, cons
 	work->thread.threads_complete = 0;
 	work->errors = 0;
 	pthread_t regex_worker;
-	assert(pthread_create(&regex_worker, NULL, test_poll_worker, work) == 0);
+	start_test_worker(&regex_worker, test_poll_worker, work);
 	assert(pthread_join(regex_worker, NULL) == 0);
 	if (database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE local_data_id IN (601,602) AND output='266'") != 2) {
 		fprintf(stderr, "flush contract: output_regex did not see the normalized Hex-STRING\n");
@@ -2210,7 +2219,7 @@ static void test_poll_pipeline(MYSQL *mysql) {
 		owned_details[0] = &work->thread;
 		details = owned_details;
 		pthread_t worker;
-		assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+		start_test_worker(&worker, test_poll_worker, work);
 		assert(pthread_join(worker, NULL) == 0);
 		assert(work->thread.complete && work->thread.threads_complete == 1 && work->errors == 1);
 		assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);

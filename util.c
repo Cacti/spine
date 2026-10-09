@@ -177,6 +177,34 @@ int spine_permits_available(spine_permits_t *permits) {
 	return available;
 }
 
+/* Raise, never lower, the platform default: glibc already gives 8 MiB, and a
+ * smaller stack there would only add risk in code nobody has measured. */
+int spine_thread_attr_init(pthread_attr_t *attributes) {
+	size_t current = 0;
+	size_t wanted = SPINE_THREAD_STACK_SIZE;
+	int status;
+
+#ifdef PTHREAD_STACK_MIN
+	if (wanted < (size_t) PTHREAD_STACK_MIN) wanted = (size_t) PTHREAD_STACK_MIN;
+#endif
+
+	status = pthread_attr_init(attributes);
+	if (status != 0) {
+		return status;
+	}
+
+	if (pthread_attr_getstacksize(attributes, &current) == 0 && current >= wanted) {
+		return 0;
+	}
+
+	status = pthread_attr_setstacksize(attributes, wanted);
+	if (status != 0) {
+		pthread_attr_destroy(attributes);
+	}
+
+	return status;
+}
+
 void spine_clear_sensitive(void *buffer, size_t length) {
 	volatile unsigned char *bytes = buffer;
 	while (length > 0) {

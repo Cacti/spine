@@ -11,6 +11,9 @@
  * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
  * for more details.
  */
+
+/* pthread_getattr_np() and pthread_setattr_default_np() check worker stacks. */
+#define _GNU_SOURCE
 #include "common.h"
 #include "spine.h"
 #include <dirent.h>
@@ -111,7 +114,10 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attributes,
 	void *(*start)(void *), void *arg) {
 	if (!launch_case_active || start != &child) return __real_pthread_create(thread, attributes, start, arg);
 	const poller_thread_t *work = arg;
+	size_t stack_size = 0;
 	assert(work != NULL && work->host_id == 902);
+	assert(attributes != NULL && pthread_attr_getstacksize(attributes, &stack_size) == 0);
+	assert(stack_size >= SPINE_THREAD_STACK_SIZE);
 	launch_calls++;
 	launch_device_counter = work->device_counter;
 	launch_startup = work->thread_init_sem;
@@ -319,6 +325,14 @@ int __wrap_pipe(int descriptors[2]) {
 int __wrap_socketpair(int domain, int type, int protocol, int descriptors[2]) {
 	if (socketpair_failures > 0) { socketpair_failures--; errno = EMFILE; return -1; }
 	return __real_socketpair(domain, type, protocol, descriptors);
+}
+
+extern int __real_pthread_attr_setstacksize(pthread_attr_t *, size_t);
+static int stack_size_failures;
+
+int __wrap_pthread_attr_setstacksize(pthread_attr_t *attributes, size_t size) {
+	if (stack_size_failures > 0) { stack_size_failures--; return EINVAL; }
+	return __real_pthread_attr_setstacksize(attributes, size);
 }
 
 /* Script children are created with posix_spawn(), which reports failure
@@ -937,7 +951,61 @@ static void test_fake_database_main_paths(void) {
 	puts("production scripted database main-thread regressions passed");
 }
 
+/* The stack the thread really got, not the one requested. */
+static void assert_worker_stack(void) {
+	pthread_attr_t attributes;
+	size_t stack_size = 0;
+
+	assert(pthread_getattr_np(pthread_self(), &attributes) == 0);
+	assert(pthread_attr_getstacksize(&attributes, &stack_size) == 0);
+	assert(pthread_attr_destroy(&attributes) == 0);
+	assert(stack_size >= SPINE_THREAD_STACK_SIZE);
+}
+
+static void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument) {
+	pthread_attr_t attributes;
+
+	assert(spine_thread_attr_init(&attributes) == 0);
+	assert(pthread_create(worker, &attributes, start, argument) == 0);
+	assert(pthread_attr_destroy(&attributes) == 0);
+}
+
+/* A larger default is kept, and a refused size is reported, not ignored. */
+static void test_thread_attr_init(void) {
+	pthread_attr_t attributes;
+	size_t stack_size = 0;
+
+	stack_size_failures = 1;
+	assert(spine_thread_attr_init(&attributes) == EINVAL);
+	assert(stack_size_failures == 0);
+
+	fflush(NULL);
+	pid_t process = fork();
+	assert(process >= 0);
+	if (process == 0) {
+		pthread_attr_t larger;
+		assert(pthread_attr_init(&larger) == 0);
+		assert(pthread_attr_setstacksize(&larger, 4 * SPINE_THREAD_STACK_SIZE) == 0);
+		assert(pthread_setattr_default_np(&larger) == 0);
+		assert(pthread_attr_destroy(&larger) == 0);
+		assert(spine_thread_attr_init(&attributes) == 0);
+		assert(pthread_attr_getstacksize(&attributes, &stack_size) == 0);
+		assert(pthread_attr_destroy(&attributes) == 0);
+		exit(stack_size == 4 * SPINE_THREAD_STACK_SIZE ? 0 : 1);
+	}
+	int status;
+	assert(waitpid(process, &status, 0) == process);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+
+	assert(spine_thread_attr_init(&attributes) == 0);
+	assert(pthread_attr_getstacksize(&attributes, &stack_size) == 0);
+	assert(pthread_attr_destroy(&attributes) == 0);
+	assert(stack_size == SPINE_THREAD_STACK_SIZE);
+	puts("production worker thread stack regressions passed");
+}
+
 static void *fake_poll_worker(void *argument) {
+	assert_worker_stack();
 	assert(mysql_thread_init() == 0);
 	int errors = 0;
 	poll_host(argument, &errors);
@@ -953,7 +1021,7 @@ static void run_fake_poll(poller_thread_t *device, int host_id) {
 	STRNCOPY(device->host_time, "1791244800");
 	set.exit.exit_code = EXIT_SUCCESS;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, fake_poll_worker, device) == 0);
+	start_test_worker(&worker, fake_poll_worker, device);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(device->threads_complete == 1);
 }
@@ -1015,7 +1083,7 @@ static void test_fake_database_poll_host(void) {
 	device.host_threads = 1;
 	STRNCOPY(device.host_time, "1791244800");
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, fake_poll_worker, &device) == 0);
+	start_test_worker(&worker, fake_poll_worker, &device);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(device.threads_complete == 0 && !device.poll_failed && db_pool_local[0].free);
 	/* A row count of one with no row ignores the device but completes it. */
@@ -1262,7 +1330,7 @@ static void test_ping_only_session_lifetime(void) {
 		session_closes = 0;
 		account_snmp_sessions = TRUE;
 		pthread_t worker;
-		assert(pthread_create(&worker, NULL, run_ping_only_worker, &work) == 0);
+		start_test_worker(&worker, run_ping_only_worker, &work);
 		assert(pthread_join(worker, NULL) == 0);
 		account_snmp_sessions = FALSE;
 		int observed_opens = session_opens;
@@ -1367,7 +1435,7 @@ static void test_snmp_batch_key_width(void) {
 	session_closes = 0;
 	account_snmp_sessions = TRUE;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, run_batch_worker, &work) == 0);
+	start_test_worker(&worker, run_batch_worker, &work);
 	assert(pthread_join(worker, NULL) == 0);
 	account_snmp_sessions = FALSE;
 	int observed_opens = session_opens;
@@ -1495,6 +1563,15 @@ static void test_worker_launch_failures(void) {
 }
 
 int main(int argc, char **argv) {
+#if defined(__GLIBC__)
+	/* Give unconfigured threads musl's 128 KiB, so a worker started without
+	 * spine_thread_attr_init() overflows here as it does on Alpine. */
+	pthread_attr_t musl_default;
+	assert(pthread_attr_init(&musl_default) == 0);
+	assert(pthread_attr_setstacksize(&musl_default, 128 * 1024) == 0);
+	assert(pthread_setattr_default_np(&musl_default) == 0);
+	assert(pthread_attr_destroy(&musl_default) == 0);
+#endif
 	/* Fresh exec enters production initialization exactly once, without
 	 * reinitializing the ordinary fault harness's inherited mutexes. */
 	if (argc == 4 && strcmp(argv[1], "--worker-launch-case") == 0) {
@@ -1514,6 +1591,7 @@ int main(int argc, char **argv) {
 	test_privilege_drop_faults();
 	test_fake_database_wrappers();
 	test_fake_database_main_paths();
+	test_thread_attr_init();
 	test_fake_database_poll_host();
 	test_fake_database_startup_reads();
 	test_fake_database_main();

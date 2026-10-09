@@ -17,6 +17,7 @@
 
 extern poller_thread_t **details;
 extern int *debug_devices;
+extern void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument);
 
 static unsigned long long output_count(MYSQL *mysql, const char *query) {
 	MYSQL_RES *result = db_query(mysql, LOCAL, query);
@@ -51,7 +52,7 @@ static void run_output_partition(const poller_thread_t *aggregate, int partition
 	pthread_t worker;
 	/* Production child owns/frees instructions and releases thread/startup
 	 * permits after poll_host, including output failures. */
-	assert(pthread_create(&worker, NULL, child, work) == 0);
+	start_test_worker(&worker, child, work);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(spine_permits_available(&startup) == 1);
 	assert(spine_permits_destroy(&startup) == 0);
@@ -290,7 +291,7 @@ static void test_concurrent_output_failure(MYSQL *mysql) {
 		workers[index].finished_fd = finished[index][1];
 		assert(spine_permits_try_acquire(&startup) == 0);
 		assert(spine_permits_try_acquire(&available_threads) == 0);
-		assert(pthread_create(&threads[index], NULL, controlled_output_child, &workers[index]) == 0);
+		start_test_worker(&threads[index], controlled_output_child, &workers[index]);
 	}
 	double deadline = spine_monotonic_time() + 10;
 	await_output_byte(ready[0], 'R', deadline);
