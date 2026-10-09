@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 		int bad_start = strstr(mode, "bad-start") != NULL;
 
 		if (strstr(mode, "check-sigpipe") != NULL &&
-		    (sigaction(SIGPIPE, NULL, &action) != 0 || action.sa_handler != SIG_DFL)) {
+			(sigaction(SIGPIPE, NULL, &action) != 0 || action.sa_handler != SIG_DFL)) {
 			bad_start = 1;
 		}
 		puts(bad_start ? "Not ready" : "Started");

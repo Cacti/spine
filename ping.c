@@ -749,8 +749,8 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 	memset(packet, 0, packet_len);
 
 	/* set the memory of the ping address */
-	memset(&fromname, 0, sizeof(struct sockaddr_in));
-	memset(&recvname, 0, sizeof(struct sockaddr_in));
+	memset(&fromname, 0, sizeof(fromname));
+	memset(&recvname, 0, sizeof(recvname));
 
 	icmp = (struct icmp*) packet;
 
@@ -1786,28 +1786,25 @@ name_t *get_namebyhost(const char *hostname, name_t *name) {
  *  \return 16bit checksum of an input buffer of size len.
  *
  */
-unsigned short int get_checksum(void* buf, int len) {
-	int      nleft = len;
-	int32_t  sum   = 0;
-	unsigned short int answer;
-	unsigned short int* w = (unsigned short int*)buf;
-	unsigned short int odd_byte = 0;
+unsigned short int get_checksum(const void *buf, int len) {
+	const unsigned char *bytes = buf;
+	uint32_t sum = 0;
+	uint16_t word;
 
-	while (nleft > 1) {
-		sum += *w++;
-		nleft -= 2;
+	while (len > 1) {
+		memcpy(&word, bytes, sizeof(word));
+		sum += word;
+		bytes += sizeof(word);
+		len -= (int) sizeof(word);
 	}
-
-	if (nleft == 1) {
-   		*(unsigned char*)(&odd_byte) = *(unsigned char*)w;
-   		sum += odd_byte;
+	if (len == 1) {
+		word = 0;
+		memcpy(&word, bytes, 1);
+		sum += word;
 	}
-
-	sum    = (sum >> 16) + (sum & 0xffff);
-	sum   += (sum >> 16);
-	answer = (unsigned short int)((unsigned int)~sum & 0xffff); /* checksum truncation is intentional */
-
-	return answer;
+	sum = (sum >> 16) + (sum & UINT32_C(0xffff));
+	sum += sum >> 16;
+	return (unsigned short int) (~sum & UINT32_C(0xffff));
 }
 
 static bool host_requires_snmp(const host_t *host) {

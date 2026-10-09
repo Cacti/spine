@@ -4,7 +4,7 @@
  * replicate its predicate, so they compile standalone.  That keeps them cheap
  * but means a fix can land in util.c while the test still passes against the
  * old copy.  This binary links the real translation units instead, with
- * tests/fuzz/stubs.c supplying the globals that spine.c would otherwise define,
+ * tests/support/spine_runtime.c supplying the globals that spine.c would otherwise define,
  * so what runs here is what ships.
  */
 #include <stdarg.h>
@@ -35,7 +35,7 @@
 #define ICMP_DEST_UNREACH ICMP_UNREACH
 #endif
 
-/* provided by tests/fuzz/stubs.c, as spine.c would */
+/* provided by tests/support/spine_runtime.c, as spine.c would */
 extern int *debug_devices;
 
 #ifdef SPINE_TEST_WRAP_WAITPID
@@ -308,6 +308,37 @@ static void test_get_time_as_double_advances(void **state) {
 	assert_true(t1 > 0.0);
 	t2 = get_time_as_double();
 	assert_true(t2 >= t1);
+}
+
+static void test_get_checksum_accepts_unaligned_bytes(void **state) {
+	_Alignas(uint16_t) unsigned char bytes[34];
+	_Alignas(uint16_t) unsigned char aligned[32];
+	size_t offset;
+	size_t length;
+	size_t index;
+	(void) state;
+
+	for (index = 0; index < sizeof(bytes); index++) bytes[index] = (unsigned char) (index * 17);
+	for (offset = 0; offset < _Alignof(uint16_t); offset++) {
+		for (length = 0; length <= sizeof(aligned); length++) {
+			memcpy(aligned, bytes + offset, length);
+			assert_int_equal(get_checksum(bytes + offset, (int) length), get_checksum(aligned, (int) length));
+		}
+	}
+}
+
+static void test_rtrim_empty_and_fully_trimmed(void **state) {
+	char empty[] = "";
+	char trimmed[] = " \t\r\n\\\"'";
+	char value[] = "42 \t\n";
+	(void) state;
+
+	assert_ptr_equal(rtrim(empty), empty);
+	assert_string_equal(empty, "");
+	assert_ptr_equal(rtrim(trimmed), trimmed);
+	assert_string_equal(trimmed, "");
+	assert_ptr_equal(rtrim(value), value);
+	assert_string_equal(value, "42");
 }
 
 static void test_get_checksum_is_stable(void **state) {
@@ -1077,6 +1108,8 @@ int main(void) {
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),
+		cmocka_unit_test(test_get_checksum_accepts_unaligned_bytes),
+		cmocka_unit_test(test_rtrim_empty_and_fully_trimmed),
 		cmocka_unit_test(test_icmp_classify_accepts_our_reply),
 		cmocka_unit_test(test_icmp_classify_rejects_a_runt),
 		cmocka_unit_test(test_icmp_classify_rejects_a_bad_ihl),

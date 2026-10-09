@@ -7,7 +7,7 @@
  *
  * Build:
  *   clang -fsanitize=fuzzer,address,undefined tests/fuzz/fuzz_namebyhost.c \
- *         ping.o tests/fuzz/stubs.c -o fuzz_namebyhost -lnetsnmp
+ *         ping.o tests/support/spine_runtime.c -o fuzz_namebyhost -lnetsnmp
  */
 #include <stdint.h>
 #include <stdlib.h>

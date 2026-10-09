@@ -46,7 +46,7 @@ all: $(TARGETS)
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-$(BINDIR)/fuzz_%: fuzz_%.c stubs.c $(SPINE_SRC) | $(BINDIR)
+$(BINDIR)/fuzz_%: fuzz_%.c ../support/spine_runtime.c $(SPINE_SRC) | $(BINDIR)
 	$(FUZZ_CC) $(FUZZ_CFLAGS) $^ -o $@ $(FUZZ_LDLIBS)
 
 run: $(TARGETS)

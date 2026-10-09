@@ -161,7 +161,7 @@ static void spine_signal_handler(int spine_signal) {
 	errno = saved_errno;
 }
 
-static int spine_fatal_signals[] = {
+static const int spine_fatal_signals[] = {
 	SIGINT,
 	SIGSEGV,
 	SIGBUS,
@@ -169,8 +169,7 @@ static int spine_fatal_signals[] = {
 	SIGQUIT,
 	SIGSYS,
 	SIGABRT,
-	0
-};
+	0};
 
 /* A caught disposition is reset to SIG_DFL by exec(), unlike SIG_IGN. Keep
  * broken pipes non-fatal in Spine while preserving normal SIGPIPE semantics
@@ -187,13 +186,12 @@ static void spine_sigpipe_handler(int spine_signal) {
 void install_spine_signal_handler(void) {
 	/* Set a handler for any fatal signal not already handled */
 	int i;
-	struct sigaction sa;
+	struct sigaction sa = {0};
 	void (*ohandler)(int);
 
 	/* Broken pipes are ordinary runtime failures for database sockets, script
 	 * pipes and redirected logs. A caught handler makes write() return EPIPE,
 	 * and exec'd children automatically regain SIG_DFL. */
-	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = spine_sigpipe_handler;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
@@ -228,7 +226,7 @@ void install_spine_signal_handler(void) {
 void uninstall_spine_signal_handler(void) {
 	/* Remove a handler for any fatal signal handled */
 	int i;
-	struct sigaction sa;
+	struct sigaction sa = {0};
 	void (*ohandler)(int);
 
 	if (sigaction(SIGPIPE, NULL, &sa) != 0) {
