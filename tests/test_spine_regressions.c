@@ -29,6 +29,7 @@ extern void test_script_stream_contracts(void);
 extern void test_additional_database_contracts(MYSQL *mysql);
 extern void test_settings_write_contracts(MYSQL *mysql);
 extern void test_additional_reindex_contracts(MYSQL *mysql);
+extern void test_reindex_result_contracts(MYSQL *mysql);
 extern void test_additional_snmp_session_boundaries(void);
 extern void test_snmpv3_agent_contracts(void);
 
@@ -56,15 +57,11 @@ static void test_string_conversions(void) {
 	assert(strcmp(reverse(empty), "") == 0);
 	assert(strcmp(reverse(one), "x") == 0);
 	assert(strcmp(reverse(word), "dcba") == 0);
-	char hex[] = "\"FF ff\t\"";
-	char maximum[] = "FFFFFFFFFFFFFFFF";
-	char overflow[] = "10000000000000000";
-	char invalid[] = "not hex";
-	unsigned long long value = 0;
-	assert(hex2dec(hex, &value) && value == 65535);
-	assert(hex2dec(maximum, &value) && value == ULLONG_MAX);
-	assert(!hex2dec(overflow, &value));
-	assert(!hex2dec(invalid, &value) && !hex2dec(NULL, &value));
+	classified_result_t hex;
+	assert(classify_result("\"FF ff\t\"", &hex) == RESULT_HEX_COUNTER && hex.value.counter == 65535);
+	assert(classify_result("FF:FF:FF:FF FF-FF-FF-FF", &hex) == RESULT_HEX_COUNTER && hex.value.counter == ULLONG_MAX);
+	assert(classify_result("01 00 00 00 00 00 00 00 00", &hex) == RESULT_UNKNOWN && IS_UNDEFINED(hex.text));
+	assert(classify_result("not hex", &hex) == RESULT_UNKNOWN);
 	char input[BUFSIZE * 2];
 	memset(input, '\\', sizeof(input) - 1);
 	input[sizeof(input) - 1] = '\0';
@@ -668,7 +665,16 @@ static void test_poll_result_formats(void) {
 		{"a:1 b!2", "a:1 b!2", POLL_RESULT_VALID},
 		{"a!1", "a!1", POLL_RESULT_VALID},
 		{"U", "U", POLL_RESULT_UNDEFINED},
-		{"nonsense", "", POLL_RESULT_INVALID}
+		{"nonsense", "U", POLL_RESULT_INVALID},
+		/* Padding is not data: " 42" once parsed as the octets 0x42. */
+		{" 42", "42", POLL_RESULT_VALID},
+		{"42\n", "42", POLL_RESULT_VALID},
+		{"  10\n", "10", POLL_RESULT_VALID},
+		{"\"42\"", "42", POLL_RESULT_VALID},
+		{"1F FF FF FF FF FF FF F1", "2305843009213693937", POLL_RESULT_VALID},
+		{"0x1A", "U", POLL_RESULT_INVALID},
+		{"---", "U", POLL_RESULT_INVALID},
+		{"   ", "U", POLL_RESULT_INVALID}
 	};
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
 		for (int snmp = 0; snmp <= 1; snmp++) {
@@ -678,10 +684,17 @@ static void test_poll_result_formats(void) {
 			assert(strcmp(result, cases[i].output) == 0);
 		}
 	}
-	char undefined[RESULTS_BUFFER] = "u";
-	assert(normalize_poll_result(undefined, true) == POLL_RESULT_UNDEFINED);
-	assert(strcmp(undefined, "u") == 0);
-	assert(normalize_poll_result(undefined, false) == POLL_RESULT_INVALID);
+	/* An agent's "u" or "NaN" is unknown, and poller_output stores it as U. */
+	static const char *const unknown[] = {"u", "NaN", "nan"};
+	for (size_t i = 0; i < sizeof(unknown) / sizeof(unknown[0]); i++) {
+		char undefined[RESULTS_BUFFER];
+		strncopy(undefined, unknown[i], sizeof(undefined));
+		assert(normalize_poll_result(undefined, true) == POLL_RESULT_UNDEFINED);
+		assert(strcmp(undefined, "U") == 0);
+		strncopy(undefined, unknown[i], sizeof(undefined));
+		assert(normalize_poll_result(undefined, false) == POLL_RESULT_INVALID);
+		assert(strcmp(undefined, "U") == 0);
+	}
 }
 
 static void test_hostnames(void) {
@@ -1811,7 +1824,7 @@ static void test_reindex_pipeline(MYSQL *mysql, test_poll_work_t *work) {
 		{"<", "0", "/usr/bin/printf 123", POLLER_ACTION_SCRIPT, 0, "123", "123"},
 		{"=", "123", "/usr/bin/printf 'a\\nb\\n'", POLLER_ACTION_SCRIPT_COUNT, 1, "2", "123"},
 		{"=", "123", "/usr/bin/printf U", POLLER_ACTION_SCRIPT, 0, "123", "123"},
-		{"<", "124", "/usr/bin/printf U", POLLER_ACTION_SCRIPT, 0, "U", "123"},
+		{"<", "124", "/usr/bin/printf U", POLLER_ACTION_SCRIPT, 0, "124", "123"},
 		{"<", "124", "unknown", 99, 0, "124", "123"}
 	};
 	for (int level = 0; level <= 2; level++) {
@@ -1985,10 +1998,11 @@ static void prepare_nullable_snmp_profile(MYSQL *mysql) {
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_item WHERE host_id=44 AND snmp_context IS NULL AND snmp_engine_id IS NULL AND arg2 IS NULL AND arg3 IS NULL") == 2);
 }
 
-static void assert_snmp_pipeline_samples(MYSQL *mysql, bool spike, bool change_version) {
+static void assert_snmp_pipeline_samples(MYSQL *mysql, bool spike) {
 	char query[LRG_BUFSIZE];
-	bool first_discarded = spike && !change_version;
-	const char *first_check = first_discarded ? "output='U'" : "output REGEXP '^[0-9]+$' AND CAST(output AS UNSIGNED)>0";
+	/* A restarted agent invalidates every sample of the cycle, including
+	 * those flushed early because the next item's credentials differ. */
+	const char *first_check = spike ? "output='U'" : "output REGEXP '^[0-9]+$' AND CAST(output AS UNSIGNED)>0";
 	spine_snprintf(query, sizeof(query), "SELECT COUNT(*) FROM poller_output WHERE local_data_id=601 AND %s", first_check);
 	assert(database_count(mysql, query) == 1);
 	spine_snprintf(query, sizeof(query), "SELECT COUNT(*) FROM poller_output_boost WHERE local_data_id=601 AND %s", first_check);
@@ -2030,12 +2044,77 @@ static void test_snmp_item_pipeline(MYSQL *mysql, test_poll_work_t *work, const 
 		assert(work->thread.complete && work->thread.threads_complete == 1);
 		assert(work->errors == (spike ? 0 : 1));
 		assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);
-		assert_snmp_pipeline_samples(mysql, spike, change_version);
+		assert_snmp_pipeline_samples(mysql, spike);
 		if (scenario == 8) puts("production nullable SNMP profile handoff passed");
 	}
 	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
 	assert(db_insert(mysql, LOCAL, "UPDATE host SET snmp_context='',snmp_engine_id='' WHERE id=44"));
 	assert(db_insert(mysql, LOCAL, "UPDATE poller_item SET snmp_context='',snmp_engine_id='' WHERE host_id=44"));
+}
+
+/* Each item leaves through a different batch flush: 601 through the
+ * batch-full flush (max_oids=1) or the credential-change flush (602 switches
+ * to v1), and 602 through the final flush. All three must apply the same
+ * output_regex and spike kill. */
+static void test_snmp_flush_contracts(MYSQL *mysql, test_poll_work_t *work, const char *agent) {
+	char escaped_agent[BUFSIZE];
+	char query[LRG_BUFSIZE];
+	int previous_regex = set.hosts.has_output_regex;
+	db_escape(mysql, escaped_agent, sizeof(escaped_agent), agent);
+	assert(db_insert(mysql, LOCAL, "ALTER TABLE poller_item ADD COLUMN output_regex varchar(255) NOT NULL DEFAULT ''"));
+	set.hosts.has_output_regex = TRUE;
+	for (int scenario = 0; scenario < 4; scenario++) {
+		bool full_batch = (scenario & 1) != 0;
+		bool spike = (scenario & 2) != 0;
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_command"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output_boost"));
+		spine_snprintf(query, sizeof(query), "UPDATE host SET max_oids=%d WHERE id=44", full_batch ? 1 : 5);
+		assert(db_insert(mysql, LOCAL, query));
+		/* The leading digit of sysUpTime: a visible, still numeric rewrite. */
+		spine_snprintf(query, sizeof(query), "UPDATE poller_item SET action=0,hostname='%s',snmp_community='regression',snmp_version=2,snmp_port=1161,snmp_timeout=500,arg1='.1.3.6.1.2.1.1.3.0',output_regex='^[0-9]' WHERE host_id=44", escaped_agent);
+		assert(db_insert(mysql, LOCAL, query));
+		if (!full_batch) assert(db_insert(mysql, LOCAL, "UPDATE poller_item SET snmp_version=1 WHERE local_data_id=602"));
+		if (spike) assert(db_insert(mysql, LOCAL, "INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES (44,7,1,'<','124','/usr/bin/printf 123')"));
+		work->thread.complete = FALSE;
+		work->thread.threads_complete = 0;
+		work->errors = 0;
+		pthread_t worker;
+		assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+		assert(pthread_join(worker, NULL) == 0);
+		assert(work->thread.complete && work->thread.threads_complete == 1);
+		const char *expected = spike ? "output='U'" : "output REGEXP '^[0-9]$'";
+		for (int item = 601; item <= 602; item++) {
+			spine_snprintf(query, sizeof(query), "SELECT COUNT(*) FROM poller_output WHERE local_data_id=%d AND %s", item, expected);
+			if (database_count(mysql, query) != 1) {
+				fprintf(stderr, "flush contract: scenario=%d full_batch=%d spike=%d item=%d expected %s\n", scenario, full_batch, spike, item, expected);
+				assert(0);
+			}
+			spine_snprintf(query, sizeof(query), "SELECT COUNT(*) FROM poller_output_boost WHERE local_data_id=%d AND %s", item, expected);
+			assert(database_count(mysql, query) == 1);
+		}
+	}
+	/* Existing regexes were written against the normalized value: a
+	 * Hex-STRING becomes 266 first, then the regex keeps "266", not "00". */
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output_boost"));
+	assert(db_insert(mysql, LOCAL, "UPDATE poller_item SET snmp_version=2,arg1='.1.3.6.1.2.1.1.5.0',output_regex='^[0-9][0-9]*' WHERE host_id=44"));
+	work->thread.complete = FALSE;
+	work->thread.threads_complete = 0;
+	work->errors = 0;
+	pthread_t regex_worker;
+	assert(pthread_create(&regex_worker, NULL, test_poll_worker, work) == 0);
+	assert(pthread_join(regex_worker, NULL) == 0);
+	if (database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE local_data_id IN (601,602) AND output='266'") != 2) {
+		fprintf(stderr, "flush contract: output_regex did not see the normalized Hex-STRING\n");
+		assert(0);
+	}
+	set.hosts.has_output_regex = previous_regex;
+	assert(db_insert(mysql, LOCAL, "ALTER TABLE poller_item DROP COLUMN output_regex"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
+	puts("production SNMP batch flush contracts passed");
 }
 
 static void assert_polled_host_statistics(MYSQL *mysql, int host_id) {
@@ -2121,7 +2200,10 @@ static void test_poll_pipeline(MYSQL *mysql) {
 		spine_snprintf(query, sizeof(query), "SELECT errors FROM host_errors WHERE host_id=%d", host_id);
 		assert(database_count(mysql, query) == 1);
 		assert_polled_host_statistics(mysql, host_id);
-		if (host_id == 44) test_snmp_item_pipeline(mysql, work, agent);
+		if (host_id == 44) {
+			test_snmp_item_pipeline(mysql, work, agent);
+			test_snmp_flush_contracts(mysql, work, agent);
+		}
 		if (host_id == 43) {
 			test_reindex_pipeline(mysql, work);
 			test_reindex_query_shortcut(mysql, work);
@@ -2313,6 +2395,7 @@ static void test_database_configuration(void) {
 	test_collector_transfer(&mysql);
 	test_poll_pipeline(&mysql);
 	test_output_write_contracts(&mysql);
+	test_reindex_result_contracts(&mysql);
 	const char *reindex_agent = getenv("SPINE_TEST_SNMP_HOST");
 	if (reindex_agent != NULL && reindex_agent[0] != '\0') test_additional_reindex_contracts(&mysql);
 	test_cli_transfer_exit(&mysql);

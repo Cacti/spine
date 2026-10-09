@@ -174,14 +174,17 @@ static void test_multipart_boundaries(void) {
 		{NULL, FALSE}, {"", FALSE}, {"123", FALSE}, {"hello", FALSE},
 		{"a:1", TRUE}, {"a!1", TRUE}, {":", TRUE}, {"!", TRUE},
 		{"a:1 b:2", TRUE}, {"a!1 b!2", TRUE}, {"a:1 b!2", TRUE},
-		{"a:1  b:2", FALSE}, {" a:1", FALSE}, {"a:1 ", FALSE},
-		{" a:1 b:2 ", FALSE}, {"a:1 b:2 c:3", TRUE},
+		{"a:1  b:2", FALSE}, {" a:1", TRUE}, {"a:1 ", TRUE},
+		{" a:1 b:2 ", TRUE}, {"a:1 b:2 c:3", TRUE},
 		{"a::1 b:2", FALSE}, {"a::1", TRUE},
 		{"a:1\tb:2", TRUE}, {"a:1\nb!2", TRUE},
 		{"a:1\t b!2", TRUE}, {"a:1 b:2\n c!3", TRUE},
 		{"a:1 \t b:2", FALSE}, {"a  b", FALSE}
 	};
-	for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) assert(is_multipart_output(cases[i].input) == cases[i].expected);
+	for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+		classified_result_t out;
+		assert((classify_result(cases[i].input, &out) == RESULT_MULTIPART) == cases[i].expected);
+	}
 }
 
 static void test_fatal_signal_contracts(void) {

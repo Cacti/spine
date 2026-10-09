@@ -122,6 +122,7 @@ check_PROGRAMS += \
 	tests/unit/test_build_fixes \
 	tests/unit/test_safety_fixes \
 	tests/unit/test_linked \
+	tests/unit/test_classify_result \
 	tests/unit/test_util_paths \
 	tests/unit/test_snmpv3_session \
 	tests/unit/test_ping_icmp
@@ -133,7 +134,7 @@ noinst_PROGRAMS = tests/unit/php_test_server
 tests_unit_php_test_server_SOURCES = tests/unit/php_test_server.c
 
 if HAVE_LD_WRAP
-check_PROGRAMS += tests/unit/test_php_runtime
+check_PROGRAMS += tests/unit/test_php_runtime tests/unit/test_poll_host
 endif
 endif
 
@@ -171,6 +172,11 @@ tests_unit_test_linked_LDFLAGS = -Wl,--wrap=waitpid
 tests_unit_test_linked_CPPFLAGS += -DSPINE_TEST_WRAP_WAITPID
 endif
 
+tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
+tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
 # includes util.c, so it needs the same libraries spine links against
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
@@ -184,6 +190,20 @@ tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
 	src/core/keywords.c error.c
 tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+# poll_host() against an in-memory database and SNMP agent: the wrapped
+# calls are the ones poller.o makes into sql.o, snmp.o, ping.o and libmysql.
+tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
+tests_unit_test_poll_host_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_poll_host_LDFLAGS = \
+	-Wl,--wrap=db_query -Wl,--wrap=db_insert -Wl,--wrap=db_escape \
+	-Wl,--wrap=db_get_connection -Wl,--wrap=db_release_connection \
+	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
+	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
+	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
+	-Wl,--wrap=ping_host
 
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \

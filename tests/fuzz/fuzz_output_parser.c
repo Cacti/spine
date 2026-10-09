@@ -47,8 +47,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
 	(void)format_poller_output_row(row, sizeof(row), 1,
 		"fuzz", "1700000000", result);
-	(void)is_multipart_output(value);
-	(void)validate_result(value);
+	classified_result_t classified;
+	if (classify_result(value, &classified) == RESULT_UNKNOWN &&
+		!IS_UNDEFINED(classified.text)) {
+		abort();
+	}
 
 	return 0;
 }

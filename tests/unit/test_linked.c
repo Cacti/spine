@@ -211,28 +211,6 @@ static void test_is_ipaddress(void **state) {
 	assert_int_equal(is_ipaddress(""), TRUE);              /* vacuously true */
 }
 
-static void test_is_numeric(void **state) {
-	char i[16], d[16], neg[16], txt[16], mixed[16], empty[16];
-	(void) state;
-
-	strcpy(i, "42");        assert_int_equal(is_numeric(i), TRUE);
-	strcpy(d, "3.14");      assert_int_equal(is_numeric(d), TRUE);
-	strcpy(neg, "-7");      assert_int_equal(is_numeric(neg), TRUE);
-	strcpy(txt, "abc");     assert_int_equal(is_numeric(txt), FALSE);
-	strcpy(mixed, "12abc"); assert_int_equal(is_numeric(mixed), FALSE);
-	strcpy(empty, "");      assert_int_equal(is_numeric(empty), FALSE);
-}
-
-static void test_is_hexadecimal(void **state) {
-	(void) state;
-	assert_int_equal(is_hexadecimal("AA BB CC", 0), TRUE);
-	assert_int_equal(is_hexadecimal("AA\tBB", 0), FALSE);
-	assert_int_equal(is_hexadecimal("AA\tBB", 1), FALSE);
-	assert_int_equal(is_hexadecimal("AA\tBB:CC", 1), TRUE);
-	assert_int_equal(is_hexadecimal("zz", 0), FALSE);
-	assert_int_equal(is_hexadecimal("", 0), FALSE);
-}
-
 /* --- string surgery ------------------------------------------------------- */
 
 static void test_trim_family(void **state) {
@@ -301,71 +279,6 @@ static void test_add_slashes_passes_plain_text_through(void **state) {
 	assert_non_null(out);
 	assert_string_equal(out, "plain");
 	free(out);
-}
-
-static void test_hex2dec(void **state) {
-	char a[32], b[16], overflow[160];
-	unsigned long long value;
-	(void) state;
-
-	strcpy(a, "FF");  assert_true(hex2dec(a, &value)); assert_int_equal(value, 255);
-	strcpy(b, "00");  assert_true(hex2dec(b, &value)); assert_int_equal(value, 0);
-	strcpy(a, "00:1b:44:11:3a:b7");
-	assert_true(hex2dec(a, &value));
-	assert_int_equal(value, 0x001b44113ab7ULL);
-	strcpy(a, "- 0a:1B- 2c :3D ");
-	assert_true(hex2dec(a, &value));
-	assert_int_equal(value, 0x0a1b2c3dULL);
-	strcpy(a, "ff:ff:ff:ff:ff:ff:ff:ff");
-	assert_true(hex2dec(a, &value));
-	assert_int_equal(value, ULLONG_MAX);
-	strcpy(overflow, "10000000000000000");
-	assert_false(hex2dec(overflow, &value));
-	strcpy(overflow, "80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88:80:00:1f:88");
-	assert_false(hex2dec(overflow, &value));
-	strcpy(overflow, "ffff ffff ffff ffff ffff ffff ffff ffff");
-	assert_false(hex2dec(overflow, &value));
-	assert_false(hex2dec(NULL, &value));
-	assert_false(hex2dec("ff", NULL));
-	assert_false(hex2dec("", &value));
-	assert_false(hex2dec(":::", &value));
-}
-
-static void test_poller_hex_overflow_is_undefined(void **state) {
-	char result[RESULTS_BUFFER];
-	char exact[4] = "ff";
-	char tiny[2] = "f";
-	char too_small[3] = "ff";
-	char empty[1] = "";
-	char long_hex[RESULTS_BUFFER + 16];
-	int errors = 0;
-
-	(void) state;
-	assert_true(poller_store_hex_result(exact, sizeof(exact), exact, &errors));
-	assert_string_equal(exact, "255");
-	strcpy(result, "ff:ff:ff:ff:ff:ff:ff:ff");
-	assert_true(poller_store_hex_result(result, sizeof(result), result, &errors));
-	assert_string_equal(result, "18446744073709551615");
-	assert_int_equal(errors, 0);
-
-	strcpy(result, "1:00:00:00:00:00:00:00:00");
-	assert_false(poller_store_hex_result(result, sizeof(result), result, &errors));
-	assert_true(IS_UNDEFINED(result));
-	assert_int_equal(errors, 1);
-	assert_false(poller_store_hex_result(NULL, 0, "ff", &errors));
-	assert_false(poller_store_hex_result(empty, 0, "ff", &errors));
-	assert_false(poller_store_hex_result(tiny, 1, "ff", &errors));
-	assert_false(poller_store_hex_result(too_small, sizeof(too_small), too_small, &errors));
-	assert_true(IS_UNDEFINED(too_small));
-	assert_int_equal(errors, 5);
-
-	memset(long_hex, ' ', sizeof(long_hex));
-	long_hex[sizeof(long_hex) - 3] = 'f';
-	long_hex[sizeof(long_hex) - 2] = 'f';
-	long_hex[sizeof(long_hex) - 1] = '\0';
-	assert_true(poller_store_hex_result(result, sizeof(result), long_hex, &errors));
-	assert_string_equal(result, "255");
-	assert_int_equal(errors, 5);
 }
 
 static void test_row_alias_upsert_version_gate(void **state) {
@@ -1153,8 +1066,6 @@ int main(void) {
 		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
-		cmocka_unit_test(test_is_numeric),
-		cmocka_unit_test(test_is_hexadecimal),
 		cmocka_unit_test(test_trim_family),
 		cmocka_unit_test(test_reverse),
 		cmocka_unit_test(test_strpos),
@@ -1162,8 +1073,6 @@ int main(void) {
 		cmocka_unit_test(test_strip_alpha),
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
-		cmocka_unit_test(test_hex2dec),
-		cmocka_unit_test(test_poller_hex_overflow_is_undefined),
 		cmocka_unit_test(test_row_alias_upsert_version_gate),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),

@@ -1297,6 +1297,103 @@ static void test_ping_only_session_lifetime(void) {
 	puts("production ping-only SNMP session ownership regressions passed");
 }
 
+static void *run_batch_worker(void *argument) {
+	assert(mysql_thread_init() == 0);
+	int errors = 0;
+	poll_host(argument, &errors);
+	assert(errors == 0);
+	return NULL;
+}
+
+/* The batch key once held 49 bytes of a 99-byte community, so a longer
+ * community never matched its own key and every item reopened the session. */
+static void test_snmp_batch_key_width(void) {
+	extern int *debug_devices;
+	static const char community[] = "regression-community-wider-than-the-old-fifty-byte-batch-key";
+	const char *agent = getenv("SPINE_TEST_SNMP_HOST");
+	assert(agent != NULL && agent[0] != '\0');
+	assert(sizeof(community) > 50);
+	config_t previous = set;
+	int *previous_debug_devices = debug_devices;
+	poller_thread_t **previous_details = details;
+	int debug_fixture[100] = {0};
+	debug_devices = debug_fixture;
+	pool_t *previous_pool = db_pool_local;
+	set.poller.threads = 1;
+	set.poller.poller_id = 1;
+	set.poller.mode = REMOTE_OFFLINE;
+	set.poller.poller_interval = 0;
+	set.poller.active_profiles = 1;
+	set.availability.ping_only = FALSE;
+	set.boost.boost_enabled = FALSE;
+	set.boost.boost_redirect = FALSE;
+	set.logging.spine_log_level = 0;
+	set.snmp.snmp_retries = 0;
+	set.snmp.mibs = 0;
+	MYSQL administrator;
+	db_connect(LOCAL, &administrator);
+	assert(fault_database_count(&administrator, "SELECT COUNT(*) FROM host WHERE id=904") == 0);
+	assert(fault_database_count(&administrator, "SELECT COUNT(*) FROM poller_item WHERE host_id=904") == 0);
+	db_pool_local = calloc(1, sizeof(*db_pool_local));
+	assert(db_pool_local != NULL);
+	db_pool_local[0].free = TRUE;
+	db_connect(LOCAL, &db_pool_local[0].mysql);
+	assert(spine_permits_init(&available_scripts, 3) == 0);
+	char escaped_agent[BUFSIZE];
+	db_escape(&administrator, escaped_agent, sizeof(escaped_agent), agent);
+	char query[LRG_BUFSIZE];
+	spine_snprintf(query, sizeof(query), "INSERT INTO host(id,hostname,snmp_version,snmp_community,snmp_port,snmp_timeout,availability_method,max_oids,status_fail_date,status_rec_date) VALUES(904,'%s',2,'%s',1161,500,%i,10,'2026-10-06 00:00:00','2026-10-06 00:00:00')", escaped_agent, community, AVAIL_NONE);
+	assert(db_insert(&administrator, LOCAL, query));
+	spine_snprintf(query, sizeof(query), "INSERT INTO poller_item(local_data_id,host_id,poller_id,action,hostname,snmp_community,snmp_version,snmp_port,snmp_timeout,arg1,rrd_name) VALUES"
+		"(941,904,1,0,'%s','%s',2,1161,500,'.1.3.6.1.2.1.1.3.0','a'),"
+		"(942,904,1,0,'%s','%s',2,1161,500,'.1.3.6.1.2.1.1.3.0','b'),"
+		"(943,904,1,0,'%s','%s',2,1161,500,'.1.3.6.1.2.1.1.3.0','c')",
+		escaped_agent, community, escaped_agent, community, escaped_agent, community);
+	assert(db_insert(&administrator, LOCAL, query));
+	assert(db_insert(&administrator, LOCAL, "DELETE FROM poller_output WHERE local_data_id IN (941,942,943)"));
+	snmp_spine_init();
+	poller_thread_t work = {0};
+	work.host_id = 904;
+	work.host_thread = 1;
+	work.host_threads = 1;
+	work.host_data_ids = 3;
+	work.host_time_double = get_time_as_double();
+	STRNCOPY(work.host_time, "1791244800");
+	poller_thread_t *device = &work;
+	details = &device;
+	owned_snmp_session = NULL;
+	session_opens = 0;
+	session_close_attempts = 0;
+	session_closes = 0;
+	account_snmp_sessions = TRUE;
+	pthread_t worker;
+	assert(pthread_create(&worker, NULL, run_batch_worker, &work) == 0);
+	assert(pthread_join(worker, NULL) == 0);
+	account_snmp_sessions = FALSE;
+	int observed_opens = session_opens;
+	if (owned_snmp_session != NULL) {
+		assert(__real_snmp_sess_close(owned_snmp_session) == 1);
+		owned_snmp_session = NULL;
+	}
+	fprintf(stderr, "long community batch: opens=%d closes=%d\n", observed_opens, session_closes);
+	assert(work.complete && db_pool_local[0].free);
+	assert(fault_database_count(&administrator, "SELECT COUNT(*) FROM poller_output WHERE local_data_id IN (941,942,943) AND output REGEXP '^[0-9]+$'") == 3);
+	/* One session for the device checks, one for the single batch. */
+	assert(observed_opens == 2 && session_closes == 2);
+	assert(db_insert(&administrator, LOCAL, "DELETE FROM poller_output WHERE local_data_id IN (941,942,943)"));
+	assert(db_insert(&administrator, LOCAL, "DELETE FROM poller_item WHERE host_id=904"));
+	assert(db_insert(&administrator, LOCAL, "DELETE FROM host WHERE id=904"));
+	snmp_spine_close();
+	assert(spine_permits_destroy(&available_scripts) == 0);
+	db_close_connection_pool(LOCAL);
+	db_pool_local = previous_pool;
+	db_disconnect(&administrator);
+	details = previous_details;
+	debug_devices = previous_debug_devices;
+	set = previous;
+	puts("production long-community SNMP batching regressions passed");
+}
+
 static int execute_worker_launch_case(const char *scenario, char *config) {
 	assert(strcmp(scenario, "admitted") == 0 || strcmp(scenario, "rejected") == 0 || strcmp(scenario, "retry") == 0);
 	launch_case_active = TRUE;
@@ -1423,6 +1520,7 @@ int main(int argc, char **argv) {
 	if (argc == 2 && strcmp(argv[1], "--database") == 0) {
 		test_real_database_retry();
 		test_ping_only_session_lifetime();
+		test_snmp_batch_key_width();
 		test_worker_launch_failures();
 	}
 	else assert(argc == 1);
