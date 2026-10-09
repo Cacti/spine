@@ -364,6 +364,9 @@ int nft_popen(const char * command, const char * type) {
 	/* nft_popen() reports why process creation failed through errno, as
 	 * popen() does; cleanup below must not overwrite it. */
 	int    failure_errno = 0;
+	posix_spawnattr_t attr;
+	int    attr_valid = FALSE;
+	int    attr_err;
 
 	if (command == NULL || type == NULL) {
 		errno = EINVAL;
@@ -445,6 +448,21 @@ int nft_popen(const char * command, const char * type) {
 		return -1;
 	}
 
+	/* Each script leads its own process group so a timeout can kill the
+	 * group. Killing only the shell left anything it had started running,
+	 * still holding the pipe and counting against the process limit. */
+	attr_err = posix_spawnattr_init(&attr);
+	if (attr_err == 0) {
+		attr_valid = TRUE;
+		attr_err = posix_spawnattr_setpgroup(&attr, 0);
+	}
+	if (attr_err == 0) attr_err = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+	if (attr_err != 0) {
+		failure_errno = attr_err;
+		SPINE_LOG(("ERROR: SCRIPT: posix_spawnattr setup failed: %s", strerror(attr_err)));
+		goto spawn_failed;
+	}
+
 	/* The pipe ends are close-on-exec, which is the point: another thread
 	 * spawning in this window must not inherit them. The child needs its own
 	 * end, and dup2 clears the flag on its target, so the usual paths are
@@ -521,7 +539,7 @@ int nft_popen(const char * command, const char * type) {
 
 	int spawn_err;
 	retry:
-	spawn_err = posix_spawn(&pid, spawn_shell, &fa, NULL, argv, environ);
+	spawn_err = posix_spawn(&pid, spawn_shell, &fa, &attr, argv, environ);
 
 	if (spawn_err != 0) {
 		if ((spawn_err == EAGAIN || spawn_err == ENOMEM) && retry_count < 3) {
@@ -540,6 +558,7 @@ spawn_failed:
 		 * nft_pclose() in every poller thread and the daemon stops collecting
 		 * script data until it is restarted. */
 		posix_spawn_file_actions_destroy(&fa);
+		if (attr_valid) posix_spawnattr_destroy(&attr);
 
 		if (inherit_fd != -1) {
 			(void)close(inherit_fd);
@@ -559,6 +578,7 @@ spawn_failed:
 	}
 
 	posix_spawn_file_actions_destroy(&fa);
+	posix_spawnattr_destroy(&attr);
 
 	/* The child holds its own duplicate. Keeping this one would hold the pipe's
 	 * write end open, so the reader never sees EOF and exec_poll() blocks to
@@ -688,7 +708,8 @@ nft_pclose(int fd)
 		pid = cur->pid;
 		break;
 	case 1:
-		(void)kill(cur->pid, SIGKILL);
+		/* The negative pid reaches the script's whole process group. */
+		(void)kill(-cur->pid, SIGKILL);
 		nft_abandon_child(cur->pid, "did not exit before pipe close");
 		errno = ETIMEDOUT;
 		pid = -1;
@@ -699,7 +720,7 @@ nft_pclose(int fd)
 		 * outside the sweep's reach. Preserve waitpid()'s errno. */
 		{
 			int saved_errno = errno;
-			(void)kill(cur->pid, SIGKILL);
+			(void)kill(-cur->pid, SIGKILL);
 			nft_abandon_child(cur->pid, "waitpid failed");
 			errno = saved_errno;
 		}

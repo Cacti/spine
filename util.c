@@ -250,6 +250,19 @@ typedef struct setting_cache_entry {
 static setting_cache_t *settings_cache       = NULL;
 static int              settings_cache_count = 0;
 
+/* Settings are read in the main thread before polling starts, so a database
+ * error here is a configuration failure and ends the process, as it did when
+ * db_query() exited on its own. An empty or missing result is not an error. */
+static MYSQL_RES *config_query(MYSQL *psql, int mode, const char *query) {
+	MYSQL_RES *result = db_query(psql, mode, query);
+
+	if (result == NULL && mysql_errno(psql) != 0) {
+		die("FATAL: Unable to read the Cacti configuration from the database");
+	}
+
+	return result;
+}
+
 static void settings_cache_free(void) {
 	int i;
 
@@ -276,7 +289,7 @@ static void settings_cache_load(MYSQL *psql, int mode) {
 
 	settings_cache_free();
 
-	result = db_query(psql, mode, "SELECT SQL_NO_CACHE name, value FROM settings");
+	result = config_query(psql, mode, "SELECT SQL_NO_CACHE name, value FROM settings");
 
 	if (result == NULL) return;
 
@@ -361,7 +374,7 @@ static char *getsetting(MYSQL *psql, int mode, const char *setting) {
 
 	spine_snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
-	result = db_query(psql, mode, qstring);
+	result = config_query(psql, mode, qstring);
 	if (result == NULL) return strdup("");
 	mysql_row = mysql_num_rows(result) > 0 ? mysql_fetch_row(result) : NULL;
 	retval = mysql_row != NULL && mysql_row[0] != NULL ? strdup(mysql_row[0]) : strdup("");
@@ -434,7 +447,7 @@ static char *getpsetting(MYSQL *psql, int mode, const char *setting) {
 
 	spine_snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE %s FROM poller WHERE id = '%d'", setting, set.poller.poller_id);
 
-	result = db_query(psql, mode, qstring);
+	result = config_query(psql, mode, qstring);
 	if (result == NULL) return NULL;
 	mysql_row = mysql_num_rows(result) > 0 ? mysql_fetch_row(result) : NULL;
 	retval = mysql_row != NULL && mysql_row[0] != NULL ? strdup(mysql_row[0]) : NULL;
@@ -513,7 +526,7 @@ static char *getglobalvariable(MYSQL *psql, int mode, const char *setting) {
 
 	spine_snprintf(qstring, sizeof(qstring), "SHOW GLOBAL VARIABLES LIKE '%s'", setting);
 
-	result = db_query(psql, mode, qstring);
+	result = config_query(psql, mode, qstring);
 	if (result == NULL) return NULL;
 	mysql_row = mysql_num_rows(result) > 0 ? mysql_fetch_row(result) : NULL;
 	retval = mysql_row != NULL && mysql_row[1] != NULL ? strdup(mysql_row[1]) : NULL;
@@ -860,8 +873,8 @@ static void read_php_requirement(MYSQL *mysql) {
 		sqlp += spine_snprintf(sqlp, sizeof(sqlbuf) - (size_t)(sqlp - sqlbuf), " AND poller_id=%i", set.poller.poller_id);
 		spine_snprintf(sqlp, sizeof(sqlbuf) - (size_t)(sqlp - sqlbuf), " LIMIT 1");
 
-		result = db_query(mysql, LOCAL, sqlbuf);
-		num_rows = spine_count_to_int(mysql_num_rows(result));
+		result = config_query(mysql, LOCAL, sqlbuf);
+		num_rows = result != NULL ? spine_count_to_int(mysql_num_rows(result)) : 0;
 		db_free_result(result);
 
 		if (num_rows > 0) set.php.php_required = TRUE;
@@ -878,8 +891,8 @@ static void read_php_requirement(MYSQL *mysql) {
 		sqlp += spine_snprintf(sqlp, sizeof(sqlbuf) - (size_t)(sqlp - sqlbuf), " AND poller_id=%i", set.poller.poller_id);
 		spine_snprintf(sqlp, sizeof(sqlbuf) - (size_t)(sqlp - sqlbuf), " LIMIT 1");
 
-		result = db_query(mysql, LOCAL, sqlbuf);
-		num_rows = spine_count_to_int(mysql_num_rows(result));
+		result = config_query(mysql, LOCAL, sqlbuf);
+		num_rows = result != NULL ? spine_count_to_int(mysql_num_rows(result)) : 0;
 		db_free_result(result);
 
 		if (num_rows > 0) set.php.php_required = TRUE;
@@ -996,13 +1009,13 @@ void read_config_options() {
 	int mode;
 	char *res;
 
-	db_connect(LOCAL, &mysql);
+	if (!db_connect(LOCAL, &mysql)) die("FATAL: Unable to connect to the local database");
 
 	/* one round trip instead of one per setting */
 	settings_cache_load(&mysql, LOCAL);
 
 	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
-		db_connect(REMOTE, &mysqlr);
+		if (!db_connect(REMOTE, &mysqlr)) die("FATAL: Unable to connect to the remote database");
 		mode = REMOTE;
 	} else {
 		mode = LOCAL;
@@ -1224,8 +1237,20 @@ bool poller_transfer_status(MYSQL *source, MYSQL *destination) {
 void poller_push_data_to_main(void) {
 	MYSQL source;
 	MYSQL destination;
-	db_connect(LOCAL, &source);
-	db_connect(REMOTE, &destination);
+	/* A failed connect leaves an initialized handle that still has to be closed. */
+	if (!db_connect(LOCAL, &source)) {
+		db_disconnect(&source);
+		SPINE_LOG(("ERROR: Collector synchronization skipped; the local database is unavailable. Local rows are retained for retry."));
+		set.exit.exit_code = EXIT_FAILURE;
+		return;
+	}
+	if (!db_connect(REMOTE, &destination)) {
+		db_disconnect(&destination);
+		db_disconnect(&source);
+		SPINE_LOG(("ERROR: Collector synchronization skipped; the main server is unavailable. Local rows are retained for retry."));
+		set.exit.exit_code = EXIT_FAILURE;
+		return;
+	}
 	/* Preserve the supported zero-date and GROUP BY session policies. */
 	bool configured = db_insert(&source, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))") &&
 		db_insert(&source, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))") &&
@@ -2264,7 +2289,7 @@ static int parse_cacti_version(const char *value) {
 
 int get_cacti_version(MYSQL *psql, int mode) {
 	assert(psql != NULL);
-	MYSQL_RES *result = db_query(psql, mode, "SELECT cacti FROM version LIMIT 1");
+	MYSQL_RES *result = config_query(psql, mode, "SELECT cacti FROM version LIMIT 1");
 	if (result == NULL) return 0;
 	MYSQL_ROW row = mysql_fetch_row(result);
 	int version = row != NULL && row[0] != NULL ? parse_cacti_version(row[0]) : 0;

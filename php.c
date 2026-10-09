@@ -84,6 +84,17 @@ static char *php_undefined_result(void) {
 	return result;
 }
 
+/* Script and script server arguments can carry SNMP communities and v3
+ * passphrases, so logs name only the first token, the script, never the
+ * arguments. */
+void php_command_script(const char *command, char *script, size_t capacity) {
+	size_t length = strcspn(command, " \t\r\n");
+
+	if (length >= capacity) length = capacity - 1;
+	memcpy(script, command, length);
+	script[length] = '\0';
+}
+
 static void php_fail_read(int php_process, int allow_restart) {
 	php_processes[php_process].php_state = PHP_BUSY;
 	if (allow_restart) {
@@ -106,7 +117,7 @@ void php_processes_initialize(php_t *processes, int count) {
 	}
 }
 
-static char *php_read_result(int php_process, char *command, int allow_restart);
+static char *php_read_result(int php_process, const char *command, int allow_restart);
 
 /* Block SIGPIPE in the calling thread around Spine's two pipe writes. The
  * daemon normally catches SIGPIPE with a no-op handler process-wide, but this local guard
@@ -201,7 +212,11 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
+		char script[SMALL_BUFSIZE];
+
+		php_command_script(command, script, sizeof(script));
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending a command.  Restarting PHP Script Server", php_process));
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Unsent command for script '%s'", php_process, script));
 
 		php_close(php_process);
 		retries++;
@@ -323,7 +338,7 @@ char *php_read_result_for_test(int php_process, char *command, int allow_restart
 }
 #endif
 
-/*! \fn char *php_readpipe(int php_process, char *command)
+/*! \fn char *php_readpipe(int php_process, const char *command)
  *  \brief read a line from a PHP Script Server process
  *  \param php_process the PHP Script Server process to obtain output from
  *
@@ -334,7 +349,7 @@ char *php_read_result_for_test(int php_process, char *command, int allow_restart
  *
  *  \return a string pointer to the PHP Script Server response
  */
-/*! \fn static char *php_read_result(int php_process, char *command, int allow_restart)
+/*! \fn static char *php_read_result(int php_process, const char *command, int allow_restart)
  *  \brief reads one script server response.
  *
  *  allow_restart is FALSE for the startup handshake. php_init() calls this to
@@ -344,7 +359,7 @@ char *php_read_result_for_test(int php_process, char *command, int allow_restart
  *  recursion, spawning a fresh server at every level. Refusing the restart on
  *  the handshake bounds the depth at one by construction.
  */
-static char *php_read_result(int php_process, char *command, int allow_restart) {
+static char *php_read_result(int php_process, const char *command, int allow_restart) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
@@ -353,6 +368,7 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	char *result_string;
 	int response_timeout;
 	double read_deadline;
+	char script[SMALL_BUFSIZE];
 
 	ssize_t i;
 	char *cp;
@@ -450,7 +466,9 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	case 0:
 		/* record end time */
 		end_time = get_time_as_double();
-		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - begin_time, command));
+		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f] and will therefore be restarted", php_process, end_time - begin_time));
+		php_command_script(command, script, sizeof(script));
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Unanswered command for script '%s'", php_process, script));
 		SET_UNDEFINED(result_string);
 		php_fail_read(php_process, allow_restart);
 		break;
@@ -478,7 +496,9 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 						int ready = spine_wait_readable(php_processes[php_process].php_read_fd, read_deadline);
 
 						if (ready <= 0) {
-							SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent a partial response and %s, Command[%s]", php_process, ready == 0 ? "timed out" : "failed", command));
+							SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent a partial response and %s", php_process, ready == 0 ? "timed out" : "failed"));
+							php_command_script(command, script, sizeof(script));
+							SPINE_LOG_DEBUG(("DEBUG: SS[%i] Unanswered command for script '%s'", php_process, script));
 							SET_UNDEFINED(result_string);
 							read_ok = FALSE;
 							break;
@@ -529,13 +549,13 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	return result_string;
 }
 
-/*! \fn char *php_readpipe(int php_process, char *command)
+/*! \fn char *php_readpipe(int php_process, const char *command)
  *  \brief reads a script server response, restarting a server that stops
  *         answering.
  *
  *  \return a string pointer to the PHP Script Server response
  */
-char *php_readpipe(int php_process, char *command) {
+char *php_readpipe(int php_process, const char *command) {
 	return php_read_result(php_process, command, TRUE);
 }
 

@@ -651,6 +651,9 @@ static void report_worker_completion(int num_rows) {
 			if (det->output_failed) {
 				SPINE_LOG(("ERROR: Device[%i] output persistence failed; due items remain scheduled for retry", det->host_id));
 			}
+			if (det->poll_failed) {
+				SPINE_LOG(("ERROR: Device[%i] polling failed on a database error; due items remain scheduled for retry", det->host_id));
+			}
 			SPINE_LOG_HIGH(("INFO: Device[%i] Thread %scomplete and %d to %d sources",
 				det->host_id,
 				det->complete ? "":"in",
@@ -712,6 +715,15 @@ static void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 	while (canexit == FALSE && device_counter < num_rows) {
 		if (change_host) {
 			mysql_row       = mysql_fetch_row(result);
+			/* num_rows comes from this result, so a short read is not expected;
+			 * upstream guarded it and the dispatch refactor dropped the check. */
+			if (mysql_row == NULL || mysql_row[0] == NULL || mysql_row[1] == NULL) {
+				SPINE_LOG(("ERROR: Device list ended after %i of %i devices", device_counter, num_rows));
+				thread_mutex_lock(LOCK_THDET);
+				set.exit.exit_code = EXIT_FAILURE;
+				thread_mutex_unlock(LOCK_THDET);
+				break;
+			}
 			host_id         = atoi(mysql_row[0]);
 			partition.threads  = atoi(mysql_row[1]);
 			current_thread  = 1;
@@ -745,6 +757,7 @@ static void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 			poller_details->complete         = FALSE;
 			poller_details->threads_complete = 0;
 			poller_details->output_failed    = FALSE;
+			poller_details->poll_failed      = FALSE;
 
 			thread_mutex_lock(LOCK_THDET);
 			details[device_counter] = poller_details;
@@ -866,11 +879,12 @@ static double initialize_process_defaults(void) {
 static int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 	MYSQL_RES *result;
 	int mode;
+	int has_output_regex;
 	/* initialize mysql objects for threads */
 	mysql_library_init(0, NULL, NULL);
 
 	/* connect for main loop */
-	db_connect(LOCAL, mysql);
+	if (!db_connect(LOCAL, mysql)) die("FATAL: Unable to connect to the local database");
 
 	/* setup local connection pool for hosts */
 	db_pool_local = (pool_t *) calloc(set.poller.threads, sizeof(pool_t));
@@ -878,7 +892,7 @@ static int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 	db_create_connection_pool(LOCAL);
 
 	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
-		db_connect(REMOTE, mysqlr);
+		if (!db_connect(REMOTE, mysqlr)) die("FATAL: Unable to connect to the remote database");
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
@@ -892,20 +906,23 @@ static int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 
 	/* check for device 0 items */
 	result = db_query(mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
+	if (result == NULL) die("FATAL: Unable to check for Device 0 poller items");
 	if (mysql_num_rows(result)) {
 		set.hosts.has_device_0 = TRUE;
 	}
 	db_free_result(result);
 
 	/* check if poller_item has the output_regex column (added in Cacti 1.3.1) */
-	if (db_column_exists(mysql, LOCAL, "poller_item", "output_regex")) {
+	has_output_regex = db_column_exists(mysql, LOCAL, "poller_item", "output_regex");
+	if (has_output_regex < 0) die("FATAL: Unable to inspect the poller_item table");
+	if (has_output_regex) {
 		set.hosts.has_output_regex = TRUE;
 		SPINE_LOG_DEBUG(("DEBUG: poller_item.output_regex column detected"));
 	}
 
-	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
-	db_insert(mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-	db_insert(mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti. The
+	 * same policy as the pool, which a reconnect of this handle reapplies. */
+	if (!db_set_session_mode(mysql)) die("FATAL: Unable to configure the database session");
 
 	return mode;
 
@@ -1148,6 +1165,7 @@ int main(int argc, char *argv[]) {
 	initialize_main_php();
 
 	result = select_poll_hosts(&mysql);
+	if (result == NULL) die("FATAL: Unable to select the devices to poll");
 
 	prepare_worker_storage(result, &num_rows, &threads, &ids, &host_time);
 

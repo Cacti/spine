@@ -213,8 +213,11 @@ static void record_result_error(const poll_error_context_t *context, const host_
 			context->host_id, context->thread_id, item->local_data_id,
 			host->snmp.profile.version, host->hostname, item->rrd_name, item->arg1, result));
 	} else {
+		char script[SMALL_BUFSIZE];
+
+		php_command_script(item->arg1, script, sizeof(script));
 		SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-			context->host_id, context->thread_id, item->local_data_id, item->arg1, result));
+			context->host_id, context->thread_id, item->local_data_id, script, result));
 	}
 }
 
@@ -568,12 +571,13 @@ static void log_reindex_assertion(const reindex_evaluation_t *evaluation, const 
 	SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s%s%s'", evaluation->host->id, evaluation->work->host_thread, reindex->data_query_id, reindex->assert_value, failed ? reindex->op : "=", value != NULL ? value : "(null)"));
 }
 
-static void queue_reindex(const reindex_evaluation_t *evaluation, const reindex_t *reindex) {
-	if (evaluation->work->host_thread != 1) return;
+/* FALSE only when the queue write failed; other partitions never queue. */
+static bool queue_reindex(const reindex_evaluation_t *evaluation, const reindex_t *reindex) {
+	if (evaluation->work->host_thread != 1) return TRUE;
 	char query[LRG_BUFSIZE];
 	snprintf(query, sizeof(query), "REPLACE INTO poller_command (poller_id, time, action, command) VALUES (%i, NOW(), %i, '%i:%i')", set.poller.poller_id, POLLER_COMMAND_REINDEX, evaluation->host->id, reindex->data_query_id);
-	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) db_insert(evaluation->remote, REMOTE, query);
-	else db_insert(evaluation->local, LOCAL, query);
+	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) return db_insert(evaluation->remote, REMOTE, query);
+	return db_insert(evaluation->local, LOCAL, query);
 }
 
 static void update_reindex_value(const reindex_evaluation_t *evaluation, const reindex_t *reindex, const char *value) {
@@ -602,8 +606,10 @@ static bool evaluate_reindex_assertion(const reindex_evaluation_t *evaluation, c
 	bool failed = reindex_assertion_failed(reindex, value);
 	bool unavailable = value == NULL || IS_UNDEFINED(value) || STRIMATCH(value, "No Such Instance");
 	if (failed || unavailable) log_reindex_assertion(evaluation, reindex, value, failed);
-	if (failed) queue_reindex(evaluation, reindex);
-	if (failed || STRMATCH(reindex->op, ">") || STRMATCH(reindex->op, "<")) update_reindex_value(evaluation, reindex, value);
+	/* Advancing the stored value without a queued reindex would lose the
+	 * reindex for good: the next poll compares against the new value. */
+	bool queued = !failed || queue_reindex(evaluation, reindex);
+	if (queued && (failed || STRMATCH(reindex->op, ">") || STRMATCH(reindex->op, "<"))) update_reindex_value(evaluation, reindex, value);
 	/* A failed uptime assertion means the counters reset, so the sample is a spike. */
 	if (failed && (STRMATCH(reindex->op, "<") ||
 		STRMATCH(reindex->arg1, ".1.3.6.1.2.1.1.3.0") ||
@@ -685,6 +691,7 @@ static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread
 static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thread, char *sysUptime, bool *unavailable) {
 	char *poll_result = NULL;
 	int php_process;
+	char script[SMALL_BUFSIZE];
 	switch(reindex->action) {
 	case POLLER_ACTION_SNMP:
 		poll_result = poll_reindex_snmp(host, reindex, host_thread, sysUptime, unavailable);
@@ -699,7 +706,8 @@ static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thre
 
 		poll_result = trim(exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ"));
 
-		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+		php_command_script(reindex->arg1, script, sizeof(script));
+		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE CMD: %s, output: %s", host->id, host_thread, reindex->data_query_id, script, poll_result));
 
 		break;
 	case POLLER_ACTION_PHP_SCRIPT_SERVER: /* script (php script server) */
@@ -707,7 +715,8 @@ static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thre
 
 		poll_result = trim(php_cmd(reindex->arg1, php_process));
 
-		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+		php_command_script(reindex->arg1, script, sizeof(script));
+		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE SERVER: %s, output: %s", host->id, host_thread, reindex->data_query_id, script, poll_result));
 
 		break;
 	case POLLER_ACTION_SNMP_COUNT: { /* snmp; count items */
@@ -737,7 +746,8 @@ static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thre
 		snprintf(poll_result, BUFSIZE, "%d", char_count(count_result, '\n'));
 		SPINE_FREE(count_result);
 
-		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+		php_command_script(reindex->arg1, script, sizeof(script));
+		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE CMD COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, script, poll_result));
 
 		break;
 	}
@@ -753,7 +763,8 @@ static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thre
 		spine_snprintf(poll_result, BUFSIZE, "%d", char_count(count_result, '\n'));
 		SPINE_FREE(count_result);
 
-		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, reindex->arg1, poll_result));
+		php_command_script(reindex->arg1, script, sizeof(script));
+		SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE SERVER COUNT: %s, output: %s", host->id, host_thread, reindex->data_query_id, script, poll_result));
 
 		break;
 	}
@@ -911,10 +922,12 @@ static void poll_script_item(host_t *host, target_t *item,
 	}
 	SPINE_FREE(poll_result);
 	double thread_end = get_time_as_double();
+	char script[SMALL_BUFSIZE];
+	php_command_script(item->arg1, script, sizeof(script));
 	if (script_server) {
-		SPINE_LOG_DEVICE(errors->host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", errors->host_id, errors->thread_id, item->local_data_id, (float) ((thread_end - thread_start) * 1000), php_process, item->arg1, item->result));
+		SPINE_LOG_DEVICE(errors->host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", errors->host_id, errors->thread_id, item->local_data_id, (float) ((thread_end - thread_start) * 1000), php_process, script, item->result));
 	} else {
-		SPINE_LOG_DEVICE(errors->host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", errors->host_id, errors->thread_id, item->local_data_id, (float) ((thread_end - thread_start) * 1000), item->arg1, item->result));
+		SPINE_LOG_DEVICE(errors->host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", errors->host_id, errors->thread_id, item->local_data_id, (float) ((thread_end - thread_start) * 1000), script, item->result));
 	}
 	/* insert a NaN in place of the actual value if the snmp agent restarts */
 	if (!IS_UNDEFINED(item->result) && spike_kill && !strstr(item->result, ":")) SET_UNDEFINED(item->result);
@@ -1197,6 +1210,7 @@ static int collect_poll_items(host_t *host, snmp_poll_batch_t *batch, int num_ro
 	int i = 0;
 	int rows_processed = 0;
 	double thread_start = 0;
+	char script[SMALL_BUFSIZE];
 	while ((i < num_rows) && (!host->ignore_host)) {
 		thread_start = get_time_as_double();
 
@@ -1211,7 +1225,8 @@ static int collect_poll_items(host_t *host, snmp_poll_batch_t *batch, int num_ro
 			poll_script_item(host, &batch->items[i], batch->errors, thread_start, spike_kill, TRUE);
 			break;
 		default: /* unknown action, generate error */
-			SPINE_LOG(("Device[%i] HT[%i] DS[%i] ERROR: Unknown Poller Action: %s", batch->errors->host_id, batch->errors->thread_id, batch->items[i].local_data_id, batch->items[i].arg1));
+			php_command_script(batch->items[i].arg1, script, sizeof(script));
+			SPINE_LOG(("Device[%i] HT[%i] DS[%i] ERROR: Unknown Poller Action: %s", batch->errors->host_id, batch->errors->thread_id, batch->items[i].local_data_id, script));
 
 			break;
 		}
@@ -1246,9 +1261,16 @@ static void release_poll_connections(const poller_thread_t *work,
 	}
 }
 
-/* FALSE requests the existing missing-device early return. Other database
- * failures leave the host ignored and continue through the normal caller. */
-static bool load_poll_host(MYSQL *mysql, const poller_queries_t *queries,
+typedef enum {
+	POLL_HOST_LOADED,
+	POLL_HOST_MISSING,
+	POLL_HOST_FAILED
+} poll_host_load_t;
+
+/* A device deleted since selection returns quietly. A failed device query
+ * fails the device: treating it as an ignored host would still advance its
+ * schedule and drop the samples it never collected. */
+static poll_host_load_t load_poll_host(MYSQL *mysql, const poller_queries_t *queries,
 	host_t *host, ping_t *ping, const poller_thread_t *work) {
 	/* host_id=0 denotes a data source without a device. */
 	if (!work->host_id) {
@@ -1256,22 +1278,22 @@ static bool load_poll_host(MYSQL *mysql, const poller_queries_t *queries,
 		host->snmp.max_oids = 1;
 		host->snmp.session = NULL;
 		host->ignore_host = FALSE;
-		return TRUE;
+		return POLL_HOST_LOADED;
 	}
 	MYSQL_RES *result = db_query(mysql, LOCAL, queries->host);
 	if (result == NULL) {
-		host->ignore_host = TRUE;
-		return TRUE;
+		SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to load the device", work->host_id, work->host_thread));
+		return POLL_HOST_FAILED;
 	}
 	if (spine_count_to_int(mysql_num_rows(result)) != 1) {
 		db_free_result(result);
-		return FALSE;
+		return POLL_HOST_MISSING;
 	}
 	MYSQL_ROW row = mysql_fetch_row(result);
 	if (row == NULL) {
 		SPINE_LOG(("Device[%i] HT[%i] ERROR: MySQL Returned a Null Device Result", host->id, work->host_thread));
 		host->ignore_host = TRUE;
-		return TRUE;
+		return POLL_HOST_LOADED;
 	}
 	load_host_metadata(mysql, row, host, work);
 	db_free_result(result);
@@ -1280,12 +1302,17 @@ static bool load_poll_host(MYSQL *mysql, const poller_queries_t *queries,
 	if (work->host_thread == 1) {
 		persist_host_status(mysql, host, include_system_information && host->ignore_host != TRUE);
 	}
-	return TRUE;
+	return POLL_HOST_LOADED;
 }
 
+/* LOCK_THDET only guards the shared completion state. The database writes
+ * run after it is released: each can wait out a read timeout and a reconnect,
+ * and holding the lock across them would stall every other worker. A
+ * poll_failed partition skips them, since mysql may be NULL and a connection
+ * that just failed would only spend another retry budget. */
 static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 	const poller_thread_t *work, const poll_error_context_t *error_context,
-	bool output_failed, double poll_start) {
+	bool output_failed, bool poll_failed, double poll_start) {
 	extern poller_thread_t **details;
 	int host_id = work->host_id;
 	int host_thread = work->host_thread;
@@ -1293,6 +1320,9 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 	int errors = *error_context->errors;
 	const char *error_string = error_context->buffer;
 	double poll_time;
+	bool last_partition;
+	bool update_schedule = FALSE;
+	bool write_failed = FALSE;
 	/* record the polling time for the device */
 	poll_time = get_time_as_double() - poll_start;
 	SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
@@ -1305,20 +1335,36 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 		set.exit.exit_code = EXIT_FAILURE;
 		SPINE_LOG(("ERROR: Device[%i] HT[%i] output write failed; partial writes remain and due items stay eligible for recollection", host_id, host_thread));
 	}
+	if (poll_failed) {
+		device->poll_failed = TRUE;
+		set.exit.exit_code = EXIT_FAILURE;
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] polling failed on a database error; due items stay eligible for recollection", host_id, host_thread));
+	}
 	device->threads_complete++;
-	if (device->threads_complete == device->host_threads) {
-		/* Keep the due-item set stable until every device partition has finished. */
-		if (set.poller.active_profiles != 1 && !device->output_failed) {
-			SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
-			db_query(mysql, LOCAL, queries->schedule);
-		}
-		device->complete = !device->output_failed;
+	last_partition = device->threads_complete == device->host_threads;
+	if (last_partition) {
+		bool failed = device->output_failed || device->poll_failed;
+		/* Keep the due-item set stable until every device partition has
+		 * finished; only this last partition runs the update. */
+		update_schedule = set.poller.active_profiles != 1 && !failed;
+		device->complete = !failed;
+	}
+	thread_mutex_unlock(LOCK_THDET);
 
+	if (poll_failed) return;
+
+	if (update_schedule) {
+		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
+		/* db_insert() reports the outcome; db_query() has no result set to
+		 * show for an UPDATE, so a failed write used to look like success. */
+		if (!db_insert(mysql, LOCAL, queries->schedule)) write_failed = TRUE;
+	}
+
+	if (last_partition) {
 		poll_time = get_time_as_double();
 		queries->items[0] = '\0';
 		snprintf(queries->items, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
-		db_query(mysql, LOCAL, queries->items);
-
+		if (!db_insert(mysql, LOCAL, queries->items)) write_failed = TRUE;
 	}
 
 	if (errors > 0) {
@@ -1333,12 +1379,21 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 			" local_data_ids = CONCAT(local_data_ids, ', ', VALUES(local_data_ids))",
 			host_id, set.poller.poller_id, errors, error_string);
 
-		db_query(mysql, LOCAL, error_query);
+		if (!db_insert(mysql, LOCAL, error_query)) write_failed = TRUE;
 
 		free(error_query);
 	}
 
-	thread_mutex_unlock(LOCK_THDET);
+	/* output_failed keeps a later partition from marking the device complete
+	 * or advancing its schedule, so its items stay due for the next poll. */
+	if (write_failed) {
+		thread_mutex_lock(LOCK_THDET);
+		device->output_failed = TRUE;
+		device->complete = FALSE;
+		set.exit.exit_code = EXIT_FAILURE;
+		thread_mutex_unlock(LOCK_THDET);
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] device completion write failed; the device is not counted as polled", host_id, host_thread));
+	}
 }
 
 void poll_host(const poller_thread_t *work, int *host_errors) {
@@ -1361,6 +1416,8 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	int    spike_kill = FALSE;
 	int    rows_processed = 0;
 	bool   output_failed = FALSE;
+	bool   poll_failed = FALSE;
+	poll_host_load_t loaded;
 
 
 	double poll_time = get_time_as_double();
@@ -1401,14 +1458,26 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	MYSQL_RES *result;
 
 	local_cnn = db_get_connection(LOCAL);
-	if (local_cnn == NULL) die("ERROR: No local database connection available for polling");
-	mysql = &local_cnn->mysql;
-
-	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
+	if (local_cnn != NULL && set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
 		remote_cnn = db_get_connection(REMOTE);
-		if (remote_cnn == NULL) die("ERROR: No remote database connection available for polling");
-		mysqlr = &remote_cnn->mysql;
+		if (remote_cnn == NULL) {
+			db_release_connection(LOCAL, local_cnn->id);
+			local_cnn = NULL;
+		}
 	}
+
+	if (local_cnn == NULL) {
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] No database connection available for polling", host_id, host_thread));
+		complete_poll_host(NULL, NULL, work, &error_context, FALSE, TRUE, poll_time);
+		SPINE_FREE(error_string);
+		SPINE_FREE(buf_size);
+		SPINE_FREE(buf_errors);
+		mysql_thread_end();
+		return;
+	}
+
+	mysql = &local_cnn->mysql;
+	if (remote_cnn != NULL) mysqlr = &remote_cnn->mysql;
 
 	/* allocate host and ping structures with appropriate values */
 	if (!(host = (host_t *) malloc(sizeof(host_t)))) {
@@ -1438,7 +1507,11 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	snprintf(ping->snmp_status,   50,            "down");
 	snprintf(ping->snmp_response, SMALL_BUFSIZE, "SNMP not performed due to setting or ping result");
 
-	if (!load_poll_host(mysql, &queries, host, ping, work)) {
+	loaded = load_poll_host(mysql, &queries, host, ping, work);
+	if (loaded == POLL_HOST_FAILED) {
+		complete_poll_host(mysql, &queries, work, &error_context, FALSE, TRUE, poll_time);
+	}
+	if (loaded != POLL_HOST_LOADED) {
 		release_poll_connections(work, local_cnn, remote_cnn);
 		SPINE_FREE(host);
 		SPINE_FREE(reindex);
@@ -1475,6 +1548,7 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 
 	/* calculate the number of poller items to poll this cycle */
 	result = select_poll_items(mysql, &queries, host, work, &num_rows);
+	poll_failed = result == NULL;
 
 	if (num_rows > 0) {
 		poll_item_storage_t storage = load_poll_items(result, host, num_rows);
@@ -1514,7 +1588,7 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	SPINE_FREE(reindex);
 	SPINE_FREE(ping);
 
-	complete_poll_host(mysql, &queries, work, &error_context, output_failed, poll_time);
+	complete_poll_host(mysql, &queries, work, &error_context, output_failed, poll_failed, poll_time);
 
 	release_poll_connections(work, local_cnn, remote_cnn);
 
@@ -1708,7 +1782,8 @@ static bool read_script_result(const script_result_context_t *context, int fd, d
 		SPINE_LOG_MEDIUM(("Device[%i] ERROR: The NIFTY POPEN timed out", context->host->id));
 		int pid = nft_pchild(fd);
 		if (pid > 1) {
-			kill(pid, SIGKILL);
+			/* nft_popen() made the script a group leader; take its descendants too. */
+			kill(-pid, SIGKILL);
 		} else {
 			SPINE_LOG(("Device[%i] ERROR: Unable to find the timed-out POPEN child", context->host->id));
 		}
@@ -1720,10 +1795,13 @@ static bool read_script_result(const script_result_context_t *context, int fd, d
 	if (bytes > 0 && bytes < RESULTS_BUFFER) {
 		result[bytes] = '\0';
 	} else {
+		char script[SMALL_BUFSIZE];
+
+		php_command_script(context->command, script, sizeof(script));
 		if (STRIMATCH(context->type, "DS")) {
-			SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", context->host->id, context->id, context->host->hostname, context->command));
+			SPINE_LOG(("Device[%i] DS[%i] ERROR: Empty result [%s]: '%s'", context->host->id, context->id, context->host->hostname, script));
 		} else {
-			SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", context->host->id, context->id, context->host->hostname, context->command));
+			SPINE_LOG(("Device[%i] DQ[%i] ERROR: Empty result [%s]: '%s'", context->host->id, context->id, context->host->hostname, script));
 		}
 		SET_UNDEFINED(result);
 	}
@@ -1803,7 +1881,8 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 			strtok_r(executable, " ", &saveptr);
 		}
 
-		SPINE_LOG_DEBUG(("The executable is '%s' in \'%s\'", executable, proc_command));
+		/* executable is the first token; the arguments can carry credentials. */
+		SPINE_LOG_DEBUG(("The executable is '%s'", executable));
 
 		if (access(executable, X_OK | F_OK) != -1) {
 			cmd_fd = nft_popen(proc_command, "r");
@@ -1816,11 +1895,11 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				/* close pipe */
 				nft_pclose(cmd_fd);
 			} else {
-				SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, command));
+				SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, executable));
 				SET_UNDEFINED(result_string);
 			}
 		} else {
-			SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN.  File '%s' does not exist or is not executable.", current_host->id, command));
+			SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN.  File '%s' does not exist or is not executable.", current_host->id, executable));
 			SET_UNDEFINED(result_string);
 		}
 

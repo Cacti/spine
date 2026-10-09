@@ -98,12 +98,15 @@ static void spine_signal_handler(int spine_signal) {
 	const char *message = NULL;
 	int saved_errno = errno;
 
-	/* A real fault (SIGSEGV/SIGBUS/...) resets to SIG_DFL and returns so the
-	 * faulting instruction re-executes and dies with a core. SIGPIPE is a
-	 * routine, recurring condition instead, and signal dispositions are
-	 * process-wide: dropping it to SIG_DFL here, even briefly, would let a
-	 * broken-pipe write on any other thread terminate the process during
-	 * that window. Leave this handler permanently installed for SIGPIPE. */
+	/* Every signal handled here except SIGSEGV, which exits with status 1
+	 * below, resets to SIG_DFL and is raised again before returning, so the
+	 * process ends with that signal's default action and core. Returning alone only ended real faults, which re-execute; after
+	 * SIGINT, SIGQUIT or a sent SIGBUS the poller logged FATAL and kept going.
+	 * SIGPIPE is a routine, recurring condition instead, and signal
+	 * dispositions are process-wide: dropping it to SIG_DFL here, even
+	 * briefly, would let a broken-pipe write on any other thread terminate
+	 * the process during that window. Leave this handler permanently
+	 * installed for SIGPIPE. */
 	if (spine_signal != SIGPIPE) {
 		signal(spine_signal, SIG_DFL);
 	}
@@ -147,6 +150,12 @@ static void spine_signal_handler(int spine_signal) {
 
 	if (spine_signal == SIGSEGV) {
 		_exit(1);
+	}
+
+	/* The signal stays blocked until this handler returns, then the default
+	 * action ends the process. raise() is async-signal-safe. */
+	if (spine_signal != SIGPIPE) {
+		(void) raise(spine_signal);
 	}
 
 	errno = saved_errno;
