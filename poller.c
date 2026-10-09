@@ -792,9 +792,9 @@ static void load_reindex_item(reindex_t *reindex, MYSQL_ROW row) {
 	if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 }
 
-static void poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
+static bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 	const reindex_evaluation_t *evaluation) {
-	if (host->ignore_host || evaluation->work->host_id == 0) return;
+	if (host->ignore_host || evaluation->work->host_id == 0) return TRUE;
 	int thread = evaluation->work->host_thread;
 	MYSQL_RES *result = db_query(evaluation->local, LOCAL, query);
 	if (result == NULL) {
@@ -830,6 +830,7 @@ static void poll_host_reindex(host_t *host, reindex_t *reindex, const char *quer
 		snmp_host_cleanup(host->snmp.session);
 		host->snmp.session = NULL;
 	}
+	return result != NULL;
 }
 
 static void load_poll_item(target_t *item, MYSQL_ROW row) {
@@ -1305,11 +1306,9 @@ static poll_host_load_t load_poll_host(MYSQL *mysql, const poller_queries_t *que
 	return POLL_HOST_LOADED;
 }
 
-/* LOCK_THDET only guards the shared completion state. The database writes
- * run after it is released: each can wait out a read timeout and a reconnect,
- * and holding the lock across them would stall every other worker. A
- * poll_failed partition skips them, since mysql may be NULL and a connection
- * that just failed would only spend another retry budget. */
+/* Publish each partition only after its bookkeeping writes finish. The last
+ * partition records polling time and advances the schedule after every earlier
+ * write succeeded. Database waits never hold LOCK_THDET. */
 static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 	const poller_thread_t *work, const poll_error_context_t *error_context,
 	bool output_failed, bool poll_failed, double poll_start) {
@@ -1319,55 +1318,15 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 	double host_time_double = work->host_time_double;
 	int errors = *error_context->errors;
 	const char *error_string = error_context->buffer;
-	double poll_time;
+	poller_thread_t *device = details[work->device_counter];
+	double poll_time = get_time_as_double() - poll_start;
 	bool last_partition;
-	bool update_schedule = FALSE;
+	bool failed;
 	bool write_failed = FALSE;
-	/* record the polling time for the device */
-	poll_time = get_time_as_double() - poll_start;
+
 	SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
 
-	/* record the total time for the host */
-	thread_mutex_lock(LOCK_THDET);
-	poller_thread_t *device = details[work->device_counter];
-	if (output_failed) {
-		device->output_failed = TRUE;
-		set.exit.exit_code = EXIT_FAILURE;
-		SPINE_LOG(("ERROR: Device[%i] HT[%i] output write failed; partial writes remain and due items stay eligible for recollection", host_id, host_thread));
-	}
-	if (poll_failed) {
-		device->poll_failed = TRUE;
-		set.exit.exit_code = EXIT_FAILURE;
-		SPINE_LOG(("ERROR: Device[%i] HT[%i] polling failed on a database error; due items stay eligible for recollection", host_id, host_thread));
-	}
-	device->threads_complete++;
-	last_partition = device->threads_complete == device->host_threads;
-	if (last_partition) {
-		bool failed = device->output_failed || device->poll_failed;
-		/* Keep the due-item set stable until every device partition has
-		 * finished; only this last partition runs the update. */
-		update_schedule = set.poller.active_profiles != 1 && !failed;
-		device->complete = !failed;
-	}
-	thread_mutex_unlock(LOCK_THDET);
-
-	if (poll_failed) return;
-
-	if (update_schedule) {
-		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
-		/* db_insert() reports the outcome; db_query() has no result set to
-		 * show for an UPDATE, so a failed write used to look like success. */
-		if (!db_insert(mysql, LOCAL, queries->schedule)) write_failed = TRUE;
-	}
-
-	if (last_partition) {
-		poll_time = get_time_as_double();
-		queries->items[0] = '\0';
-		snprintf(queries->items, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
-		if (!db_insert(mysql, LOCAL, queries->items)) write_failed = TRUE;
-	}
-
-	if (errors > 0) {
+	if (!poll_failed && errors > 0) {
 		int error_query_len = spine_count_to_int(strlen(error_string) + BUFSIZE);
 		char *error_query = (char *)malloc(error_query_len);
 		if (error_query == NULL) die("ERROR: Fatal malloc error: poller.c error_query!");
@@ -1384,14 +1343,45 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 		free(error_query);
 	}
 
-	/* output_failed keeps a later partition from marking the device complete
-	 * or advancing its schedule, so its items stay due for the next poll. */
-	if (write_failed) {
-		thread_mutex_lock(LOCK_THDET);
-		device->output_failed = TRUE;
+
+	thread_mutex_lock(LOCK_THDET);
+	if (output_failed || write_failed) device->output_failed = TRUE;
+	if (poll_failed) device->poll_failed = TRUE;
+	failed = device->output_failed || device->poll_failed;
+	if (failed) {
 		device->complete = FALSE;
 		set.exit.exit_code = EXIT_FAILURE;
-		thread_mutex_unlock(LOCK_THDET);
+	}
+	device->threads_complete++;
+	last_partition = device->threads_complete == device->host_threads;
+	thread_mutex_unlock(LOCK_THDET);
+
+	if (output_failed || poll_failed || write_failed) {
+		SPINE_LOG(("ERROR: Device[%i] HT[%i] polling or completion write failed; due items stay eligible for recollection", host_id, host_thread));
+	}
+	if (!last_partition) return;
+
+	if (!poll_failed) {
+		poll_time = get_time_as_double();
+		snprintf(queries->items, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
+		if (!db_insert(mysql, LOCAL, queries->items)) write_failed = TRUE;
+
+		/* Advancing the due-item set is the final write, after every partition
+		 * and the device polling-time write have reported their outcome. */
+		if (!failed && !write_failed && set.poller.active_profiles != 1) {
+			SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Updating Poller Items for Next Poll", host_id, host_thread));
+			if (!db_insert(mysql, LOCAL, queries->schedule)) write_failed = TRUE;
+		}
+	}
+
+	thread_mutex_lock(LOCK_THDET);
+	if (write_failed) {
+		device->output_failed = TRUE;
+		set.exit.exit_code = EXIT_FAILURE;
+	}
+	device->complete = !device->output_failed && !device->poll_failed;
+	thread_mutex_unlock(LOCK_THDET);
+	if (write_failed) {
 		SPINE_LOG(("ERROR: Device[%i] HT[%i] device completion write failed; the device is not counted as polled", host_id, host_thread));
 	}
 }
@@ -1544,11 +1534,15 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	}
 
 	const reindex_evaluation_t evaluation = {mysql, mysqlr, host, work, &errors, &spike_kill};
-	poll_host_reindex(host, reindex, queries.reindex, &evaluation);
+	poll_failed = !poll_host_reindex(host, reindex, queries.reindex, &evaluation);
 
 	/* calculate the number of poller items to poll this cycle */
-	result = select_poll_items(mysql, &queries, host, work, &num_rows);
-	poll_failed = result == NULL;
+	num_rows = 0;
+	result = NULL;
+	if (!poll_failed) {
+		result = select_poll_items(mysql, &queries, host, work, &num_rows);
+		poll_failed = result == NULL;
+	}
 
 	if (num_rows > 0) {
 		poll_item_storage_t storage = load_poll_items(result, host, num_rows);
