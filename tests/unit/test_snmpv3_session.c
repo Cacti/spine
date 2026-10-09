@@ -553,17 +553,19 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 		const char *next_value;
 		bool get_failed;
 		bool next_failed;
+		int get_status;
+		int next_status;
 	} response_case_t;
 	static const response_case_t cases[] = {
-		{STAT_SUCCESS, REPLY_NONE, "U", "U", "U", TRUE, TRUE},
-		{STAT_TIMEOUT, REPLY_NONE, "U", "", "U", TRUE, TRUE},
-		{STAT_TIMEOUT, REPLY_SCALAR, "U", "U", "U", TRUE, TRUE},
-		{STAT_SUCCESS, REPLY_EMPTY, "", "", "U", FALSE, TRUE},
-		{STAT_SUCCESS, REPLY_AGENT_ERROR, "", "", "", FALSE, FALSE},
-		{STAT_SUCCESS, REPLY_SCALAR, "42", "42", "42", FALSE, FALSE},
-		{STAT_SUCCESS, REPLY_NAMELESS, "", "", "U", FALSE, TRUE},
-		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, TRUE},
-		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, TRUE}};
+		{STAT_SUCCESS, REPLY_NONE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
+		{STAT_TIMEOUT, REPLY_NONE, "U", "", "U", TRUE, TRUE, STAT_TIMEOUT, STAT_TIMEOUT},
+		{STAT_TIMEOUT, REPLY_SCALAR, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_TIMEOUT},
+		{STAT_SUCCESS, REPLY_EMPTY, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_AGENT_ERROR, "", "", "", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_SCALAR, "42", "42", "42", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_NAMELESS, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR}};
 	char text_oid[] = ".1.3.6.1.2.1.1.1.0";
 
 	(void) state;
@@ -582,7 +584,7 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 			result = operation == 2 ? snmp_getnext(&host, text_oid) : snmp_get_base(&host, text_oid, operation == 0);
 			assert_non_null(result);
 			assert_string_equal(result, expected);
-			assert_int_equal(host.snmp.status, cases[index].status);
+			assert_int_equal(host.snmp.status, operation == 2 ? cases[index].next_status : cases[index].get_status);
 			assert_int_equal(host.ignore_host, operation == 0 ? cases[index].get_failed : operation == 1 ? FALSE
 																										 : cases[index].next_failed);
 			assert_int_equal(request_calls, 1);

@@ -75,6 +75,13 @@ static const char *fake_fail_prefix;
 static int fake_item_rows;
 static char *fake_item_row[21];
 static int fake_queries;
+static int fake_schedule_writes;
+static int fake_item_selects;
+static bool fake_device_row;
+static bool fake_device_row_pending;
+static char *fake_host_row[37];
+static poller_thread_t *fake_completion_peer;
+static void *fake_poll_worker(void *argument);
 static int fake_result_storage;
 #define FAKE_RESULT ((MYSQL_RES *) (void *) &fake_result_storage)
 static int interrupted_queries;
@@ -187,7 +194,22 @@ size_t __wrap_strftime(char *output, size_t capacity, const char *format, const 
 int __wrap_mysql_query(MYSQL *mysql, const char *query) {
 	if (fake_database) {
 		fake_queries++;
+		if (strncmp(query, "UPDATE poller_item", strlen("UPDATE poller_item")) == 0) fake_schedule_writes++;
+		if (strncmp(query, "SELECT ", 7) == 0 && strstr(query, " FROM poller_item ") != NULL) fake_item_selects++;
+		/* Pause the first partition's error write while another partition
+		 * finishes. Joining keeps this scripted server's state serialized. */
+		if (fake_completion_peer != NULL && strncmp(query, "INSERT INTO host_errors", strlen("INSERT INTO host_errors")) == 0) {
+			poller_thread_t *peer = fake_completion_peer;
+			pthread_t worker;
+			fake_completion_peer = NULL;
+			fake_rows = 0;
+			assert(pthread_create(&worker, NULL, fake_poll_worker, peer) == 0);
+			assert(pthread_join(worker, NULL) == 0);
+			assert(fake_schedule_writes == 0 && !details[peer->device_counter]->complete);
+		}
+		fake_device_row_pending = fake_device_row && strncmp(query, "SELECT SQL_NO_CACHE id,", strlen("SELECT SQL_NO_CACHE id,")) == 0;
 		fake_rows_current = fake_rows_prefix != NULL && strncmp(query, fake_rows_prefix, strlen(fake_rows_prefix)) == 0 ? fake_rows_matched : fake_rows;
+		if (fake_device_row_pending) fake_rows_current = 1;
 		if (strncmp(query, "SET SESSION sql_mode", strlen("SET SESSION sql_mode")) == 0) {
 			fake_errno_value = fake_session_mode_fails ? 1146 : 0;
 		} else if (fake_fail_prefix != NULL && strncmp(query, fake_fail_prefix, strlen(fake_fail_prefix)) == 0) {
@@ -286,6 +308,10 @@ my_ulonglong __wrap_mysql_num_rows(MYSQL_RES *result) {
 
 MYSQL_ROW __wrap_mysql_fetch_row(MYSQL_RES *result) {
 	if (result == FAKE_RESULT) {
+		if (fake_device_row_pending) {
+			fake_device_row_pending = FALSE;
+			return fake_host_row;
+		}
 		if (fake_item_rows <= 0) return NULL;
 		fake_item_rows--;
 		return fake_item_row;
@@ -870,6 +896,11 @@ static void fake_script(const int *errors, int count) {
 	fake_fail_connect_number = 0;
 	fake_connects = 0;
 	fake_queries = 0;
+	fake_schedule_writes = 0;
+	fake_item_selects = 0;
+	fake_device_row = FALSE;
+	fake_device_row_pending = FALSE;
+	fake_completion_peer = NULL;
 	fake_session_mode_fails = FALSE;
 	fake_ping_reconnects = FALSE;
 	fake_rows = 0;
@@ -1072,15 +1103,18 @@ static void test_fake_database_poll_host(void) {
 	details = device_list;
 	fake_database = TRUE;
 	set.logging.log_destination = 0;
-	set.poller.threads = 1;
+	set.poller.threads = 2;
 	set.poller.poller_id = 1;
 	set.poller.active_profiles = 2;
 	set.poller.poller_interval = 5;
 	set.availability.ping_only = FALSE;
-	db_pool_local = calloc(1, sizeof(*db_pool_local));
+	db_pool_local = calloc(2, sizeof(*db_pool_local));
 	assert(db_pool_local != NULL);
 	fake_script(NULL, 0);
 	assert(db_connect(LOCAL, &db_pool_local[0].mysql));
+	assert(db_connect(LOCAL, &db_pool_local[1].mysql));
+	db_pool_local[1].id = 1;
+	db_pool_local[1].free = FALSE;
 	db_pool_local[0].free = FALSE;
 	run_fake_poll(&device, 0);
 	assert(device.poll_failed && !device.complete && set.exit.exit_code == EXIT_FAILURE);
@@ -1104,6 +1138,17 @@ static void test_fake_database_poll_host(void) {
 	run_fake_poll(&device, 0);
 	assert_fake_poll_failed(&device);
 	assert(fake_queries == 1);
+
+	/* A failed reindex read stops collection and keeps the device due. */
+	fake_script(NULL, 0);
+	fake_device_row = TRUE;
+	fake_host_row[0] = "902";
+	fake_host_row[3] = "0";
+	fake_host_row[14] = "0"; /* AVAIL_NONE: no network access. */
+	fake_fail_prefix = "SELECT SQL_NO_CACHE data_query_id";
+	run_fake_poll(&device, 902);
+	assert_fake_poll_failed(&device);
+	assert(fake_item_selects == 0 && fake_schedule_writes == 0);
 
 	/* A device deleted since selection returns quietly, uncounted. */
 	fake_script(NULL, 0);
@@ -1152,9 +1197,39 @@ static void test_fake_database_poll_host(void) {
 		fprintf(stderr, "completion write '%s' failing: complete=%d exit=%d queries=%d\n",
 			completion_writes[failing], device.complete, set.exit.exit_code, fake_queries);
 		assert(!device.complete && set.exit.exit_code == EXIT_FAILURE && db_pool_local[0].free);
+		assert(fake_schedule_writes == (failing == 0 ? 1 : 0));
 	}
+	db_pool_local[1].free = TRUE;
+	/* The final partition must wait for the first partition's pending
+	 * bookkeeping outcome before it can advance the shared schedule. */
+	for (int fail_write = 0; fail_write < 2; fail_write++) {
+		poller_thread_t first = {0};
+		poller_thread_t second = {0};
+		pthread_t worker;
+		fake_script(NULL, 0);
+		fake_rows = 1;
+		fake_item_rows = 1;
+		fake_fail_prefix = fail_write ? "INSERT INTO host_errors" : NULL;
+		memset(&device, 0, sizeof(device));
+		device.host_threads = 2;
+		first.host_thread = 1;
+		second.host_thread = 2;
+		STRNCOPY(first.host_time, "1791244800");
+		STRNCOPY(second.host_time, "1791244800");
+		set.exit.exit_code = EXIT_SUCCESS;
+		fake_completion_peer = &second;
+		assert(pthread_create(&worker, NULL, fake_poll_worker, &first) == 0);
+		assert(pthread_join(worker, NULL) == 0);
+		assert(fake_completion_peer == NULL && device.threads_complete == 2);
+		assert(device.complete == !fail_write && device.output_failed == fail_write);
+		assert(fake_schedule_writes == !fail_write);
+		assert(set.exit.exit_code == (fail_write ? EXIT_FAILURE : EXIT_SUCCESS));
+		assert(db_pool_local[0].free && db_pool_local[1].free);
+	}
+
 	assert(spine_permits_destroy(&available_scripts) == 0);
 
+	db_disconnect(&db_pool_local[1].mysql);
 	db_disconnect(&db_pool_local[0].mysql);
 	free(db_pool_local);
 	fake_database = FALSE;
