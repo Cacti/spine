@@ -34,6 +34,7 @@ static oid captured_priv_proto[MAX_OID_LEN];
 static void *capture_snmp_sess_open(struct snmp_session *session);
 
 #define snmp_sess_open capture_snmp_sess_open
+#include "../../src/snmp/session.c"
 #include "../../snmp.c"
 #undef snmp_sess_open
 

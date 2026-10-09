@@ -27,7 +27,24 @@ NETSNMP_LIBS   := $(filter -l% -L%, $(shell net-snmp-config --libs 2>/dev/null))
 DB_CONFIG      ?= $(shell command -v mariadb_config 2>/dev/null || command -v mysql_config 2>/dev/null)
 
 SPINE_SRC := $(addprefix $(SPINE_ROOT)/, \
-	ping.c util.c sql.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	ping.c \
+	src/ping/icmp_shared.c \
+	src/ping/icmp4.c \
+	src/ping/icmp6.c \
+	src/ping/transport.c \
+	src/ping/address.c util.c \
+	src/config/settings.c \
+	src/config/options.c \
+	src/config/file.c \
+	src/database/transfer.c \
+	src/core/log.c \
+	src/core/result.c \
+	src/core/privileges.c \
+	src/core/regex.c sql.c \
+	src/database/connection.c \
+	src/database/pool.c snmp.c \
+	src/snmp/session.c src/core/locks.c poller.c \
+	src/poller/script.c src/poller/query.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c nft_popen.c src/process/fd.c php.c src/php/read.c src/php/process.c \
 	src/core/keywords.c error.c)
 
 FUZZ_CFLAGS := $(SANITIZERS) -g -O1 -DHAVE_CONFIG_H \

@@ -20,21 +20,21 @@ fail() {
 	exit 1
 }
 
-# The close-on-exec helper lives in nft_popen.c and both callers share it.
-grep -q 'FD_CLOEXEC' nft_popen.c ||
-	fail "nft_popen.c must set close-on-exec on pipe fds"
+# The close-on-exec helper lives in src/process/fd.c and both callers share it.
+grep -q 'FD_CLOEXEC' src/process/fd.c ||
+	fail "nft_popen.c must use the close-on-exec descriptor helpers"
 
 grep -q 'spine_open_pipe_cloexec(pdes)' nft_popen.c ||
 	fail "nft_popen() must open its pipe with close-on-exec"
 
-grep -q 'spine_open_pipe_cloexec(cacti2php_pdes)' php.c ||
-	fail "php.c must protect the cacti-to-php pipe with close-on-exec"
+grep -q 'spine_open_pipe_cloexec(cacti2php_pdes)' src/php/process.c ||
+	fail "PHP process module must protect the cacti-to-php pipe with close-on-exec"
 
-grep -q 'spine_open_pipe_cloexec(php2cacti_pdes)' php.c ||
-	fail "php.c must protect the php-to-cacti pipe with close-on-exec"
+grep -q 'spine_open_pipe_cloexec(php2cacti_pdes)' src/php/process.c ||
+	fail "PHP process module must protect the php-to-cacti pipe with close-on-exec"
 
 # The reap must be bounded and must escalate.
-grep -q 'waitpid(pid, pstat, WNOHANG)' nft_popen.c ||
+grep -q 'waitpid(pid, pstat, WNOHANG)' src/process/fd.c ||
 	fail "nft_popen.c must reap child processes with WNOHANG"
 
 # The negative pid kills the script's process group, descendants included.
@@ -45,7 +45,7 @@ if grep -q 'waitpid(cur->pid, &pstat, 0)' nft_popen.c; then
 	fail "nft_pclose() must not block in waitpid()"
 fi
 
-if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' php.c; then
+if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' src/php/process.c; then
 	fail "php_close() must not block in waitpid()"
 fi
 
@@ -61,7 +61,7 @@ printf '%s\n' "$nft_pclose_body" | grep -qE 'usleep|NFT_PCLOSE_(TERM|KILL)_ATTEM
 
 # php_terminate_and_reap() must hold the same invariant: one non-blocking
 # check, then kill and move on.
-php_terminate_body=$(awk '/^static int php_terminate_and_reap/,/^}/' php.c)
+php_terminate_body=$(awk '/^static int php_terminate_and_reap/,/^}/' src/php/process.c)
 
 printf '%s\n' "$php_terminate_body" | grep -qE 'usleep|for \(' &&
 	fail "php_terminate_and_reap() must not spin/sleep waiting for a child to exit"
@@ -75,18 +75,18 @@ echo "PASS: child process safety invariants"
 # opened in between. The cloexec branch cannot be driven from a unit test:
 # fcntl(F_SETFD) does not fail on a valid descriptor, and ld --wrap cannot
 # intercept the call because it is inside the same translation unit.
-awk '/^int spine_open_pipe_cloexec/,/^}/' nft_popen.c |
+awk '/^int spine_open_pipe_cloexec/,/^}/' src/process/fd.c |
 	grep -q 'pdes\[0\] = -1;' ||
 	fail "spine_open_pipe_cloexec() must clear pdes when it fails after opening the pipe"
 
 # php_init() must have exactly one teardown. Five hand-copied ones drifted and
 # every one of them leaked the command buffer.
-php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' php.c)
+php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/php/process.c)
 
 printf '%s\n' "$php_init_body" | grep -cE '^[[:space:]]+return FALSE;' | grep -qx '1' ||
 	fail "php_init() must reach its teardown by goto, not by a return that skips it"
 
-printf '%s\n' "$php_init_body" | grep -q '^cleanup:' ||
+printf '%s\n' "$php_init_body" | grep -q '^[[:space:]]*cleanup:' ||
 	fail "php_init() must have a single cleanup label"
 
 # php_init() must not reach a read that can restart the server. php_readpipe()
@@ -94,7 +94,7 @@ printf '%s\n' "$php_init_body" | grep -q '^cleanup:' ||
 # reading, so a server that spawned but never answered recursed without bound,
 # spawning another server at every level. The handshake read must stay on the
 # non-restarting entry point.
-php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' php.c)
+php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/php/process.c)
 
 printf '%s\n' "$php_init_body" | grep -q 'php_read_result(slot, command, FALSE)' ||
 	fail "php_init() must read the startup handshake with restarts disabled"
@@ -102,11 +102,11 @@ printf '%s\n' "$php_init_body" | grep -q 'php_read_result(slot, command, FALSE)'
 printf '%s\n' "$php_init_body" | grep -q 'php_readpipe(' &&
 	fail "php_init() must not call php_readpipe(), which may restart the server"
 
-awk '/^static char \*php_read_result/,/^\}/' php.c |
+awk '/^char \*php_read_result/,/^\}/' src/php/read.c |
 	grep -q 'php_fail_read(php_process, allow_restart)' ||
 	fail "php_read_result() must route failures through the guarded restart helper"
 
-awk '/^static void php_fail_read/,/^\}/' php.c |
+awk '/^void php_fail_read/,/^\}/' php.c |
 	grep -q 'if (allow_restart) {' ||
 	fail "php_fail_read() must gate the server restart on allow_restart"
 
