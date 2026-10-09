@@ -66,6 +66,7 @@ static uint16_t reply_seq;
 static int recvfrom_calls;
 static int recvfrom_eintr_once;
 static int controlled_reply_v6;
+static int wrong_v6_source_octet;
 static int socket_cloexec_einval;
 static int fcntl_fails;
 
@@ -188,6 +189,9 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 			memset(source6, 0, sizeof(*source6));
 			source6->sin6_family = AF_INET6;
 			source6->sin6_addr = in6addr_loopback;
+			if (wrong_v6_source_octet >= 0 && (size_t) wrong_v6_source_octet < sizeof(source6->sin6_addr.s6_addr)) {
+				source6->sin6_addr.s6_addr[wrong_v6_source_octet++] ^= 0x80;
+			}
 			*address_len = sizeof(*source6);
 		}
 		return (ssize_t) length6;
@@ -346,6 +350,7 @@ static int ping_reset(void **state) {
 	icmp6_shared.reading = FALSE;
 	recvfrom_eintr_once = 0;
 	controlled_reply_v6 = 0;
+	wrong_v6_source_octet = -1;
 	socket_cloexec_einval = 0;
 	fcntl_fails = 0;
 	icmp_waiters = NULL;
@@ -894,6 +899,17 @@ static void test_shared_dispatch_ipv6(void **state) {
 	icmp_shared_dispatch(AF_INET, reply, length, &from);
 	assert_false(waiter.answered);
 	source->sin6_addr = in6addr_loopback;
+	header->icmp6_seq = htons(5);
+	icmp_shared_dispatch(AF_INET6, reply, length, &from);
+	assert_false(waiter.answered);
+	header->icmp6_seq = htons(4);
+	/* Every address octet participates in peer identity; struct padding does not. */
+	for (size_t octet = 0; octet < sizeof(source->sin6_addr.s6_addr); octet++) {
+		source->sin6_addr.s6_addr[octet] ^= 0x80;
+		icmp_shared_dispatch(AF_INET6, reply, length, &from);
+		assert_false(waiter.answered);
+		source->sin6_addr.s6_addr[octet] ^= 0x80;
+	}
 	icmp_shared_dispatch(AF_INET6, reply, length, &from);
 	assert_true(waiter.answered);
 	thread_mutex_unlock(LOCK_ICMP);
@@ -1012,6 +1028,84 @@ static void test_ipv6_datagram_socket_answers(void **state) {
 	assert_int_equal(controlled_socket_closed, 1);
 }
 
+static void test_ipv6_datagram_rejects_wrong_peer_addresses(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	wrong_v6_source_octet = 0;
+	make_host6(&host);
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+	assert_int_equal(recvfrom_calls, sizeof(in6addr_loopback.s6_addr) + 1);
+	assert_string_equal(ping.ping_response, "ICMPv6: Device is Alive");
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_ipv6_invalid_input_releases_resources(void **state) {
+	(void) state;
+	for (int mode = 0; mode <= 2; mode++) {
+		host_t host;
+		ping_t ping = {0};
+
+		assert_int_equal(ping_reset(NULL), 0);
+		use_owned_controlled_socket();
+		track_packet = 1;
+		packet_size = sizeof(struct icmp6_hdr) + sizeof(icmp6_payload) - 1;
+		resolver_mode = mode;
+		make_host(&host, mode == 0 ? "" : "::1");
+		pi_debug_table[0] = host.id;
+		assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_DOWN);
+		assert_string_equal(ping.ping_response, mode == 0 ? "ICMPv6: Destination address not specified" : "ICMPv6: Destination hostname invalid");
+		assert_string_equal(ping.ping_status, "down");
+		assert_int_equal(resolver_calls, mode == 0 ? 0 : mode == 1 ? 1
+																   : 4);
+		assert_int_equal(freeaddrinfo_calls, 0);
+		assert_int_equal(packet_released, 1);
+		assert_int_equal(controlled_socket_closed, 1);
+		assert_int_equal(ping_teardown(NULL), 0);
+		controlled_pair[0] = controlled_pair[1] = -1;
+	}
+}
+
+static void test_ipv6_fd_boundary_releases_resources(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	use_controlled_socket = 1;
+	controlled_socket_fd = FD_SETSIZE;
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	track_packet = 1;
+	packet_size = sizeof(struct icmp6_hdr) + sizeof(icmp6_payload) - 1;
+	make_host6(&host);
+	pi_debug_table[0] = host.id;
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "FD_SETSIZE"));
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_ipv6_socket_failure_budget_is_bounded(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	/* The datagram attempt and all five raw attempts fail deterministically. */
+	socket_failures_remaining = 6;
+	set.logging.log_level = POLLER_VERBOSITY_DEBUG;
+	make_host6(&host);
+	pi_debug_table[0] = host.id;
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "unable to create ICMPv6 Socket"));
+	assert_int_equal(socket_calls, 6);
+	assert_int_equal(controlled_socket_closed, 0);
+	assert_null(packet_allocation);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_fd_setsize_guard_releases_the_packet, ping_reset, ping_teardown),
@@ -1040,6 +1134,10 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_ipv6_shared_socket_answers, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_shared_socket_timeout, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_datagram_socket_answers, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_datagram_rejects_wrong_peer_addresses, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_invalid_input_releases_resources, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_fd_boundary_releases_resources, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_socket_failure_budget_is_bounded, ping_reset, ping_teardown),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

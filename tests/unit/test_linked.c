@@ -507,11 +507,19 @@ static void test_read_spine_config_rejects_a_missing_file(void **state) {
 }
 
 static void test_read_spine_config_reads_settings(void **state) {
-	const char *path = "/tmp/spine_test.conf";
+	char path[] = "/tmp/spine-linked-config-XXXXXX";
+	int descriptor;
+	int read_status;
 	FILE *fp;
 	(void) state;
 
-	fp = fopen(path, "wb");
+	descriptor = mkstemp(path);
+	assert_true(descriptor >= 0);
+	fp = fdopen(descriptor, "wb");
+	if (fp == NULL) {
+		close(descriptor);
+		unlink(path);
+	}
 	assert_non_null(fp);
 	fputs("DB_Host           testhost\n", fp);
 	fputs("DB_Database       testdb\n", fp);
@@ -523,14 +531,14 @@ static void test_read_spine_config_reads_settings(void **state) {
 	fclose(fp);
 
 	config_defaults();
-	assert_int_equal(read_spine_config(path), 0);
+	read_status = read_spine_config(path);
+	assert_int_equal(unlink(path), 0);
+	assert_int_equal(read_status, 0);
 
 	assert_string_equal(set.database.host, "testhost");
 	assert_string_equal(set.database.database,   "testdb");
 	assert_string_equal(set.database.user, "testuser");
 	assert_int_equal(set.database.port, 3399);
-
-	remove(path);
 }
 
 /* --- get_date_format(): cached storage, rebuilt by set_date_format() ------ */

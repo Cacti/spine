@@ -7,6 +7,7 @@
  */
 #include "internal/common.h"
 #include "app/spine.h"
+#include "app/startup_internal.h"
 #include <stdint.h>
 #include <sys/resource.h>
 
@@ -253,6 +254,54 @@ static void test_fatal_signal_contracts(void) {
 	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
 
+static void test_startup_output_contracts(void) {
+	config_t previous = set;
+	char output[DBL_BUFSIZE];
+
+	set.logging.log_destination = LOGDEST_STDOUT;
+	set.poller.threads = 3;
+	for (int debug = 0; debug <= 1; debug++) {
+		set.logging.log_level = debug ? POLLER_VERBOSITY_DEBUG : POLLER_VERBOSITY_LOW;
+		for (int hidden = 0; hidden <= 1; hidden++) {
+			set.console.stdout_notty = hidden;
+			for (int remote = 0; remote <= 1; remote++) {
+				for (int secondary = 0; secondary <= 1; secondary++) {
+					FILE *capture = tmpfile();
+					int saved_stdout;
+					size_t count;
+
+					assert(capture != NULL && fflush(stdout) == 0);
+					saved_stdout = dup(STDOUT_FILENO);
+					assert(saved_stdout >= 0 && dup2(fileno(capture), STDOUT_FILENO) == STDOUT_FILENO);
+					set.poller.poller_id = secondary ? 2 : 1;
+					set.hosts.has_device_0 = secondary;
+					report_startup(remote ? REMOTE : LOCAL);
+					report_poll_statistics(0.0, 7);
+					assert(fflush(stdout) == 0 && dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+					assert(close(saved_stdout) == 0);
+					rewind(capture);
+					count = fread(output, 1, sizeof(output) - 1, capture);
+					assert(count < sizeof(output) - 1 && !ferror(capture));
+					output[count] = '\0';
+					assert(fclose(capture) == 0);
+					assert((strstr(output, "Version " VERSION " starting") != NULL) == (debug || !hidden));
+					assert((strstr(output, "Threads: 3, Devices: 7") != NULL) == (debug || !hidden));
+					assert((strstr(output, "Sending entries to ") != NULL) == (secondary && (debug || !hidden)));
+					if (secondary && (debug || !hidden)) {
+						assert(strstr(output, remote ? "remote database in 'online' mode" : "local database in 'offline', or 'recovery' mode") != NULL);
+					}
+					if (debug) {
+						assert(strstr(output, secondary ? "Device 0 Poller Items found." : "No Device 0 Poller Items found.") != NULL);
+						assert(strstr(output, mysql_thread_safe() ? "MySQL is Thread Safe!" : "MySQL is NOT Thread Safe!") != NULL);
+					}
+				}
+			}
+		}
+	}
+	set = previous;
+	puts("production startup and statistics output contracts passed");
+}
+
 void test_additional_contracts(void) {
 	test_keyword_roundtrips();
 	test_lock_contracts();
@@ -260,6 +309,7 @@ void test_additional_contracts(void) {
 	test_legacy_ip_predicate();
 	test_multipart_boundaries();
 	test_fatal_signal_contracts();
+	test_startup_output_contracts();
 	puts("production additional contracts passed");
 }
 

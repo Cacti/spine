@@ -92,19 +92,31 @@ for source in "${fault_sources[@]}"; do
 done
 producer_units=()
 make --no-print-directory coverage-object-list > "$coverage_dir/object-manifest.txt"
+make --no-print-directory coverage-unit-program-list > "$coverage_dir/unit-programs.txt"
+make --no-print-directory coverage-unit-object-list > "$coverage_dir/unit-object-manifest.txt"
+mapfile -t unit_programs < "$coverage_dir/unit-programs.txt"
+if [[ "${#unit_programs[@]}" -eq 0 || -z "${unit_programs[0]}" ]]; then
+    printf 'Coverage requires the cmocka unit suites; install its development package.\n' >&2
+    exit 1
+fi
+for program in "${unit_programs[@]}"; do
+    case "$program" in tests/unit/test_*) ;; *) printf 'Unsupported unit program: %s\n' "$program" >&2; exit 1;; esac
+done
+cat "$coverage_dir/object-manifest.txt" "$coverage_dir/unit-object-manifest.txt" | LC_ALL=C sort -u > "$coverage_dir/all-object-manifest.txt"
 while IFS= read -r object; do
     case "$object" in *.o) producer_units+=("${object%.o}");; *) exit 1;; esac
-done < "$coverage_dir/object-manifest.txt"
+done < "$coverage_dir/all-object-manifest.txt"
 [[ "${#producer_units[@]}" -gt 0 ]]
 printf '%s\n' "${producer_units[@]}" > "$coverage_dir/producers.txt"
 [[ "$(sort -u "$coverage_dir/producers.txt" | wc -l)" -eq "${#producer_units[@]}" ]]
 make clean >> "$coverage_dir/build.log" 2>&1
 find . -path "$coverage_find_path" -prune -o -name '*.gcda' -type f -exec rm -f {} +
-make -j2 spine test_spine_regressions test_spine_faults >> "$coverage_dir/build.log" 2>&1
+make -j2 spine test_spine_regressions test_spine_faults "${unit_programs[@]}" >> "$coverage_dir/build.log" 2>&1
 sha256sum config/config.h Makefile.in > "$coverage_dir/generated-config.sha256"
 cp config/config.h "$coverage_dir/generated-config.h"
 cp Makefile.in "$coverage_dir/generated-Makefile.in"
 sha256sum spine test_spine_regressions test_spine_faults > "$coverage_dir/binaries.sha256"
+sha256sum "${unit_programs[@]}" >> "$coverage_dir/binaries.sha256"
 cp config.log "$coverage_dir/config.log"
 notes=()
 for producer in "${producer_units[@]}"; do [[ -s "$producer.gcno" ]]; notes+=("$producer.gcno"); done
@@ -112,6 +124,11 @@ tests/tools/verify_coverage.sh --producers "$source_dir" "$coverage_dir/producer
 sha256sum "${notes[@]}" > "$coverage_dir/notes.sha256"
 ./spine --version > "$coverage_dir/entry-version.log" 2>&1
 ./spine --help > "$coverage_dir/entry-help.log" 2>&1
+mkdir -p "$coverage_dir/unit-logs"
+for program in "${unit_programs[@]}"; do
+    "$program" > "$coverage_dir/unit-logs/${program##*/}.log" 2>&1
+done
+(cd "$coverage_dir" && sha256sum unit-logs/*.log) > "$coverage_dir/unit-logs.sha256"
 ./test_spine_regressions > "$coverage_dir/default.log" 2>&1
 grep -Fq 'production regression tests passed' "$coverage_dir/default.log"
 grep -Fq 'production SNMPv3 key and timeout boundary regressions passed' "$coverage_dir/default.log"
@@ -120,8 +137,10 @@ grep -Fq 'production script stream regressions passed' "$coverage_dir/default.lo
 grep -Fq 'production config structure bindings passed' "$coverage_dir/default.log"
 grep -Fq 'production numeric error-list boundary regressions passed' "$coverage_dir/default.log"
 grep -Fq 'production additional contracts passed' "$coverage_dir/default.log"
+grep -Fq 'production startup and statistics output contracts passed' "$coverage_dir/default.log"
 ./test_spine_regressions --database > "$coverage_dir/database.log" 2>&1
 grep -Fq 'production settings write outcome regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production configuration option bounds and defaults passed' "$coverage_dir/database.log"
 grep -Fq 'production database configuration regressions passed' "$coverage_dir/database.log"
 grep -Fq 'production output write failure and retry regressions passed' "$coverage_dir/database.log"
 grep -Fq 'production output recollection retains incomplete historical samples passed' "$coverage_dir/database.log"
@@ -178,6 +197,7 @@ sha256sum "${profiles[@]}" > "$coverage_dir/profiles.sha256"
 mkdir -p "$coverage_dir/profiles" "$coverage_dir/bin"
 cp --parents -- "${notes[@]}" "${profiles[@]}" "$coverage_dir/profiles/"
 cp -- spine test_spine_regressions test_spine_faults "$coverage_dir/bin/"
+cp -- "${unit_programs[@]}" "$coverage_dir/bin/"
 (cd "$coverage_dir" && find profiles bin -type f -print0 | sort -z | xargs -0 sha256sum) > "$coverage_dir/saved-producers.sha256"
 {
     sha256sum --check "$coverage_dir/source.sha256"
@@ -185,7 +205,7 @@ cp -- spine test_spine_regressions test_spine_faults "$coverage_dir/bin/"
     sha256sum --check "$coverage_dir/binaries.sha256"
     sha256sum --check "$coverage_dir/notes.sha256"
 } > "$coverage_dir/source-verification.log"
-printf '%s\n' default numeric-error-boundaries config-bindings script-streams cli-aliases additional-contracts database settings-write-outcome output-write-failure-retry output-recollection-new-timestamp simultaneous-output-failure-ordering remote-output-destination-failure-recollection output-sql-batch-boundary nullable-snmp-profile live-reindex snmp local-silent-udp-snmp-multi-timeout snmpv3-key-timeout snmpv3-live fault-default fault-logger fault-process fault-database-retry fault-ping-only-session worker-launch-admitted worker-launch-rejected worker-launch-eagain-retry icmp-denied icmp-capability > "$coverage_dir/scenarios.txt"
-(cd "$coverage_dir" && sha256sum default.log database.log snmp.log snmpv3.log snmpv3-agent.log fault-default.log fault-database.log icmp-denied.log icmp-capability.log scenarios.txt production.info summary.txt source.sha256 generated-config.sha256 binaries.sha256 notes.sha256 profiles.sha256 production-sources.txt test-sources.txt fault-sources.txt producers.txt revision.txt worktree-status.txt compiler.txt dependencies.txt gcov.txt lcov.txt object-manifest.txt entry-help.log entry-version.log entry-gcov.json entry-verifier-self-test.log source-Makefile.in generated-Makefile.in generated-config.h source-inputs.nul source-inputs.tar.gz saved-producers.sha256) > "$coverage_dir/evidence.sha256"
+printf '%s\n' default cmocka-unit-suites numeric-error-boundaries config-bindings script-streams cli-aliases additional-contracts database settings-write-outcome output-write-failure-retry output-recollection-new-timestamp simultaneous-output-failure-ordering remote-output-destination-failure-recollection output-sql-batch-boundary nullable-snmp-profile live-reindex snmp local-silent-udp-snmp-multi-timeout snmpv3-key-timeout snmpv3-live fault-default fault-logger fault-process fault-database-retry fault-ping-only-session worker-launch-admitted worker-launch-rejected worker-launch-eagain-retry icmp-denied icmp-capability > "$coverage_dir/scenarios.txt"
+(cd "$coverage_dir" && sha256sum default.log database.log snmp.log snmpv3.log snmpv3-agent.log fault-default.log fault-database.log icmp-denied.log icmp-capability.log scenarios.txt production.info summary.txt source.sha256 generated-config.sha256 binaries.sha256 notes.sha256 profiles.sha256 production-sources.txt test-sources.txt fault-sources.txt producers.txt revision.txt worktree-status.txt compiler.txt dependencies.txt gcov.txt lcov.txt object-manifest.txt unit-programs.txt unit-object-manifest.txt all-object-manifest.txt unit-logs.sha256 unit-logs/*.log entry-help.log entry-version.log entry-gcov.json entry-verifier-self-test.log source-Makefile.in generated-Makefile.in generated-config.h source-inputs.nul source-inputs.tar.gz saved-producers.sha256) > "$coverage_dir/evidence.sha256"
 cat "$coverage_dir/summary.txt"
 coverage_complete=1

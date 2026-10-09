@@ -405,7 +405,7 @@ int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 				}
 			} else {
 				/* the kernel does not match the source address for us */
-				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) {
+				if (memcmp(fromname.sin6_addr.s6_addr, recvname.sin6_addr.s6_addr, sizeof(fromname.sin6_addr.s6_addr)) != 0) {
 					/* another host responded */
 					goto keep_listening_ipv6;
 				}
