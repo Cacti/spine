@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Reports which lines of the poller the integration fixture actually reaches.
 #
 # Builds spine with gcov instrumentation in a single stage so the .gcda files

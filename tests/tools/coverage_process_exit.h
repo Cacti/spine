@@ -1,5 +1,10 @@
-/* Copyright (C) 2026 The Cacti Group
- * Licensed under the GNU Lesser General Public License, version 2.1 or later. */
+/*
+ * SPDX-FileCopyrightText: 2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
 #ifndef SPINE_COVERAGE_PROCESS_EXIT_H
 #define SPINE_COVERAGE_PROCESS_EXIT_H
 /* Instrumentation only: flush owned subprocess counters before POSIX _exit.

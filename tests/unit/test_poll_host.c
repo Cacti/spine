@@ -1,9 +1,8 @@
-/* Drives the shipped poll_host() without a database or an SNMP agent.
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
  *
- * GNU ld --wrap replaces the database and SNMP calls that poller.o makes into
- * sql.o, snmp.o and the client library with an in-memory fake, so the flush,
- * reindex and completion paths run in an unprivileged "make check".  The live
- * suites in tests/test_spine_*.c cover the same paths against real servers.
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
  */
 #include <stdarg.h>
 #include <stddef.h>

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Integration test for the startup allocation guards (issue#564).
 #
 # php_processes and debug_devices are dereferenced on the line after their

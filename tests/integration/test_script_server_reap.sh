@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Integration test for the PHP script-server reap fix in php_close().
 #
 # Bug: php_close() sent SIGTERM but never waitpid()'d the child, so each

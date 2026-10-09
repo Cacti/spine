@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LGPL-2.1-only
+# SPDX-FileCopyrightText: 2026 Thomas Vincent
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # Fork maintenance: Thomas Vincent. Project contributor history: CONTRIBUTORS.md.
 """Exercise measured zero-branch normalization without weakening verification."""
 import copy

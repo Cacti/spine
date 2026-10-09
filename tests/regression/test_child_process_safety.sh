@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Structural guard for the child process hardening.
 #
 # The behaviour is covered by tests/unit/test_linked.c, which opens a pipe and
