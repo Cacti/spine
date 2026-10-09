@@ -4,10 +4,13 @@ on:
   pull_request:
     branches: [develop]
     paths:
+      - 'configure.ac'
+      - 'Makefile.am'
+      - 'bootstrap'
       - '**.c'
       - '**.h'
       - 'tests/fuzz/**'
-      - '.github/actions/build-spine/**'
+      - '.github/actions/**'
       - '.github/workflows/fuzz.yml'
   schedule:
     - cron: '0 3 * * 0'
@@ -26,6 +29,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/build-spine
         with:

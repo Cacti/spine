@@ -3,7 +3,19 @@ name: Integration
 on:
   pull_request:
     branches: [develop, 'refactor/c17-series-*']
-    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/integration/**', 'tests/test-harness.sh', 'tests/snmpv3/**', '.github/workflows/integration.yml']
+    paths:
+      - '**.c'
+      - '**.h'
+      - 'configure.ac'
+      - 'Makefile.am'
+      - 'bootstrap'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'tests/integration/**'
+      - 'tests/support/test-harness.sh'
+      - 'tests/snmpv3/**'
+      - '.github/actions/**'
+      - '.github/workflows/integration.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,6 +36,8 @@ jobs:
         database: [mariadb, mysql]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Brings up MariaDB and an snmpd, then polls a real device through
       # poll_host() and checks the value lands in poller_output.
@@ -74,7 +88,7 @@ jobs:
 
       - name: Upload integration diagnostics
         if: always() && matrix.database == 'mariadb'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.4.3
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: integration-diagnostics-${{ matrix.database }}
           path: test-artifacts

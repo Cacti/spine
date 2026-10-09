@@ -51,6 +51,12 @@ AC_ARG_WITH(mysql,
   [MYSQL_DIR=$withval]
 )
 
+AC_ARG_WITH([mysql-client],
+  AS_HELP_STRING([--with-mysql-client=mariadb|mysql],[Database client library: MariaDB Connector/C, or the deprecated libmysqlclient (default: MariaDB Connector/C, then libmysqlclient)]),
+  [spine_db_client=$withval],
+  [spine_db_client=auto]
+)
+
 # snmp
 AC_ARG_WITH(snmp,
   AS_HELP_STRING([--with-snmp],[SNMP base directory [[/usr/(local/)include]]
@@ -120,6 +126,56 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
    else
      AC_MSG_ERROR([__STDC_VERSION__ is below 201710L under -std=gnu17])
    fi])
+
+# ****************** 64-bit time_t ***********************
+dnl A 32-bit time_t overflows in January 2038. 64-bit hosts already have a
+dnl 64-bit time_t. On 32-bit targets glibc 2.34 and later provide one under
+dnl _TIME_BITS=64, which glibc accepts only with _FILE_OFFSET_BITS=64.
+AC_ARG_ENABLE([y2038-check],
+  AS_HELP_STRING([--disable-y2038-check],[Allow a build whose time_t is narrower than 64 bits]),
+  [enable_y2038_check=$enableval],
+  [enable_y2038_check=yes])
+
+m4_define([SPINE_TIME_T_64_PROGRAM], [AC_LANG_PROGRAM([[
+#include <time.h>
+]], [[
+static int time_t_is_64_bit[sizeof(time_t) >= 8 ? 1 : -1];
+return time_t_is_64_bit[0];
+]])])
+
+AC_CACHE_CHECK([whether time_t is 64 bits], [spine_cv_time_t_64],
+  [AC_COMPILE_IFELSE([SPINE_TIME_T_64_PROGRAM],
+    [spine_cv_time_t_64=yes],
+    [spine_cv_time_t_64=no])])
+
+spine_time_t_64=$spine_cv_time_t_64
+if test "x$spine_time_t_64" = xno; then
+  AC_CACHE_CHECK([whether glibc offers _TIME_BITS=64], [spine_cv_glibc_time_bits],
+    [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <limits.h>
+#if !defined(__GLIBC__) || __GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 34)
+#error glibc 2.34 or later is needed
+#endif
+]], [])],
+      [spine_cv_glibc_time_bits=yes],
+      [spine_cv_glibc_time_bits=no])])
+
+  if test "x$spine_cv_glibc_time_bits" = xyes; then
+    CPPFLAGS="$CPPFLAGS -D_TIME_BITS=64 -D_FILE_OFFSET_BITS=64"
+    AC_MSG_CHECKING([whether time_t is 64 bits with _TIME_BITS=64])
+    AC_COMPILE_IFELSE([SPINE_TIME_T_64_PROGRAM],
+      [spine_time_t_64=yes],
+      [spine_time_t_64=no])
+    AC_MSG_RESULT([$spine_time_t_64])
+  fi
+fi
+
+if test "x$spine_time_t_64" = xno; then
+  if test "x$enable_y2038_check" != xno; then
+    AC_MSG_ERROR([time_t is narrower than 64 bits, so Spine would stop working in January 2038. Build on a 64-bit target or with glibc 2.34 or later, or pass --disable-y2038-check to build anyway.])
+  fi
+  AC_MSG_WARN([time_t is narrower than 64 bits; timestamps will overflow in January 2038])
+fi
 
 AC_PROG_CPP
 AC_PROG_INSTALL
@@ -262,10 +318,33 @@ else
 fi
 
 # ****************** MySQL-compatible client checks ***********************
+dnl MariaDB Connector/C is the default client (docs/adr/0003). libmysqlclient
+dnl still builds for one release, with a deprecation warning.
 AC_ARG_VAR([MYSQL_CONFIG], [path to mariadb_config or mysql_config])
 
+case $spine_db_client in
+  mariadb)
+    spine_db_config_tools=mariadb_config
+    spine_db_include_dirs="include/mariadb include include/mysql mysql"
+    spine_db_libs=mariadb
+    ;;
+  mysql)
+    spine_db_config_tools=mysql_config
+    spine_db_include_dirs="include/mysql include mysql"
+    spine_db_libs="mysqlclient perconaserverclient"
+    ;;
+  auto)
+    spine_db_config_tools="mariadb_config mysql_config"
+    spine_db_include_dirs="include/mariadb include include/mysql mysql"
+    spine_db_libs="mariadb mysqlclient perconaserverclient"
+    ;;
+  *)
+    AC_MSG_ERROR([--with-mysql-client must be mariadb or mysql, not $spine_db_client])
+    ;;
+esac
+
 if test -n "$MYSQL_DIR" && test -z "$MYSQL_CONFIG"; then
-  for mysql_config_candidate in mariadb_config mysql_config; do
+  for mysql_config_candidate in $spine_db_config_tools; do
     if test -x "$MYSQL_DIR/bin/$mysql_config_candidate"; then
       MYSQL_CONFIG="$MYSQL_DIR/bin/$mysql_config_candidate"
       break
@@ -274,7 +353,7 @@ if test -n "$MYSQL_DIR" && test -z "$MYSQL_CONFIG"; then
 fi
 
 if test -z "$MYSQL_CONFIG"; then
-  AC_PATH_PROGS([MYSQL_CONFIG], [mariadb_config mysql_config])
+  AC_PATH_PROGS([MYSQL_CONFIG], [$spine_db_config_tools])
 fi
 
 if test -n "$MYSQL_CONFIG"; then
@@ -293,7 +372,7 @@ else
   mysql_header_prefix=
 
   for mysql_prefix in $MYSQL_DIR /usr /usr/local /opt /opt/mysql /usr/pkg /usr/local/mysql; do
-    for mysql_include_dir in include include/mysql include/mariadb mysql; do
+    for mysql_include_dir in $spine_db_include_dirs; do
       if test -f "$mysql_prefix/$mysql_include_dir/mysql.h"; then
         CFLAGS="-I$mysql_prefix/$mysql_include_dir $CFLAGS"
         mysql_header_prefix=$mysql_prefix
@@ -323,10 +402,37 @@ fi
 AC_CHECK_HEADER([mysql.h], [],
   [AC_MSG_ERROR([Cannot find mysql.h. Install MariaDB Connector/C or MySQL Connector/C development files.])])
 
-AC_SEARCH_LIBS([mysql_init], [mariadb mysqlclient perconaserverclient],
+AC_SEARCH_LIBS([mysql_init], [$spine_db_libs],
   [AC_DEFINE([HAVE_MYSQL], [1], [MySQL-compatible Client API])
    HAVE_MYSQL=yes],
   [AC_MSG_ERROR([Cannot link a MySQL-compatible client library.])])
+
+dnl Ask the library rather than the tool name: Debian and Homebrew install a
+dnl mysql_config that belongs to MariaDB Connector/C.
+AC_CACHE_CHECK([whether the client library is MariaDB Connector/C],
+  [spine_cv_mariadb_connector],
+  [AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <stddef.h>
+#include <mysql.h>
+]], [[
+size_t version = 0;
+return mariadb_get_infov(NULL, MARIADB_CLIENT_VERSION_ID, &version);
+]])],
+    [spine_cv_mariadb_connector=yes],
+    [spine_cv_mariadb_connector=no])])
+
+spine_db_client_deprecated=no
+if test "x$spine_cv_mariadb_connector" = xyes; then
+  if test "x$spine_db_client" = xmysql; then
+    AC_MSG_ERROR([--with-mysql-client=mysql was given, but ${MYSQL_CONFIG:-the client library found} is MariaDB Connector/C. Set MYSQL_CONFIG to the mysql_config of the MySQL client.])
+  fi
+else
+  if test "x$spine_db_client" = xmariadb; then
+    AC_MSG_ERROR([--with-mysql-client=mariadb was given, but the client library found is not MariaDB Connector/C. Install libmariadb development files or set MYSQL_CONFIG to mariadb_config.])
+  fi
+  spine_db_client_deprecated=yes
+  AC_MSG_WARN([Building against libmysqlclient, which is deprecated and will be removed in the next release. Use MariaDB Connector/C; it connects to MySQL servers too. See docs/adr/0003-mariadb-connector.md.])
+fi
 
 # ****************** Net-SNMP Checks ***********************
 if test "x$SNMP_DIR" != "x"; then
@@ -709,3 +815,8 @@ AM_CONDITIONAL([HAVE_CMOCKA], [test "x$have_cmocka" = xyes])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
+
+dnl Repeat the warning where it cannot scroll past unseen.
+if test "x$spine_db_client_deprecated" = xyes; then
+  AC_MSG_WARN([libmysqlclient is deprecated and will be removed in the next release. Use MariaDB Connector/C (--with-mysql-client=mariadb).])
+fi

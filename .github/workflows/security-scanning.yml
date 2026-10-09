@@ -1,0 +1,117 @@
+name: Security scanning
+
+# Scorecard publishes to the OpenSSF API, which rejects results from a
+# workflow with top-level env or defaults, any workflow-level write
+# permission, or id-token: write outside the Scorecard job. Keep those out
+# of this file.
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop, '1.2.x']
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scorecard:
+    name: OpenSSF Scorecard
+    # Scorecard supports push and schedule on the default branch only.
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'schedule')
+    # The results API accepts only its listed Ubuntu labels, and every step
+    # here must come from its allow-list of actions.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      checks: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload Scorecard SARIF
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: scorecard.sarif
+          category: scorecard
+
+  secrets:
+    name: Secret scan (full history)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TRUFFLEHOG_VERSION: 3.97.9
+      # sha256 of trufflehog_${VERSION}_linux_amd64.tar.gz, taken from the
+      # release checksums file after checking its cosign signature.
+      TRUFFLEHOG_SHA256: 40377e6572495412fb9ba0bc21c9401f73b72f1d2afd11b9931bc4a5ed622866
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install TruffleHog
+        run: |
+          set -euo pipefail
+          archive="trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/${archive}"
+          echo "${TRUFFLEHOG_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/trufflehog"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/trufflehog" trufflehog
+          echo "${RUNNER_TEMP}/trufflehog" >> "${GITHUB_PATH}"
+
+      # Only secrets that TruffleHog confirms live fail the job. Unverified
+      # pattern matches in test fixtures would otherwise block every PR.
+      - name: Scan every commit
+        run: |
+          set -euo pipefail
+          trufflehog git "file://${GITHUB_WORKSPACE}" \
+            --no-update --results=verified --fail --github-actions
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      SEMGREP_IMAGE: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Semgrep
+        run: |
+          set -euo pipefail
+          docker run --rm -v "${GITHUB_WORKSPACE}:/src" -w /src "${SEMGREP_IMAGE}" \
+            semgrep scan --config p/c --config p/secrets --metrics=off \
+            --error --sarif-output=semgrep.sarif
+
+      - name: Upload Semgrep SARIF
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

@@ -311,4 +311,6 @@ noinst_HEADERS += src/app/buffer.h \
 
 noinst_HEADERS += src/database/cacti_query.h src/database/persistence.h
 
+EXTRA_DIST += tests/tools/test_configure_contracts.sh
+
 EXTRA_DIST += scripts/cppcheck/spine.cfg

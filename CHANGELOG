@@ -1,6 +1,17 @@
 The Cacti Group | spine
 
 1.3.0
+-feature: Use C17 with checked native interfaces and production-linked polling contracts
+-issue: Drop root before untrusted input and retain only owned ICMP resources
+-issue: Bound database reconnects and isolate worker failures without losing completion or cleanup
+-issue: Normalize numeric and undefined output and preserve failed-write recollection and SNMP batch persistence
+-issue: Bound probe retry deadlines and validate CLI and configuration inputs
+-issue: Size worker stacks safely on musl and reject size and attribute failures
+-issue: Validate PHP reader slots, unsigned character classification and portable child cleanup
+-issue: Match IPv6 response addresses by octet and validate ICMPv6 reply sequence and peer
+-feature: Organize native modules by responsibility and separate main from reusable runtime objects
+-feature: Preserve licensing and contributor credits through SPDX notices
+-feature: Verify compiler overrides, hardening, connector selection and time-width policy
 -feature#612: Prefer MariaDB Connector/C discovery while retaining MySQL Connector/C compatibility
 -issue#60: Warn at startup when the spine and Cacti versions come from different release lines
 -issue#263: Unify the debug message prefix so a single poll no longer logs two orders

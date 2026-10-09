@@ -1168,7 +1168,9 @@ EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
 	tests/fixtures/c17_develop_behavior_baseline.json \
 	scripts/debug.sh scripts/package.sh \
 	tests/regression/test_helper_scripts.sh \
-	docs/architecture/source-modules.md scripts/cppcheck/spine.cfg
+	docs/architecture/source-modules.md \
+	tests/tools/test_configure_contracts.sh \
+	scripts/cppcheck/spine.cfg
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src \
 	-I$(top_srcdir)/vendor/uthash -I$(top_builddir)
 

@@ -9,8 +9,10 @@ on:
     paths:
       - "configure.ac"
       - "Makefile.am"
+      - "bootstrap"
       - "**.c"
       - "**.h"
+      - "scripts/test-distros.sh"
       - ".github/workflows/rocky-linux.yml"
 
 permissions:
@@ -28,20 +30,26 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build and test in Rocky Linux 9
+        env:
+          # The Rocky project maintains this namespace; the old Docker Hub
+          # library image no longer receives current base-system updates.
+          IMAGE: quay.io/rockylinux/rockylinux:9@sha256:8101994123cf3d0a8fee517bee7f39e555c7d92bd2d9eb3303cc988a0eeed00f
+          LOG_DIR: ${{ runner.temp }}/rocky-logs
         run: |
           set -euo pipefail
-          docker run --rm \
-            --volume "$GITHUB_WORKSPACE:/src:ro" \
-            --workdir /workspace \
-            mirror.gcr.io/library/rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 \
-            bash -euo pipefail -c '
-              cp -a /src/. /workspace/
-              dnf -y group install "Development Tools"
-              dnf -y install autoconf automake libtool mariadb-connector-c-devel net-snmp-devel openssl-devel libxml2-devel libcurl-devel zlib-devel
-              autoreconf -fi
-              ./configure --enable-warnings
-              make --jobs "$(nproc)"
-              make check
-            '
+          # Same complete cmocka suite and unprivileged builder as the matrix,
+          # without installing the unrelated Development Tools package group.
+          scripts/test-distros.sh "$IMAGE"
+
+      - name: Upload Rocky failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rocky-linux-9-logs
+          path: ${{ runner.temp }}/rocky-logs
+          if-no-files-found: warn
+          retention-days: 14
