@@ -762,6 +762,7 @@ char *snmp_get_base(host_t *host, char *text_oid, bool should_fail) {
 	int status = reply.status;
 	if (host->snmp.session != NULL) status = snmp_get_response(host, text_oid, &reply, output);
 	if (reply.response != NULL) snmp_free_pdu(reply.response);
+	host->snmp.status = status;
 	if (status != STAT_SUCCESS && should_fail) {
 		host->ignore_host = TRUE;
 		SET_UNDEFINED(output);
@@ -802,6 +803,7 @@ char *snmp_getnext(host_t *host, char *text_oid) {
 		status = snmp_decode_session_error(host, text_oid, "getnext ", status, output);
 	}
 	if (reply.response != NULL) snmp_free_pdu(reply.response);
+	host->snmp.status = status;
 	if (status != STAT_SUCCESS) {
 		host->ignore_host = TRUE;
 		SET_UNDEFINED(output);
