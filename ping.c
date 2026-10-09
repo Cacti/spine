@@ -274,6 +274,360 @@ spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *reply, s
 	return SPINE_ICMP_REPLY_OK;
 }
 
+#ifdef SPINE_HAVE_ICMPV6
+static const char icmp6_payload[] = "cacti-monitoring-system";
+
+/*! \fn static int icmp6_reply_matches(const unsigned char *reply, ssize_t len, uint16_t id, uint16_t seq, int check_id)
+ *  \brief decides whether an ICMPv6 message answers our echo request
+ *
+ *  ICMPv6 sockets deliver the message without the IPv6 header.  id and seq
+ *  are in network order, as written into the request.  A datagram socket
+ *  rewrites the echo id, so its caller passes check_id FALSE.
+ */
+static int icmp6_reply_matches(const unsigned char *reply, ssize_t len, uint16_t id, uint16_t seq, int check_id) {
+	struct icmp6_hdr hdr;
+	size_t payload_len = sizeof(icmp6_payload) - 1;
+
+	if (len < 0 || (size_t) len < sizeof(hdr) + payload_len) {
+		return FALSE;
+	}
+
+	memcpy(&hdr, reply, sizeof(hdr));
+
+	if (hdr.icmp6_type != ICMP6_ECHO_REPLY || hdr.icmp6_seq != seq) {
+		return FALSE;
+	}
+
+	if (check_id && hdr.icmp6_id != id) {
+		return FALSE;
+	}
+
+	return memcmp(reply + sizeof(hdr), icmp6_payload, payload_len) == 0;
+}
+#endif
+
+/* Raw sockets opened by drop_privileges() before a setuid root spine gave up
+ * root for good.  Without CAP_NET_RAW nothing can open another, so every
+ * poller thread shares them.  A raw socket queues each ICMP message once, so a
+ * thread that reads a reply meant for another thread must hand it over rather
+ * than drop it: one thread at a time reads, matches each reply against the
+ * registered requests, and wakes only the thread it answers.  LOCK_ICMP guards
+ * all of it. */
+typedef struct {
+	int fd;
+	int reading;
+} icmp_shared_t;
+
+typedef struct icmp_waiter {
+	struct icmp_waiter *next;
+	icmp_shared_t *shared;
+	pthread_cond_t wake;
+	int      family;
+	uint16_t id;
+	uint16_t seq;
+	struct in_addr  peer;
+	#ifdef SPINE_HAVE_ICMPV6
+	struct in6_addr peer6;
+	#endif
+	int      answered;
+	int      sleeping;
+} icmp_waiter_t;
+
+/* A reader empties the queue in batches read without LOCK_ICMP held, so a
+ * flood delays neither registrations nor the waiters being woken.  The bound
+ * on one pass keeps the reader's own deadline check running.  Matching needs
+ * only the IP header, the ICMP header and the payload marker, so each slot
+ * keeps the first ICMP_SHARED_SNAPLEN bytes.  The queue itself is sized for
+ * every poller thread rather than one. */
+#define ICMP_SHARED_DRAIN_MAX 1024
+#define ICMP_SHARED_BATCH     64
+#define ICMP_SHARED_SNAPLEN   128
+#define ICMP_SHARED_RCVBUF    (4 * 1024 * 1024)
+
+#if defined(__linux__)
+#ifndef SOL_RAW
+#define SOL_RAW 255
+#endif
+#ifndef ICMP_FILTER
+#define ICMP_FILTER 1
+#endif
+#endif
+
+static icmp_shared_t  icmp_shared  = {-1, FALSE};
+#ifdef SPINE_HAVE_ICMPV6
+static icmp_shared_t  icmp6_shared = {-1, FALSE};
+#endif
+static icmp_waiter_t *icmp_waiters = NULL;
+
+/*! \fn static int icmp_open_socket(int family, int type, int protocol)
+ *  \brief opens an ICMP socket that PHP and script children cannot inherit
+ *
+ *  Poller threads posix_spawn() scripts while others ping, so the flag is set
+ *  atomically where SOCK_CLOEXEC exists; elsewhere fcntl() narrows the window.
+ */
+static int icmp_open_socket(int family, int type, int protocol) {
+	int fd;
+
+	#ifdef SOCK_CLOEXEC
+	fd = socket(family, type | SOCK_CLOEXEC, protocol);
+
+	if (fd != -1 || errno != EINVAL) {
+		return fd;
+	}
+	#endif
+
+	fd = socket(family, type, protocol);
+
+	if (fd != -1 && fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
+		close(fd);
+		return -1;
+	}
+
+	return fd;
+}
+
+static int icmp_open_shared(int family, int protocol) {
+	int fd = icmp_open_socket(family, SOCK_RAW, protocol);
+
+	if (fd == -1) {
+		return -1;
+	}
+
+	/* A descriptor select() cannot watch is no use to the readers below. */
+	if (fd >= FD_SETSIZE) {
+		close(fd);
+		return -1;
+	}
+
+	#if defined(__linux__)
+	/* The kernel copies every inbound ICMP message to a raw socket.  Echo
+	 * requests and errors aimed at this host would otherwise compete with
+	 * the replies for the single shared queue.  Best effort, as is
+	 * ICMP6_FILTER on the IPv6 socket. */
+	if (family == AF_INET) {
+		uint32_t blocked = ~(1U << ICMP_ECHOREPLY);
+
+		(void) setsockopt(fd, SOL_RAW, ICMP_FILTER, &blocked, sizeof(blocked));
+	}
+	#endif
+
+	/* Best effort as well.  SO_RCVBUFFORCE passes net.core.rmem_max, which
+	 * is why this happens here, while spine is still root. */
+	{
+		int rcvbuf = ICMP_SHARED_RCVBUF;
+
+		#ifdef SO_RCVBUFFORCE
+		if (setsockopt(fd, SOL_SOCKET, SO_RCVBUFFORCE, &rcvbuf, sizeof(rcvbuf)) != 0)
+		#endif
+		(void) setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+	}
+
+	return fd;
+}
+
+/*! \fn int ping_icmp_open_shared(void)
+ *  \brief opens the shared raw ICMP sockets; the caller must still be root
+ *
+ *  \return TRUE if the IPv4 socket is open.  IPv6 is best effort.
+ */
+int ping_icmp_open_shared(void) {
+	if (icmp_shared.fd == -1) {
+		icmp_shared.fd = icmp_open_shared(AF_INET, IPPROTO_ICMP);
+	}
+
+	#ifdef SPINE_HAVE_ICMPV6
+	if (icmp6_shared.fd == -1) {
+		icmp6_shared.fd = icmp_open_shared(AF_INET6, IPPROTO_ICMPV6);
+	}
+	#endif
+
+	return icmp_shared.fd != -1;
+}
+
+int ping_icmp_shared_available(void) {
+	return icmp_shared.fd != -1;
+}
+
+/* Called with LOCK_ICMP held whenever nobody is reading a socket: wake one
+ * sleeping waiter so it takes over.  A waiter that is not asleep finds the
+ * socket free on its own before it next sleeps. */
+static void icmp_shared_handoff(const icmp_shared_t *shared) {
+	icmp_waiter_t *waiter;
+
+	if (shared->reading) {
+		return;
+	}
+
+	for (waiter = icmp_waiters; waiter != NULL; waiter = waiter->next) {
+		if (waiter->shared == shared && waiter->sleeping && !waiter->answered) {
+			pthread_cond_signal(&waiter->wake);
+			return;
+		}
+	}
+}
+
+static void icmp_shared_register(icmp_waiter_t *waiter) {
+	pthread_cond_init(&waiter->wake, NULL);
+
+	thread_mutex_lock(LOCK_ICMP);
+	waiter->answered = FALSE;
+	waiter->sleeping = FALSE;
+	waiter->next     = icmp_waiters;
+	icmp_waiters     = waiter;
+	thread_mutex_unlock(LOCK_ICMP);
+}
+
+static void icmp_shared_unregister(icmp_waiter_t *waiter) {
+	icmp_waiter_t **link;
+
+	thread_mutex_lock(LOCK_ICMP);
+	for (link = &icmp_waiters; *link != NULL; link = &(*link)->next) {
+		if (*link == waiter) {
+			*link = waiter->next;
+			break;
+		}
+	}
+	icmp_shared_handoff(waiter->shared);
+	thread_mutex_unlock(LOCK_ICMP);
+
+	pthread_cond_destroy(&waiter->wake);
+}
+
+/* Called with LOCK_ICMP held.  A reply nobody waits for is dropped, exactly as
+ * a per-thread socket would drop a reply that is not its own. */
+static void icmp_shared_dispatch(int family, const unsigned char *reply, ssize_t len,
+	const struct sockaddr_storage *from) {
+	icmp_waiter_t *waiter;
+
+	for (waiter = icmp_waiters; waiter != NULL; waiter = waiter->next) {
+		if (waiter->family != family || waiter->answered) {
+			continue;
+		}
+
+		if (family == AF_INET) {
+			const struct sockaddr_in *source = (const struct sockaddr_in *) from;
+
+			if (source->sin_addr.s_addr != waiter->peer.s_addr ||
+				spine_icmp_classify_reply(reply, len, waiter->id, waiter->seq, NULL) != SPINE_ICMP_REPLY_OK) {
+				continue;
+			}
+		}
+		#ifdef SPINE_HAVE_ICMPV6
+		else {
+			const struct sockaddr_in6 *source = (const struct sockaddr_in6 *) from;
+
+			if (memcmp(&source->sin6_addr, &waiter->peer6, sizeof(waiter->peer6)) != 0 ||
+				!icmp6_reply_matches(reply, len, waiter->id, waiter->seq, TRUE)) {
+				continue;
+			}
+		}
+		#endif
+
+		waiter->answered = TRUE;
+		pthread_cond_signal(&waiter->wake);
+		return;
+	}
+}
+
+/*! \fn static int icmp_shared_await(icmp_waiter_t *waiter, double deadline)
+ *  \brief waits until the reply to a registered request arrives, or deadline
+ *
+ *  Whichever waiting thread finds the socket idle reads it, so a reply is
+ *  never stuck behind a thread whose own deadline is further away: a reader
+ *  returns from select() as soon as anything arrives, drains the queue, and
+ *  wakes the threads whose replies it found.
+ *
+ *  \return TRUE if the reply arrived in time.
+ */
+static int icmp_shared_await(icmp_waiter_t *waiter, double deadline) {
+	icmp_shared_t *shared = waiter->shared;
+	unsigned char  replies[ICMP_SHARED_BATCH][ICMP_SHARED_SNAPLEN];
+	struct sockaddr_storage sources[ICMP_SHARED_BATCH];
+	ssize_t        lengths[ICMP_SHARED_BATCH];
+	socklen_t      fromlen;
+	ssize_t        received;
+	struct timeval wait;
+	struct timespec until;
+	fd_set         fds;
+	double         now;
+	double         remaining;
+	int            readable;
+	int            drained;
+	int            count;
+	int            slot;
+	int            answered;
+
+	until.tv_sec  = (time_t) deadline;
+	until.tv_nsec = (long) ((deadline - (double) until.tv_sec) * 1000000000.0);
+
+	thread_mutex_lock(LOCK_ICMP);
+
+	while (!waiter->answered) {
+		now = get_time_as_double();
+
+		if (now >= deadline) {
+			break;
+		}
+
+		if (shared->reading) {
+			waiter->sleeping = TRUE;
+			pthread_cond_timedwait(&waiter->wake, get_lock(LOCK_ICMP), &until);
+			waiter->sleeping = FALSE;
+			continue;
+		}
+
+		shared->reading = TRUE;
+		thread_mutex_unlock(LOCK_ICMP);
+
+		remaining    = deadline - now;
+		wait.tv_sec  = (time_t) remaining;
+		wait.tv_usec = (suseconds_t) ((remaining - (double) wait.tv_sec) * 1000000.0);
+
+		FD_ZERO(&fds);
+		FD_SET(shared->fd, &fds);
+		readable = select(shared->fd + 1, &fds, NULL, NULL, &wait) > 0;
+
+		/* Empty the queue: under a flood, one reply per pass falls behind
+		 * and the kernel drops the replies that matter. */
+		for (drained = 0; readable && drained < ICMP_SHARED_DRAIN_MAX; drained += count) {
+			for (count = 0; count < ICMP_SHARED_BATCH; ) {
+				fromlen  = sizeof(sources[count]);
+				received = recvfrom(shared->fd, replies[count], ICMP_SHARED_SNAPLEN, MSG_DONTWAIT,
+					(struct sockaddr *) &sources[count], &fromlen);
+
+				if (received < 0) {
+					if (errno == EINTR) {
+						continue;
+					}
+					readable = FALSE;
+					break;
+				}
+
+				lengths[count++] = received;
+			}
+
+			thread_mutex_lock(LOCK_ICMP);
+			for (slot = 0; slot < count; slot++) {
+				if (lengths[slot] > 0) {
+					icmp_shared_dispatch(waiter->family, replies[slot], lengths[slot], &sources[slot]);
+				}
+			}
+			thread_mutex_unlock(LOCK_ICMP);
+		}
+
+		thread_mutex_lock(LOCK_ICMP);
+		shared->reading = FALSE;
+	}
+
+	answered = waiter->answered;
+
+	/* Leaving with the socket idle: let a sleeping waiter take over. */
+	icmp_shared_handoff(shared);
+	thread_mutex_unlock(LOCK_ICMP);
+
+	return answered;
+}
+
 /*! \fn int ping_icmp(host_t *host, ping_t *ping)
  *  \brief ping a host using an ICMP packet
  *  \param host a pointer to the current host structure
@@ -291,9 +645,9 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 	int    icmp_dgram;
 	int    rc = HOST_DOWN;
 	int    socket_errno = 0;
-	#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-	const int needs_seteuid = (set.availability.icmp_uses_caps != TRUE);
-	#endif
+	int    icmp_use_shared = FALSE;
+	icmp_waiter_t waiter;
+	int    waiting = FALSE;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -326,42 +680,22 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 	 * unchanged.  A datagram reply arrives with the IPv4 header already
 	 * stripped, which the receive path has to account for. */
 	icmp_dgram  = FALSE;
-	icmp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+	icmp_socket = icmp_open_socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
 
 	if (icmp_socket != -1) {
 		icmp_dgram = TRUE;
+	} else if (icmp_shared.fd != -1) {
+		icmp_socket     = icmp_shared.fd;
+		icmp_use_shared = TRUE;
 	}
 
-	/* Get a raw ICMP socket when the datagram path is unavailable.
-	 *
-	 * Each attempt is one complete lock/elevate/open/drop/unlock block. The
-	 * retry used to sleep and loop back while still holding LOCK_SETEUID, so
-	 * the second attempt relocked a non-recursive process-global mutex from
-	 * the thread that already owned it. That deadlocks this thread at euid 0
-	 * in a SUID root binary and takes every other thread that needs the lock
-	 * down with it, on nothing worse than a transient socket() failure. */
+	/* Otherwise open a raw socket of our own, which needs CAP_NET_RAW or a
+	 * real root user.  Spine never regains root to do it: a setuid install
+	 * without capabilities uses the shared socket above instead. */
 	retry_count = 0;
 	while (icmp_socket == -1) {
-		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (needs_seteuid) {
-			thread_mutex_lock(LOCK_SETEUID);
-			if (seteuid(0) == -1) {
-				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-			}
-		}
-		#endif
-
-		icmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+		icmp_socket = icmp_open_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 		socket_errno = errno;
-
-		#if !(defined(__CYGWIN__) && !defined(SOLAR_PRIV))
-		if (needs_seteuid) {
-			if (seteuid(getuid()) == -1) {
-				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-			}
-			thread_mutex_unlock(LOCK_SETEUID);
-		}
-		#endif
 
 		if (icmp_socket != -1) {
 			break;
@@ -425,6 +759,17 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 			total_time  = 0;
 			begin_time  = get_time_as_double();
 
+			if (icmp_use_shared) {
+				memset(&waiter, 0, sizeof(waiter));
+				waiter.shared = &icmp_shared;
+				waiter.family = AF_INET;
+				waiter.id     = (uint16_t) (getpid() & 0xFFFF);
+				waiter.seq    = icmp->icmp_seq;
+				waiter.peer   = fromname.sin_addr;
+				icmp_shared_register(&waiter);
+				waiting = TRUE;
+			}
+
 			while (1) {
 				if (retry_count > host->availability.retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Ping timed out");
@@ -437,6 +782,29 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 					SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->availability.retries));
 				} else {
 					SPINE_LOG_DEBUG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->availability.retries));
+				}
+
+				if (waiting) {
+					/* Socket options would change every other thread's socket too. */
+					double attempt_begin = get_time_as_double();
+
+					if (sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname)) >= 0 &&
+						icmp_shared_await(&waiter, attempt_begin + host_timeout / one_thousand)) {
+						total_time = (get_time_as_double() - attempt_begin) * one_thousand;
+
+						if (is_debug_device(host->id)) {
+							SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						} else {
+							SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						}
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
+						rc = HOST_UP;
+						goto cleanup;
+					}
+
+					retry_count++;
+					continue;
 				}
 
 				/* decrement the timeout value by the total time */
@@ -585,14 +953,15 @@ cleanup:
 	 * socket and returned without freeing the packet, once per affected device
 	 * per cycle. See #593.
 	 *
-	 * close() needs no privileges. Three of those exits re-entered root and
-	 * took LOCK_SETEUID to call it, which widened the elevated window and
-	 * serialised every poller thread on a global mutex for nothing. The raw
-	 * socket needs root to open, which is done above, and the elevation is
-	 * dropped there. */
+	 * The shared socket outlives this call; only a socket opened here is
+	 * closed. */
 	SPINE_FREE(packet);
 
-	if (icmp_socket != -1) {
+	if (waiting) {
+		icmp_shared_unregister(&waiter);
+	}
+
+	if (icmp_socket != -1 && !icmp_use_shared) {
 		close(icmp_socket);
 	}
 
@@ -719,7 +1088,9 @@ static void apply_ipv6_scope_id(struct sockaddr_in6 *name) {
 static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 	int    icmp_socket;
 	int    socket_errno = 0;
-	const int needs_seteuid = (set.availability.icmp_uses_caps != TRUE);
+	int    icmp_use_shared = FALSE;
+	icmp_waiter_t waiter;
+	int    waiting = FALSE;
 
 	double begin_time, end_time, total_time;
 	double host_timeout;
@@ -730,7 +1101,7 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 	struct sockaddr_in6 fromname;
 	char   socket_reply[BUFSIZE];
 	int    retry_count;
-	const char *cacti_msg = "cacti-monitoring-system";
+	const char *cacti_msg = icmp6_payload;
 	size_t msg_len;
 	int    packet_len;
 	socklen_t    fromlen;
@@ -741,7 +1112,6 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 	static   unsigned int seq = 0;
 
 	struct   icmp6_hdr *icmp6;
-	struct   icmp6_hdr reply;
 	unsigned char  *packet;
 	uint16_t our_id;
 	uint16_t our_seq;
@@ -764,30 +1134,19 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 	 * rewrites the echo id on such a socket, which the reply match below
 	 * accounts for. */
 	icmp_dgram  = FALSE;
-	icmp_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+	icmp_socket = icmp_open_socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
 
 	if (icmp_socket != -1) {
 		icmp_dgram = TRUE;
+	} else if (icmp6_shared.fd != -1) {
+		icmp_socket     = icmp6_shared.fd;
+		icmp_use_shared = TRUE;
 	}
 
-	/* Each raw-socket attempt owns one complete privilege transition. */
+	/* As in ping_icmp(), a socket of our own never involves regaining root. */
 	while (icmp_socket == -1) {
-		if (needs_seteuid) {
-			thread_mutex_lock(LOCK_SETEUID);
-			if (seteuid(0) == -1) {
-				SPINE_LOG_DEBUG(("WARNING: Spine unable to obtain root privileges."));
-			}
-		}
-
-		icmp_socket = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+		icmp_socket = icmp_open_socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
 		socket_errno = errno;
-
-		if (needs_seteuid) {
-			if (seteuid(getuid()) == -1) {
-				SPINE_LOG_DEBUG(("WARNING: Spine unable to drop from root to local user."));
-			}
-			thread_mutex_unlock(LOCK_SETEUID);
-		}
 
 		if (icmp_socket != -1) {
 			break;
@@ -890,6 +1249,17 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 	total_time  = 0;
 	begin_time  = get_time_as_double();
 
+	if (icmp_use_shared) {
+		memset(&waiter, 0, sizeof(waiter));
+		waiter.shared = &icmp6_shared;
+		waiter.family = AF_INET6;
+		waiter.id     = htons(our_id);
+		waiter.seq    = htons(our_seq);
+		waiter.peer6  = fromname.sin6_addr;
+		icmp_shared_register(&waiter);
+		waiting = TRUE;
+	}
+
 	while (1) {
 		if (retry_count > host->availability.retries) {
 			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Ping timed out");
@@ -901,6 +1271,31 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 			SPINE_LOG(("Device[%i] DEBUG: Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, our_seq, retry_count, host->availability.retries));
 		} else {
 			SPINE_LOG_DEBUG(("DEBUG: Device[%i] Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, our_seq, retry_count, host->availability.retries));
+		}
+
+		if (waiting) {
+			/* Socket options would change every other thread's socket too. */
+			double attempt_begin = get_time_as_double();
+
+			if (sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname)) >= 0 &&
+				icmp_shared_await(&waiter, attempt_begin + host_timeout / one_thousand)) {
+				total_time = (get_time_as_double() - attempt_begin) * one_thousand;
+
+				if (is_debug_device(host->id)) {
+					SPINE_LOG(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+				} else {
+					SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+				}
+
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
+				snprintf(ping->ping_status, 50, "%.5f", total_time);
+
+				result = HOST_UP;
+				goto cleanup;
+			}
+
+			retry_count++;
+			continue;
 		}
 
 		/* decrement the timeout value by the total time */
@@ -956,34 +1351,17 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 					goto keep_listening_ipv6;
 				}
 			} else {
-				/* a raw ICMPv6 socket delivers the ICMPv6 header without the
-				 * IPv6 header, so anything shorter than our own probe cannot
-				 * be the reply to it */
-				if ((size_t) return_code < sizeof(struct icmp6_hdr) + msg_len) {
-					goto keep_listening_ipv6;
-				}
-
 				/* the kernel does not match the source address for us */
 				if (memcmp(&fromname.sin6_addr, &recvname.sin6_addr, sizeof(struct in6_addr)) != 0) {
 					/* another host responded */
 					goto keep_listening_ipv6;
 				}
 
-				memcpy(&reply, socket_reply, sizeof(reply));
-
-				if ((reply.icmp6_type != ICMP6_ECHO_REPLY) ||
-					(reply.icmp6_seq  != htons(our_seq))) {
-					goto keep_listening_ipv6;
-				}
-
 				/* on a datagram socket the kernel assigns the echo id, so it
 				 * will not match what we wrote; sequence, source address and
 				 * payload still identify the reply */
-				if (!icmp_dgram && reply.icmp6_id != htons(our_id)) {
-					goto keep_listening_ipv6;
-				}
-
-				if (memcmp(socket_reply + sizeof(struct icmp6_hdr), cacti_msg, msg_len) != 0) {
+				if (!icmp6_reply_matches((const unsigned char *) socket_reply, return_code,
+					htons(our_id), htons(our_seq), !icmp_dgram)) {
 					goto keep_listening_ipv6;
 				}
 
@@ -1017,7 +1395,11 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 cleanup:
 	SPINE_FREE(packet);
 
-	if (icmp_socket != -1) {
+	if (waiting) {
+		icmp_shared_unregister(&waiter);
+	}
+
+	if (icmp_socket != -1 && !icmp_use_shared) {
 		close(icmp_socket);
 	}
 

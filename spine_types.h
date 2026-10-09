@@ -174,7 +174,7 @@
 
 /* threads constants */
 #define LOCK_SNMP 0
-#define LOCK_SETEUID 2
+#define LOCK_ICMP 2
 #define LOCK_GHBN 3
 #define LOCK_POOL 4
 #define LOCK_PHP 6
@@ -197,7 +197,7 @@
 #define LOCK_HOST_TIME 41
 
 #define LOCK_SNMP_O 0
-#define LOCK_SETEUID_O 2
+#define LOCK_ICMP_O 2
 #define LOCK_GHBN_O 3
 #define LOCK_POOL_O 4
 #define LOCK_PHP_O 6

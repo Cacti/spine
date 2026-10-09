@@ -21,6 +21,9 @@ extern int spine_program_main(int argc, char **argv);
 extern void test_output_write_contracts(MYSQL *mysql);
 extern void test_additional_contracts(void);
 extern void test_cli_alias_contracts(void);
+extern void test_privilege_contracts(void);
+extern void test_setuid_icmp(void);
+extern void test_setuid_stress(int rounds);
 extern int run_script_stream_fixture(const char *scenario);
 extern void test_script_stream_contracts(void);
 extern void test_additional_database_contracts(MYSQL *mysql);
@@ -490,6 +493,52 @@ static void test_config_directives(void) {
 	assert(set.logging.logfile_processed == 1 && set.logging.log_destination == LOGDEST_BOTH);
 	assert(unlink(path) == 0);
 	assert(read_spine_config(path) == -1);
+}
+
+/* -C accepts any readable path, so a warning about a line that is not a
+ * directive must not reveal what the line holds. */
+static void test_config_unknown_lines_not_echoed(void) {
+	char path[] = "spine-config-echo-XXXXXX";
+	int fd = mkstemp(path);
+	assert(fd >= 0);
+	FILE *file = fdopen(fd, "w");
+	assert(file != NULL);
+	assert(fputs("DB_Host localhost\nroot:$6$saltsecret:19000:0:99999:7:::\n", file) != EOF);
+	assert(fclose(file) == 0);
+	int errors[2];
+	assert(pipe(errors) == 0);
+	fflush(NULL);
+	pid_t child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		assert(close(errors[0]) == 0);
+		assert(dup2(errors[1], STDERR_FILENO) == STDERR_FILENO);
+		assert(close(errors[1]) == 0);
+		memset(&set, 0, sizeof set);
+		set.console.stdout_notty = TRUE;
+		set.console.stderr_notty = FALSE;
+		config_defaults();
+		_exit(read_spine_config(path) == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
+	assert(close(errors[1]) == 0);
+	char message[1024];
+	size_t used = 0;
+	for (;;) {
+		ssize_t received = read(errors[0], message + used, sizeof(message) - used - 1);
+		if (received < 0 && errno == EINTR) continue;
+		assert(received >= 0);
+		if (received == 0) break;
+		used += (size_t)received;
+		assert(used < sizeof(message) - 1);
+	}
+	message[used] = '\0';
+	assert(close(errors[0]) == 0);
+	int status;
+	assert(waitpid(child, &status, 0) == child);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
+	assert(unlink(path) == 0);
+	assert(strstr(message, "line 2") != NULL);
+	assert(strstr(message, "root") == NULL && strstr(message, "salt") == NULL);
 }
 
 static void test_config_structure_bindings(void) {
@@ -1292,7 +1341,7 @@ static void test_icmp_socket_failure(void) {
 		assert(geteuid() == getuid());
 		return;
 	}
-	/* Failed socket retries must release the privilege mutex each time. */
+	/* Failed socket retries must give up without regaining root. */
 	alarm(6);
 	assert(ping_icmp(&host, &ping) == HOST_DOWN);
 	alarm(0);
@@ -2445,6 +2494,19 @@ int main(int argc, char **argv) {
 		puts("production ICMP loopback regression passed");
 		return 0;
 	}
+	if (argc == 2 && strcmp(argv[1], "--privilege-drop") == 0) {
+		test_privilege_contracts();
+		return 0;
+	}
+	if (argc == 3 && strcmp(argv[1], "--setuid-stress") == 0) {
+		test_setuid_stress(atoi(argv[2]));
+		return 0;
+	}
+	if (argc == 2 && strcmp(argv[1], "--setuid-icmp") == 0) {
+		test_setuid_icmp();
+		puts("production setuid ICMP regression passed");
+		return 0;
+	}
 	if (argc == 2 && strcmp(argv[1], "--icmp-no-capability") == 0) {
 		init_mutexes();
 		test_icmp_socket_failure();
@@ -2484,6 +2546,7 @@ int main(int argc, char **argv) {
 	test_log_sanitization();
 	test_log_append_and_failures();
 	test_config_directives();
+	test_config_unknown_lines_not_echoed();
 	test_config_structure_bindings();
 	test_date_formats();
 	test_device_logging();
@@ -2516,6 +2579,7 @@ int main(int argc, char **argv) {
 	test_script_execution();
 	test_script_stream_contracts();
 	test_cli_alias_contracts();
+	test_privilege_contracts();
 	test_error_id_buffer_boundaries();
 	test_additional_contracts();
 	puts("production regression tests passed");

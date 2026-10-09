@@ -43,6 +43,17 @@ please do the following:
    chown root:root /usr/local/spine/bin/spine
    chmod u+s /usr/local/spine/bin/spine
 
+   Spine is setuid root only so that it can send ICMP pings.  Before it
+   reads any option or file it opens its raw ICMP sockets, or with
+   --enable-lcap keeps only CAP_NET_RAW, and then drops root for good.  If
+   it cannot get ICMP that way it still drops root and keeps polling: ICMP
+   pings use datagram sockets where net.ipv4.ping_group_range allows them,
+   and otherwise fall back to UDP with a warning.  Spine exits only if it
+   cannot confirm that root is gone.  When root itself runs spine, for
+   example from root's crontab, it keeps root as before.  Without the
+   setuid bit, ICMP works where net.ipv4.ping_group_range covers the poller
+   user, or where the binary has CAP_NET_RAW (setcap cap_net_raw+ep).
+
 To compile and install Spine using MySQL versions previous to 5.5 please add
 the additional --with-reentrant option to the ./configure command above but
 please be aware that Cacti no longer officially supports MySQL prior to 5.5.

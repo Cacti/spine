@@ -213,6 +213,255 @@ char *__wrap_strdup(const char *text) {
 	return __real_strdup(text);
 }
 
+/* Identity and ICMP socket faults.  A setuid root start cannot be reproduced
+ * by an unprivileged `make check`, so the ids the kernel would report, and the
+ * rules it applies to changing them, are modelled here for drop_privileges()
+ * and checkAsRoot().  Every case runs in a child so the process-wide state
+ * they set (the shared sockets, the setuid flag) cannot leak between cases. */
+extern uid_t __real_getuid(void);
+extern uid_t __real_geteuid(void);
+extern gid_t __real_getgid(void);
+extern gid_t __real_getegid(void);
+extern int __real_setuid(uid_t);
+extern int __real_setgid(gid_t);
+extern int __real_seteuid(uid_t);
+extern int __real_setegid(gid_t);
+extern int __real_socket(int, int, int);
+
+static bool ids_faked;
+static uid_t fake_ruid, fake_euid, fake_suid;
+static gid_t fake_rgid, fake_egid, fake_sgid;
+static bool setuid_refused;
+static bool setuid_keeps_saved;
+static bool setgid_keeps_saved;
+static bool icmp_faked;
+static bool raw_icmp_allowed;
+static bool dgram_icmp_allowed;
+
+uid_t __wrap_getuid(void) { return ids_faked ? fake_ruid : __real_getuid(); }
+uid_t __wrap_geteuid(void) { return ids_faked ? fake_euid : __real_geteuid(); }
+gid_t __wrap_getgid(void) { return ids_faked ? fake_rgid : __real_getgid(); }
+gid_t __wrap_getegid(void) { return ids_faked ? fake_egid : __real_getegid(); }
+
+/* POSIX: with euid 0 setuid() sets all three ids; otherwise only the
+ * effective id may change, and only to the real or saved id. */
+int __wrap_setuid(uid_t uid) {
+	if (!ids_faked) return __real_setuid(uid);
+	if (setuid_refused) { errno = EAGAIN; return -1; }
+	if (fake_euid == 0) {
+		fake_ruid = fake_euid = uid;
+		if (!setuid_keeps_saved) fake_suid = uid;
+		return 0;
+	}
+	if (uid == fake_ruid || uid == fake_suid) { fake_euid = uid; return 0; }
+	errno = EPERM;
+	return -1;
+}
+
+int __wrap_setgid(gid_t gid) {
+	if (!ids_faked) return __real_setgid(gid);
+	if (fake_euid == 0) {
+		fake_rgid = fake_egid = gid;
+		if (!setgid_keeps_saved) fake_sgid = gid;
+		return 0;
+	}
+	if (gid == fake_rgid || gid == fake_sgid) { fake_egid = gid; return 0; }
+	errno = EPERM;
+	return -1;
+}
+
+int __wrap_seteuid(uid_t uid) {
+	if (!ids_faked) return __real_seteuid(uid);
+	if (fake_euid == 0 || uid == fake_ruid || uid == fake_suid) { fake_euid = uid; return 0; }
+	errno = EPERM;
+	return -1;
+}
+
+int __wrap_setegid(gid_t gid) {
+	if (!ids_faked) return __real_setegid(gid);
+	if (fake_euid == 0 || gid == fake_rgid || gid == fake_sgid) { fake_egid = gid; return 0; }
+	errno = EPERM;
+	return -1;
+}
+
+/* An allowed ICMP socket is stood in for by a local datagram socket. */
+int __wrap_socket(int domain, int type, int protocol) {
+	int base = type;
+	#ifdef SOCK_CLOEXEC
+	base &= ~SOCK_CLOEXEC;
+	#endif
+	if (!icmp_faked || (protocol != IPPROTO_ICMP && protocol != IPPROTO_ICMPV6)) {
+		return __real_socket(domain, type, protocol);
+	}
+	if ((base == SOCK_RAW && raw_icmp_allowed) || (base == SOCK_DGRAM && dgram_icmp_allowed)) {
+		return __real_socket(AF_UNIX, SOCK_DGRAM | (type & ~base), 0);
+	}
+	errno = EPERM;
+	return -1;
+}
+
+
+typedef void (*identity_case_t)(void);
+
+/* Runs one case in a child; returns its exit status with its output. */
+static int run_identity_case(identity_case_t body, char *output, size_t capacity) {
+	int descriptors[2];
+	assert(__real_pipe(descriptors) == 0);
+	fflush(NULL);
+	pid_t child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		assert(close(descriptors[0]) == 0);
+		assert(dup2(descriptors[1], STDOUT_FILENO) == STDOUT_FILENO);
+		assert(dup2(descriptors[1], STDERR_FILENO) == STDERR_FILENO);
+		assert(close(descriptors[1]) == 0);
+		set.exit.exit_code = EXIT_SUCCESS;
+		set.php.php_initialized = FALSE;
+		set.logging.log_level = POLLER_VERBOSITY_DEBUG;
+		set.logging.log_destination = LOGDEST_STDOUT;
+		body();
+		fflush(NULL);
+		/* exit(), not _exit(), so the child's coverage counters are kept */
+		exit(EXIT_SUCCESS);
+	}
+	assert(close(descriptors[1]) == 0);
+	size_t used = 0;
+	for (;;) {
+		ssize_t received = read(descriptors[0], output + used, capacity - used - 1);
+		if (received < 0 && errno == EINTR) continue;
+		assert(received >= 0);
+		if (received == 0) break;
+		used += (size_t) received;
+		assert(used < capacity - 1);
+	}
+	output[used] = '\0';
+	assert(close(descriptors[0]) == 0);
+	int status;
+	while (waitpid(child, &status, 0) < 0) assert(errno == EINTR);
+	assert(WIFEXITED(status));
+	return WEXITSTATUS(status);
+}
+
+#ifndef HAVE_LCAP
+static void fake_setuid_root_start(uid_t uid, gid_t gid) {
+	ids_faked = TRUE;
+	fake_ruid = uid;
+	fake_euid = fake_suid = 0;
+	fake_rgid = fake_egid = fake_sgid = gid;
+	icmp_faked = TRUE;
+}
+
+static void setuid_start_with_raw_icmp(void) {
+	fake_setuid_root_start(1000, 1000);
+	raw_icmp_allowed = TRUE;
+	drop_privileges();
+	assert(fake_ruid == 1000 && fake_euid == 1000 && fake_suid == 1000);
+	assert(fake_rgid == 1000 && fake_egid == 1000 && fake_sgid == 1000);
+	assert(ping_icmp_shared_available());
+	/* nothing can open another raw socket now, and none is needed */
+	raw_icmp_allowed = FALSE;
+	checkAsRoot();
+	assert(set.availability.icmp_avail);
+}
+
+static void setuid_start_without_icmp(void) {
+	fake_setuid_root_start(1000, 1000);
+	drop_privileges();
+	assert(fake_euid == 1000 && fake_suid == 1000);
+	assert(!ping_icmp_shared_available());
+	checkAsRoot();
+	assert(!set.availability.icmp_avail);
+}
+
+static void setuid_start_with_datagram_icmp(void) {
+	fake_setuid_root_start(1000, 1000);
+	drop_privileges();
+	dgram_icmp_allowed = TRUE;
+	checkAsRoot();
+	assert(set.availability.icmp_avail);
+}
+
+static void setuid_start_setuid_refused(void) {
+	fake_setuid_root_start(1000, 1000);
+	raw_icmp_allowed = TRUE;
+	setuid_refused = TRUE;
+	drop_privileges();
+}
+
+static void setuid_start_saved_uid_kept(void) {
+	fake_setuid_root_start(1000, 1000);
+	setuid_keeps_saved = TRUE;
+	drop_privileges();
+}
+
+/* A setuid and setgid root install starts with an effective gid of 0. */
+static void setuid_start_saved_gid_kept(void) {
+	fake_setuid_root_start(1000, 1000);
+	fake_egid = fake_sgid = 0;
+	setgid_keeps_saved = TRUE;
+	drop_privileges();
+}
+
+static void real_root_start(void) {
+	ids_faked = TRUE;
+	icmp_faked = TRUE;
+	drop_privileges();
+	assert(fake_ruid == 0 && fake_euid == 0 && fake_suid == 0);
+	checkAsRoot();
+	assert(set.availability.icmp_avail);
+}
+
+#endif
+
+static void unprivileged_start(void) {
+	ids_faked = TRUE;
+	fake_ruid = fake_euid = fake_suid = 1000;
+	fake_rgid = fake_egid = fake_sgid = 1000;
+	icmp_faked = TRUE;
+	drop_privileges();
+	assert(!ping_icmp_shared_available());
+	/* a file capability */
+	raw_icmp_allowed = TRUE;
+	checkAsRoot();
+	assert(set.availability.icmp_avail);
+	/* net.ipv4.ping_group_range */
+	raw_icmp_allowed = FALSE;
+	dgram_icmp_allowed = TRUE;
+	checkAsRoot();
+	assert(set.availability.icmp_avail);
+	/* neither */
+	dgram_icmp_allowed = FALSE;
+	checkAsRoot();
+	assert(!set.availability.icmp_avail);
+}
+
+static void test_privilege_drop_faults(void) {
+	char output[8192];
+	#ifndef HAVE_LCAP
+	/* With libcap the drop goes through prctl(), setgroups() and the cap_*
+	 * calls, which these fakes do not model; regressions.yml runs it for real. */
+	assert(run_identity_case(setuid_start_with_raw_icmp, output, sizeof(output)) == EXIT_SUCCESS);
+	assert(strstr(output, "raw ICMP sockets it opened before dropping root") != NULL);
+	assert(run_identity_case(setuid_start_without_icmp, output, sizeof(output)) == EXIT_SUCCESS);
+	assert(strstr(output, "WARNING: Spine is setuid root but could not get raw ICMP access") != NULL);
+	assert(run_identity_case(setuid_start_with_datagram_icmp, output, sizeof(output)) == EXIT_SUCCESS);
+	assert(strstr(output, "may use unprivileged ICMP sockets") != NULL);
+	assert(run_identity_case(setuid_start_setuid_refused, output, sizeof(output)) == EXIT_FAILURE);
+	assert(strstr(output, "could not drop to uid 1000/gid 1000; refusing to run") != NULL);
+	assert(run_identity_case(setuid_start_saved_uid_kept, output, sizeof(output)) == EXIT_FAILURE);
+	assert(strstr(output, "could not drop root permanently; refusing to run") != NULL);
+	assert(run_identity_case(setuid_start_saved_gid_kept, output, sizeof(output)) == EXIT_FAILURE);
+	assert(strstr(output, "could not drop root permanently; refusing to run") != NULL);
+	assert(run_identity_case(real_root_start, output, sizeof(output)) == EXIT_SUCCESS);
+	assert(strstr(output, "Spine is running as root") != NULL);
+	#endif
+	assert(run_identity_case(unprivileged_start, output, sizeof(output)) == EXIT_SUCCESS);
+	assert(strstr(output, "may open raw ICMP sockets") != NULL);
+	assert(strstr(output, "Spine has no ICMP access") != NULL);
+	assert(strstr(output, "WARNING: Spine is setuid root") == NULL);
+	puts("production privilege drop faults passed");
+}
+
 static void test_logger_format_failure(void) {
 	config_t previous = set;
 	char filename[] = "spine-log-fault-XXXXXX";
@@ -700,6 +949,7 @@ int main(int argc, char **argv) {
 	test_process_creation_failures();
 	test_interrupted_insert_retry();
 	test_snmpv3_privacy_copy_failure();
+	test_privilege_drop_faults();
 	if (argc == 2 && strcmp(argv[1], "--database") == 0) {
 		test_real_database_retry();
 		test_ping_only_session_lifetime();

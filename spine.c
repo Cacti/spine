@@ -124,54 +124,6 @@ poller_thread_t** details = NULL;
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
 
-#ifdef HAVE_LCAP
-/* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
- * Pekka Savola that was adapted (copied) from a patch by Chris Wings to drop
- * root for xntpd.
- */
-void drop_root(uid_t server_uid, gid_t server_gid) {
-	cap_t caps;
-	if (prctl(PR_SET_KEEPCAPS, 1)) {
-		SPINE_LOG_HIGH(("prctl(PR_SET_KEEPCAPS, 1) failed"));
-		exit(1);
-	}
-
-	if (setgroups(0, NULL) == -1) {
-		SPINE_LOG_HIGH(("setgroups failed."));
-		exit(1);
-	}
-
-	if (setegid(server_gid) == -1 || seteuid(server_uid) == -1) {
-		SPINE_LOG_HIGH(("setegid/seteuid to uid=%d/gid=%d failed.", server_uid, server_gid));
-		exit(1);
-	}
-
-	caps = cap_from_text("cap_net_raw=eip");
-	if (caps == NULL) {
-		SPINE_LOG_HIGH(("cap_from_text failed."));
-		exit(1);
-	}
-
-	if (cap_set_proc(caps) == -1) {
-		SPINE_LOG_HIGH(("cap_set_proc failed."));
-		exit(1);
-	}
-
-	/* Try to free the memory from cap_from_text */
-	cap_free( caps );
-
-	if ( setregid(server_gid, server_gid) == -1 ||
-		setreuid(server_uid, server_uid) == -1 ) {
-		SPINE_LOG_HIGH(("setregid/setreuid to uid=%d/gid=%d failed.",
-			server_uid, server_gid));
-		exit(1);
-	}
-
-	SPINE_LOG_LOW(("running as uid(%d)/gid(%d) euid(%d)/egid(%d) with cap_net_raw=eip.",
-		getuid(), getgid(), geteuid(), getegid()));
-}
-#endif /* HAVE_LCAP */
-
 /*! \fn main(int argc, char *argv[])
  *  \brief The Spine program entry point
  *  \param argc The number of arguments passed to the function plus one (+1)
@@ -1071,11 +1023,8 @@ int main(int argc, char *argv[]) {
 	start_time = get_time_as_double();
 	total_time = 0;
 
-	#ifdef HAVE_LCAP
-	if (geteuid() == 0) {
-		drop_root(getuid(), getgid());
-	}
-	#endif /* HAVE_LCAP */
+	/* Before any option, file or setting is read; see drop_privileges(). */
+	drop_privileges();
 
 	pthread_t* threads = NULL;
 	pthread_attr_t attr;
