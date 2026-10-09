@@ -68,6 +68,13 @@ char *php_read_result(int php_process, const char *command, int allow_restart) {
 	}
 	result_string[0] = '\0';
 
+	/* Public readers may be called without php_cmd()'s slot validation. */
+	if (php_processes == NULL || php_process < 0 ||
+		php_process >= set.php.php_servers || php_process >= MAX_PHP_SERVERS) {
+		SET_UNDEFINED(result_string);
+		return result_string;
+	}
+
 	/* record start time */
 	begin_time = get_time_as_double();
 

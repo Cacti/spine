@@ -200,11 +200,22 @@ int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr) {
 int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 	int attempt;
 	int eintr_budget;
+	int fast_attempts;
+	double deadline;
 	pid_t waited;
 
 	if (pstat == NULL) {
 		return -1;
 	}
+
+	if (attempts <= 0) return 1;
+	fast_attempts = attempts < NFT_PCLOSE_SPIN_ATTEMPTS ? attempts : NFT_PCLOSE_SPIN_ATTEMPTS;
+	/* BSD kernels may round a 200 us sleep to an entire scheduler tick.
+	 * Bound elapsed grace time as well as syscall attempts. */
+	deadline = spine_monotonic_time() +
+		((double) fast_attempts * NFT_PCLOSE_SPIN_USEC +
+			(double) (attempts - fast_attempts) * NFT_PCLOSE_REAP_USEC) /
+			1000000.0;
 
 	for (attempt = 0; attempt < attempts; attempt++) {
 		/* Bounded so a stream of caught signals cannot spin this call
@@ -212,7 +223,7 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		eintr_budget = 1000;
 		do {
 			waited = waitpid(pid, pstat, WNOHANG);
-		} while (waited < 0 && errno == EINTR && --eintr_budget > 0);
+		} while (waited < 0 && errno == EINTR && --eintr_budget > 0 && spine_monotonic_time() < deadline);
 
 		if (waited == pid) {
 			return 0;
@@ -228,6 +239,8 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 			/* leave errno as waitpid set it; nft_pclose() reports it */
 			return -1;
 		}
+
+		if (spine_monotonic_time() >= deadline) return 1;
 
 /* The delay is load-bearing: without it the attempts are spent in
 		   nanoseconds and the caller's kill lands before the child can exit.

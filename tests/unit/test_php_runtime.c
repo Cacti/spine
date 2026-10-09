@@ -70,13 +70,12 @@ static int duplicate_at_fdsetsize(int fd) {
 	return duplicate;
 }
 
-int __real_pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
-int __wrap_pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
+int spine_php_test_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
 	if (fail_next_sigmask && how == SIG_BLOCK) {
 		fail_next_sigmask = FALSE;
 		return EAGAIN;
 	}
-	return __real_pthread_sigmask(how, set, oldset);
+	return pthread_sigmask(how, set, oldset);
 }
 
 ssize_t __real_write(int fd, const void *buffer, size_t length);
@@ -856,7 +855,9 @@ static void test_spawn_failure_releases_every_resource(void **state) {
 	/* calloc-like zeroes reproduce the process-wide initialization that used to
 	 * let a failed slot masquerade as stdin. php_init() must replace them. */
 	memset(&php_processes[0], 0, sizeof(php_processes[0]));
-	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
+	/* POSIX allows exec errors to appear in the child. Inject an actual
+	 * parent-side spawn failure so this exercises the cleanup on every OS. */
+	fail_php_spawn_call = 1;
 	assert_int_equal(php_init(0), FALSE);
 	assert_int_equal(php_processes[0].php_pid, -1);
 	assert_int_equal(php_processes[0].php_read_fd, -1);
@@ -879,6 +880,28 @@ static void test_command_rejects_a_writable_poisoned_slot(void **state) {
 	free(result);
 	close(fd);
 	php_processes[0].php_read_fd = php_processes[0].php_write_fd = -1;
+}
+
+static void test_readpipe_rejects_invalid_slots(void **state) {
+	const int slots[] = {-1, MAX_PHP_SERVERS, set.php.php_servers};
+	size_t index;
+	php_t *saved_processes;
+	char *result;
+
+	(void) state;
+	for (index = 0; index < sizeof(slots) / sizeof(slots[0]); index++) {
+		result = php_readpipe(slots[index], "test");
+		assert_non_null(result);
+		assert_string_equal(result, "U");
+		free(result);
+	}
+	saved_processes = php_processes;
+	php_processes = NULL;
+	result = php_readpipe(0, "test");
+	php_processes = saved_processes;
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
 }
 
 static void test_readpipe_rejects_fd_at_fd_setsize(void **state) {
@@ -1101,6 +1124,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_init_timeout_does_not_recurse, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawn_failure_releases_every_resource, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_rejects_a_writable_poisoned_slot, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_readpipe_rejects_invalid_slots, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_readpipe_rejects_fd_at_fd_setsize, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_startup_read_rejects_fd_at_fd_setsize_without_restart, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_retires_fd_at_fd_setsize, php_setup, php_teardown),

@@ -50,7 +50,7 @@ int all_digits(const char *string) {
 	/* empty string is not all digits */
 	if (*string == '\0') return FALSE;
 
-	while (isdigit((int) *string))
+	while (isdigit((unsigned char) *string))
 		string++;
 
 	return *string == '\0';
@@ -68,7 +68,7 @@ int all_digits(const char *string) {
  */
 int is_ipaddress(const char *string) {
 	while (*string) {
-		if ((isdigit((int) *string)) ||
+		if ((isdigit((unsigned char) *string)) ||
 			(*string == '.') ||
 			(*string == ':')) {
 			string++;
