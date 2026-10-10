@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop]
   pull_request:
-    branches: [develop]
+    branches: [develop, 'refactor/c17-series-*']
   workflow_dispatch:
 
 permissions:
@@ -114,17 +114,35 @@ jobs:
 
       # Test code is left out: cmocka's assertions are not marked noreturn,
       # so the analyzer follows paths past every failed assertion.
+      - name: Test the clang-tidy failure gate
+        run: python3 tests/tools/test_clang_tidy_gate.py
+
       - name: Run clang-tidy on the production sources
         run: |
           set -euo pipefail
           checks=$(tr -d ' \n' <<<"$CHECKS")
-          mapfile -t sources < <(make -s coverage-source-list | sort -u)
-          clang-tidy -p . --quiet -checks="$checks" "${sources[@]}" \
-            > clang-tidy-report.txt 2> clang-tidy-stderr.txt || true
+          sources_list=$(make -s coverage-source-list | sort -u)
+          test -n "$sources_list"
+          mapfile -t sources <<< "$sources_list"
+          if clang-tidy -p . --quiet -checks="$checks" "${sources[@]}" \
+              > clang-tidy-report.txt 2> clang-tidy-stderr.txt; then
+            analyzer_status=0
+          else
+            analyzer_status=$?
+          fi
+          if [ "$analyzer_status" -ne 0 ]; then
+            cat clang-tidy-report.txt clang-tidy-stderr.txt
+            echo "clang-tidy failed with exit status $analyzer_status."
+            exit "$analyzer_status"
+          fi
+          if grep -E ': (fatal )?error: ' clang-tidy-report.txt clang-tidy-stderr.txt; then
+            echo "clang-tidy reported a compilation error."
+            exit 1
+          fi
           grep ': warning: ' clang-tidy-report.txt \
             | sed -E "s#^$PWD/##; s#^([^:]+):[0-9]+:[0-9]+: warning: #\\1: #" \
             | LC_ALL=C sort > clang-tidy-findings.txt || true
-          grep -v '^#' .github/clang-tidy-baseline.txt | LC_ALL=C sort > baseline.sorted
+          sed '/^#/d' .github/clang-tidy-baseline.txt | LC_ALL=C sort > baseline.sorted
           LC_ALL=C comm -13 baseline.sorted clang-tidy-findings.txt > clang-tidy-new.txt
           LC_ALL=C comm -23 baseline.sorted clang-tidy-findings.txt > clang-tidy-fixed.txt
           if [ -s clang-tidy-fixed.txt ]; then
@@ -145,6 +163,7 @@ jobs:
           name: clang-tidy-report
           path: |
             clang-tidy-report.txt
+            clang-tidy-stderr.txt
             clang-tidy-findings.txt
             clang-tidy-new.txt
           if-no-files-found: ignore
