@@ -82,6 +82,7 @@ static bool fake_device_row_pending;
 static char *fake_host_row[37];
 static poller_thread_t *fake_completion_peer;
 static void *fake_poll_worker(void *argument);
+static void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument);
 static int fake_result_storage;
 #define FAKE_RESULT ((MYSQL_RES *) (void *) &fake_result_storage)
 static int interrupted_queries;
@@ -203,7 +204,7 @@ int __wrap_mysql_query(MYSQL *mysql, const char *query) {
 			pthread_t worker;
 			fake_completion_peer = NULL;
 			fake_rows = 0;
-			assert(pthread_create(&worker, NULL, fake_poll_worker, peer) == 0);
+			start_test_worker(&worker, fake_poll_worker, peer);
 			assert(pthread_join(worker, NULL) == 0);
 			assert(fake_schedule_writes == 0 && !details[peer->device_counter]->complete);
 		}
@@ -1218,7 +1219,7 @@ static void test_fake_database_poll_host(void) {
 		STRNCOPY(second.host_time, "1791244800");
 		set.exit.exit_code = EXIT_SUCCESS;
 		fake_completion_peer = &second;
-		assert(pthread_create(&worker, NULL, fake_poll_worker, &first) == 0);
+		start_test_worker(&worker, fake_poll_worker, &first);
 		assert(pthread_join(worker, NULL) == 0);
 		assert(fake_completion_peer == NULL && device.threads_complete == 2);
 		assert(device.complete == !fail_write && device.output_failed == fail_write);
