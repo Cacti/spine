@@ -70,3 +70,9 @@ excessive output, delayed output, lingering producers, cancellation cleanup,
 CPU exhaustion, Linux address-space exhaustion, inherited stricter limits,
 invalid configuration, and helper/setup failures. Persistent PHP-server policy
 and aggregate process-group resource accounting are outside this policy.
+
+Apply the `runtime-validation` PR label to run the existing nightly matrix and
+full concurrency/60-minute memory soaks on an unmerged revision. Normal PRs do
+not pay that runtime cost. Scheduled and manual workflow behavior is preserved.
+Removing the label prevents later pushes from requesting these long runs;
+already-running jobs retain their configured timeout and artifact behavior.

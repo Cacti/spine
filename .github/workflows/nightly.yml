@@ -6,6 +6,8 @@ name: Nightly
 # memcheck and helgrind.
 
 on:
+  pull_request:
+    types: [labeled, synchronize]
   schedule:
     - cron: "41 2 * * *"
   workflow_dispatch:
@@ -19,6 +21,10 @@ concurrency:
 
 jobs:
   dynamic:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
     name: ${{ matrix.tool }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
