@@ -8,6 +8,16 @@ Make sure that you have the proper development environment to compile Spine.
 This includes compilers, header files and things such as libtool. If you have
 questions please consult the forums and/or online documentation.
 
+### SNMPv3 concurrency
+
+Spine synchronizes SNMPv3 request/response transactions with Net-SNMP session
+construction and cleanup because those operations share USM user and engine
+state. SNMPv1/v2c requests continue to use independent sessions concurrently.
+SNMPv3 requests therefore serialize while inside the library, including their
+configured network timeout; this can limit throughput for slow or unreachable
+SNMPv3 devices. This follows the library
+[threading limitations](https://www.net-snmp.org/docs/README.thread.html).
+
 -----------------------------------------------------------------------------
 
 ## Unix Installation
