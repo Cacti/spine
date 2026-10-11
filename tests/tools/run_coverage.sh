@@ -111,7 +111,7 @@ printf '%s\n' "${producer_units[@]}" > "$coverage_dir/producers.txt"
 [[ "$(sort -u "$coverage_dir/producers.txt" | wc -l)" -eq "${#producer_units[@]}" ]]
 make clean >> "$coverage_dir/build.log" 2>&1
 find . -path "$coverage_find_path" -prune -o -name '*.gcda' -type f -exec rm -f {} +
-make -j2 spine test_spine_regressions test_spine_faults "${unit_programs[@]}" >> "$coverage_dir/build.log" 2>&1
+make -j2 spine tests/support/resource_fixture test_spine_regressions test_spine_faults "${unit_programs[@]}" >> "$coverage_dir/build.log" 2>&1
 sha256sum config/config.h Makefile.in > "$coverage_dir/generated-config.sha256"
 cp config/config.h "$coverage_dir/generated-config.h"
 cp Makefile.in "$coverage_dir/generated-Makefile.in"

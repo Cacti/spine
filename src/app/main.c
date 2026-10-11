@@ -14,7 +14,15 @@
  */
 
 #include "app/runtime.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "process/resource.h"
 
 int main(int argc, char *argv[]) {
+	if (argc > 1 && strcmp(argv[1], "--internal-script-child") == 0) {
+		/* This entry point must never bypass the setuid privilege boundary. */
+		drop_privileges();
+		return spine_script_resource_child(argc, argv);
+	}
 	spine_run(argc, argv);
 }

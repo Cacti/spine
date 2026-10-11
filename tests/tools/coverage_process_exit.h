@@ -17,4 +17,11 @@ static inline __attribute__((noreturn)) void spine_coverage_process_exit(int sta
 }
 #define _exit(status) spine_coverage_process_exit(status)
 
+/* A successful exec replaces the process before its normal gcov teardown. */
+static inline int spine_coverage_process_exec(const char *path, char *const arguments[], char *const environment[]) {
+	__gcov_dump();
+	return execve(path, arguments, environment);
+}
+#define execve(path, arguments, environment) spine_coverage_process_exec(path, arguments, environment)
+
 #endif

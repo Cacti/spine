@@ -75,6 +75,10 @@ typedef struct {
 	char path_php[BUFSIZE];
 	char path_php_server[BUFSIZE];
 	int script_timeout;
+	unsigned int script_max_output;
+	unsigned int script_cpu_seconds;
+	unsigned int script_memory_mb;
+	char script_executable[BUFSIZE];
 	int php_required;
 	int php_initialized;
 	int php_servers;

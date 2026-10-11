@@ -307,7 +307,7 @@ jobs:
           # The tests start polling threads; non-atomic arc counters race and
           # gcov then reports negative branch counts (GCC bug 68080).
           extra-packages: mariadb-client snmpd libcap2-bin
-          cflags: -g -O0 --coverage -fprofile-update=atomic
+          cflags: -g -O0 --coverage -fprofile-update=atomic -include tests/tools/coverage_process_exit.h
           ldflags: --coverage
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -376,7 +376,10 @@ jobs:
           set -euo pipefail
           diff-cover coverage.xml \
             --compare-branch="origin/${BASE_REF}" \
-            --fail-under=70
+            --fail-under=100
+          python3 tests/tools/test_changed_coverage.py
+          git diff --unified=0 "origin/${BASE_REF}...HEAD" -- src/ > changed-production.diff
+          python3 tests/tools/verify_changed_coverage.py coverage.xml changed-production.diff
 
       - name: Upload coverage reports
         if: always()

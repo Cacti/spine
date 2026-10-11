@@ -18,6 +18,7 @@
 #include "app/runtime.h"
 #include "app/startup_internal.h"
 #include <limits.h>
+#include "process/resource.h"
 
 
 /* Global Variables */
@@ -54,6 +55,7 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 
 	/* Before any option, file or setting is read; see drop_privileges(). */
 	drop_privileges();
+	spine_script_executable(argv[0]);
 
 	pthread_t *threads = NULL;
 	pthread_attr_t attr;

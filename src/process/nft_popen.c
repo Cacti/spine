@@ -174,7 +174,9 @@ int nft_popen(const char *command, const char *type) {
 	int inherit_fd = -1;
 	int fd, twoway;
 	pid_t pid;
-	char *argv[4];
+	char *argv[6];
+	char cpu_limit[32];
+	char memory_limit[32];
 	char *command_copy;
 	char shell_cmd[] = "sh";
 	char shell_flag[] = "-c";
@@ -358,6 +360,21 @@ int nft_popen(const char *command, const char *type) {
 #endif
 
 	int spawn_err;
+	if (set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0) {
+		if (set.php.script_executable[0] != '/') {
+			failure_errno = ENOENT;
+			goto spawn_failed;
+		}
+		snprintf(cpu_limit, sizeof(cpu_limit), "%u", set.php.script_cpu_seconds);
+		snprintf(memory_limit, sizeof(memory_limit), "%u", set.php.script_memory_mb);
+		spawn_shell = set.php.script_executable;
+		argv[0] = set.php.script_executable;
+		argv[1] = "--internal-script-child";
+		argv[2] = cpu_limit;
+		argv[3] = memory_limit;
+		argv[4] = command_copy;
+		argv[5] = NULL;
+	}
 retry:
 	spawn_err = posix_spawn(&pid, spawn_shell, &fa, &attr, argv, environ);
 

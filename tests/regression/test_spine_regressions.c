@@ -27,6 +27,7 @@ extern void test_additional_reindex_contracts(MYSQL *mysql);
 extern void test_reindex_result_contracts(MYSQL *mysql);
 extern void test_additional_snmp_session_boundaries(void);
 extern void test_snmpv3_agent_contracts(void);
+extern void test_execution_policy(void);
 
 /* Threads that run poll_host() need the stack production workers get. */
 void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument) {
@@ -3009,6 +3010,7 @@ int main(int argc, char **argv) {
 	test_script_timeout_kills_descendants();
 	test_pclose_kills_descendants();
 	test_script_stream_contracts();
+	test_execution_policy();
 	test_cli_alias_contracts();
 	test_privilege_contracts();
 	test_error_id_buffer_boundaries();

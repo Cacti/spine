@@ -15,6 +15,7 @@
 
 #include "internal/common.h"
 #include "app/spine.h"
+#include <limits.h>
 #define SPINE_STRINGIFY_INNER(value) #value
 #define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
 
@@ -25,6 +26,25 @@
  *  \return 0 if successful or -1 if the file could not be opened
  */
 static int apply_config_directive(const char *name, const char *value) {
+	unsigned int *limit = NULL;
+	unsigned long parsed;
+	char *end;
+	if (STRIMATCH(name, "ScriptMaxOutputBytes")) limit = &set.php.script_max_output;
+	else if (STRIMATCH(name, "ScriptCpuSeconds")) limit = &set.php.script_cpu_seconds;
+	else if (STRIMATCH(name, "ScriptMemoryMB")) limit = &set.php.script_memory_mb;
+	if (limit != NULL) {
+		errno = 0;
+		parsed = strtoul(value, &end, 10);
+		if (value[0] < '0' || value[0] > '9' || *end != '\0' || errno != 0 || parsed > UINT_MAX ||
+			(limit == &set.php.script_max_output && parsed >= RESULTS_BUFFER)) {
+			die("ERROR: Invalid external-script limit for %s", name);
+		}
+#if !defined(__linux__)
+		if (limit == &set.php.script_memory_mb && parsed != 0) die("ERROR: ScriptMemoryMB requires Linux RLIMIT_AS");
+#endif
+		*limit = (unsigned int) parsed;
+		return TRUE;
+	}
 	/* Immutable metadata cannot be changed by configuration values written
 	 * into set. Offsets and capacities describe the actual destination fields. */
 	static const struct {
@@ -124,6 +144,8 @@ int read_spine_config(const char *file) {
 		 * A lone token is a key without a value, or a line that is no
 		 * directive at all; the old %15s split such a line in two. */
 		if (fields == 1) {
+			if (STRIMATCH(name, "ScriptMaxOutputBytes") || STRIMATCH(name, "ScriptCpuSeconds") || STRIMATCH(name, "ScriptMemoryMB"))
+				(void) apply_config_directive(name, "");
 			if (!set.console.stderr_notty) {
 				fprintf(stderr, "WARNING: Directive without a value on line %d of %s\n", line, display_file);
 			}
@@ -142,6 +164,9 @@ int read_spine_config(const char *file) {
  *
  */
 void config_defaults() {
+	set.php.script_max_output = 0;
+	set.php.script_cpu_seconds = 0;
+	set.php.script_memory_mb = 0;
 	set.poller.threads = DEFAULT_THREADS;
 
 	/* default server */

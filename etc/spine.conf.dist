@@ -1,3 +1,9 @@
+# Optional external-command limits (0 preserves existing behavior).
+# ScriptMaxOutputBytes must be less than the configured RESULTS_BUFFER.
+# ScriptMemoryMB requires Linux and limits per-process virtual address space.
+# ScriptMaxOutputBytes 0
+# ScriptCpuSeconds 0
+# ScriptMemoryMB 0
 # +-------------------------------------------------------------------------+
 # | Copyright (C) 2004-2026 The Cacti Group                                 |
 # |                                                                         |

@@ -36,6 +36,9 @@ extern void db_release_connection(int type, int id);
 extern int db_set_session_mode(MYSQL *mysql);
 extern int db_reconnect(MYSQL *mysql, int type, int error, const char *location);
 extern int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column);
+/* Syntax is chosen from the destination handle, never from global settings. */
+extern bool db_upsert_suffix(MYSQL *destination, char *buffer, size_t capacity,
+	const char *const *columns, size_t count);
 
 extern int append_hostrange(char *obuf, size_t capacity, const char *colname);
 

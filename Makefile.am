@@ -21,7 +21,7 @@ spine_support_sources = src/app/buffer.c \
 	src/log/log.c src/poller/result.c \
 	src/platform/privileges.c src/poller/regex.c
 spine_database_sources = src/database/sql.c \
-	src/database/connection.c \
+	src/database/connection.c src/database/upsert.c \
 	src/database/pool.c src/database/transfer.c \
 	src/database/cacti_query.c src/database/persistence.c
 spine_snmp_sources = src/snmp/requests.c src/snmp/response.c \
@@ -36,7 +36,7 @@ spine_poller_sources = src/poller/poller.c \
 	src/script/external.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c
 
 spine_php_sources = src/script/protocol.c src/script/read.c src/script/server.c
-spine_process_sources = src/process/nft_popen.c src/process/fd.c
+spine_process_sources = src/process/nft_popen.c src/process/fd.c src/process/resource.c
 
 spine_shared_sources = $(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) \
 	$(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) src/config/keywords.c src/app/signals.c
@@ -62,6 +62,10 @@ uninstall-hook:
 	fi
 
 bin_PROGRAMS = spine
+noinst_PROGRAMS = tests/support/resource_fixture
+noinst_PROGRAMS += tests/contracts/test_database_destinations
+tests_contracts_test_database_destinations_SOURCES = $(spine_runtime_sources) tests/contracts/test_database_destinations.c
+tests_support_resource_fixture_SOURCES = tests/support/resource_fixture.c
 
 man_MANS = docs/man/spine.1
 
@@ -69,6 +73,7 @@ check_PROGRAMS = test_spine_regressions
 dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
 TESTS = $(check_PROGRAMS)
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
+test_spine_regressions_SOURCES += tests/contracts/test_execution_policy.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Production and regression binaries share the runtime objects.
 
@@ -90,6 +95,7 @@ endif
 # Headers are not referenced by any _SOURCES, so automake will not distribute
 # them unless they are listed. Without this the release tarball builds nothing.
 noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h src/platform/locks.h \
+	src/process/resource.h \
 	src/process/nft_popen.h src/script/server.h src/ping/ping.h src/poller/poller.h \
 	src/snmp/snmp.h src/app/spine.h src/platform/spine_sem.h src/internal/spine_types.h \
 	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h
@@ -103,6 +109,8 @@ EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
 	tests/integration/test_network_faults.sh
 
 EXTRA_DIST += tests/integration/test_memory_soak.sh
+EXTRA_DIST += tests/integration/test_destination_upserts.sh tests/snmpv3/docker-compose.policy.yml \
+	tests/snmpv3/Dockerfile.policy tests/snmpv3/Dockerfile.policy.dockerignore
 
 EXTRA_DIST += tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh tests/tools/coverage_process_exit.h \
  tests/tools/verify_coverage.sh tests/tools/test_coverage_verifier.sh \
@@ -163,12 +171,14 @@ check_PROGRAMS += \
 	tests/unit/test_snmpv3_session \
 	tests/unit/test_ping_icmp \
 	tests/unit/test_ping_timing \
-	tests/unit/test_log_config
+	tests/unit/test_log_config \
+	tests/unit/test_resource_policy \
+	tests/unit/test_external_policy
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
 # pipe, spawn, command, response, shutdown and reap paths.
-noinst_PROGRAMS = tests/support/php_test_server
+noinst_PROGRAMS += tests/support/php_test_server
 tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
 
 if HAVE_LD_WRAP
@@ -218,6 +228,15 @@ tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 # Includes production helpers, so it needs the same libraries as Spine
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_resource_policy_SOURCES = tests/unit/test_resource_policy.c
+tests_unit_test_resource_policy_LDADD = $(CMOCKA_LIBS)
+tests_unit_test_external_policy_SOURCES = tests/unit/test_external_policy.c tests/support/spine_runtime.c \
+	src/database/sql.c src/database/connection.c src/database/upsert.c src/database/pool.c \
+	src/database/transfer.c src/database/cacti_query.c $(spine_support_sources) $(spine_snmp_sources) \
+	src/platform/locks.c src/poller/poller.c src/poller/host.c src/poller/reindex.c \
+	src/poller/items.c src/poller/system.c $(spine_process_sources) $(spine_php_sources) \
+	$(spine_ping_sources) src/config/keywords.c src/app/signals.c
+tests_unit_test_external_policy_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
@@ -315,3 +334,6 @@ EXTRA_DIST += tests/tools/test_configure_contracts.sh
 EXTRA_DIST += tests/tools/test_clang_tidy_gate.py
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg
+TESTS += tests/tools/test_nightly_suites.sh
+EXTRA_DIST += tests/tools/test_nightly_suites.sh .github/scripts/verify-nightly-suites.sh
+EXTRA_DIST += tests/tools/verify_changed_coverage.py tests/tools/test_changed_coverage.py

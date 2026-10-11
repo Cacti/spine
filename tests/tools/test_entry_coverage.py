@@ -50,6 +50,16 @@ class EntryCoverageTests(unittest.TestCase):
             with self.subTest(profile=profile), self.assertRaises(ValueError):
                 normalize(profile, self.report, self.entry)
 
+    def test_preserves_real_branches_and_rejects_missing_counts(self):
+        report = copy.deepcopy(self.report)
+        report['files'][0]['lines'][0]['branches'] = [{'count': 2}, {'count': 0}]
+        profile = self.profile.replace('LF:2', 'BRDA:1,0,0,2\nBRDA:1,0,1,0\nBRF:2\nBRH:1\nLF:2')
+        self.assertEqual(normalize(profile, report, self.entry), profile)
+        for bad in (self.profile, profile.replace('BRH:1', 'BRH:2'),
+                    profile.replace('BRDA:1,0,1,0\n', '')):
+            with self.assertRaises(ValueError):
+                normalize(bad, report, self.entry)
+
 
 if __name__ == '__main__':
     unittest.main()
