@@ -28,6 +28,10 @@ class ChangedCoverageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify(self.profile, self.diff.replace('@@ -0,0 +3,2 @@', '@@ malformed'))
 
+    def test_external_diff_is_rejected(self):
+        with self.assertRaises(ValueError):
+            verify(self.profile, 'src/new.c --- C\n1 changed()\n')
+
 
 if __name__ == '__main__':
     unittest.main()

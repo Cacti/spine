@@ -8,6 +8,8 @@ import xml.etree.ElementTree as ET
 
 
 def verify(profile: str, diff: str) -> tuple[int, list[str]]:
+    if diff.strip() and not diff.startswith('diff --git '):
+        raise ValueError('Expected a unified Git diff; disable external diff and text conversion')
     measured = {}
     for item in ET.fromstring(profile).findall('.//class'):
         name = item.attrib['filename'].removeprefix('./')

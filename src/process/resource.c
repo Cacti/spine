@@ -10,22 +10,25 @@
 #endif
 
 void spine_script_executable(const char *argument) {
-	char path[PATH_MAX];
-	char resolved[PATH_MAX];
+	char *resolved;
+	size_t length;
 #if defined(__linux__)
-	ssize_t length = readlink("/proc/self/exe", path, sizeof(path) - 1);
-	if (length <= 0 || (size_t) length >= sizeof(path) - 1) return;
-	path[length] = '\0';
+	/* Let libc allocate the canonical path; /proc/self is owned by this process. */
+	resolved = realpath("/proc/self/exe", NULL);
 #elif defined(__APPLE__)
+	char path[PATH_MAX];
 	uint32_t capacity = sizeof(path);
 	if (_NSGetExecutablePath(path, &capacity) != 0) return;
+	resolved = realpath(path, NULL);
 #else
-	if (argument == NULL || strlen(argument) >= sizeof(path)) return;
-	strcpy(path, argument);
+	if (argument == NULL || strlen(argument) >= PATH_MAX) return;
+	resolved = realpath(argument, NULL);
 #endif
 	(void) argument;
-	if (realpath(path, resolved) == NULL || strlen(resolved) >= sizeof(set.php.script_executable)) return;
-	strcpy(set.php.script_executable, resolved);
+	if (resolved == NULL) return;
+	length = strlen(resolved);
+	if (length < sizeof(set.php.script_executable)) memcpy(set.php.script_executable, resolved, length + 1);
+	free(resolved);
 }
 
 static int lower_limit(int resource, rlim_t requested) {

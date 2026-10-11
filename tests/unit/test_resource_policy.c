@@ -23,14 +23,6 @@ static int executed;
 static struct rlimit inherited;
 static struct rlimit applied;
 
-#ifdef __linux__
-static ssize_t fake_readlink(const char *path, char *buffer, size_t capacity) {
-	(void) path;
-	if (path_error) return path_error == 1 ? -1 : (ssize_t) capacity;
-	strcpy(buffer, "/tmp/spine");
-	return strlen(buffer);
-}
-#endif
 #ifdef __APPLE__
 static int fake_executable(char *buffer, uint32_t *capacity) {
 	(void) capacity;
@@ -40,13 +32,17 @@ static int fake_executable(char *buffer, uint32_t *capacity) {
 }
 #endif
 static char *fake_realpath(const char *path, char *resolved) {
+	char *result;
 	(void) path;
+	assert_null(resolved);
 	if (resolve_error) return NULL;
-	if (resolve_long && PATH_MAX > BUFSIZE) {
-		memset(resolved, 'a', BUFSIZE);
-		resolved[BUFSIZE] = '\0';
-	} else strcpy(resolved, "/tmp/spine");
-	return resolved;
+	result = malloc(BUFSIZE + 1);
+	assert_non_null(result);
+	if (resolve_long) {
+		memset(result, 'a', BUFSIZE);
+		result[BUFSIZE] = '\0';
+	} else memcpy(result, "/tmp/spine", sizeof("/tmp/spine"));
+	return result;
 }
 static int fake_getrlimit(int resource, struct rlimit *limit) {
 	(void) resource;
@@ -69,7 +65,6 @@ static int fake_execve(const char *file, char *const argv[], char *const environ
 	executed++;
 	return -1;
 }
-#define readlink fake_readlink
 #define realpath fake_realpath
 #define getrlimit fake_getrlimit
 #define setrlimit fake_setrlimit
@@ -92,25 +87,20 @@ static int reset(void **state) {
 
 static void test_executable_resolution(void **state) {
 	(void) state;
+#ifdef __APPLE__
 	path_error = 1;
 	spine_script_executable("spine");
 	assert_string_equal(set.php.script_executable, "");
-#ifdef __linux__
-	path_error = 2;
-	spine_script_executable("spine");
-	assert_string_equal(set.php.script_executable, "");
-#endif
 	path_error = 0;
+#endif
 	resolve_error = 1;
 	spine_script_executable("spine");
 	assert_string_equal(set.php.script_executable, "");
 	resolve_error = 0;
-#if PATH_MAX > BUFSIZE
 	resolve_long = 1;
 	spine_script_executable("spine");
 	assert_string_equal(set.php.script_executable, "");
 	resolve_long = 0;
-#endif
 	spine_script_executable("spine");
 	assert_string_equal(set.php.script_executable, "/tmp/spine");
 }

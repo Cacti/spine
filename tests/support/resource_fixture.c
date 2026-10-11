@@ -9,7 +9,9 @@
 int main(int argc, char *argv[]) {
 	struct rlimit limit;
 	volatile unsigned long work = 0;
-	void *allocation;
+	void *allocations[256];
+	int allocated = 0;
+	int result = 0;
 	int i;
 	if (argc != 2) return 2;
 	if (strcmp(argv[1], "cpu") == 0) {
@@ -17,11 +19,16 @@ int main(int argc, char *argv[]) {
 	}
 	if (strcmp(argv[1], "memory") == 0) {
 		for (i = 0; i < 256; i++) {
-			allocation = malloc(1024 * 1024);
-			if (allocation == NULL) return 42;
-			memset(allocation, 0x5a, 1024 * 1024);
+			allocations[i] = malloc(1024 * 1024);
+			if (allocations[i] == NULL) {
+				result = 42;
+				break;
+			}
+			allocated++;
+			memset(allocations[i], 0x5a, 1024 * 1024);
 		}
-		return 0;
+		for (i = 0; i < allocated; i++) free(allocations[i]);
+		return result;
 	}
 	if (strcmp(argv[1], "limits") == 0) {
 		if (getrlimit(RLIMIT_CPU, &limit) != 0) return 2;
