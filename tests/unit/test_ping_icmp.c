@@ -187,10 +187,10 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 		assert_non_null(address);
 		assert_non_null(address_len);
 		assert_true(*address_len >= sizeof(*source6));
-		assert_true(reply_v6_count <= sizeof(source6->sin6_addr.s6_addr));
+		if (check_wrong_peer) assert_true(reply_v6_count <= sizeof(source6->sin6_addr.s6_addr));
 		memset(buffer, 0, response_length);
 		reply6->icmp6_type = ICMP6_ECHO_REPLY;
-		reply6->icmp6_id = controlled_socket_type == SOCK_DGRAM ? sent_icmp_id ^ htons(0x100) : sent_icmp_id;
+		reply6->icmp6_id = check_wrong_peer && controlled_socket_type == SOCK_DGRAM ? sent_icmp_id ^ htons(0x100) : sent_icmp_id;
 		reply6->icmp6_seq = sent_icmp_seq;
 		memcpy((unsigned char *) buffer + sizeof(*reply6), payload, sizeof(payload) - 1);
 		memset(source6, 0, sizeof(*source6));
