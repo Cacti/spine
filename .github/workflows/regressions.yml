@@ -41,7 +41,10 @@ jobs:
           mkdir -p config m4
           autoreconf -fi
           ./configure
-          make -j2 check
+          if ! make -j2 check; then
+            cat test-suite.log
+            exit 1
+          fi
       - name: Verify database configuration loading
         env:
           SPINE_TEST_DB_HOST: 127.0.0.1

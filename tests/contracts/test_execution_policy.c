@@ -36,7 +36,9 @@ static void cancellation_contract(host_t *host) {
 	int pid = 0;
 	int attempts;
 	assert(fd >= 0 && close(fd) == 0);
-	snprintf(command, sizeof(command), "/bin/sh -c 'echo $$ > %s; printf 42; sleep 30'", filename);
+	/* $$ belongs to nft_popen's shell, which Spine can reap directly. A nested
+	 * shell may remain a zombie until the environment's init adopts/reaps it. */
+	snprintf(command, sizeof(command), "/usr/bin/printf '%%s' $$ > %s; /usr/bin/printf 42; sleep 30", filename);
 	assert(pthread_create(&worker, NULL, run_canceled_script, &script) == 0);
 	for (attempts = 0; attempts < 100 && pid == 0; attempts++) {
 		file = fopen(filename, "r");

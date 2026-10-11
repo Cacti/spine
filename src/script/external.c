@@ -42,10 +42,12 @@ typedef struct {
 } script_result_context_t;
 
 typedef struct {
-	int fd;
-	char *result;
-	bool permit;
-	char *command;
+	/* glibc cleanup unwinds with setjmp/longjmp. Preserve state changed after
+	 * pthread_cleanup_push even when the compiler keeps ordinary locals in registers. */
+	volatile int fd;
+	char *volatile result;
+	volatile bool permit;
+	char *volatile command;
 } script_read_owner_t;
 
 static void cancel_script_read(void *argument) {
