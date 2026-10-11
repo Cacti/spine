@@ -368,3 +368,19 @@ EXTRA_DIST += tests/tools/verify_changed_coverage.py tests/tools/test_changed_co
 EXTRA_DIST += tests/tools/test_json_encoder.py
 
 EXTRA_DIST += tests/tools/run_database_tls.sh tests/tools/ownership-coverage-sources.txt
+
+EXTRA_DIST += tests/tools/benchmark_builds.py \
+	tests/tools/build_benchmark_pair.sh \
+	tests/tools/test_benchmark_record.py \
+	tests/tools/verify_benchmark_record.py \
+	docs/benchmarks/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-default-logging/compiler.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/cycles.csv \
+	docs/benchmarks/results/2026-10-11-default-logging/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/metadata.json \
+	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/summary.json
