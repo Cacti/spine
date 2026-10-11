@@ -8,7 +8,7 @@ fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 cd "$fixture"
 mkdir -p tests/unit
-printf '%s\n' tests/unit/test_resource_policy tests/unit/test_external_policy tests/unit/test_worker_set tests/unit/test_db_lease test_spine_regressions test_spine_faults > inventory
+printf '%s\n' tests/unit/test_resource_policy tests/unit/test_external_policy tests/unit/test_worker_set tests/unit/test_db_lease tests/unit/test_tls_policy test_spine_regressions test_spine_faults > inventory
 while IFS= read -r program; do
   printf '#!/bin/sh\nexit 0\n' > "$program"
   chmod 755 "$program"

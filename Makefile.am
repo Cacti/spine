@@ -177,7 +177,8 @@ check_PROGRAMS += \
 	tests/unit/test_resource_policy \
 	tests/unit/test_external_policy \
 	tests/unit/test_worker_set \
-	tests/unit/test_db_lease
+	tests/unit/test_db_lease \
+	tests/unit/test_tls_policy
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
@@ -290,6 +291,8 @@ endif
 tests_unit_test_db_lease_SOURCES = tests/unit/test_db_lease.c src/database/lease.c
 tests_unit_test_db_lease_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_db_lease_CPPFLAGS = $(AM_CPPFLAGS)
+tests_unit_test_tls_policy_SOURCES = tests/unit/test_tls_policy.c
+tests_unit_test_tls_policy_LDADD = $(CMOCKA_LIBS) $(LIBS)
 if HAVE_LINKER_WRAP
 tests_unit_test_db_lease_CPPFLAGS += -DSPINE_LEASE_TEST_WRAP
 tests_unit_test_db_lease_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_destroy

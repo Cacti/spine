@@ -121,7 +121,8 @@ check_PROGRAMS = test_spine_regressions$(EXEEXT) $(am__EXEEXT_1) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_resource_policy \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_external_policy \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_worker_set \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease
+@HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_tls_policy
 
 
 # A small executable which speaks the subset of the PHP Script Server protocol
@@ -166,7 +167,8 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_resource_policy$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_external_policy$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_worker_set$(EXEEXT) \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease$(EXEEXT)
+@HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_tls_policy$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__EXEEXT_3 = tests/unit/test_php_runtime$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poll_host$(EXEEXT)
 @HAVE_CMOCKA_TRUE@am__EXEEXT_4 =  \
@@ -530,6 +532,12 @@ tests_unit_test_snmpv3_session_OBJECTS =  \
 	$(am_tests_unit_test_snmpv3_session_OBJECTS)
 tests_unit_test_snmpv3_session_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
+am_tests_unit_test_tls_policy_OBJECTS =  \
+	tests/unit/test_tls_policy.$(OBJEXT)
+tests_unit_test_tls_policy_OBJECTS =  \
+	$(am_tests_unit_test_tls_policy_OBJECTS)
+tests_unit_test_tls_policy_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_tests_unit_test_util_paths_OBJECTS =  \
 	tests/unit/test_util_paths.$(OBJEXT) src/log/json.$(OBJEXT)
 tests_unit_test_util_paths_OBJECTS =  \
@@ -747,6 +755,7 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/unit/$(DEPDIR)/test_resource_policy.Po \
 	tests/unit/$(DEPDIR)/test_safety_fixes.Po \
 	tests/unit/$(DEPDIR)/test_snmpv3_session.Po \
+	tests/unit/$(DEPDIR)/test_tls_policy.Po \
 	tests/unit/$(DEPDIR)/test_util_paths.Po \
 	tests/unit/$(DEPDIR)/test_util_strings.Po \
 	tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
@@ -787,6 +796,7 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_unit_test_resource_policy_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
+	$(tests_unit_test_tls_policy_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
 	$(tests_unit_test_util_strings_SOURCES) \
 	$(tests_unit_test_worker_set_SOURCES)
@@ -808,6 +818,7 @@ DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(tests_unit_test_resource_policy_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
+	$(tests_unit_test_tls_policy_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
 	$(tests_unit_test_util_strings_SOURCES) \
 	$(tests_unit_test_worker_set_SOURCES)
@@ -1446,6 +1457,8 @@ tests_unit_test_worker_set_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_6)
 tests_unit_test_db_lease_SOURCES = tests/unit/test_db_lease.c src/database/lease.c
 tests_unit_test_db_lease_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_db_lease_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_7)
+tests_unit_test_tls_policy_SOURCES = tests/unit/test_tls_policy.c
+tests_unit_test_tls_policy_LDADD = $(CMOCKA_LIBS) $(LIBS)
 @HAVE_LINKER_WRAP_TRUE@tests_unit_test_db_lease_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_destroy
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
@@ -2212,6 +2225,12 @@ tests/unit/test_snmpv3_session.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_snmpv3_session$(EXEEXT): $(tests_unit_test_snmpv3_session_OBJECTS) $(tests_unit_test_snmpv3_session_DEPENDENCIES) $(EXTRA_tests_unit_test_snmpv3_session_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_snmpv3_session$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_snmpv3_session_OBJECTS) $(tests_unit_test_snmpv3_session_LDADD) $(LIBS)
+tests/unit/test_tls_policy.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_tls_policy$(EXEEXT): $(tests_unit_test_tls_policy_OBJECTS) $(tests_unit_test_tls_policy_DEPENDENCIES) $(EXTRA_tests_unit_test_tls_policy_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_tls_policy$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_tls_policy_OBJECTS) $(tests_unit_test_tls_policy_LDADD) $(LIBS)
 tests/unit/test_util_paths.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -2450,6 +2469,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_resource_policy.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_safety_fixes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_session.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_tls_policy.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_paths.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_strings.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po@am__quote@ # am--include-marker
@@ -4465,6 +4485,13 @@ tests/unit/test_db_lease.log: tests/unit/test_db_lease$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_tls_policy.log: tests/unit/test_tls_policy$(EXEEXT)
+	@p='tests/unit/test_tls_policy$(EXEEXT)'; \
+	b='tests/unit/test_tls_policy'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/unit/test_php_runtime.log: tests/unit/test_php_runtime$(EXEEXT)
 	@p='tests/unit/test_php_runtime$(EXEEXT)'; \
 	b='tests/unit/test_php_runtime'; \
@@ -4989,6 +5016,7 @@ distclean: distclean-am
 	-rm -f tests/unit/$(DEPDIR)/test_resource_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
+	-rm -f tests/unit/$(DEPDIR)/test_tls_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_strings.Po
 	-rm -f tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
@@ -5235,6 +5263,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/unit/$(DEPDIR)/test_resource_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
+	-rm -f tests/unit/$(DEPDIR)/test_tls_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_strings.Po
 	-rm -f tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po

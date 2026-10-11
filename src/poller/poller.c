@@ -444,7 +444,8 @@ finish_poll:
 		buffer_output_errors(error_string, &buf_size, &buf_errors, host_id, host_thread, 0, true);
 	}
 
-	*host_errors = errors;
+	/* Early ping-only/deleted-device returns preserve the caller's value. */
+	if (report_completion) *host_errors = errors;
 	pthread_setcancelstate(old_cancel_state, NULL);
 }
 
