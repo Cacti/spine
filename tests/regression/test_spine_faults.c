@@ -1094,8 +1094,9 @@ static void test_fake_database_poll_host(void) {
 
 	set.poller.poller_id = 2;
 	set.poller.mode = REMOTE_ONLINE;
-	pool_t busy_remote = {0};
-	db_pool_remote = &busy_remote;
+	/* The production allocator scans one slot per configured worker. */
+	pool_t busy_remote[2] = {0};
+	db_pool_remote = busy_remote;
 	run_fake_poll(&device, 0);
 	assert_fake_poll_failed(&device);
 	set.poller.poller_id = 1;
