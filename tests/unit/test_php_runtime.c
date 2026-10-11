@@ -11,6 +11,7 @@
 #include <cmocka.h>
 
 #include <errno.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
@@ -882,26 +883,42 @@ static void test_command_rejects_a_writable_poisoned_slot(void **state) {
 	php_processes[0].php_read_fd = php_processes[0].php_write_fd = -1;
 }
 
-static void test_readpipe_rejects_invalid_slots(void **state) {
-	const int slots[] = {-1, MAX_PHP_SERVERS, set.php.php_servers};
-	size_t index;
-	php_t *saved_processes;
+static void assert_invalid_reader_result(int slot) {
+	char command[] = "test";
 	char *result;
 
-	(void) state;
-	for (index = 0; index < sizeof(slots) / sizeof(slots[0]); index++) {
-		result = php_readpipe(slots[index], "test");
-		assert_non_null(result);
-		assert_string_equal(result, "U");
-		free(result);
-	}
-	saved_processes = php_processes;
-	php_processes = NULL;
-	result = php_readpipe(0, "test");
-	php_processes = saved_processes;
+	result = php_readpipe(slot, command);
 	assert_non_null(result);
 	assert_string_equal(result, "U");
 	free(result);
+	result = php_read_result_for_test(slot, command, FALSE);
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+}
+
+static void test_readpipe_rejects_invalid_slots(void **state) {
+	php_t *owned_processes = php_processes;
+	int invalid_slots[] = {-1, 2, MAX_PHP_SERVERS, INT_MAX};
+	size_t index;
+
+	(void) state;
+	track_write = TRUE;
+	php_processes = NULL;
+	assert_invalid_reader_result(0);
+	php_processes = owned_processes;
+	for (index = 0; index < sizeof(invalid_slots) / sizeof(invalid_slots[0]); index++) {
+		assert_invalid_reader_result(invalid_slots[index]);
+	}
+	set.php.php_servers = 0;
+	assert_invalid_reader_result(0);
+	set.php.php_servers = -1;
+	assert_invalid_reader_result(0);
+	/* An invalid configured count cannot authorize an out-of-array slot. */
+	set.php.php_servers = MAX_PHP_SERVERS + 1;
+	assert_invalid_reader_result(MAX_PHP_SERVERS);
+	assert_int_equal(php_spawn_calls, 0);
+	assert_int_equal(write_calls, 0);
 }
 
 static void test_readpipe_rejects_fd_at_fd_setsize(void **state) {
