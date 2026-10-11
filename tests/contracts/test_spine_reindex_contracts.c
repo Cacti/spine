@@ -149,8 +149,8 @@ void test_additional_reindex_contracts(MYSQL *mysql) {
 	assert(db_insert(mysql, LOCAL, query));
 	assert(db_insert(mysql, LOCAL, "INSERT INTO poller_item(local_data_id,host_id,poller_id,action,arg1,rrd_name) VALUES(801,45,1,1,'/usr/bin/printf 123','reindex_valid')"));
 	snmp_spine_init();
-	run_reindex_case(mysql, POLLER_ACTION_SNMP, ".1.3.6.1.2.1.1.6.0", "=", "isolated-regression-agent", "isolated-regression-agent", 0);
-	run_reindex_case(mysql, POLLER_ACTION_SNMP, ".1.3.6.1.2.1.1.6.0", "=", "previous", "isolated-regression-agent", 1);
+	run_reindex_case(mysql, POLLER_ACTION_SNMP, ".1.3.6.1.2.1.1.6.0", "=", "42 watts", "42 watts", 0);
+	run_reindex_case(mysql, POLLER_ACTION_SNMP, ".1.3.6.1.2.1.1.6.0", "=", "previous", "42 watts", 1);
 	run_reindex_case(mysql, POLLER_ACTION_SNMP, "invalid-regression-oid", "=", "previous", "previous", 0);
 	run_reindex_case(mysql, POLLER_ACTION_SNMP_COUNT, ".1.3.6.1.2.1.1.6", "=", "0", "1", 1);
 	run_uptime_cache_case(mysql);

@@ -163,6 +163,9 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y cppcheck
+          # Raw checkouts have no generated configure probes. Analyze the
+          # supported MySQL mode API, then both MariaDB verification APIs;
+          # treating every declaration probe as zero erases all TLS setters.
           # Project data structures are consumed across translation units;
           # checking headers in isolation otherwise reports every member. A
           # few externally visible helpers are deliberate unit-test seams.
@@ -187,7 +190,20 @@ jobs:
             --suppress=toomanyconfigs \
             --library=scripts/cppcheck/spine.cfg \
             -I. -Isrc -Ivendor/uthash \
+            -DHAVE_DECL_MYSQL_OPT_SSL_MODE=1 \
             src
+          for callback in 0 1; do
+            callback_flags=()
+            if [[ "$callback" == 1 ]]; then
+              callback_flags=(-DHAVE_MARIADB_TLS_VERIFICATION_CALLBACK=1 -DHAVE_DECL_MARIADB_OPT_TLS_VERIFICATION_CALLBACK=1)
+            fi
+            cppcheck --enable=warning,style,performance,portability --std=c11 \
+              --error-exitcode=1 --suppress=missingInclude --suppress=missingIncludeSystem \
+              --library=scripts/cppcheck/spine.cfg -I. -Isrc -Ivendor/uthash \
+              -DHAVE_DECL_MYSQL_OPT_SSL_ENFORCE=1 -DHAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT=1 \
+              -DHAVE_DECL_MYSQL_OPT_TLS_VERSION=1 -DHAVE_DECL_MYSQL_OPT_SSL_CIPHER=1 \
+              "${callback_flags[@]}" src/database/tls.c
+          done
 
   # GCC 15 and later default to gnu23. Build with the newest Fedora GCC to
   # show that configure still selects gnu17 there.
@@ -222,7 +238,7 @@ jobs:
               runuser -u builder -- ./configure --enable-warnings
               grep "^CFLAGS = .*-std=gnu17" Makefile
               runuser -u builder -- make --jobs "$(nproc)"
-              runuser -u builder -- make check
+              runuser -u builder -- make check || { cat test-suite.log; exit 1; }
             '
 
   # The Clang counterpart of newest-gcc. Pin the major version so a Fedora
@@ -259,7 +275,7 @@ jobs:
               runuser -u builder -- ./configure CC=clang --enable-warnings
               grep "^CFLAGS = .*-std=gnu17" Makefile
               runuser -u builder -- make --jobs "$(nproc)"
-              runuser -u builder -- make check
+              runuser -u builder -- make check || { cat test-suite.log; exit 1; }
             '
 
   shellcheck:

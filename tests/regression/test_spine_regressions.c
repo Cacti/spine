@@ -2496,7 +2496,7 @@ static void test_snmp_multi_responses(host_t *host) {
 	}
 	snmp_get_multi(host, items, oids, 4);
 	assert(!host->ignore_host);
-	assert(strstr(oids[0].result, "isolated-regression-agent") != NULL);
+	assert(strstr(oids[0].result, "42 watts") != NULL);
 	assert(strcmp(oids[1].result, "U") == 0);
 	/* v1 reports the missing instance as a PDU error and v2c as an inline
 	 * exception varbind; neither is data, so both store U. */
@@ -2536,7 +2536,7 @@ static void test_snmp_multi_responses(host_t *host) {
 
 static void test_snmp_scalar_responses(host_t *host) {
 	char *result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
-	assert(strstr(result, "isolated-regression-agent") != NULL && !host->ignore_host);
+	assert(strstr(result, "42 watts") != NULL && !host->ignore_host);
 	free(result);
 	/* A malformed configured OID must not poison later requests or leak a PDU. */
 	for (int count = 0; count < 50; count++) {
@@ -2553,7 +2553,7 @@ static void test_snmp_scalar_responses(host_t *host) {
 	else assert(strcmp(result, "") == 0);
 	free(result);
 	result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
-	assert(strstr(result, "isolated-regression-agent") != NULL && !host->ignore_host);
+	assert(strstr(result, "42 watts") != NULL && !host->ignore_host);
 	free(result);
 	if (host->snmp.profile.version == 2) {
 		result = snmp_get(host, ".1.3.6.1.2.1.1.1.999");
@@ -2578,7 +2578,7 @@ static void test_system_information(host_t *host) {
 	for (int explicit_update = 0; explicit_update <= 1; explicit_update++) {
 		set.snmp.mibs = !explicit_update;
 		get_system_information(host, &mysql, explicit_update);
-		assert(strcmp(host->system.snmp_sysLocation, "isolated-regression-agent") == 0);
+		assert(strcmp(host->system.snmp_sysLocation, "42 watts") == 0);
 		assert(strcmp(host->system.snmp_sysContact, "regression") == 0);
 		assert(host->system.snmp_sysDescr[0] != '\0' && host->system.snmp_sysObjectID[0] != '\0');
 		assert(host->system.snmp_sysName[0] != '\0' && !host->ignore_host);
