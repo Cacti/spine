@@ -54,7 +54,7 @@ fi
 gcc --version > "$coverage_dir/compiler.txt"
 gcc -dumpmachine >> "$coverage_dir/compiler.txt"
 if command -v dpkg-query >/dev/null; then
-    dpkg-query -W gcc libc6-dev libmariadb-dev libsnmp-dev libssl-dev snmpd lcov autoconf automake libtool > "$coverage_dir/dependencies.txt"
+    dpkg-query -W gcc libc6-dev "${SPINE_CLIENT_PACKAGE:-libmariadb-dev}" libsnmp-dev libssl-dev snmpd lcov autoconf automake libtool > "$coverage_dir/dependencies.txt"
 else
     printf '%s\n' 'Package version inventory unavailable: dpkg-query is not installed.' > "$coverage_dir/dependencies.txt"
 fi
@@ -62,7 +62,9 @@ gcov --version > "$coverage_dir/gcov.txt"
 lcov --version > "$coverage_dir/lcov.txt"
 mkdir -p config m4
 autoreconf -fi > "$coverage_dir/build.log" 2>&1
-./configure CC=gcc CFLAGS="-std=gnu17 -g -O0 -UNDEBUG --coverage -fprofile-update=atomic -include $source_dir/tests/tools/coverage_process_exit.h" LDFLAGS='--coverage' >> "$coverage_dir/build.log" 2>&1
+client_arguments=()
+if [[ -n "${SPINE_CLIENT_CHOICE:-}" ]]; then client_arguments+=("--with-mysql-client=$SPINE_CLIENT_CHOICE"); fi
+./configure "${client_arguments[@]}" CC=gcc CFLAGS="-std=gnu17 -g -O0 -UNDEBUG --coverage -fprofile-update=atomic -include $source_dir/tests/tools/coverage_process_exit.h" LDFLAGS='--coverage' >> "$coverage_dir/build.log" 2>&1
 make --no-print-directory coverage-source-list > "$coverage_dir/production-sources.txt"
 make --no-print-directory coverage-test-source-list > "$coverage_dir/test-sources.txt"
 make --no-print-directory coverage-fault-source-list > "$coverage_dir/fault-sources.txt"
@@ -143,6 +145,7 @@ grep -Fq 'production settings write outcome regressions passed' "$coverage_dir/d
 grep -Fq 'production configuration option bounds and defaults passed' "$coverage_dir/database.log"
 grep -Fq 'production database configuration regressions passed' "$coverage_dir/database.log"
 grep -Fq 'production output write failure and retry regressions passed' "$coverage_dir/database.log"
+grep -Fq 'production destination-aware duplicate-key upsert regressions passed' "$coverage_dir/database.log"
 grep -Fq 'production output recollection retains incomplete historical samples passed' "$coverage_dir/database.log"
 grep -Fq 'production simultaneous output failure ordering regressions passed' "$coverage_dir/database.log"
 grep -Fq 'production remote output destination failure and recollection regressions passed' "$coverage_dir/database.log"
@@ -190,7 +193,7 @@ python3 tests/tools/normalize_entry_coverage.py "$coverage_dir/production.info" 
     "$coverage_dir/entry-gcov.json" "$source_dir/src/app/main.c"
 python3 tests/tools/test_entry_coverage.py > "$coverage_dir/entry-verifier-self-test.log" 2>&1
 tests/tools/test_coverage_verifier.sh > "$coverage_dir/verifier-self-test.log"
-tests/tools/verify_coverage.sh "$coverage_dir/production.info" "$source_dir" "$coverage_dir/production-sources.txt"
+tests/tools/verify_coverage.sh "$coverage_dir/production.info" "$source_dir" "$coverage_dir/production-sources.txt" tests/tools/ownership-coverage-sources.txt
 lcov --summary "$coverage_dir/production.info" --rc branch_coverage=1 > "$coverage_dir/summary.txt" 2>&1
 # Bind every producer and scenario to this immutable tested source snapshot.
 sha256sum "${profiles[@]}" > "$coverage_dir/profiles.sha256"

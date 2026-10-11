@@ -94,6 +94,33 @@ Values must be nonnegative decimal integers. Invalid or unsupported configured
 limits fail startup. A missing resource helper fails command submission.
 Timeouts and output breaches terminate the owned process group. Diagnostics
 identify the device and data source without printing command arguments.
+.SH DATABASE TLS POLICY
+DB_SSL_Mode and RDB_SSL_Mode select the local and remote database TLS policies.
+The default, legacy, preserves the existing connector behavior.
+Explicit modes are disabled, preferred, required, verify-ca, and verify-full.
+Required requests encryption without authenticating the peer; verify-ca checks
+the certificate chain, and verify-full also checks the server identity.
+Certificate verification requires the corresponding DB_SSL_CA or RDB_SSL_CA.
+.PP
+DB_SSL_MinVersion and RDB_SSL_MinVersion accept TLSv1.2 or TLSv1.3.
+DB_SSL_Cipher and RDB_SSL_Cipher constrain older TLS cipher selection;
+DB_SSL_Ciphersuites and RDB_SSL_Ciphersuites constrain TLS 1.3 selection.
+Protocol and cipher constraints require a mode of required or stronger.
+Invalid or unsupported explicit policies fail the connection rather than
+silently dropping the requested constraint. Connector capabilities differ;
+an explicit mode unsupported by the selected client library is rejected.
+.SH STRUCTURED LOGGING
+Log_Format accepts text (the default) or json.
+JSON records contain a UTC timestamp, severity, and escaped message.
+Device and data-source identifiers remain in the message.
+Invalid UTF-8 or formatting failures produce an error record and a failed
+logging result. File, console, and syslog routing retain their existing rules.
+Startup banners and fatal output outside the logging API retain text framing.
+.SH WORKER AND DATABASE OWNERSHIP
+The parent joins polling workers before releasing shared runtime state.
+Database pool leases belong to the acquiring thread and include a generation
+identifier. A stale lease or a release from another thread is rejected.
+These checks do not change configured polling concurrency.
 .SH SNMPV3 CONCURRENCY
 SNMPv3 transactions share a lock with session construction and cleanup because
 Net-SNMP USM state is shared. Configured network timeouts hold that lock; slow

@@ -159,12 +159,15 @@ static bool log_to_file(const char *message) {
 	 * creates missing files without a stat/open race that can truncate them. */
 	static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 	static bool reported_error = FALSE;
-	if (pthread_mutex_lock(&mutex) != 0) return FALSE;
+	int oldstate;
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	if (pthread_mutex_lock(&mutex) != 0) {
+		pthread_setcancelstate(oldstate, NULL);
+		return FALSE;
+	}
 	/* O_APPEND selects the end atomically and one write() keeps another
 	 * process sharing the log from splicing into a record. Reopening per
 	 * message preserves log rotation. */
-	int oldstate;
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
 	int fd = open(set.logging.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0640);
 	bool success = FALSE;
 	if (fd >= 0) {
@@ -173,12 +176,12 @@ static bool log_to_file(const char *message) {
 		success = written >= 0 && (size_t) written == length;
 		if (close(fd) != 0) success = FALSE;
 	}
-	pthread_setcancelstate(oldstate, NULL);
 	if (!success && !reported_error) {
-		printf("ERROR: Spine Log File Could Not Be Opened/Created or Written\n");
+		printf("%s", set.logging.json_logs ? "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"Log file write failed\"}\n" : "ERROR: Spine Log File Could Not Be Opened/Created or Written\n");
 		reported_error = TRUE;
 	}
-	if (pthread_mutex_unlock(&mutex) != 0) return FALSE;
+	if (pthread_mutex_unlock(&mutex) != 0) success = FALSE;
+	pthread_setcancelstate(oldstate, NULL);
 	return success;
 }
 
@@ -212,6 +215,45 @@ static log_buffers_t *log_buffers(void) {
 	return buffers;
 }
 
+_Static_assert((size_t) LOGSIZE <= (SIZE_MAX - 256) / 6, "JSON log allocation size overflows");
+
+static int log_json_message(const char *message) {
+	static const char failure[] = "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: invalid UTF-8 or formatting failure\"}\n";
+	const char *severity = strstr(message, "FATAL") ? "FATAL" : strstr(message, "ERROR") ? "ERROR"
+		: strstr(message, "WARNING")                                                     ? "WARNING"
+																						 : "INFO";
+	char timestamp[32] = "unknown";
+	struct tm utc;
+	time_t now = time(NULL);
+	size_t length = strlen(message);
+	char *owned = NULL;
+	const char *record = failure;
+	bool valid;
+	bool success;
+
+	valid = gmtime_r(&now, &utc) != NULL &&
+		strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc) != 0;
+	owned = malloc(length * 6 + 256);
+	if (owned != NULL && spine_json_log_record(owned, length * 6 + 256, timestamp, severity, message)) {
+		record = owned;
+	} else {
+		valid = FALSE;
+	}
+	success = valid;
+	pthread_cleanup_push(free, owned);
+	if (IS_LOGGING_TO_STDOUT()) {
+		if (printf("%s", record) < 0) success = FALSE;
+	} else {
+		FILE *stream = strcmp(severity, "INFO") == 0 && valid ? stdout : log_error_stream();
+		log_to_syslog(record);
+		if (!log_to_file(record)) success = FALSE;
+		if (set.logging.log_level >= POLLER_VERBOSITY_NONE && log_stream_available(stream) &&
+			fprintf(stream, "%s", record) < 0) success = FALSE;
+	}
+	pthread_cleanup_pop(1);
+	return success;
+}
+
 int spine_log(const char *format, ...) {
 	char fallback_message[BUFSIZE];
 	char fallback_formatted[BUFSIZE];
@@ -223,6 +265,7 @@ int spine_log(const char *format, ...) {
 	va_start(args, format);
 	vsnprintf(message, capacity - 1, format, args);
 	va_end(args);
+	if (set.logging.json_logs) return log_json_message(message);
 	spine_sanitize_log_message(message);
 	if (IS_LOGGING_TO_STDOUT()) {
 		return printf("Total[%3.4f] %s\n", get_time_as_double() - start_time, message) < 0 ? FALSE : TRUE;

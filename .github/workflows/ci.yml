@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop, '1.2.x']
   pull_request:
-    branches: [develop, '1.2.x', 'refactor/c17-series-*']
+    branches: [develop, '1.2.x', 'refactor/c17-series-*', 'fix/post-c17-execution-hardening']
   workflow_dispatch:
 
 permissions:
@@ -161,16 +161,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: cppcheck
+
       - name: Run cppcheck
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
           # Project data structures are consumed across translation units;
           # checking headers in isolation otherwise reports every member. A
           # few externally visible helpers are deliberate unit-test seams.
           # cppcheck 2.13 accepts --std=c17 but still analyses as C11.
           cppcheck \
+            --include=config/config.h \
             --enable=all \
             --std=c11 \
             --error-exitcode=1 \
@@ -363,6 +366,7 @@ jobs:
           ./test_spine_regressions --snmp-agent
           ./test_spine_faults --database
           tests/tools/run_snmpv3.sh
+          bash tests/tools/run_database_tls.sh
           ./test_spine_regressions --icmp-no-capability
           sudo setcap cap_net_raw+ep ./test_spine_regressions
           ./test_spine_regressions --raw-icmp
@@ -370,6 +374,7 @@ jobs:
       - name: Report coverage
         run: |
           set -euo pipefail
+          python3 tests/tools/test_json_encoder.py
           # configure leaves instrumented conftest objects behind and gcovr
           # cannot resolve their sources
           rm -f ./*conftest*.gcno ./*conftest*.gcda

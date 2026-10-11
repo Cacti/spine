@@ -19,6 +19,7 @@
 #include "internal/common.h"
 #include "app/spine.h"
 #include "database/persistence.h"
+#include "platform/worker_set.h"
 extern int *debug_devices;
 extern int entries;
 extern int num_hosts;
@@ -28,14 +29,14 @@ extern poller_thread_t **details;
 
 
 
-int wait_for_workers(double begin_time);
+int wait_for_workers(double begin_time, spine_worker_set_t *workers);
 void report_worker_completion(int num_rows);
 void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
-	pthread_t *threads, spine_permits_t *thread_init_sem,
+	spine_worker_set_t *workers, spine_permits_t *thread_init_sem,
 	const pthread_attr_t *attr, char *host_time);
 void prepare_worker_storage(MYSQL_RES *result, int *rows,
-	pthread_t **worker_threads, int **host_ids, char **timestamp);
-void free_worker_storage(int num_rows, pthread_t *threads, int *ids,
+	int **host_ids, char **timestamp);
+void free_worker_storage(int num_rows, int *ids,
 	char *conf_file, char *host_time);
 char *load_startup_configuration(char *conf_file);
 void report_startup(int mode);
