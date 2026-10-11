@@ -132,7 +132,7 @@ jobs:
           ./bootstrap
           ./configure --enable-warnings --with-snmp="$net_snmp_prefix"
           make -j"$(sysctl -n hw.ncpu)"
-          make check
+          make check || { cat test-suite.log; exit 1; }
 
   cppcheck:
     runs-on: ubuntu-24.04
