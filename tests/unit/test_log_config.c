@@ -168,13 +168,13 @@ static void test_config_every_known_key_is_accepted(void **state) {
 		"RDB_Port", "RDB_UseSSL", "DB_Port", "DB_UseSSL", "Poller", "Cacti_Log",
 	};
 	char contents[2048];
-	size_t used = 0;
+	char *cursor = contents;
+	size_t remaining = sizeof(contents);
 	size_t i;
 
 	(void) state;
 	for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
-		used += (size_t) snprintf(contents + used, sizeof(contents) - used, "%s 1\n", keys[i]);
-		assert_true(used < sizeof(contents));
+		assert_true(spine_appendf(&cursor, &remaining, "%s 1\n", keys[i]));
 	}
 	write_config(contents);
 	assert_int_equal(read_spine_config(config_path), 0);

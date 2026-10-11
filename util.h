@@ -167,6 +167,10 @@ extern int spine_permits_available(spine_permits_t *permits);
  * overflows on entry to poll_host().  Reserve twice 180 KiB plus five results
  * buffers, rounded up to 64 KiB so the size is a page multiple everywhere:
  * 384 KiB with the default 2048-byte results buffer. */
+/* Check the unrounded expression before evaluating its size_t arithmetic. */
+_Static_assert(RESULTS_BUFFER >= 2, "RESULTS_BUFFER must hold a value and terminator");
+_Static_assert((size_t) RESULTS_BUFFER <= (SIZE_MAX - ((size_t) 2 * 180 * 1024 + 65535)) / 10,
+	"RESULTS_BUFFER overflows the worker stack size");
 #define SPINE_THREAD_STACK_SIZE \
 	(((size_t) 2 * ((size_t) 180 * 1024 + 5 * (size_t) RESULTS_BUFFER) + 65535) & ~(size_t) 65535)
 
