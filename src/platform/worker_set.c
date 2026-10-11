@@ -9,9 +9,10 @@
 
 static void finish_worker(void *argument) {
 	spine_worker_slot_t *slot = argument;
-	pthread_mutex_lock(&slot->owner->mutex);
-	slot->finished = true;
-	pthread_mutex_unlock(&slot->owner->mutex);
+	/* Completion is published during cancellation unwinding too. An atomic
+     * release avoids depending on mutex-interceptor state in that path. The
+     * parent still joins before reclaiming any slot or argument. */
+	atomic_store_explicit(&slot->finished, true, memory_order_release);
 }
 
 void *spine_worker_entry(void *argument) {
@@ -25,6 +26,7 @@ void *spine_worker_entry(void *argument) {
 
 int spine_worker_set_init(spine_worker_set_t *workers, size_t capacity) {
 	int error;
+	size_t index;
 	if (workers == NULL || workers->slots != NULL || capacity == 0 || capacity > SIZE_MAX / sizeof(*workers->slots)) return EINVAL;
 	workers->slots = calloc(capacity, sizeof(*workers->slots));
 	if (workers->slots == NULL) return ENOMEM;
@@ -34,6 +36,7 @@ int spine_worker_set_init(spine_worker_set_t *workers, size_t capacity) {
 		workers->slots = NULL;
 		return error;
 	}
+	for (index = 0; index < capacity; index++) atomic_init(&workers->slots[index].finished, false);
 	workers->capacity = capacity;
 	return 0;
 }
@@ -47,7 +50,7 @@ int spine_worker_set_reap(spine_worker_set_t *workers, size_t *remaining) {
 		bool finished;
 		int error;
 		pthread_mutex_lock(&workers->mutex);
-		finished = slot->occupied && slot->finished;
+		finished = slot->occupied && atomic_load_explicit(&slot->finished, memory_order_acquire);
 		pthread_mutex_unlock(&workers->mutex);
 		if (finished) {
 			error = pthread_join(slot->thread, NULL);
@@ -79,7 +82,7 @@ int spine_worker_set_start(spine_worker_set_t *workers, const pthread_attr_t *at
 		slot->owner = workers;
 		slot->function = function;
 		slot->argument = argument;
-		slot->finished = false;
+		atomic_store_explicit(&slot->finished, false, memory_order_relaxed);
 		slot->occupied = true;
 		error = pthread_create(&slot->thread, attributes, spine_worker_entry, slot);
 		if (error != 0) {

@@ -111,7 +111,7 @@ static void await_finished(spine_worker_set_t *workers, size_t index) {
 	unsigned int attempts;
 	for (attempts = 0; attempts < 5000; attempts++) {
 		pthread_mutex_lock(&workers->mutex);
-		finished = workers->slots[index].finished;
+		finished = atomic_load_explicit(&workers->slots[index].finished, memory_order_acquire);
 		pthread_mutex_unlock(&workers->mutex);
 		if (finished) return;
 		usleep(1000);

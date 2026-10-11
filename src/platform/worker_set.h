@@ -5,6 +5,7 @@
 #ifndef SPINE_WORKER_SET_H
 #define SPINE_WORKER_SET_H
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <pthread.h>
 
@@ -15,7 +16,7 @@ typedef struct {
 	void *(*function)(void *);
 	void *argument;
 	bool occupied;
-	bool finished;
+	atomic_bool finished;
 } spine_worker_slot_t;
 
 /* The parent owns this bounded registry until every child has been joined.
