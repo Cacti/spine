@@ -1,0 +1,91 @@
+name: Production regressions
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      database:
+        image: mirror.gcr.io/library/mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: spine_regressions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install build dependencies
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool help2man libmariadb-dev mariadb-client libsnmp-dev snmpd libssl-dev libcap2-bin lcov
+      - name: Build and test production code
+        run: |
+          set -eu
+          mkdir -p config m4
+          autoreconf -fi
+          ./configure
+          make -j2 check
+      - name: Verify database configuration loading
+        env:
+          SPINE_TEST_DB_HOST: 127.0.0.1
+        run: |
+          set -eu
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/configuration.sql
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/poller.sql
+          ./test_spine_regressions --database
+      - name: Verify SNMP availability against local agent
+        env:
+          SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_TEST_DB_HOST: 127.0.0.1
+        run: |
+          set -eu
+          snmpd -f -Lo -C -c tests/fixtures/snmpd.conf > snmp-agent.log 2>&1 &
+          agent_pid=$!
+          trap 'kill "$agent_pid"; wait "$agent_pid" || true' EXIT
+          sleep 1
+          ./test_spine_regressions --snmp-agent
+          ./test_spine_regressions --database
+          ./test_spine_faults --database
+      - name: Verify authenticated SNMPv3 against owned agent
+        env:
+          SPINE_SNMPV3_EVIDENCE_DIR: snmpv3-evidence
+        run: tests/tools/run_snmpv3.sh
+      - name: Verify ICMP against local loopback
+        run: |
+          set -eu
+          ./test_spine_regressions --icmp-no-capability
+          sudo setcap cap_net_raw+ep ./test_spine_regressions
+          ./test_spine_regressions --raw-icmp
+      - name: Measure every production translation unit
+        env:
+          SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_TEST_DB_HOST: 127.0.0.1
+        run: |
+          set -eu
+          snmpd -f -Lo -C -c tests/fixtures/snmpd.conf > coverage-snmp-agent.log 2>&1 &
+          agent_pid=$!
+          trap 'kill "$agent_pid"; wait "$agent_pid" || true' EXIT
+          sleep 1
+          tests/tools/run_coverage.sh
+      - name: Preserve coverage and source provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-coverage-${{ github.sha }}
+          path: coverage/
+          if-no-files-found: error

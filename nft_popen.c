@@ -361,13 +361,21 @@ int nft_popen(const char * command, const char * type) {
 	int    cancel_state;
 	extern char **environ;
 	int    retry_count = 0;
+	/* nft_popen() reports why process creation failed through errno, as
+	 * popen() does; cleanup below must not overwrite it. */
+	int    failure_errno = 0;
+
+	if (command == NULL || type == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
 
 	/* On platforms where pipe() is bidirectional,
-	 * "r+" gives two-way communication.
+	 * "r+" gives two-way communication. Only the documented modes are
+	 * accepted; any other "+" mode is a caller error, not a duplex request.
 	 */
-	if (strchr(type, '+')) {
+	if (strcmp(type, "r+") == 0) {
 		twoway = 1;
-		type = "r+";
 	}else {
 		twoway = 0;
 		if ((*type != 'r' && *type != 'w') || type[1]) {
@@ -376,8 +384,20 @@ int nft_popen(const char * command, const char * type) {
 		}
 	}
 
-	if (!spine_open_pipe_cloexec(pdes))
+	/* An ordinary pipe is one-way on Linux and macOS, so the duplex mode
+	 * needs a socket pair to be readable and writable at the parent end. */
+	if (twoway) {
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pdes) < 0)
+			return -1;
+
+		if (spine_set_cloexec(pdes[0]) != 0 || spine_set_cloexec(pdes[1]) != 0) {
+			(void)close(pdes[0]);
+			(void)close(pdes[1]);
+			return -1;
+		}
+	} else if (!spine_open_pipe_cloexec(pdes)) {
 		return -1;
+	}
 
 	/* Disable thread cancellation from this point forward. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
@@ -449,6 +469,7 @@ int nft_popen(const char * command, const char * type) {
 			inherit_fd = spine_dup_cloexec(pdes[1]);
 
 			if (inherit_fd < 0) {
+				failure_errno = errno;
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
 				goto spawn_failed;
 			}
@@ -467,6 +488,7 @@ int nft_popen(const char * command, const char * type) {
 			inherit_fd = spine_dup_cloexec(pdes[0]);
 
 			if (inherit_fd < 0) {
+				failure_errno = errno;
 				SPINE_LOG(("ERROR: Unable to duplicate the pipe for the child: %s", strerror(errno)));
 				goto spawn_failed;
 			}
@@ -508,6 +530,7 @@ int nft_popen(const char * command, const char * type) {
 			goto retry;
 		}
 
+		failure_errno = spawn_err;
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", strerror(spawn_err)));
 
 spawn_failed:
@@ -529,6 +552,9 @@ spawn_failed:
 		free(command_copy);
 		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
+		if (failure_errno != 0) {
+			errno = failure_errno;
+		}
 		return -1;
 	}
 

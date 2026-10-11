@@ -33,6 +33,14 @@
 
 #ifndef SPINE_SQL_H
 #define SPINE_SQL_H
+typedef struct db_address {
+	char *storage;
+	char *hostname;
+	char *socket;
+} db_address_t;
+extern void db_address_init(db_address_t *address, const char *value, bool parse_socket);
+extern void db_address_release(db_address_t *address);
+
 extern int db_insert(MYSQL *mysql, int type, const char *query);
 extern MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query);
 extern void db_connect(int type, MYSQL *mysql);
@@ -46,14 +54,8 @@ extern void db_release_connection(int type, int id);
 extern int  db_reconnect(MYSQL *mysql, int type, int error, const char *location);
 extern int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column);
 
-extern int append_hostrange(char *obuf, const char *colname);
+extern int append_hostrange(char *obuf, size_t capacity, const char *colname);
 
-#define MYSQL_SET_OPTION(opt, value, desc)	\
-{\
-	options_error = mysql_options(mysql, opt, value); \
-	if (options_error < 0) {\
-	        die("FATAL: MySQL options unable to set %s option", desc);\
-	}\
-}
+extern void db_set_option(MYSQL *mysql, enum mysql_option option, const void *value, const char *description);
 
 #endif /* SPINE_SQL_H */

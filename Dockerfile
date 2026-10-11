@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-FROM debian:bookworm-slim AS builder
+FROM mirror.gcr.io/library/debian:bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
@@ -20,7 +19,7 @@ RUN autoreconf -fi \
     && ./configure --prefix=/usr/local \
     && make -j"$(nproc)" spine
 
-FROM debian:bookworm-slim
+FROM mirror.gcr.io/library/debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libmariadb3 \

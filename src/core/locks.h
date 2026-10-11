@@ -33,6 +33,7 @@
 
 #ifndef SPINE_LOCKS_H
 #define SPINE_LOCKS_H
+extern const char* get_name(int lock);
 extern void init_mutexes(void);
 extern void thread_mutex_lock(int mutex);
 extern void thread_mutex_unlock(int mutex);

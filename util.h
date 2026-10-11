@@ -37,6 +37,8 @@
 extern void read_config_options(void);
 extern int read_spine_config(const char *file);
 extern void config_defaults(void);
+extern bool poller_transfer_status(MYSQL *source, MYSQL *destination);
+extern void poller_push_data_to_main(void);
 
 /* cacti logging function */
 extern int spine_log(const char *format, ...)
@@ -57,17 +59,23 @@ extern int is_hexadecimal(const char * str, const short ignore_special);
 
 /* determine if a device is a debug device */
 extern int is_debug_device(int device_id);
+extern void parse_debug_devices(char *device_list, int *devices, size_t capacity);
+extern bool spine_should_log_device(int host_id, int verbosity);
 
 /* string and file functions */
 extern char *add_slashes(const char *string);
 extern int file_exists(const char *filename);
 extern char *strip_alpha(char *string);
 extern char *strncopy(char *dst, const char *src, size_t n);
+extern int spine_snprintf(char *output, size_t capacity, const char *format, ...)
+	__attribute__((format(printf, 3, 4)));
+extern void spine_clear_sensitive(void *buffer, size_t length);
+extern void spine_sanitize_log_message(char *message);
 extern char *trim(char *str);
 extern char *rtrim(char *str);
 extern char *ltrim(char *str);
 extern char *reverse(char *str);
-extern int strpos(const char *haystack, const char *needle);
+extern int strpos(const char *haystack, const char *needle) ;
 extern int char_count(const char *str, int chr);
 
 /* convert a delimited hexadecimal value without conflating overflow with 0 */
@@ -77,7 +85,7 @@ int hex2dec(const char *str, unsigned long long *result);
 #define MAX_MATCHES 5
 #define REGEX_NUMBER "([-+]*)([0-9]*)([.][0-9]+)"
 #define CAPABILITY_PROTOCOL_LIST_MAX 480
-const char *regex_replace(const char *exp, const char *value);
+char *regex_replace(const char *exp, char *value);
 int format_spine_capabilities(char *output, size_t output_size,
 	const char *auth_protocols, const char *priv_protocols);
 
@@ -118,6 +126,19 @@ extern double start_time;
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
 
+extern void spine_sleep_usec(unsigned int microseconds);
+extern double spine_monotonic_time(void);
+
+extern int spine_count_to_int(unsigned long long count);
+
+extern int spine_wait_readable(int fd, double deadline);
+extern int spine_wait_writable(int fd, double deadline);
+
+extern int spine_permits_init(spine_permits_t *permits, int count);
+extern int spine_permits_destroy(spine_permits_t *permits);
+extern int spine_permits_try_acquire(spine_permits_t *permits);
+extern int spine_permits_release(spine_permits_t *permits);
+extern int spine_permits_available(spine_permits_t *permits);
 /*! \fn int spine_appendf(char **cursor, size_t *remaining, const char *fmt, ...)
  *  \brief append to a bounded buffer without walking off the end
  *

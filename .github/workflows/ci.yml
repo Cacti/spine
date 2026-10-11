@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop, '1.2.x']
   pull_request:
-    branches: [develop, '1.2.x']
+    branches: [develop, '1.2.x', 'refactor/c17-series-*']
 
 permissions:
   contents: read
@@ -166,6 +166,7 @@ jobs:
             --suppress=constVariablePointer \
             --suppress=redundantAssignment \
             --suppress=toomanyconfigs \
+            --library=scripts/cppcheck/spine.cfg \
             ./*.c ./*.h
 
   shellcheck:
@@ -187,6 +188,19 @@ jobs:
   coverage:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      database:
+        image: mirror.gcr.io/library/mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: spine_regressions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -194,8 +208,8 @@ jobs:
 
       - uses: ./.github/actions/build-spine
         with:
-          extra-packages: gcovr python3-pip
-          cflags: -g -O0 --coverage
+          extra-packages: gcovr python3-pip mariadb-client snmpd libcap2-bin
+          cflags: -g -O0 --coverage -fprofile-update=atomic
           ldflags: --coverage
 
       - name: Build instrumented
@@ -207,6 +221,32 @@ jobs:
         run: |
           set -euo pipefail
           make check
+
+      - name: Cover production database and protocol scenarios
+        env:
+          SPINE_TEST_DB_HOST: 127.0.0.1
+          SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_SNMPV3_EVIDENCE_DIR: snmpv3-evidence
+        run: |
+          set -euo pipefail
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/configuration.sql
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/poller.sql
+          snmpd -f -Lo -C -c tests/fixtures/snmpd.conf > coverage-snmp-agent.log 2>&1 &
+          agent_pid=$!
+          cleanup() {
+            sudo setcap -r ./test_spine_regressions
+            kill "$agent_pid"
+            wait "$agent_pid" || true
+          }
+          trap cleanup EXIT
+          sleep 1
+          ./test_spine_regressions --database
+          ./test_spine_regressions --snmp-agent
+          ./test_spine_faults --database
+          tests/tools/run_snmpv3.sh
+          ./test_spine_regressions --icmp-no-capability
+          sudo setcap cap_net_raw+ep ./test_spine_regressions
+          ./test_spine_regressions --raw-icmp
 
       - name: Report coverage
         run: |

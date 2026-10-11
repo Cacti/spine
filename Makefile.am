@@ -22,11 +22,12 @@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
-spine_SOURCES = sql.c spine.c util.c snmp.c src/core/locks.c poller.c \
+spine_shared_sources = sql.c util.c snmp.c src/core/locks.c poller.c \
 	nft_popen.c php.c ping.c src/core/keywords.c error.c
+spine_SOURCES = $(spine_shared_sources) spine.c
 
 configdir = $(sysconfdir)
-config_DATA = spine.conf.dist
+dist_config_DATA = spine.conf.dist
 
 # Seed a live config on first install without ever overwriting an existing one.
 install-data-hook:
@@ -46,12 +47,35 @@ uninstall-hook:
 bin_PROGRAMS = spine
 
 man_MANS = spine.1
+DISTCLEANFILES = spine.1
+
+check_PROGRAMS = test_spine_regressions
+dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
+TESTS = $(check_PROGRAMS)
+test_spine_regressions_SOURCES = $(spine_SOURCES) tests/test_spine_regressions.c tests/test_spine_contracts.c tests/test_spine_reindex_contracts.c tests/test_spine_snmpv3_contracts.c tests/test_spine_settings_contracts.c tests/test_spine_cli_contracts.c tests/test_spine_stream_contracts.c tests/test_spine_output_contracts.c
+# Link the real production translation units and globals, with a separate test
+# entry point. Only spine.c maps its own entry point in the test build.
+test_spine_regressions_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir) -DSPINE_TEST_PROGRAM_ENTRY
+
+if HAVE_LINKER_WRAP
+check_PROGRAMS += test_spine_faults
+# Reuse the real renamed spine object for its production globals, avoiding
+# another production main-renaming flag on the fault-test translation units.
+test_spine_faults_SOURCES = $(spine_shared_sources) tests/test_spine_faults.c
+test_spine_faults_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)
+test_spine_faults_LDADD = test_spine_regressions-spine.$(OBJEXT)
+test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
+ -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn \
+ -Wl,--wrap=malloc -Wl,--wrap=strdup \
+ -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create
+endif
+
 
 # Headers are not referenced by any _SOURCES, so automake will not distribute
 # them unless they are listed. Without this the release tarball builds nothing.
 noinst_HEADERS = common.h error.h src/core/keywords.h src/core/locks.h \
-	nft_popen.h php.h ping.h poller.h snmp.h spine.h spine_sem.h sql.h \
-	uthash.h util.h
+	nft_popen.h php.h ping.h poller.h snmp.h spine.h spine_sem.h spine_types.h \
+	sql.h uthash.h util.h
 
 EXTRA_DIST = spine.1 spine.conf.dist \
 	tests/README.md \
@@ -59,6 +83,18 @@ EXTRA_DIST = spine.1 spine.conf.dist \
 	tests/integration/test_concurrency.sh \
 	tests/integration/test_network_faults.sh
 
+EXTRA_DIST += tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh tests/tools/coverage_process_exit.h \
+ tests/tools/verify_coverage.sh tests/tools/test_coverage_verifier.sh
+.PHONY: coverage-source-list coverage-test-source-list
+coverage-source-list:
+	@printf '%s\n' $(spine_SOURCES)
+
+coverage-test-source-list:
+	@printf '%s\n' $(test_spine_regressions_SOURCES)
+
+.PHONY: coverage-fault-source-list
+coverage-fault-source-list:
+	@printf '%s\n' $(test_spine_faults_SOURCES)
 # Docker targets — require Dockerfile and Dockerfile.dev (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
 
@@ -75,8 +111,6 @@ cppcheck: docker-dev
 	docker run --rm -e VERIFY_CPPCHECK_ONLY=1 spine-dev
 
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src/core -I$(top_builddir)
-
-check_PROGRAMS =
 
 if HAVE_CMOCKA
 check_PROGRAMS += \
@@ -162,6 +196,8 @@ tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
-TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh
+TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
 EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh
+
+EXTRA_DIST += scripts/cppcheck/spine.cfg

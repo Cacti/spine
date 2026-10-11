@@ -108,7 +108,7 @@ static void spine_signal_handler(int spine_signal) {
 		signal(spine_signal, SIG_DFL);
 	}
 
-	set.exit_code = spine_signal;
+	set.exit.exit_code = spine_signal;
 
 	switch (spine_signal) {
 		case SIGABRT:

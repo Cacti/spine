@@ -1,6 +1,6 @@
 # Single stage: the .gcda files land beside the objects, so /src must survive
 # into the running container.
-FROM debian:bookworm-slim
+FROM mirror.gcr.io/library/debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc make autoconf automake libtool pkg-config \
         libmariadb-dev libsnmp-dev libssl-dev gcovr \

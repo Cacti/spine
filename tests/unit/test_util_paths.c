@@ -45,13 +45,19 @@ static char *item_inserts[8];
 static int host_insert_count;
 static int item_insert_count;
 static int total_insert_count;
+static int host_insert_failures;
 
 #define mysql_num_rows test_mysql_num_rows
 #define mysql_get_server_version test_mysql_get_server_version
 #define mysql_fetch_row test_mysql_fetch_row
+#define mysql_num_fields test_mysql_num_fields
+#define mysql_errno test_mysql_errno
 
 my_ulonglong test_mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
 unsigned long test_mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+/* The remote push checks the column count against its transfer plan. */
+unsigned int test_mysql_num_fields(MYSQL_RES *res) { (void) res; return fake_query_kind == FAKE_QUERY_ITEMS ? 5 : 21; }
+unsigned int test_mysql_errno(MYSQL *mysql) { (void) mysql; return 0; }
 
 MYSQL_ROW test_mysql_fetch_row(MYSQL_RES *res) {
 	static char *cells[21];
@@ -129,13 +135,18 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 		assert_true(host_insert_count < 8);
 		host_inserts[host_insert_count++] = strdup(query);
 		assert_non_null(host_inserts[host_insert_count - 1]);
+		if (host_insert_failures > 0) {
+			host_insert_failures--;
+			return 0;
+		}
 	} else if (strncmp(query, "INSERT INTO poller_item ", strlen("INSERT INTO poller_item ")) == 0) {
 		assert_true(item_insert_count < 8);
 		item_inserts[item_insert_count++] = strdup(query);
 		assert_non_null(item_inserts[item_insert_count - 1]);
 	}
 
-	return 0;
+	/* TRUE: the remote push stops on the first failed statement. */
+	return 1;
 }
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	size_t in = 0;
@@ -152,7 +163,7 @@ void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
 	}
 	output[out] = '\0';
 }
-int append_hostrange(char *obuf, const char *colname) { return 0; }
+int append_hostrange(char *obuf, size_t capacity, const char *colname) { return 0; }
 int parse_logdest(const char *res, int default_dest) { return 0; }
 const char *printable_logdest(int dest) { return ""; }
 void php_close(int php_process) {}
@@ -162,10 +173,12 @@ void php_close(int php_process) {}
 #undef mysql_num_rows
 #undef mysql_get_server_version
 #undef mysql_fetch_row
+#undef mysql_num_fields
+#undef mysql_errno
 
 static char *build(int sep_code, int fmt_code) {
-	set.log_datetime_separator = sep_code;
-	set.log_datetime_format    = fmt_code;
+	set.logging.log_datetime_separator = sep_code;
+	set.logging.log_datetime_format    = fmt_code;
 	set_date_format();
 
 	return get_date_format();
@@ -221,8 +234,8 @@ static void test_out_of_range_codes_clamp_to_defaults(void **state) {
 
 	from_default = build(GDC_MAX + 7, GD_MAX + 7);
 	assert_string_equal(from_default, expected);
-	assert_int_equal(set.log_datetime_separator, GDC_DEFAULT);
-	assert_int_equal(set.log_datetime_format, GD_DEFAULT);
+	assert_int_equal(set.logging.log_datetime_separator, GDC_DEFAULT);
+	assert_int_equal(set.logging.log_datetime_format, GD_DEFAULT);
 
 	from_default = build(GDC_MIN - 3, GD_MIN - 3);
 	assert_string_equal(from_default, expected);
@@ -369,33 +382,12 @@ static int count_occurrences(const char *haystack, const char *needle) {
 	return count;
 }
 
-static void test_push_flush_drops_suffix_overflow(void **state) {
-	char *sqlbuf;
-	char *cursor;
-	MYSQL mysql;
-	int before;
-
-	(void) state;
-	sqlbuf = malloc(HUGE_BUFSIZE);
-	assert_non_null(sqlbuf);
-	memset(sqlbuf, 'x', HUGE_BUFSIZE - 1);
-	sqlbuf[HUGE_BUFSIZE - 1] = '\0';
-	cursor = sqlbuf + HUGE_BUFSIZE - 1;
-	before = total_insert_count;
-
-	push_flush_batch(&mysql, sqlbuf, &cursor, " suffix");
-
-	assert_int_equal(total_insert_count, before);
-	assert_ptr_equal(cursor, sqlbuf + HUGE_BUFSIZE - 1);
-	free(sqlbuf);
-}
-
 static void test_remote_push_keeps_batch_boundary_rows(void **state) {
 	int i;
 
 	(void) state;
 	memset(&set, 0, sizeof(set));
-	set.poller_id = 2;
+	set.poller.poller_id = 2;
 	row_is_null = 0;
 	fake_query_kind = FAKE_QUERY_DEFAULT;
 	byte_boundary_mode = 0;
@@ -406,14 +398,14 @@ static void test_remote_push_keeps_batch_boundary_rows(void **state) {
 
 	assert_int_equal(host_insert_count, 2);
 	assert_int_equal(item_insert_count, 2);
-	assert_int_equal(count_occurrences(host_inserts[0], " (500, "), 1);
-	assert_int_equal(count_occurrences(host_inserts[0], " (501, "), 0);
-	assert_int_equal(count_occurrences(host_inserts[1], " (500, "), 0);
-	assert_int_equal(count_occurrences(host_inserts[1], " (501, "), 1);
-	assert_int_equal(count_occurrences(item_inserts[0], " (10000, "), 1);
-	assert_int_equal(count_occurrences(item_inserts[0], " (10001, "), 0);
-	assert_int_equal(count_occurrences(item_inserts[1], " (10000, "), 0);
-	assert_int_equal(count_occurrences(item_inserts[1], " (10001, "), 1);
+	assert_int_equal(count_occurrences(host_inserts[0], " ('500', "), 1);
+	assert_int_equal(count_occurrences(host_inserts[0], " ('501', "), 0);
+	assert_int_equal(count_occurrences(host_inserts[1], " ('500', "), 0);
+	assert_int_equal(count_occurrences(host_inserts[1], " ('501', "), 1);
+	assert_int_equal(count_occurrences(item_inserts[0], " ('10000', "), 1);
+	assert_int_equal(count_occurrences(item_inserts[0], " ('10001', "), 0);
+	assert_int_equal(count_occurrences(item_inserts[1], " ('10000', "), 0);
+	assert_int_equal(count_occurrences(item_inserts[1], " ('10001', "), 1);
 	assert_null(strstr(host_inserts[0], " AS rs "));
 	assert_non_null(strstr(host_inserts[0], "VALUES(snmp_sysDescr)"));
 	assert_null(strstr(item_inserts[0], " AS rs "));
@@ -433,7 +425,7 @@ static void test_remote_push_flushes_wide_rows_before_overflow(void **state) {
 
 	(void) state;
 	memset(&set, 0, sizeof(set));
-	set.poller_id = 2;
+	set.poller.poller_id = 2;
 	row_is_null = 0;
 	fake_query_kind = FAKE_QUERY_DEFAULT;
 	byte_boundary_mode = 1;
@@ -458,6 +450,33 @@ static void test_remote_push_flushes_wide_rows_before_overflow(void **state) {
 	fake_query_kind = FAKE_QUERY_DEFAULT;
 }
 
+/* A failed batch must end the push: the row that triggered the flush is not
+ * queued for a later batch, and poller items are never attempted. */
+static void test_remote_push_stops_on_failed_batch(void **state) {
+	int before;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 0;
+	host_insert_count = 0;
+	item_insert_count = 0;
+	host_insert_failures = 1;
+	before = frees_seen;
+
+	assert_false(poller_transfer_status(&fake_mysql, &fake_mysql));
+
+	assert_int_equal(host_insert_failures, 0);
+	assert_int_equal(host_insert_count, 1);
+	assert_int_equal(item_insert_count, 0);
+	assert_int_equal(frees_seen - before, 1);
+	assert_int_equal(count_occurrences(host_inserts[0], " ('501', "), 0);
+	free(host_inserts[0]);
+	host_inserts[0] = NULL;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
 
 /* ---- issue#565: spine_log() appends the newline without overrunning ---- */
 
@@ -467,11 +486,11 @@ static void route_log_to_a_file(void) {
 	snprintf(log_path, sizeof(log_path), "/tmp/spine_log_test_%d.log", (int) getpid());
 	unlink(log_path);
 
-	set.log_destination  = LOGDEST_FILE;
-	set.log_level        = POLLER_VERBOSITY_DEBUG;
-	set.logfile_processed = TRUE;
-	set.poller_id        = 1;
-	snprintf(set.path_logfile, sizeof(set.path_logfile), "%s", log_path);
+	set.logging.log_destination  = LOGDEST_FILE;
+	set.logging.log_level        = POLLER_VERBOSITY_DEBUG;
+	set.logging.logfile_processed = TRUE;
+	set.poller.poller_id        = 1;
+	snprintf(set.logging.path_logfile, sizeof(set.logging.path_logfile), "%s", log_path);
 }
 
 static char *read_log(size_t *len) {
@@ -531,7 +550,9 @@ static void test_spine_log_survives_a_full_line(void **state) {
 	out = read_log(&n);
 	assert_non_null(out);
 	assert_int_equal(n, LOGSIZE - 1);
-	assert_int_equal(out[n - 1], 'y');
+	/* The message is shortened so the record still ends its line. */
+	assert_int_equal(out[n - 1], '\n');
+	assert_int_equal(out[n - 2], 'y');
 
 	free(big);
 	unlink(log_path);
@@ -571,7 +592,7 @@ int main(void) {
 		cmocka_unit_test(test_success_path_frees_once),
 		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
 		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
-		cmocka_unit_test(test_push_flush_drops_suffix_overflow),
+		cmocka_unit_test(test_remote_push_stops_on_failed_batch),
 		cmocka_unit_test(test_spine_log_appends_a_newline),
 		cmocka_unit_test(test_spine_log_survives_a_full_line),
 		cmocka_unit_test(test_spine_log_does_not_double_an_existing_newline),
