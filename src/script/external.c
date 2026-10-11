@@ -66,7 +66,7 @@ typedef struct {
 } script_cleanup_t;
 
 static void cleanup_script_poll(void *argument) {
-	script_cleanup_t *owned = argument;
+	volatile script_cleanup_t *owned = argument;
 	int pid;
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	if (owned->fd >= 0) {
@@ -182,7 +182,9 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	bool valid_result;
 	unsigned int execution_seconds;
 	bool limited = script_limits_enabled();
-	script_cleanup_t owned = {NULL, NULL, -1, current_host->id, FALSE};
+	/* POSIX cleanup may return through setjmp after cancellation. Automatic
+	 * ownership fields changed inside that scope must retain their values. */
+	volatile script_cleanup_t owned = {NULL, NULL, -1, current_host->id, FALSE};
 	/* Deferred cancellation allows ownership to be registered between APIs.
 	 * Cancellation remains supported while waiting for a permit or output. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &previous_state);
@@ -214,7 +216,8 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	char executable[BUFSIZE];
 	char *saveptr = NULL;
 
-	pthread_cleanup_push(cleanup_script_poll, &owned);
+	/* pthread's opaque payload has no qualifier; the handler restores it. */
+	pthread_cleanup_push(cleanup_script_poll, (void *) &owned);
 	pthread_setcancelstate(previous_state, NULL);
 
 	sem_err = acquire_script_permit(current_host);
