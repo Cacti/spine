@@ -35,6 +35,7 @@
 #define SPINE_THREAD_H
 
 #include <pthread.h>
+#include <stdint.h>
 #include "internal/constants.h"
 /* Process-local permits own their mutex. Initialize before sharing; destroy
  * only after users stop. Acquire/release/available serialize on that mutex.
