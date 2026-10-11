@@ -32,6 +32,7 @@ void die(const char *format, ...) {
 	char logmessage[BUFSIZE];
 	char flogmessage[DBL_BUFSIZE];
 	int old_errno = errno;
+	int exit_code;
 
 	/* A fatal error can originate in any worker. Stop every registered script,
 	 * including groups another worker is closing, before logging or exiting. */
@@ -65,7 +66,8 @@ void die(const char *format, ...) {
 		php_close(PHP_INIT);
 	}
 
-	exit(set.exit.exit_code == EXIT_SUCCESS ? EXIT_FAILURE : set.exit.exit_code);
+	exit_code = atomic_load_explicit(&set.exit.exit_code, memory_order_relaxed);
+	exit(exit_code == EXIT_SUCCESS ? EXIT_FAILURE : exit_code);
 }
 
 /* The log timestamp format depends only on two settings read once in

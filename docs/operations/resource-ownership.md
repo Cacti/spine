@@ -19,6 +19,7 @@ lifetime or platform. The table records reviewed responsibilities and limits.
 | External-script registry | `src/process/nft_popen.c` publishes under `ListMutex`, retains closing entries until cleanup, and parks unreaped children. Reaping clears the owned PID under that mutex before reuse; cancellation kills the group before releasing its entry. | Linked close-owner contracts and process-abort suite. |
 | Permits | `src/platform/thread.c` owns mutex/condition state; script/worker cleanup returns acquired permits. | Thread fault and cancellation contracts. |
 | Log stream | `src/log/log.c` serializes writes with cancellation disabled and restores cancellation after unlocking. | Log cancellation faults and JSON tests. |
+| Exit status | `src/config/model.h` uses a lock-free atomic integer so workers, the fatal caller and emergency handlers share one status without a data race. `die()` snapshots it once before exiting. | Live deadline regression under TSan; a compile-time gate requires signal-safe lock-free integer atomics. |
 
 ## External-script fatal and termination policy
 

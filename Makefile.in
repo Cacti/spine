@@ -1563,7 +1563,7 @@ tests_unit_test_process_abort_SOURCES = tests/unit/test_process_abort.c tests/su
 tests_unit_test_process_abort_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_process_abort_CPPFLAGS = $(AM_CPPFLAGS) \
 	$(am__append_5)
-@HAVE_LD_WRAP_TRUE@tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
+@HAVE_LD_WRAP_TRUE@tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
 
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
 # real-syscall trigger (WNOHANG is always a valid options value), so covering

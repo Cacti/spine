@@ -32,6 +32,9 @@ extern int __real_pipe(int descriptors[2]);
 extern int __real_fcntl(int fd, int command, ...);
 extern int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*) (void *), void *);
 extern ssize_t __real_read(int, void *, size_t);
+#ifdef __GLIBC__
+extern ssize_t __real___read_chk(int, void *, size_t, size_t);
+#endif
 extern ssize_t __real_write(int, const void *, size_t);
 extern int __real_raise(int);
 extern int __real_pthread_kill(pthread_t, int);
@@ -75,6 +78,18 @@ ssize_t __wrap_read(int fd, void *buffer, size_t size) {
 	}
 	return __real_read(fd, buffer, size);
 }
+
+#ifdef __GLIBC__
+/* Fortified headers may route the same source read through __read_chk under
+ * newer Clang. Preserve its buffer check when the fault is not armed. */
+ssize_t __wrap___read_chk(int fd, void *buffer, size_t size, size_t capacity) {
+	if (injected_fault == 5) {
+		errno = EIO;
+		return -1;
+	}
+	return __real___read_chk(fd, buffer, size, capacity);
+}
+#endif
 
 ssize_t __wrap_write(int fd, const void *buffer, size_t size) {
 	if (injected_fault == 6 && size == 1) {
@@ -423,6 +438,7 @@ static void test_coordinator_failures_are_fatal(void **state) {
 			for (;;) pause();
 		}
 		assert_int_equal(waitpid(fixture, &status, 0), fixture);
+		fprintf(stderr, "Termination fault case %i: raw status %i\n", fault, status);
 		if (fault <= 5 || fault == 9) {
 			assert_true(WIFEXITED(status));
 			assert_int_equal(WEXITSTATUS(status), fault == 9 ? 128 + SIGTERM : EXIT_FAILURE);

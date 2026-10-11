@@ -219,7 +219,7 @@ tests_unit_test_process_abort_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_process_abort_CPPFLAGS = $(AM_CPPFLAGS)
 if HAVE_LD_WRAP
 tests_unit_test_process_abort_CPPFLAGS += -DSPINE_TEST_ABORT_FAULTS
-tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
+tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
 endif
 
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
