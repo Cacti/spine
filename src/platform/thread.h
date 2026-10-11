@@ -32,6 +32,10 @@ int spine_permits_try_acquire(spine_permits_t *permits);
 int spine_permits_release(spine_permits_t *permits);
 int spine_permits_available(spine_permits_t *permits);
 /* Raise, never lower, the platform stack default, accounting for results. */
+/* Check the unrounded expression before evaluating its size_t arithmetic. */
+_Static_assert(RESULTS_BUFFER >= 2, "RESULTS_BUFFER must hold a value and terminator");
+_Static_assert((size_t) RESULTS_BUFFER <= (SIZE_MAX - ((size_t) 2 * 180 * 1024 + 65535)) / 10,
+	"RESULTS_BUFFER overflows the worker stack size");
 #define SPINE_THREAD_STACK_SIZE \
 	(((size_t) 2 * ((size_t) 180 * 1024 + 5 * (size_t) RESULTS_BUFFER) + 65535) & ~(size_t) 65535)
 /* On failure attributes are destroyed; success transfers cleanup to caller. */
