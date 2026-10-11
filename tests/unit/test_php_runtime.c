@@ -909,12 +909,12 @@ static void test_readpipe_rejects_invalid_slots(void **state) {
 	for (index = 0; index < sizeof(invalid_slots) / sizeof(invalid_slots[0]); index++) {
 		assert_invalid_reader_result(invalid_slots[index]);
 	}
-	set.php_servers = 0;
+	set.php.php_servers = 0;
 	assert_invalid_reader_result(0);
-	set.php_servers = -1;
+	set.php.php_servers = -1;
 	assert_invalid_reader_result(0);
 	/* An invalid configured count cannot authorize an out-of-array slot. */
-	set.php_servers = MAX_PHP_SERVERS + 1;
+	set.php.php_servers = MAX_PHP_SERVERS + 1;
 	assert_invalid_reader_result(MAX_PHP_SERVERS);
 	assert_int_equal(php_spawn_calls, 0);
 	assert_int_equal(write_calls, 0);
