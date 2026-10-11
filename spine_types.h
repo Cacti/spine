@@ -547,6 +547,7 @@ typedef struct poller_thread {
 	int threads_complete;
 	int complete;
 	int output_failed;
+	int poll_failed;
 	char host_time[40];
 	double host_time_double;
 	spine_permits_t *thread_init_sem;

@@ -34,7 +34,8 @@
 #ifndef SPINE_PHP_H
 #define SPINE_PHP_H
 extern char *php_cmd(const char *php_command, int php_process);
-extern char *php_readpipe(int php_process, char *command);
+extern char *php_readpipe(int php_process, const char *command);
+extern void php_command_script(const char *command, char *script, size_t capacity);
 extern int php_init(int php_process);
 extern void php_close(int php_process);
 extern int php_get_process(void);

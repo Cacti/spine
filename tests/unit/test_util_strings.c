@@ -17,7 +17,7 @@ char config_paths[CONFIG_PATHS][BUFSIZE];
 int *debug_devices = NULL;
 
 /* Mock functions needed by util.c */
-void db_connect(int type, MYSQL *mysql) {}
+int db_connect(int type, MYSQL *mysql) { return TRUE; }
 void db_disconnect(MYSQL *mysql) {}
 MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) { return NULL; }
 void db_free_result(MYSQL_RES *result) {}

@@ -108,7 +108,7 @@ MYSQL_ROW test_mysql_fetch_row(MYSQL_RES *res) {
 	return cells;
 }
 
-void db_connect(int type, MYSQL *mysql) {}
+int db_connect(int type, MYSQL *mysql) { return TRUE; }
 void db_disconnect(MYSQL *mysql) {}
 MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	(void) mysql; (void) type;

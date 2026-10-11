@@ -37,7 +37,8 @@ grep -q 'spine_open_pipe_cloexec(php2cacti_pdes)' php.c ||
 grep -q 'waitpid(pid, pstat, WNOHANG)' nft_popen.c ||
 	fail "nft_popen.c must reap child processes with WNOHANG"
 
-grep -q 'kill(cur->pid, SIGKILL)' nft_popen.c ||
+# The negative pid kills the script's process group, descendants included.
+grep -q 'kill(-cur->pid, SIGKILL)' nft_popen.c ||
 	fail "nft_popen.c must escalate a timed-out reap to SIGKILL"
 
 if grep -q 'waitpid(cur->pid, &pstat, 0)' nft_popen.c; then
