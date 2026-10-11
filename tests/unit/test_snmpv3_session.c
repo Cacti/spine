@@ -39,14 +39,26 @@ static oid captured_auth_proto[MAX_OID_LEN];
 static oid captured_priv_proto[MAX_OID_LEN];
 
 static void *capture_snmp_sess_open(struct snmp_session *session);
+static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
+	struct snmp_pdu **response);
+static bool expect_serialized_request;
+static int captured_request_status;
 
 #define snmp_sess_open capture_snmp_sess_open
+#define snmp_sess_synch_response capture_snmp_sess_synch_response
 #include "../../src/snmp/session.c"
 #include "../../src/snmp/requests.c"
 #include "../../src/snmp/response.c"
 #undef snmp_sess_open
+#undef snmp_sess_synch_response
 
 static void *capture_snmp_sess_open(struct snmp_session *session) {
+	int cancellation_state;
+
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), EBUSY);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	assert_int_equal(cancellation_state, PTHREAD_CANCEL_DISABLE);
 	captured_security_level = session->securityLevel;
 	captured_auth_key_len = session->securityAuthKeyLen;
 	captured_priv_key_len = session->securityPrivKeyLen;
@@ -73,6 +85,26 @@ static void *capture_snmp_sess_open(struct snmp_session *session) {
 			captured_priv_proto_len * sizeof(*captured_priv_proto));
 	}
 	return (void *)(uintptr_t) 1;
+}
+
+static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
+	struct snmp_pdu **response) {
+	int lock_status;
+	int cancellation_state;
+
+	(void) session;
+	(void) request;
+	*response = NULL;
+	lock_status = thread_mutex_trylock(LOCK_SNMP);
+	if (lock_status == 0) {
+		thread_mutex_unlock(LOCK_SNMP);
+	}
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	assert_int_equal(lock_status, expect_serialized_request ? EBUSY : 0);
+	assert_int_equal(cancellation_state,
+		expect_serialized_request ? PTHREAD_CANCEL_DISABLE : PTHREAD_CANCEL_ENABLE);
+	return captured_request_status;
 }
 
 static int session_reset(void **state) {
@@ -486,6 +518,44 @@ static void test_multi_get_refuses_a_missing_session(void **state) {
 	assert_true(IS_UNDEFINED(request.result));
 }
 
+static void test_request_lock_and_cancellation_contract(void **state) {
+	host_t host = {0};
+	struct snmp_pdu *response = NULL;
+	int cancellation_state;
+	int version;
+	const int statuses[] = {STAT_SUCCESS, STAT_TIMEOUT, STAT_ERROR};
+	size_t index;
+
+	(void) state;
+	for (version = 1; version <= 3; version++) {
+		host.snmp.profile.version = version;
+		expect_serialized_request = version == 3;
+		for (index = 0; index < sizeof(statuses) / sizeof(statuses[0]); index++) {
+			captured_request_status = statuses[index];
+			assert_int_equal(snmp_synchronized_response(&host, NULL, &response), statuses[index]);
+			assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+			thread_mutex_unlock(LOCK_SNMP);
+			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+			pthread_setcancelstate(cancellation_state, NULL);
+			assert_int_equal(cancellation_state, PTHREAD_CANCEL_ENABLE);
+		}
+	}
+}
+
+static void test_failed_session_restores_lock_and_cancellation(void **state) {
+	const snmp_connection_t options = {.snmp_timeout = 0};
+	int original_state;
+	int restored_state;
+
+	(void) state;
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &original_state);
+	assert_null(snmp_host_init(&options));
+	pthread_setcancelstate(original_state, &restored_state);
+	assert_int_equal(restored_state, PTHREAD_CANCEL_DISABLE);
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+	thread_mutex_unlock(LOCK_SNMP);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_value_presence_contract, session_reset),
@@ -510,6 +580,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_session_construction_does_not_modify_caller_passphrases, session_reset),
 		cmocka_unit_test_setup(test_authnopriv_does_not_modify_caller_password, session_reset),
 		cmocka_unit_test_setup(test_multi_get_refuses_a_missing_session, session_reset),
+		cmocka_unit_test_setup(test_request_lock_and_cancellation_contract, session_reset),
+		cmocka_unit_test_setup(test_failed_session_restores_lock_and_cancellation, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
