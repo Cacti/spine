@@ -46,7 +46,7 @@ trap cleanup EXIT
 
 db_query() {
 	"${COMPOSE[@]}" exec -T -e MYSQL_PWD=spine db \
-		mariadb -uspine cacti -N -B -e "$1"
+		mariadb --protocol=TCP -h127.0.0.1 -uspine cacti -N -B -e "$1"
 }
 
 wait_for_fixture() {

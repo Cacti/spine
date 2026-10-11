@@ -1040,18 +1040,19 @@ static void run_php_failure_logs(int level) {
 	STRNCOPY(set.php.path_php, "/nonexistent-spine-regression-executable");
 	char command[BUFSIZE];
 	spine_snprintf(command, sizeof(command), "ss_regression.php ss_regression 127.0.0.1 %s\r\n", secret);
-	php_t process;
-	php_processes = &process;
+	php_t *process = malloc(sizeof(*process));
+	assert(process != NULL);
+	php_processes = process;
 	for (int partial = 0; partial <= 1; partial++) {
 		int pipes[2];
 		assert(pipe(pipes) == 0);
 		if (partial) assert(write(pipes[1], "7", 1) == 1);
-		php_processes_initialize(&process, 1);
-		process.php_read_fd = pipes[0];
+		php_processes_initialize(process, 1);
+		process->php_read_fd = pipes[0];
 		char *result = php_readpipe(0, command);
 		assert(strcmp(result, "U") == 0);
 		free(result);
-		if (process.php_read_fd >= 0) close(process.php_read_fd);
+		if (process->php_read_fd >= 0) close(process->php_read_fd);
 		assert(close(pipes[1]) == 0);
 	}
 	int requests[2];
@@ -1065,11 +1066,11 @@ static void run_php_failure_logs(int level) {
 		pause();
 		_exit(0);
 	}
-	php_processes_initialize(&process, 1);
-	process.php_state = PHP_READY;
-	process.php_pid = server;
-	process.php_write_fd = requests[1];
-	process.php_read_fd = responses[0];
+	php_processes_initialize(process, 1);
+	process->php_state = PHP_READY;
+	process->php_pid = server;
+	process->php_write_fd = requests[1];
+	process->php_read_fd = responses[0];
 	/* The write fails with EPIPE; restarts fail on the missing executable. */
 	char *result = php_cmd(command, 0);
 	assert(strcmp(result, "U") == 0);
@@ -1112,6 +1113,7 @@ static void run_php_failure_logs(int level) {
 	}
 	assert(unlink(path) == 0);
 	php_processes = previous_processes;
+	free(process);
 	set = previous_config;
 }
 
