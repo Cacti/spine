@@ -366,7 +366,7 @@ static char *php_read_result(int php_process, char *command, int allow_restart) 
 	/* Public readers may bypass php_cmd()'s process-slot validation. Keep
 	 * both command and startup readers inside the allocated process table. */
 	if (php_processes == NULL || php_process < 0 ||
-	    php_process >= set.php_servers || php_process >= MAX_PHP_SERVERS) {
+	    php_process >= set.php.php_servers || php_process >= MAX_PHP_SERVERS) {
 		SET_UNDEFINED(result_string);
 		return result_string;
 	}

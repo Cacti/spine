@@ -516,7 +516,7 @@ static void check_ipv6_peer_matching(int socket_type) {
 	controlled_reply = 1;
 	controlled_reply_v6 = 1;
 	socket_failures_remaining = socket_type == SOCK_RAW ? 1 : 0;
-	set.icmp_uses_caps = TRUE;
+	set.availability.icmp_uses_caps = TRUE;
 	track_packet = 1;
 	packet_size = sizeof(struct icmp6_hdr) + strlen("cacti-monitoring-system");
 	make_host(&host, "::1");
