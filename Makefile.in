@@ -1108,11 +1108,39 @@ configdir = $(sysconfdir)
 dist_config_DATA = etc/spine.conf.dist
 man_MANS = docs/man/spine.1
 dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
-TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh \
+TESTS = $(check_PROGRAMS) tests/tools/test_nightly_tests.sh \
+	tests/regression/test_remote_push.sh \
 	tests/integration/test_alloc_failure.sh \
 	tests/regression/test_child_process_safety.sh \
 	tests/regression/test_setuid_privilege_drop.sh \
 	tests/regression/test_helper_scripts.sh
+EXTRA_DIST = tests/tools/check_nightly_tests.sh \
+	tests/tools/test_nightly_tests.sh docs/man/spine.1 \
+	etc/spine.conf.dist CONTRIBUTORS.md docs/licensing.md \
+	LICENSES/LicenseRef-Xenadyne.txt \
+	LICENSES/LicenseRef-Xenadyne-Header.txt \
+	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt \
+	LICENSES/LGPL-2.1-only.txt tests/README.md \
+	tests/support/test-harness.sh \
+	tests/integration/test_concurrency.sh \
+	tests/integration/test_network_faults.sh \
+	tests/integration/test_memory_soak.sh \
+	tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh \
+	tests/tools/coverage_process_exit.h \
+	tests/tools/verify_coverage.sh \
+	tests/tools/test_coverage_verifier.sh \
+	tests/tools/normalize_entry_coverage.py \
+	tests/tools/test_entry_coverage.py \
+	tests/regression/test_remote_push.sh \
+	tests/integration/test_alloc_failure.sh \
+	tests/regression/test_child_process_safety.sh \
+	tests/regression/test_setuid_privilege_drop.sh \
+	tests/fixtures/c17_develop_behavior_baseline.json \
+	scripts/debug.sh scripts/package.sh \
+	tests/regression/test_helper_scripts.sh \
+	docs/architecture/source-modules.md \
+	tests/tools/test_configure_contracts.sh \
+	tests/tools/test_clang_tidy_gate.py scripts/cppcheck/spine.cfg
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
 # Link the same runtime implementation with a separate fault-test entry point.
 @HAVE_LINKER_WRAP_TRUE@test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
@@ -1146,31 +1174,6 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h \
 	src/platform/thread.h src/poller/result.h src/script/escape.h \
 	src/snmp/response.h src/database/cacti_query.h \
 	src/database/persistence.h
-EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
-	docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt \
-	LICENSES/LicenseRef-Xenadyne-Header.txt \
-	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt \
-	LICENSES/LGPL-2.1-only.txt tests/README.md \
-	tests/support/test-harness.sh \
-	tests/integration/test_concurrency.sh \
-	tests/integration/test_network_faults.sh \
-	tests/integration/test_memory_soak.sh \
-	tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh \
-	tests/tools/coverage_process_exit.h \
-	tests/tools/verify_coverage.sh \
-	tests/tools/test_coverage_verifier.sh \
-	tests/tools/normalize_entry_coverage.py \
-	tests/tools/test_entry_coverage.py \
-	tests/regression/test_remote_push.sh \
-	tests/integration/test_alloc_failure.sh \
-	tests/regression/test_child_process_safety.sh \
-	tests/regression/test_setuid_privilege_drop.sh \
-	tests/fixtures/c17_develop_behavior_baseline.json \
-	scripts/debug.sh scripts/package.sh \
-	tests/regression/test_helper_scripts.sh \
-	docs/architecture/source-modules.md \
-	tests/tools/test_configure_contracts.sh \
-	scripts/cppcheck/spine.cfg
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src \
 	-I$(top_srcdir)/vendor/uthash -I$(top_builddir)
 

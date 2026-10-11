@@ -115,6 +115,8 @@ jobs:
           else
             make -j"$(nproc)" check
           fi
+          make --no-print-directory coverage-unit-program-list > nightly-unit-programs.txt
+          tests/tools/check_nightly_tests.sh nightly-unit-programs.txt
 
       - name: Load the regression fixtures
         run: |

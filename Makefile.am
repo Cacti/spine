@@ -68,6 +68,8 @@ man_MANS = docs/man/spine.1
 check_PROGRAMS = test_spine_regressions
 dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
 TESTS = $(check_PROGRAMS)
+TESTS += tests/tools/test_nightly_tests.sh
+EXTRA_DIST = tests/tools/check_nightly_tests.sh tests/tools/test_nightly_tests.sh
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Production and regression binaries share the runtime objects.
@@ -94,7 +96,7 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h s
 	src/snmp/snmp.h src/app/spine.h src/platform/spine_sem.h src/internal/spine_types.h \
 	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h
 
-EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
+EXTRA_DIST += docs/man/spine.1 etc/spine.conf.dist \
 	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
 	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
 	tests/README.md \
