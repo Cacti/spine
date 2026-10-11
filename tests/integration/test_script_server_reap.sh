@@ -52,7 +52,7 @@ trap cleanup EXIT
 # Wait for seed data.
 elapsed=0
 while [[ $elapsed -lt 120 ]]; do
-	count=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+	count=$("${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti \
 		-N -e "SELECT COUNT(*) FROM host;" 2>/dev/null || echo "0")
 	[[ "$count" -gt 0 ]] && break
 	sleep 3; elapsed=$((elapsed + 3))
@@ -60,7 +60,7 @@ done
 [[ "$count" -gt 0 ]] || { fail "database did not start"; exit 1; }
 pass "infrastructure ready"
 
-"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+"${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti -e "
 INSERT INTO settings (name, value) VALUES
   ('path_webroot', '/opt/cacti'),
   ('path_php_binary', '/usr/bin/php')
@@ -73,7 +73,7 @@ pass "PHP script-server settings seeded"
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Seed script-server poller_item (action=2) ==="
-"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+"${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti -e "
 INSERT IGNORE INTO poller_item (
   local_data_id, host_id, action, hostname,
   rrd_name, rrd_path, rrd_num, rrd_step, arg1, deleted, poller_id
@@ -116,7 +116,7 @@ else
 	pass "no zombie php child after poll"
 fi
 
-value=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -N -B \
+value=$("${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti -N -B \
 	-e "SELECT output FROM poller_output WHERE local_data_id = 900 LIMIT 1;" 2>/dev/null)
 if [[ $value == 42 ]]; then
 	pass "script-server command returned and stored 42"
