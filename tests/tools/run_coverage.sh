@@ -37,7 +37,9 @@ case "$coverage_base" in
     "$source_dir"/*) coverage_find_path="./${coverage_base#"$source_dir"/}";;
     *) ;;
 esac
-find . -path "$coverage_find_path" -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile.am' -o -name 'configure.ac' -o -path './scripts/copyright_year.sh' -o -path './tests/fixtures/*' -o -path './tests/tools/*' -o -path './.github/workflows/*.yml' \) -not -path './.git/*' -not -path './config/config.h' -print0 | sort -z > "$coverage_dir/source-inputs.nul"
+# Automake leaves .log/.trs files beside shell suites after make check. They
+# are build outputs, and make clean removes them; hash only tool inputs here.
+find . -path "$coverage_find_path" -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile.am' -o -name 'configure.ac' -o -path './scripts/copyright_year.sh' -o -path './tests/fixtures/*' -o \( -path './tests/tools/*' -a \( -name '*.sh' -o -name '*.py' -o -name '*.txt' \) \) -o -path './.github/workflows/*.yml' \) -not -path './.git/*' -not -path './config/config.h' -print0 | sort -z > "$coverage_dir/source-inputs.nul"
 xargs -0 sha256sum < "$coverage_dir/source-inputs.nul" > "$coverage_dir/source.sha256"
 tar -czf "$coverage_dir/source-inputs.tar.gz" --null -T "$coverage_dir/source-inputs.nul"
 # Autoreconf replaces this tracked template. Preserve its original bytes and
