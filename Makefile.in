@@ -165,8 +165,8 @@ am__objects_2 = src/app/buffer.$(OBJEXT) src/platform/clock.$(OBJEXT) \
 	src/log/sanitize.$(OBJEXT) src/script/escape.$(OBJEXT) \
 	src/config/settings.$(OBJEXT) src/config/options.$(OBJEXT) \
 	src/config/file.$(OBJEXT) src/log/log.$(OBJEXT) \
-	src/poller/result.$(OBJEXT) src/platform/privileges.$(OBJEXT) \
-	src/poller/regex.$(OBJEXT)
+	src/log/json.$(OBJEXT) src/poller/result.$(OBJEXT) \
+	src/platform/privileges.$(OBJEXT) src/poller/regex.$(OBJEXT)
 am__objects_3 = src/snmp/requests.$(OBJEXT) \
 	src/snmp/response.$(OBJEXT) src/snmp/session.$(OBJEXT)
 am__objects_4 = src/poller/poller.$(OBJEXT) \
@@ -204,7 +204,7 @@ am__test_spine_faults_SOURCES_DIST = src/database/sql.c \
 	src/config/text.c src/config/validate.c src/log/debug.c \
 	src/log/sanitize.c src/script/escape.c src/config/settings.c \
 	src/config/options.c src/config/file.c src/log/log.c \
-	src/poller/result.c src/platform/privileges.c \
+	src/log/json.c src/poller/result.c src/platform/privileges.c \
 	src/poller/regex.c src/snmp/requests.c src/snmp/response.c \
 	src/snmp/session.c src/platform/locks.c src/poller/poller.c \
 	src/script/external.c src/poller/host.c src/poller/reindex.c \
@@ -281,6 +281,7 @@ am__objects_11 = src/app/tests_unit_test_linked-buffer.$(OBJEXT) \
 	src/config/tests_unit_test_linked-options.$(OBJEXT) \
 	src/config/tests_unit_test_linked-file.$(OBJEXT) \
 	src/log/tests_unit_test_linked-log.$(OBJEXT) \
+	src/log/tests_unit_test_linked-json.$(OBJEXT) \
 	src/poller/tests_unit_test_linked-result.$(OBJEXT) \
 	src/platform/tests_unit_test_linked-privileges.$(OBJEXT) \
 	src/poller/tests_unit_test_linked-regex.$(OBJEXT)
@@ -355,6 +356,7 @@ am__objects_18 = src/app/tests_unit_test_php_runtime-buffer.$(OBJEXT) \
 	src/config/tests_unit_test_php_runtime-options.$(OBJEXT) \
 	src/config/tests_unit_test_php_runtime-file.$(OBJEXT) \
 	src/log/tests_unit_test_php_runtime-log.$(OBJEXT) \
+	src/log/tests_unit_test_php_runtime-json.$(OBJEXT) \
 	src/poller/tests_unit_test_php_runtime-result.$(OBJEXT) \
 	src/platform/tests_unit_test_php_runtime-privileges.$(OBJEXT) \
 	src/poller/tests_unit_test_php_runtime-regex.$(OBJEXT)
@@ -450,13 +452,13 @@ tests_unit_test_snmpv3_session_OBJECTS =  \
 tests_unit_test_snmpv3_session_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_util_paths_OBJECTS =  \
-	tests/unit/test_util_paths.$(OBJEXT)
+	tests/unit/test_util_paths.$(OBJEXT) src/log/json.$(OBJEXT)
 tests_unit_test_util_paths_OBJECTS =  \
 	$(am_tests_unit_test_util_paths_OBJECTS)
 tests_unit_test_util_paths_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_util_strings_OBJECTS =  \
-	tests/unit/test_util_strings.$(OBJEXT)
+	tests/unit/test_util_strings.$(OBJEXT) src/log/json.$(OBJEXT)
 tests_unit_test_util_strings_OBJECTS =  \
 	$(am_tests_unit_test_util_strings_OBJECTS)
 tests_unit_test_util_strings_DEPENDENCIES = $(am__DEPENDENCIES_1) \
@@ -517,11 +519,14 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-sql.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po \
 	src/database/$(DEPDIR)/transfer.Po src/log/$(DEPDIR)/debug.Po \
-	src/log/$(DEPDIR)/log.Po src/log/$(DEPDIR)/sanitize.Po \
+	src/log/$(DEPDIR)/json.Po src/log/$(DEPDIR)/log.Po \
+	src/log/$(DEPDIR)/sanitize.Po \
 	src/log/$(DEPDIR)/tests_unit_test_linked-debug.Po \
+	src/log/$(DEPDIR)/tests_unit_test_linked-json.Po \
 	src/log/$(DEPDIR)/tests_unit_test_linked-log.Po \
 	src/log/$(DEPDIR)/tests_unit_test_linked-sanitize.Po \
 	src/log/$(DEPDIR)/tests_unit_test_php_runtime-debug.Po \
+	src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Po \
 	src/log/$(DEPDIR)/tests_unit_test_php_runtime-log.Po \
 	src/log/$(DEPDIR)/tests_unit_test_php_runtime-sanitize.Po \
 	src/ping/$(DEPDIR)/address.Po src/ping/$(DEPDIR)/icmp4.Po \
@@ -1076,7 +1081,7 @@ spine_support_sources = src/app/buffer.c \
 	src/log/sanitize.c \
 	src/script/escape.c \
 	src/config/settings.c src/config/options.c src/config/file.c \
-	src/log/log.c src/poller/result.c \
+	src/log/log.c src/log/json.c src/poller/result.c \
 	src/platform/privileges.c src/poller/regex.c
 
 spine_database_sources = src/database/sql.c \
@@ -1115,7 +1120,8 @@ TESTS = $(check_PROGRAMS) tests/tools/test_nightly_tests.sh \
 	tests/regression/test_setuid_privilege_drop.sh \
 	tests/regression/test_helper_scripts.sh
 EXTRA_DIST = tests/tools/check_nightly_tests.sh \
-	tests/tools/test_nightly_tests.sh docs/man/spine.1 \
+	tests/tools/test_nightly_tests.sh \
+	tests/tools/test_json_encoder.py docs/man/spine.1 \
 	etc/spine.conf.dist CONTRIBUTORS.md docs/licensing.md \
 	LICENSES/LicenseRef-Xenadyne.txt \
 	LICENSES/LicenseRef-Xenadyne-Header.txt \
@@ -1144,7 +1150,7 @@ EXTRA_DIST = tests/tools/check_nightly_tests.sh \
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
 # Link the same runtime implementation with a separate fault-test entry point.
 @HAVE_LINKER_WRAP_TRUE@test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
-@HAVE_LINKER_WRAP_TRUE@test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
+@HAVE_LINKER_WRAP_TRUE@test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
@@ -1181,7 +1187,7 @@ AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src \
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
 # the same libraries spine links against.  The others are self-contained.
-tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
+tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c src/log/json.c
 tests_unit_test_util_strings_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_build_fixes_SOURCES = tests/unit/test_build_fixes.c
 tests_unit_test_build_fixes_LDADD = $(CMOCKA_LIBS)
@@ -1215,7 +1221,7 @@ tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c test
 tests_unit_test_classify_result_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
 # Includes production helpers, so it needs the same libraries as Spine
-tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
+tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c src/log/json.c
 tests_unit_test_util_paths_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
@@ -1468,6 +1474,8 @@ src/config/file.$(OBJEXT): src/config/$(am__dirstamp) \
 	src/config/$(DEPDIR)/$(am__dirstamp)
 src/log/log.$(OBJEXT): src/log/$(am__dirstamp) \
 	src/log/$(DEPDIR)/$(am__dirstamp)
+src/log/json.$(OBJEXT): src/log/$(am__dirstamp) \
+	src/log/$(DEPDIR)/$(am__dirstamp)
 src/poller/$(am__dirstamp):
 	@$(MKDIR_P) src/poller
 	@: > src/poller/$(am__dirstamp)
@@ -1705,6 +1713,8 @@ src/config/tests_unit_test_linked-file.$(OBJEXT):  \
 	src/config/$(DEPDIR)/$(am__dirstamp)
 src/log/tests_unit_test_linked-log.$(OBJEXT): src/log/$(am__dirstamp) \
 	src/log/$(DEPDIR)/$(am__dirstamp)
+src/log/tests_unit_test_linked-json.$(OBJEXT):  \
+	src/log/$(am__dirstamp) src/log/$(DEPDIR)/$(am__dirstamp)
 src/poller/tests_unit_test_linked-result.$(OBJEXT):  \
 	src/poller/$(am__dirstamp) \
 	src/poller/$(DEPDIR)/$(am__dirstamp)
@@ -1847,6 +1857,8 @@ src/config/tests_unit_test_php_runtime-file.$(OBJEXT):  \
 	src/config/$(am__dirstamp) \
 	src/config/$(DEPDIR)/$(am__dirstamp)
 src/log/tests_unit_test_php_runtime-log.$(OBJEXT):  \
+	src/log/$(am__dirstamp) src/log/$(DEPDIR)/$(am__dirstamp)
+src/log/tests_unit_test_php_runtime-json.$(OBJEXT):  \
 	src/log/$(am__dirstamp) src/log/$(DEPDIR)/$(am__dirstamp)
 src/poller/tests_unit_test_php_runtime-result.$(OBJEXT):  \
 	src/poller/$(am__dirstamp) \
@@ -2033,12 +2045,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/transfer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/debug.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/json.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/log.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/sanitize.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_linked-debug.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_linked-json.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_linked-log.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_linked-sanitize.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_php_runtime-debug.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_php_runtime-log.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/tests_unit_test_php_runtime-sanitize.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/ping/$(DEPDIR)/address.Po@am__quote@ # am--include-marker
@@ -2496,6 +2511,20 @@ src/log/tests_unit_test_linked-log.obj: src/log/log.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/log/log.c' object='src/log/tests_unit_test_linked-log.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/log/tests_unit_test_linked-log.obj `if test -f 'src/log/log.c'; then $(CYGPATH_W) 'src/log/log.c'; else $(CYGPATH_W) '$(srcdir)/src/log/log.c'; fi`
+
+src/log/tests_unit_test_linked-json.o: src/log/json.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/log/tests_unit_test_linked-json.o -MD -MP -MF src/log/$(DEPDIR)/tests_unit_test_linked-json.Tpo -c -o src/log/tests_unit_test_linked-json.o `test -f 'src/log/json.c' || echo '$(srcdir)/'`src/log/json.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/log/$(DEPDIR)/tests_unit_test_linked-json.Tpo src/log/$(DEPDIR)/tests_unit_test_linked-json.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/log/json.c' object='src/log/tests_unit_test_linked-json.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/log/tests_unit_test_linked-json.o `test -f 'src/log/json.c' || echo '$(srcdir)/'`src/log/json.c
+
+src/log/tests_unit_test_linked-json.obj: src/log/json.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/log/tests_unit_test_linked-json.obj -MD -MP -MF src/log/$(DEPDIR)/tests_unit_test_linked-json.Tpo -c -o src/log/tests_unit_test_linked-json.obj `if test -f 'src/log/json.c'; then $(CYGPATH_W) 'src/log/json.c'; else $(CYGPATH_W) '$(srcdir)/src/log/json.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/log/$(DEPDIR)/tests_unit_test_linked-json.Tpo src/log/$(DEPDIR)/tests_unit_test_linked-json.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/log/json.c' object='src/log/tests_unit_test_linked-json.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/log/tests_unit_test_linked-json.obj `if test -f 'src/log/json.c'; then $(CYGPATH_W) 'src/log/json.c'; else $(CYGPATH_W) '$(srcdir)/src/log/json.c'; fi`
 
 src/poller/tests_unit_test_linked-result.o: src/poller/result.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/poller/tests_unit_test_linked-result.o -MD -MP -MF src/poller/$(DEPDIR)/tests_unit_test_linked-result.Tpo -c -o src/poller/tests_unit_test_linked-result.o `test -f 'src/poller/result.c' || echo '$(srcdir)/'`src/poller/result.c
@@ -3182,6 +3211,20 @@ src/log/tests_unit_test_php_runtime-log.obj: src/log/log.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/log/log.c' object='src/log/tests_unit_test_php_runtime-log.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/log/tests_unit_test_php_runtime-log.obj `if test -f 'src/log/log.c'; then $(CYGPATH_W) 'src/log/log.c'; else $(CYGPATH_W) '$(srcdir)/src/log/log.c'; fi`
+
+src/log/tests_unit_test_php_runtime-json.o: src/log/json.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/log/tests_unit_test_php_runtime-json.o -MD -MP -MF src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Tpo -c -o src/log/tests_unit_test_php_runtime-json.o `test -f 'src/log/json.c' || echo '$(srcdir)/'`src/log/json.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Tpo src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/log/json.c' object='src/log/tests_unit_test_php_runtime-json.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/log/tests_unit_test_php_runtime-json.o `test -f 'src/log/json.c' || echo '$(srcdir)/'`src/log/json.c
+
+src/log/tests_unit_test_php_runtime-json.obj: src/log/json.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/log/tests_unit_test_php_runtime-json.obj -MD -MP -MF src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Tpo -c -o src/log/tests_unit_test_php_runtime-json.obj `if test -f 'src/log/json.c'; then $(CYGPATH_W) 'src/log/json.c'; else $(CYGPATH_W) '$(srcdir)/src/log/json.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Tpo src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/log/json.c' object='src/log/tests_unit_test_php_runtime-json.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/log/tests_unit_test_php_runtime-json.obj `if test -f 'src/log/json.c'; then $(CYGPATH_W) 'src/log/json.c'; else $(CYGPATH_W) '$(srcdir)/src/log/json.c'; fi`
 
 src/poller/tests_unit_test_php_runtime-result.o: src/poller/result.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/poller/tests_unit_test_php_runtime-result.o -MD -MP -MF src/poller/$(DEPDIR)/tests_unit_test_php_runtime-result.Tpo -c -o src/poller/tests_unit_test_php_runtime-result.o `test -f 'src/poller/result.c' || echo '$(srcdir)/'`src/poller/result.c
@@ -4244,12 +4287,15 @@ distclean: distclean-am
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po
 	-rm -f src/database/$(DEPDIR)/transfer.Po
 	-rm -f src/log/$(DEPDIR)/debug.Po
+	-rm -f src/log/$(DEPDIR)/json.Po
 	-rm -f src/log/$(DEPDIR)/log.Po
 	-rm -f src/log/$(DEPDIR)/sanitize.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-debug.Po
+	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-json.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-log.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-sanitize.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-debug.Po
+	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-log.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-sanitize.Po
 	-rm -f src/ping/$(DEPDIR)/address.Po
@@ -4464,12 +4510,15 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po
 	-rm -f src/database/$(DEPDIR)/transfer.Po
 	-rm -f src/log/$(DEPDIR)/debug.Po
+	-rm -f src/log/$(DEPDIR)/json.Po
 	-rm -f src/log/$(DEPDIR)/log.Po
 	-rm -f src/log/$(DEPDIR)/sanitize.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-debug.Po
+	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-json.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-log.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_linked-sanitize.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-debug.Po
+	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-json.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-log.Po
 	-rm -f src/log/$(DEPDIR)/tests_unit_test_php_runtime-sanitize.Po
 	-rm -f src/ping/$(DEPDIR)/address.Po

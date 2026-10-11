@@ -59,7 +59,11 @@ static int apply_config_directive(const char *name, const char *value) {
 	else if (STRIMATCH(name, "DB_Port")) set.database.port = atoi(value);
 	else if (STRIMATCH(name, "DB_UseSSL")) set.database.ssl = atoi(value);
 	else if (STRIMATCH(name, "Poller")) set.poller.poller_id = atoi(value);
-	else if (STRIMATCH(name, "DB_PreG")) {
+	else if (STRIMATCH(name, "Log_Format")) {
+		if (STRIMATCH(value, "json")) set.logging.json_logs = TRUE;
+		else if (STRIMATCH(value, "text")) set.logging.json_logs = FALSE;
+		else die("ERROR: Log_Format must be text or json");
+	} else if (STRIMATCH(name, "DB_PreG")) {
 		if (!set.console.stderr_notty) fprintf(stderr, "WARNING: DB_PreG is no longer supported\n");
 	} else if (STRIMATCH(name, "Cacti_Log")) {
 		STRNCOPY(set.logging.path_logfile, value);
@@ -166,4 +170,5 @@ void config_defaults() {
 	STRNCOPY(config_paths[3], CONFIG_PATH_4);
 
 	set.logging.log_destination = LOGDEST_FILE;
+	set.logging.json_logs = FALSE;
 }

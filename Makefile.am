@@ -18,7 +18,7 @@ spine_support_sources = src/app/buffer.c \
 	src/log/sanitize.c \
 	src/script/escape.c \
 	src/config/settings.c src/config/options.c src/config/file.c \
-	src/log/log.c src/poller/result.c \
+	src/log/log.c src/log/json.c src/poller/result.c \
 	src/platform/privileges.c src/poller/regex.c
 spine_database_sources = src/database/sql.c \
 	src/database/connection.c \
@@ -70,6 +70,7 @@ dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql te
 TESTS = $(check_PROGRAMS)
 TESTS += tests/tools/test_nightly_tests.sh
 EXTRA_DIST = tests/tools/check_nightly_tests.sh tests/tools/test_nightly_tests.sh
+EXTRA_DIST += tests/tools/test_json_encoder.py
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Production and regression binaries share the runtime objects.
@@ -78,7 +79,7 @@ if HAVE_LINKER_WRAP
 check_PROGRAMS += test_spine_faults
 # Link the same runtime implementation with a separate fault-test entry point.
 test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
-test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
+test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
  -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
  -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
  -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
@@ -180,7 +181,7 @@ endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
 # the same libraries spine links against.  The others are self-contained.
-tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
+tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c src/log/json.c
 tests_unit_test_util_strings_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_build_fixes_SOURCES  = tests/unit/test_build_fixes.c
@@ -218,7 +219,7 @@ tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c test
 tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 # Includes production helpers, so it needs the same libraries as Spine
-tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
+tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c src/log/json.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \

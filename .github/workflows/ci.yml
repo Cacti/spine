@@ -358,6 +358,7 @@ jobs:
       - name: Report coverage
         run: |
           set -euo pipefail
+          python3 tests/tools/test_json_encoder.py
           # configure leaves instrumented conftest objects behind and gcovr
           # cannot resolve their sources
           rm -f ./*conftest*.gcno ./*conftest*.gcda

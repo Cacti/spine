@@ -40,6 +40,17 @@ extern int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*) 
 #include "app/runtime.h"
 extern poller_thread_t **details;
 
+extern ssize_t __real_write(int, const void *, size_t);
+static bool cancel_log_write;
+
+ssize_t __wrap_write(int fd, const void *bytes, size_t length) {
+	if (cancel_log_write && fd > STDERR_FILENO) {
+		cancel_log_write = FALSE;
+		assert(pthread_cancel(pthread_self()) == 0);
+	}
+	return __real_write(fd, bytes, length);
+}
+
 static int format_failures;
 static int format_fault_calls;
 static MYSQL *query_fault_connection;
@@ -664,6 +675,62 @@ static void test_privilege_drop_faults(void) {
 	assert(strstr(output, "Spine has no ICMP access") != NULL);
 	assert(strstr(output, "WARNING: Spine is setuid root") == NULL);
 	puts("production privilege drop faults passed");
+}
+
+static void *cancelled_logger(void *argument) {
+	assert(pthread_setcanceltype((int) (intptr_t) argument, NULL) == 0);
+	spine_log("cancellation ownership check");
+	pthread_testcancel();
+	return NULL;
+}
+
+static void test_logger_cancellation_unlocks_file(void) {
+	char path[] = "spine-log-cancellation-XXXXXX";
+	int fd = mkstemp(path);
+	pid_t process;
+	int status;
+
+	assert(fd >= 0 && close(fd) == 0);
+	fflush(NULL);
+	process = fork();
+	assert(process >= 0);
+	if (process == 0) {
+		pthread_t worker;
+		void *result = NULL;
+		config_t previous = set;
+		int kind;
+
+		signal(SIGALRM, SIG_DFL);
+		alarm(5);
+		set.logging.json_logs = TRUE;
+		set.logging.log_destination = LOGDEST_FILE;
+		set.logging.log_level = POLLER_VERBOSITY_LOW;
+		set.logging.logfile_processed = TRUE;
+		set.console.stdout_notty = TRUE;
+		set.console.stderr_notty = TRUE;
+		STRNCOPY(set.logging.path_logfile, path);
+		for (kind = PTHREAD_CANCEL_DEFERRED; kind <= PTHREAD_CANCEL_ASYNCHRONOUS; kind++) {
+			cancel_log_write = TRUE;
+			assert(pthread_create(&worker, NULL, cancelled_logger, (void *) (intptr_t) kind) == 0);
+			assert(pthread_join(worker, &result) == 0);
+			assert(!cancel_log_write);
+			assert(result == PTHREAD_CANCELED);
+			/* A stranded mutex would hang here; the alarm makes that a failure. */
+			assert(spine_log("logging remains usable after cancellation"));
+		}
+		allocation_failures = 1;
+		assert(!spine_log("allocation fault"));
+		assert(allocation_failures == 0);
+		format_failures = 1;
+		assert(!spine_log("timestamp fault"));
+		assert(format_failures == 0);
+		set = previous;
+		exit(0);
+	}
+	assert(waitpid(process, &status, 0) == process);
+	assert(unlink(path) == 0);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+	puts("production JSON logger cancellation and allocation faults passed");
 }
 
 static void test_logger_format_failure(void) {
@@ -1690,6 +1757,7 @@ int main(int argc, char **argv) {
 	init_mutexes();
 	alarm(20);
 	test_logger_format_failure();
+	test_logger_cancellation_unlocks_file();
 	test_process_creation_failures();
 	test_spawn_group_failure();
 	test_interrupted_insert_retry();
