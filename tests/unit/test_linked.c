@@ -856,6 +856,9 @@ static void test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect(voi
 	int writer;
 	int reader;
 	int writer_status;
+	int wait_status = -1;
+	pid_t writer_pid;
+	siginfo_t writer_info = {0};
 	int reader_status;
 	ssize_t bytes;
 	char output[32] = {0};
@@ -871,10 +874,19 @@ static void test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect(voi
 	/* The write-mode parent retains fd 1 in PidList. The following read-mode
 	 * child also redirects its new pipe onto fd 1. Its later PidList close walk
 	 * must not close that newly installed stdout. */
-	writer = nft_popen("cat >/dev/null", "w");
+	writer = nft_popen("exit 0", "w");
+	writer_pid = writer >= 0 ? nft_pchild(writer) : -1;
 	reader = nft_popen("printf second-child-visible", "r");
 	bytes = reader >= 0 ? read(reader, output, sizeof(output) - 1) : -1;
 	reader_status = reader >= 0 ? nft_pclose(reader) : -1;
+	/* Keep the writer entry and fd 1 registered until after the reader has
+	 * spawned. Observe its exit without reaping, so close tests ownership
+	 * rather than the runner scheduling the child within the reap budget. */
+	if (writer_pid > 0) {
+		do {
+			wait_status = waitid(P_PID, (id_t)writer_pid, &writer_info, WEXITED | WNOWAIT);
+		} while (wait_status < 0 && errno == EINTR);
+	}
 	writer_status = writer >= 0 ? nft_pclose(writer) : -1;
 
 	dup2(saved_stdin, STDIN_FILENO);
@@ -888,6 +900,10 @@ static void test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect(voi
 	assert_string_equal(output, "second-child-visible");
 	assert_true(WIFEXITED(reader_status));
 	assert_int_equal(WEXITSTATUS(reader_status), 0);
+	assert_int_equal(wait_status, 0);
+	assert_int_equal(writer_info.si_pid, writer_pid);
+	assert_int_equal(writer_info.si_code, CLD_EXITED);
+	assert_int_equal(writer_info.si_status, 0);
 	assert_true(WIFEXITED(writer_status));
 	assert_int_equal(WEXITSTATUS(writer_status), 0);
 }
