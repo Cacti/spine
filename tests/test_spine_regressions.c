@@ -1375,7 +1375,12 @@ static void test_php_startup(const char *executable) {
 	STRNCOPY(set.php.path_php_server, "regression-server");
 	assert(!php_init(-2) && !php_init(set.php.php_servers));
 	STRNCOPY(set.php.path_php, "/nonexistent-spine-regression-executable");
-	assert(!php_init(0));
+	/* Some libcs return an exec error to the parent; OpenBSD reports it
+	 * through the child exit instead. Neither path may produce a READY slot. */
+	if (php_init(0)) {
+		assert(processes[0].php_state == PHP_BUSY);
+		php_close(0);
+	}
 	assert(processes[0].php_state == PHP_BUSY);
 	assert(processes[0].php_read_fd == -1 && processes[0].php_write_fd == -1);
 	/* posix_spawn reports a missing executable to the parent (or the child

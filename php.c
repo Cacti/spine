@@ -117,7 +117,11 @@ ssize_t php_write_no_sigpipe(int fd, const void *buffer, size_t length) {
 
 	sigemptyset(&blocked);
 	sigaddset(&blocked, SIGPIPE);
+#ifdef SPINE_PHP_RUNTIME_TESTING
+	mask_error = spine_php_test_sigmask(SIG_BLOCK, &blocked, &old_mask);
+#else
 	mask_error = pthread_sigmask(SIG_BLOCK, &blocked, &old_mask);
+#endif
 	if (mask_error != 0) {
 		errno = mask_error;
 		return -1;
