@@ -1317,6 +1317,19 @@ static int apply_config_directive(const char *name, const char *value) {
 	return TRUE;
 }
 
+/* fgets() returns a line longer than its buffer in pieces, and each piece
+ * would be parsed as a directive of its own.  Report whether the line just
+ * read was whole, consuming the remainder when it was not.  The caller sets
+ * the last byte nonzero before reading: fgets() only clears it when it filled
+ * the buffer, which a string search cannot tell once the line holds a NUL. */
+static bool config_line_complete(FILE *fp, const char *line, size_t capacity) {
+	if (line[capacity - 1] != '\0' || line[capacity - 2] == '\n') return TRUE;
+	int next = getc(fp);
+	if (next == EOF || next == '\n') return TRUE;
+	while (next != EOF && next != '\n') next = getc(fp);
+	return FALSE;
+}
+
 int read_spine_config(const char *file) {
 	FILE *fp = fopen(file, "rb");
 	char buff[BUFSIZE];
@@ -1324,7 +1337,6 @@ int read_spine_config(const char *file) {
 	char value[BUFSIZE];
 	char display_file[BUFSIZE];
 	int line = 0;
-	bool line_start = TRUE;
 	strncopy(display_file, file, sizeof(display_file));
 	spine_sanitize_log_message(display_file);
 
@@ -1337,14 +1349,31 @@ int read_spine_config(const char *file) {
 	if (!set.console.stdout_notty) {
 		fprintf(stdout, "SPINE: Using spine config file [%s]\n", display_file);
 	}
-	while (fgets(buff, sizeof(buff), fp) != NULL) {
-		/* A line longer than buff arrives in several pieces; count it once. */
-		if (line_start) line++;
-		line_start = strchr(buff, '\n') != NULL;
+	for (;;) {
+		buff[sizeof(buff) - 1] = 1;
+		if (fgets(buff, sizeof(buff), fp) == NULL) break;
+		/* config_line_complete() consumes an overlong line whole, so each
+		 * pass is exactly one line */
+		line++;
+		if (!config_line_complete(fp, buff, sizeof(buff))) {
+			if (!set.console.stderr_notty) {
+				fprintf(stderr, "WARNING: Ignoring line %d of %s, longer than %d characters\n", line, display_file, BUFSIZE - 2);
+			}
+			continue;
+		}
 		if (buff[0] == '#' || buff[0] == ' ' || buff[0] == '\n') continue;
-		if (sscanf(buff, "%15s %255s", name, value) != 2) continue;
-		/* -C accepts any path, so report where the line is, never what it holds. */
-		if (!apply_config_directive(name, value) && !set.console.stderr_notty) {
+		/* Field widths match the line buffer, so no token is ever cut; the old
+		 * %15s handed the tail of a long key over as its value. */
+		int fields = sscanf(buff, "%1023s %1023s", name, value);
+		if (fields < 1) continue;
+		/* -C accepts any path, so report where the line is, never what it holds.
+		 * A lone token is a key without a value, or a line that is no
+		 * directive at all; the old %15s split such a line in two. */
+		if (fields == 1) {
+			if (!set.console.stderr_notty) {
+				fprintf(stderr, "WARNING: Directive without a value on line %d of %s\n", line, display_file);
+			}
+		} else if (!apply_config_directive(name, value) && !set.console.stderr_notty) {
 			fprintf(stderr, "WARNING: Unrecognized directive on line %d of %s\n", line, display_file);
 		}
 	}
@@ -1489,8 +1518,8 @@ static void log_format_error(const char *message) {
 	if (log_stream_available(stream)) fprintf(stream, "%s\n", message);
 }
 
-static bool log_format_message(char *output, const char *message) {
-	char prefix[LOGSIZE];
+static bool log_format_message(char *output, size_t capacity, const char *message) {
+	char prefix[SMALL_BUFSIZE];
 	snprintf(prefix, sizeof(prefix), "SPINE: Poller[%i] PID[%i] PT[%lu] ", set.poller.poller_id, getpid(), (unsigned long int)pthread_self());
 	time_t now = time(NULL);
 	struct tm local;
@@ -1503,10 +1532,10 @@ static bool log_format_message(char *output, const char *message) {
 	}
 	int prefix_length = spine_count_to_int(strlen(prefix));
 	int message_length = spine_count_to_int(strlen(message));
-	int available = LOGSIZE - spine_count_to_int(date_length) - 2;
+	int available = spine_count_to_int(capacity) - spine_count_to_int(date_length) - 2;
 	if (prefix_length > available) prefix_length = available;
 	if (message_length > available - prefix_length) message_length = available - prefix_length;
-	snprintf(output + date_length, LOGSIZE - date_length, "%.*s%.*s", prefix_length, prefix, message_length, message);
+	snprintf(output + date_length, capacity - date_length, "%.*s%.*s", prefix_length, prefix, message_length, message);
 	return date_length != 0;
 }
 
@@ -1548,24 +1577,56 @@ static bool log_to_file(const char *message) {
 	return success;
 }
 
-int spine_log(const char *format, ...) {
+/* Three LOGSIZE records on the stack overran the 128 KiB musl default thread
+ * stack.  Each thread takes its buffers from the heap on its first message
+ * and keeps them until it exits; if that allocation fails the record is
+ * still written, cut to BUFSIZE. */
+typedef struct {
 	char message[LOGSIZE];
+	char formatted[LOGSIZE];
+} log_buffers_t;
+
+static pthread_key_t log_buffers_key;
+static pthread_once_t log_buffers_once = PTHREAD_ONCE_INIT;
+static bool log_buffers_keyed = FALSE;
+
+static void log_buffers_create_key(void) {
+	log_buffers_keyed = pthread_key_create(&log_buffers_key, free) == 0;
+}
+
+static log_buffers_t *log_buffers(void) {
+	log_buffers_t *buffers;
+	if (pthread_once(&log_buffers_once, log_buffers_create_key) != 0 || !log_buffers_keyed) return NULL;
+	buffers = pthread_getspecific(log_buffers_key);
+	if (buffers != NULL) return buffers;
+	buffers = malloc(sizeof(*buffers));
+	if (buffers != NULL && pthread_setspecific(log_buffers_key, buffers) != 0) {
+		free(buffers);
+		buffers = NULL;
+	}
+	return buffers;
+}
+
+int spine_log(const char *format, ...) {
+	char fallback_message[BUFSIZE];
+	char fallback_formatted[BUFSIZE];
+	log_buffers_t *buffers = log_buffers();
+	char *message = buffers != NULL ? buffers->message : fallback_message;
+	char *formatted = buffers != NULL ? buffers->formatted : fallback_formatted;
+	size_t capacity = buffers != NULL ? LOGSIZE : BUFSIZE;
 	va_list args;
 	va_start(args, format);
-	vsnprintf(message, LOGSIZE - 1, format, args);
+	vsnprintf(message, capacity - 1, format, args);
 	va_end(args);
 	spine_sanitize_log_message(message);
 	if (IS_LOGGING_TO_STDOUT()) {
-		char console[LOGSIZE + 20];
-		snprintf(console, sizeof(console), "Total[%3.4f] %s", get_time_as_double() - start_time, message);
-		return puts(console) == EOF ? FALSE : TRUE;
+		return printf("Total[%3.4f] %s\n", get_time_as_double() - start_time, message) < 0 ? FALSE : TRUE;
 	}
-	char formatted[LOGSIZE];
-	bool date_valid = log_format_message(formatted, message);
+	bool date_valid = log_format_message(formatted, capacity, message);
 	log_to_syslog(formatted);
 	if (strchr(formatted, '\n') == NULL) {
 		size_t used = strlen(formatted);
-		snprintf(formatted + used, sizeof(formatted) - used, "\n");
+		snprintf(formatted + used, capacity - used, "\n");
 	}
 	bool success = log_to_file(formatted);
 	if (set.logging.log_level >= POLLER_VERBOSITY_NONE) {

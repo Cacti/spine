@@ -125,7 +125,9 @@ check_PROGRAMS += \
 	tests/unit/test_classify_result \
 	tests/unit/test_util_paths \
 	tests/unit/test_snmpv3_session \
-	tests/unit/test_ping_icmp
+	tests/unit/test_ping_icmp \
+	tests/unit/test_ping_timing \
+	tests/unit/test_log_config
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
@@ -204,6 +206,17 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
 	-Wl,--wrap=ping_host
+
+# Includes ping.c directly so its socket calls can be steered; see the file.
+tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	src/core/keywords.c error.c
+tests_unit_test_ping_timing_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
+tests_unit_test_log_config_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
