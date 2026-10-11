@@ -546,8 +546,8 @@ static void test_socket_retry_can_succeed_after_one_failure(void **state) {
    own owner. That wedged the thread at euid 0 and every other thread behind it.
    The elevation is gone; the retry must still give up rather than hang.
 
-   This runs exactly where the tests above skip: with no privilege, socket()
-   fails with EPERM and the retry loop is what executes. An alarm turns the
+   Inject EPERM independently of the runner's privilege so the retry loop
+   executes under both root and unprivileged coverage runs. An alarm turns the
    deadlock into a named failure instead of a CI job that hangs until the
    runner's own timeout kills it with nothing to read. */
 static sigjmp_buf ping_deadlock_env;
@@ -578,6 +578,7 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 
 	make_host(&host, "127.0.0.1");
 	memset(&ping, 0, sizeof(ping));
+	use_controlled_socket = 1;
 	socket_failures_remaining = 5;
 
 	/* five attempts at 500ms is about 2s; 15 leaves room on a loaded runner */

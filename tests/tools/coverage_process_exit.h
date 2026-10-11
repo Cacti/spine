@@ -7,6 +7,11 @@
  */
 #ifndef SPINE_COVERAGE_PROCESS_EXIT_H
 #define SPINE_COVERAGE_PROCESS_EXIT_H
+/* This header is force-included before common.h. Feature selection must
+ * precede the first system header, just as it does in production builds. */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
 /* Instrumentation only: flush owned subprocess counters before POSIX _exit.
  * Preserve _exit's descriptor and stdio behavior; do not replace it with exit. */
 #include <unistd.h>
