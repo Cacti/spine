@@ -52,7 +52,7 @@ DISTCLEANFILES = spine.1
 check_PROGRAMS = test_spine_regressions
 dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
 TESTS = $(check_PROGRAMS)
-test_spine_regressions_SOURCES = $(spine_SOURCES) tests/test_spine_regressions.c tests/test_spine_contracts.c tests/test_spine_reindex_contracts.c tests/test_spine_snmpv3_contracts.c tests/test_spine_settings_contracts.c tests/test_spine_cli_contracts.c tests/test_spine_stream_contracts.c tests/test_spine_output_contracts.c
+test_spine_regressions_SOURCES = $(spine_SOURCES) tests/test_spine_regressions.c tests/test_spine_contracts.c tests/test_spine_reindex_contracts.c tests/test_spine_snmpv3_contracts.c tests/test_spine_settings_contracts.c tests/test_spine_cli_contracts.c tests/test_spine_stream_contracts.c tests/test_spine_output_contracts.c tests/test_spine_privilege_contracts.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Only spine.c maps its own entry point in the test build.
 test_spine_regressions_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir) -DSPINE_TEST_PROGRAM_ENTRY
@@ -65,9 +65,13 @@ test_spine_faults_SOURCES = $(spine_shared_sources) tests/test_spine_faults.c
 test_spine_faults_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)
 test_spine_faults_LDADD = test_spine_regressions-spine.$(OBJEXT)
 test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
- -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn \
+ -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
+ -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
+ -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
  -Wl,--wrap=malloc -Wl,--wrap=strdup \
- -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create
+ -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create \
+ -Wl,--wrap=getuid -Wl,--wrap=geteuid -Wl,--wrap=getgid -Wl,--wrap=getegid \
+ -Wl,--wrap=setuid -Wl,--wrap=setgid -Wl,--wrap=seteuid -Wl,--wrap=setegid -Wl,--wrap=socket
 endif
 
 
@@ -196,8 +200,8 @@ tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
-TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh
+TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
-EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh
+EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg

@@ -14,6 +14,7 @@
 #include "common.h"
 #include "spine.h"
 #include <stdint.h>
+#include <sys/resource.h>
 
 static void test_keyword_roundtrips(void) {
 	typedef struct { const char *word; int value; } keyword_case_t;
@@ -68,12 +69,12 @@ static void *try_busy_lock(void *argument) {
 }
 
 static void test_lock_contracts(void) {
-	static const int locks[] = {LOCK_SNMP, LOCK_SETEUID, LOCK_GHBN, LOCK_POOL, LOCK_PHP,
+	static const int locks[] = {LOCK_SNMP, LOCK_ICMP, LOCK_GHBN, LOCK_POOL, LOCK_PHP,
 		LOCK_PHP_PROC_0, LOCK_PHP_PROC_1, LOCK_PHP_PROC_2, LOCK_PHP_PROC_3,
 		LOCK_PHP_PROC_4, LOCK_PHP_PROC_5, LOCK_PHP_PROC_6, LOCK_PHP_PROC_7,
 		LOCK_PHP_PROC_8, LOCK_PHP_PROC_9, LOCK_PHP_PROC_10, LOCK_PHP_PROC_11,
 		LOCK_PHP_PROC_12, LOCK_PHP_PROC_13, LOCK_PHP_PROC_14, LOCK_THDET, LOCK_HOST_TIME};
-	static const char *const names[] = {"snmp", "seteuid", "ghbn", "pool", "php",
+	static const char *const names[] = {"snmp", "icmp", "ghbn", "pool", "php",
 		"php_proc_0", "php_proc_1", "php_proc_2", "php_proc_3", "php_proc_4",
 		"php_proc_5", "php_proc_6", "php_proc_7", "php_proc_8", "php_proc_9",
 		"php_proc_10", "php_proc_11", "php_proc_12", "php_proc_13", "php_proc_14", "thdet", "host_time"};
@@ -200,14 +201,13 @@ static void test_fatal_signal_contracts(void) {
 			close(diagnostic[0]);
 			assert(dup2(diagnostic[1], STDERR_FILENO) == STDERR_FILENO);
 			close(diagnostic[1]);
+			/* The default action of several cases dumps core. */
+			struct rlimit no_core = {0, 0};
+			assert(setrlimit(RLIMIT_CORE, &no_core) == 0);
 			assert(signal(cases[i].signal, SIG_DFL) != SIG_ERR);
 			install_spine_signal_handler();
 			assert(raise(cases[i].signal) == 0);
-			assert(set.exit.exit_code == cases[i].signal);
-			struct sigaction restored;
-			assert(sigaction(cases[i].signal, NULL, &restored) == 0);
-			assert(restored.sa_handler == SIG_DFL);
-			uninstall_spine_signal_handler();
+			/* A fatal signal must end the process once it is logged. */
 			_exit(0);
 		}
 		close(diagnostic[1]);
@@ -223,8 +223,12 @@ static void test_fatal_signal_contracts(void) {
 		close(diagnostic[0]);
 		int status;
 		assert(waitpid(child, &status, 0) == child);
-		assert(WIFEXITED(status));
-		assert(WEXITSTATUS(status) == (cases[i].signal == SIGSEGV ? 1 : 0));
+		fprintf(stderr, "fatal signal %d: raw_status=%d\n", cases[i].signal, status);
+		if (cases[i].signal == SIGSEGV) {
+			assert(WIFEXITED(status) && WEXITSTATUS(status) == 1);
+		} else {
+			assert(WIFSIGNALED(status) && WTERMSIG(status) == cases[i].signal);
+		}
 		assert(strstr(message, cases[i].message) != NULL);
 	}
 	/* A broken pipe is an ordinary write failure: it must neither terminate
@@ -256,6 +260,96 @@ void test_additional_contracts(void) {
 	test_multipart_boundaries();
 	test_fatal_signal_contracts();
 	puts("production additional contracts passed");
+}
+
+/* The client library never clears errno, so an EINTR left over from an
+ * unrelated call must not stand in for an interrupted query. Run in a child
+ * so an unbounded retry shows up as the alarm instead of a hung suite. */
+static void assert_stale_interrupt_is_retried(void) {
+	fflush(NULL);
+	pid_t child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		alarm(10);
+		MYSQL administrator;
+		MYSQL victim;
+		db_connect(LOCAL, &administrator);
+		db_connect(LOCAL, &victim);
+		char query[100];
+		snprintf(query, sizeof(query), "KILL CONNECTION %lu", mysql_thread_id(&victim));
+		if (mysql_query(&administrator, query) != 0) _exit(2);
+		errno = EINTR;
+		_exit(db_insert(&victim, LOCAL, "SET @spine_regression_interrupt=1") == TRUE ? 0 : 3);
+	}
+	int status;
+	assert(waitpid(child, &status, 0) == child);
+	fprintf(stderr, "stale EINTR retry: raw_status=%d\n", status);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
+/* Query wrappers report failure to the caller; only startup code may turn a
+ * database error into a process exit. Port 1 refuses the reconnect quickly
+ * and deterministically, which stands in for a server that is down. */
+static void assert_database_failures_return(void) {
+	fflush(NULL);
+	pid_t child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		alarm(30);
+		MYSQL administrator;
+		MYSQL victim;
+		if (!db_connect(LOCAL, &administrator) || !db_connect(LOCAL, &victim)) _exit(2);
+		if (db_query(&administrator, LOCAL, "SELECT spine_regression_missing FROM spine_regression_missing") != NULL) _exit(3);
+		if (db_insert(&administrator, LOCAL, "UPDATE spine_regression_missing SET value=1") != FALSE) _exit(4);
+		char query[100];
+		snprintf(query, sizeof(query), "KILL CONNECTION %lu", mysql_thread_id(&victim));
+		if (mysql_query(&administrator, query) != 0) _exit(5);
+		unsigned int port = set.database.port;
+		set.database.port = 1;
+		double begin = spine_monotonic_time();
+		if (db_query(&victim, LOCAL, "SELECT 1") != NULL) _exit(6);
+		if (db_insert(&victim, LOCAL, "SET @spine_regression_down=1") != FALSE) _exit(7);
+		if (db_reconnect(&victim, LOCAL, 2006, "regression_down_server") != -1) _exit(8);
+		if (spine_monotonic_time() - begin > 20) _exit(9);
+		/* The same handle recovers once the server is reachable again. */
+		set.database.port = port;
+		MYSQL_RES *result = db_query(&victim, LOCAL, "SELECT 789");
+		MYSQL_ROW row = result != NULL ? mysql_fetch_row(result) : NULL;
+		if (row == NULL || row[0] == NULL || strcmp(row[0], "789") != 0) _exit(10);
+		db_free_result(result);
+		_exit(0);
+	}
+	int status;
+	assert(waitpid(child, &status, 0) == child);
+	fprintf(stderr, "database failure propagation: raw_status=%d\n", status);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
+static bool session_mode_contains(MYSQL *mysql, const char *mode) {
+	MYSQL_RES *result = db_query(mysql, LOCAL, "SELECT @@SESSION.sql_mode");
+	assert(result != NULL);
+	MYSQL_ROW row = mysql_fetch_row(result);
+	assert(row != NULL && row[0] != NULL);
+	bool found = strstr(row[0], mode) != NULL;
+	db_free_result(result);
+	return found;
+}
+
+/* Pooled sessions run with Cacti's relaxed sql_mode. A reconnect opens a new
+ * session with the server default, so it must apply the same policy again. */
+static void assert_reconnect_restores_session_mode(MYSQL *mysql) {
+	MYSQL victim;
+	assert(db_connect(LOCAL, &victim));
+	/* The fixture server's default mode is strict; otherwise this proves nothing. */
+	assert(session_mode_contains(&victim, "STRICT_TRANS_TABLES"));
+	char query[100];
+	snprintf(query, sizeof(query), "KILL CONNECTION %lu", mysql_thread_id(&victim));
+	assert(mysql_query(mysql, query) == 0);
+	bool strict = session_mode_contains(&victim, "STRICT_TRANS_TABLES");
+	bool zero_date = session_mode_contains(&victim, "NO_ZERO_DATE");
+	fprintf(stderr, "reconnected session mode: strict=%d no_zero_date=%d\n", strict, zero_date);
+	assert(!strict && !zero_date);
+	db_disconnect(&victim);
 }
 
 void test_additional_database_contracts(MYSQL *mysql) {
@@ -302,4 +396,7 @@ void test_additional_database_contracts(MYSQL *mysql) {
 		}
 	}
 	db_disconnect(&victim);
+	assert_stale_interrupt_is_retried();
+	assert_database_failures_return();
+	assert_reconnect_restores_session_mode(mysql);
 }

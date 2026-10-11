@@ -50,7 +50,7 @@
 	}
 
 DEFINE_SPINE_LOCK(snmp)
-DEFINE_SPINE_LOCK(seteuid)
+DEFINE_SPINE_LOCK(icmp)
 DEFINE_SPINE_LOCK(ghbn)
 DEFINE_SPINE_LOCK(pool)
 DEFINE_SPINE_LOCK(php)
@@ -74,7 +74,7 @@ DEFINE_SPINE_LOCK(host_time)
 
 void init_mutexes() {
 	pthread_once(get_attr(LOCK_SNMP_O),        init_snmp_lock);
-	pthread_once(get_attr(LOCK_SETEUID_O),     init_seteuid_lock);
+	pthread_once(get_attr(LOCK_ICMP_O),        init_icmp_lock);
 	pthread_once(get_attr(LOCK_GHBN_O),        init_ghbn_lock);
 	pthread_once(get_attr(LOCK_POOL_O),        init_pool_lock);
 	pthread_once(get_attr(LOCK_PHP_O),         init_php_lock);
@@ -100,7 +100,7 @@ void init_mutexes() {
 const char *get_name(int lock) {
 	switch (lock) {
 		case LOCK_SNMP:        return "snmp";
-		case LOCK_SETEUID:     return "seteuid";
+		case LOCK_ICMP:        return "icmp";
 		case LOCK_GHBN:        return "ghbn";
 		case LOCK_POOL:        return "pool";
 		case LOCK_PHP:         return "php";
@@ -131,7 +131,7 @@ pthread_cond_t* get_cond(int lock) {
 
 	switch (lock) {
 		case LOCK_SNMP:        ret_val = &snmp_cond;        break;
-		case LOCK_SETEUID:     ret_val = &seteuid_cond;     break;
+		case LOCK_ICMP:        ret_val = &icmp_cond;        break;
 		case LOCK_GHBN:        ret_val = &ghbn_cond;        break;
 		case LOCK_POOL:        ret_val = &pool_cond;        break;
 		case LOCK_PHP:         ret_val = &php_cond;         break;
@@ -165,7 +165,7 @@ pthread_mutex_t* get_lock(int lock) {
 
 	switch (lock) {
 		case LOCK_SNMP:        ret_val = &snmp_lock;        break;
-		case LOCK_SETEUID:     ret_val = &seteuid_lock;     break;
+		case LOCK_ICMP:        ret_val = &icmp_lock;        break;
 		case LOCK_GHBN:        ret_val = &ghbn_lock;        break;
 		case LOCK_POOL:        ret_val = &pool_lock;        break;
 		case LOCK_PHP:         ret_val = &php_lock;         break;
@@ -199,7 +199,7 @@ pthread_once_t* get_attr(int locko) {
 
 	switch (locko) {
 		case LOCK_SNMP_O:        ret_val = &snmp_lock_o;        break;
-		case LOCK_SETEUID_O:     ret_val = &seteuid_lock_o;     break;
+		case LOCK_ICMP_O:        ret_val = &icmp_lock_o;        break;
 		case LOCK_GHBN_O:        ret_val = &ghbn_lock_o;        break;
 		case LOCK_POOL_O:        ret_val = &pool_lock_o;        break;
 		case LOCK_PHP_O:         ret_val = &php_lock_o;         break;

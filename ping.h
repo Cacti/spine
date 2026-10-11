@@ -164,6 +164,8 @@ extern spine_icmp_reply_t spine_icmp_classify_dgram_reply(const unsigned char *r
 extern int ping_host(host_t *host, ping_t *ping);
 extern int ping_snmp(host_t *host, ping_t *ping);
 extern int ping_icmp(const host_t *host, ping_t *ping);
+extern int ping_icmp_open_shared(void);
+extern int ping_icmp_shared_available(void);
 extern int ping_udp(const host_t *host, ping_t *ping);
 extern int ping_tcp(const host_t *host, ping_t *ping);
 extern name_t *get_namebyhost(const char *hostname, name_t *name);

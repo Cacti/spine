@@ -105,6 +105,8 @@ extern double get_time_as_double(void);
 
 /* function to check to see if program has capability to use raw socket with
    out uid = 0 */
+extern void drop_privileges(void);
+extern int privileges_dropped(uid_t uid, gid_t gid);
 extern int hasCaps(void);
 
 /* see if we can do things as root */

@@ -211,21 +211,27 @@ AC_ARG_ENABLE(lcap,
   [ ENABLED_LCAP=no ]
   )
 
+HAVE_LCAP=no
 if test x$ENABLED_LCAP != xno; then
+  AC_MSG_RESULT([yes])
   if test x$FOUND_SYS_CAPABILITY_H != xno; then
-    AC_MSG_RESULT([yes])
     AC_CHECK_LIB(cap, cap_init,
       [ LIBS="-lcap $LIBS"
         AC_DEFINE(HAVE_LCAP, 1, Linux Capabilities)
-        HAVE_LCAP=yes ],
-      [ AC_MSG_RESULT(Cannot find Linux Capabilities library(cap)...)
-        HAVE_LCAP=no ]
-    )
-  else
-    AC_MSG_RESULT([no])
+        HAVE_LCAP=yes ])
+  fi
+  # An explicit request must not quietly produce a build without it.
+  if test x$HAVE_LCAP != xyes; then
+    AC_MSG_ERROR([--enable-lcap was given but libcap (sys/capability.h and -lcap) was not found])
   fi
 else
   AC_MSG_RESULT([no])
+  if test x$FOUND_SYS_CAPABILITY_H != xno; then
+    AC_MSG_NOTICE([libcap headers were found but are not used; pass --enable-lcap to use them])
+  else
+    AC_MSG_NOTICE([libcap was not found; building without Linux capabilities support])
+  fi
+  AC_MSG_NOTICE([without it a setuid root spine opens its raw ICMP sockets at startup, then drops root for good])
 fi
 
 # ****************** MySQL-compatible client checks ***********************

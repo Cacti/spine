@@ -17,7 +17,7 @@ char config_paths[CONFIG_PATHS][BUFSIZE];
 int *debug_devices = NULL;
 
 /* Mock functions needed by util.c */
-void db_connect(int type, MYSQL *mysql) {}
+int db_connect(int type, MYSQL *mysql) { return TRUE; }
 void db_disconnect(MYSQL *mysql) {}
 MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) { return NULL; }
 void db_free_result(MYSQL_RES *result) {}
@@ -27,6 +27,8 @@ int append_hostrange(char *obuf, size_t capacity, const char *colname) { return 
 int parse_logdest(const char *res, int default_dest) { return 0; }
 const char *printable_logdest(int dest) { return ""; }
 void php_close(int php_process) {}
+int ping_icmp_open_shared(void) { return 0; }
+int ping_icmp_shared_available(void) { return 0; }
 
 /* Include the actual source file */
 #include "../../util.c"

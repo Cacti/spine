@@ -21,6 +21,9 @@ extern int spine_program_main(int argc, char **argv);
 extern void test_output_write_contracts(MYSQL *mysql);
 extern void test_additional_contracts(void);
 extern void test_cli_alias_contracts(void);
+extern void test_privilege_contracts(void);
+extern void test_setuid_icmp(void);
+extern void test_setuid_stress(int rounds);
 extern int run_script_stream_fixture(const char *scenario);
 extern void test_script_stream_contracts(void);
 extern void test_additional_database_contracts(MYSQL *mysql);
@@ -492,6 +495,52 @@ static void test_config_directives(void) {
 	assert(read_spine_config(path) == -1);
 }
 
+/* -C accepts any readable path, so a warning about a line that is not a
+ * directive must not reveal what the line holds. */
+static void test_config_unknown_lines_not_echoed(void) {
+	char path[] = "spine-config-echo-XXXXXX";
+	int fd = mkstemp(path);
+	assert(fd >= 0);
+	FILE *file = fdopen(fd, "w");
+	assert(file != NULL);
+	assert(fputs("DB_Host localhost\nroot:$6$saltsecret:19000:0:99999:7:::\n", file) != EOF);
+	assert(fclose(file) == 0);
+	int errors[2];
+	assert(pipe(errors) == 0);
+	fflush(NULL);
+	pid_t child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		assert(close(errors[0]) == 0);
+		assert(dup2(errors[1], STDERR_FILENO) == STDERR_FILENO);
+		assert(close(errors[1]) == 0);
+		memset(&set, 0, sizeof set);
+		set.console.stdout_notty = TRUE;
+		set.console.stderr_notty = FALSE;
+		config_defaults();
+		_exit(read_spine_config(path) == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
+	assert(close(errors[1]) == 0);
+	char message[1024];
+	size_t used = 0;
+	for (;;) {
+		ssize_t received = read(errors[0], message + used, sizeof(message) - used - 1);
+		if (received < 0 && errno == EINTR) continue;
+		assert(received >= 0);
+		if (received == 0) break;
+		used += (size_t)received;
+		assert(used < sizeof(message) - 1);
+	}
+	message[used] = '\0';
+	assert(close(errors[0]) == 0);
+	int status;
+	assert(waitpid(child, &status, 0) == child);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
+	assert(unlink(path) == 0);
+	assert(strstr(message, "line 2") != NULL);
+	assert(strstr(message, "root") == NULL && strstr(message, "salt") == NULL);
+}
+
 static void test_config_structure_bindings(void) {
 	config_t previous = set;
 	memset(&set, 0, sizeof set);
@@ -916,6 +965,109 @@ static void test_php_partial_response_timeout(void) {
 	close(pipes[1]);
 }
 
+/* Script server arguments can carry SNMP communities and v3 passphrases, so
+ * no failure line may repeat the command arguments, at any verbosity.
+ * Drives the timeout, partial-line and lost-server paths of the real code. */
+static void run_php_failure_logs(int level) {
+	static const char secret[] = "regression-community-7d1f";
+	config_t previous_config = set;
+	php_t *previous_processes = php_processes;
+	char path[] = "spine-php-redaction-XXXXXX";
+	int log_fd = mkstemp(path);
+	assert(log_fd >= 0 && close(log_fd) == 0);
+	set.logging.log_destination = LOGDEST_FILE;
+	set.logging.log_level = level;
+	set.logging.logfile_processed = TRUE;
+	set.console.stdout_notty = TRUE;
+	set.console.stderr_notty = TRUE;
+	strncopy(set.logging.path_logfile, path, sizeof(set.logging.path_logfile));
+	set.php.php_servers = 1;
+	set.php.script_timeout = 1;
+	STRNCOPY(set.php.path_php, "/nonexistent-spine-regression-executable");
+	char command[BUFSIZE];
+	spine_snprintf(command, sizeof(command), "ss_regression.php ss_regression 127.0.0.1 %s\r\n", secret);
+	php_t *process = malloc(sizeof(*process));
+	assert(process != NULL);
+	php_processes = process;
+	for (int partial = 0; partial <= 1; partial++) {
+		int pipes[2];
+		assert(pipe(pipes) == 0);
+		if (partial) assert(write(pipes[1], "7", 1) == 1);
+		php_processes_initialize(process, 1);
+		process->php_read_fd = pipes[0];
+		char *result = php_readpipe(0, command);
+		assert(strcmp(result, "U") == 0);
+		free(result);
+		if (process->php_read_fd >= 0) close(process->php_read_fd);
+		assert(close(pipes[1]) == 0);
+	}
+	int requests[2];
+	assert(pipe(requests) == 0 && close(requests[0]) == 0);
+	int responses[2];
+	assert(pipe(responses) == 0);
+	fflush(NULL);
+	pid_t server = fork();
+	assert(server >= 0);
+	if (server == 0) {
+		pause();
+		_exit(0);
+	}
+	php_processes_initialize(process, 1);
+	process->php_state = PHP_READY;
+	process->php_pid = server;
+	process->php_write_fd = requests[1];
+	process->php_read_fd = responses[0];
+	/* The write fails with EPIPE; restarts fail on the missing executable. */
+	char *result = php_cmd(command, 0);
+	assert(strcmp(result, "U") == 0);
+	free(result);
+	assert(close(responses[1]) == 0);
+	int status;
+	assert(waitpid(server, &status, 0) == server);
+	/* The script poller logs the same commands; drive its empty-result and
+	 * missing-file lines with the secret in the arguments. */
+	assert(spine_permits_init(&available_scripts, 1) == 0);
+	host_t host = {0};
+	STRNCOPY(host.hostname, "regression-device");
+	char script_command[BUFSIZE];
+	spine_snprintf(script_command, sizeof(script_command), "/usr/bin/printf '' %s", secret);
+	result = exec_poll(&host, script_command, 1, "DS");
+	assert(strcmp(result, "U") == 0);
+	free(result);
+	spine_snprintf(script_command, sizeof(script_command), "/spine-regression/missing-script %s", secret);
+	result = exec_poll(&host, script_command, 1, "DS");
+	assert(strcmp(result, "U") == 0);
+	free(result);
+	assert(spine_permits_destroy(&available_scripts) == 0);
+	FILE *file = fopen(path, "r");
+	assert(file != NULL);
+	char logged[16384];
+	size_t bytes = fread(logged, 1, sizeof(logged) - 1, file);
+	assert(!ferror(file) && fclose(file) == 0);
+	logged[bytes] = '\0';
+	assert(strstr(logged, "did not respond in time") != NULL);
+	assert(strstr(logged, "partial response") != NULL);
+	assert(strstr(logged, "communications lost") != NULL);
+	assert(strstr(logged, "Empty result [regression-device]: '/usr/bin/printf'") != NULL);
+	assert(strstr(logged, "File '/spine-regression/missing-script' does not exist") != NULL);
+	fprintf(stderr, "php failure logs at level %d contain command arguments: %s\n", level, strstr(logged, secret) != NULL ? "yes" : "no");
+	assert(strstr(logged, secret) == NULL);
+	/* Debug output still names the script, which is enough to find it. */
+	if (level == POLLER_VERBOSITY_DEBUG) {
+		assert(strstr(logged, "ss_regression.php") != NULL);
+		assert(strstr(logged, "The executable is '/usr/bin/printf'") != NULL);
+	}
+	assert(unlink(path) == 0);
+	php_processes = previous_processes;
+	free(process);
+	set = previous_config;
+}
+
+static void test_php_failure_logs_omit_command(void) {
+	run_php_failure_logs(POLLER_VERBOSITY_LOW);
+	run_php_failure_logs(POLLER_VERBOSITY_DEBUG);
+}
+
 static void test_script_execution(void) {
 	assert(spine_permits_init(&available_scripts, 1) == 0);
 	host_t host = {0};
@@ -969,6 +1121,59 @@ static void test_script_execution(void) {
 	assert(spine_permits_available(&available_scripts) == 1);
 	assert(spine_permits_destroy(&available_scripts) == 0);
 	set.php.script_timeout = previous_timeout;
+}
+
+/* A timed-out script is killed with everything it started. The background
+ * sleep inherits the write end of the witness pipe, so EOF on the read end
+ * proves that no descendant outlived the timeout. */
+static void test_script_timeout_kills_descendants(void) {
+	assert(spine_permits_init(&available_scripts, 1) == 0);
+	host_t host = {0};
+	STRNCOPY(host.hostname, "regression-device");
+	int previous_timeout = set.php.script_timeout;
+	set.php.script_timeout = 1;
+	int witness[2];
+	assert(pipe(witness) == 0);
+	char command[] = "/bin/sh -c '/bin/sleep 30 & /bin/sleep 30'";
+	char *result = exec_poll(&host, command, 1, "DS");
+	assert(strcmp(result, "U") == 0);
+	free(result);
+	assert(close(witness[1]) == 0);
+	assert(witness[0] < FD_SETSIZE);
+	fd_set readable;
+	FD_ZERO(&readable);
+	FD_SET(witness[0], &readable);
+	struct timeval timeout = {3, 0};
+	int ready = select(witness[0] + 1, &readable, NULL, NULL, &timeout);
+	char byte;
+	fprintf(stderr, "script timeout descendants: ready=%d\n", ready);
+	assert(ready == 1 && read(witness[0], &byte, 1) == 0);
+	assert(close(witness[0]) == 0);
+	assert(spine_permits_available(&available_scripts) == 1);
+	assert(spine_permits_destroy(&available_scripts) == 0);
+	set.php.script_timeout = previous_timeout;
+}
+
+/* nft_pclose() kills a script that is still running after its output was
+ * read, and the kill must reach the script's descendants as well. */
+static void test_pclose_kills_descendants(void) {
+	int witness[2];
+	assert(pipe(witness) == 0);
+	int fd = nft_popen("printf 7; /bin/sleep 30 & /bin/sleep 30", "r");
+	assert(fd >= 0);
+	char byte;
+	assert(read(fd, &byte, 1) == 1 && byte == '7');
+	assert(nft_pclose(fd) == -1 && errno == ETIMEDOUT);
+	assert(close(witness[1]) == 0);
+	assert(witness[0] < FD_SETSIZE);
+	fd_set readable;
+	FD_ZERO(&readable);
+	FD_SET(witness[0], &readable);
+	struct timeval timeout = {3, 0};
+	int ready = select(witness[0] + 1, &readable, NULL, NULL, &timeout);
+	fprintf(stderr, "pclose descendants: ready=%d\n", ready);
+	assert(ready == 1 && read(witness[0], &byte, 1) == 0);
+	assert(close(witness[0]) == 0);
 }
 
 static void test_php_command(size_t length) {
@@ -1292,7 +1497,7 @@ static void test_icmp_socket_failure(void) {
 		assert(geteuid() == getuid());
 		return;
 	}
-	/* Failed socket retries must release the privilege mutex each time. */
+	/* Failed socket retries must give up without regaining root. */
 	alarm(6);
 	assert(ping_icmp(&host, &ping) == HOST_DOWN);
 	alarm(0);
@@ -1556,6 +1761,8 @@ static void *test_poll_worker(void *argument) {
 	return NULL;
 }
 
+/* A worker without a connection fails its device and returns; the process
+ * keeps polling other devices and still exits with a failure status. */
 static void test_poll_missing_connection(const poller_thread_t *work) {
 	for (int remote = 0; remote <= 1; remote++) {
 		pid_t child = fork();
@@ -1567,13 +1774,23 @@ static void test_poll_missing_connection(const poller_thread_t *work) {
 				set.poller.mode = REMOTE_ONLINE;
 				db_pool_remote = &unavailable;
 			} else db_pool_local[0].free = FALSE;
+			extern poller_thread_t **details;
+			poller_thread_t *device = details[work->device_counter];
+			device->complete = FALSE;
+			device->threads_complete = 0;
 			int errors = 0;
+			set.exit.exit_code = EXIT_SUCCESS;
 			poll_host(work, &errors);
-			_exit(0);
+			if (!device->poll_failed || device->complete || device->threads_complete != 1) _exit(3);
+			/* The local slot borrowed for a remote poll goes back to the pool. */
+			if (remote && !db_pool_local[0].free) _exit(4);
+			/* The failure still reaches the process exit status. */
+			_exit(set.exit.exit_code == EXIT_FAILURE ? 0 : 5);
 		}
 		int status;
 		assert(waitpid(child, &status, 0) == child);
-		assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_FAILURE);
+		fprintf(stderr, "missing connection: remote=%d raw_status=%d\n", remote, status);
+		assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 	}
 }
 
@@ -1637,6 +1854,28 @@ static void test_reindex_pipeline(MYSQL *mysql, test_poll_work_t *work) {
 	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_command"));
 }
 
+/* A reindex that could not be queued must leave the stored assertion alone;
+ * advancing it would hide the change from every later poll. Hiding the
+ * poller_command table makes the server itself reject the queue write. */
+static void test_reindex_queue_failure(MYSQL *mysql, test_poll_work_t *work) {
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_command"));
+	assert(db_insert(mysql, LOCAL, "INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES (43,7,1,'=','122','/usr/bin/printf 123'),(43,8,1,'>','122','/usr/bin/printf 123')"));
+	assert(db_insert(mysql, LOCAL, "RENAME TABLE poller_command TO poller_command_regression_hidden"));
+	work->thread.complete = FALSE;
+	work->thread.threads_complete = 0;
+	work->errors = 0;
+	pthread_t worker;
+	assert(pthread_create(&worker, NULL, test_poll_worker, work) == 0);
+	assert(pthread_join(worker, NULL) == 0);
+	assert(db_insert(mysql, LOCAL, "RENAME TABLE poller_command_regression_hidden TO poller_command"));
+	long long kept = (long long)database_count(mysql, "SELECT COUNT(*) FROM poller_reindex WHERE (data_query_id=7 AND assert_value='122') OR (data_query_id=8 AND assert_value='122')");
+	fprintf(stderr, "reindex queue failure: assertions kept=%lld\n", kept);
+	assert(kept == 2);
+	assert(work->thread.threads_complete == 1);
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
+}
+
 static void test_reindex_query_shortcut(MYSQL *mysql, test_poll_work_t *work) {
 	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
 	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_command"));
@@ -1691,6 +1930,51 @@ static void test_profile_schedule_completion(MYSQL *mysql, test_poll_work_t *agg
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE local_data_id=603") == 0);
 	assert(database_count(mysql, "SELECT COUNT(*) FROM poller_item WHERE host_id=43 AND ((local_data_id IN (601,602) AND rrd_next_step=295) OR (local_data_id=603 AND rrd_next_step=95))") == 3);
 	assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);
+	*aggregate = original;
+	set = previous;
+}
+
+/* A real, non-retryable SQL error inside a worker fails that device and the
+ * worker returns: the schedule is not advanced, nothing is written, and the
+ * connection goes back to the pool for the next device. The item query names
+ * a column the fixture schema lacks, so MariaDB itself rejects it. */
+static void test_poll_database_failure(MYSQL *mysql, test_poll_work_t *aggregate) {
+	config_t previous = set;
+	test_poll_work_t original = *aggregate;
+	assert(database_count(mysql, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='poller_item' AND COLUMN_NAME='output_regex'") == 0);
+	set.poller.active_profiles = 2;
+	set.poller.poller_interval = 5;
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_item WHERE host_id=43 AND local_data_id NOT IN (601,602)"));
+	for (int failing = 1; failing >= 0; failing--) {
+		set.hosts.has_output_regex = failing;
+		assert(db_insert(mysql, LOCAL, "UPDATE poller_item SET rrd_step=300,rrd_next_step=0 WHERE host_id=43"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output_boost"));
+		aggregate->thread.host_thread = 1;
+		aggregate->thread.host_threads = 1;
+		aggregate->thread.host_data_ids = 0;
+		aggregate->thread.complete = FALSE;
+		aggregate->thread.threads_complete = 0;
+		aggregate->thread.output_failed = FALSE;
+		aggregate->thread.poll_failed = FALSE;
+		set.exit.exit_code = EXIT_SUCCESS;
+		pthread_t worker;
+		assert(pthread_create(&worker, NULL, test_poll_worker, aggregate) == 0);
+		assert(pthread_join(worker, NULL) == 0);
+		assert(aggregate->thread.threads_complete == 1);
+		assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);
+		if (failing) {
+			assert(aggregate->thread.poll_failed && !aggregate->thread.complete);
+			assert(set.exit.exit_code == EXIT_FAILURE);
+			assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output") == 0);
+			assert(database_count(mysql, "SELECT COUNT(*) FROM poller_item WHERE host_id=43 AND rrd_next_step=0") == 2);
+		} else {
+			assert(!aggregate->thread.poll_failed && aggregate->thread.complete);
+			assert(set.exit.exit_code == EXIT_SUCCESS);
+			assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE (local_data_id=601 AND output='123') OR (local_data_id=602 AND output='U')") == 2);
+			assert(database_count(mysql, "SELECT COUNT(*) FROM poller_item WHERE host_id=43 AND rrd_next_step=295") == 2);
+		}
+	}
 	*aggregate = original;
 	set = previous;
 }
@@ -1843,7 +2127,9 @@ static void test_poll_pipeline(MYSQL *mysql) {
 		if (host_id == 43) {
 			test_reindex_pipeline(mysql, work);
 			test_reindex_query_shortcut(mysql, work);
+			test_reindex_queue_failure(mysql, work);
 			test_profile_schedule_completion(mysql, work);
+			test_poll_database_failure(mysql, work);
 		}
 		/* End this fixture binding before the next host or caller runs. */
 		details = previous_details;
@@ -2445,6 +2731,19 @@ int main(int argc, char **argv) {
 		puts("production ICMP loopback regression passed");
 		return 0;
 	}
+	if (argc == 2 && strcmp(argv[1], "--privilege-drop") == 0) {
+		test_privilege_contracts();
+		return 0;
+	}
+	if (argc == 3 && strcmp(argv[1], "--setuid-stress") == 0) {
+		test_setuid_stress(atoi(argv[2]));
+		return 0;
+	}
+	if (argc == 2 && strcmp(argv[1], "--setuid-icmp") == 0) {
+		test_setuid_icmp();
+		puts("production setuid ICMP regression passed");
+		return 0;
+	}
 	if (argc == 2 && strcmp(argv[1], "--icmp-no-capability") == 0) {
 		init_mutexes();
 		test_icmp_socket_failure();
@@ -2484,6 +2783,7 @@ int main(int argc, char **argv) {
 	test_log_sanitization();
 	test_log_append_and_failures();
 	test_config_directives();
+	test_config_unknown_lines_not_echoed();
 	test_config_structure_bindings();
 	test_date_formats();
 	test_device_logging();
@@ -2510,12 +2810,16 @@ int main(int argc, char **argv) {
 	test_php_command(4);
 	test_php_command(BUFSIZE - 3);
 	test_invalid_php_commands();
+	test_php_failure_logs_omit_command();
 	test_php_startup(argv[0]);
 	test_php_owned_shutdown();
 	test_host_status_transitions();
 	test_script_execution();
+	test_script_timeout_kills_descendants();
+	test_pclose_kills_descendants();
 	test_script_stream_contracts();
 	test_cli_alias_contracts();
+	test_privilege_contracts();
 	test_error_id_buffer_boundaries();
 	test_additional_contracts();
 	puts("production regression tests passed");
