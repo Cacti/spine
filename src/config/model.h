@@ -16,6 +16,8 @@
 #ifndef SPINE_CONFIG_MODEL_H
 #define SPINE_CONFIG_MODEL_H
 
+#include <stdbool.h>
+
 #include <stddef.h>
 #include "internal/constants.h"
 
@@ -98,6 +100,7 @@ typedef struct {
 	int spine_log_level;
 	int log_datetime_separator;
 	int log_datetime_format;
+	bool json_logs;
 } spine_logging_config_t;
 
 /* Availability configuration and runtime state. */

@@ -176,3 +176,18 @@ fixtures. [Platform requirements](docs/platforms.md) list the compiler and
 library dependencies. Runtime contracts exercise availability, retries, script
 framing, result persistence, worker failures and shutdown. Portable checked
 buffer helpers use the existing C/POSIX interfaces without Annex K.
+
+### Structured logging
+
+Set `Log_Format json` in `spine.conf` to emit one JSON record per log message.
+Text remains the default. Records contain a UTC timestamp, severity, and the
+message, retaining device identifiers in the message without guessing structured
+fields from ambiguous text. File, console, and syslog destinations retain their
+existing routing. Startup banners and fatal diagnostics outside the logging
+API remain operational diagnostics.
+
+The fixed record encoder escapes quotes, backslashes, and controls, preserves
+valid UTF-8, and rejects malformed UTF-8 with a structured error record. An
+allocation or formatting failure also emits a structured error and returns
+failure to the caller. It does not add a JSON parser or a build dependency; the
+legacy capabilities-string contract remains separate from log formatting.
