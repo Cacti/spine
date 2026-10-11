@@ -181,6 +181,7 @@ static void *cancellable_worker(void *argument) {
 	pthread_cond_broadcast(&gate->condition);
 	pthread_mutex_unlock(&gate->mutex);
 	for (;;) usleep(1000);
+	return NULL;
 }
 
 static void test_exit_and_cancellation_are_joined(void **state) {
