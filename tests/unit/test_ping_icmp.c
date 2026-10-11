@@ -49,6 +49,10 @@ static int freeaddrinfo_calls;
 static int controlled_reply;
 static uint16_t sent_icmp_id;
 static uint16_t sent_icmp_seq;
+#ifdef SPINE_HAVE_ICMPV6
+static int controlled_reply_v6;
+static size_t reply_v6_count;
+#endif
 
 static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
@@ -113,8 +117,17 @@ static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
 	if (!controlled_reply) {
 		return sendto(fd, buffer, length, flags, address, address_len);
 	}
-	sent_icmp_id = request->icmp_id;
-	sent_icmp_seq = request->icmp_seq;
+#ifdef SPINE_HAVE_ICMPV6
+	if (controlled_reply_v6) {
+		const struct icmp6_hdr *request6 = buffer;
+		sent_icmp_id = request6->icmp6_id;
+		sent_icmp_seq = request6->icmp6_seq;
+	} else
+#endif
+	{
+		sent_icmp_id = request->icmp_id;
+		sent_icmp_seq = request->icmp_seq;
+	}
 	return (ssize_t) length;
 }
 
@@ -137,6 +150,35 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 	if (!controlled_reply) {
 		return recvfrom(fd, buffer, length, flags, address, address_len);
 	}
+#ifdef SPINE_HAVE_ICMPV6
+	if (controlled_reply_v6) {
+		const char payload[] = "cacti-monitoring-system";
+		struct icmp6_hdr *reply6 = buffer;
+		struct sockaddr_in6 *source6 = (struct sockaddr_in6 *) address;
+		size_t response_length = sizeof(*reply6) + sizeof(payload) - 1;
+
+		assert_true(length >= response_length);
+		assert_non_null(address);
+		assert_non_null(address_len);
+		assert_true(*address_len >= sizeof(*source6));
+		assert_true(reply_v6_count <= sizeof(source6->sin6_addr.s6_addr));
+		memset(buffer, 0, response_length);
+		reply6->icmp6_type = ICMP6_ECHO_REPLY;
+		reply6->icmp6_id = controlled_socket_type == SOCK_DGRAM ? sent_icmp_id ^ htons(0x100) : sent_icmp_id;
+		reply6->icmp6_seq = sent_icmp_seq;
+		memcpy((unsigned char *) buffer + sizeof(*reply6), payload, sizeof(payload) - 1);
+		memset(source6, 0, sizeof(*source6));
+		source6->sin6_family = AF_INET6;
+		source6->sin6_addr = in6addr_loopback;
+		/* Queue one wrong source for every address octet, then the real peer. */
+		if (reply_v6_count < sizeof(source6->sin6_addr.s6_addr)) {
+			source6->sin6_addr.s6_addr[reply_v6_count] ^= 0x80;
+		}
+		reply_v6_count++;
+		*address_len = sizeof(*source6);
+		return (ssize_t) response_length;
+	}
+#endif
 	assert_true(length >= reply_length);
 	memset(buffer, 0, reply_length);
 	if (ip_length != 0) {
@@ -242,6 +284,10 @@ static int ping_reset(void **state) {
 	controlled_reply = 0;
 	sent_icmp_id = 0;
 	sent_icmp_seq = 0;
+#ifdef SPINE_HAVE_ICMPV6
+	controlled_reply_v6 = 0;
+	reply_v6_count = 0;
+#endif
 	return 0;
 }
 
@@ -461,6 +507,40 @@ static void test_socket_retry_does_not_deadlock_on_seteuid(void **state) {
 
 }
 
+#ifdef SPINE_HAVE_ICMPV6
+static void check_ipv6_peer_matching(int socket_type) {
+	host_t host;
+	ping_t ping;
+
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	socket_failures_remaining = socket_type == SOCK_RAW ? 1 : 0;
+	set.icmp_uses_caps = TRUE;
+	track_packet = 1;
+	packet_size = sizeof(struct icmp6_hdr) + strlen("cacti-monitoring-system");
+	make_host(&host, "::1");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+	assert_int_equal(controlled_socket_type, socket_type);
+	assert_int_equal(reply_v6_count, sizeof(in6addr_loopback.s6_addr) + 1);
+	assert_string_equal(ping.ping_response, "ICMPv6: Device is Alive");
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_ipv6_datagram_rejects_every_wrong_source_octet(void **state) {
+	(void) state;
+	check_ipv6_peer_matching(SOCK_DGRAM);
+}
+
+static void test_ipv6_raw_rejects_every_wrong_source_octet(void **state) {
+	(void) state;
+	check_ipv6_peer_matching(SOCK_RAW);
+}
+#endif
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_fd_setsize_guard_releases_the_packet, ping_reset, ping_teardown),
@@ -472,6 +552,10 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_cached_capability_path_releases_resources, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_can_succeed_after_one_failure, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_socket_retry_does_not_deadlock_on_seteuid, ping_reset, ping_teardown),
+#ifdef SPINE_HAVE_ICMPV6
+		cmocka_unit_test_setup_teardown(test_ipv6_datagram_rejects_every_wrong_source_octet, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_raw_rejects_every_wrong_source_octet, ping_reset, ping_teardown),
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
