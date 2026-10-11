@@ -2,7 +2,7 @@ name: Integration
 
 on:
   pull_request:
-    branches: [develop, 'refactor/c17-series-*']
+    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening']
     paths:
       - '**.c'
       - '**.h'
