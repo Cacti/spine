@@ -61,6 +61,8 @@ static int recvfrom_eintr_once;
 static int controlled_reply_v6;
 static int socket_cloexec_einval;
 static int fcntl_fails;
+static size_t reply_v6_count;
+static int check_wrong_peer;
 
 static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
@@ -135,8 +137,17 @@ static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
 	if (!controlled_reply) {
 		return sendto(fd, buffer, length, flags, address, address_len);
 	}
-	sent_icmp_id = request->icmp_id;
-	sent_icmp_seq = request->icmp_seq;
+#ifdef SPINE_HAVE_ICMPV6
+	if (controlled_reply_v6) {
+		const struct icmp6_hdr *request6 = buffer;
+		sent_icmp_id = request6->icmp6_id;
+		sent_icmp_seq = request6->icmp6_seq;
+	} else
+#endif
+	{
+		sent_icmp_id = request->icmp_id;
+		sent_icmp_seq = request->icmp_seq;
+	}
 	return (ssize_t) length;
 }
 
@@ -165,26 +176,35 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 		errno = EINTR;
 		return -1;
 	}
+#ifdef SPINE_HAVE_ICMPV6
 	if (controlled_reply_v6) {
-		/* ICMPv6 sockets deliver the message without the IPv6 header. */
+		const char payload[] = "cacti-monitoring-system";
 		struct icmp6_hdr *reply6 = buffer;
-		struct sockaddr_in6 *source6;
-		size_t length6 = sizeof(*reply6) + sizeof(icmp6_payload) - 1;
-		assert_true(length >= length6);
-		memset(buffer, 0, length6);
+		struct sockaddr_in6 *source6 = (struct sockaddr_in6 *) address;
+		size_t response_length = sizeof(*reply6) + sizeof(payload) - 1;
+
+		assert_true(length >= response_length);
+		assert_non_null(address);
+		assert_non_null(address_len);
+		assert_true(*address_len >= sizeof(*source6));
+		assert_true(reply_v6_count <= sizeof(source6->sin6_addr.s6_addr));
+		memset(buffer, 0, response_length);
 		reply6->icmp6_type = ICMP6_ECHO_REPLY;
-		reply6->icmp6_id = sent_icmp_id;
+		reply6->icmp6_id = controlled_socket_type == SOCK_DGRAM ? sent_icmp_id ^ htons(0x100) : sent_icmp_id;
 		reply6->icmp6_seq = sent_icmp_seq;
-		memcpy((unsigned char *) buffer + sizeof(*reply6), icmp6_payload, sizeof(icmp6_payload) - 1);
-		if (address != NULL && address_len != NULL && *address_len >= sizeof(*source6)) {
-			source6 = (struct sockaddr_in6 *) address;
-			memset(source6, 0, sizeof(*source6));
-			source6->sin6_family = AF_INET6;
-			source6->sin6_addr = in6addr_loopback;
-			*address_len = sizeof(*source6);
+		memcpy((unsigned char *) buffer + sizeof(*reply6), payload, sizeof(payload) - 1);
+		memset(source6, 0, sizeof(*source6));
+		source6->sin6_family = AF_INET6;
+		source6->sin6_addr = in6addr_loopback;
+		/* Queue one wrong source for every address octet, then the real peer. */
+		if (check_wrong_peer && reply_v6_count < sizeof(source6->sin6_addr.s6_addr)) {
+			source6->sin6_addr.s6_addr[reply_v6_count] ^= 0x80;
 		}
-		return (ssize_t) length6;
+		reply_v6_count++;
+		*address_len = sizeof(*source6);
+		return (ssize_t) response_length;
 	}
+#endif
 	/* A finite queue ends the way a drained non-blocking socket does. */
 	if (reply_queue_len > 0 && reply_queue_pos >= reply_queue_len) {
 		errno = EAGAIN;
@@ -342,6 +362,8 @@ static int ping_reset(void **state) {
 	socket_cloexec_einval = 0;
 	fcntl_fails = 0;
 	icmp_waiters = NULL;
+	reply_v6_count = 0;
+	check_wrong_peer = 0;
 	return 0;
 }
 
@@ -1004,6 +1026,40 @@ static void test_ipv6_datagram_socket_answers(void **state) {
 	assert_int_equal(controlled_socket_cloexec, 1);
 	assert_int_equal(controlled_socket_closed, 1);
 }
+#ifdef SPINE_HAVE_ICMPV6
+static void check_ipv6_peer_matching(int socket_type) {
+	host_t host;
+	ping_t ping;
+
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	check_wrong_peer = 1;
+	socket_failures_remaining = socket_type == SOCK_RAW ? 1 : 0;
+	set.availability.icmp_uses_caps = TRUE;
+	track_packet = 1;
+	packet_size = sizeof(struct icmp6_hdr) + strlen("cacti-monitoring-system");
+	make_host(&host, "::1");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+	assert_int_equal(controlled_socket_type, socket_type);
+	assert_int_equal(reply_v6_count, sizeof(in6addr_loopback.s6_addr) + 1);
+	assert_string_equal(ping.ping_response, "ICMPv6: Device is Alive");
+	assert_int_equal(packet_released, 1);
+	assert_int_equal(controlled_socket_closed, 1);
+}
+
+static void test_ipv6_datagram_rejects_every_wrong_source_octet(void **state) {
+	(void) state;
+	check_ipv6_peer_matching(SOCK_DGRAM);
+}
+
+static void test_ipv6_raw_rejects_every_wrong_source_octet(void **state) {
+	(void) state;
+	check_ipv6_peer_matching(SOCK_RAW);
+}
+#endif
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
@@ -1033,6 +1089,10 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_ipv6_shared_socket_answers, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_shared_socket_timeout, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_datagram_socket_answers, ping_reset, ping_teardown),
+#ifdef SPINE_HAVE_ICMPV6
+		cmocka_unit_test_setup_teardown(test_ipv6_datagram_rejects_every_wrong_source_octet, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_raw_rejects_every_wrong_source_octet, ping_reset, ping_teardown),
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
