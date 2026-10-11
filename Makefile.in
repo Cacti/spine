@@ -1394,7 +1394,10 @@ EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
 	docs/benchmarks/results/2026-10-11-runtime-ownership/dependencies.txt \
 	docs/benchmarks/results/2026-10-11-runtime-ownership/metadata.json \
 	docs/benchmarks/results/2026-10-11-runtime-ownership/revisions.txt \
-	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json
+	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json \
+	docs/adr/0004-formatting-and-json-dependencies.md \
+	docs/operations/database-tls.md \
+	docs/operations/issue-boundaries.md
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src \
 	-I$(top_srcdir)/vendor/uthash -I$(top_builddir)
 

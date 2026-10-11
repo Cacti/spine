@@ -406,3 +406,7 @@ EXTRA_DIST += docs/benchmarks/results/2026-10-11-recovered-runtime/README.md \
 	docs/benchmarks/results/2026-10-11-runtime-ownership/metadata.json \
 	docs/benchmarks/results/2026-10-11-runtime-ownership/revisions.txt \
 	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json
+
+EXTRA_DIST += docs/adr/0004-formatting-and-json-dependencies.md \
+	docs/operations/database-tls.md \
+	docs/operations/issue-boundaries.md
