@@ -439,19 +439,19 @@ void *snmp_host_init(const snmp_connection_t *options) {
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
 	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
-	session.securityEngineID = NULL;
+	session.securityEngineID    = 0;
 	session.securityEngineIDLen = 0;
 
-	session.securityName = NULL;
+	session.securityName    = 0;
 	session.securityNameLen = 0;
 
-	session.contextEngineID = NULL;
+	session.contextEngineID    = 0;
 	session.contextEngineIDLen = 0;
 
-	session.contextName = NULL;
+	session.contextName    = 0;
 	session.contextNameLen = 0;
 
-	session.contextEngineID = NULL;
+	session.contextEngineID    = 0;
 	session.contextEngineIDLen = 0;
 
 	/* verify snmp version is accurate */
@@ -910,7 +910,7 @@ void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t obj
 	(void)objid;
 	(void)objidlen;
 	if (obuf == NULL || buf_len == 0) return;
-	u_char *buf = calloc(buf_len, sizeof(*buf));
+	u_char *buf = calloc(buf_len, 1);
 	if (buf == NULL) {
 		snprintf(obuf, buf_len, "%s", "U");
 		return;

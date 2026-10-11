@@ -87,8 +87,6 @@ EXTRA_DIST = spine.1 spine.conf.dist \
 	tests/integration/test_concurrency.sh \
 	tests/integration/test_network_faults.sh
 
-EXTRA_DIST += tests/integration/test_memory_soak.sh
-
 EXTRA_DIST += tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh tests/tools/coverage_process_exit.h \
  tests/tools/verify_coverage.sh tests/tools/test_coverage_verifier.sh
 .PHONY: coverage-source-list coverage-test-source-list
@@ -134,8 +132,8 @@ check_PROGRAMS += \
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
 # pipe, spawn, command, response, shutdown and reap paths.
-noinst_PROGRAMS = tests/support/php_test_server
-tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
+noinst_PROGRAMS = tests/unit/php_test_server
+tests_unit_php_test_server_SOURCES = tests/unit/php_test_server.c
 
 if HAVE_LD_WRAP
 check_PROGRAMS += tests/unit/test_php_runtime tests/unit/test_poll_host
@@ -154,9 +152,9 @@ tests_unit_test_safety_fixes_SOURCES = tests/unit/test_safety_fixes.c
 tests_unit_test_safety_fixes_LDADD   = $(CMOCKA_LIBS)
 
 # test_linked exercises the shipped objects rather than a copy of the logic.
-# Everything except spine.c is linked as built; tests/support/spine_runtime.c supplies the
+# Everything except spine.c is linked as built; tests/fuzz/stubs.c supplies the
 # globals that spine.c would define.
-tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/support/spine_runtime.c \
+tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
@@ -176,7 +174,7 @@ tests_unit_test_linked_LDFLAGS = -Wl,--wrap=waitpid
 tests_unit_test_linked_CPPFLAGS += -DSPINE_TEST_WRAP_WAITPID
 endif
 
-tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c tests/support/spine_runtime.c \
+tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
@@ -185,19 +183,19 @@ tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \
+tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
 	sql.c util.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/support/spine_runtime.c \
+tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
 	src/core/keywords.c error.c
 tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 # poll_host() against an in-memory database and SNMP agent: the wrapped
 # calls are the ones poller.o makes into sql.o, snmp.o, ping.o and libmysql.
-tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/support/spine_runtime.c \
+tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_poll_host_LDADD = $(CMOCKA_LIBS) $(LIBS)
@@ -210,17 +208,17 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=ping_host
 
 # Includes ping.c directly so its socket calls can be steered; see the file.
-tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/support/spine_runtime.c \
+tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
 	src/core/keywords.c error.c
 tests_unit_test_ping_timing_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/support/spine_runtime.c \
+tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_log_config_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
-tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
+tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
@@ -229,21 +227,14 @@ tests_unit_test_php_runtime_LDFLAGS = \
 	-Wl,--wrap=pthread_sigmask -Wl,--wrap=write \
 	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
-	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/support/php_test_server"' \
+	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/unit/php_test_server"' \
 	-DSPINE_PHP_RUNTIME_TESTING
-tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT)
+tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
 TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
 EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
-
-EXTRA_DIST += tests/fixtures/c17_develop_behavior_baseline.json
-
-EXTRA_DIST += scripts/debug.sh scripts/package.sh
-
-TESTS += tests/regression/test_helper_scripts.sh
-EXTRA_DIST += tests/regression/test_helper_scripts.sh
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg

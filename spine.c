@@ -112,7 +112,7 @@ double start_time;
 double total_time;
 
 config_t set;
-php_t *php_processes = NULL;
+php_t	*php_processes = 0;
 char	config_paths[CONFIG_PATHS][BUFSIZE];
 int     *debug_devices;
 
@@ -767,7 +767,7 @@ static void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 
 		if (current_thread == 1) {
 			/* populate the thread structure */
-			if (!(poller_details = malloc(sizeof(*poller_details)))) {
+			if (!(poller_details = (poller_thread_t *)malloc(sizeof(poller_thread_t)))) {
 				die("ERROR: Fatal malloc error: spine.c poller_details!");
 			}
 
@@ -821,19 +821,19 @@ static void prepare_worker_storage(MYSQL_RES *result, int *rows,
 	}
 
 	if (num_rows > 0) {
-		if (!(threads = malloc(num_rows * sizeof(*threads)))) {
+		if (!(threads = (pthread_t *)malloc(num_rows * sizeof(pthread_t)))) {
 			die("ERROR: Fatal malloc error: spine.c threads!");
 		}
 
-		if (!(details = (poller_thread_t **) calloc((size_t) num_rows, sizeof(poller_thread_t *)))) {
+		if (!(details = (poller_thread_t **)calloc((size_t)num_rows, sizeof(poller_thread_t*)))) {
 			die("ERROR: Fatal malloc error: spine.c details!");
 		}
 
-		if (!(ids = malloc(num_rows * sizeof(*ids)))) {
+		if (!(ids = (int *)malloc(num_rows * sizeof(int)))) {
 			die("ERROR: Fatal malloc error: spine.c host id's!");
 		}
 
-		if (!(host_time = malloc(SMALL_BUFSIZE))) {
+		if (!(host_time = (char *) malloc(SMALL_BUFSIZE))) {
 			die("ERROR: Fatal malloc error: util.c host_time");
 		}
 
@@ -851,12 +851,12 @@ static void prepare_worker_storage(MYSQL_RES *result, int *rows,
 static double initialize_process_defaults(void) {
 	double begin_time;
 	/* establish php processes and initialize space */
-	php_processes = calloc(MAX_PHP_SERVERS, sizeof(*php_processes));
+	php_processes = (php_t*) calloc(MAX_PHP_SERVERS, sizeof(php_t));
 	if (php_processes == NULL) die("ERROR: Fatal calloc error: spine.c php_processes!");
 	php_processes_initialize(php_processes, MAX_PHP_SERVERS);
 
 	/* create the array of debug devices */
-	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(*debug_devices));
+	debug_devices = calloc(MAX_DEBUG_DEVICES, sizeof(int));
 	if (debug_devices == NULL) die("ERROR: Fatal calloc error: spine.c debug_devices!");
 
 	/* initialize icmp_avail */
@@ -914,7 +914,7 @@ static int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 	if (!db_connect(LOCAL, mysql)) die("FATAL: Unable to connect to the local database");
 
 	/* setup local connection pool for hosts */
-	db_pool_local = calloc(set.poller.threads, sizeof(*db_pool_local));
+	db_pool_local = (pool_t *) calloc(set.poller.threads, sizeof(pool_t));
 	if (db_pool_local == NULL) die("ERROR: Fatal calloc error: spine.c db_pool_local!");
 	db_create_connection_pool(LOCAL);
 
@@ -923,7 +923,7 @@ static int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
-		db_pool_remote = calloc(set.poller.threads, sizeof(*db_pool_remote));
+		db_pool_remote = (pool_t *) calloc(set.poller.threads, sizeof(pool_t));
 		if (db_pool_remote == NULL) die("ERROR: Fatal calloc error: spine.c db_pool_remote!");
 		db_create_connection_pool(REMOTE);
 	} else {
