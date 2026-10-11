@@ -77,6 +77,20 @@ void test_database_tls_contracts(void) {
 		configuration->port = trusted;
 #endif
 		configuration->tls_mode = SPINE_TLS_VERIFY_FULL;
+#if HAVE_DECL_MYSQL_OPT_SSL_MODE || (HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT)
+		{
+			MYSQL mysql;
+			configuration->tls_mode = SPINE_TLS_PREFERRED;
+			configuration->tls_min_version = 0;
+			configuration->port = plaintext;
+			assert(db_connect(type, &mysql));
+			assert(mysql_get_ssl_cipher(&mysql) == NULL);
+			db_disconnect(&mysql);
+			configuration->tls_mode = SPINE_TLS_VERIFY_FULL;
+			configuration->tls_min_version = 12;
+			configuration->port = trusted;
+		}
+#endif
 	}
 	puts("production database TLS trust, identity, protocol, cipher and downgrade contracts passed");
 }

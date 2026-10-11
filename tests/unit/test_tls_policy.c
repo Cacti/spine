@@ -10,6 +10,8 @@
 static int calls;
 static int fail_at;
 static unsigned int verification_flags;
+static unsigned char enforcement;
+static unsigned char verification;
 
 int spine_log(const char *format, ...) {
 	(void) format;
@@ -18,8 +20,13 @@ int spine_log(const char *format, ...) {
 
 static int fake_options(MYSQL *mysql, enum mysql_option option, const void *value) {
 	(void) mysql;
-	(void) option;
 	assert_non_null(value);
+#if HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+	if (option == MYSQL_OPT_SSL_ENFORCE) enforcement = *(const unsigned char *) value;
+	if (option == MYSQL_OPT_SSL_VERIFY_SERVER_CERT) verification = *(const unsigned char *) value;
+#else
+	(void) option;
+#endif
 	calls++;
 	return calls == fail_at ? 1 : 0;
 }
@@ -89,10 +96,36 @@ static void test_verification_callbacks_keep_requested_checks(void **state) {
 #endif
 }
 
+static void test_preferred_allows_plaintext_fallback(void **state) {
+	MYSQL mysql = {0};
+	spine_database_config_t configuration = {0};
+	(void) state;
+	configuration.tls_mode = SPINE_TLS_PREFERRED;
+	calls = 0;
+	fail_at = 0;
+	enforcement = verification = 255;
+#if HAVE_DECL_MYSQL_OPT_SSL_MODE
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+#elif HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	assert_int_equal(enforcement, 0);
+	assert_int_equal(verification, 0);
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	memcpy(configuration.ssl_ca, "/fixture/ca.pem", sizeof("/fixture/ca.pem"));
+	if (db_apply_tls_policy(&mysql, &configuration)) {
+		assert_int_equal(enforcement, 1);
+		assert_int_equal(verification, 1);
+	}
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_each_option_failure_stops_policy),
 		cmocka_unit_test(test_verification_callbacks_keep_requested_checks),
+		cmocka_unit_test(test_preferred_allows_plaintext_fallback),
 	};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }

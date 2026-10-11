@@ -71,7 +71,7 @@ bool db_apply_tls_policy(MYSQL *mysql, const spine_database_config_t *configurat
 	}
 #elif HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
 	{
-		unsigned char enforce = 1;
+		unsigned char enforce = mode >= SPINE_TLS_REQUIRED;
 		unsigned char verify = mode != SPINE_TLS_PREFERRED;
 		if (mode == SPINE_TLS_DISABLED) return FALSE;
 		if (mode != SPINE_TLS_PREFERRED) {
