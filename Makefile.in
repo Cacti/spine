@@ -128,7 +128,7 @@ check_PROGRAMS = test_spine_regressions$(EXEEXT) $(am__EXEEXT_1) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_log_config
 
 @HAVE_CMOCKA_TRUE@noinst_PROGRAMS =  \
-@HAVE_CMOCKA_TRUE@	tests/unit/php_test_server$(EXEEXT)
+@HAVE_CMOCKA_TRUE@	tests/support/php_test_server$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__append_3 = tests/unit/test_php_runtime tests/unit/test_poll_host
 @HAVE_LD_WRAP_TRUE@am__append_4 = -DSPINE_TEST_WRAP_WAITPID
 subdir = .
@@ -224,13 +224,13 @@ am_test_spine_regressions_OBJECTS = $(am__objects_4) \
 	tests/test_spine_regressions-test_spine_privilege_contracts.$(OBJEXT)
 test_spine_regressions_OBJECTS = $(am_test_spine_regressions_OBJECTS)
 test_spine_regressions_LDADD = $(LDADD)
-am__tests_unit_php_test_server_SOURCES_DIST =  \
-	tests/unit/php_test_server.c
-@HAVE_CMOCKA_TRUE@am_tests_unit_php_test_server_OBJECTS =  \
-@HAVE_CMOCKA_TRUE@	tests/unit/php_test_server.$(OBJEXT)
-tests_unit_php_test_server_OBJECTS =  \
-	$(am_tests_unit_php_test_server_OBJECTS)
-tests_unit_php_test_server_LDADD = $(LDADD)
+am__tests_support_php_test_server_SOURCES_DIST =  \
+	tests/support/php_test_server.c
+@HAVE_CMOCKA_TRUE@am_tests_support_php_test_server_OBJECTS =  \
+@HAVE_CMOCKA_TRUE@	tests/support/php_test_server.$(OBJEXT)
+tests_support_php_test_server_OBJECTS =  \
+	$(am_tests_support_php_test_server_OBJECTS)
+tests_support_php_test_server_LDADD = $(LDADD)
 am_tests_unit_test_build_fixes_OBJECTS =  \
 	tests/unit/test_build_fixes.$(OBJEXT)
 tests_unit_test_build_fixes_OBJECTS =  \
@@ -239,17 +239,17 @@ am__DEPENDENCIES_1 =
 tests_unit_test_build_fixes_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_tests_unit_test_classify_result_OBJECTS =  \
 	tests/unit/test_classify_result.$(OBJEXT) \
-	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
-	snmp.$(OBJEXT) src/core/locks.$(OBJEXT) poller.$(OBJEXT) \
-	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
-	src/core/keywords.$(OBJEXT) error.$(OBJEXT)
+	tests/support/spine_runtime.$(OBJEXT) sql.$(OBJEXT) \
+	util.$(OBJEXT) snmp.$(OBJEXT) src/core/locks.$(OBJEXT) \
+	poller.$(OBJEXT) nft_popen.$(OBJEXT) php.$(OBJEXT) \
+	ping.$(OBJEXT) src/core/keywords.$(OBJEXT) error.$(OBJEXT)
 tests_unit_test_classify_result_OBJECTS =  \
 	$(am_tests_unit_test_classify_result_OBJECTS)
 tests_unit_test_classify_result_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_linked_OBJECTS =  \
 	tests/unit/test_linked-test_linked.$(OBJEXT) \
-	tests/fuzz/unit_test_linked-stubs.$(OBJEXT) \
+	tests/support/unit_test_linked-spine_runtime.$(OBJEXT) \
 	tests_unit_test_linked-sql.$(OBJEXT) \
 	tests_unit_test_linked-util.$(OBJEXT) \
 	tests_unit_test_linked-snmp.$(OBJEXT) \
@@ -269,17 +269,17 @@ tests_unit_test_linked_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(LDFLAGS) -o $@
 am_tests_unit_test_log_config_OBJECTS =  \
 	tests/unit/test_log_config.$(OBJEXT) \
-	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
-	snmp.$(OBJEXT) src/core/locks.$(OBJEXT) poller.$(OBJEXT) \
-	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
-	src/core/keywords.$(OBJEXT) error.$(OBJEXT)
+	tests/support/spine_runtime.$(OBJEXT) sql.$(OBJEXT) \
+	util.$(OBJEXT) snmp.$(OBJEXT) src/core/locks.$(OBJEXT) \
+	poller.$(OBJEXT) nft_popen.$(OBJEXT) php.$(OBJEXT) \
+	ping.$(OBJEXT) src/core/keywords.$(OBJEXT) error.$(OBJEXT)
 tests_unit_test_log_config_OBJECTS =  \
 	$(am_tests_unit_test_log_config_OBJECTS)
 tests_unit_test_log_config_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_php_runtime_OBJECTS =  \
 	tests/unit/test_php_runtime-test_php_runtime.$(OBJEXT) \
-	tests/fuzz/unit_test_php_runtime-stubs.$(OBJEXT) \
+	tests/support/unit_test_php_runtime-spine_runtime.$(OBJEXT) \
 	tests_unit_test_php_runtime-sql.$(OBJEXT) \
 	tests_unit_test_php_runtime-util.$(OBJEXT) \
 	tests_unit_test_php_runtime-snmp.$(OBJEXT) \
@@ -297,30 +297,31 @@ tests_unit_test_php_runtime_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_CFLAGS) $(CFLAGS) $(tests_unit_test_php_runtime_LDFLAGS) \
 	$(LDFLAGS) -o $@
 am_tests_unit_test_ping_icmp_OBJECTS =  \
-	tests/unit/test_ping_icmp.$(OBJEXT) tests/fuzz/stubs.$(OBJEXT) \
-	sql.$(OBJEXT) util.$(OBJEXT) snmp.$(OBJEXT) \
-	src/core/locks.$(OBJEXT) poller.$(OBJEXT) nft_popen.$(OBJEXT) \
-	php.$(OBJEXT) src/core/keywords.$(OBJEXT) error.$(OBJEXT)
+	tests/unit/test_ping_icmp.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) sql.$(OBJEXT) \
+	util.$(OBJEXT) snmp.$(OBJEXT) src/core/locks.$(OBJEXT) \
+	poller.$(OBJEXT) nft_popen.$(OBJEXT) php.$(OBJEXT) \
+	src/core/keywords.$(OBJEXT) error.$(OBJEXT)
 tests_unit_test_ping_icmp_OBJECTS =  \
 	$(am_tests_unit_test_ping_icmp_OBJECTS)
 tests_unit_test_ping_icmp_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_ping_timing_OBJECTS =  \
 	tests/unit/test_ping_timing.$(OBJEXT) \
-	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
-	snmp.$(OBJEXT) src/core/locks.$(OBJEXT) poller.$(OBJEXT) \
-	nft_popen.$(OBJEXT) php.$(OBJEXT) src/core/keywords.$(OBJEXT) \
-	error.$(OBJEXT)
+	tests/support/spine_runtime.$(OBJEXT) sql.$(OBJEXT) \
+	util.$(OBJEXT) snmp.$(OBJEXT) src/core/locks.$(OBJEXT) \
+	poller.$(OBJEXT) nft_popen.$(OBJEXT) php.$(OBJEXT) \
+	src/core/keywords.$(OBJEXT) error.$(OBJEXT)
 tests_unit_test_ping_timing_OBJECTS =  \
 	$(am_tests_unit_test_ping_timing_OBJECTS)
 tests_unit_test_ping_timing_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_poll_host_OBJECTS =  \
-	tests/unit/test_poll_host.$(OBJEXT) tests/fuzz/stubs.$(OBJEXT) \
-	sql.$(OBJEXT) util.$(OBJEXT) snmp.$(OBJEXT) \
-	src/core/locks.$(OBJEXT) poller.$(OBJEXT) nft_popen.$(OBJEXT) \
-	php.$(OBJEXT) ping.$(OBJEXT) src/core/keywords.$(OBJEXT) \
-	error.$(OBJEXT)
+	tests/unit/test_poll_host.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) sql.$(OBJEXT) \
+	util.$(OBJEXT) snmp.$(OBJEXT) src/core/locks.$(OBJEXT) \
+	poller.$(OBJEXT) nft_popen.$(OBJEXT) php.$(OBJEXT) \
+	ping.$(OBJEXT) src/core/keywords.$(OBJEXT) error.$(OBJEXT)
 tests_unit_test_poll_host_OBJECTS =  \
 	$(am_tests_unit_test_poll_host_OBJECTS)
 tests_unit_test_poll_host_DEPENDENCIES = $(am__DEPENDENCIES_1) \
@@ -336,10 +337,10 @@ tests_unit_test_safety_fixes_OBJECTS =  \
 tests_unit_test_safety_fixes_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_tests_unit_test_snmpv3_session_OBJECTS =  \
 	tests/unit/test_snmpv3_session.$(OBJEXT) \
-	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
-	src/core/locks.$(OBJEXT) poller.$(OBJEXT) nft_popen.$(OBJEXT) \
-	php.$(OBJEXT) ping.$(OBJEXT) src/core/keywords.$(OBJEXT) \
-	error.$(OBJEXT)
+	tests/support/spine_runtime.$(OBJEXT) sql.$(OBJEXT) \
+	util.$(OBJEXT) src/core/locks.$(OBJEXT) poller.$(OBJEXT) \
+	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
+	src/core/keywords.$(OBJEXT) error.$(OBJEXT)
 tests_unit_test_snmpv3_session_OBJECTS =  \
 	$(am_tests_unit_test_snmpv3_session_OBJECTS)
 tests_unit_test_snmpv3_session_DEPENDENCIES = $(am__DEPENDENCIES_1) \
@@ -427,10 +428,10 @@ am__depfiles_remade = ./$(DEPDIR)/error.Po ./$(DEPDIR)/nft_popen.Po \
 	tests/$(DEPDIR)/test_spine_regressions-test_spine_settings_contracts.Po \
 	tests/$(DEPDIR)/test_spine_regressions-test_spine_snmpv3_contracts.Po \
 	tests/$(DEPDIR)/test_spine_regressions-test_spine_stream_contracts.Po \
-	tests/fuzz/$(DEPDIR)/stubs.Po \
-	tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Po \
-	tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Po \
-	tests/unit/$(DEPDIR)/php_test_server.Po \
+	tests/support/$(DEPDIR)/php_test_server.Po \
+	tests/support/$(DEPDIR)/spine_runtime.Po \
+	tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Po \
+	tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po \
 	tests/unit/$(DEPDIR)/test_build_fixes.Po \
 	tests/unit/$(DEPDIR)/test_classify_result.Po \
 	tests/unit/$(DEPDIR)/test_linked-test_linked.Po \
@@ -464,7 +465,7 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 =
 SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(test_spine_regressions_SOURCES) \
-	$(tests_unit_php_test_server_SOURCES) \
+	$(tests_support_php_test_server_SOURCES) \
 	$(tests_unit_test_build_fixes_SOURCES) \
 	$(tests_unit_test_classify_result_SOURCES) \
 	$(tests_unit_test_linked_SOURCES) \
@@ -479,7 +480,7 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_unit_test_util_strings_SOURCES)
 DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(test_spine_regressions_SOURCES) \
-	$(am__tests_unit_php_test_server_SOURCES_DIST) \
+	$(am__tests_support_php_test_server_SOURCES_DIST) \
 	$(tests_unit_test_build_fixes_SOURCES) \
 	$(tests_unit_test_classify_result_SOURCES) \
 	$(tests_unit_test_linked_SOURCES) \
@@ -888,7 +889,8 @@ dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql te
 TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh \
 	tests/integration/test_alloc_failure.sh \
 	tests/regression/test_child_process_safety.sh \
-	tests/regression/test_setuid_privilege_drop.sh
+	tests/regression/test_setuid_privilege_drop.sh \
+	tests/regression/test_helper_scripts.sh
 test_spine_regressions_SOURCES = $(spine_SOURCES) tests/test_spine_regressions.c tests/test_spine_contracts.c tests/test_spine_reindex_contracts.c tests/test_spine_snmpv3_contracts.c tests/test_spine_settings_contracts.c tests/test_spine_cli_contracts.c tests/test_spine_stream_contracts.c tests/test_spine_output_contracts.c tests/test_spine_privilege_contracts.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Only spine.c maps its own entry point in the test build.
@@ -917,6 +919,7 @@ noinst_HEADERS = common.h error.h src/core/keywords.h src/core/locks.h \
 EXTRA_DIST = spine.1 spine.conf.dist tests/README.md \
 	tests/test-harness.sh tests/integration/test_concurrency.sh \
 	tests/integration/test_network_faults.sh \
+	tests/integration/test_memory_soak.sh \
 	tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh \
 	tests/tools/coverage_process_exit.h \
 	tests/tools/verify_coverage.sh \
@@ -925,9 +928,12 @@ EXTRA_DIST = spine.1 spine.conf.dist tests/README.md \
 	tests/integration/test_alloc_failure.sh \
 	tests/regression/test_child_process_safety.sh \
 	tests/regression/test_setuid_privilege_drop.sh \
+	tests/fixtures/c17_develop_behavior_baseline.json \
+	scripts/debug.sh scripts/package.sh \
+	tests/regression/test_helper_scripts.sh \
 	scripts/cppcheck/spine.cfg
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src/core -I$(top_builddir)
-@HAVE_CMOCKA_TRUE@tests_unit_php_test_server_SOURCES = tests/unit/php_test_server.c
+@HAVE_CMOCKA_TRUE@tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
 # the same libraries spine links against.  The others are self-contained.
@@ -939,9 +945,9 @@ tests_unit_test_safety_fixes_SOURCES = tests/unit/test_safety_fixes.c
 tests_unit_test_safety_fixes_LDADD = $(CMOCKA_LIBS)
 
 # test_linked exercises the shipped objects rather than a copy of the logic.
-# Everything except spine.c is linked as built; tests/fuzz/stubs.c supplies the
+# Everything except spine.c is linked as built; tests/support/spine_runtime.c supplies the
 # globals that spine.c would define.
-tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/fuzz/stubs.c \
+tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 
@@ -958,7 +964,7 @@ tests_unit_test_linked_LDADD = $(CMOCKA_LIBS) $(LIBS)
 # needs to find locks.h there.
 tests_unit_test_linked_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_4)
 @HAVE_LD_WRAP_TRUE@tests_unit_test_linked_LDFLAGS = -Wl,--wrap=waitpid
-tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c tests/fuzz/stubs.c \
+tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 
@@ -967,12 +973,12 @@ tests_unit_test_classify_result_LDADD = $(CMOCKA_LIBS) $(LIBS)
 # includes util.c, so it needs the same libraries spine links against
 tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/fuzz/stubs.c \
+tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \
 	sql.c util.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 
 tests_unit_test_snmpv3_session_LDADD = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/fuzz/stubs.c \
+tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
 	src/core/keywords.c error.c
 
@@ -980,7 +986,7 @@ tests_unit_test_ping_icmp_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
 # poll_host() against an in-memory database and SNMP agent: the wrapped
 # calls are the ones poller.o makes into sql.o, snmp.o, ping.o and libmysql.
-tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/fuzz/stubs.c \
+tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 
@@ -995,17 +1001,17 @@ tests_unit_test_poll_host_LDFLAGS = \
 
 
 # Includes ping.c directly so its socket calls can be steered; see the file.
-tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/fuzz/stubs.c \
+tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
 	src/core/keywords.c error.c
 
 tests_unit_test_ping_timing_LDADD = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/fuzz/stubs.c \
+tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 
 tests_unit_test_log_config_LDADD = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
+tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
 
@@ -1016,10 +1022,10 @@ tests_unit_test_php_runtime_LDFLAGS = \
 	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
 
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
-	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/unit/php_test_server"' \
+	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/support/php_test_server"' \
 	-DSPINE_PHP_RUNTIME_TESTING
 
-tests_unit_test_php_runtime_DEPENDENCIES = tests/unit/php_test_server$(EXEEXT)
+tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT)
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
@@ -1198,18 +1204,25 @@ tests/test_spine_regressions-test_spine_privilege_contracts.$(OBJEXT):  \
 test_spine_regressions$(EXEEXT): $(test_spine_regressions_OBJECTS) $(test_spine_regressions_DEPENDENCIES) $(EXTRA_test_spine_regressions_DEPENDENCIES)
 	@rm -f test_spine_regressions$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_spine_regressions_OBJECTS) $(test_spine_regressions_LDADD) $(LIBS)
+tests/support/$(am__dirstamp):
+	@$(MKDIR_P) tests/support
+	@: > tests/support/$(am__dirstamp)
+tests/support/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) tests/support/$(DEPDIR)
+	@: > tests/support/$(DEPDIR)/$(am__dirstamp)
+tests/support/php_test_server.$(OBJEXT):  \
+	tests/support/$(am__dirstamp) \
+	tests/support/$(DEPDIR)/$(am__dirstamp)
+
+tests/support/php_test_server$(EXEEXT): $(tests_support_php_test_server_OBJECTS) $(tests_support_php_test_server_DEPENDENCIES) $(EXTRA_tests_support_php_test_server_DEPENDENCIES) tests/support/$(am__dirstamp)
+	@rm -f tests/support/php_test_server$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_support_php_test_server_OBJECTS) $(tests_support_php_test_server_LDADD) $(LIBS)
 tests/unit/$(am__dirstamp):
 	@$(MKDIR_P) tests/unit
 	@: > tests/unit/$(am__dirstamp)
 tests/unit/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) tests/unit/$(DEPDIR)
 	@: > tests/unit/$(DEPDIR)/$(am__dirstamp)
-tests/unit/php_test_server.$(OBJEXT): tests/unit/$(am__dirstamp) \
-	tests/unit/$(DEPDIR)/$(am__dirstamp)
-
-tests/unit/php_test_server$(EXEEXT): $(tests_unit_php_test_server_OBJECTS) $(tests_unit_php_test_server_DEPENDENCIES) $(EXTRA_tests_unit_php_test_server_DEPENDENCIES) tests/unit/$(am__dirstamp)
-	@rm -f tests/unit/php_test_server$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(tests_unit_php_test_server_OBJECTS) $(tests_unit_php_test_server_LDADD) $(LIBS)
 tests/unit/test_build_fixes.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -1218,14 +1231,8 @@ tests/unit/test_build_fixes$(EXEEXT): $(tests_unit_test_build_fixes_OBJECTS) $(t
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_build_fixes_OBJECTS) $(tests_unit_test_build_fixes_LDADD) $(LIBS)
 tests/unit/test_classify_result.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
-tests/fuzz/$(am__dirstamp):
-	@$(MKDIR_P) tests/fuzz
-	@: > tests/fuzz/$(am__dirstamp)
-tests/fuzz/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) tests/fuzz/$(DEPDIR)
-	@: > tests/fuzz/$(DEPDIR)/$(am__dirstamp)
-tests/fuzz/stubs.$(OBJEXT): tests/fuzz/$(am__dirstamp) \
-	tests/fuzz/$(DEPDIR)/$(am__dirstamp)
+tests/support/spine_runtime.$(OBJEXT): tests/support/$(am__dirstamp) \
+	tests/support/$(DEPDIR)/$(am__dirstamp)
 
 tests/unit/test_classify_result$(EXEEXT): $(tests_unit_test_classify_result_OBJECTS) $(tests_unit_test_classify_result_DEPENDENCIES) $(EXTRA_tests_unit_test_classify_result_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_classify_result$(EXEEXT)
@@ -1233,9 +1240,9 @@ tests/unit/test_classify_result$(EXEEXT): $(tests_unit_test_classify_result_OBJE
 tests/unit/test_linked-test_linked.$(OBJEXT):  \
 	tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
-tests/fuzz/unit_test_linked-stubs.$(OBJEXT):  \
-	tests/fuzz/$(am__dirstamp) \
-	tests/fuzz/$(DEPDIR)/$(am__dirstamp)
+tests/support/unit_test_linked-spine_runtime.$(OBJEXT):  \
+	tests/support/$(am__dirstamp) \
+	tests/support/$(DEPDIR)/$(am__dirstamp)
 src/core/tests_unit_test_linked-locks.$(OBJEXT):  \
 	src/core/$(am__dirstamp) src/core/$(DEPDIR)/$(am__dirstamp)
 src/core/tests_unit_test_linked-keywords.$(OBJEXT):  \
@@ -1253,9 +1260,9 @@ tests/unit/test_log_config$(EXEEXT): $(tests_unit_test_log_config_OBJECTS) $(tes
 tests/unit/test_php_runtime-test_php_runtime.$(OBJEXT):  \
 	tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
-tests/fuzz/unit_test_php_runtime-stubs.$(OBJEXT):  \
-	tests/fuzz/$(am__dirstamp) \
-	tests/fuzz/$(DEPDIR)/$(am__dirstamp)
+tests/support/unit_test_php_runtime-spine_runtime.$(OBJEXT):  \
+	tests/support/$(am__dirstamp) \
+	tests/support/$(DEPDIR)/$(am__dirstamp)
 src/core/tests_unit_test_php_runtime-locks.$(OBJEXT):  \
 	src/core/$(am__dirstamp) src/core/$(DEPDIR)/$(am__dirstamp)
 src/core/tests_unit_test_php_runtime-keywords.$(OBJEXT):  \
@@ -1311,7 +1318,7 @@ mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f src/core/*.$(OBJEXT)
 	-rm -f tests/*.$(OBJEXT)
-	-rm -f tests/fuzz/*.$(OBJEXT)
+	-rm -f tests/support/*.$(OBJEXT)
 	-rm -f tests/unit/*.$(OBJEXT)
 
 distclean-compile:
@@ -1379,10 +1386,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_spine_regressions-test_spine_settings_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_spine_regressions-test_spine_snmpv3_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_spine_regressions-test_spine_stream_contracts.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@tests/fuzz/$(DEPDIR)/stubs.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/php_test_server.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/support/$(DEPDIR)/php_test_server.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/support/$(DEPDIR)/spine_runtime.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_build_fixes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_classify_result.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_linked-test_linked.Po@am__quote@ # am--include-marker
@@ -1874,19 +1881,19 @@ tests/unit/test_linked-test_linked.obj: tests/unit/test_linked.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/unit/test_linked-test_linked.obj `if test -f 'tests/unit/test_linked.c'; then $(CYGPATH_W) 'tests/unit/test_linked.c'; else $(CYGPATH_W) '$(srcdir)/tests/unit/test_linked.c'; fi`
 
-tests/fuzz/unit_test_linked-stubs.o: tests/fuzz/stubs.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/fuzz/unit_test_linked-stubs.o -MD -MP -MF tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Tpo -c -o tests/fuzz/unit_test_linked-stubs.o `test -f 'tests/fuzz/stubs.c' || echo '$(srcdir)/'`tests/fuzz/stubs.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Tpo tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/fuzz/stubs.c' object='tests/fuzz/unit_test_linked-stubs.o' libtool=no @AMDEPBACKSLASH@
+tests/support/unit_test_linked-spine_runtime.o: tests/support/spine_runtime.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/support/unit_test_linked-spine_runtime.o -MD -MP -MF tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Tpo -c -o tests/support/unit_test_linked-spine_runtime.o `test -f 'tests/support/spine_runtime.c' || echo '$(srcdir)/'`tests/support/spine_runtime.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Tpo tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/support/spine_runtime.c' object='tests/support/unit_test_linked-spine_runtime.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/fuzz/unit_test_linked-stubs.o `test -f 'tests/fuzz/stubs.c' || echo '$(srcdir)/'`tests/fuzz/stubs.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/support/unit_test_linked-spine_runtime.o `test -f 'tests/support/spine_runtime.c' || echo '$(srcdir)/'`tests/support/spine_runtime.c
 
-tests/fuzz/unit_test_linked-stubs.obj: tests/fuzz/stubs.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/fuzz/unit_test_linked-stubs.obj -MD -MP -MF tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Tpo -c -o tests/fuzz/unit_test_linked-stubs.obj `if test -f 'tests/fuzz/stubs.c'; then $(CYGPATH_W) 'tests/fuzz/stubs.c'; else $(CYGPATH_W) '$(srcdir)/tests/fuzz/stubs.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Tpo tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/fuzz/stubs.c' object='tests/fuzz/unit_test_linked-stubs.obj' libtool=no @AMDEPBACKSLASH@
+tests/support/unit_test_linked-spine_runtime.obj: tests/support/spine_runtime.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/support/unit_test_linked-spine_runtime.obj -MD -MP -MF tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Tpo -c -o tests/support/unit_test_linked-spine_runtime.obj `if test -f 'tests/support/spine_runtime.c'; then $(CYGPATH_W) 'tests/support/spine_runtime.c'; else $(CYGPATH_W) '$(srcdir)/tests/support/spine_runtime.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Tpo tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/support/spine_runtime.c' object='tests/support/unit_test_linked-spine_runtime.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/fuzz/unit_test_linked-stubs.obj `if test -f 'tests/fuzz/stubs.c'; then $(CYGPATH_W) 'tests/fuzz/stubs.c'; else $(CYGPATH_W) '$(srcdir)/tests/fuzz/stubs.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/support/unit_test_linked-spine_runtime.obj `if test -f 'tests/support/spine_runtime.c'; then $(CYGPATH_W) 'tests/support/spine_runtime.c'; else $(CYGPATH_W) '$(srcdir)/tests/support/spine_runtime.c'; fi`
 
 tests_unit_test_linked-sql.o: sql.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests_unit_test_linked-sql.o -MD -MP -MF $(DEPDIR)/tests_unit_test_linked-sql.Tpo -c -o tests_unit_test_linked-sql.o `test -f 'sql.c' || echo '$(srcdir)/'`sql.c
@@ -2042,19 +2049,19 @@ tests/unit/test_php_runtime-test_php_runtime.obj: tests/unit/test_php_runtime.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/unit/test_php_runtime-test_php_runtime.obj `if test -f 'tests/unit/test_php_runtime.c'; then $(CYGPATH_W) 'tests/unit/test_php_runtime.c'; else $(CYGPATH_W) '$(srcdir)/tests/unit/test_php_runtime.c'; fi`
 
-tests/fuzz/unit_test_php_runtime-stubs.o: tests/fuzz/stubs.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/fuzz/unit_test_php_runtime-stubs.o -MD -MP -MF tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Tpo -c -o tests/fuzz/unit_test_php_runtime-stubs.o `test -f 'tests/fuzz/stubs.c' || echo '$(srcdir)/'`tests/fuzz/stubs.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Tpo tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/fuzz/stubs.c' object='tests/fuzz/unit_test_php_runtime-stubs.o' libtool=no @AMDEPBACKSLASH@
+tests/support/unit_test_php_runtime-spine_runtime.o: tests/support/spine_runtime.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/support/unit_test_php_runtime-spine_runtime.o -MD -MP -MF tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Tpo -c -o tests/support/unit_test_php_runtime-spine_runtime.o `test -f 'tests/support/spine_runtime.c' || echo '$(srcdir)/'`tests/support/spine_runtime.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Tpo tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/support/spine_runtime.c' object='tests/support/unit_test_php_runtime-spine_runtime.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/fuzz/unit_test_php_runtime-stubs.o `test -f 'tests/fuzz/stubs.c' || echo '$(srcdir)/'`tests/fuzz/stubs.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/support/unit_test_php_runtime-spine_runtime.o `test -f 'tests/support/spine_runtime.c' || echo '$(srcdir)/'`tests/support/spine_runtime.c
 
-tests/fuzz/unit_test_php_runtime-stubs.obj: tests/fuzz/stubs.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/fuzz/unit_test_php_runtime-stubs.obj -MD -MP -MF tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Tpo -c -o tests/fuzz/unit_test_php_runtime-stubs.obj `if test -f 'tests/fuzz/stubs.c'; then $(CYGPATH_W) 'tests/fuzz/stubs.c'; else $(CYGPATH_W) '$(srcdir)/tests/fuzz/stubs.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Tpo tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/fuzz/stubs.c' object='tests/fuzz/unit_test_php_runtime-stubs.obj' libtool=no @AMDEPBACKSLASH@
+tests/support/unit_test_php_runtime-spine_runtime.obj: tests/support/spine_runtime.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/support/unit_test_php_runtime-spine_runtime.obj -MD -MP -MF tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Tpo -c -o tests/support/unit_test_php_runtime-spine_runtime.obj `if test -f 'tests/support/spine_runtime.c'; then $(CYGPATH_W) 'tests/support/spine_runtime.c'; else $(CYGPATH_W) '$(srcdir)/tests/support/spine_runtime.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Tpo tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/support/spine_runtime.c' object='tests/support/unit_test_php_runtime-spine_runtime.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/fuzz/unit_test_php_runtime-stubs.obj `if test -f 'tests/fuzz/stubs.c'; then $(CYGPATH_W) 'tests/fuzz/stubs.c'; else $(CYGPATH_W) '$(srcdir)/tests/fuzz/stubs.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/support/unit_test_php_runtime-spine_runtime.obj `if test -f 'tests/support/spine_runtime.c'; then $(CYGPATH_W) 'tests/support/spine_runtime.c'; else $(CYGPATH_W) '$(srcdir)/tests/support/spine_runtime.c'; fi`
 
 tests_unit_test_php_runtime-sql.o: sql.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests_unit_test_php_runtime-sql.o -MD -MP -MF $(DEPDIR)/tests_unit_test_php_runtime-sql.Tpo -c -o tests_unit_test_php_runtime-sql.o `test -f 'sql.c' || echo '$(srcdir)/'`sql.c
@@ -2201,6 +2208,7 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf tests/support/.libs tests/support/_libs
 	-rm -rf tests/unit/.libs tests/unit/_libs
 
 distclean-libtool:
@@ -2796,8 +2804,8 @@ distclean-generic:
 	-rm -f src/core/$(am__dirstamp)
 	-rm -f tests/$(DEPDIR)/$(am__dirstamp)
 	-rm -f tests/$(am__dirstamp)
-	-rm -f tests/fuzz/$(DEPDIR)/$(am__dirstamp)
-	-rm -f tests/fuzz/$(am__dirstamp)
+	-rm -f tests/support/$(DEPDIR)/$(am__dirstamp)
+	-rm -f tests/support/$(am__dirstamp)
 	-rm -f tests/unit/$(DEPDIR)/$(am__dirstamp)
 	-rm -f tests/unit/$(am__dirstamp)
 	-test -z "$(DISTCLEANFILES)" || rm -f $(DISTCLEANFILES)
@@ -2874,10 +2882,10 @@ distclean: distclean-am
 	-rm -f tests/$(DEPDIR)/test_spine_regressions-test_spine_settings_contracts.Po
 	-rm -f tests/$(DEPDIR)/test_spine_regressions-test_spine_snmpv3_contracts.Po
 	-rm -f tests/$(DEPDIR)/test_spine_regressions-test_spine_stream_contracts.Po
-	-rm -f tests/fuzz/$(DEPDIR)/stubs.Po
-	-rm -f tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Po
-	-rm -f tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Po
-	-rm -f tests/unit/$(DEPDIR)/php_test_server.Po
+	-rm -f tests/support/$(DEPDIR)/php_test_server.Po
+	-rm -f tests/support/$(DEPDIR)/spine_runtime.Po
+	-rm -f tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Po
+	-rm -f tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_build_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_classify_result.Po
 	-rm -f tests/unit/$(DEPDIR)/test_linked-test_linked.Po
@@ -3000,10 +3008,10 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/$(DEPDIR)/test_spine_regressions-test_spine_settings_contracts.Po
 	-rm -f tests/$(DEPDIR)/test_spine_regressions-test_spine_snmpv3_contracts.Po
 	-rm -f tests/$(DEPDIR)/test_spine_regressions-test_spine_stream_contracts.Po
-	-rm -f tests/fuzz/$(DEPDIR)/stubs.Po
-	-rm -f tests/fuzz/$(DEPDIR)/unit_test_linked-stubs.Po
-	-rm -f tests/fuzz/$(DEPDIR)/unit_test_php_runtime-stubs.Po
-	-rm -f tests/unit/$(DEPDIR)/php_test_server.Po
+	-rm -f tests/support/$(DEPDIR)/php_test_server.Po
+	-rm -f tests/support/$(DEPDIR)/spine_runtime.Po
+	-rm -f tests/support/$(DEPDIR)/unit_test_linked-spine_runtime.Po
+	-rm -f tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_build_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_classify_result.Po
 	-rm -f tests/unit/$(DEPDIR)/test_linked-test_linked.Po

@@ -10,12 +10,12 @@
 
 spine_permits_t available_threads;
 spine_permits_t available_scripts;
-double      start_time;
-double      total_time;
-config_t    set;
-char        config_paths[CONFIG_PATHS][BUFSIZE];
-int        *debug_devices;
-pool_t     *db_pool_local;
-pool_t     *db_pool_remote;
-php_t      *php_processes;
+double start_time;
+double total_time;
+config_t set;
+char config_paths[CONFIG_PATHS][BUFSIZE];
+int *debug_devices;
+pool_t *db_pool_local;
+pool_t *db_pool_remote;
+php_t *php_processes;
 poller_thread_t **details;

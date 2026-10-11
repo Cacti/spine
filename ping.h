@@ -172,6 +172,6 @@ extern name_t *get_namebyhost(const char *hostname, name_t *name);
 extern void update_host_status(int status, host_t *host, const ping_t *ping, int availability_method);
 extern int init_sockaddr(struct sockaddr_in *name, const char *hostname, int port);
 extern int get_address_type(host_t *host);
-extern unsigned short int get_checksum(void* buf, int len);
+extern unsigned short int get_checksum(const void *buf, int len);
 
 #endif /* SPINE_PING_H */

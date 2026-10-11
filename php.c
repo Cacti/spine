@@ -575,7 +575,7 @@ int php_init(int php_process) {
 	int  php2cacti_pdes[2] = { -1, -1 };
 	pid_t  pid;
 	char poller_id[SMALL_BUFSIZE];
-	char *argv[7];
+	char *argv[7] = {NULL};
 	char arg_q[] = "-q";
 	char arg_spine[] = "spine";
 	char arg_environ_spine[] = "--environ=spine";
@@ -650,7 +650,7 @@ int php_init(int php_process) {
 			argv[1] = arg_q;
 			argv[2] = set.php.path_php_server;
 			argv[3] = arg_spine;
-			snprintf(poller_id, SMALL_BUFSIZE, "%d", set.poller.poller_id);
+			snprintf(poller_id, sizeof(poller_id), "%d", set.poller.poller_id);
 			argv[4] = poller_id;
 			argv[5] = NULL;
 		} else if (set.poller.poller_id > 1) {
@@ -659,7 +659,7 @@ int php_init(int php_process) {
 			argv[2] = set.php.path_php_server;
 			argv[3] = arg_environ_spine;
 
-			snprintf(poller_id, SMALL_BUFSIZE, "--poller=%d", set.poller.poller_id);
+			snprintf(poller_id, sizeof(poller_id), "--poller=%d", set.poller.poller_id);
 			argv[4] = poller_id;
 
 			if (set.poller.mode == REMOTE_ONLINE) {
@@ -674,7 +674,7 @@ int php_init(int php_process) {
 			argv[1] = arg_q;
 			argv[2] = set.php.path_php_server;
 			argv[3] = arg_environ_spine;
-			snprintf(poller_id, SMALL_BUFSIZE, "--poller=%d", set.poller.poller_id);
+			snprintf(poller_id, sizeof(poller_id), "--poller=%d", set.poller.poller_id);
 			argv[4] = poller_id;
 
 			argv[5] = NULL;

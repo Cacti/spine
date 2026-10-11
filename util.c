@@ -328,7 +328,7 @@ static void settings_cache_load(MYSQL *psql, int mode) {
 		return;
 	}
 
-	table = (setting_cache_t *) calloc((size_t) rows, sizeof(setting_cache_t));
+	table = calloc((size_t) rows, sizeof(*table));
 
 	if (table == NULL) {
 		db_free_result(result);
@@ -1983,8 +1983,8 @@ char *add_slashes(const char *string) {
  *
 */
 char *strncopy(char *dst, const char *src, size_t obuf) {
-	assert(dst != 0);
-	assert(src != 0);
+	assert(dst != NULL);
+	assert(src != NULL);
 
 	size_t len;
 
@@ -2036,7 +2036,8 @@ char *rtrim(char *str) {
 
 	end = str + strlen(str);
 
-	while (end-- > str) {
+	while (end > str) {
+		--end;
 		if (!strchr(trim_chars, *end)) return str;
 
 		*end = 0;
