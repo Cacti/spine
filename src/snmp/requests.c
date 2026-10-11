@@ -18,6 +18,28 @@
 #include "snmp/response.h"
 #include <limits.h>
 
+/* USM users and engine state are shared by otherwise independent sessions.
+ * V1/v2c retain the single-session API's parallel requests. A v3 transaction
+ * is exclusive with session construction/cleanup and other v3 transactions.
+ * Disable cancellation while owning the shared lock. */
+static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *request,
+	struct snmp_pdu **response) {
+	int status;
+	int cancellation_state;
+	bool serialized = host->snmp.profile.version == 3;
+
+	if (serialized) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+		thread_mutex_lock(LOCK_SNMP);
+	}
+	status = snmp_sess_synch_response(host->snmp.session, request, response);
+	if (serialized) {
+		thread_mutex_unlock(LOCK_SNMP);
+		pthread_setcancelstate(cancellation_state, NULL);
+	}
+	return status;
+}
+
 typedef struct {
 	struct snmp_pdu *response;
 	int status;
@@ -41,7 +63,7 @@ static snmp_reply_t snmp_request_parsed(host_t *host, const oid *name, size_t le
 	}
 	/* Net-SNMP owns and frees request after the synchronous call, including
 	 * a failed send; the caller owns only the returned response. */
-	reply.status = snmp_sess_synch_response(host->snmp.session, request, &reply.response);
+	reply.status = snmp_synchronized_response(host, request, &reply.response);
 	host->snmp.status = reply.status;
 	return reply;
 }
@@ -451,7 +473,7 @@ void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int 
 	while (request != NULL && attempt < count) {
 		attempt++;
 		struct snmp_pdu *response = NULL;
-		status = snmp_sess_synch_response(host->snmp.session, request, &response);
+		status = snmp_synchronized_response(host, request, &response);
 		request = NULL;
 		host->snmp.status = status;
 		if (status == STAT_SUCCESS) {

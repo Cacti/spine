@@ -368,7 +368,7 @@ static bool snmp_set_security_protocols(struct snmp_session *session, const snmp
 /*! \fn void *snmp_host_init(const snmp_connection_t *options)
  *  \brief initializes an owned Net-SNMP session from borrowed connection inputs.
  */
-void *snmp_host_init(const snmp_connection_t *options) {
+static void *snmp_host_init_unlocked(const snmp_connection_t *options) {
 	if (options->snmp_timeout <= 0) {
 		SPINE_LOG(("SNMP: Device[%i] Invalid nonpositive timeout.", options->host_id));
 		return NULL;
@@ -485,9 +485,7 @@ void *snmp_host_init(const snmp_connection_t *options) {
 	}
 
 	/* open SNMP Session */
-	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		SPINE_LOG_DEVICE(options->host_id, POLLER_VERBOSITY_MEDIUM, ("ERROR: Device[%i] Problem initializing SNMP session '%s'", options->host_id, options->hostname));
@@ -495,6 +493,21 @@ void *snmp_host_init(const snmp_connection_t *options) {
 
 	snmp_host_init_release(&session, Apsz, Xpsz);
 	return sessp;
+}
+
+/* Session construction mutates Net-SNMP global USM state. Keep it exclusive
+ * with authenticated requests, not only with other session opens.
+ * Net-SNMP documents this limitation in docs/README.thread.html. */
+void *snmp_host_init(const snmp_connection_t *options) {
+	void *session;
+	int cancellation_state;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	thread_mutex_lock(LOCK_SNMP);
+	session = snmp_host_init_unlocked(options);
+	thread_mutex_unlock(LOCK_SNMP);
+	pthread_setcancelstate(cancellation_state, NULL);
+	return session;
 }
 
 /*! \fn void snmp_host_cleanup(void *snmp_session)
