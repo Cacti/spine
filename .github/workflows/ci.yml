@@ -173,7 +173,7 @@ jobs:
           # few externally visible helpers are deliberate unit-test seams.
           # cppcheck 2.13 accepts --std=c17 but still analyses as C11.
           cppcheck \
-            --include=config.h \
+            --include=config/config.h \
             --enable=all \
             --std=c11 \
             --error-exitcode=1 \
