@@ -1192,6 +1192,16 @@ EXTRA_DIST = tests/tools/check_nightly_tests.sh \
 	docs/benchmarks/results/2026-10-11-default-logging/cpu-quota.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/README.md \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cycles.csv \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/metadata.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/compiler.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/revisions.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/build-settings.txt \
 	tests/tools/run_script_limits.sh \
 	tests/fixtures/script_resource_probe.c \
 	docs/operations/script-limits.md \

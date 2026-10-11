@@ -86,6 +86,16 @@ EXTRA_DIST += docs/benchmarks/README.md \
 	docs/benchmarks/results/2026-10-11-default-logging/cpu-quota.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/build-settings.txt
+EXTRA_DIST += docs/benchmarks/results/2026-10-11-runtime-ownership/README.md \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cycles.csv \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/metadata.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/compiler.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/revisions.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/build-settings.txt
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
 test_spine_regressions_SOURCES += tests/contracts/test_spine_tls_contracts.c
 test_spine_regressions_SOURCES += tests/contracts/test_spine_script_limits_contracts.c

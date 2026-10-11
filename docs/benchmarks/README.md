@@ -44,6 +44,10 @@ without measurements.
 
 ## Recording results
 
+Checked-in measurements are available for [default text logging](results/2026-10-11-default-logging/README.md)
+and [the complete runtime changes](results/2026-10-11-runtime-ownership/README.md).
+Each record preserves the raw cycles, exact build identities and interpretation.
+
 After a completed workflow run, download its artifact and add a directory under
 `docs/benchmarks/results/` containing `cycles.csv`, `summary.json`, `metadata.json`
 and the build revision/toolchain records. Add a short Markdown interpretation
