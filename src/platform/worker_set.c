@@ -9,10 +9,12 @@
 
 static void finish_worker(void *argument) {
 	spine_worker_slot_t *slot = argument;
-	/* Completion is published during cancellation unwinding too. An atomic
-     * release avoids depending on mutex-interceptor state in that path. The
-     * parent still joins before reclaiming any slot or argument. */
+	/* Serialize callback completion with the parent's registry scans. The
+  * atomic also makes publication explicit during cancellation unwinding;
+  * the parent still joins before reclaiming any slot or argument. */
+	pthread_mutex_lock(&slot->owner->mutex);
 	atomic_store_explicit(&slot->finished, true, memory_order_release);
+	pthread_mutex_unlock(&slot->owner->mutex);
 }
 
 void *spine_worker_entry(void *argument) {

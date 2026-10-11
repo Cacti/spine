@@ -376,6 +376,24 @@ static void test_local_and_remote_database_lease_adapters(void **state) {
 	set.exit.exit_code = previous_exit;
 }
 
+#if HAVE_DECL_MYSQL_OPT_TLS_VERSION
+static void assert_tls_version_readback(MYSQL *mysql, const char *expected) {
+	const char *value = NULL;
+#if defined(MARIADB_PACKAGE_VERSION_ID) && MARIADB_PACKAGE_VERSION_ID < 30300
+	/* Connector/C 3.2 accepts TLS_VERSION in mysql_optionsv(), but its
+  * mysql_get_optionv() has no corresponding case. Assert that documented
+  * API boundary rather than assuming a setter implies a getter. The
+  * TLS option-injection suite separately checks exact setter values. */
+	(void) expected;
+	assert_int_equal(mysql_get_option(mysql, MYSQL_OPT_TLS_VERSION, &value), 1);
+	assert_null(value);
+#else
+	assert_int_equal(mysql_get_option(mysql, MYSQL_OPT_TLS_VERSION, &value), 0);
+	assert_string_equal(value, expected);
+#endif
+}
+#endif
+
 static void test_database_tls_policy(void **state) {
 	MYSQL mysql;
 	spine_database_config_t configuration = {0};
