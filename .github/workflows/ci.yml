@@ -509,10 +509,12 @@ jobs:
           make distcheck
 
   # Branch protection should require this stable name rather than every matrix
-  # child. Any failed, cancelled or unexpectedly skipped dependency fails it.
+  # child. Any failed, cancelled or unexpectedly skipped dependency fails an
+  # active run. A superseded workflow must not publish a failing aggregate
+  # after concurrency cancellation; its replacement owns the current result.
   required:
     name: CI / required
-    if: always()
+    if: always() && !cancelled()
     needs:
       - dco
       - build
