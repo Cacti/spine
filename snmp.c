@@ -389,7 +389,7 @@ static bool snmp_set_security_protocols(struct snmp_session *session, const snmp
 /*! \fn void *snmp_host_init(const snmp_connection_t *options)
  *  \brief initializes an owned Net-SNMP session from borrowed connection inputs.
  */
-void *snmp_host_init(const snmp_connection_t *options) {
+static void *snmp_host_init_unlocked(const snmp_connection_t *options) {
 	if (options->snmp_timeout <= 0) {
 		SPINE_LOG(("SNMP: Device[%i] Invalid nonpositive timeout.", options->host_id));
 		return NULL;
@@ -506,9 +506,7 @@ void *snmp_host_init(const snmp_connection_t *options) {
 	}
 
 	/* open SNMP Session */
-	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		SPINE_LOG_DEVICE(options->host_id, POLLER_VERBOSITY_MEDIUM, ("ERROR: Device[%i] Problem initializing SNMP session '%s'", options->host_id, options->hostname));
@@ -516,6 +514,21 @@ void *snmp_host_init(const snmp_connection_t *options) {
 
 	snmp_host_init_release(&session, Apsz, Xpsz);
 	return sessp;
+}
+
+/* Session construction mutates Net-SNMP global USM state. Keep it exclusive
+ * with authenticated requests, not only with other session opens.
+ * Net-SNMP documents this limitation in docs/README.thread.html. */
+void *snmp_host_init(const snmp_connection_t *options) {
+	void *session;
+	int cancellation_state;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	thread_mutex_lock(LOCK_SNMP);
+	session = snmp_host_init_unlocked(options);
+	thread_mutex_unlock(LOCK_SNMP);
+	pthread_setcancelstate(cancellation_state, NULL);
+	return session;
 }
 
 /*! \fn void snmp_host_cleanup(void *snmp_session)
@@ -531,6 +544,28 @@ void snmp_host_cleanup(void *snmp_session) {
 		snmp_sess_close(snmp_session);
 		thread_mutex_unlock(LOCK_SNMP);
 	}
+}
+
+/* USM users and engine state are shared by otherwise independent sessions.
+ * V1/v2c retain the single-session API's parallel requests. A v3 transaction
+ * is exclusive with session construction/cleanup and other v3 transactions.
+ * Disable cancellation while owning the shared lock. */
+static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *request,
+	struct snmp_pdu **response) {
+	int status;
+	int cancellation_state;
+	bool serialized = host->snmp.profile.version == 3;
+
+	if (serialized) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+		thread_mutex_lock(LOCK_SNMP);
+	}
+	status = snmp_sess_synch_response(host->snmp.session, request, response);
+	if (serialized) {
+		thread_mutex_unlock(LOCK_SNMP);
+		pthread_setcancelstate(cancellation_state, NULL);
+	}
+	return status;
 }
 
 typedef struct {
@@ -556,7 +591,7 @@ static snmp_reply_t snmp_request_parsed(host_t *host, const oid *name, size_t le
 	}
 	/* Net-SNMP owns and frees request after the synchronous call, including
 	 * a failed send; the caller owns only the returned response. */
-	reply.status = snmp_sess_synch_response(host->snmp.session, request, &reply.response);
+	reply.status = snmp_synchronized_response(host, request, &reply.response);
 	host->snmp.status = reply.status;
 	return reply;
 }
@@ -1030,7 +1065,7 @@ void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int 
 	while (request != NULL && attempt < count) {
 		attempt++;
 		struct snmp_pdu *response = NULL;
-		status = snmp_sess_synch_response(host->snmp.session, request, &response);
+		status = snmp_synchronized_response(host, request, &response);
 		request = NULL;
 		host->snmp.status = status;
 		if (status == STAT_SUCCESS) {
