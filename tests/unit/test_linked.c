@@ -334,6 +334,123 @@ static void test_get_checksum_accepts_unaligned_bytes(void **state) {
 	}
 }
 
+static void test_local_and_remote_database_lease_adapters(void **state) {
+	pool_t local[1] = {0};
+	pool_t remote[1] = {0};
+	pool_t *previous_local = db_pool_local;
+	pool_t *previous_remote = db_pool_remote;
+	int previous_exit = set.exit.exit_code;
+	db_lease_t local_lease = {0};
+	db_lease_t remote_lease = {0};
+	db_lease_t stale;
+	(void) state;
+	assert_int_equal(db_pool_ownership_init(local, 1), 0);
+	assert_int_equal(db_pool_ownership_init(remote, 1), 0);
+	local[0].free = remote[0].free = TRUE;
+	db_pool_local = local;
+	db_pool_remote = remote;
+	assert_false(db_acquire_lease(99, &local_lease));
+	assert_false(db_acquire_lease(LOCAL, NULL));
+	assert_false(db_release_lease(NULL));
+	assert_true(db_acquire_lease(LOCAL, &local_lease));
+	assert_true(db_acquire_lease(REMOTE, &remote_lease));
+	assert_ptr_equal(local_lease.connection, &local[0]);
+	assert_ptr_equal(remote_lease.connection, &remote[0]);
+	assert_false(db_acquire_lease(LOCAL, &local_lease));
+	stale = local_lease;
+	stale.type = REMOTE;
+	assert_false(db_release_lease(&stale));
+	assert_false(local[0].free);
+	assert_false(remote[0].free);
+	assert_true(db_release_lease(&local_lease));
+	stale = remote_lease;
+	assert_true(db_release_lease(&remote_lease));
+	assert_true(db_acquire_lease(REMOTE, &remote_lease));
+	assert_false(db_release_lease(&stale));
+	assert_false(remote[0].free);
+	assert_true(db_release_lease(&remote_lease));
+	assert_int_equal(db_pool_ownership_destroy(local), 0);
+	assert_int_equal(db_pool_ownership_destroy(remote), 0);
+	db_pool_local = previous_local;
+	db_pool_remote = previous_remote;
+	set.exit.exit_code = previous_exit;
+}
+
+static void test_database_tls_policy(void **state) {
+	MYSQL mysql;
+	spine_database_config_t configuration = {0};
+	int mode;
+	const char *version = NULL;
+	(void) state;
+
+	assert_non_null(mysql_init(&mysql));
+	assert_false(db_apply_tls_policy(NULL, &configuration));
+	assert_false(db_apply_tls_policy(&mysql, NULL));
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_min_version = 12;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_PREFERRED;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_REQUIRED;
+	configuration.tls_min_version = 11;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_min_version = 0;
+	configuration.tls_mode = (spine_tls_mode_t) 99;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	STRNCOPY(configuration.ssl_ca, "/fixture/ca.pem");
+	for (mode = SPINE_TLS_DISABLED; mode <= SPINE_TLS_VERIFY_FULL; mode++) {
+		bool supported;
+		configuration.tls_mode = (spine_tls_mode_t) mode;
+#if HAVE_DECL_MYSQL_OPT_SSL_MODE
+		supported = TRUE;
+#elif HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+#ifdef HAVE_MARIADB_TLS_VERIFICATION_CALLBACK
+		supported = mode != SPINE_TLS_DISABLED;
+#elif HAVE_DECL_MARIADB_OPT_TLS_VERIFICATION_CALLBACK
+		supported = mode == SPINE_TLS_PREFERRED;
+#else
+		supported = mode == SPINE_TLS_PREFERRED || mode == SPINE_TLS_VERIFY_FULL;
+#endif
+#else
+		supported = FALSE;
+#endif
+		assert_int_equal(db_apply_tls_policy(&mysql, &configuration), supported);
+	}
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	configuration.tls_min_version = 12;
+#if HAVE_DECL_MYSQL_OPT_TLS_VERSION && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
+	assert_string_equal(version, "TLSv1.2,TLSv1.3");
+	configuration.tls_min_version = 13;
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
+	assert_string_equal(version, "TLSv1.3");
+#else
+	(void) version;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	configuration.tls_min_version = 0;
+	STRNCOPY(configuration.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
+#if HAVE_DECL_MYSQL_OPT_SSL_CIPHER && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_SSL_CIPHER, &version), 0);
+	assert_string_equal(version, configuration.tls_cipher);
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	configuration.tls_cipher[0] = '\0';
+	STRNCOPY(configuration.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+#if HAVE_DECL_MYSQL_OPT_TLS_CIPHERSUITES && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	mysql_close(&mysql);
+}
+
 static void test_rtrim_empty_and_fully_trimmed(void **state) {
 	char empty[] = "";
 	char trimmed[] = " \t\r\n\\\"'";
@@ -1142,6 +1259,8 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_row_alias_upsert_version_gate),
+		cmocka_unit_test(test_database_tls_policy),
+		cmocka_unit_test(test_local_and_remote_database_lease_adapters),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),

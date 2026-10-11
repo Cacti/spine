@@ -10,6 +10,7 @@
 #define _GNU_SOURCE
 #include "internal/common.h"
 #include "app/spine.h"
+#include "platform/worker_set.h"
 #include <dirent.h>
 #include <spawn.h>
 #include <fcntl.h>
@@ -64,6 +65,7 @@ static MYSQL *interrupted_connection;
  * without a database. While fake_database is set every client call below
  * answers from this script and nothing touches the network. */
 static bool fake_database;
+static bool cancel_fake_poll;
 static int fake_errors[64];
 static int fake_error_count;
 static int fake_error_next;
@@ -125,8 +127,9 @@ static int completion_writes_locked;
 
 int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attributes,
 	void *(*start)(void *), void *arg) {
-	if (!launch_case_active || start != &child) return __real_pthread_create(thread, attributes, start, arg);
-	const poller_thread_t *work = arg;
+	if (!launch_case_active || start != &spine_worker_entry) return __real_pthread_create(thread, attributes, start, arg);
+	const spine_worker_slot_t *slot = arg;
+	const poller_thread_t *work = slot->argument;
 	size_t stack_size = 0;
 	assert(work != NULL && work->host_id == 902);
 	assert(attributes != NULL && pthread_attr_getstacksize(attributes, &stack_size) == 0);
@@ -206,6 +209,10 @@ size_t __wrap_strftime(char *output, size_t capacity, const char *format, const 
 int __wrap_mysql_query(MYSQL *mysql, const char *query) {
 	if (fake_database) {
 		fake_queries++;
+		if (cancel_fake_poll) {
+			cancel_fake_poll = FALSE;
+			assert(pthread_cancel(pthread_self()) == 0);
+		}
 		if (strncmp(query, "UPDATE poller_item", strlen("UPDATE poller_item")) == 0) fake_schedule_writes++;
 		if (strncmp(query, "SELECT ", 7) == 0 && strstr(query, " FROM poller_item ") != NULL) fake_item_selects++;
 		/* Pause the first partition's error write while another partition
@@ -1138,6 +1145,7 @@ static void *fake_poll_worker(void *argument) {
 	assert(mysql_thread_init() == 0);
 	int errors = 0;
 	poll_host(argument, &errors);
+	pthread_testcancel();
 	return NULL;
 }
 
@@ -1179,6 +1187,7 @@ static void test_fake_database_poll_host(void) {
 	db_pool_local = calloc(2, sizeof(*db_pool_local));
 	assert(db_pool_local != NULL);
 	fake_script(NULL, 0);
+	assert(db_pool_ownership_init(db_pool_local, 2) == 0);
 	assert(db_connect(LOCAL, &db_pool_local[0].mysql));
 	assert(db_connect(LOCAL, &db_pool_local[1].mysql));
 	db_pool_local[1].id = 1;
@@ -1241,6 +1250,17 @@ static void test_fake_database_poll_host(void) {
 	run_fake_poll(&device, 0);
 	assert(!device.poll_failed && device.complete && set.exit.exit_code == EXIT_SUCCESS);
 	assert(fake_queries == 3 && db_pool_local[0].free);
+	/* Cancellation requested during a database operation is delivered only
+	 * after the common cleanup has returned the lease and thread state. */
+	{
+		pthread_t cancelled;
+		void *status;
+		fake_script(NULL, 0);
+		cancel_fake_poll = TRUE;
+		start_test_worker(&cancelled, fake_poll_worker, &device);
+		assert(pthread_join(cancelled, &status) == 0 && status == PTHREAD_CANCELED);
+		assert(!cancel_fake_poll && db_pool_local[0].free && !db_pool_local[0].leased);
+	}
 
 	/* A completion write that fails must leave the device incomplete and
 	 * fail the run. One invalid script result makes a host_errors write. */
@@ -1300,6 +1320,7 @@ static void test_fake_database_poll_host(void) {
 
 	db_disconnect(&db_pool_local[1].mysql);
 	db_disconnect(&db_pool_local[0].mysql);
+	assert(db_pool_ownership_destroy(db_pool_local) == 0);
 	free(db_pool_local);
 	fake_database = FALSE;
 	db_pool_local = previous_local;
@@ -1482,6 +1503,7 @@ static void test_ping_only_session_lifetime(void) {
 	assert(db_pool_local != NULL);
 	db_pool_local[0].free = TRUE;
 	db_connect(LOCAL, &db_pool_local[0].mysql);
+	assert(db_pool_ownership_init(db_pool_local, 1) == 0);
 	assert(spine_permits_init(&available_threads, 2) == 0);
 	assert(spine_permits_init(&available_scripts, 3) == 0);
 	char escaped_agent[BUFSIZE];
@@ -1579,6 +1601,7 @@ static void test_snmp_batch_key_width(void) {
 	assert(db_pool_local != NULL);
 	db_pool_local[0].free = TRUE;
 	db_connect(LOCAL, &db_pool_local[0].mysql);
+	assert(db_pool_ownership_init(db_pool_local, 1) == 0);
 	assert(spine_permits_init(&available_scripts, 3) == 0);
 	char escaped_agent[BUFSIZE];
 	db_escape(&administrator, escaped_agent, sizeof(escaped_agent), agent);

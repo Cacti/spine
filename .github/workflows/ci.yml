@@ -363,6 +363,7 @@ jobs:
           ./test_spine_regressions --snmp-agent
           ./test_spine_faults --database
           tests/tools/run_snmpv3.sh
+          bash tests/tools/run_database_tls.sh
           ./test_spine_regressions --icmp-no-capability
           sudo setcap cap_net_raw+ep ./test_spine_regressions
           ./test_spine_regressions --raw-icmp

@@ -152,14 +152,15 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 	snprintf(output, (size_t) max_size, "%s", input);
 }
 
-pool_t *__wrap_db_get_connection(int type) {
-	(void) type;
-	return &fake_pool;
+bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
+	lease->type = type;
+	lease->connection = &fake_pool;
+	return TRUE;
 }
 
-void __wrap_db_release_connection(int type, int id) {
-	(void) type;
-	(void) id;
+bool __wrap_db_release_lease(db_lease_t *lease) {
+	lease->connection = NULL;
+	return TRUE;
 }
 
 void __wrap_db_free_result(MYSQL_RES *opaque) {

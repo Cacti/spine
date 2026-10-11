@@ -405,8 +405,55 @@ static void test_invalid_log_format_is_refused(void **state) {
 	assert_int_not_equal(WEXITSTATUS(status), 0);
 }
 
+static void test_local_and_remote_tls_configuration(void **state) {
+	(void) state;
+	write_config("DB_SSL_Mode required\nDB_SSL_MinVersion TLSv1.2\n"
+				 "DB_SSL_Cipher ECDHE-RSA-AES128-GCM-SHA256\n"
+				 "RDB_SSL_Mode verify-full\nRDB_SSL_MinVersion TLSv1.3\n"
+				 "RDB_SSL_CA /fixture/ca.pem\nRDB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	assert_int_equal(set.database.tls_mode, SPINE_TLS_REQUIRED);
+	assert_int_equal(set.database.tls_min_version, 12);
+	assert_string_equal(set.database.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
+	assert_string_equal(set.database.tls_ciphersuites, "");
+	assert_int_equal(set.remote_database.tls_mode, SPINE_TLS_VERIFY_FULL);
+	assert_int_equal(set.remote_database.tls_min_version, 13);
+	assert_string_equal(set.remote_database.tls_cipher, "");
+	assert_string_equal(set.remote_database.ssl_ca, "/fixture/ca.pem");
+	assert_string_equal(set.remote_database.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+	config_defaults();
+	assert_int_equal(set.database.tls_mode, SPINE_TLS_LEGACY);
+	assert_int_equal(set.remote_database.tls_min_version, 0);
+	assert_string_equal(set.database.tls_cipher, "");
+}
+
+static void test_invalid_tls_configuration_is_refused(void **state) {
+	const char *invalid[] = {"DB_SSL_Mode pretend\n", "RDB_SSL_MinVersion TLSv1.0\n"};
+	size_t index;
+	(void) state;
+	for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); index++) {
+		pid_t child;
+		int status;
+		write_config(invalid[index]);
+		fflush(NULL);
+		child = fork();
+		assert_true(child >= 0);
+		if (child == 0) {
+			read_spine_config(config_path);
+			_exit(0);
+		}
+		assert_int_equal(waitpid(child, &status, 0), child);
+		assert_true(WIFEXITED(status));
+		assert_int_not_equal(WEXITSTATUS(status), 0);
+		assert_int_equal(unlink(config_path), 0);
+		config_path[0] = '\0';
+	}
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup_teardown(test_local_and_remote_tls_configuration, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_invalid_tls_configuration_is_refused, config_setup, config_teardown),
 		cmocka_unit_test(test_spine_log_fits_a_musl_thread_stack),
 		cmocka_unit_test(test_new_log_permissions),
 		cmocka_unit_test(test_json_record_escaping_and_capacity),

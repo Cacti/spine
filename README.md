@@ -177,7 +177,16 @@ library dependencies. Runtime contracts exercise availability, retries, script
 framing, result persistence, worker failures and shutdown. Portable checked
 buffer helpers use the existing C/POSIX interfaces without Annex K.
 
+### Database output compatibility
+
+Result writes inspect the connected destination's server version. MySQL 8.0.19
+and newer use row aliases for duplicate-key updates; older MySQL and MariaDB
+retain `VALUES(output)`. Local and remote writes choose independently, including
+after reconnects. Regression tests verify duplicate-key replacement in both
+output tables, with a separate MariaDB-to-MySQL destination lane in CI.
+
 ### Structured logging
+
 
 Set `Log_Format json` in `spine.conf` to emit one JSON record per log message.
 Text remains the default. Records contain a UTC timestamp, severity, and the
