@@ -380,6 +380,7 @@ static void test_database_tls_policy(void **state) {
 	MYSQL mysql;
 	spine_database_config_t configuration = {0};
 	int mode;
+	bool verify_full_supported = FALSE;
 	const char *version = NULL;
 	(void) state;
 
@@ -417,17 +418,22 @@ static void test_database_tls_policy(void **state) {
 		supported = FALSE;
 #endif
 		assert_int_equal(db_apply_tls_policy(&mysql, &configuration), supported);
+		if (mode == SPINE_TLS_VERIFY_FULL) verify_full_supported = supported;
 	}
 	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
 	configuration.tls_min_version = 12;
 #if HAVE_DECL_MYSQL_OPT_TLS_VERSION && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
-	assert_true(db_apply_tls_policy(&mysql, &configuration));
-	assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
-	assert_string_equal(version, "TLSv1.2,TLSv1.3");
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
+		assert_string_equal(version, "TLSv1.2,TLSv1.3");
+	}
 	configuration.tls_min_version = 13;
-	assert_true(db_apply_tls_policy(&mysql, &configuration));
-	assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
-	assert_string_equal(version, "TLSv1.3");
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
+		assert_string_equal(version, "TLSv1.3");
+	}
 #else
 	(void) version;
 	assert_false(db_apply_tls_policy(&mysql, &configuration));
@@ -435,16 +441,18 @@ static void test_database_tls_policy(void **state) {
 	configuration.tls_min_version = 0;
 	STRNCOPY(configuration.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
 #if HAVE_DECL_MYSQL_OPT_SSL_CIPHER && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
-	assert_true(db_apply_tls_policy(&mysql, &configuration));
-	assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_SSL_CIPHER, &version), 0);
-	assert_string_equal(version, configuration.tls_cipher);
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_SSL_CIPHER, &version), 0);
+		assert_string_equal(version, configuration.tls_cipher);
+	}
 #else
 	assert_false(db_apply_tls_policy(&mysql, &configuration));
 #endif
 	configuration.tls_cipher[0] = '\0';
 	STRNCOPY(configuration.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
 #if HAVE_DECL_MYSQL_OPT_TLS_CIPHERSUITES && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
-	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
 #else
 	assert_false(db_apply_tls_policy(&mysql, &configuration));
 #endif

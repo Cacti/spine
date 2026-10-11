@@ -82,7 +82,9 @@ if HAVE_LINKER_WRAP
 check_PROGRAMS += test_spine_faults
 # Link the same runtime implementation with a separate fault-test entry point.
 test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
-test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
+test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
+ -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
+ -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
  -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
  -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
  -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
@@ -100,7 +102,7 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h s
 	src/process/nft_popen.h src/script/server.h src/ping/ping.h src/poller/poller.h \
 	src/snmp/snmp.h src/app/spine.h src/platform/spine_sem.h src/internal/spine_types.h \
 	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h
-noinst_HEADERS += src/database/lease.h
+noinst_HEADERS += src/database/lease.h src/platform/worker_set.h
 
 EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
 	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \

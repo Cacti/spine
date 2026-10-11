@@ -161,16 +161,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: cppcheck
+
       - name: Run cppcheck
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
           # Project data structures are consumed across translation units;
           # checking headers in isolation otherwise reports every member. A
           # few externally visible helpers are deliberate unit-test seams.
           # cppcheck 2.13 accepts --std=c17 but still analyses as C11.
           cppcheck \
+            --include=config.h \
             --enable=all \
             --std=c11 \
             --error-exitcode=1 \

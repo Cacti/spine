@@ -171,6 +171,18 @@ static void *exiting_worker(void *argument) {
 	pthread_exit(argument);
 }
 
+/* Publish entry before reaching a cancellation point with no fixture mutex
+ * held. The test concerns registry ownership; cancelling a condition wait
+ * additionally depends on libc's internal mutex reacquisition bookkeeping. */
+static void *cancellable_worker(void *argument) {
+	worker_gate_t *gate = argument;
+	pthread_mutex_lock(&gate->mutex);
+	gate->entered = true;
+	pthread_cond_broadcast(&gate->condition);
+	pthread_mutex_unlock(&gate->mutex);
+	for (;;) usleep(1000);
+}
+
 static void test_exit_and_cancellation_are_joined(void **state) {
 	spine_worker_set_t workers = {0};
 	pthread_attr_t attributes;
@@ -180,7 +192,7 @@ static void test_exit_and_cancellation_are_joined(void **state) {
 	assert_int_equal(spine_worker_set_init(&workers, 1), 0);
 	assert_int_equal(spine_worker_set_start(&workers, &attributes, exiting_worker, &gate), 0);
 	await_finished(&workers, 0);
-	assert_int_equal(spine_worker_set_start(&workers, &attributes, gated_worker, &gate), 0);
+	assert_int_equal(spine_worker_set_start(&workers, &attributes, cancellable_worker, &gate), 0);
 	await_entry(&gate);
 	assert_int_equal(pthread_cancel(workers.slots[0].thread), 0);
 	await_finished(&workers, 0);
