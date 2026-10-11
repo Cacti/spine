@@ -13,6 +13,8 @@
 
 #include "app/runtime.h"
 extern void test_output_write_contracts(MYSQL *mysql);
+extern void test_database_tls_contracts(void);
+extern void run_script_limit_contracts(void);
 extern void test_additional_contracts(void);
 extern void test_cli_alias_contracts(void);
 extern void test_privilege_contracts(void);
@@ -2156,6 +2158,25 @@ static void test_snmp_flush_contracts(MYSQL *mysql, test_poll_work_t *work, cons
 			assert(database_count(mysql, query) == 1);
 		}
 	}
+	/* Units-bearing strings must become numeric before validation, through
+	 * full, credential-change and final batch flushes. */
+	for (int scenario = 0; scenario < 3; scenario++) {
+		pthread_t units_worker;
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output"));
+		assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output_boost"));
+		spine_snprintf(query, sizeof(query), "UPDATE host SET max_oids=%d WHERE id=44", scenario == 1 ? 1 : 5);
+		assert(db_insert(mysql, LOCAL, query));
+		assert(db_insert(mysql, LOCAL, "UPDATE poller_item SET snmp_version=2,arg1='.1.3.6.1.2.1.1.6.0',output_regex='^[0-9][0-9]*' WHERE host_id=44"));
+		if (scenario == 0) assert(db_insert(mysql, LOCAL, "UPDATE poller_item SET snmp_version=1 WHERE local_data_id=602"));
+		work->thread.complete = FALSE;
+		work->thread.threads_complete = 0;
+		work->errors = 0;
+		start_test_worker(&units_worker, test_poll_worker, work);
+		assert(pthread_join(units_worker, NULL) == 0);
+		assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE local_data_id IN (601,602) AND output='42'") == 2);
+		assert(database_count(mysql, "SELECT COUNT(*) FROM poller_output_boost WHERE local_data_id IN (601,602) AND output='42'") == 2);
+	}
 	/* Existing regexes were written against the normalized value: a
 	 * Hex-STRING becomes 266 first, then the regex keeps "266", not "00". */
 	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex"));
@@ -2180,7 +2201,7 @@ static void test_snmp_flush_contracts(MYSQL *mysql, test_poll_work_t *work, cons
 
 static void assert_polled_host_statistics(MYSQL *mysql, int host_id) {
 	if (host_id == 44) {
-		assert(database_count(mysql, "SELECT COUNT(*) FROM host WHERE id=44 AND total_polls=1 AND failed_polls=0 AND status_last_error='' AND snmp_sysUpTimeInstance>0 AND snmp_sysDescr!='' AND snmp_sysObjectID!='' AND snmp_sysContact='regression' AND snmp_sysName!='' AND snmp_sysLocation='isolated-regression-agent'") == 1);
+		assert(database_count(mysql, "SELECT COUNT(*) FROM host WHERE id=44 AND total_polls=1 AND failed_polls=0 AND status_last_error='' AND snmp_sysUpTimeInstance>0 AND snmp_sysDescr!='' AND snmp_sysObjectID!='' AND snmp_sysContact='regression' AND snmp_sysName!='' AND snmp_sysLocation='42 watts'") == 1);
 	} else if (host_id != 0) {
 		char query[256];
 		spine_snprintf(query, sizeof(query), "SELECT COUNT(*) FROM host WHERE id=%d AND total_polls=1 AND failed_polls=0 AND min_time=0 AND status_last_error=''", host_id);
@@ -2911,6 +2932,11 @@ static void test_error_id_buffer_boundaries(void) {
 
 
 int main(int argc, char **argv) {
+	if (argc == 2 && strcmp(argv[1], "--database-tls") == 0) {
+		init_mutexes();
+		test_database_tls_contracts();
+		return 0;
+	}
 	if (argc == 3 && strcmp(argv[1], "--script-stream") == 0) return run_script_stream_fixture(argv[2]);
 	if (argc > 1 && strcmp(argv[1], "-q") == 0) return run_test_script_server(argc, argv);
 	extern int *debug_devices;
@@ -2920,6 +2946,11 @@ int main(int argc, char **argv) {
 		init_mutexes();
 		test_icmp_loopback();
 		puts("production ICMP loopback regression passed");
+		return 0;
+	}
+	if (argc == 2 && strcmp(argv[1], "--script-limits") == 0) {
+		init_mutexes();
+		run_script_limit_contracts();
 		return 0;
 	}
 	if (argc == 2 && strcmp(argv[1], "--privilege-drop") == 0) {
@@ -3006,6 +3037,7 @@ int main(int argc, char **argv) {
 	test_php_owned_shutdown();
 	test_host_status_transitions();
 	test_script_execution();
+	run_script_limit_contracts();
 	test_script_timeout_kills_descendants();
 	test_pclose_kills_descendants();
 	test_script_stream_contracts();

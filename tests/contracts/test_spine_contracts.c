@@ -64,15 +64,15 @@ static void *try_busy_lock(void *argument) {
 }
 
 static void test_lock_contracts(void) {
-	static const int locks[] = {LOCK_SNMP, LOCK_ICMP, LOCK_GHBN, LOCK_POOL, LOCK_PHP,
+	static const int locks[] = {LOCK_SNMP, LOCK_ICMP, LOCK_GHBN, LOCK_PHP,
 		LOCK_PHP_PROC_0, LOCK_PHP_PROC_1, LOCK_PHP_PROC_2, LOCK_PHP_PROC_3,
 		LOCK_PHP_PROC_4, LOCK_PHP_PROC_5, LOCK_PHP_PROC_6, LOCK_PHP_PROC_7,
 		LOCK_PHP_PROC_8, LOCK_PHP_PROC_9, LOCK_PHP_PROC_10, LOCK_PHP_PROC_11,
-		LOCK_PHP_PROC_12, LOCK_PHP_PROC_13, LOCK_PHP_PROC_14, LOCK_THDET, LOCK_HOST_TIME};
-	static const char *const names[] = {"snmp", "icmp", "ghbn", "pool", "php",
+		LOCK_PHP_PROC_12, LOCK_PHP_PROC_13, LOCK_PHP_PROC_14, LOCK_THDET};
+	static const char *const names[] = {"snmp", "icmp", "ghbn", "php",
 		"php_proc_0", "php_proc_1", "php_proc_2", "php_proc_3", "php_proc_4",
 		"php_proc_5", "php_proc_6", "php_proc_7", "php_proc_8", "php_proc_9",
-		"php_proc_10", "php_proc_11", "php_proc_12", "php_proc_13", "php_proc_14", "thdet", "host_time"};
+		"php_proc_10", "php_proc_11", "php_proc_12", "php_proc_13", "php_proc_14", "thdet"};
 	init_mutexes();
 	init_mutexes(); /* pthread_once must preserve the already-created locks. */
 	for (size_t i = 0; i < sizeof(locks) / sizeof(locks[0]); i++) {

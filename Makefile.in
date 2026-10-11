@@ -112,12 +112,16 @@ check_PROGRAMS = test_spine_regressions$(EXEEXT) $(am__EXEEXT_1) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_timing \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_log_config
+@HAVE_CMOCKA_TRUE@	tests/unit/test_log_config \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_worker_set \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease
 
 @HAVE_CMOCKA_TRUE@noinst_PROGRAMS =  \
 @HAVE_CMOCKA_TRUE@	tests/support/php_test_server$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__append_3 = tests/unit/test_php_runtime tests/unit/test_poll_host
 @HAVE_LD_WRAP_TRUE@am__append_4 = -DSPINE_TEST_WRAP_WAITPID
+@HAVE_LINKER_WRAP_TRUE@am__append_5 = -DSPINE_WORKER_TEST_WRAP
+@HAVE_LINKER_WRAP_TRUE@am__append_6 = -DSPINE_LEASE_TEST_WRAP
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -148,13 +152,16 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_timing$(EXEEXT) \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_log_config$(EXEEXT)
+@HAVE_CMOCKA_TRUE@	tests/unit/test_log_config$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_worker_set$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__EXEEXT_3 = tests/unit/test_php_runtime$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poll_host$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = src/database/sql.$(OBJEXT) \
-	src/database/connection.$(OBJEXT) src/database/pool.$(OBJEXT) \
+	src/database/connection.$(OBJEXT) src/database/tls.$(OBJEXT) \
+	src/database/lease.$(OBJEXT) src/database/pool.$(OBJEXT) \
 	src/database/transfer.$(OBJEXT) \
 	src/database/cacti_query.$(OBJEXT) \
 	src/database/persistence.$(OBJEXT)
@@ -185,9 +192,9 @@ am__objects_8 = $(am__objects_1) $(am__objects_2) $(am__objects_3) \
 	src/platform/locks.$(OBJEXT) $(am__objects_4) $(am__objects_5) \
 	$(am__objects_6) $(am__objects_7) \
 	src/config/keywords.$(OBJEXT) src/app/signals.$(OBJEXT)
-am__objects_9 = $(am__objects_8) src/app/runtime.$(OBJEXT) \
-	src/app/cli.$(OBJEXT) src/app/startup.$(OBJEXT) \
-	src/poller/workers.$(OBJEXT)
+am__objects_9 = $(am__objects_8) src/platform/worker_set.$(OBJEXT) \
+	src/app/runtime.$(OBJEXT) src/app/cli.$(OBJEXT) \
+	src/app/startup.$(OBJEXT) src/poller/workers.$(OBJEXT)
 am_spine_OBJECTS = $(am__objects_9) src/app/main.$(OBJEXT)
 spine_OBJECTS = $(am_spine_OBJECTS)
 spine_LDADD = $(LDADD)
@@ -196,7 +203,8 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 =
 am__test_spine_faults_SOURCES_DIST = src/database/sql.c \
-	src/database/connection.c src/database/pool.c \
+	src/database/connection.c src/database/tls.c \
+	src/database/lease.c src/database/pool.c \
 	src/database/transfer.c src/database/cacti_query.c \
 	src/database/persistence.c src/app/buffer.c \
 	src/platform/clock.c src/platform/socket.c \
@@ -213,8 +221,9 @@ am__test_spine_faults_SOURCES_DIST = src/database/sql.c \
 	src/script/server.c src/poller/availability.c \
 	src/ping/icmp_shared.c src/ping/icmp4.c src/ping/icmp6.c \
 	src/ping/udp.c src/ping/tcp.c src/ping/address.c \
-	src/config/keywords.c src/app/signals.c src/app/runtime.c \
-	src/app/cli.c src/app/startup.c src/poller/workers.c \
+	src/config/keywords.c src/app/signals.c \
+	src/platform/worker_set.c src/app/runtime.c src/app/cli.c \
+	src/app/startup.c src/poller/workers.c \
 	tests/regression/test_spine_faults.c
 @HAVE_LINKER_WRAP_TRUE@am_test_spine_faults_OBJECTS =  \
 @HAVE_LINKER_WRAP_TRUE@	$(am__objects_9) \
@@ -234,7 +243,9 @@ am_test_spine_regressions_OBJECTS = $(am__objects_9) \
 	tests/contracts/test_spine_cli_contracts.$(OBJEXT) \
 	tests/contracts/test_spine_stream_contracts.$(OBJEXT) \
 	tests/contracts/test_spine_output_contracts.$(OBJEXT) \
-	tests/contracts/test_spine_privilege_contracts.$(OBJEXT)
+	tests/contracts/test_spine_privilege_contracts.$(OBJEXT) \
+	tests/contracts/test_spine_tls_contracts.$(OBJEXT) \
+	tests/contracts/test_spine_script_limits_contracts.$(OBJEXT)
 test_spine_regressions_OBJECTS = $(am_test_spine_regressions_OBJECTS)
 test_spine_regressions_LDADD = $(LDADD)
 am__tests_support_php_test_server_SOURCES_DIST =  \
@@ -261,8 +272,21 @@ tests_unit_test_classify_result_OBJECTS =  \
 	$(am_tests_unit_test_classify_result_OBJECTS)
 tests_unit_test_classify_result_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
+am_tests_unit_test_db_lease_OBJECTS =  \
+	tests/unit/test_db_lease-test_db_lease.$(OBJEXT) \
+	src/database/tests_unit_test_db_lease-lease.$(OBJEXT)
+tests_unit_test_db_lease_OBJECTS =  \
+	$(am_tests_unit_test_db_lease_OBJECTS)
+tests_unit_test_db_lease_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+tests_unit_test_db_lease_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(tests_unit_test_db_lease_LDFLAGS) \
+	$(LDFLAGS) -o $@
 am__objects_10 = src/database/tests_unit_test_linked-sql.$(OBJEXT) \
 	src/database/tests_unit_test_linked-connection.$(OBJEXT) \
+	src/database/tests_unit_test_linked-tls.$(OBJEXT) \
+	src/database/tests_unit_test_linked-lease.$(OBJEXT) \
 	src/database/tests_unit_test_linked-pool.$(OBJEXT) \
 	src/database/tests_unit_test_linked-transfer.$(OBJEXT) \
 	src/database/tests_unit_test_linked-cacti_query.$(OBJEXT) \
@@ -338,6 +362,8 @@ tests_unit_test_log_config_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 am__objects_17 =  \
 	src/database/tests_unit_test_php_runtime-sql.$(OBJEXT) \
 	src/database/tests_unit_test_php_runtime-connection.$(OBJEXT) \
+	src/database/tests_unit_test_php_runtime-tls.$(OBJEXT) \
+	src/database/tests_unit_test_php_runtime-lease.$(OBJEXT) \
 	src/database/tests_unit_test_php_runtime-pool.$(OBJEXT) \
 	src/database/tests_unit_test_php_runtime-transfer.$(OBJEXT) \
 	src/database/tests_unit_test_php_runtime-cacti_query.$(OBJEXT) \
@@ -463,6 +489,17 @@ tests_unit_test_util_strings_OBJECTS =  \
 	$(am_tests_unit_test_util_strings_OBJECTS)
 tests_unit_test_util_strings_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
+am_tests_unit_test_worker_set_OBJECTS =  \
+	tests/unit/test_worker_set-test_worker_set.$(OBJEXT) \
+	src/platform/tests_unit_test_worker_set-worker_set.$(OBJEXT)
+tests_unit_test_worker_set_OBJECTS =  \
+	$(am_tests_unit_test_worker_set_OBJECTS)
+tests_unit_test_worker_set_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+tests_unit_test_worker_set_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(tests_unit_test_worker_set_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -504,20 +541,27 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	src/config/$(DEPDIR)/text.Po src/config/$(DEPDIR)/validate.Po \
 	src/database/$(DEPDIR)/cacti_query.Po \
 	src/database/$(DEPDIR)/connection.Po \
+	src/database/$(DEPDIR)/lease.Po \
 	src/database/$(DEPDIR)/persistence.Po \
 	src/database/$(DEPDIR)/pool.Po src/database/$(DEPDIR)/sql.Po \
+	src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Po \
 	src/database/$(DEPDIR)/tests_unit_test_linked-cacti_query.Po \
 	src/database/$(DEPDIR)/tests_unit_test_linked-connection.Po \
+	src/database/$(DEPDIR)/tests_unit_test_linked-lease.Po \
 	src/database/$(DEPDIR)/tests_unit_test_linked-persistence.Po \
 	src/database/$(DEPDIR)/tests_unit_test_linked-pool.Po \
 	src/database/$(DEPDIR)/tests_unit_test_linked-sql.Po \
+	src/database/$(DEPDIR)/tests_unit_test_linked-tls.Po \
 	src/database/$(DEPDIR)/tests_unit_test_linked-transfer.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-cacti_query.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-connection.Po \
+	src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-persistence.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-sql.Po \
+	src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Po \
 	src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po \
+	src/database/$(DEPDIR)/tls.Po \
 	src/database/$(DEPDIR)/transfer.Po src/log/$(DEPDIR)/debug.Po \
 	src/log/$(DEPDIR)/json.Po src/log/$(DEPDIR)/log.Po \
 	src/log/$(DEPDIR)/sanitize.Po \
@@ -561,7 +605,9 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_php_runtime-privileges.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_php_runtime-socket.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_php_runtime-thread.Po \
+	src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po \
 	src/platform/$(DEPDIR)/thread.Po \
+	src/platform/$(DEPDIR)/worker_set.Po \
 	src/poller/$(DEPDIR)/availability.Po \
 	src/poller/$(DEPDIR)/host.Po src/poller/$(DEPDIR)/items.Po \
 	src/poller/$(DEPDIR)/poller.Po src/poller/$(DEPDIR)/regex.Po \
@@ -616,9 +662,11 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/contracts/$(DEPDIR)/test_spine_output_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_privilege_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po \
+	tests/contracts/$(DEPDIR)/test_spine_script_limits_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po \
+	tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po \
 	tests/regression/$(DEPDIR)/test_spine_faults.Po \
 	tests/regression/$(DEPDIR)/test_spine_regressions.Po \
 	tests/support/$(DEPDIR)/php_test_server.Po \
@@ -627,6 +675,7 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po \
 	tests/unit/$(DEPDIR)/test_build_fixes.Po \
 	tests/unit/$(DEPDIR)/test_classify_result.Po \
+	tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Po \
 	tests/unit/$(DEPDIR)/test_linked-test_linked.Po \
 	tests/unit/$(DEPDIR)/test_log_config.Po \
 	tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po \
@@ -636,7 +685,8 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/unit/$(DEPDIR)/test_safety_fixes.Po \
 	tests/unit/$(DEPDIR)/test_snmpv3_session.Po \
 	tests/unit/$(DEPDIR)/test_util_paths.Po \
-	tests/unit/$(DEPDIR)/test_util_strings.Po
+	tests/unit/$(DEPDIR)/test_util_strings.Po \
+	tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -661,6 +711,7 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_support_php_test_server_SOURCES) \
 	$(tests_unit_test_build_fixes_SOURCES) \
 	$(tests_unit_test_classify_result_SOURCES) \
+	$(tests_unit_test_db_lease_SOURCES) \
 	$(tests_unit_test_linked_SOURCES) \
 	$(tests_unit_test_log_config_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
@@ -670,12 +721,14 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
-	$(tests_unit_test_util_strings_SOURCES)
+	$(tests_unit_test_util_strings_SOURCES) \
+	$(tests_unit_test_worker_set_SOURCES)
 DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(test_spine_regressions_SOURCES) \
 	$(am__tests_support_php_test_server_SOURCES_DIST) \
 	$(tests_unit_test_build_fixes_SOURCES) \
 	$(tests_unit_test_classify_result_SOURCES) \
+	$(tests_unit_test_db_lease_SOURCES) \
 	$(tests_unit_test_linked_SOURCES) \
 	$(tests_unit_test_log_config_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
@@ -685,7 +738,8 @@ DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
-	$(tests_unit_test_util_strings_SOURCES)
+	$(tests_unit_test_util_strings_SOURCES) \
+	$(tests_unit_test_worker_set_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -1085,7 +1139,7 @@ spine_support_sources = src/app/buffer.c \
 	src/platform/privileges.c src/poller/regex.c
 
 spine_database_sources = src/database/sql.c \
-	src/database/connection.c \
+	src/database/connection.c src/database/tls.c src/database/lease.c \
 	src/database/pool.c src/database/transfer.c \
 	src/database/cacti_query.c src/database/persistence.c
 
@@ -1107,7 +1161,7 @@ spine_process_sources = src/process/nft_popen.c src/process/fd.c
 spine_shared_sources = $(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) \
 	$(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) src/config/keywords.c src/app/signals.c
 
-spine_runtime_sources = $(spine_shared_sources) src/app/runtime.c src/app/cli.c src/app/startup.c src/poller/workers.c
+spine_runtime_sources = $(spine_shared_sources) src/platform/worker_set.c src/app/runtime.c src/app/cli.c src/app/startup.c src/poller/workers.c
 spine_SOURCES = $(spine_runtime_sources) src/app/main.c
 configdir = $(sysconfdir)
 dist_config_DATA = etc/spine.conf.dist
@@ -1121,9 +1175,31 @@ TESTS = $(check_PROGRAMS) tests/tools/test_nightly_tests.sh \
 	tests/regression/test_helper_scripts.sh
 EXTRA_DIST = tests/tools/check_nightly_tests.sh \
 	tests/tools/test_nightly_tests.sh \
-	tests/tools/test_json_encoder.py docs/man/spine.1 \
-	etc/spine.conf.dist CONTRIBUTORS.md docs/licensing.md \
-	LICENSES/LicenseRef-Xenadyne.txt \
+	tests/tools/test_json_encoder.py \
+	tests/tools/run_database_tls.sh \
+	tests/tools/ownership-coverage-sources.txt \
+	tests/tools/build_benchmark_pair.sh \
+	tests/tools/benchmark_builds.py \
+	tests/tools/verify_benchmark_record.py \
+	tests/tools/test_benchmark_record.py docs/benchmarks/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/cycles.csv \
+	docs/benchmarks/results/2026-10-11-default-logging/metadata.json \
+	docs/benchmarks/results/2026-10-11-default-logging/summary.json \
+	docs/benchmarks/results/2026-10-11-default-logging/compiler.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-default-logging/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/build-settings.txt \
+	tests/tools/run_script_limits.sh \
+	tests/fixtures/script_resource_probe.c \
+	docs/operations/script-limits.md \
+	docs/operations/database-tls.md \
+	docs/operations/issue-boundaries.md \
+	docs/adr/0004-formatting-and-json-dependencies.md \
+	docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
+	docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt \
 	LICENSES/LicenseRef-Xenadyne-Header.txt \
 	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt \
 	LICENSES/LGPL-2.1-only.txt tests/README.md \
@@ -1147,7 +1223,18 @@ EXTRA_DIST = tests/tools/check_nightly_tests.sh \
 	docs/architecture/source-modules.md \
 	tests/tools/test_configure_contracts.sh \
 	tests/tools/test_clang_tidy_gate.py scripts/cppcheck/spine.cfg
-test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
+test_spine_regressions_SOURCES = $(spine_runtime_sources) \
+	tests/regression/test_spine_regressions.c \
+	tests/contracts/test_spine_contracts.c \
+	tests/contracts/test_spine_reindex_contracts.c \
+	tests/contracts/test_spine_snmpv3_contracts.c \
+	tests/contracts/test_spine_settings_contracts.c \
+	tests/contracts/test_spine_cli_contracts.c \
+	tests/contracts/test_spine_stream_contracts.c \
+	tests/contracts/test_spine_output_contracts.c \
+	tests/contracts/test_spine_privilege_contracts.c \
+	tests/contracts/test_spine_tls_contracts.c \
+	tests/contracts/test_spine_script_limits_contracts.c
 # Link the same runtime implementation with a separate fault-test entry point.
 @HAVE_LINKER_WRAP_TRUE@test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
 @HAVE_LINKER_WRAP_TRUE@test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
@@ -1164,16 +1251,17 @@ test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_
 # them unless they are listed. Without this the release tarball builds nothing.
 noinst_HEADERS = src/internal/common.h src/app/signals.h \
 	src/config/keywords.h src/platform/locks.h \
-	src/process/nft_popen.h src/script/server.h src/ping/ping.h \
-	src/poller/poller.h src/snmp/snmp.h src/app/spine.h \
-	src/platform/spine_sem.h src/internal/spine_types.h \
-	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h \
-	src/config/settings_internal.h src/ping/ping_internal.h \
-	src/app/cli_internal.h src/poller/poller_internal.h \
-	src/app/startup_internal.h src/script/server_internal.h \
-	src/process/process_internal.h src/app/buffer.h \
-	src/app/runtime.h src/config/model.h src/config/state.h \
-	src/config/text.h src/config/validate.h \
+	src/platform/worker_set.h src/process/nft_popen.h \
+	src/script/server.h src/ping/ping.h src/poller/poller.h \
+	src/snmp/snmp.h src/app/spine.h src/platform/spine_sem.h \
+	src/internal/spine_types.h src/database/sql.h \
+	vendor/uthash/uthash.h src/internal/util.h \
+	src/database/lease.h src/config/settings_internal.h \
+	src/ping/ping_internal.h src/app/cli_internal.h \
+	src/poller/poller_internal.h src/app/startup_internal.h \
+	src/script/server_internal.h src/process/process_internal.h \
+	src/app/buffer.h src/app/runtime.h src/config/model.h \
+	src/config/state.h src/config/text.h src/config/validate.h \
 	src/internal/constants.h src/log/debug.h src/log/log.h \
 	src/log/sanitize.h src/platform/clock.h \
 	src/platform/descriptor.h src/platform/socket.h \
@@ -1243,7 +1331,7 @@ tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/support/sp
 tests_unit_test_poll_host_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_query -Wl,--wrap=db_insert -Wl,--wrap=db_escape \
-	-Wl,--wrap=db_get_connection -Wl,--wrap=db_release_connection \
+	-Wl,--wrap=db_acquire_lease -Wl,--wrap=db_release_lease \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
@@ -1261,6 +1349,21 @@ tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/support/
 	src/config/keywords.c src/app/signals.c
 
 tests_unit_test_log_config_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_worker_set_SOURCES = tests/unit/test_worker_set.c src/platform/worker_set.c
+tests_unit_test_worker_set_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_worker_set_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_5)
+@HAVE_LINKER_WRAP_TRUE@tests_unit_test_worker_set_LDFLAGS =  \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=calloc \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_mutex_init \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_mutex_destroy \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_create \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_join \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_attr_getdetachstate \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_mutex_lock
+tests_unit_test_db_lease_SOURCES = tests/unit/test_db_lease.c src/database/lease.c
+tests_unit_test_db_lease_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_db_lease_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_6)
+@HAVE_LINKER_WRAP_TRUE@tests_unit_test_db_lease_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_destroy
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
@@ -1408,6 +1511,10 @@ src/database/sql.$(OBJEXT): src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/connection.$(OBJEXT): src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
+src/database/tls.$(OBJEXT): src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
+src/database/lease.$(OBJEXT): src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/pool.$(OBJEXT): src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/transfer.$(OBJEXT): src/database/$(am__dirstamp) \
@@ -1554,6 +1661,8 @@ src/config/keywords.$(OBJEXT): src/config/$(am__dirstamp) \
 	src/config/$(DEPDIR)/$(am__dirstamp)
 src/app/signals.$(OBJEXT): src/app/$(am__dirstamp) \
 	src/app/$(DEPDIR)/$(am__dirstamp)
+src/platform/worker_set.$(OBJEXT): src/platform/$(am__dirstamp) \
+	src/platform/$(DEPDIR)/$(am__dirstamp)
 src/app/runtime.$(OBJEXT): src/app/$(am__dirstamp) \
 	src/app/$(DEPDIR)/$(am__dirstamp)
 src/app/cli.$(OBJEXT): src/app/$(am__dirstamp) \
@@ -1614,6 +1723,12 @@ tests/contracts/test_spine_output_contracts.$(OBJEXT):  \
 tests/contracts/test_spine_privilege_contracts.$(OBJEXT):  \
 	tests/contracts/$(am__dirstamp) \
 	tests/contracts/$(DEPDIR)/$(am__dirstamp)
+tests/contracts/test_spine_tls_contracts.$(OBJEXT):  \
+	tests/contracts/$(am__dirstamp) \
+	tests/contracts/$(DEPDIR)/$(am__dirstamp)
+tests/contracts/test_spine_script_limits_contracts.$(OBJEXT):  \
+	tests/contracts/$(am__dirstamp) \
+	tests/contracts/$(DEPDIR)/$(am__dirstamp)
 
 test_spine_regressions$(EXEEXT): $(test_spine_regressions_OBJECTS) $(test_spine_regressions_DEPENDENCIES) $(EXTRA_test_spine_regressions_DEPENDENCIES)
 	@rm -f test_spine_regressions$(EXEEXT)
@@ -1651,6 +1766,16 @@ tests/support/spine_runtime.$(OBJEXT): tests/support/$(am__dirstamp) \
 tests/unit/test_classify_result$(EXEEXT): $(tests_unit_test_classify_result_OBJECTS) $(tests_unit_test_classify_result_DEPENDENCIES) $(EXTRA_tests_unit_test_classify_result_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_classify_result$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_classify_result_OBJECTS) $(tests_unit_test_classify_result_LDADD) $(LIBS)
+tests/unit/test_db_lease-test_db_lease.$(OBJEXT):  \
+	tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+src/database/tests_unit_test_db_lease-lease.$(OBJEXT):  \
+	src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_db_lease$(EXEEXT): $(tests_unit_test_db_lease_OBJECTS) $(tests_unit_test_db_lease_DEPENDENCIES) $(EXTRA_tests_unit_test_db_lease_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_db_lease$(EXEEXT)
+	$(AM_V_CCLD)$(tests_unit_test_db_lease_LINK) $(tests_unit_test_db_lease_OBJECTS) $(tests_unit_test_db_lease_LDADD) $(LIBS)
 tests/unit/test_linked-test_linked.$(OBJEXT):  \
 	tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
@@ -1661,6 +1786,12 @@ src/database/tests_unit_test_linked-sql.$(OBJEXT):  \
 	src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/tests_unit_test_linked-connection.$(OBJEXT):  \
+	src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
+src/database/tests_unit_test_linked-tls.$(OBJEXT):  \
+	src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
+src/database/tests_unit_test_linked-lease.$(OBJEXT):  \
 	src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/tests_unit_test_linked-pool.$(OBJEXT):  \
@@ -1806,6 +1937,12 @@ src/database/tests_unit_test_php_runtime-sql.$(OBJEXT):  \
 	src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/tests_unit_test_php_runtime-connection.$(OBJEXT):  \
+	src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
+src/database/tests_unit_test_php_runtime-tls.$(OBJEXT):  \
+	src/database/$(am__dirstamp) \
+	src/database/$(DEPDIR)/$(am__dirstamp)
+src/database/tests_unit_test_php_runtime-lease.$(OBJEXT):  \
 	src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
 src/database/tests_unit_test_php_runtime-pool.$(OBJEXT):  \
@@ -1977,6 +2114,16 @@ tests/unit/test_util_strings.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_util_strings$(EXEEXT): $(tests_unit_test_util_strings_OBJECTS) $(tests_unit_test_util_strings_DEPENDENCIES) $(EXTRA_tests_unit_test_util_strings_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_util_strings$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_util_strings_OBJECTS) $(tests_unit_test_util_strings_LDADD) $(LIBS)
+tests/unit/test_worker_set-test_worker_set.$(OBJEXT):  \
+	tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+src/platform/tests_unit_test_worker_set-worker_set.$(OBJEXT):  \
+	src/platform/$(am__dirstamp) \
+	src/platform/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_worker_set$(EXEEXT): $(tests_unit_test_worker_set_OBJECTS) $(tests_unit_test_worker_set_DEPENDENCIES) $(EXTRA_tests_unit_test_worker_set_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_worker_set$(EXEEXT)
+	$(AM_V_CCLD)$(tests_unit_test_worker_set_LINK) $(tests_unit_test_worker_set_OBJECTS) $(tests_unit_test_worker_set_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -2028,21 +2175,28 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/config/$(DEPDIR)/validate.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/cacti_query.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/connection.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/lease.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/persistence.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/pool.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/sql.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-cacti_query.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-connection.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-lease.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-persistence.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-pool.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-sql.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-tls.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_linked-transfer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-cacti_query.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-connection.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-persistence.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-sql.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/tls.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/database/$(DEPDIR)/transfer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/debug.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/log/$(DEPDIR)/json.Po@am__quote@ # am--include-marker
@@ -2091,7 +2245,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_php_runtime-privileges.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_php_runtime-socket.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_php_runtime-thread.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/thread.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/worker_set.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/availability.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/host.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/items.Po@am__quote@ # am--include-marker
@@ -2152,9 +2308,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_output_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_privilege_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_script_limits_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/regression/$(DEPDIR)/test_spine_faults.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/regression/$(DEPDIR)/test_spine_regressions.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/support/$(DEPDIR)/php_test_server.Po@am__quote@ # am--include-marker
@@ -2163,6 +2321,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_build_fixes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_classify_result.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_linked-test_linked.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_log_config.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po@am__quote@ # am--include-marker
@@ -2173,6 +2332,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_session.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_paths.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_strings.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -2203,6 +2363,34 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+tests/unit/test_db_lease-test_db_lease.o: tests/unit/test_db_lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/unit/test_db_lease-test_db_lease.o -MD -MP -MF tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Tpo -c -o tests/unit/test_db_lease-test_db_lease.o `test -f 'tests/unit/test_db_lease.c' || echo '$(srcdir)/'`tests/unit/test_db_lease.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Tpo tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/unit/test_db_lease.c' object='tests/unit/test_db_lease-test_db_lease.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/unit/test_db_lease-test_db_lease.o `test -f 'tests/unit/test_db_lease.c' || echo '$(srcdir)/'`tests/unit/test_db_lease.c
+
+tests/unit/test_db_lease-test_db_lease.obj: tests/unit/test_db_lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/unit/test_db_lease-test_db_lease.obj -MD -MP -MF tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Tpo -c -o tests/unit/test_db_lease-test_db_lease.obj `if test -f 'tests/unit/test_db_lease.c'; then $(CYGPATH_W) 'tests/unit/test_db_lease.c'; else $(CYGPATH_W) '$(srcdir)/tests/unit/test_db_lease.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Tpo tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/unit/test_db_lease.c' object='tests/unit/test_db_lease-test_db_lease.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/unit/test_db_lease-test_db_lease.obj `if test -f 'tests/unit/test_db_lease.c'; then $(CYGPATH_W) 'tests/unit/test_db_lease.c'; else $(CYGPATH_W) '$(srcdir)/tests/unit/test_db_lease.c'; fi`
+
+src/database/tests_unit_test_db_lease-lease.o: src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_db_lease-lease.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Tpo -c -o src/database/tests_unit_test_db_lease-lease.o `test -f 'src/database/lease.c' || echo '$(srcdir)/'`src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Tpo src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/lease.c' object='src/database/tests_unit_test_db_lease-lease.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_db_lease-lease.o `test -f 'src/database/lease.c' || echo '$(srcdir)/'`src/database/lease.c
+
+src/database/tests_unit_test_db_lease-lease.obj: src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_db_lease-lease.obj -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Tpo -c -o src/database/tests_unit_test_db_lease-lease.obj `if test -f 'src/database/lease.c'; then $(CYGPATH_W) 'src/database/lease.c'; else $(CYGPATH_W) '$(srcdir)/src/database/lease.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Tpo src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/lease.c' object='src/database/tests_unit_test_db_lease-lease.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_db_lease_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_db_lease-lease.obj `if test -f 'src/database/lease.c'; then $(CYGPATH_W) 'src/database/lease.c'; else $(CYGPATH_W) '$(srcdir)/src/database/lease.c'; fi`
 
 tests/unit/test_linked-test_linked.o: tests/unit/test_linked.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/unit/test_linked-test_linked.o -MD -MP -MF tests/unit/$(DEPDIR)/test_linked-test_linked.Tpo -c -o tests/unit/test_linked-test_linked.o `test -f 'tests/unit/test_linked.c' || echo '$(srcdir)/'`tests/unit/test_linked.c
@@ -2259,6 +2447,34 @@ src/database/tests_unit_test_linked-connection.obj: src/database/connection.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/connection.c' object='src/database/tests_unit_test_linked-connection.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_linked-connection.obj `if test -f 'src/database/connection.c'; then $(CYGPATH_W) 'src/database/connection.c'; else $(CYGPATH_W) '$(srcdir)/src/database/connection.c'; fi`
+
+src/database/tests_unit_test_linked-tls.o: src/database/tls.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_linked-tls.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_linked-tls.Tpo -c -o src/database/tests_unit_test_linked-tls.o `test -f 'src/database/tls.c' || echo '$(srcdir)/'`src/database/tls.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_linked-tls.Tpo src/database/$(DEPDIR)/tests_unit_test_linked-tls.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/tls.c' object='src/database/tests_unit_test_linked-tls.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_linked-tls.o `test -f 'src/database/tls.c' || echo '$(srcdir)/'`src/database/tls.c
+
+src/database/tests_unit_test_linked-tls.obj: src/database/tls.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_linked-tls.obj -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_linked-tls.Tpo -c -o src/database/tests_unit_test_linked-tls.obj `if test -f 'src/database/tls.c'; then $(CYGPATH_W) 'src/database/tls.c'; else $(CYGPATH_W) '$(srcdir)/src/database/tls.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_linked-tls.Tpo src/database/$(DEPDIR)/tests_unit_test_linked-tls.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/tls.c' object='src/database/tests_unit_test_linked-tls.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_linked-tls.obj `if test -f 'src/database/tls.c'; then $(CYGPATH_W) 'src/database/tls.c'; else $(CYGPATH_W) '$(srcdir)/src/database/tls.c'; fi`
+
+src/database/tests_unit_test_linked-lease.o: src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_linked-lease.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_linked-lease.Tpo -c -o src/database/tests_unit_test_linked-lease.o `test -f 'src/database/lease.c' || echo '$(srcdir)/'`src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_linked-lease.Tpo src/database/$(DEPDIR)/tests_unit_test_linked-lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/lease.c' object='src/database/tests_unit_test_linked-lease.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_linked-lease.o `test -f 'src/database/lease.c' || echo '$(srcdir)/'`src/database/lease.c
+
+src/database/tests_unit_test_linked-lease.obj: src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_linked-lease.obj -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_linked-lease.Tpo -c -o src/database/tests_unit_test_linked-lease.obj `if test -f 'src/database/lease.c'; then $(CYGPATH_W) 'src/database/lease.c'; else $(CYGPATH_W) '$(srcdir)/src/database/lease.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_linked-lease.Tpo src/database/$(DEPDIR)/tests_unit_test_linked-lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/lease.c' object='src/database/tests_unit_test_linked-lease.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_linked-lease.obj `if test -f 'src/database/lease.c'; then $(CYGPATH_W) 'src/database/lease.c'; else $(CYGPATH_W) '$(srcdir)/src/database/lease.c'; fi`
 
 src/database/tests_unit_test_linked-pool.o: src/database/pool.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_linked_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_linked-pool.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_linked-pool.Tpo -c -o src/database/tests_unit_test_linked-pool.o `test -f 'src/database/pool.c' || echo '$(srcdir)/'`src/database/pool.c
@@ -2960,6 +3176,34 @@ src/database/tests_unit_test_php_runtime-connection.obj: src/database/connection
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_php_runtime-connection.obj `if test -f 'src/database/connection.c'; then $(CYGPATH_W) 'src/database/connection.c'; else $(CYGPATH_W) '$(srcdir)/src/database/connection.c'; fi`
 
+src/database/tests_unit_test_php_runtime-tls.o: src/database/tls.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_php_runtime-tls.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Tpo -c -o src/database/tests_unit_test_php_runtime-tls.o `test -f 'src/database/tls.c' || echo '$(srcdir)/'`src/database/tls.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Tpo src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/tls.c' object='src/database/tests_unit_test_php_runtime-tls.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_php_runtime-tls.o `test -f 'src/database/tls.c' || echo '$(srcdir)/'`src/database/tls.c
+
+src/database/tests_unit_test_php_runtime-tls.obj: src/database/tls.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_php_runtime-tls.obj -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Tpo -c -o src/database/tests_unit_test_php_runtime-tls.obj `if test -f 'src/database/tls.c'; then $(CYGPATH_W) 'src/database/tls.c'; else $(CYGPATH_W) '$(srcdir)/src/database/tls.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Tpo src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/tls.c' object='src/database/tests_unit_test_php_runtime-tls.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_php_runtime-tls.obj `if test -f 'src/database/tls.c'; then $(CYGPATH_W) 'src/database/tls.c'; else $(CYGPATH_W) '$(srcdir)/src/database/tls.c'; fi`
+
+src/database/tests_unit_test_php_runtime-lease.o: src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_php_runtime-lease.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Tpo -c -o src/database/tests_unit_test_php_runtime-lease.o `test -f 'src/database/lease.c' || echo '$(srcdir)/'`src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Tpo src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/lease.c' object='src/database/tests_unit_test_php_runtime-lease.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_php_runtime-lease.o `test -f 'src/database/lease.c' || echo '$(srcdir)/'`src/database/lease.c
+
+src/database/tests_unit_test_php_runtime-lease.obj: src/database/lease.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_php_runtime-lease.obj -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Tpo -c -o src/database/tests_unit_test_php_runtime-lease.obj `if test -f 'src/database/lease.c'; then $(CYGPATH_W) 'src/database/lease.c'; else $(CYGPATH_W) '$(srcdir)/src/database/lease.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Tpo src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/database/lease.c' object='src/database/tests_unit_test_php_runtime-lease.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/database/tests_unit_test_php_runtime-lease.obj `if test -f 'src/database/lease.c'; then $(CYGPATH_W) 'src/database/lease.c'; else $(CYGPATH_W) '$(srcdir)/src/database/lease.c'; fi`
+
 src/database/tests_unit_test_php_runtime-pool.o: src/database/pool.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_php_runtime-pool.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Tpo -c -o src/database/tests_unit_test_php_runtime-pool.o `test -f 'src/database/pool.c' || echo '$(srcdir)/'`src/database/pool.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Tpo src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Po
@@ -3604,6 +3848,34 @@ src/app/tests_unit_test_php_runtime-signals.obj: src/app/signals.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_php_runtime_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/app/tests_unit_test_php_runtime-signals.obj `if test -f 'src/app/signals.c'; then $(CYGPATH_W) 'src/app/signals.c'; else $(CYGPATH_W) '$(srcdir)/src/app/signals.c'; fi`
 
+tests/unit/test_worker_set-test_worker_set.o: tests/unit/test_worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/unit/test_worker_set-test_worker_set.o -MD -MP -MF tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Tpo -c -o tests/unit/test_worker_set-test_worker_set.o `test -f 'tests/unit/test_worker_set.c' || echo '$(srcdir)/'`tests/unit/test_worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Tpo tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/unit/test_worker_set.c' object='tests/unit/test_worker_set-test_worker_set.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/unit/test_worker_set-test_worker_set.o `test -f 'tests/unit/test_worker_set.c' || echo '$(srcdir)/'`tests/unit/test_worker_set.c
+
+tests/unit/test_worker_set-test_worker_set.obj: tests/unit/test_worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tests/unit/test_worker_set-test_worker_set.obj -MD -MP -MF tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Tpo -c -o tests/unit/test_worker_set-test_worker_set.obj `if test -f 'tests/unit/test_worker_set.c'; then $(CYGPATH_W) 'tests/unit/test_worker_set.c'; else $(CYGPATH_W) '$(srcdir)/tests/unit/test_worker_set.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Tpo tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/unit/test_worker_set.c' object='tests/unit/test_worker_set-test_worker_set.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/unit/test_worker_set-test_worker_set.obj `if test -f 'tests/unit/test_worker_set.c'; then $(CYGPATH_W) 'tests/unit/test_worker_set.c'; else $(CYGPATH_W) '$(srcdir)/tests/unit/test_worker_set.c'; fi`
+
+src/platform/tests_unit_test_worker_set-worker_set.o: src/platform/worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/platform/tests_unit_test_worker_set-worker_set.o -MD -MP -MF src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Tpo -c -o src/platform/tests_unit_test_worker_set-worker_set.o `test -f 'src/platform/worker_set.c' || echo '$(srcdir)/'`src/platform/worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Tpo src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/platform/worker_set.c' object='src/platform/tests_unit_test_worker_set-worker_set.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/platform/tests_unit_test_worker_set-worker_set.o `test -f 'src/platform/worker_set.c' || echo '$(srcdir)/'`src/platform/worker_set.c
+
+src/platform/tests_unit_test_worker_set-worker_set.obj: src/platform/worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/platform/tests_unit_test_worker_set-worker_set.obj -MD -MP -MF src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Tpo -c -o src/platform/tests_unit_test_worker_set-worker_set.obj `if test -f 'src/platform/worker_set.c'; then $(CYGPATH_W) 'src/platform/worker_set.c'; else $(CYGPATH_W) '$(srcdir)/src/platform/worker_set.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Tpo src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/platform/worker_set.c' object='src/platform/tests_unit_test_worker_set-worker_set.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_worker_set_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/platform/tests_unit_test_worker_set-worker_set.obj `if test -f 'src/platform/worker_set.c'; then $(CYGPATH_W) 'src/platform/worker_set.c'; else $(CYGPATH_W) '$(srcdir)/src/platform/worker_set.c'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -3963,6 +4235,20 @@ tests/unit/test_log_config.log: tests/unit/test_log_config$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_worker_set.log: tests/unit/test_worker_set$(EXEEXT)
+	@p='tests/unit/test_worker_set$(EXEEXT)'; \
+	b='tests/unit/test_worker_set'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_db_lease.log: tests/unit/test_db_lease$(EXEEXT)
+	@p='tests/unit/test_db_lease$(EXEEXT)'; \
+	b='tests/unit/test_db_lease'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/unit/test_php_runtime.log: tests/unit/test_php_runtime$(EXEEXT)
 	@p='tests/unit/test_php_runtime$(EXEEXT)'; \
 	b='tests/unit/test_php_runtime'; \
@@ -4270,21 +4556,28 @@ distclean: distclean-am
 	-rm -f src/config/$(DEPDIR)/validate.Po
 	-rm -f src/database/$(DEPDIR)/cacti_query.Po
 	-rm -f src/database/$(DEPDIR)/connection.Po
+	-rm -f src/database/$(DEPDIR)/lease.Po
 	-rm -f src/database/$(DEPDIR)/persistence.Po
 	-rm -f src/database/$(DEPDIR)/pool.Po
 	-rm -f src/database/$(DEPDIR)/sql.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-cacti_query.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-connection.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-lease.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-persistence.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-pool.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-sql.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-tls.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-transfer.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-cacti_query.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-connection.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-persistence.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-sql.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po
+	-rm -f src/database/$(DEPDIR)/tls.Po
 	-rm -f src/database/$(DEPDIR)/transfer.Po
 	-rm -f src/log/$(DEPDIR)/debug.Po
 	-rm -f src/log/$(DEPDIR)/json.Po
@@ -4333,7 +4626,9 @@ distclean: distclean-am
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_php_runtime-privileges.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_php_runtime-socket.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_php_runtime-thread.Po
+	-rm -f src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po
 	-rm -f src/platform/$(DEPDIR)/thread.Po
+	-rm -f src/platform/$(DEPDIR)/worker_set.Po
 	-rm -f src/poller/$(DEPDIR)/availability.Po
 	-rm -f src/poller/$(DEPDIR)/host.Po
 	-rm -f src/poller/$(DEPDIR)/items.Po
@@ -4394,9 +4689,11 @@ distclean: distclean-am
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_output_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_privilege_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po
+	-rm -f tests/contracts/$(DEPDIR)/test_spine_script_limits_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po
+	-rm -f tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po
 	-rm -f tests/regression/$(DEPDIR)/test_spine_faults.Po
 	-rm -f tests/regression/$(DEPDIR)/test_spine_regressions.Po
 	-rm -f tests/support/$(DEPDIR)/php_test_server.Po
@@ -4405,6 +4702,7 @@ distclean: distclean-am
 	-rm -f tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_build_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_classify_result.Po
+	-rm -f tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Po
 	-rm -f tests/unit/$(DEPDIR)/test_linked-test_linked.Po
 	-rm -f tests/unit/$(DEPDIR)/test_log_config.Po
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
@@ -4415,6 +4713,7 @@ distclean: distclean-am
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_strings.Po
+	-rm -f tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags
@@ -4493,21 +4792,28 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/config/$(DEPDIR)/validate.Po
 	-rm -f src/database/$(DEPDIR)/cacti_query.Po
 	-rm -f src/database/$(DEPDIR)/connection.Po
+	-rm -f src/database/$(DEPDIR)/lease.Po
 	-rm -f src/database/$(DEPDIR)/persistence.Po
 	-rm -f src/database/$(DEPDIR)/pool.Po
 	-rm -f src/database/$(DEPDIR)/sql.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_db_lease-lease.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-cacti_query.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-connection.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-lease.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-persistence.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-pool.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-sql.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-tls.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_linked-transfer.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-cacti_query.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-connection.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-lease.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-persistence.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-pool.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-sql.Po
+	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-tls.Po
 	-rm -f src/database/$(DEPDIR)/tests_unit_test_php_runtime-transfer.Po
+	-rm -f src/database/$(DEPDIR)/tls.Po
 	-rm -f src/database/$(DEPDIR)/transfer.Po
 	-rm -f src/log/$(DEPDIR)/debug.Po
 	-rm -f src/log/$(DEPDIR)/json.Po
@@ -4556,7 +4862,9 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_php_runtime-privileges.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_php_runtime-socket.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_php_runtime-thread.Po
+	-rm -f src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po
 	-rm -f src/platform/$(DEPDIR)/thread.Po
+	-rm -f src/platform/$(DEPDIR)/worker_set.Po
 	-rm -f src/poller/$(DEPDIR)/availability.Po
 	-rm -f src/poller/$(DEPDIR)/host.Po
 	-rm -f src/poller/$(DEPDIR)/items.Po
@@ -4617,9 +4925,11 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_output_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_privilege_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po
+	-rm -f tests/contracts/$(DEPDIR)/test_spine_script_limits_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po
+	-rm -f tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po
 	-rm -f tests/regression/$(DEPDIR)/test_spine_faults.Po
 	-rm -f tests/regression/$(DEPDIR)/test_spine_regressions.Po
 	-rm -f tests/support/$(DEPDIR)/php_test_server.Po
@@ -4628,6 +4938,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/support/$(DEPDIR)/unit_test_php_runtime-spine_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_build_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_classify_result.Po
+	-rm -f tests/unit/$(DEPDIR)/test_db_lease-test_db_lease.Po
 	-rm -f tests/unit/$(DEPDIR)/test_linked-test_linked.Po
 	-rm -f tests/unit/$(DEPDIR)/test_log_config.Po
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
@@ -4638,6 +4949,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_strings.Po
+	-rm -f tests/unit/$(DEPDIR)/test_worker_set-test_worker_set.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

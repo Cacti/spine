@@ -55,7 +55,7 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 	/* Before any option, file or setting is read; see drop_privileges(). */
 	drop_privileges();
 
-	pthread_t *threads = NULL;
+	spine_worker_set_t workers = {0};
 	pthread_attr_t attr;
 
 	int *ids = NULL;
@@ -179,7 +179,7 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 	result = select_poll_hosts(&mysql);
 	if (result == NULL) die("FATAL: Unable to select the devices to poll");
 
-	prepare_worker_storage(result, &num_rows, &threads, &ids, &host_time);
+	prepare_worker_storage(result, &num_rows, &ids, &host_time);
 
 	/* initialize winsock library on Windows */
 	SOCK_STARTUP;
@@ -195,13 +195,16 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 	}
 
 	/* initialize threads and mutexes */
-	if (spine_thread_attr_init(&attr) != 0 ||
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0) {
+	if (spine_thread_attr_init(&attr) != 0) {
 		set.exit.exit_code = EXIT_FAILURE;
 		die("ERROR: Unable to initialize polling thread attributes");
 	}
 
 	init_mutexes();
+	if (spine_worker_set_init(&workers, (size_t) set.poller.threads) != 0) {
+		set.exit.exit_code = EXIT_FAILURE;
+		die("ERROR: Unable to initialize polling worker registry");
+	}
 
 	/* Initialize process-local concurrency permits before worker startup. */
 	if (spine_permits_init(&available_threads, set.poller.threads) != 0 ||
@@ -219,9 +222,13 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 	/* tell fork processes that they are now active */
 	set.poller.parent_fork = SPINE_FORK;
 
-	launch_poll_workers(&mysql, result, num_rows, threads, &thread_init_sem, &attr, host_time);
+	launch_poll_workers(&mysql, result, num_rows, &workers, &thread_init_sem, &attr, host_time);
 
-	a_threads_value = wait_for_workers(begin_time);
+	a_threads_value = wait_for_workers(begin_time, &workers);
+	if (spine_worker_set_destroy(&workers) != 0) {
+		set.exit.exit_code = EXIT_FAILURE;
+		die("ERROR: Unable to release joined polling worker registry");
+	}
 
 	threads_final = set.poller.threads - a_threads_value;
 
@@ -241,7 +248,7 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 
 	close_main_php();
 
-	free_worker_storage(num_rows, threads, ids, conf_file, host_time);
+	free_worker_storage(num_rows, ids, conf_file, host_time);
 
 	/* close mysql */
 	db_free_result(result);

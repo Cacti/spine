@@ -341,6 +341,7 @@ static void test_json_log_file_and_config(void **state) {
 	assert_non_null(strstr(line, "quote\\\" slash\\\\ value\\u000anext"));
 	assert_non_null(fgets(line, sizeof(line), file));
 	assert_non_null(strstr(line, "\"severity\":\"ERROR\""));
+	assert_non_null(strstr(line, "\"timestamp\":\"unknown\""));
 	assert_null(strstr(line, "\xff"));
 	assert_null(fgets(line, sizeof(line), file));
 	assert_int_equal(fclose(file), 0);
@@ -405,8 +406,88 @@ static void test_invalid_log_format_is_refused(void **state) {
 	assert_int_not_equal(WEXITSTATUS(status), 0);
 }
 
+static void test_local_and_remote_tls_configuration(void **state) {
+	(void) state;
+	write_config("DB_SSL_Mode required\nDB_SSL_MinVersion TLSv1.2\n"
+				 "DB_SSL_Cipher ECDHE-RSA-AES128-GCM-SHA256\n"
+				 "RDB_SSL_Mode verify-full\nRDB_SSL_MinVersion TLSv1.3\n"
+				 "RDB_SSL_CA /fixture/ca.pem\nRDB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	assert_int_equal(set.database.tls_mode, SPINE_TLS_REQUIRED);
+	assert_int_equal(set.database.tls_min_version, 12);
+	assert_string_equal(set.database.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
+	assert_string_equal(set.database.tls_ciphersuites, "");
+	assert_int_equal(set.remote_database.tls_mode, SPINE_TLS_VERIFY_FULL);
+	assert_int_equal(set.remote_database.tls_min_version, 13);
+	assert_string_equal(set.remote_database.tls_cipher, "");
+	assert_string_equal(set.remote_database.ssl_ca, "/fixture/ca.pem");
+	assert_string_equal(set.remote_database.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+	config_defaults();
+	assert_int_equal(set.database.tls_mode, SPINE_TLS_LEGACY);
+	assert_int_equal(set.remote_database.tls_min_version, 0);
+	assert_string_equal(set.database.tls_cipher, "");
+}
+
+static void test_invalid_policy_configuration_is_refused(void **state) {
+	char overlong_policy[BUFSIZE + 64];
+	const char *invalid[] = {"DB_SSL_Mode pretend\n", "RDB_SSL_MinVersion TLSv1.0\n",
+		"Script_OutputBytes 9999999999999999999999999999999999999999999999999\n",
+		"Script_DeadlineSeconds 86401\n", "Script_CPUSeconds -1\n",
+		"Script_CPUSeconds\n", "DB_SSL_Mode\n",
+		"DB_SSL_Cipher\n", "RDB_SSL_Ciphersuites\n", overlong_policy,
+		"Script_OpenFiles +16\n", "Script_MemoryKiB 1x\n", "Script_FileKiB 2147483648\n"};
+	size_t index;
+	size_t prefix;
+	(void) state;
+	spine_snprintf(overlong_policy, sizeof(overlong_policy), "Script_OutputBytes ");
+	prefix = strlen(overlong_policy);
+	memset(overlong_policy + prefix, '1', sizeof(overlong_policy) - prefix - 2);
+	overlong_policy[sizeof(overlong_policy) - 2] = '\n';
+	overlong_policy[sizeof(overlong_policy) - 1] = '\0';
+	for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); index++) {
+		pid_t child;
+		int status;
+		write_config(invalid[index]);
+		fflush(NULL);
+		child = fork();
+		assert_true(child >= 0);
+		if (child == 0) {
+			read_spine_config(config_path);
+			_exit(0);
+		}
+		assert_int_equal(waitpid(child, &status, 0), child);
+		assert_true(WIFEXITED(status));
+		assert_int_not_equal(WEXITSTATUS(status), 0);
+		assert_int_equal(unlink(config_path), 0);
+		config_path[0] = '\0';
+	}
+}
+
+static void test_script_limit_configuration_and_reset(void **state) {
+	(void) state;
+	write_config("Script_DeadlineSeconds 2\nScript_OutputBytes 3\nScript_CPUSeconds 1\n"
+				 "Script_MemoryKiB 16384\nScript_FileKiB 1\nScript_OpenFiles 16\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	assert_int_equal(set.php.limits.deadline_seconds, 2);
+	assert_int_equal(set.php.limits.output_bytes, 3);
+	assert_int_equal(set.php.limits.cpu_seconds, 1);
+	assert_int_equal(set.php.limits.memory_kib, 16384);
+	assert_int_equal(set.php.limits.file_kib, 1);
+	assert_int_equal(set.php.limits.open_files, 16);
+	config_defaults();
+	assert_int_equal(set.php.limits.deadline_seconds, 0);
+	assert_int_equal(set.php.limits.output_bytes, 0);
+	assert_int_equal(set.php.limits.cpu_seconds, 0);
+	assert_int_equal(set.php.limits.memory_kib, 0);
+	assert_int_equal(set.php.limits.file_kib, 0);
+	assert_int_equal(set.php.limits.open_files, 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup_teardown(test_local_and_remote_tls_configuration, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_invalid_policy_configuration_is_refused, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_script_limit_configuration_and_reset, config_setup, config_teardown),
 		cmocka_unit_test(test_spine_log_fits_a_musl_thread_stack),
 		cmocka_unit_test(test_new_log_permissions),
 		cmocka_unit_test(test_json_record_escaping_and_capacity),

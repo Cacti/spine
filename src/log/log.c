@@ -177,7 +177,7 @@ static bool log_to_file(const char *message) {
 		if (close(fd) != 0) success = FALSE;
 	}
 	if (!success && !reported_error) {
-		printf("%s", set.logging.json_logs ? "{\"severity\":\"ERROR\",\"message\":\"Log file write failed\"}\n" : "ERROR: Spine Log File Could Not Be Opened/Created or Written\n");
+		printf("%s", set.logging.json_logs ? "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"Log file write failed\"}\n" : "ERROR: Spine Log File Could Not Be Opened/Created or Written\n");
 		reported_error = TRUE;
 	}
 	if (pthread_mutex_unlock(&mutex) != 0) success = FALSE;
@@ -218,7 +218,7 @@ static log_buffers_t *log_buffers(void) {
 _Static_assert((size_t) LOGSIZE <= (SIZE_MAX - 256) / 6, "JSON log allocation size overflows");
 
 static int log_json_message(const char *message) {
-	static const char failure[] = "{\"severity\":\"ERROR\",\"message\":\"JSON log rejected: invalid UTF-8 or formatting failure\"}\n";
+	static const char failure[] = "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: invalid UTF-8 or formatting failure\"}\n";
 	const char *severity = strstr(message, "FATAL") ? "FATAL" : strstr(message, "ERROR") ? "ERROR"
 		: strstr(message, "WARNING")                                                     ? "WARNING"
 																						 : "INFO";
@@ -233,6 +233,7 @@ static int log_json_message(const char *message) {
 
 	valid = gmtime_r(&now, &utc) != NULL &&
 		strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc) != 0;
+	if (!valid) strcpy(timestamp, "unknown");
 	owned = malloc(length * 6 + 256);
 	if (owned != NULL && spine_json_log_record(owned, length * 6 + 256, timestamp, severity, message)) {
 		record = owned;

@@ -49,11 +49,27 @@ DB_Port       3306
 #DB_SSL_Key
 #DB_SSL_Cert
 #DB_SSL_CA
+# Explicit policy overrides legacy connector defaults; unset keeps compatibility.
+# Unsupported explicit modes fail; see docs/operations/database-tls.md.
+# verify-full requires a trusted DB_SSL_CA and a matching server identity.
+#DB_SSL_Mode required
+#DB_SSL_MinVersion TLSv1.2
+#DB_SSL_Cipher ECDHE-RSA-AES128-GCM-SHA256
+#DB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256
 
 # Optional structured logging. Default text preserves existing log consumers.
 # JSON records use UTC timestamps and retain valid UTF-8. Invalid UTF-8 emits
 # a structured error record instead of the original message.
 #Log_Format text
+# Optional per-command limits. Zero/unset preserves legacy script behavior.
+# Enabling any limit requires complete bounded output and successful child exit.
+# Resource caps (CPU, memory, file size, descriptors) require Linux /bin/sh.
+#Script_DeadlineSeconds 0
+#Script_OutputBytes 0
+#Script_CPUSeconds 0
+#Script_MemoryKiB 0
+#Script_FileKiB 0
+#Script_OpenFiles 0
 #SNMP_Clientaddr
 #Cacti_Log     /var/www/html/cacti/log/cacti.log
 
@@ -66,4 +82,8 @@ DB_Port       3306
 #RDB_SSL_Key
 #RDB_SSL_Cert
 #RDB_SSL_CA
+#RDB_SSL_Mode verify-full
+#RDB_SSL_MinVersion TLSv1.2
+#RDB_SSL_Cipher ECDHE-RSA-AES128-GCM-SHA256
+#RDB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256
 

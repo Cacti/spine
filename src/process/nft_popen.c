@@ -167,14 +167,22 @@ static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd) {
 /* WARNING: command is passed to /bin/sh -c without shell escaping.
  * The caller MUST ensure command originates from a trusted source
  * (the Cacti database). Do not pass user-controlled input directly. */
-int nft_popen(const char *command, const char *type) {
+int nft_popen_limited(const char *command, const char *type, const spine_script_limits_t *limits) {
 	struct pid *cur;
 	struct pid *p;
 	int pdes[2];
 	int inherit_fd = -1;
 	int fd, twoway;
 	pid_t pid;
-	char *argv[4];
+	char *argv[10];
+	char limit_values[4][32];
+	bool resources = limits != NULL && (limits->cpu_seconds || limits->memory_kib || limits->file_kib || limits->open_files);
+	static char limit_policy[] =
+		"if [ \"$1\" -ne 0 ]; then ulimit -t \"$1\" || exit 125; fi; "
+		"if [ \"$2\" -ne 0 ]; then ulimit -v \"$2\" || exit 125; fi; "
+		"if [ \"$3\" -ne 0 ]; then ulimit -f \"$3\" || exit 125; fi; "
+		"if [ \"$4\" -ne 0 ]; then ulimit -n \"$4\" || exit 125; fi; "
+		"exec /bin/sh -c \"$5\"";
 	char *command_copy;
 	char shell_cmd[] = "sh";
 	char shell_flag[] = "-c";
@@ -192,6 +200,12 @@ int nft_popen(const char *command, const char *type) {
 		errno = EINVAL;
 		return -1;
 	}
+#ifndef __linux__
+	if (resources) {
+		errno = ENOTSUP;
+		return -1;
+	}
+#endif
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication. Only the documented modes are
@@ -244,6 +258,23 @@ int nft_popen(const char *command, const char *type) {
 	argv[1] = shell_flag;
 	argv[2] = command_copy;
 	argv[3] = NULL;
+	if (resources) {
+		/* Policy is constant code. Numeric limits and the trusted command are
+		 * separate positional arguments, never concatenated into that code.
+		 * /bin/sh's POSIX file-size unit is a 512-byte block. */
+		snprintf(limit_values[0], sizeof(limit_values[0]), "%u", limits->cpu_seconds);
+		snprintf(limit_values[1], sizeof(limit_values[1]), "%u", limits->memory_kib);
+		snprintf(limit_values[2], sizeof(limit_values[2]), "%llu", (unsigned long long) limits->file_kib * 2);
+		snprintf(limit_values[3], sizeof(limit_values[3]), "%u", limits->open_files);
+		argv[2] = limit_policy;
+		argv[3] = (char *) "spine-script-limits";
+		argv[4] = limit_values[0];
+		argv[5] = limit_values[1];
+		argv[6] = limit_values[2];
+		argv[7] = limit_values[3];
+		argv[8] = command_copy;
+		argv[9] = NULL;
+	}
 
 	/* Lock the list mutex prior to forking, to ensure that
 	 * the child process sees PidList in a consistent list state.
@@ -430,6 +461,10 @@ retry:
 	pthread_setcancelstate(cancel_state, NULL);
 
 	return fd;
+}
+
+int nft_popen(const char *command, const char *type) {
+	return nft_popen_limited(command, type, NULL);
 }
 
 /*! ------------------------------------------------------------------------------

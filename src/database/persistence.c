@@ -49,6 +49,7 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	int new_buffer = TRUE;
 	size_t out_buffer;
 	MYSQL *mysqlt;
+	const char *suffix;
 	int i;
 
 	/* insert the query results into the database */
@@ -72,6 +73,7 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	}
 
 	i = 0;
+	suffix = db_output_upsert_suffix(mysqlt);
 	while (i < rows_processed) {
 		char escaped_result[RESULTS_BUFFER * 2 + 1];
 		char escaped_rrd_name[DBL_BUFSIZE];
@@ -94,8 +96,8 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 
 		/* if the next element to the buffer will overflow it, write to the database */
 		if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
-			if (!flush_output_query(mysqlt, mode, query3, queries->suffix, queries->output)) failed = TRUE;
-			if (!flush_output_query(mysqlt, mode, query12, queries->suffix, queries->boost_output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query3, suffix, queries->output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query12, suffix, queries->boost_output)) failed = TRUE;
 
 			/* reset the output buffer length */
 			out_buffer = strlen(query3);
@@ -120,8 +122,8 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 
 	/* perform the last insert if there is data to process */
 	if (out_buffer > strlen(queries->output)) {
-		if (!flush_output_query(mysqlt, mode, query3, queries->suffix, NULL)) failed = TRUE;
-		if (!flush_output_query(mysqlt, mode, query12, queries->suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query3, suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query12, suffix, NULL)) failed = TRUE;
 	}
 	/* MEMORY output tables can retain earlier rows after a rejected write.
 	 * Confirmed partial output remains; keep due items eligible for recollection. */

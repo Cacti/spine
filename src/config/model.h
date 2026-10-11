@@ -58,6 +58,15 @@ typedef struct {
 } spine_hosts_config_t;
 
 /* Database configuration and runtime state. */
+typedef enum {
+	SPINE_TLS_LEGACY = 0,
+	SPINE_TLS_DISABLED,
+	SPINE_TLS_PREFERRED,
+	SPINE_TLS_REQUIRED,
+	SPINE_TLS_VERIFY_CA,
+	SPINE_TLS_VERIFY_FULL
+} spine_tls_mode_t;
+
 typedef struct {
 	char host[BUFSIZE];
 	char database[BUFSIZE];
@@ -67,12 +76,25 @@ typedef struct {
 	char ssl_key[BUFSIZE];
 	char ssl_cert[BUFSIZE];
 	char ssl_ca[BUFSIZE];
+	spine_tls_mode_t tls_mode;
+	int tls_min_version;
+	char tls_cipher[BUFSIZE];
+	char tls_ciphersuites[BUFSIZE];
 	unsigned int port;
 	char version[BUFSIZE];
 	int onupdate;
 } spine_database_config_t;
 
 /* Php configuration and runtime state. */
+typedef struct {
+	unsigned int deadline_seconds;
+	unsigned int output_bytes;
+	unsigned int cpu_seconds;
+	unsigned int memory_kib;
+	unsigned int file_kib;
+	unsigned int open_files;
+} spine_script_limits_t;
+
 typedef struct {
 	char path_php[BUFSIZE];
 	char path_php_server[BUFSIZE];
@@ -81,6 +103,7 @@ typedef struct {
 	int php_initialized;
 	int php_servers;
 	int php_current_server;
+	spine_script_limits_t limits;
 } spine_php_config_t;
 
 /* Logging configuration and runtime state. */

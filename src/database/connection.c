@@ -15,6 +15,7 @@
 
 #include "internal/common.h"
 #include "app/spine.h"
+#include <stdatomic.h>
 
 /*! \fn void db_connect(char *database, MYSQL *mysql)
  *  \brief opens a connection to a MySQL database.
@@ -58,6 +59,23 @@ void db_set_option(MYSQL *mysql, enum mysql_option option, const void *value, co
 	}
 }
 
+/* Inspect the connected destination, including after a reconnect. A cached
+ * capability for the local server cannot describe a remote output server. */
+const char *db_output_upsert_suffix(MYSQL *mysql) {
+	const char *version = mysql == NULL ? NULL : mysql_get_server_info(mysql);
+	unsigned long number;
+
+	if (version == NULL || version[0] == '\0') {
+		return " ON DUPLICATE KEY UPDATE output=VALUES(output)";
+	}
+	number = mysql_get_server_version(mysql);
+
+	if (db_row_alias_upsert_supported(version, number)) {
+		return " AS rs ON DUPLICATE KEY UPDATE output=rs.output";
+	}
+	return " ON DUPLICATE KEY UPDATE output=VALUES(output)";
+}
+
 #ifdef HAS_MYSQL_OPT_SSL_KEY
 static void db_set_ssl_options(MYSQL *mysql, int type) {
 #ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
@@ -89,7 +107,8 @@ int db_connect(int type, MYSQL *mysql) {
 	int error = 0;
 	const MYSQL *connect_error;
 	db_address_t address;
-	static int connections = 0;
+	static atomic_uint connections;
+	unsigned int total_connections;
 
 	bool local_address = set.poller.poller_id <= 1 || type == LOCAL;
 	db_address_init(&address, local_address ? set.database.host : set.remote_database.host, local_address);
@@ -102,25 +121,32 @@ int db_connect(int type, MYSQL *mysql) {
 	wtimeout = 30;
 	attempts = 1;
 
-	if (mysql_init(mysql) == NULL) {
-		db_address_release(&address);
-		printf("ERROR: Database unable to allocate memory and therefore can not connect\n");
-		return FALSE;
-	}
+	while (tries > 0) {
+		/* Failed handshakes may consume connector TLS state. Each attempt owns a
+	 * freshly initialized handle and reapplies the complete policy. */
+		if (mysql_init(mysql) == NULL) {
+			db_address_release(&address);
+			printf("ERROR: Database unable to allocate memory and therefore can not connect\n");
+			return FALSE;
+		}
 
-	db_set_option(mysql, MYSQL_OPT_READ_TIMEOUT, &rtimeout, "read timeout");
-	db_set_option(mysql, MYSQL_OPT_WRITE_TIMEOUT, &wtimeout, "write timeout");
-	db_set_option(mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout, "general timeout");
+		db_set_option(mysql, MYSQL_OPT_READ_TIMEOUT, &rtimeout, "read timeout");
+		db_set_option(mysql, MYSQL_OPT_WRITE_TIMEOUT, &wtimeout, "write timeout");
+		db_set_option(mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout, "general timeout");
 
 #ifdef HAS_MYSQL_OPT_RETRY_COUNT
 	db_set_option(mysql, MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 #endif
 
 #ifdef HAS_MYSQL_OPT_SSL_KEY
-	db_set_ssl_options(mysql, type);
+	db_set_ssl_options(mysql, local_address ? LOCAL : REMOTE);
 #endif
+	if (!db_apply_tls_policy(mysql, local_address ? &set.database : &set.remote_database)) {
+		SPINE_LOG(("ERROR: Database TLS policy is invalid or unsupported by the selected client library"));
+		db_address_release(&address);
+		return FALSE;
+	}
 
-	while (tries > 0) {
 		tries--;
 
 		if (set.poller.poller_id > 1) {
@@ -151,11 +177,20 @@ int db_connect(int type, MYSQL *mysql) {
 				success = FALSE;
 			}
 		} else {
+			const spine_database_config_t *configuration = local_address ? &set.database : &set.remote_database;
+			if (configuration->tls_mode >= SPINE_TLS_REQUIRED && mysql_get_ssl_cipher(mysql) == NULL) {
+				SPINE_LOG(("ERROR: Database connection rejected because the explicit TLS policy requires encryption"));
+				mysql_close(mysql);
+				mysql_init(mysql);
+				db_address_release(&address);
+				return FALSE;
+			}
 			success = TRUE;
 			break;
 		}
 
 		attempts++;
+		if (tries > 0) mysql_close(mysql);
 	}
 
 	db_address_release(&address);
@@ -167,9 +202,8 @@ int db_connect(int type, MYSQL *mysql) {
 		return FALSE;
 	}
 
-	SPINE_LOG_DEBUG(("DEBUG: Total Connections made %i", connections));
-
-	connections++;
+	total_connections = atomic_fetch_add_explicit(&connections, 1, memory_order_relaxed) + 1;
+	SPINE_LOG_DEBUG(("DEBUG: Total Connections made %u", total_connections));
 
 	return TRUE;
 }

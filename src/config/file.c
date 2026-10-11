@@ -17,6 +17,84 @@
 #include "app/spine.h"
 #define SPINE_STRINGIFY_INNER(value) #value
 #define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
+#include <limits.h>
+
+static bool explicit_policy_name(const char *name) {
+	const char *option;
+	if (strncasecmp(name, "Script_", 7) == 0 || STRIMATCH(name, "Log_Format")) return TRUE;
+	if (strncasecmp(name, "DB_SSL_", 7) == 0) option = name + 7;
+	else if (strncasecmp(name, "RDB_SSL_", 8) == 0) option = name + 8;
+	else return FALSE;
+	return STRIMATCH(option, "Mode") || STRIMATCH(option, "MinVersion") ||
+		STRIMATCH(option, "Cipher") || STRIMATCH(option, "Ciphersuites");
+}
+
+static bool apply_script_limit(const char *name, const char *value) {
+	static const struct {
+		const char *name;
+		size_t offset;
+		unsigned long maximum;
+	} directives[] = {
+		{"Script_DeadlineSeconds", offsetof(spine_script_limits_t, deadline_seconds), 86400},
+		{"Script_OutputBytes", offsetof(spine_script_limits_t, output_bytes), RESULTS_BUFFER - 1},
+		{"Script_CPUSeconds", offsetof(spine_script_limits_t, cpu_seconds), 86400},
+		{"Script_MemoryKiB", offsetof(spine_script_limits_t, memory_kib), INT_MAX},
+		{"Script_FileKiB", offsetof(spine_script_limits_t, file_kib), INT_MAX},
+		{"Script_OpenFiles", offsetof(spine_script_limits_t, open_files), INT_MAX}};
+	size_t index;
+	unsigned long number;
+	char *end;
+	for (index = 0; index < sizeof(directives) / sizeof(directives[0]); index++) {
+		if (!STRIMATCH(name, directives[index].name)) continue;
+		if (value[0] == '\0' || !all_digits(value)) die("ERROR: Invalid script resource limit");
+		errno = 0;
+		number = strtoul(value, &end, 10);
+		if (errno != 0 || *end != '\0' || number > directives[index].maximum) die("ERROR: Script resource limit is out of range");
+		*(unsigned int *) ((char *) &set.php.limits + directives[index].offset) = (unsigned int) number;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static bool apply_tls_directive(const char *name, const char *value) {
+	spine_database_config_t *configuration;
+	const char *option;
+	static const char *const modes[] = {"legacy", "disabled", "preferred", "required", "verify-ca", "verify-full"};
+	size_t index;
+	char *destination;
+
+	if (strncasecmp(name, "DB_SSL_", 7) == 0) {
+		configuration = &set.database;
+		option = name + 7;
+	} else if (strncasecmp(name, "RDB_SSL_", 8) == 0) {
+		configuration = &set.remote_database;
+		option = name + 8;
+	} else {
+		return FALSE;
+	}
+	if (STRIMATCH(option, "Mode")) {
+		for (index = 0; index < sizeof(modes) / sizeof(modes[0]); index++) {
+			if (STRIMATCH(value, modes[index])) {
+				configuration->tls_mode = (spine_tls_mode_t) index;
+				return TRUE;
+			}
+		}
+		die("ERROR: Invalid database TLS mode");
+	}
+	if (STRIMATCH(option, "MinVersion")) {
+		if (STRIMATCH(value, "TLSv1.2")) configuration->tls_min_version = 12;
+		else if (STRIMATCH(value, "TLSv1.3")) configuration->tls_min_version = 13;
+		else die("ERROR: Database TLS minimum must be TLSv1.2 or TLSv1.3");
+		return TRUE;
+	}
+	if (STRIMATCH(option, "Cipher")) destination = configuration->tls_cipher;
+	else if (STRIMATCH(option, "Ciphersuites")) destination = configuration->tls_ciphersuites;
+	else return FALSE;
+	if (value[0] == '\0') die("ERROR: Missing database TLS cipher policy value");
+	if (strlen(value) >= BUFSIZE) die("ERROR: Database TLS cipher policy exceeds the configuration limit");
+	strncopy(destination, value, BUFSIZE);
+	return TRUE;
+}
 
 /*! \fn int read_spine_config(const char *file)
  *  \brief obtain default startup variables from the spine.conf file.
@@ -25,6 +103,8 @@
  *  \return 0 if successful or -1 if the file could not be opened
  */
 static int apply_config_directive(const char *name, const char *value) {
+	if (apply_script_limit(name, value)) return TRUE;
+	if (apply_tls_directive(name, value)) return TRUE;
 	/* Immutable metadata cannot be changed by configuration values written
 	 * into set. Offsets and capacities describe the actual destination fields. */
 	static const struct {
@@ -114,6 +194,8 @@ int read_spine_config(const char *file) {
 		 * pass is exactly one line */
 		line++;
 		if (!config_line_complete(fp, buff, sizeof(buff))) {
+			if (sscanf(buff, "%1023s", name) == 1 && explicit_policy_name(name))
+				die("ERROR: Explicit policy directive exceeds the configuration line limit");
 			if (!set.console.stderr_notty) {
 				fprintf(stderr, "WARNING: Ignoring line %d of %s, longer than %d characters\n", line, display_file, BUFSIZE - 2);
 			}
@@ -128,6 +210,9 @@ int read_spine_config(const char *file) {
 		 * A lone token is a key without a value, or a line that is no
 		 * directive at all; the old %15s split such a line in two. */
 		if (fields == 1) {
+			/* Explicit policies must not silently become legacy defaults. */
+			(void) apply_script_limit(name, "");
+			(void) apply_tls_directive(name, "");
 			if (!set.console.stderr_notty) {
 				fprintf(stderr, "WARNING: Directive without a value on line %d of %s\n", line, display_file);
 			}
@@ -146,6 +231,11 @@ int read_spine_config(const char *file) {
  *
  */
 void config_defaults() {
+	memset(&set.php.limits, 0, sizeof(set.php.limits));
+	set.database.tls_mode = set.remote_database.tls_mode = SPINE_TLS_LEGACY;
+	set.database.tls_min_version = set.remote_database.tls_min_version = 0;
+	set.database.tls_cipher[0] = set.remote_database.tls_cipher[0] = '\0';
+	set.database.tls_ciphersuites[0] = set.remote_database.tls_ciphersuites[0] = '\0';
 	set.poller.threads = DEFAULT_THREADS;
 
 	/* default server */

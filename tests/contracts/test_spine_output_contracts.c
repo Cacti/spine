@@ -7,6 +7,7 @@
  */
 #include "internal/common.h"
 #include "app/spine.h"
+#include "database/persistence.h"
 #include <fcntl.h>
 
 extern poller_thread_t **details;
@@ -121,6 +122,78 @@ static void assert_sample_at(MYSQL *mysql, const char *table, int id,
 	assert(output_count(mysql, query) == 1);
 }
 
+/* Exercise the writer with real destination metadata and duplicate keys.
+ * Temporary tables isolate these samples from the other polling contracts. */
+static void test_destination_upserts(MYSQL *local) {
+	config_t previous = set;
+	MYSQL remote_storage;
+	MYSQL *remote = local;
+	const char *remote_host = getenv("SPINE_TEST_REMOTE_DB_HOST");
+	poller_queries_t queries;
+	target_t item = {0};
+	int mode;
+	int pass;
+	int table;
+	const char *tables[] = {"spine_upsert_output", "spine_upsert_boost"};
+	const char *sources[] = {"poller_output", "poller_output_boost"};
+	char query[BUFSIZE];
+
+	if (remote_host != NULL && remote_host[0] != '\0') {
+		assert(mysql_init(&remote_storage) != NULL);
+		assert(mysql_real_connect(&remote_storage, remote_host, "root", "",
+				   "spine_regressions", 3307, NULL, 0) != NULL);
+		remote = &remote_storage;
+		/* Match db_connect's Cacti-compatible session before cloning the
+		 * legacy fixture tables with zero-date column defaults. */
+		assert(mysql_query(remote, "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'") == 0);
+		/* This lane must really cover different server families. */
+		assert(strstr(mysql_get_server_info(local), "MariaDB") != NULL);
+		assert(strstr(mysql_get_server_info(remote), "MariaDB") == NULL);
+		assert(strstr(db_output_upsert_suffix(remote), " AS rs ") != NULL);
+	}
+	set.poller.poller_id = 2;
+	set.poller.SQL_readonly = FALSE;
+	set.boost.boost_enabled = TRUE;
+	set.boost.boost_redirect = TRUE;
+	item.local_data_id = 930001;
+	STRNCOPY(item.rrd_name, "upsert");
+	poller_prepare_queries(&queries, 901, 1, 1);
+	STRNCOPY(queries.output, "INSERT INTO spine_upsert_output (local_data_id,rrd_name,time,output) VALUES");
+	STRNCOPY(queries.boost_output, "INSERT INTO spine_upsert_boost (local_data_id,rrd_name,time,output) VALUES");
+	/* A stale, invalid suffix must never reach either destination. */
+	STRNCOPY(queries.suffix, " INVALID CACHED UPSERT");
+	for (mode = 0; mode < 2; mode++) {
+		MYSQL *destination = mode == 0 ? local : remote;
+		set.poller.mode = mode == 0 ? REMOTE_OFFLINE : REMOTE_ONLINE;
+		set.database.onupdate = mode;
+		set.remote_database.onupdate = !mode;
+		for (table = 0; table < 2; table++) {
+			spine_snprintf(query, sizeof(query), "CREATE TEMPORARY TABLE %s LIKE %s", tables[table], sources[table]);
+			assert(db_insert(destination, LOCAL, query));
+		}
+		for (pass = 0; pass < 2; pass++) {
+			poll_output_buffers_t buffers;
+			STRNCOPY(item.result, pass == 0 ? "123" : "456");
+			buffers = write_poll_results(local, remote, &queries, &item, 1, "1791244800");
+			assert(!buffers.failed);
+			free(buffers.output);
+			free(buffers.boost);
+			for (table = 0; table < 2; table++) {
+				spine_snprintf(query, sizeof(query), "SELECT COUNT(*) FROM %s", tables[table]);
+				assert(output_count(destination, query) == 1);
+				assert_sample_at(destination, tables[table], item.local_data_id, "1791244800", item.result);
+			}
+		}
+		for (table = 0; table < 2; table++) {
+			spine_snprintf(query, sizeof(query), "DROP TEMPORARY TABLE %s", tables[table]);
+			assert(db_insert(destination, LOCAL, query));
+		}
+	}
+	if (remote != local) mysql_close(remote);
+	set = previous;
+	puts("production destination-aware duplicate-key upsert regressions passed");
+}
+
 static void test_output_recollection(MYSQL *mysql) {
 	poller_thread_t **previous_details = details;
 	char query[BUFSIZE];
@@ -221,6 +294,8 @@ static void test_concurrent_output_failure(MYSQL *mysql) {
 	poller_thread_t **previous_details = details;
 	int previous_threads = set.poller.threads;
 	int previous_timeout = set.php.script_timeout;
+	db_lease_t probe = {0};
+	db_lease_t second_probe = {0};
 	assert(previous_threads == 1 && db_pool_local[0].free);
 	assert(spine_permits_available(&available_threads) == 1);
 	assert(spine_permits_available(&available_scripts) == 2);
@@ -293,9 +368,7 @@ static void test_concurrent_output_failure(MYSQL *mysql) {
 	assert(spine_permits_available(&startup) == 2);
 	assert(spine_permits_available(&available_threads) == 0);
 	assert(spine_permits_available(&available_scripts) == 0);
-	thread_mutex_lock(LOCK_POOL);
-	assert(!db_pool_local[0].free && !db_pool_local[1].free);
-	thread_mutex_unlock(LOCK_POOL);
+	assert(!db_acquire_lease(LOCAL, &probe));
 	/* Both real workers have selected their own partition and hold resources.
 	 * Allow only the rejected partition to finish first. */
 	send_output_sample(release[1], "resume\n", 7);
@@ -310,9 +383,9 @@ static void test_concurrent_output_failure(MYSQL *mysql) {
 	assert_sample_at(mysql, "poller_output_boost", 930002, "1791244800", "123");
 	assert(spine_permits_available(&available_threads) == 1);
 	assert(spine_permits_available(&available_scripts) == 1);
-	thread_mutex_lock(LOCK_POOL);
-	assert(db_pool_local[0].free + db_pool_local[1].free == 1);
-	thread_mutex_unlock(LOCK_POOL);
+	assert(db_acquire_lease(LOCAL, &probe));
+	assert(!db_acquire_lease(LOCAL, &second_probe));
+	assert(db_release_lease(&probe));
 	send_output_sample(release[0], "resume\n", 7);
 	await_output_byte(finished[0][0], 'F', spine_monotonic_time() + 10);
 	assert(pthread_join(threads[0], NULL) == 0);
@@ -538,6 +611,7 @@ void test_output_write_contracts(MYSQL *mysql) {
 	php_t *previous_servers = php_processes;
 	int *previous_debug = debug_devices;
 	static int owned_debug[100];
+	test_destination_upserts(mysql);
 	debug_devices = owned_debug;
 	assert_output_engine(mysql, "poller_output", "MEMORY");
 	assert_output_engine(mysql, "poller_output_boost", "InnoDB");

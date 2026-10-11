@@ -40,6 +40,9 @@ static struct {
 	const char *engine_uptime;
 	const char *legacy_uptime;
 	int session_opens;
+	int session_closes;
+	int lease_acquires;
+	int lease_releases;
 	char *queries[MAX_QUERIES];
 	int query_count;
 	int completion_queries;
@@ -152,14 +155,18 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 	snprintf(output, (size_t) max_size, "%s", input);
 }
 
-pool_t *__wrap_db_get_connection(int type) {
-	(void) type;
-	return &fake_pool;
+bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
+	fake.lease_acquires++;
+	lease->type = type;
+	lease->connection = &fake_pool;
+	return TRUE;
 }
 
-void __wrap_db_release_connection(int type, int id) {
-	(void) type;
-	(void) id;
+bool __wrap_db_release_lease(db_lease_t *lease) {
+	assert_ptr_equal(lease->connection, &fake_pool);
+	fake.lease_releases++;
+	lease->connection = NULL;
+	return TRUE;
 }
 
 void __wrap_db_free_result(MYSQL_RES *opaque) {
@@ -190,6 +197,7 @@ void *__wrap_snmp_host_init(const snmp_connection_t *options) {
 
 void __wrap_snmp_host_cleanup(void *session) {
 	assert_ptr_equal(session, &fake_session);
+	fake.session_closes++;
 }
 
 /* Mirrors snmp_get_base(): a failure is "" when allowed and U otherwise. */
@@ -316,6 +324,17 @@ static int setup(void **state) {
 /* Each item leaves through a different flush. 601 goes out when the batch is
  * full (max_oids=1) or when 602's credentials differ; 602 is the final flush.
  * All three apply the same regex, to the normalized value, and spike kill. */
+static void test_empty_device_releases_session_and_lease(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	assert_int_equal(fake.item_count, 0);
+	run_poll();
+	assert_int_equal(fake.session_opens, 1);
+	assert_int_equal(fake.session_closes, 1);
+	assert_int_equal(fake.lease_acquires, 1);
+	assert_int_equal(fake.lease_releases, 1);
+}
+
 static void test_flush_paths_agree(void **state) {
 	(void) state;
 	for (int scenario = 0; scenario < 4; scenario++) {
@@ -449,6 +468,7 @@ static void test_system_uptime(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup(test_empty_device_releases_session_and_lease, setup),
 		cmocka_unit_test_setup(test_flush_paths_agree, setup),
 		cmocka_unit_test_setup(test_long_community_batches, setup),
 		cmocka_unit_test_setup(test_snmpv3_batches_on_profile, setup),

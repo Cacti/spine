@@ -15,6 +15,70 @@
 
 #include "internal/common.h"
 #include "app/spine.h"
+#include <sys/wait.h>
+
+static bool script_limits_enabled(void) {
+	const spine_script_limits_t *limits = &set.php.limits;
+	return limits->deadline_seconds || limits->output_bytes || limits->cpu_seconds ||
+		limits->memory_kib || limits->file_kib || limits->open_files;
+}
+
+static bool read_limited_script(const host_t *host, int fd, double deadline, char *result) {
+	size_t used = 0;
+	size_t maximum = set.php.limits.output_bytes ? set.php.limits.output_bytes : RESULTS_BUFFER - 1;
+	char chunk[RESULTS_BUFFER];
+	int ready;
+	ssize_t bytes;
+	if (maximum >= RESULTS_BUFFER) {
+		SET_UNDEFINED(result);
+		return FALSE;
+	}
+	while ((ready = spine_wait_readable(fd, deadline)) > 0) {
+		bytes = read(fd, chunk, sizeof(chunk));
+		if (bytes < 0 && errno == EINTR) continue;
+		if (bytes == 0 && used != 0) {
+			result[used] = '\0';
+			return TRUE;
+		}
+		if (bytes <= 0) {
+			SPINE_LOG(("Device[%i] ERROR: Script policy rejected empty output or a read failure", host->id));
+			break;
+		}
+		if ((size_t) bytes > maximum - used) {
+			SPINE_LOG(("Device[%i] ERROR: Script output exceeded its configured byte limit", host->id));
+			break;
+		}
+		memcpy(result + used, chunk, (size_t) bytes);
+		used += (size_t) bytes;
+	}
+	if (ready == 0) SPINE_LOG(("Device[%i] ERROR: Script execution exceeded its configured deadline", host->id));
+	if (ready < 0) SPINE_LOG(("Device[%i] ERROR: Script policy could not wait for output", host->id));
+	SET_UNDEFINED(result);
+	return FALSE;
+}
+
+typedef struct {
+	char *result;
+	char *command;
+	int fd;
+	int host_id;
+	bool permit;
+} script_cleanup_t;
+
+static void cleanup_script_poll(void *argument) {
+	script_cleanup_t *owned = argument;
+	int pid;
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	if (owned->fd >= 0) {
+		pid = nft_pchild(owned->fd);
+		if (pid > 1) kill(-pid, SIGKILL);
+		nft_pclose(owned->fd);
+	}
+	if (owned->permit) spine_permits_release(&available_scripts);
+	free(owned->command);
+	free(owned->result);
+	SPINE_LOG(("Device[%i] ERROR: Script execution cancelled and owned resources released", owned->host_id));
+}
 
 static int acquire_script_permit(const host_t *host) {
 	if (set.php.script_timeout <= 0) return EINVAL;
@@ -110,6 +174,19 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 	double deadline;
 	char *proc_command;
 	char *result_string;
+	int previous_state;
+	int previous_type;
+	int status;
+	int child_pid;
+	int spawn_error;
+	bool valid_result;
+	unsigned int execution_seconds;
+	bool limited = script_limits_enabled();
+	script_cleanup_t owned = {NULL, NULL, -1, current_host->id, FALSE};
+	/* Deferred cancellation allows ownership to be registered between APIs.
+	 * Cancellation remains supported while waiting for a permit or output. */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &previous_state);
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, &previous_type);
 
 /* compensate for back slashes in arguments */
 #if defined(__CYGWIN__)
@@ -124,17 +201,21 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 
 	/* set zeros */
 	memset(result_string, 0, RESULTS_BUFFER);
+	owned.result = result_string;
+#if defined(__CYGWIN__)
+	owned.command = proc_command;
+#endif
 
 
 	/* don't run too many scripts, operating systems do not like that. */
 	int sem_err;
-	int needs_cleanup = 0;
 
 	/* used for checking executable status */
 	char executable[BUFSIZE];
 	char *saveptr = NULL;
 
-	pthread_cleanup_push(child_cleanup_script, NULL);
+	pthread_cleanup_push(cleanup_script_poll, &owned);
+	pthread_setcancelstate(previous_state, NULL);
 
 	sem_err = acquire_script_permit(current_host);
 
@@ -142,14 +223,17 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 		SPINE_LOG(("ERROR: Device[%i]: Failed to obtain a script execution lock (error %d)", current_host->id, sem_err));
 		SET_UNDEFINED(result_string);
 #if defined(__CYGWIN__)
-		SPINE_FREE(proc_command);
+		/* The common ownership cleanup releases this allocation. */
 #endif
 	} else {
 		/* Mark for cleanup */
-		needs_cleanup = 1;
+		owned.permit = TRUE;
 
 		/* record start time */
-		deadline = spine_monotonic_time() + set.php.script_timeout;
+		execution_seconds = (unsigned int) set.php.script_timeout;
+		if (set.php.limits.deadline_seconds && set.php.limits.deadline_seconds < execution_seconds)
+			execution_seconds = set.php.limits.deadline_seconds;
+		deadline = spine_monotonic_time() + execution_seconds;
 
 		/* peel the executable from the command */
 		saveptr = proc_command;
@@ -167,17 +251,38 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 		SPINE_LOG_DEBUG(("The executable is '%s'", executable));
 
 		if (access(executable, X_OK | F_OK) != -1) {
-			cmd_fd = nft_popen(proc_command, "r");
+			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+			cmd_fd = nft_popen_limited(proc_command, "r", &set.php.limits);
+			spawn_error = errno;
+			owned.fd = cmd_fd;
+			pthread_setcancelstate(previous_state, NULL);
 			SPINE_LOG_DEVICE(current_host->id, POLLER_VERBOSITY_DEBUG, ("Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 
 			if (cmd_fd >= 0) {
 				const script_result_context_t context = {current_host, command, id, type};
-				(void) read_script_result(&context, cmd_fd, deadline, result_string);
+				if (limited) {
+					valid_result = read_limited_script(current_host, cmd_fd, deadline, result_string);
+					if (!valid_result) {
+						child_pid = nft_pchild(cmd_fd);
+						if (child_pid > 1) kill(-child_pid, SIGKILL);
+					}
+				} else (void) read_script_result(&context, cmd_fd, deadline, result_string);
 
 				/* close pipe */
-				nft_pclose(cmd_fd);
+				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+				status = nft_pclose(cmd_fd);
+				owned.fd = -1;
+				pthread_setcancelstate(previous_state, NULL);
+				if (limited && (status < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)) {
+					SPINE_LOG(("Device[%i] DS/DQ[%i] ERROR: Script resource policy or child exit failed for '%s'", current_host->id, id, executable));
+					SET_UNDEFINED(result_string);
+				}
 			} else {
-				SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s'", current_host->id, current_host->hostname, executable));
+				if (spawn_error == ENOTSUP && limited) {
+					SPINE_LOG(("Device[%i] DS/DQ[%i] ERROR: Configured child resource limits are unsupported on this platform for '%s'", current_host->id, id, executable));
+				} else {
+					SPINE_LOG(("Device[%i] ERROR: Problem executing POPEN [%s]: '%s': %s", current_host->id, current_host->hostname, executable, strerror(spawn_error)));
+				}
 				SET_UNDEFINED(result_string);
 			}
 		} else {
@@ -186,12 +291,20 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 		}
 
 #if defined(__CYGWIN__)
-		SPINE_FREE(proc_command);
+		/* The common ownership cleanup releases this allocation. */
 #endif
 	}
 
-	/* reduce the active script count */
-	pthread_cleanup_pop(needs_cleanup);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	if (owned.permit) spine_permits_release(&available_scripts);
+	owned.permit = FALSE;
+	free(owned.command);
+	owned.command = NULL;
+	pthread_setcanceltype(previous_type, NULL);
+	pthread_setcancelstate(previous_state, NULL);
+	pthread_testcancel();
+	owned.result = NULL;
+	pthread_cleanup_pop(0);
 
 	return result_string;
 }

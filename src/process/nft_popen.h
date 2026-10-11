@@ -36,6 +36,7 @@
  */
 
 #include <spawn.h>
+#include "config/model.h"
 
 /*!
  *  The nft_popen() function forks a command in a child process, and returns
@@ -56,6 +57,9 @@
  *	EAGAIN  fork() failed.
  */
 extern int nft_popen(const char *command, const char *mode);
+/* Per-process resource caps are supported by the Linux shell backend only.
+ * An explicit unsupported policy fails before spawning a child. */
+extern int nft_popen_limited(const char *command, const char *mode, const spine_script_limits_t *limits);
 
 /*!
  *  nft_pchild

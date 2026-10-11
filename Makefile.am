@@ -21,7 +21,7 @@ spine_support_sources = src/app/buffer.c \
 	src/log/log.c src/log/json.c src/poller/result.c \
 	src/platform/privileges.c src/poller/regex.c
 spine_database_sources = src/database/sql.c \
-	src/database/connection.c \
+	src/database/connection.c src/database/tls.c src/database/lease.c \
 	src/database/pool.c src/database/transfer.c \
 	src/database/cacti_query.c src/database/persistence.c
 spine_snmp_sources = src/snmp/requests.c src/snmp/response.c \
@@ -40,7 +40,7 @@ spine_process_sources = src/process/nft_popen.c src/process/fd.c
 
 spine_shared_sources = $(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) \
 	$(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) src/config/keywords.c src/app/signals.c
-spine_runtime_sources = $(spine_shared_sources) src/app/runtime.c src/app/cli.c src/app/startup.c src/poller/workers.c
+spine_runtime_sources = $(spine_shared_sources) src/platform/worker_set.c src/app/runtime.c src/app/cli.c src/app/startup.c src/poller/workers.c
 spine_SOURCES = $(spine_runtime_sources) src/app/main.c
 
 configdir = $(sysconfdir)
@@ -71,7 +71,27 @@ TESTS = $(check_PROGRAMS)
 TESTS += tests/tools/test_nightly_tests.sh
 EXTRA_DIST = tests/tools/check_nightly_tests.sh tests/tools/test_nightly_tests.sh
 EXTRA_DIST += tests/tools/test_json_encoder.py
+EXTRA_DIST += tests/tools/run_database_tls.sh
+EXTRA_DIST += tests/tools/ownership-coverage-sources.txt
+EXTRA_DIST += tests/tools/build_benchmark_pair.sh tests/tools/benchmark_builds.py
+EXTRA_DIST += tests/tools/verify_benchmark_record.py tests/tools/test_benchmark_record.py
+EXTRA_DIST += docs/benchmarks/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/cycles.csv \
+	docs/benchmarks/results/2026-10-11-default-logging/metadata.json \
+	docs/benchmarks/results/2026-10-11-default-logging/summary.json \
+	docs/benchmarks/results/2026-10-11-default-logging/compiler.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-default-logging/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/build-settings.txt
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
+test_spine_regressions_SOURCES += tests/contracts/test_spine_tls_contracts.c
+test_spine_regressions_SOURCES += tests/contracts/test_spine_script_limits_contracts.c
+EXTRA_DIST += tests/tools/run_script_limits.sh tests/fixtures/script_resource_probe.c
+EXTRA_DIST += docs/operations/script-limits.md docs/operations/database-tls.md \
+	docs/operations/issue-boundaries.md docs/adr/0004-formatting-and-json-dependencies.md
 # Link the real production translation units and globals, with a separate test
 # entry point. Production and regression binaries share the runtime objects.
 
@@ -93,9 +113,11 @@ endif
 # Headers are not referenced by any _SOURCES, so automake will not distribute
 # them unless they are listed. Without this the release tarball builds nothing.
 noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h src/platform/locks.h \
+	src/platform/worker_set.h \
 	src/process/nft_popen.h src/script/server.h src/ping/ping.h src/poller/poller.h \
 	src/snmp/snmp.h src/app/spine.h src/platform/spine_sem.h src/internal/spine_types.h \
 	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h
+noinst_HEADERS += src/database/lease.h
 
 EXTRA_DIST += docs/man/spine.1 etc/spine.conf.dist \
 	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
@@ -166,7 +188,9 @@ check_PROGRAMS += \
 	tests/unit/test_snmpv3_session \
 	tests/unit/test_ping_icmp \
 	tests/unit/test_ping_timing \
-	tests/unit/test_log_config
+	tests/unit/test_log_config \
+	tests/unit/test_worker_set \
+	tests/unit/test_db_lease
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
@@ -240,7 +264,7 @@ tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/support/sp
 tests_unit_test_poll_host_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_query -Wl,--wrap=db_insert -Wl,--wrap=db_escape \
-	-Wl,--wrap=db_get_connection -Wl,--wrap=db_release_connection \
+	-Wl,--wrap=db_acquire_lease -Wl,--wrap=db_release_lease \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
@@ -256,6 +280,26 @@ tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/support/
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_log_config_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+tests_unit_test_worker_set_SOURCES = tests/unit/test_worker_set.c src/platform/worker_set.c
+tests_unit_test_worker_set_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_worker_set_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_LINKER_WRAP
+tests_unit_test_worker_set_CPPFLAGS += -DSPINE_WORKER_TEST_WRAP
+tests_unit_test_worker_set_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init \
+	-Wl,--wrap=pthread_mutex_destroy -Wl,--wrap=pthread_create -Wl,--wrap=pthread_join \
+	-Wl,--wrap=pthread_attr_getdetachstate
+
+tests_unit_test_worker_set_LDFLAGS += -Wl,--wrap=pthread_mutex_lock
+endif
+
+tests_unit_test_db_lease_SOURCES = tests/unit/test_db_lease.c src/database/lease.c
+tests_unit_test_db_lease_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_db_lease_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_LINKER_WRAP
+tests_unit_test_db_lease_CPPFLAGS += -DSPINE_LEASE_TEST_WRAP
+tests_unit_test_db_lease_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_destroy
+endif
 
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
