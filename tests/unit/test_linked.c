@@ -398,12 +398,20 @@ static void test_local_and_remote_database_lease_adapters(void **state) {
 	set.exit.exit_code = previous_exit;
 }
 
+static void assert_client_option_when_readable(MYSQL *mysql, enum mysql_option option, const char *expected) {
+	const char *value = NULL;
+	int result = mysql_get_option(mysql, option, &value);
+	/* Connector/C 3.1 accepts TLS setters but lacks the corresponding getters.
+	 * Real handshake contracts, rather than readback alone, prove enforcement. */
+	if (result == 0) assert_string_equal(value, expected);
+	else assert_int_equal(result, 1);
+}
+
 static void test_database_tls_policy(void **state) {
 	MYSQL mysql;
 	spine_database_config_t configuration = {0};
 	int mode;
 	bool full_supported = FALSE;
-	const char *version = NULL;
 	(void) state;
 
 	assert_non_null(mysql_init(&mysql));
@@ -447,17 +455,14 @@ static void test_database_tls_policy(void **state) {
 #if HAVE_DECL_MYSQL_OPT_TLS_VERSION && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
 	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), full_supported);
 	if (full_supported) {
-		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
-		assert_string_equal(version, "TLSv1.2,TLSv1.3");
+		assert_client_option_when_readable(&mysql, MYSQL_OPT_TLS_VERSION, "TLSv1.2,TLSv1.3");
 	}
 	configuration.tls_min_version = 13;
 	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), full_supported);
 	if (full_supported) {
-		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
-		assert_string_equal(version, "TLSv1.3");
+		assert_client_option_when_readable(&mysql, MYSQL_OPT_TLS_VERSION, "TLSv1.3");
 	}
 #else
-	(void) version;
 	assert_false(db_apply_tls_policy(&mysql, &configuration));
 #endif
 	configuration.tls_min_version = 0;
@@ -465,8 +470,7 @@ static void test_database_tls_policy(void **state) {
 #if HAVE_DECL_MYSQL_OPT_SSL_CIPHER && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
 	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), full_supported);
 	if (full_supported) {
-		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_SSL_CIPHER, &version), 0);
-		assert_string_equal(version, configuration.tls_cipher);
+		assert_client_option_when_readable(&mysql, MYSQL_OPT_SSL_CIPHER, configuration.tls_cipher);
 	}
 #else
 	assert_false(db_apply_tls_policy(&mysql, &configuration));

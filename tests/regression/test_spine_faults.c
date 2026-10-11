@@ -1473,7 +1473,7 @@ static void *run_ping_only_worker(void *argument) {
 	assert(mysql_thread_init() == 0);
 	int errors = -1;
 	poll_host(argument, &errors);
-	assert(errors == -1); /* Early ping-only return preserves this output. */
+	assert(errors == 0); /* Common cleanup returns an explicit no-error count. */
 	return NULL;
 }
 
