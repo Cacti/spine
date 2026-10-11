@@ -207,6 +207,9 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 	bool last_partition;
 	bool failed;
 	bool write_failed = FALSE;
+	/* A script killed by process-wide abort must not advance completion or
+	 * scheduling while the fatal thread is still logging its diagnostic. */
+	poll_failed = poll_failed || nft_abort_requested();
 
 	SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
 

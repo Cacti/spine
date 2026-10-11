@@ -41,7 +41,10 @@ static void *termination_coordinator(void *unused) {
 	do {
 		count = read(termination_pipe[0], &request, sizeof(request));
 	} while (count < 0 && errno == EINTR);
-	if (count < 0) _exit(EXIT_FAILURE);
+	if (count < 0) {
+		nft_abort_children();
+		_exit(EXIT_FAILURE);
+	}
 	if (count != sizeof(request) || request == 0) return NULL;
 	if (request == SIGINT) signal_write("FATAL: Spine Interrupted by Console Operator\n");
 	else if (request == SIGQUIT) signal_write("FATAL: Spine Encountered a Keyboard Quit Command\n");
@@ -53,7 +56,7 @@ static void *termination_coordinator(void *unused) {
 	sigemptyset(&unblocked);
 	sigaddset(&unblocked, request);
 	(void) pthread_sigmask(SIG_UNBLOCK, &unblocked, NULL);
-	(void) raise(request);
+	(void) pthread_kill(pthread_self(), request);
 	_exit(128 + request);
 }
 

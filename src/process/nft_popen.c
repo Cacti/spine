@@ -735,3 +735,15 @@ void nft_abort_children(void) {
 	pthread_mutex_unlock(&ListMutex);
 	pthread_setcancelstate(oldstate, NULL);
 }
+
+int nft_abort_requested(void) {
+	int requested;
+	int oldstate;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	pthread_mutex_lock(&ListMutex);
+	requested = AbortRequested;
+	pthread_mutex_unlock(&ListMutex);
+	pthread_setcancelstate(oldstate, NULL);
+	return requested;
+}

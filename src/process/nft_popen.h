@@ -137,6 +137,7 @@ extern int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_
 /* Permanently stop spawning and kill registered external script groups.
  * This function takes a mutex and must never run in a signal handler. */
 extern void nft_abort_children(void);
+extern int nft_abort_requested(void);
 
 /*!
  *  The cap on parked pids. Past it a child is logged and dropped, because an

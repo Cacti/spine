@@ -25,7 +25,10 @@ the check and preserve a diagnostic instead of reporting a clean stack.
 python3 tests/tools/verify_pr_stack.py --fetch --output pr-stack-audit.json
 ```
 
-The workflow runs on PR updates and `develop` pushes. Its artifact records
+The dedicated Git-enabled workflow runs the seven tool contracts and live
+stack audit on PR updates and `develop` pushes. These review-tool tests are
+separate from production `make check`, so release and older distro builds do
+not acquire a Git 2.38 dependency. Its artifact records
 exact revisions, dependency order and result trees. Repeat after restacking.
 
 Before squash-merging a parent, record its old head and preserve a local ref.

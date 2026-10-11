@@ -219,7 +219,7 @@ tests_unit_test_process_abort_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_process_abort_CPPFLAGS = $(AM_CPPFLAGS)
 if HAVE_LD_WRAP
 tests_unit_test_process_abort_CPPFLAGS += -DSPINE_TEST_ABORT_FAULTS
-tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=usleep
+tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
 endif
 
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
@@ -379,7 +379,8 @@ EXTRA_DIST += tests/tools/test_json_encoder.py
 
 EXTRA_DIST += tests/tools/run_database_tls.sh tests/tools/ownership-coverage-sources.txt
 EXTRA_DIST += tests/tools/verify_pr_stack.py tests/tools/test_pr_stack.py
-TESTS += tests/tools/test_pr_stack.sh
+# Git-based review tooling has its own required CI job; release builds and
+# platform regression lanes do not require the review tool's Git 2.38 floor.
 EXTRA_DIST += tests/tools/test_pr_stack.sh docs/operations/pr-stack.md docs/operations/resource-ownership.md
 
 EXTRA_DIST += tests/tools/benchmark_builds.py \

@@ -28,6 +28,9 @@ exiting. Existing owners retain their descriptors and allocations until cleanup.
 Spawn, reap, cleanup and abort share the registry mutex, preventing an abort
 from signalling a PID already reaped by this registry. The bounded close grace
 period sleeps outside the mutex.
+Once abort starts, result persistence rejects newly assembled batches and host
+completion does not advance due-item scheduling. A killed script's EOF must
+not publish an undefined result while the fatal thread prints its diagnostic.
 
 SIGINT, SIGTERM and SIGQUIT notify a coordinator through a nonblocking,
 close-on-exec pipe. The handler only writes a signal byte and returns, allowing

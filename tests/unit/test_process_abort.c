@@ -6,6 +6,7 @@
 #include <cmocka.h>
 #include "internal/common.h"
 #include "app/spine.h"
+#include "database/persistence.h"
 #include <sys/wait.h>
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -22,6 +23,7 @@ static int abort_from_worker;
 
 #ifdef SPINE_TEST_ABORT_FAULTS
 static _Atomic int injected_fault;
+static _Thread_local int write_interrupted;
 static pthread_mutex_t close_gate = PTHREAD_MUTEX_INITIALIZER;
 static int close_waiting;
 static int close_released;
@@ -32,6 +34,7 @@ extern int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*) 
 extern ssize_t __real_read(int, void *, size_t);
 extern ssize_t __real_write(int, const void *, size_t);
 extern int __real_raise(int);
+extern int __real_pthread_kill(pthread_t, int);
 extern int __real_usleep(useconds_t);
 extern void __gcov_dump(void) __attribute__((weak));
 extern void __gcov_reset(void) __attribute__((weak));
@@ -78,8 +81,8 @@ ssize_t __wrap_write(int fd, const void *buffer, size_t size) {
 		errno = EIO;
 		return -1;
 	}
-	if (injected_fault == 7 && size == 1) {
-		injected_fault = 0;
+	if (injected_fault == 7 && size == 1 && !write_interrupted) {
+		write_interrupted = TRUE;
 		errno = EINTR;
 		return -1;
 	}
@@ -99,8 +102,16 @@ int __wrap_raise(int signal_number) {
 		__gcov_dump();
 		if (__gcov_reset != NULL) __gcov_reset();
 	}
-	if (injected_fault == 9) return -1;
 	return __real_raise(signal_number);
+}
+
+int __wrap_pthread_kill(pthread_t thread, int signal_number) {
+	if (__gcov_dump != NULL) {
+		__gcov_dump();
+		if (__gcov_reset != NULL) __gcov_reset();
+	}
+	if (injected_fault == 9) return EINVAL;
+	return __real_pthread_kill(thread, signal_number);
 }
 
 int __wrap_usleep(useconds_t delay) {
@@ -142,8 +153,9 @@ static void *script_worker(void *argument) {
 	}
 	/* Keep this worker owning its subprocess while another worker or the
 	 * termination coordinator aborts the whole external-script registry. */
-	(void) read(fd, &byte, 1);
-	(void) nft_pclose(fd);
+	/* This fixture ends the whole process deliberately. Keep its detached
+	 * owners alive without starting unrelated close/reap work during exit. */
+	for (;;) pause();
 	return NULL;
 }
 
@@ -192,6 +204,7 @@ static void check_abort(int signal_number, int worker_fatal) {
 	assert_true(fixture >= 0);
 	if (fixture == 0) {
 		pthread_t workers[WORKERS];
+		pthread_attr_t attributes;
 		char byte;
 		close(ready[0]);
 		close(control[1]);
@@ -200,9 +213,12 @@ static void check_abort(int signal_number, int worker_fatal) {
 		abort_from_worker = worker_fatal;
 		init_mutexes();
 		install_spine_signal_handler();
+		if (pthread_attr_init(&attributes) != 0 ||
+			pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED) != 0) _exit(109);
 		for (i = 0; i < WORKERS; i++) {
-			if (pthread_create(&workers[i], NULL, script_worker, i == 0 ? &workers[0] : NULL) != 0) _exit(95);
+			if (pthread_create(&workers[i], &attributes, script_worker, i == 0 ? &workers[0] : NULL) != 0) _exit(95);
 		}
+		(void) pthread_attr_destroy(&attributes);
 		if (!worker_fatal) {
 			if (read(control_fd, &byte, 1) != 1) _exit(96);
 			if (signal_number == 0) die("Fixture fatal parent error");
@@ -285,6 +301,9 @@ static void test_abort_rejects_spawn_and_preserves_closing_owner(void **state) {
 		int result;
 		int parked_status;
 		pid_t parked;
+		poller_queries_t queries = {0};
+		target_t item = {0};
+		poll_output_buffers_t output;
 		char byte;
 		if (fd < 0 || read(fd, &byte, 1) != 1) _exit(98);
 		parked = fork();
@@ -295,6 +314,8 @@ static void test_abort_rejects_spawn_and_preserves_closing_owner(void **state) {
 		nft_abandon_child(parked, "abort fixture");
 		nft_abort_children();
 		nft_abort_children();
+		output = write_poll_results(NULL, NULL, &queries, &item, 1, "1791676800");
+		if (!output.failed || output.output != NULL || output.boost != NULL) _exit(110);
 		if (waitpid(parked, &parked_status, 0) != parked ||
 			!WIFSIGNALED(parked_status) || WTERMSIG(parked_status) != SIGKILL) _exit(102);
 		errno = 0;
@@ -392,10 +413,9 @@ static void test_coordinator_failures_are_fatal(void **state) {
 		assert_true(fixture >= 0);
 		if (fixture == 0) {
 			alarm(5);
-			if (fault <= 5) injected_fault = fault;
+			injected_fault = fault;
 			install_spine_signal_handler();
 			if (fault >= 6) {
-				injected_fault = fault;
 				/* kill enters the handler without going through the wrapped
 				 * raise that the coordinator uses for its final disposition. */
 				(void) kill(getpid(), SIGTERM);
