@@ -1480,6 +1480,7 @@ static int execute_fake_main_case(char *config, int failure) {
 }
 
 static void test_fake_database_main(void) {
+	int failure;
 	char directory[] = "/tmp/spine-fake-main-XXXXXX";
 	assert(mkdtemp(directory) != NULL);
 	char config[SMALL_BUFSIZE];
@@ -1490,7 +1491,7 @@ static void test_fake_database_main(void) {
 	assert(file != NULL);
 	assert(fprintf(file, "DB_Host 127.0.0.1\nDB_Database spine_fake\nCacti_Log %s\n", log_path) > 0);
 	assert(fclose(file) == 0);
-	for (int failure = 0; failure <= 3; failure++) {
+	for (failure = 0; failure <= 3; failure++) {
 		char value[8];
 		int status;
 		pid_t process;
