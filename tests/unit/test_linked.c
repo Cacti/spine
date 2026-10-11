@@ -443,14 +443,12 @@ static void test_database_tls_policy(void **state) {
 #if HAVE_DECL_MYSQL_OPT_TLS_VERSION && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
 	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
 	if (verify_full_supported) {
-		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
-		assert_string_equal(version, "TLSv1.2,TLSv1.3");
+		assert_tls_version_readback(&mysql, "TLSv1.2,TLSv1.3");
 	}
 	configuration.tls_min_version = 13;
 	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
 	if (verify_full_supported) {
-		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_TLS_VERSION, &version), 0);
-		assert_string_equal(version, "TLSv1.3");
+		assert_tls_version_readback(&mysql, "TLSv1.3");
 	}
 #else
 	(void) version;
