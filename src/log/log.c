@@ -33,6 +33,10 @@ void die(const char *format, ...) {
 	char flogmessage[DBL_BUFSIZE];
 	int old_errno = errno;
 
+	/* A fatal error can originate in any worker. Stop every registered script,
+	 * including groups another worker is closing, before logging or exiting. */
+	nft_abort_children();
+
 	va_start(args, format);
 	vsnprintf(logmessage, sizeof(logmessage), format, args);
 	va_end(args);

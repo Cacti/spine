@@ -1054,8 +1054,15 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	int i;
 	int created = 0;
 	int status;
+	int closing_fd;
+	pid_t closing_pid;
+	char ready;
 
 	(void) state;
+	closing_fd = nft_popen("printf x; exec sleep 300", "r");
+	assert_true(closing_fd >= 0);
+	closing_pid = nft_pchild(closing_fd);
+	assert_int_equal(read(closing_fd, &ready, 1), 1);
 	for (i = 0; i < NFT_ABANDONED_MAX + 1; i++) {
 		pids[i] = fork();
 		if (pids[i] < 0)
@@ -1069,6 +1076,8 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	}
 
 	if (created != NFT_ABANDONED_MAX + 1) {
+		(void) nft_pclose(closing_fd);
+		(void) waitpid(closing_pid, &status, 0);
 		for (i = 0; i < created; i++) {
 			(void)kill(pids[i], SIGKILL);
 			(void)waitpid(pids[i], &status, 0);
@@ -1078,6 +1087,9 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	}
 
 	assert_int_equal(nft_abandoned_pending(), NFT_ABANDONED_MAX);
+	assert_int_equal(nft_pclose(closing_fd), -1);
+	assert_int_equal(waitpid(closing_pid, &status, 0), closing_pid);
+	assert_true(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL);
 	for (i = 0; i < created; i++) {
 		assert_int_equal(kill(pids[i], SIGKILL), 0);
 		assert_int_equal(waitpid(pids[i], &status, 0), pids[i]);

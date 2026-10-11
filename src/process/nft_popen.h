@@ -132,6 +132,11 @@ extern int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
  *  exhausted.
  */
 extern int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
+/* Reaping and clearing the owned PID share the registry's mutex. */
+extern int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_mutex_t *mutex);
+/* Permanently stop spawning and kill registered external script groups.
+ * This function takes a mutex and must never run in a signal handler. */
+extern void nft_abort_children(void);
 
 /*!
  *  The cap on parked pids. Past it a child is logged and dropped, because an

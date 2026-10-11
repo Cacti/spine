@@ -21,6 +21,71 @@
 #include "internal/common.h"
 #include "app/spine.h"
 
+static int termination_pipe[2] = {-1, -1};
+static volatile sig_atomic_t termination_write_fd = -1;
+static pthread_t termination_thread;
+static int termination_started;
+static void signal_write(const char *text);
+
+/* Termination signals hand off to ordinary thread context. Returning from the
+ * handler lets an interrupted spawn/close release its registry mutex; taking
+ * that mutex from the handler itself could deadlock the process permanently.
+ * Hardware-fault signals retain their async-safe emergency exit behavior. */
+static void *termination_coordinator(void *unused) {
+	unsigned char request;
+	ssize_t count;
+	struct sigaction action = {0};
+	sigset_t unblocked;
+	(void) unused;
+
+	do {
+		count = read(termination_pipe[0], &request, sizeof(request));
+	} while (count < 0 && errno == EINTR);
+	if (count < 0) _exit(EXIT_FAILURE);
+	if (count != sizeof(request) || request == 0) return NULL;
+	if (request == SIGINT) signal_write("FATAL: Spine Interrupted by Console Operator\n");
+	else if (request == SIGQUIT) signal_write("FATAL: Spine Encountered a Keyboard Quit Command\n");
+	else signal_write("FATAL: Spine Interrupted by Termination Signal\n");
+	nft_abort_children();
+	action.sa_handler = SIG_DFL;
+	sigemptyset(&action.sa_mask);
+	(void) sigaction(request, &action, NULL);
+	sigemptyset(&unblocked);
+	sigaddset(&unblocked, request);
+	(void) pthread_sigmask(SIG_UNBLOCK, &unblocked, NULL);
+	(void) raise(request);
+	_exit(128 + request);
+}
+
+static void start_termination_coordinator(void) {
+	int flags;
+	int error;
+
+	if (termination_started) return;
+	if (!spine_open_pipe_cloexec(termination_pipe)) die("ERROR: Unable to create termination pipe");
+	flags = fcntl(termination_pipe[1], F_GETFL);
+	if (flags < 0 || fcntl(termination_pipe[1], F_SETFL, flags | O_NONBLOCK) < 0) {
+		die("ERROR: Unable to make termination notification nonblocking");
+	}
+	error = pthread_create(&termination_thread, NULL, termination_coordinator, NULL);
+	if (error != 0) {
+		errno = error;
+		die("ERROR: Unable to start termination coordinator");
+	}
+	termination_started = TRUE;
+	termination_write_fd = termination_pipe[1];
+}
+
+static void stop_termination_coordinator(void) {
+	if (!termination_started) return;
+	termination_write_fd = -1;
+	(void) close(termination_pipe[1]);
+	(void) pthread_join(termination_thread, NULL);
+	(void) close(termination_pipe[0]);
+	termination_pipe[0] = termination_pipe[1] = -1;
+	termination_started = FALSE;
+}
+
 /*! \fn static void signal_write(const char *text)
  *  \brief writes a NUL terminated message to stderr from a signal handler
  *
@@ -79,6 +144,22 @@ static void signal_write_number(long long value) {
 static void spine_signal_handler(int spine_signal) {
 	const char *message = NULL;
 	int saved_errno = errno;
+	unsigned char request;
+	ssize_t notified;
+
+	if ((spine_signal == SIGINT || spine_signal == SIGQUIT || spine_signal == SIGTERM) &&
+		termination_write_fd >= 0) {
+		request = (unsigned char) spine_signal;
+		do {
+			notified = write(termination_write_fd, &request, sizeof(request));
+		} while (notified < 0 && errno == EINTR);
+		/* A full pipe already contains a termination request. Other failures
+		 * must not silently turn a fatal signal into continued polling. */
+		if (notified == sizeof(request) || (notified < 0 && errno == EAGAIN)) {
+			errno = saved_errno;
+			return;
+		}
+	}
 
 	/* Every signal handled here except SIGSEGV, which exits with status 1
 	 * below, resets to SIG_DFL and is raised again before returning, so the
@@ -101,6 +182,9 @@ static void spine_signal_handler(int spine_signal) {
 			break;
 		case SIGINT:
 			message = "FATAL: Spine Interrupted by Console Operator\n";
+			break;
+		case SIGTERM:
+			message = "FATAL: Spine Interrupted by Termination Signal\n";
 			break;
 		case SIGSEGV:
 			message = "FATAL: Spine Encountered a Segmentation Fault\n";
@@ -145,6 +229,7 @@ static void spine_signal_handler(int spine_signal) {
 
 static const int spine_fatal_signals[] = {
 	SIGINT,
+	SIGTERM,
 	SIGSEGV,
 	SIGBUS,
 	SIGFPE,
@@ -170,6 +255,8 @@ void install_spine_signal_handler(void) {
 	int i;
 	struct sigaction sa = {0};
 	void (*ohandler)(int);
+
+	start_termination_coordinator();
 
 	/* Broken pipes are ordinary runtime failures for database sockets, script
 	 * pipes and redirected logs. A caught handler makes write() return EPIPE,
@@ -236,4 +323,5 @@ void uninstall_spine_signal_handler(void) {
 			signal(spine_fatal_signals[i], ohandler);
 		}
 	}
+	stop_termination_coordinator();
 }
