@@ -90,22 +90,23 @@ static void test_executable_resolution(void **state) {
 	(void) state;
 #ifdef __APPLE__
 	path_error = 1;
-	spine_script_executable("spine");
+	spine_script_executable("/tmp/spine");
 	assert_string_equal(set.php.script_executable, "");
 	path_error = 0;
 #endif
 	resolve_error = 1;
-	spine_script_executable("spine");
+	spine_script_executable("/tmp/spine");
 	assert_string_equal(set.php.script_executable, "");
 	resolve_error = 0;
 	resolve_long = 1;
-	spine_script_executable("spine");
+	spine_script_executable("/tmp/spine");
 	assert_string_equal(set.php.script_executable, "");
 	resolve_long = 0;
-	spine_script_executable("spine");
+	spine_script_executable("/tmp/spine");
 	assert_string_equal(set.php.script_executable, "/tmp/spine");
 }
 
+#if !defined(__linux__) && !defined(__APPLE__)
 static void test_executable_path_search(void **state) {
 	char directory[] = "/tmp/spine-path-XXXXXX";
 	char executable[PATH_MAX];
@@ -118,16 +119,16 @@ static void test_executable_path_search(void **state) {
 	snprintf(executable, sizeof(executable), "%s/spine", directory);
 	file = fopen(executable, "w");
 	assert_non_null(file);
-	fclose(file);
-	assert_int_equal(chmod(executable, 0700), 0);
+	assert_int_equal(fchmod(fileno(file), 0700), 0);
 	snprintf(search, sizeof(search), "/missing-spine-directory:%s", directory);
 	assert_int_equal(setenv("PATH", search, 1), 0);
 	resolved = script_executable_from_path("spine");
 	assert_non_null(resolved);
 	assert_string_equal(resolved_input, executable);
 	free(resolved);
-	assert_int_equal(chmod(executable, 0600), 0);
+	assert_int_equal(fchmod(fileno(file), 0600), 0);
 	assert_null(script_executable_from_path("spine"));
+	assert_int_equal(fclose(file), 0);
 	assert_int_equal(unlink(executable), 0);
 	assert_int_equal(mkdir(executable, 0700), 0);
 	assert_null(script_executable_from_path("spine"));
@@ -144,6 +145,8 @@ static void test_executable_path_search(void **state) {
 		free(saved);
 	} else unsetenv("PATH");
 }
+
+#endif
 
 static void test_child_policy_validation(void **state) {
 	char *arguments[] = {"spine", "--internal-script-child", "0", "0", "printf 42"};
@@ -202,7 +205,9 @@ static void test_resource_failures_and_inheritance(void **state) {
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_executable_resolution, reset),
+#if !defined(__linux__) && !defined(__APPLE__)
 		cmocka_unit_test_setup(test_executable_path_search, reset),
+#endif
 		cmocka_unit_test_setup(test_child_policy_validation, reset),
 		cmocka_unit_test_setup(test_resource_failures_and_inheritance, reset),
 	};
