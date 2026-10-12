@@ -360,16 +360,14 @@ static int run_udp_probe(int injected_errno, int reply, ping_t *ping) {
 	return rc;
 }
 
-/* Linux reports EHOSTUNREACH on a connected UDP socket only for host or
- * admin prohibited, which a device's own firewall sends; cmd.php reads it as
- * alive and spine has to agree. */
-static void test_udp_host_prohibited_is_alive(void **state) {
+/* EHOSTUNREACH includes ordinary unreachable hosts and failed neighbour
+ * resolution; it is not evidence that the device responded. */
+static void test_udp_host_unreachable_is_down(void **state) {
 	ping_t ping;
 
 	(void) state;
-	assert_int_equal(run_udp_probe(EHOSTUNREACH, 1, &ping), HOST_UP);
+	assert_int_equal(run_udp_probe(EHOSTUNREACH, 1, &ping), HOST_DOWN);
 	assert_true(recv_calls >= 1);
-	assert_string_equal(ping.ping_response, "UDP: Device is Alive");
 }
 
 static void test_udp_network_unreachable_is_down(void **state) {
@@ -488,7 +486,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_icmpv6_retry_after_one_lost_probe_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmpv6_wait_matches_the_device_timeout, timing_setup, timing_teardown),
 		#endif
-		cmocka_unit_test_setup_teardown(test_udp_host_prohibited_is_alive, timing_setup, timing_teardown),
+		cmocka_unit_test_setup_teardown(test_udp_host_unreachable_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_network_unreachable_is_down, timing_setup, timing_teardown),
 		#ifdef EHOSTDOWN
 		cmocka_unit_test_setup_teardown(test_udp_host_down_is_down, timing_setup, timing_teardown),

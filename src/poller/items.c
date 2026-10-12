@@ -234,6 +234,7 @@ static void *open_snmp_item(const host_t *host, target_t *item) {
 
 static bool snmp_item_changed(const snmp_item_key_t *key, const target_t *item) {
 	return (key->profile.port != item->snmp.port) ||
+		(key->profile.timeout != item->snmp.timeout) ||
 		(key->profile.version != item->snmp.version) ||
 		(item->snmp.version < 3 &&
 			(!STRMATCH(key->profile.community, item->snmp.community))) ||
