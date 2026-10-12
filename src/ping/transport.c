@@ -54,11 +54,9 @@ static int ping_down(ping_t *ping, const char *message) {
 	return HOST_DOWN;
 }
 
-/* The ICMP errors follow Cacti's PHP ping.  Without IP_RECVERR, Linux reports
- * only hard errors on a connected UDP socket: port unreachable, and the host
- * or admin prohibited a device's own REJECT rule sends.  Router and neighbour
- * unreachables never arrive and the probe times out.  A connected socket only
- * accepts datagrams from its peer, so a data reply is the device answering. */
+/* A connected socket accepts datagrams only from its peer. Port-unreachable
+ * errors also indicate a response, but EHOSTUNREACH cannot distinguish a
+ * firewall rejection from an unreachable host or failed neighbour lookup. */
 static int ping_udp_response(int fd, double deadline) {
 	char response[BUFSIZE];
 	for (;;) {
@@ -66,7 +64,7 @@ static int ping_udp_response(int fd, double deadline) {
 		if (ready <= 0) return ready;
 		ssize_t received = recv(fd, response, sizeof(response), 0);
 		if (received >= 0) return 1;
-		if (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED) return 1;
+		if (errno == ECONNRESET || errno == ECONNREFUSED) return 1;
 		if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 	}
 }
