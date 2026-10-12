@@ -38,7 +38,6 @@
 #ifdef SPINE_HAVE_ICMPV6
 static int ping_icmp_ipv6(const host_t *host, ping_t *ping);
 #endif
-static const char *ping_address(const char *hostname, char *address, size_t capacity);
 
 /*! \fn int ping_host(host_t *host, ping_t *ping)
  *  \brief ping a host to determine if it is reachable for polling
@@ -160,25 +159,6 @@ int ping_snmp(host_t *host, ping_t *ping) {
 }
 
 static int ping_down(ping_t *ping, const char *message);
-
-/*! \fn static void ping_wait_left(double deadline, struct timeval *timeout)
- *  \brief converts the time left before a monotonic deadline to a timeval
- *
- *  Each ICMP attempt owns a deadline of its own.  Measuring from the first
- *  attempt left every retry with an already spent budget, so one lost packet
- *  marked the device down, and rint(ms / 1000) plus the millisecond remainder
- *  stretched a 1500 ms timeout to 2.5 s.
- */
-static void ping_wait_left(double deadline, struct timeval *timeout) {
-	double remaining = deadline - spine_monotonic_time();
-
-	if (remaining < 0) {
-		remaining = 0;
-	}
-
-	timeout->tv_sec  = (time_t) remaining;
-	timeout->tv_usec = (suseconds_t) ((remaining - (double) timeout->tv_sec) * 1000000);
-}
 
 #ifdef __CYGWIN__
 /*! \fn static void icmp_discard_reply(int icmp_socket, char *buffer)
@@ -669,7 +649,7 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 	icmp_waiter_t waiter;
 	int    waiting = FALSE;
 
-	double begin_time, deadline, total_time;
+	double begin_time, end_time, total_time;
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
@@ -777,6 +757,7 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 		if (init_sockaddr(&fromname, host->hostname, 7)) {
 			retry_count = 0;
 			total_time  = 0;
+			begin_time  = get_time_as_double();
 
 			if (icmp_use_shared) {
 				memset(&waiter, 0, sizeof(waiter));
@@ -826,9 +807,9 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 					continue;
 				}
 
-				begin_time = spine_monotonic_time();
-				deadline   = begin_time + host_timeout / one_thousand;
-				ping_wait_left(deadline, &timeout);
+				/* decrement the timeout value by the total time */
+				timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
 				/* set the socket send and receive timeout */
 				setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -851,18 +832,15 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 					goto cleanup;
 				}
 				FD_SET(icmp_socket,&socket_fds);
-				/* a stray datagram must not restart the wait, and only Linux
-				 * writes the time left back into the timeval */
-				ping_wait_left(deadline, &timeout);
 				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
-				if (return_code < 0 && errno == EINTR) {
-					goto keep_listening;
-				}
+				/* record end time */
+				end_time = get_time_as_double();
 
-				total_time = (spine_monotonic_time() - begin_time) * one_thousand;
+				/* calculate total time */
+				total_time = (end_time - begin_time) * one_thousand;
 
-				if (return_code > 0 && total_time < host_timeout) {
+				if (total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
 					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 					#else
@@ -926,10 +904,15 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 								rc = HOST_UP;
 								goto cleanup;
 							} else {
-								/* received a response other than an echo reply; the
-								 * echo reply may still arrive inside this deadline */
+								/* received a response other than an echo reply */
 								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
-								goto keep_listening;
+
+								if (total_time > host_timeout) {
+									retry_count++;
+									total_time = 0;
+								}
+
+								continue;
 							}
 						} else {
 							/* another host responded */
@@ -996,7 +979,6 @@ cleanup:
 static int init_sockaddr6(struct sockaddr_in6 *name, const char *hostname) {
 	struct addrinfo hints, *hostinfo;
 	int rv, retry_count;
-	char address[BUFSIZE];
 
 	memset(&hints, 0, sizeof(hints));
 
@@ -1010,7 +992,7 @@ static int init_sockaddr6(struct sockaddr_in6 *name, const char *hostname) {
 	hostinfo    = NULL;
 
 	while (TRUE) {
-		rv = getaddrinfo(ping_address(hostname, address, sizeof(address)), NULL, &hints, &hostinfo);
+		rv = getaddrinfo(hostname, NULL, &hints, &hostinfo);
 
 		if (rv == 0) {
 			break;
@@ -1110,7 +1092,7 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 	icmp_waiter_t waiter;
 	int    waiting = FALSE;
 
-	double begin_time, deadline, total_time;
+	double begin_time, end_time, total_time;
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
@@ -1265,6 +1247,7 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 
 	retry_count = 0;
 	total_time  = 0;
+	begin_time  = get_time_as_double();
 
 	if (icmp_use_shared) {
 		memset(&waiter, 0, sizeof(waiter));
@@ -1315,9 +1298,9 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 			continue;
 		}
 
-		begin_time = spine_monotonic_time();
-		deadline   = begin_time + host_timeout / one_thousand;
-		ping_wait_left(deadline, &timeout);
+		/* decrement the timeout value by the total time */
+		timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
+		timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
 
 		/* set the socket send and receive timeout */
 		setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -1343,16 +1326,13 @@ static int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 			goto cleanup;
 		}
 		FD_SET(icmp_socket,&socket_fds);
-		/* a stray datagram must not restart the wait, and only Linux
-		 * writes the time left back into the timeval */
-		ping_wait_left(deadline, &timeout);
 		return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
-		if (return_code < 0 && errno == EINTR) {
-			goto keep_listening_ipv6;
-		}
+		/* record end time */
+		end_time = get_time_as_double();
 
-		total_time = (spine_monotonic_time() - begin_time) * one_thousand;
+		/* calculate total time */
+		total_time = (end_time - begin_time) * one_thousand;
 
 		if ((return_code > 0) && (total_time < host_timeout)) {
 			fromlen     = sizeof(recvname);
@@ -1446,18 +1426,15 @@ static int ping_down(ping_t *ping, const char *message) {
 	return HOST_DOWN;
 }
 
-/* The ICMP errors follow Cacti's PHP ping.  Without IP_RECVERR, Linux reports
- * only hard errors on a connected UDP socket: port unreachable, and the host
- * or admin prohibited a device's own REJECT rule sends.  Router and neighbour
- * unreachables never arrive and the probe times out.  A connected socket only
- * accepts datagrams from its peer, so a data reply is the device answering. */
+/* UDP reachability is established by the existing ICMP port-error contract;
+ * receiving an application datagram alone does not establish that result. */
 static int ping_udp_response(int fd, double deadline) {
 	char response[BUFSIZE];
 	for (;;) {
 		int ready = spine_wait_readable(fd, deadline);
 		if (ready <= 0) return ready;
 		ssize_t received = recv(fd, response, sizeof(response), 0);
-		if (received >= 0) return 1;
+		if (received >= 0) continue;
 		if (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED) return 1;
 		if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 	}
@@ -1578,7 +1555,6 @@ int get_address_type(host_t *host) {
 	struct addrinfo hints;
 	struct addrinfo *res_list;
 	char addrstr[255];
-	char address[BUFSIZE];
 	const void *ptr = NULL;
 	int addr_found = FALSE;
 
@@ -1589,7 +1565,7 @@ int get_address_type(host_t *host) {
 	hints.ai_flags    = AI_CANONNAME | AI_ADDRCONFIG;
 	int error;
 
-	if ((error = getaddrinfo(ping_address(host->hostname, address, sizeof(address)), NULL, &hints, &res_list)) != 0) {
+	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res_list)) != 0) {
 		SPINE_LOG(("WARNING: Unable to determine address info for %s (%s)", host->hostname, gai_strerror(error)));
 		return SPINE_NONE;
 	}
@@ -1640,12 +1616,10 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, int port) {
 	if (port < 0 || port > 65535) return FALSE;
 	struct addrinfo hints = {0};
 	struct addrinfo *hostinfo = NULL;
-	char address[BUFSIZE];
 	hints.ai_family = AF_INET;
 	hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
-	ping_address(hostname, address, sizeof(address));
 	for (int attempt = 0; ; attempt++) {
-		int status = getaddrinfo(address, NULL, &hints, &hostinfo);
+		int status = getaddrinfo(hostname, NULL, &hints, &hostinfo);
 		if (status == 0) break;
 		if (status == EAI_AGAIN && attempt < 3) {
 			SPINE_LOG(("WARNING: Temporary DNS error for host %s (%s), retrying", hostname, gai_strerror(status)));
@@ -1666,115 +1640,35 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, int port) {
 	return TRUE;
 }
 
-/*! \fn static int split_host_spec(const char *spec, int *method, char *address, size_t capacity, int *port)
- *  \brief splits a "[transport:]host[:port]" device name into its parts
- *
- *  Cacti keeps Net-SNMP transport specifiers such as udp6:[2001:db8::1]:161
- *  in the hostname.  An IPv6 host is either bracketed, so that a port can
- *  follow it, or a bare literal in which every colon belongs to the address.
- *  A port that is not a plain number from 1 to 65535 is reported as 0.
- *
- *  \return TRUE if the host part is IPv6, FALSE otherwise
- */
-static int split_host_spec(const char *spec, int *method, char *address, size_t capacity, int *port) {
-	static const char *const methods[] = {"TCP", "UDP", "TCP6", "UDP6"};
-	const char *host = spec;
-	const char *colon;
-	const char *end;
-	const char *port_text = NULL;
-	size_t length;
-	size_t i;
-	int ipv6 = FALSE;
-
-	*method = 0;
-	*port   = 0;
-
-	colon = strchr(spec, ':');
-
-	if (colon != NULL) {
-		for (i = 0; i < sizeof(methods) / sizeof(methods[0]); i++) {
-			length = strlen(methods[i]);
-
-			if ((size_t) (colon - spec) == length && strncasecmp(spec, methods[i], length) == 0) {
-				*method = (int) i + 1;
-				host    = colon + 1;
-				break;
-			}
-		}
-	}
-
-	if (host[0] == '[' && (end = strchr(host, ']')) != NULL) {
-		ipv6   = TRUE;
-		host   = host + 1;
-		length = (size_t) (end - host);
-
-		if (end[1] == ':') {
-			port_text = end + 2;
-		}
-	} else if (char_count(host, ':') > 1 || host[0] == '[') {
-		ipv6   = TRUE;
-		length = strlen(host);
-	} else if ((colon = strchr(host, ':')) != NULL) {
-		length    = (size_t) (colon - host);
-		port_text = colon + 1;
-	} else {
-		length = strlen(host);
-	}
-
-	if (length >= capacity) {
-		length = capacity - 1;
-	}
-
-	memcpy(address, host, length);
-	address[length] = '\0';
-
-	if (port_text != NULL && port_text[0] >= '0' && port_text[0] <= '9') {
-		char *rest;
-		long value;
-
-		errno = 0;
-		value = strtol(port_text, &rest, 10);
-
-		if (errno == 0 && *rest == '\0' && value > 0 && value <= 65535) {
-			*port = (int) value;
-		}
-	}
-
-	return ipv6;
-}
-
-/*! \fn static const char *ping_address(const char *hostname, char *address, size_t capacity)
- *  \brief the bare address a network probe resolves for a device name
- */
-static const char *ping_address(const char *hostname, char *address, size_t capacity) {
-	int method;
-	int port;
-
-	split_host_spec(hostname, &method, address, capacity, &port);
-
-	return address;
-}
-
-/*! \fn name_t *get_namebyhost(const char *hostname, name_t *name)
- *  \brief parses a device hostname with an optional transport and port
- *
- *  An IPv6 name is returned whole: Net-SNMP needs the transport and the
- *  brackets to reach the agent, and the ping code strips them itself.
- */
+/*! \brief Parse a device hostname with an optional transport and port. */
 name_t *get_namebyhost(const char *hostname, name_t *name) {
-	char address[BUFSIZE];
-
 	if (name == NULL) {
 		name = calloc(1, sizeof(*name));
 		if (name == NULL) die("ERROR: Fatal malloc error: ping.c get_namebyhost->name");
 	}
-
-	if (split_host_spec(hostname, &name->method, address, sizeof(address), &name->port)) {
+	/* IPv6 transport addresses are passed intact to the address resolver. */
+	if (strchr(hostname, '[') != NULL || strstr(hostname, "::") != NULL || char_count(hostname, ':') > 2) {
 		strncopy(name->hostname, hostname, sizeof(name->hostname));
-	} else {
-		strncopy(name->hostname, address, sizeof(name->hostname));
+		return name;
 	}
-
+	char *copy = strdup(hostname);
+	if (copy == NULL) die("ERROR: Fatal malloc error: ping.c get_namebyhost->stack");
+	char *saveptr = NULL;
+	const char *token = strtok_r(copy, ":", &saveptr);
+	static const char *const methods[] = {"TCP", "UDP", "TCP6", "UDP6"};
+	if (token != NULL) {
+		for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]); i++) {
+			if (strcasecmp(token, methods[i]) == 0) {
+				name->method = (int)i + 1;
+				token = strtok_r(NULL, ":", &saveptr);
+				break;
+			}
+		}
+	}
+	strncopy(name->hostname, token != NULL ? token : hostname, sizeof(name->hostname));
+	token = strtok_r(NULL, ":", &saveptr);
+	if (token != NULL) name->port = atoi(token);
+	free(copy);
 	return name;
 }
 
