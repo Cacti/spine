@@ -129,6 +129,12 @@ coverage-object-list:
 coverage-unit-program-list:
 	@printf '%s\n' $(filter tests/unit/%,$(check_PROGRAMS))
 
+.PHONY: coverage-helper-program-list coverage-helper-object-list
+coverage-helper-program-list:
+	@printf '%s\n' tests/support/php_test_server$(EXEEXT)
+coverage-helper-object-list:
+	@printf '%s\n' $(tests_support_php_test_server_OBJECTS)
+
 # spine_runtime.c contains only test globals and generates no executable
 # coverage profile. All production sources remain in coverage-object-list.
 coverage-unit-object-list:
@@ -315,3 +321,6 @@ EXTRA_DIST += tests/tools/test_configure_contracts.sh
 EXTRA_DIST += tests/tools/test_clang_tidy_gate.py
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg
+
+TESTS += tests/tools/test_memory_soak_fit.sh
+EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk
