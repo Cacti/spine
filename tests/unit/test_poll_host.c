@@ -48,6 +48,7 @@ static struct {
 	const char *legacy_uptime;
 	int session_opens;
 	int session_timeouts[MAX_QUERIES];
+	char session_hostnames[MAX_QUERIES][BUFSIZE];
 	char *queries[MAX_QUERIES];
 	int query_count;
 	int completion_queries;
@@ -193,6 +194,7 @@ MYSQL_ROW __wrap_mysql_fetch_row(MYSQL_RES *opaque) {
 void *__wrap_snmp_host_init(const snmp_connection_t *options) {
 	assert_true(fake.session_opens < MAX_QUERIES);
 	fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
+	snprintf(fake.session_hostnames[fake.session_opens], BUFSIZE, "%s", options->hostname);
 	fake.session_opens++;
 	return &fake_session;
 }
@@ -362,6 +364,19 @@ static void test_long_community_batches(void **state) {
 	assert_int_equal(captured("'42')"), 1);
 }
 
+static void test_snmp_batches_on_hostname(void **state) {
+	(void) state;
+	set_host("regression", "10", AVAIL_NONE);
+	add_snmp_item("621", "a", "regression", "2", NULL);
+	add_snmp_item("622", "b", "regression", "2", NULL);
+	fake.items[1][1] = "127.0.0.2";
+	fake.multi_value = "42";
+	assert_int_equal(run_poll(), 0);
+	assert_int_equal(fake.session_opens, 3);
+	assert_string_equal(fake.session_hostnames[1], "127.0.0.1");
+	assert_string_equal(fake.session_hostnames[2], "127.0.0.2");
+}
+
 /* SNMPv3 items batch on every credential field; a different context
  * starts a new session. */
 static void test_snmpv3_batches_on_profile(void **state) {
@@ -489,6 +504,7 @@ int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_flush_paths_agree, setup),
 		cmocka_unit_test_setup(test_long_community_batches, setup),
+		cmocka_unit_test_setup(test_snmp_batches_on_hostname, setup),
 		cmocka_unit_test_setup(test_snmpv3_batches_on_profile, setup),
 		cmocka_unit_test_setup(test_snmp_batches_on_timeout, setup),
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
