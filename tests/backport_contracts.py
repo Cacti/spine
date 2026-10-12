@@ -138,7 +138,7 @@ config_t set;
 static jmp_buf stopped;static int calls,error_code;
 #undef SPINE_LOG
 #define SPINE_LOG(...) ((void)0)
-static void log_redacted_sql_query(const char *query){(void)query;}
+static void log_sql_statement(const char *query){(void)query;}
 int mysql_query(MYSQL *mysql,const char *query){(void)mysql;(void)query;calls++;errno=EINTR;return 1;}
 unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return error_code;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
@@ -319,4 +319,24 @@ static jmp_buf rejected;static int nopts;
 void die(const char *format,...){(void)format;longjmp(rejected,1);}
 ''' + util[a:b] + '\n' + function(util, 'void set_option(') + '''
 int main(void){int i;for(i=0;i<256;i++)set_option("fixture","value");if(setjmp(rejected)==0){set_option("fixture","value");assert(0);}return 0;}
+''')
+
+sql = (root / 'sql.c').read_text()
+run('maintenance-sql-log-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n' + '''
+config_t set;static char logs[LRG_BUFSIZE];static jmp_buf stopped;
+int spine_log(const char *format,...){va_list args;size_t used=strlen(logs);va_start(args,format);vsnprintf(logs+used,sizeof(logs)-used,format,args);va_end(args);return TRUE;}
+int mysql_query(MYSQL *mysql,const char *query){(void)mysql;(void)query;return 1;}
+unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return 1064;}
+const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture_sql_secret";}
+MYSQL_RES *mysql_store_result(MYSQL *mysql){(void)mysql;return NULL;}
+int db_reconnect(MYSQL *mysql,int error,char *location){(void)mysql;(void)error;(void)location;return FALSE;}
+int usleep(useconds_t usec){(void)usec;return 0;}
+void die(const char *format,...){(void)format;longjmp(stopped,1);}
+static void fixture_exit(int status){assert(status==1);longjmp(stopped,1);}
+#define exit fixture_exit
+''' + function(sql, 'static void log_sql_statement(') + '\n' + function(sql, 'int db_insert(') + '\n' + function(sql, 'MYSQL_RES *db_query(') + '''
+int main(void){MYSQL mysql;set.log_level=POLLER_VERBOSITY_DEVDBG;
+ assert(!db_insert(&mysql,LOCAL,"INSERT INTO settings(name,value) VALUES('password','fixture_sql_secret')"));
+ if(setjmp(stopped)==0){db_query(&mysql,LOCAL,"SELECT fixture_sql_secret");assert(0);}
+ assert(strstr(logs,"1064")!=NULL);assert(strstr(logs,"fixture_sql_secret")==NULL);return 0;}
 ''')
