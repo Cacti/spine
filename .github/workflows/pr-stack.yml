@@ -29,7 +29,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: python3 tests/tools/verify_pr_stack.py --repository "$GH_REPO" --fetch --output pr-stack-audit.json
+        run: python3 tests/tools/verify_pr_stack.py --repository "$GH_REPO" --other-root 1.2.x --fetch --output pr-stack-audit.json
       - name: Preserve exact revision evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

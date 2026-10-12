@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -22,7 +23,7 @@ def run(command, **kwargs):
     return result.stdout.strip()
 
 
-def order_prs(prs, root):
+def order_prs(prs, root, other_roots=()):
     numbers, heads = set(), set()
     for pr in prs:
         number = pr['number']
@@ -34,7 +35,7 @@ def order_prs(prs, root):
         for side in ('head', 'base'):
             if not re.fullmatch(r'[0-9a-f]{40}', pr[side]['sha']):
                 raise StackError('Invalid revision')
-    pending, ordered, available = list(prs), [], {root}
+    pending, ordered, available = list(prs), [], {root, *other_roots}
     while pending:
         ready = [pr for pr in pending if
                  (pr['base']['repo']['full_name'], pr['base']['ref']) in available]
@@ -47,11 +48,35 @@ def order_prs(prs, root):
     return ordered
 
 
+def group_stacks(prs, repository, branches):
+    if not branches or len(set(branches)) != len(branches):
+        raise StackError('Duplicate or missing root branch')
+    roots = [(repository, branch) for branch in branches]
+    ordered = order_prs(prs, roots[0], roots[1:])
+    owners = {root: root[1] for root in roots}
+    groups = {branch: [] for branch in branches}
+    for pr in ordered:
+        base = (pr['base']['repo']['full_name'], pr['base']['ref'])
+        head = (pr['head']['repo']['full_name'], pr['head']['ref'])
+        branch = owners[base]
+        groups[branch].append(pr)
+        owners[head] = branch
+    return groups
+
+
 def verify(source, prs, repository, root_branch='develop', fetch=False):
     ordered = order_prs(prs, (repository, root_branch))
     with tempfile.TemporaryDirectory(prefix='spine-stack-') as directory:
         git_dir = Path(directory) / 'simulation.git'
         run(['git', 'clone', '--bare', '--shared', str(source), str(git_dir)])
+        # Cloning a shallow worktree locally omits the history boundary.
+        # Preserve it instead of walking into parents the source never fetched.
+        if run(['git', '-C', str(source), 'rev-parse', '--is-shallow-repository']) == 'true':
+            shallow = Path(run(['git', '-C', str(source), 'rev-parse', '--git-path', 'shallow']))
+            if not shallow.is_absolute():
+                shallow = Path(source) / shallow
+            shutil.copyfile(shallow, git_dir / 'shallow')
+
 
         def git(*arguments, **kwargs):
             return run(['git', '--git-dir=' + str(git_dir), *arguments], **kwargs)
@@ -111,6 +136,8 @@ def main():
     parser.add_argument('--repository', default='Cacti/spine')
     parser.add_argument('--source', default='.')
     parser.add_argument('--root', default='develop')
+    parser.add_argument('--other-root', action='append', default=[],
+                        help='Additional independent target branch to verify')
     parser.add_argument('--inventory', type=Path)
     parser.add_argument('--fetch', action='store_true')
     parser.add_argument('--output', type=Path, required=True)
@@ -124,12 +151,20 @@ def main():
             pages = json.loads(run(['gh', 'api', '--paginate', '--slurp',
                                     f'repos/{args.repository}/pulls?state=open&per_page=100']))
             prs = [pr for page in pages for pr in page]
-        report = verify(args.source, prs, args.repository, args.root, args.fetch)
+        groups = group_stacks(prs, args.repository, [args.root, *args.other_root])
+        report = verify(args.source, groups[args.root], args.repository, args.root, args.fetch)
+        if args.other_root:
+            report['independent_stacks'] = [
+                verify(args.source, groups[branch], args.repository, branch, args.fetch)
+                for branch in args.other_root]
+
     except (StackError, KeyError, TypeError, ValueError) as error:
         args.output.write_text(json.dumps({'all_clean': False, 'error': str(error)}, indent=2) + '\n')
         raise SystemExit(str(error)) from error
     args.output.write_text(json.dumps(report, indent=2) + '\n')
-    print('Squash/restack verified:', ' -> '.join(str(n) for n in report['dependency_order']))
+    for stack in [report, *report.get('independent_stacks', [])]:
+        print('Squash/restack verified:', stack['root_branch'],
+              ' -> '.join(str(n) for n in stack['dependency_order']))
 
 
 if __name__ == '__main__':
