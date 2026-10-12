@@ -212,6 +212,7 @@ static void poll_script_item(host_t *host, target_t *item,
 
 static void remember_snmp_item(snmp_item_key_t *key, const target_t *item) {
 	key->profile = item->snmp;
+	STRNCOPY(key->hostname, item->hostname);
 }
 
 static void *open_snmp_item(const host_t *host, target_t *item) {
@@ -233,7 +234,8 @@ static void *open_snmp_item(const host_t *host, target_t *item) {
 }
 
 static bool snmp_item_changed(const snmp_item_key_t *key, const target_t *item) {
-	return (key->profile.port != item->snmp.port) ||
+	return !STRMATCH(key->hostname, item->hostname) ||
+		(key->profile.port != item->snmp.port) ||
 		(key->profile.timeout != item->snmp.timeout) ||
 		(key->profile.version != item->snmp.version) ||
 		(item->snmp.version < 3 &&
