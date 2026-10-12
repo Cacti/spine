@@ -114,7 +114,7 @@ void snmp_spine_close(void) {
  *  in question.
  *
  */
-void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
+static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_version, char *snmp_community,
 	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 	char *snmp_priv_passphrase, char *snmp_priv_protocol,
 	char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout) {
@@ -344,9 +344,7 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	}
 
 	/* open SNMP Session */
-	thread_mutex_lock(LOCK_SNMP);
 	sessp = snmp_sess_open(&session);
-	thread_mutex_unlock(LOCK_SNMP);
 
 	if (!sessp) {
 		if (is_debug_device(host_id)) {
@@ -359,6 +357,45 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
 	return sessp;
 }
 
+
+/* Net-SNMP USM state is shared across sessions. Serialize construction with
+ * authenticated transactions, keeping v1/v2c requests parallel. */
+void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
+	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
+	char *snmp_priv_passphrase, char *snmp_priv_protocol,
+	char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout) {
+	void *session;
+	int cancellation_state;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	thread_mutex_lock(LOCK_SNMP);
+	session = snmp_host_init_unlocked(host_id, hostname, snmp_version, snmp_community,
+		snmp_username, snmp_password, snmp_auth_protocol, snmp_priv_passphrase,
+		snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout);
+	thread_mutex_unlock(LOCK_SNMP);
+	pthread_setcancelstate(cancellation_state, NULL);
+	return session;
+}
+
+static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *request,
+	struct snmp_pdu **response) {
+	int status;
+	int cancellation_state;
+	const struct snmp_session *session = snmp_sess_session(host->snmp_session);
+	bool serialized = session == NULL || session->version == SNMP_VERSION_3;
+
+	if (serialized) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+		thread_mutex_lock(LOCK_SNMP);
+	}
+	status = snmp_sess_synch_response(host->snmp_session, request, response);
+	if (serialized) {
+		thread_mutex_unlock(LOCK_SNMP);
+		pthread_setcancelstate(cancellation_state, NULL);
+	}
+	return status;
+}
+
 /*! \fn void snmp_host_cleanup(void *snmp_session)
  *  \brief closes an established snmp session
  *
@@ -368,7 +405,12 @@ void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_c
  */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {
+		int cancellation_state;
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+		thread_mutex_lock(LOCK_SNMP);
 		snmp_sess_close(snmp_session);
+		thread_mutex_unlock(LOCK_SNMP);
+		pthread_setcancelstate(cancellation_state, NULL);
 	}
 }
 
@@ -429,7 +471,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 
 			/* poll host */
 			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s)", current_host->id, snmp_oid));
-			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+			status = snmp_synchronized_response(current_host, pdu, &response);
 			SPINE_LOG_DEVDBG(("Device[%i] DEBUG: snmp_sess_sync_response(%s) [complete]", current_host->id, snmp_oid));
 		}
 
@@ -578,7 +620,7 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 		}
 
 		/* poll host */
-		status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+		status = snmp_synchronized_response(current_host, pdu, &response);
 
 		/* add status to host structure */
 		current_host->snmp_status = status;
@@ -671,7 +713,7 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 			snmp_add_null_var(pdu, anOID, anOID_len);
 
 			/* do the request, use thread safe call */
-			status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+			status = snmp_synchronized_response(current_host, pdu, &response);
 
 			//SPINE_LOG_DEBUG(("TRACE: Status %i Response %i", status, response->errstat));
 
@@ -834,7 +876,7 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 
 	/* execute the multi-get request */
 	retry:
-	status = snmp_sess_synch_response(current_host->snmp_session, pdu, &response);
+	status = snmp_synchronized_response(current_host, pdu, &response);
 
 	/* liftoff, successful poll, process it!! */
 	if (status == STAT_SUCCESS) {

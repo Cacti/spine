@@ -151,6 +151,13 @@ char *php_cmd(const char *php_command, int php_process) {
 	int write_fd;
 	int retries = 0;
 
+
+	if (php_processes == NULL || set.php_servers < 0 || set.php_servers > MAX_PHP_SERVERS || php_process < 0 || php_process >= set.php_servers) {
+		char *unavailable;
+		STRDUP_OR_DIE(unavailable, "U", "PHP unavailable slot");
+		return unavailable;
+	}
+
 	assert(php_command != 0);
 
 	/* pad command with CR-LF */
@@ -307,6 +314,12 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 	int  send_quit = TRUE;
 	char *cp;
 	char *bptr;
+
+	if (php_processes == NULL || set.php_servers < 0 || set.php_servers > MAX_PHP_SERVERS || php_process < 0 || php_process >= set.php_servers) {
+		char *unavailable;
+		STRDUP_OR_DIE(unavailable, "U", "PHP unavailable slot");
+		return unavailable;
+	}
 
 	if (!(result_string = (char *)malloc(RESULTS_BUFFER))) {
 		die("ERROR: Fatal malloc error: php.c php_readpipe!");

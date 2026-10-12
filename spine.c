@@ -96,6 +96,8 @@
 
 #include "common.h"
 #include "spine.h"
+#include <stdint.h>
+#include <limits.h>
 
 /* Global Variables */
 int entries = 0;
@@ -190,6 +192,57 @@ void drop_root(uid_t server_uid, gid_t server_gid) {
  *  \return 0 if SUCCESS, or -1 if FAILED
  *
  */
+
+/* Reject invalid sizes before the stack formula can overflow. */
+#if RESULTS_BUFFER < 2
+#error RESULTS_BUFFER must hold a value and terminator
+#endif
+#if RESULTS_BUFFER > (SIZE_MAX - (2 * 180 * 1024 + 65535)) / 10
+#error RESULTS_BUFFER overflows the worker stack size
+#endif
+#define SPINE_THREAD_STACK_SIZE \
+	(((size_t) 2 * ((size_t) 180 * 1024 + 5 * (size_t) RESULTS_BUFFER) + 65535) & ~(size_t) 65535)
+
+static int spine_thread_attr_init(pthread_attr_t *attributes) {
+	size_t current = 0;
+	size_t wanted = SPINE_THREAD_STACK_SIZE;
+	int status;
+
+#ifdef PTHREAD_STACK_MIN
+	if (wanted < (size_t) PTHREAD_STACK_MIN) wanted = (size_t) PTHREAD_STACK_MIN;
+#endif
+
+	status = pthread_attr_init(attributes);
+	if (status != 0) {
+		return status;
+	}
+
+	if (pthread_attr_getstacksize(attributes, &current) == 0 && current >= wanted) {
+		return 0;
+	}
+
+	status = pthread_attr_setstacksize(attributes, wanted);
+	if (status != 0) {
+		pthread_attr_destroy(attributes);
+	}
+
+	return status;
+}
+
+
+/* Accept a whole in-range decimal before sizing workers or selecting hosts. */
+static bool parse_cli_int(const char *text, long minimum, long maximum, int *value) {
+	char *end;
+	long parsed;
+
+	if (text[0] < '0' || text[0] > '9') return FALSE;
+	errno = 0;
+	parsed = strtol(text, &end, 10);
+	if (errno != 0 || *end != '\0' || parsed < minimum || parsed > maximum) return FALSE;
+	*value = (int)parsed;
+	return TRUE;
+}
+
 int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
@@ -346,9 +399,9 @@ int main(int argc, char *argv[]) {
 				die("ERROR: %s can only be used once", arg);
 			}
 
-			set.start_host_id = atoi(opt = getarg(opt, &argv));
+			opt = getarg(opt, &argv);
 
-			if (!HOSTID_DEFINED(set.start_host_id)) {
+			if (!parse_cli_int(opt, 0, INT_MAX, &set.start_host_id)) {
 				die("ERROR: '%s=%s' is invalid first-host ID", arg, opt);
 			}
 		}
@@ -358,9 +411,9 @@ int main(int argc, char *argv[]) {
 				die("ERROR: %s can only be used once", arg);
 			}
 
-			set.end_host_id = atoi(opt = getarg(opt, &argv));
+			opt = getarg(opt, &argv);
 
-			if (!HOSTID_DEFINED(set.end_host_id)) {
+			if (!parse_cli_int(opt, 0, INT_MAX, &set.end_host_id)) {
 				die("ERROR: '%s=%s' is invalid last-host ID", arg, opt);
 			}
 		}
@@ -370,7 +423,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRMATCH(arg, "-t") || STRIMATCH(arg, "--threads")) {
-			set.threads = atoi(getarg(opt, &argv));
+			opt = getarg(opt, &argv);
+			if (!parse_cli_int(opt, 1, INT_MAX, &set.threads)) {
+				die("ERROR: Invalid thread count");
+			}
+			if (set.threads > MAX_THREADS) {
+				fprintf(stderr, "WARNING: Thread count exceeds maximum; using %d\n", MAX_THREADS);
+				set.threads = MAX_THREADS;
+			}
 			set.threads_set = TRUE;
 		}
 
@@ -444,11 +504,15 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (!HOSTID_DEFINED(set.start_host_id) && all_digits(arg)) {
-			set.start_host_id = atoi(arg);
+			if (!parse_cli_int(arg, 0, INT_MAX, &set.start_host_id)) {
+				die("ERROR: Invalid host ID");
+			}
 		}
 
 		else if (!HOSTID_DEFINED(set.end_host_id) && all_digits(arg)) {
-			set.end_host_id = atoi(arg);
+			if (!parse_cli_int(arg, 0, INT_MAX, &set.end_host_id)) {
+				die("ERROR: Invalid host ID");
+			}
 		}
 
 		else {
@@ -697,8 +761,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* initialize threads and mutexes */
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	if (spine_thread_attr_init(&attr) != 0 ||
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0) {
+		die("ERROR: Unable to initialize polling thread attributes");
+	}
 
 	init_mutexes();
 

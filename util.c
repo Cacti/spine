@@ -1054,6 +1054,17 @@ void poller_push_data_to_main() {
  *
  *  \return 0 if successful or -1 if the file could not be opened
  */
+/* Consume an overlong physical line so its tail cannot become a directive. */
+static bool config_line_complete(FILE *fp, const char *line, size_t capacity) {
+	int next;
+
+	if (line[capacity - 1] != '\0' || line[capacity - 2] == '\n') return TRUE;
+	next = getc(fp);
+	if (next == EOF || next == '\n') return TRUE;
+	while (next != EOF && next != '\n') next = getc(fp);
+	return FALSE;
+}
+
 int read_spine_config(char *file) {
 	FILE *fp;
 	char buff[BUFSIZE];
@@ -1074,10 +1085,15 @@ int read_spine_config(char *file) {
 		}
 
 		while (!feof(fp)) {
-			chars = fgets(buff, BUFSIZE, fp);
+			buff[sizeof(buff) - 1] = 1;
+			chars = fgets(buff, sizeof(buff), fp);
+			if (chars != NULL && !config_line_complete(fp, buff, sizeof(buff))) {
+				if (!set.stderr_notty) fprintf(stderr, "WARNING: Ignoring an overlong config line\n");
+				continue;
+			}
 
-			if (chars != NULL && !feof(fp) && *buff != '#' && *buff != ' ' && *buff != '\n') {
-				sscanf(buff, "%15s %255s", p1, p2);
+			if (chars != NULL && *buff != '#' && *buff != ' ' && *buff != '\n') {
+				if (sscanf(buff, "%1023s %1023s", p1, p2) != 2) continue;
 
 				if (STRIMATCH(p1, "RDB_Host"))              STRNCOPY(set.rdb_host, p2);
 				else if (STRIMATCH(p1, "RDB_Database"))     STRNCOPY(set.rdb_db, p2);
@@ -1108,7 +1124,7 @@ int read_spine_config(char *file) {
 					set.log_destination = LOGDEST_BOTH;
 				} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
 				else if (!set.stderr_notty) {
-					fprintf(stderr,"WARNING: Unrecongized directive: %s=%s in %s\n", p1, p2, file);
+					fprintf(stderr,"WARNING: Unrecognized directive in config file\n");
 				}
 
 				*p1 = '\0';
