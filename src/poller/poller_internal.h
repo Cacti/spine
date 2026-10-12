@@ -32,6 +32,7 @@ typedef struct poll_error_context {
 
 typedef struct {
 	int initialized;
+	char hostname[sizeof(((target_t *)0)->hostname)];
 	snmp_profile_t profile;
 } snmp_item_key_t;
 
