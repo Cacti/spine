@@ -9,6 +9,7 @@
 #include <mach-o/dyld.h>
 #endif
 
+#if !defined(__linux__) && !defined(__APPLE__)
 /* Used after dropping privileges on platforms without an executable-path API. */
 static inline char *script_executable_from_path(const char *argument) {
 	const char *search;
@@ -42,6 +43,8 @@ static inline char *script_executable_from_path(const char *argument) {
 		search = end + 1;
 	}
 }
+
+#endif
 
 void spine_script_executable(const char *argument) {
 	char *resolved;
