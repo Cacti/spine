@@ -909,9 +909,10 @@ int main(int argc, char *argv[]) {
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
 		poller_details->threads_complete = 0;
+		poller_details->output_failed    = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
-		details[device_counter] = poller_details;
+		if (current_thread == 1) details[device_counter] = poller_details;
 		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */

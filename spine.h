@@ -494,6 +494,7 @@ typedef struct poller_thread {
 	int host_threads;
 	int host_data_ids;
 	int threads_complete;
+	int output_failed;
 	int complete;
 	char host_time[40];
 	double host_time_double;
