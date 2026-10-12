@@ -37,7 +37,7 @@ case "$coverage_base" in
     "$source_dir"/*) coverage_find_path="./${coverage_base#"$source_dir"/}";;
     *) ;;
 esac
-find . -path "$coverage_find_path" -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile.am' -o -name 'configure.ac' -o -path './scripts/copyright_year.sh' -o -path './tests/fixtures/*' -o \( -path './tests/tools/*' \( -name '*.sh' -o -name '*.py' \) \) -o -path './.github/workflows/*.yml' \) -not -path './.git/*' -not -path './config/config.h' -not -name '*.log' -not -name '*.trs' -print0 | sort -z > "$coverage_dir/source-inputs.nul"
+find . -path "$coverage_find_path" -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile.am' -o -name 'configure.ac' -o -path './scripts/copyright_year.sh' -o -path './tests/fixtures/*' -o \( -path './tests/tools/*' \( -name '*.sh' -o -name '*.py' -o -name '*.awk' \) \) -o -path './.github/workflows/*.yml' \) -not -path './.git/*' -not -path './config/config.h' -not -name '*.log' -not -name '*.trs' -print0 | sort -z > "$coverage_dir/source-inputs.nul"
 xargs -0 sha256sum < "$coverage_dir/source-inputs.nul" > "$coverage_dir/source.sha256"
 tar -czf "$coverage_dir/source-inputs.tar.gz" --null -T "$coverage_dir/source-inputs.nul"
 # Autoreconf replaces this tracked template. Preserve its original bytes and

@@ -391,3 +391,6 @@ EXTRA_DIST += tests/tools/benchmark_builds.py \
 	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/summary.json
 EXTRA_DIST += docs/platforms.md
+
+TESTS += tests/tools/test_memory_soak_fit.sh
+EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk
