@@ -48,12 +48,6 @@
  *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
  *
  */
-static int ping_down(ping_t *ping, const char *message) {
-	snprintf(ping->ping_status, 50, "down");
-	strncopy(ping->ping_response, message, SMALL_BUFSIZE);
-	return HOST_DOWN;
-}
-
 /* A connected socket accepts datagrams only from its peer. Port-unreachable
  * errors also indicate a response, but EHOSTUNREACH cannot distinguish a
  * firewall rejection from an unreachable host or failed neighbour lookup. */
