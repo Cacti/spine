@@ -52,10 +52,30 @@ extern void die(const char *format, ...)
 extern void set_option(const char *setting, const char *value);
 
 /* number validation functions */
-extern int is_numeric(char *string);
 extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
-extern int is_hexadecimal(const char * str, const short ignore_special);
+
+/* what a poll returned; text is what poller_output stores, U if unknown */
+typedef enum {
+	RESULT_UNKNOWN = 0,
+	RESULT_COUNTER,
+	RESULT_SIGNED,
+	RESULT_FLOAT,
+	RESULT_HEX_COUNTER,
+	RESULT_MULTIPART
+} result_kind_t;
+
+typedef struct {
+	result_kind_t kind;
+	union {
+		uint64_t counter;
+		int64_t integer;
+		double real;
+	} value;
+	char text[RESULTS_BUFFER];
+} classified_result_t;
+
+extern result_kind_t classify_result(const char *raw, classified_result_t *out);
 
 /* determine if a device is a debug device */
 extern int is_debug_device(int device_id);
@@ -77,9 +97,6 @@ extern char *ltrim(char *str);
 extern char *reverse(char *str);
 extern int strpos(const char *haystack, const char *needle) ;
 extern int char_count(const char *str, int chr);
-
-/* convert a delimited hexadecimal value without conflating overflow with 0 */
-int hex2dec(const char *str, unsigned long long *result);
 
 /* custom regex replace to return a value if matches */
 #define MAX_MATCHES 5
