@@ -44,6 +44,7 @@ static void sql_log_contract(MYSQL *connection) {
 	fclose(capture);
 	assert(strstr(contents, "Database Error") != NULL);
 	assert(strstr(contents, "fixture_sql_secret") == NULL);
+	assert(db_insert(connection, LOCAL, "DELETE FROM settings WHERE name='sql_log_fixture'"));
 }
 
 static void output_contract(MYSQL *local, MYSQL *remote, int mode) {
