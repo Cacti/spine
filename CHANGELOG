@@ -1,6 +1,10 @@
 The Cacti Group | spine
 
 1.3.0
+-issue#641: Separate SNMP batches by hostname and reject truncated or NUL-containing script responses without waiting for EOF
+-issue#654: Preserve coverage fingerprints across build cleanup and run memory-soak contracts with POSIX shells
+-issue#655: Preserve portable executable PATH lookup and compile process helpers across Linux, BSD and macOS
+-issue#659: Verify independent maintenance PR stacks and preserve shallow-worktree history boundaries
 -feature: Use C17 with checked native interfaces and production-linked polling contracts
 -issue: Drop root before untrusted input and retain only owned ICMP resources
 -issue: Bound database reconnects and isolate worker failures without losing completion or cleanup
