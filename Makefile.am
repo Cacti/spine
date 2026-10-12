@@ -322,4 +322,5 @@ EXTRA_DIST += tests/tools/test_clang_tidy_gate.py
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg
 
-EXTRA_DIST += docs/platforms.md
+EXTRA_DIST += docs/platforms.mdTESTS += tests/tools/test_memory_soak_fit.sh
+EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk

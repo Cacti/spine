@@ -1171,7 +1171,9 @@ EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
 	docs/architecture/source-modules.md \
 	tests/tools/test_configure_contracts.sh \
 	tests/tools/test_clang_tidy_gate.py scripts/cppcheck/spine.cfg \
-	docs/platforms.md
+	docs/platforms.mdTESTS += tests/tools/test_memory_soak_fit.sh \
+	tests/tools/test_memory_soak_fit.sh \
+	tests/tools/memory_soak_fit.awk
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src \
 	-I$(top_srcdir)/vendor/uthash -I$(top_builddir)
 
