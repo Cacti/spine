@@ -8,9 +8,9 @@ An ordinary merge simulation does not establish that untouched dependent
 branches remain safe after a squash: their old parent commits retain different
 identities. Merge one PR at a time and restack dependents before continuing.
 
-The open stack audited on 2026-10-11 was:
+The open stack audited on 2026-10-11, after #656 merged into #655, was:
 
-`#641 → #644 → #654 → #646 → #648 → #649 → #650 → #651 → #655 → #656 → #658`
+`#641 → #644 → #654 → #646 → #648 → #649 → #650 → #651 → #655 → #658 → #659`
 
 `tests/tools/verify_pr_stack.py` discovers current PRs through GitHub's API,
 validates their dependency graph and exact revisions, and checks each existing
