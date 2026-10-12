@@ -318,3 +318,6 @@ noinst_HEADERS += src/app/buffer.h \
 noinst_HEADERS += src/database/cacti_query.h src/database/persistence.h
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg
+
+TESTS += tests/tools/test_memory_soak_fit.sh
+EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk
