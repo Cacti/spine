@@ -582,10 +582,20 @@ static bool evaluate_reindex_assertion(const reindex_evaluation_t *evaluation, c
 
 /* An uptime is a non-negative integer; anything else cannot be compared. */
 static bool parse_uptime(const char *text, unsigned long long *ticks) {
-	classified_result_t classified;
+	unsigned long long value = 0;
+	unsigned int digit;
 
-	if (classify_result(text, &classified) != RESULT_COUNTER) return FALSE;
-	*ticks = (unsigned long long)classified.value.counter;
+	if (text == NULL || ticks == NULL) return FALSE;
+	while (isspace((unsigned char)*text)) text++;
+	if (*text < '0' || *text > '9') return FALSE;
+	while (*text >= '0' && *text <= '9') {
+		digit = (unsigned int)(*text++ - '0');
+		if (value > (ULLONG_MAX - digit) / 10) return FALSE;
+		value = value * 10 + digit;
+	}
+	while (isspace((unsigned char)*text)) text++;
+	if (*text != '\0') return FALSE;
+	*ticks = value;
 	return TRUE;
 }
 
@@ -622,7 +632,7 @@ static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread
 		   engine OID is not present with numeric data. */
 		poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
-		uptime_use_engine_oid = parse_uptime(poll_result, &ticks);
+		uptime_use_engine_oid = parse_uptime(poll_result, &ticks) && ticks <= ULLONG_MAX / 100;
 
 		if (uptime_use_engine_oid) {
 			snprintf(sysUptime, BUFSIZE, "%llu", ticks * 100);
@@ -1078,6 +1088,7 @@ static void *open_snmp_item(const host_t *host, target_t *item) {
 
 static bool snmp_item_changed(const snmp_item_key_t *key, const target_t *item) {
 	return (key->profile.port != item->snmp.port) ||
+					(key->profile.timeout != item->snmp.timeout) ||
 					(key->profile.version != item->snmp.version) ||
 					(item->snmp.version < 3 &&
 					(!STRMATCH(key->profile.community, item->snmp.community))) ||
@@ -1617,7 +1628,7 @@ static void poll_system_uptime(host_t *host) {
 		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.6.3.10.2.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
-		if (parse_uptime(poll_result, &ticks)) {
+		if (parse_uptime(poll_result, &ticks) && ticks <= ULLONG_MAX / 100) {
 			host->system.snmp_sysUpTimeInstance = ticks * 100;
 		}
 	}
