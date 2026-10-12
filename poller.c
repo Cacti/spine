@@ -187,6 +187,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	int  last_snmp_version = 0;
 	int  last_snmp_port    = 0;
+	char last_snmp_hostname[sizeof(((target_t *)0)->hostname)];
 	char last_snmp_community[50];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
@@ -1400,6 +1401,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
 
+					STRNCOPY(last_snmp_hostname,        poller_items[i].hostname);
 					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
 					STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
 					STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
@@ -1427,7 +1429,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				}
 
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
-				if ((last_snmp_port != poller_items[i].snmp_port) ||
+				if (!STRMATCH(last_snmp_hostname, poller_items[i].hostname) ||
+					(last_snmp_port != poller_items[i].snmp_port) ||
 					(last_snmp_version != poller_items[i].snmp_version) ||
 					(poller_items[i].snmp_version < 3 &&
 					(!STRMATCH(last_snmp_community, poller_items[i].snmp_community))) ||
@@ -1531,6 +1534,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					last_snmp_port    = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
 
+					STRNCOPY(last_snmp_hostname,        poller_items[i].hostname);
 					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
 					STRNCOPY(last_snmp_username,        poller_items[i].snmp_username);
 					STRNCOPY(last_snmp_password,        poller_items[i].snmp_password);
@@ -2416,9 +2420,10 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 					SET_UNDEFINED(result_string);
 					break;
 				default:
-					/* get only one line of output, we will ignore the rest */
-					bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER-1);
-					if (bytes_read > 0) {
+					/* Read once, using full capacity to detect a truncated response. */
+					bytes_read = read(cmd_fd, result_string, RESULTS_BUFFER);
+					if (bytes_read > 0 && bytes_read < RESULTS_BUFFER &&
+						memchr(result_string, '\0', (size_t)bytes_read) == NULL) {
 						result_string[bytes_read] = '\0';
 					} else {
 						if (STRIMATCH(type,"DS")) {
