@@ -4,6 +4,13 @@
  * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  */
+/* Drives the shipped poll_host() without a database or an SNMP agent.
+ *
+ * GNU ld --wrap replaces the database and SNMP calls that poller.o makes into
+ * sql.o, snmp.o and the client library with an in-memory fake, so the flush,
+ * reindex and completion paths run in an unprivileged "make check".  The live
+ * suites in tests/test_spine_*.c cover the same paths against real servers.
+ */
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -40,6 +47,7 @@ static struct {
 	const char *engine_uptime;
 	const char *legacy_uptime;
 	int session_opens;
+	int session_timeouts[MAX_QUERIES];
 	char *queries[MAX_QUERIES];
 	int query_count;
 	int completion_queries;
@@ -184,7 +192,8 @@ MYSQL_ROW __wrap_mysql_fetch_row(MYSQL_RES *opaque) {
 }
 
 void *__wrap_snmp_host_init(const snmp_connection_t *options) {
-	(void) options;
+	assert_true(fake.session_opens < MAX_QUERIES);
+	fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
 	fake.session_opens++;
 	return &fake_session;
 }
@@ -380,6 +389,22 @@ static void test_snmpv3_batches_on_profile(void **state) {
 	assert_int_equal(captured("(633, 'c', FROM_UNIXTIME(1791158400), '7')"), 1);
 }
 
+/* Otherwise identical items share a session only while their timeouts match. */
+static void test_snmp_batches_on_timeout(void **state) {
+	(void) state;
+	set_host("regression", "10", AVAIL_NONE);
+	add_snmp_item("641", "a", "regression", "2", NULL);
+	add_snmp_item("642", "b", "regression", "2", NULL);
+	add_snmp_item("643", "c", "regression", "2", NULL);
+	fake.items[2][14] = "1500";
+	fake.multi_value = "7";
+	assert_int_equal(run_poll(), 0);
+	assert_int_equal(fake.session_opens, 3);
+	assert_int_equal(fake.session_timeouts[1], 500);
+	assert_int_equal(fake.session_timeouts[2], 1500);
+	assert_int_equal(captured("(643, 'c', FROM_UNIXTIME(1791158400), '7')"), 1);
+}
+
 /* Good baseline, unreadable cycle, reboot: the reboot must still fire. */
 static void test_uptime_baseline_survives_unknown(void **state) {
 	static const struct {
@@ -392,6 +417,14 @@ static void test_uptime_baseline_survives_unknown(void **state) {
 		{NULL, NULL, 0, "500"},
 		/* a negative engine time is not an uptime; the legacy OID answers */
 		{"-5", "600", 0, "600"},
+		{"4096 Bytes", "600", 0, "600"},
+		{"3.5", "600", 0, "600"},
+		{"3e2", "600", 0, "600"},
+		{"+3", "600", 0, "600"},
+		{"", "4096 Bytes", 0, "600"},
+		{"18446744073709551616", "600", 0, "600"},
+		{"18446744073709551615", "600", 0, "600"},
+		{" \t6\r\n", NULL, 0, "600"},
 		{"1", NULL, 1, "100"},
 	};
 	(void) state;
@@ -430,10 +463,19 @@ static void test_script_reindex_and_completion(void **state) {
 /* sysUpTimeInstance takes the engine time in ticks when both OIDs read, and
  * ignores an uptime that is not a whole non-negative number. */
 static void test_system_uptime(void **state) {
-	static const struct { const char *legacy; const char *engine; const char *stored; } cases[] = {
+	static const struct {
+		const char *legacy;
+		const char *engine;
+		const char *stored;
+	} cases[] = {
 		{"4200", "42", "snmp_sysUpTimeInstance='4200'"},
 		{"4200", "-1", "snmp_sysUpTimeInstance='4200'"},
 		{"-5", "42", "snmp_sysUpTimeInstance='0'"},
+		{"4096 Bytes", "42", "snmp_sysUpTimeInstance='0'"},
+		{"4200", "4096 Bytes", "snmp_sysUpTimeInstance='4200'"},
+		{"4200", "18446744073709551615", "snmp_sysUpTimeInstance='4200'"},
+		{"18446744073709551616", "42", "snmp_sysUpTimeInstance='0'"},
+		{" \t4200\r\n", " \t42\r\n", "snmp_sysUpTimeInstance='4200'"},
 	};
 	(void) state;
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -453,6 +495,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_flush_paths_agree, setup),
 		cmocka_unit_test_setup(test_long_community_batches, setup),
 		cmocka_unit_test_setup(test_snmpv3_batches_on_profile, setup),
+		cmocka_unit_test_setup(test_snmp_batches_on_timeout, setup),
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),

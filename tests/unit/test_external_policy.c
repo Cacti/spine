@@ -41,11 +41,34 @@ static ssize_t controlled_read(int fd, void *buffer, size_t capacity) {
 	}
 	return 0;
 }
+static int handoff_test;
+static int handoff_disabled;
+static int handoff_fd;
+static int controlled_popen(const char *command, const char *type) {
+	int fd = nft_popen(command, type);
+	if (handoff_test) handoff_fd = fd;
+	return fd;
+}
+static int controlled_pclose(int fd) {
+	int previous;
+	if (handoff_test) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &previous);
+		handoff_disabled = previous == PTHREAD_CANCEL_DISABLE;
+		pthread_setcancelstate(previous, NULL);
+		pthread_cancel(pthread_self());
+		pthread_testcancel();
+	}
+	return nft_pclose(fd);
+}
+#define nft_popen controlled_popen
+#define nft_pclose controlled_pclose
 #define spine_wait_readable controlled_wait
 #define read controlled_read
 #include "../../src/script/external.c"
 #undef read
 #undef spine_wait_readable
+#undef nft_popen
+#undef nft_pclose
 
 static bool reject_upsert(MYSQL *destination, char *buffer, size_t capacity,
 	const char *const *columns, size_t count) {
@@ -97,7 +120,40 @@ static void test_suffix_failure_preserves_buffer_ownership(void **state) {
 	free(buffers.boost);
 }
 
+static void *poll_with_pending_cancellation(void *argument) {
+	host_t *host = argument;
+	char *result = exec_poll(host, "/bin/echo 42", 1, "DS");
+	free(result);
+	pthread_testcancel();
+	return NULL;
+}
+
+static void test_close_handoff_defers_cancellation(void **state) {
+	host_t host = {.id = 1};
+	pthread_t worker;
+	void *result;
+	int registered;
+	(void) state;
+	scenario = calls = handoff_disabled = 0;
+	handoff_fd = -1;
+	handoff_test = 1;
+	set.php.script_timeout = 5;
+	set.php.script_max_output = 2;
+	set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+	assert_int_equal(pthread_create(&worker, NULL, poll_with_pending_cancellation, &host), 0);
+	assert_int_equal(pthread_join(worker, &result), 0);
+	handoff_test = 0;
+	registered = nft_pchild(handoff_fd);
+	if (registered > 0) nft_pclose(handoff_fd);
+	assert_ptr_equal(result, PTHREAD_CANCELED);
+	assert_true(handoff_disabled);
+	assert_int_equal(registered, -1);
+	assert_int_equal(spine_permits_available(&available_scripts), 1);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
 int main(void) {
-	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership)};
+	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation)};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }

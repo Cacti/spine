@@ -231,13 +231,16 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				const script_result_context_t context = {current_host, command, id, type};
 				script_read_owner_t owner = {cmd_fd, NULL, FALSE, NULL};
 				int child_status;
+				int cancel_state;
 				pthread_cleanup_push(cancel_script_read, &owner);
 				(void) read_script_result(&context, cmd_fd, deadline, result_string);
 
 				/* close pipe */
-				/* nft_pclose installs its own child owner before cancellation. */
+				/* Resolve child ownership before delivering a pending cancellation. */
+				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 				owner.fd = -1;
 				child_status = nft_pclose(cmd_fd);
+				pthread_setcancelstate(cancel_state, NULL);
 				if ((set.php.script_max_output != 0 || set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0) &&
 					(child_status < 0 || !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0)) {
 					SPINE_LOG(("Device[%i] %s[%i] ERROR: Limited script failed or exceeded its resource policy", current_host->id, type, id));
