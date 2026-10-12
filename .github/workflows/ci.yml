@@ -4,7 +4,7 @@ on:
   push:
     branches: [1.2.x]
   pull_request:
-    branches: [1.2.x]
+    branches: [1.2.x, 'fix/*-1.2']
 
 permissions:
   contents: read
