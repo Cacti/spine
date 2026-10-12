@@ -13,6 +13,7 @@
 #endif
 
 config_t set;
+static char resolved_input[PATH_MAX];
 static int path_error;
 static int resolve_error;
 static int resolve_long;
@@ -33,7 +34,7 @@ static int fake_executable(char *buffer, uint32_t *capacity) {
 #endif
 static char *fake_realpath(const char *path, char *resolved) {
 	char *result;
-	(void) path;
+	snprintf(resolved_input, sizeof(resolved_input), "%s", path);
 	assert_null(resolved);
 	if (resolve_error) return NULL;
 	result = malloc(BUFSIZE + 1);
@@ -105,6 +106,45 @@ static void test_executable_resolution(void **state) {
 	assert_string_equal(set.php.script_executable, "/tmp/spine");
 }
 
+static void test_executable_path_search(void **state) {
+	char directory[] = "/tmp/spine-path-XXXXXX";
+	char executable[PATH_MAX];
+	char search[PATH_MAX];
+	char *saved = getenv("PATH") == NULL ? NULL : strdup(getenv("PATH"));
+	char *resolved;
+	FILE *file;
+	(void) state;
+	assert_non_null(mkdtemp(directory));
+	snprintf(executable, sizeof(executable), "%s/spine", directory);
+	file = fopen(executable, "w");
+	assert_non_null(file);
+	fclose(file);
+	assert_int_equal(chmod(executable, 0700), 0);
+	snprintf(search, sizeof(search), "/missing-spine-directory:%s", directory);
+	assert_int_equal(setenv("PATH", search, 1), 0);
+	resolved = script_executable_from_path("spine");
+	assert_non_null(resolved);
+	assert_string_equal(resolved_input, executable);
+	free(resolved);
+	assert_int_equal(chmod(executable, 0600), 0);
+	assert_null(script_executable_from_path("spine"));
+	assert_int_equal(unlink(executable), 0);
+	assert_int_equal(mkdir(executable, 0700), 0);
+	assert_null(script_executable_from_path("spine"));
+	assert_int_equal(unsetenv("PATH"), 0);
+	assert_null(script_executable_from_path("spine"));
+	resolved = script_executable_from_path(executable);
+	assert_non_null(resolved);
+	assert_string_equal(resolved_input, executable);
+	free(resolved);
+	assert_int_equal(rmdir(executable), 0);
+	assert_int_equal(rmdir(directory), 0);
+	if (saved != NULL) {
+		setenv("PATH", saved, 1);
+		free(saved);
+	} else unsetenv("PATH");
+}
+
 static void test_child_policy_validation(void **state) {
 	char *arguments[] = {"spine", "--internal-script-child", "0", "0", "printf 42"};
 	char *invalid[] = {"", "-1", "+1", "1x", "4294967296", "999999999999999999999999"};
@@ -162,6 +202,7 @@ static void test_resource_failures_and_inheritance(void **state) {
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_executable_resolution, reset),
+		cmocka_unit_test_setup(test_executable_path_search, reset),
 		cmocka_unit_test_setup(test_child_policy_validation, reset),
 		cmocka_unit_test_setup(test_resource_failures_and_inheritance, reset),
 	};

@@ -9,6 +9,40 @@
 #include <mach-o/dyld.h>
 #endif
 
+/* Used after dropping privileges on platforms without an executable-path API. */
+static inline char *script_executable_from_path(const char *argument) {
+	const char *search;
+	const char *end;
+	size_t directory_length;
+	size_t name_length;
+	char candidate[PATH_MAX];
+	struct stat status;
+	char *resolved;
+	if (argument == NULL || argument[0] == '\0') return NULL;
+	name_length = strlen(argument);
+	if (name_length >= sizeof(candidate)) return NULL;
+	if (strchr(argument, '/') != NULL) return realpath(argument, NULL);
+	search = getenv("PATH");
+	if (search == NULL) return NULL;
+	for (;;) {
+		end = strchr(search, ':');
+		directory_length = end == NULL ? strlen(search) : (size_t) (end - search);
+		if (directory_length + name_length + 1 < sizeof(candidate)) {
+			if (directory_length != 0) {
+				memcpy(candidate, search, directory_length);
+				candidate[directory_length] = '/';
+				memcpy(candidate + directory_length + 1, argument, name_length + 1);
+			} else memcpy(candidate, argument, name_length + 1);
+			if (access(candidate, X_OK) == 0 && stat(candidate, &status) == 0 && S_ISREG(status.st_mode)) {
+				resolved = realpath(candidate, NULL);
+				if (resolved != NULL) return resolved;
+			}
+		}
+		if (end == NULL) return NULL;
+		search = end + 1;
+	}
+}
+
 void spine_script_executable(const char *argument) {
 	char *resolved;
 	size_t length;
@@ -21,8 +55,7 @@ void spine_script_executable(const char *argument) {
 	if (_NSGetExecutablePath(path, &capacity) != 0) return;
 	resolved = realpath(path, NULL);
 #else
-	if (argument == NULL || strlen(argument) >= PATH_MAX) return;
-	resolved = realpath(argument, NULL);
+	resolved = script_executable_from_path(argument);
 #endif
 	(void) argument;
 	if (resolved == NULL) return;
