@@ -196,7 +196,7 @@ spine_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
-am__v_lt_1 =
+am__v_lt_1 = 
 am__test_spine_faults_SOURCES_DIST = sql.c src/database/connection.c \
 	src/database/pool.c util.c src/config/settings.c \
 	src/config/options.c src/config/file.c src/database/transfer.c \
@@ -511,11 +511,11 @@ am__v_P_1 = :
 AM_V_GEN = $(am__v_GEN_@AM_V@)
 am__v_GEN_ = $(am__v_GEN_@AM_DEFAULT_V@)
 am__v_GEN_0 = @echo "  GEN     " $@;
-am__v_GEN_1 =
+am__v_GEN_1 = 
 AM_V_at = $(am__v_at_@AM_V@)
 am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
-am__v_at_1 =
+am__v_at_1 = 
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__maybe_remake_depfiles = depfiles
@@ -725,7 +725,7 @@ LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 AM_V_CC = $(am__v_CC_@AM_V@)
 am__v_CC_ = $(am__v_CC_@AM_DEFAULT_V@)
 am__v_CC_0 = @echo "  CC      " $@;
-am__v_CC_1 =
+am__v_CC_1 = 
 CCLD = $(CC)
 LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -733,7 +733,7 @@ LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
-am__v_CCLD_1 =
+am__v_CCLD_1 = 
 SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(test_spine_regressions_SOURCES) \
 	$(tests_support_php_test_server_SOURCES) \
@@ -1190,7 +1190,8 @@ TESTS = $(check_PROGRAMS) tests/regression/test_remote_push.sh \
 	tests/integration/test_alloc_failure.sh \
 	tests/regression/test_child_process_safety.sh \
 	tests/regression/test_setuid_privilege_drop.sh \
-	tests/regression/test_helper_scripts.sh
+	tests/regression/test_helper_scripts.sh \
+	tests/tools/test_memory_soak_fit.sh
 test_spine_regressions_SOURCES = $(spine_SOURCES) tests/test_spine_regressions.c tests/test_spine_contracts.c tests/test_spine_reindex_contracts.c tests/test_spine_snmpv3_contracts.c tests/test_spine_settings_contracts.c tests/test_spine_cli_contracts.c tests/test_spine_stream_contracts.c tests/test_spine_output_contracts.c tests/test_spine_privilege_contracts.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Only spine.c maps its own entry point in the test build.
@@ -1234,7 +1235,9 @@ EXTRA_DIST = spine.1 spine.conf.dist tests/README.md \
 	tests/fixtures/c17_develop_behavior_baseline.json \
 	scripts/debug.sh scripts/package.sh \
 	tests/regression/test_helper_scripts.sh \
-	docs/architecture/source-modules.md scripts/cppcheck/spine.cfg
+	docs/architecture/source-modules.md scripts/cppcheck/spine.cfg \
+	tests/tools/test_memory_soak_fit.sh \
+	tests/tools/memory_soak_fit.awk
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/src/core -I$(top_builddir)
 @HAVE_CMOCKA_TRUE@tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
 
@@ -1377,7 +1380,7 @@ config/config.h: config/stamp-h1
 config/stamp-h1: $(top_srcdir)/config/config.h.in $(top_builddir)/config.status
 	@rm -f config/stamp-h1
 	cd $(top_builddir) && $(SHELL) ./config.status config/config.h
-$(top_srcdir)/config/config.h.in:  $(am__configure_deps)
+$(top_srcdir)/config/config.h.in:  $(am__configure_deps) 
 	($(am__cd) $(top_srcdir) && $(AUTOHEADER))
 	rm -f config/stamp-h1
 	touch $@
@@ -1560,7 +1563,7 @@ src/core/startup.$(OBJEXT): src/core/$(am__dirstamp) \
 src/core/workers.$(OBJEXT): src/core/$(am__dirstamp) \
 	src/core/$(DEPDIR)/$(am__dirstamp)
 
-spine$(EXEEXT): $(spine_OBJECTS) $(spine_DEPENDENCIES) $(EXTRA_spine_DEPENDENCIES)
+spine$(EXEEXT): $(spine_OBJECTS) $(spine_DEPENDENCIES) $(EXTRA_spine_DEPENDENCIES) 
 	@rm -f spine$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(spine_OBJECTS) $(spine_LDADD) $(LIBS)
 src/database/test_spine_faults-connection.$(OBJEXT):  \
@@ -1645,7 +1648,7 @@ tests/$(DEPDIR)/$(am__dirstamp):
 tests/test_spine_faults-test_spine_faults.$(OBJEXT):  \
 	tests/$(am__dirstamp) tests/$(DEPDIR)/$(am__dirstamp)
 
-test_spine_faults$(EXEEXT): $(test_spine_faults_OBJECTS) $(test_spine_faults_DEPENDENCIES) $(EXTRA_test_spine_faults_DEPENDENCIES)
+test_spine_faults$(EXEEXT): $(test_spine_faults_OBJECTS) $(test_spine_faults_DEPENDENCIES) $(EXTRA_test_spine_faults_DEPENDENCIES) 
 	@rm -f test_spine_faults$(EXEEXT)
 	$(AM_V_CCLD)$(test_spine_faults_LINK) $(test_spine_faults_OBJECTS) $(test_spine_faults_LDADD) $(LIBS)
 src/database/test_spine_regressions-connection.$(OBJEXT):  \
@@ -1740,7 +1743,7 @@ tests/test_spine_regressions-test_spine_output_contracts.$(OBJEXT):  \
 tests/test_spine_regressions-test_spine_privilege_contracts.$(OBJEXT):  \
 	tests/$(am__dirstamp) tests/$(DEPDIR)/$(am__dirstamp)
 
-test_spine_regressions$(EXEEXT): $(test_spine_regressions_OBJECTS) $(test_spine_regressions_DEPENDENCIES) $(EXTRA_test_spine_regressions_DEPENDENCIES)
+test_spine_regressions$(EXEEXT): $(test_spine_regressions_OBJECTS) $(test_spine_regressions_DEPENDENCIES) $(EXTRA_test_spine_regressions_DEPENDENCIES) 
 	@rm -f test_spine_regressions$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_spine_regressions_OBJECTS) $(test_spine_regressions_LDADD) $(LIBS)
 tests/support/$(am__dirstamp):
