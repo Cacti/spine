@@ -18,6 +18,27 @@
 #include "ping/ping_internal.h"
 #include <fcntl.h>
 
+/*! \fn int ping_udp(const host_t *host, ping_t *ping)
+ *  \brief ping a host using an UDP datagram
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using UDP.  The UDP datagram contains a marker
+ *  to the "Cacti" application so that firewall's can be configured to allow.
+ *  It will modify the ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
+static int ping_down(ping_t *ping, const char *message) {
+	snprintf(ping->ping_status, 50, "down");
+	strncopy(ping->ping_response, message, SMALL_BUFSIZE);
+	return HOST_DOWN;
+}
+
+/* A connected socket accepts datagrams only from its peer. Port-unreachable
+ * errors also indicate a response, but EHOSTUNREACH cannot distinguish a
+ * firewall rejection from an unreachable host or failed neighbour lookup. */
 static int ping_udp_response(int fd, double deadline) {
 	char response[BUFSIZE];
 	for (;;) {
@@ -25,7 +46,7 @@ static int ping_udp_response(int fd, double deadline) {
 		if (ready <= 0) return ready;
 		ssize_t received = recv(fd, response, sizeof(response), 0);
 		if (received >= 0) return 1;
-		if (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED) return 1;
+		if (errno == ECONNRESET || errno == ECONNREFUSED) return 1;
 		if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 	}
 }

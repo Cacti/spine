@@ -50,9 +50,9 @@ update_copyright() {
 }
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-SCRIPT_BASE=$(realpath "${SCRIPT_DIR}/..")/
+SCRIPT_BASE=$(realpath "${SCRIPT_DIR}/")/
 
-BAD_FOLDERS="\.git vendor tests/fixtures tests/fuzz/corpus LICENSES config m4 scripts"
+BAD_FOLDERS="\.git include/vendor \*\*/vendor include/fa cache include/js scripts"
 SCRIPT_EXCLUSION=
 for f in $BAD_FOLDERS; do
 	SCRIPT_EXCLUSION="$SCRIPT_EXCLUSION -not -path ${SCRIPT_BASE}$f/\* "
