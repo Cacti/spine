@@ -4,6 +4,7 @@
 #include "app/spine.h"
 #include "database/cacti_query.h"
 #include "database/persistence.h"
+#include "config/settings_internal.h"
 
 static void stored(MYSQL *connection, const char *query, const char *expected) {
 	MYSQL_RES *result = db_query(connection, LOCAL, query);
@@ -22,6 +23,13 @@ static void output_contract(MYSQL *local, MYSQL *remote, int mode) {
 	MYSQL *destination = mode == REMOTE_ONLINE ? remote : local;
 	const char *values[] = {"42", "updated'\\value"};
 	size_t i;
+	/* Settings writes must use this connection's vendor, even when the local
+	 * server advertised a different upsert mode. */
+	set.database.onupdate = mysql_get_server_version(destination) < 80019;
+	assert(putsetting(destination, mode == REMOTE_ONLINE ? REMOTE : LOCAL, "destination_fixture", "first"));
+	stored(destination, "SELECT value FROM settings WHERE name='destination_fixture'", "first");
+	assert(putsetting(destination, mode == REMOTE_ONLINE ? REMOTE : LOCAL, "destination_fixture", "second"));
+	stored(destination, "SELECT value FROM settings WHERE name='destination_fixture'", "second");
 	set.poller.mode = mode;
 	set.boost.boost_enabled = set.boost.boost_redirect = TRUE;
 	poller_prepare_queries(&queries, 991, 1, 0);

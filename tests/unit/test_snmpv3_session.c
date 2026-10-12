@@ -52,6 +52,8 @@ static test_reply_kind_t reply_kind;
 static int request_calls;
 static int request_command;
 
+static int cleanup_cancellation_state;
+static int capture_snmp_sess_close(void *session);
 static void *capture_snmp_sess_open(struct snmp_session *session);
 static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response);
 static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
@@ -62,12 +64,14 @@ static int captured_request_status;
 static struct snmp_session captured_request_session;
 static struct snmp_session *capture_snmp_sess_session(void *session);
 
+#define snmp_sess_close capture_snmp_sess_close
 #define snmp_sess_open capture_snmp_sess_open
 #define snmp_sess_synch_response capture_snmp_sess_synch_response
 #define snmp_sess_session capture_snmp_sess_session
 #include "../../src/snmp/session.c"
 #include "../../src/snmp/requests.c"
 #include "../../src/snmp/response.c"
+#undef snmp_sess_close
 #undef snmp_sess_open
 #undef snmp_sess_synch_response
 #undef snmp_sess_session
@@ -145,7 +149,7 @@ static void *capture_snmp_sess_open(struct snmp_session *session) {
 		memcpy(captured_priv_proto, session->securityPrivProto,
 			captured_priv_proto_len * sizeof(*captured_priv_proto));
 	}
-	return (void *)(uintptr_t) 1;
+	return (void *) (uintptr_t) 1;
 }
 
 static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
@@ -189,6 +193,32 @@ static int session_reset(void **state) {
 	memset(captured_auth_proto, 0, sizeof(captured_auth_proto));
 	memset(captured_priv_proto, 0, sizeof(captured_priv_proto));
 	return 0;
+}
+
+static int capture_snmp_sess_close(void *session) {
+	int cancellation_state;
+
+	assert_non_null(session);
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), EBUSY);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	cleanup_cancellation_state = cancellation_state;
+	return 1;
+}
+
+static void test_cleanup_restores_cancellation_and_unlocks(void **state) {
+	int original_state;
+	int restored_state;
+	int session = 0;
+
+	(void) state;
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &original_state);
+	snmp_host_cleanup(&session);
+	pthread_setcancelstate(original_state, &restored_state);
+	assert_int_equal(restored_state, PTHREAD_CANCEL_ENABLE);
+	assert_int_equal(cleanup_cancellation_state, PTHREAD_CANCEL_DISABLE);
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+	thread_mutex_unlock(LOCK_SNMP);
 }
 
 static int contains_nonzero(const unsigned char *value, size_t length) {
@@ -237,16 +267,12 @@ static int level_for(char *auth_protocol, char *auth_password,
 	char *priv_protocol, char *priv_passphrase) {
 	char host[] = "127.0.0.1";
 	char user[] = "snmpuser";
-	char ctx[]  = "";
-	char eid[]  = "";
+	char ctx[] = "";
+	char eid[] = "";
 	void *sessp;
 
 	const snmp_connection_t options = {
-		.host_id = 1, .hostname = host, .snmp_version = 3, .snmp_community = NULL,
-		.snmp_username = user, .snmp_password = auth_password, .snmp_auth_protocol = auth_protocol,
-		.snmp_priv_passphrase = priv_passphrase, .snmp_priv_protocol = priv_protocol,
-		.snmp_context = ctx, .snmp_engine_id = eid, .snmp_port = 161, .snmp_timeout = 500
-	};
+		.host_id = 1, .hostname = host, .snmp_version = 3, .snmp_community = NULL, .snmp_username = user, .snmp_password = auth_password, .snmp_auth_protocol = auth_protocol, .snmp_priv_passphrase = priv_passphrase, .snmp_priv_protocol = priv_protocol, .snmp_context = ctx, .snmp_engine_id = eid, .snmp_port = 161, .snmp_timeout = 500};
 
 	sessp = snmp_host_init(&options);
 
@@ -308,7 +334,8 @@ static void test_auth_without_privacy_is_authnopriv(void **state) {
 	expected_priv_len = OID_LENGTH(usmNoPrivProtocol);
 	assert_int_equal(captured_priv_proto_len, expected_priv_len);
 	assert_int_equal(snmp_oid_compare(captured_priv_proto, captured_priv_proto_len,
-		expected_priv, expected_priv_len), 0);
+						 expected_priv, expected_priv_len),
+		0);
 }
 
 static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) {
@@ -318,18 +345,18 @@ static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) 
 		size_t expected_len;
 	};
 	const struct auth_case cases[] = {
-		#ifndef NETSNMP_DISABLE_MD5
-		{ "MD5",    usmHMACMD5AuthProtocol,       OID_LENGTH(usmHMACMD5AuthProtocol) },
-		#endif
-		{ "SHA",    usmHMACSHA1AuthProtocol,      OID_LENGTH(usmHMACSHA1AuthProtocol) },
-		#ifdef HAVE_EVP_SHA224
-		{ "SHA224", usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol) },
-		{ "SHA256", usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol) },
-		#endif
-		#ifdef HAVE_EVP_SHA384
-		{ "SHA384", usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol) },
-		{ "SHA512", usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol) },
-		#endif
+#ifndef NETSNMP_DISABLE_MD5
+		{"MD5", usmHMACMD5AuthProtocol, OID_LENGTH(usmHMACMD5AuthProtocol)},
+#endif
+		{"SHA", usmHMACSHA1AuthProtocol, OID_LENGTH(usmHMACSHA1AuthProtocol)},
+#ifdef HAVE_EVP_SHA224
+		{"SHA224", usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol)},
+		{"SHA256", usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol)},
+#endif
+#ifdef HAVE_EVP_SHA384
+		{"SHA384", usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol)},
+		{"SHA512", usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol)},
+#endif
 	};
 	char password[] = "authpass123";
 	char none[] = "[None]";
@@ -346,8 +373,9 @@ static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) 
 			SNMP_SEC_LEVEL_AUTHNOPRIV);
 		assert_int_equal(captured_auth_proto_len, cases[i].expected_len);
 		assert_int_equal(snmp_oid_compare(captured_auth_proto,
-			captured_auth_proto_len, cases[i].expected,
-			cases[i].expected_len), 0);
+							 captured_auth_proto_len, cases[i].expected,
+							 cases[i].expected_len),
+			0);
 	}
 
 	assert_true(exercised > 0);
@@ -682,6 +710,7 @@ static void test_failed_session_restores_lock_and_cancellation(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup(test_cleanup_restores_cancellation_and_unlocks, session_reset),
 		cmocka_unit_test_setup(test_value_presence_contract, session_reset),
 		cmocka_unit_test_setup(test_security_level_contract, session_reset),
 		cmocka_unit_test_setup(test_no_credentials_is_noauthnopriv, session_reset),
