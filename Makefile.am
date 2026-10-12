@@ -141,6 +141,12 @@ coverage-object-list:
 coverage-unit-program-list:
 	@printf '%s\n' $(filter tests/unit/%,$(check_PROGRAMS))
 
+.PHONY: coverage-helper-program-list coverage-helper-object-list
+coverage-helper-program-list:
+	@printf '%s\n' tests/support/php_test_server$(EXEEXT) tests/support/resource_fixture$(EXEEXT)
+coverage-helper-object-list:
+	@printf '%s\n' $(tests_support_php_test_server_OBJECTS) $(tests_support_resource_fixture_OBJECTS)
+
 # spine_runtime.c contains only test globals and generates no executable
 # coverage profile. All production sources remain in coverage-object-list.
 coverage-unit-object-list:
@@ -384,3 +390,4 @@ EXTRA_DIST += tests/tools/benchmark_builds.py \
 	docs/benchmarks/results/2026-10-11-default-logging/metadata.json \
 	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/summary.json
+EXTRA_DIST += docs/platforms.md

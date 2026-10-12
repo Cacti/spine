@@ -53,8 +53,9 @@ make -j"$(nproc)"
 make check
 ```
 
-`bootstrap` regenerates tracked files such as `Makefile.in`. Do not commit
-that output; build in a separate copy if you want a clean tree.
+`bootstrap` regenerates tracked distribution files such as `Makefile.in`.
+When changing build manifests, regenerate and commit the corresponding tracked
+files. Build in a separate copy to avoid unrelated generated changes.
 
 `configure` uses MariaDB Connector/C (`mariadb_config`) when it finds it.
 Building against MySQL's `libmysqlclient` still works, with
