@@ -85,10 +85,20 @@ static bool evaluate_reindex_assertion(const reindex_evaluation_t *evaluation, c
 
 /* An uptime is a non-negative integer; anything else cannot be compared. */
 bool parse_uptime(const char *text, unsigned long long *ticks) {
-	classified_result_t classified;
+	unsigned long long value = 0;
+	unsigned int digit;
 
-	if (classify_result(text, &classified) != RESULT_COUNTER) return FALSE;
-	*ticks = (unsigned long long) classified.value.counter;
+	if (text == NULL || ticks == NULL) return FALSE;
+	while (isspace((unsigned char)*text)) text++;
+	if (*text < '0' || *text > '9') return FALSE;
+	while (*text >= '0' && *text <= '9') {
+		digit = (unsigned int)(*text++ - '0');
+		if (value > (ULLONG_MAX - digit) / 10) return FALSE;
+		value = value * 10 + digit;
+	}
+	while (isspace((unsigned char)*text)) text++;
+	if (*text != '\0') return FALSE;
+	*ticks = value;
 	return TRUE;
 }
 
@@ -126,7 +136,7 @@ static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread
 		   engine OID is not present with numeric data. */
 		poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
-		uptime_use_engine_oid = parse_uptime(poll_result, &ticks);
+		uptime_use_engine_oid = parse_uptime(poll_result, &ticks) && ticks <= ULLONG_MAX / 100;
 
 		if (uptime_use_engine_oid) {
 			snprintf(sysUptime, BUFSIZE, "%llu", ticks * 100);
