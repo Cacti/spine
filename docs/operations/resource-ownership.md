@@ -32,6 +32,10 @@ period sleeps outside the mutex.
 Once abort starts, result persistence rejects newly assembled batches and host
 completion does not advance due-item scheduling. A killed script's EOF must
 not publish an undefined result while the fatal thread prints its diagnostic.
+On polling deadline expiry, the parent stops external scripts and joins finished
+workers through a bounded grace phase (25 checks, 10 ms between checks). If
+owners remain or joining fails, immediate process exit avoids normal exit
+callbacks and shared-state teardown while those workers still own that state.
 
 SIGINT, SIGTERM and SIGQUIT notify a coordinator through a nonblocking,
 close-on-exec pipe. The handler only writes a signal byte and returns, allowing

@@ -126,6 +126,10 @@ Fatal errors stop registered external script process groups owned by all
 workers and reject new external scripts. SIGINT, SIGTERM, and SIGQUIT notify
 a coordinator that stops those groups before preserving the signal's default
 termination status. Closing workers retain ownership until cleanup completes.
+Expired polling cycles allow a short bounded grace phase to join stopped
+workers. Remaining active owners cause immediate process termination without
+normal shared-state teardown. Aborted workers do not publish newly assembled
+results or advance due-item scheduling.
 This cooperative policy does not cover hardware faults, SIGKILL, scripts that
 escape their process group, or the PHP script server's separate ownership.
 .SH SNMPV3 CONCURRENCY

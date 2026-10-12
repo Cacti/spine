@@ -7,6 +7,7 @@
 #include "internal/common.h"
 #include "app/spine.h"
 #include "database/persistence.h"
+#include "app/startup_internal.h"
 #include <sys/wait.h>
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -24,6 +25,8 @@ static int abort_from_worker;
 #ifdef SPINE_TEST_ABORT_FAULTS
 static _Atomic int injected_fault;
 static _Thread_local int write_interrupted;
+static int fail_shutdown_reap;
+static int reap_calls;
 static pthread_mutex_t close_gate = PTHREAD_MUTEX_INITIALIZER;
 static int close_waiting;
 static int close_released;
@@ -39,6 +42,7 @@ extern ssize_t __real_write(int, const void *, size_t);
 extern int __real_raise(int);
 extern int __real_pthread_kill(pthread_t, int);
 extern int __real_usleep(useconds_t);
+extern int __real_spine_worker_set_reap(spine_worker_set_t *, size_t *);
 extern void __gcov_dump(void) __attribute__((weak));
 extern void __gcov_reset(void) __attribute__((weak));
 
@@ -141,6 +145,11 @@ int __wrap_usleep(useconds_t delay) {
 		}
 	}
 	return __real_usleep(delay);
+}
+
+int __wrap_spine_worker_set_reap(spine_worker_set_t *workers, size_t *remaining) {
+	if (fail_shutdown_reap && ++reap_calls == 2) return EIO;
+	return __real_spine_worker_set_reap(workers, remaining);
 }
 #endif
 
@@ -366,6 +375,71 @@ static void test_owned_reap_rejects_invalid_owner(void **state) {
 	assert_int_equal(spine_reap_child_owned(&pid, &status, 1, NULL), -1);
 }
 
+struct deadline_owner {
+	int ready;
+	int blocked;
+	int script;
+};
+
+static void *deadline_worker(void *argument) {
+	struct deadline_owner *owner = argument;
+	int fd = owner->blocked;
+	char byte;
+	ssize_t received;
+	if (owner->script) {
+		fd = nft_popen("printf x; exec sleep 300", "r");
+		if (fd < 0 || read(fd, &byte, 1) != 1) _exit(111);
+	}
+	if (write(owner->ready, "x", 1) != 1) _exit(112);
+	received = read(fd, &byte, 1);
+	if (received < 0) _exit(113);
+	if (owner->script) (void) nft_pclose(fd);
+	return NULL;
+}
+
+static void test_deadline_joins_stopped_workers_or_preserves_live_state(void **state) {
+	int scenario;
+	(void) state;
+	for (scenario = 0; scenario < 3; scenario++) {
+		pid_t fixture;
+		int status;
+		double start = spine_monotonic_time();
+#ifndef SPINE_TEST_ABORT_FAULTS
+		if (scenario == 2) continue;
+#endif
+		fixture = fork();
+		assert_true(fixture >= 0);
+		if (fixture == 0) {
+			spine_worker_set_t workers = {0};
+			pthread_attr_t attributes;
+			struct deadline_owner owner;
+			int ready[2];
+			int blocked[2];
+			char byte;
+			alarm(5);
+			if (pipe(ready) != 0 || pipe(blocked) != 0) _exit(114);
+			owner = (struct deadline_owner){.ready = ready[1], .blocked = blocked[0], .script = scenario == 0};
+			set.poller.threads = 1;
+			set.poller.poller_interval = 1;
+			if (pthread_attr_init(&attributes) != 0 ||
+				spine_permits_init(&available_threads, 1) != 0 ||
+				spine_worker_set_init(&workers, 1) != 0 ||
+				spine_worker_set_start(&workers, &attributes, deadline_worker, &owner) != 0) _exit(115);
+			(void) pthread_attr_destroy(&attributes);
+			if (read(ready[0], &byte, 1) != 1) _exit(116);
+#ifdef SPINE_TEST_ABORT_FAULTS
+			fail_shutdown_reap = scenario == 2;
+#endif
+			(void) wait_for_workers(get_time_as_double() - 2, &workers);
+			_exit(117);
+		}
+		assert_int_equal(waitpid(fixture, &status, 0), fixture);
+		assert_true(WIFEXITED(status));
+		assert_int_equal(WEXITSTATUS(status), EXIT_FAILURE);
+		assert_true(spine_monotonic_time() - start < 3);
+	}
+}
+
 #ifdef SPINE_TEST_ABORT_FAULTS
 static void *gated_close(void *argument) {
 	int *result = argument;
@@ -460,6 +534,7 @@ int main(void) {
 		cmocka_unit_test(test_abort_rejects_spawn_and_preserves_closing_owner),
 		cmocka_unit_test(test_coordinator_install_uninstall),
 		cmocka_unit_test(test_owned_reap_rejects_invalid_owner),
+		cmocka_unit_test(test_deadline_joins_stopped_workers_or_preserves_live_state),
 #ifdef SPINE_TEST_ABORT_FAULTS
 		cmocka_unit_test(test_abort_and_cancellation_during_close),
 		cmocka_unit_test(test_coordinator_failures_are_fatal),

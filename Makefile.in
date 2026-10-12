@@ -573,6 +573,8 @@ am__objects_30 = src/poller/tests_unit_test_process_abort-availability.$(OBJEXT)
 am_tests_unit_test_process_abort_OBJECTS =  \
 	tests/unit/test_process_abort-test_process_abort.$(OBJEXT) \
 	tests/support/unit_test_process_abort-spine_runtime.$(OBJEXT) \
+	src/poller/tests_unit_test_process_abort-workers.$(OBJEXT) \
+	src/platform/tests_unit_test_process_abort-worker_set.$(OBJEXT) \
 	$(am__objects_24) $(am__objects_25) $(am__objects_26) \
 	src/platform/tests_unit_test_process_abort-locks.$(OBJEXT) \
 	$(am__objects_27) $(am__objects_28) $(am__objects_29) \
@@ -777,6 +779,7 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_process_abort-privileges.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_process_abort-socket.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_process_abort-thread.Po \
+	src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Po \
 	src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po \
 	src/platform/$(DEPDIR)/thread.Po \
 	src/platform/$(DEPDIR)/worker_set.Po \
@@ -809,6 +812,7 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	src/poller/$(DEPDIR)/tests_unit_test_process_abort-reindex.Po \
 	src/poller/$(DEPDIR)/tests_unit_test_process_abort-result.Po \
 	src/poller/$(DEPDIR)/tests_unit_test_process_abort-system.Po \
+	src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Po \
 	src/poller/$(DEPDIR)/workers.Po src/process/$(DEPDIR)/fd.Po \
 	src/process/$(DEPDIR)/nft_popen.Po \
 	src/process/$(DEPDIR)/resource.Po \
@@ -1556,14 +1560,14 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/support/spine_ru
 	src/config/keywords.c src/app/signals.c
 
 tests_unit_test_linked_LDADD = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_process_abort_SOURCES = tests/unit/test_process_abort.c tests/support/spine_runtime.c \
+tests_unit_test_process_abort_SOURCES = tests/unit/test_process_abort.c tests/support/spine_runtime.c src/poller/workers.c src/platform/worker_set.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 
 tests_unit_test_process_abort_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_process_abort_CPPFLAGS = $(AM_CPPFLAGS) \
 	$(am__append_5)
-@HAVE_LD_WRAP_TRUE@tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
+@HAVE_LD_WRAP_TRUE@tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep -Wl,--wrap=spine_worker_set_reap
 
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
 # real-syscall trigger (WNOHANG is always a valid options value), so covering
@@ -2399,6 +2403,12 @@ tests/unit/test_process_abort-test_process_abort.$(OBJEXT):  \
 tests/support/unit_test_process_abort-spine_runtime.$(OBJEXT):  \
 	tests/support/$(am__dirstamp) \
 	tests/support/$(DEPDIR)/$(am__dirstamp)
+src/poller/tests_unit_test_process_abort-workers.$(OBJEXT):  \
+	src/poller/$(am__dirstamp) \
+	src/poller/$(DEPDIR)/$(am__dirstamp)
+src/platform/tests_unit_test_process_abort-worker_set.$(OBJEXT):  \
+	src/platform/$(am__dirstamp) \
+	src/platform/$(DEPDIR)/$(am__dirstamp)
 src/database/tests_unit_test_process_abort-sql.$(OBJEXT):  \
 	src/database/$(am__dirstamp) \
 	src/database/$(DEPDIR)/$(am__dirstamp)
@@ -2747,6 +2757,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_process_abort-privileges.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_process_abort-socket.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_process_abort-thread.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/thread.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/platform/$(DEPDIR)/worker_set.Po@am__quote@ # am--include-marker
@@ -2782,6 +2793,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/tests_unit_test_process_abort-reindex.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/tests_unit_test_process_abort-result.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/tests_unit_test_process_abort-system.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/poller/$(DEPDIR)/workers.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/process/$(DEPDIR)/fd.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/process/$(DEPDIR)/nft_popen.Po@am__quote@ # am--include-marker
@@ -4463,6 +4475,34 @@ tests/support/unit_test_process_abort-spine_runtime.obj: tests/support/spine_run
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tests/support/unit_test_process_abort-spine_runtime.obj `if test -f 'tests/support/spine_runtime.c'; then $(CYGPATH_W) 'tests/support/spine_runtime.c'; else $(CYGPATH_W) '$(srcdir)/tests/support/spine_runtime.c'; fi`
 
+src/poller/tests_unit_test_process_abort-workers.o: src/poller/workers.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/poller/tests_unit_test_process_abort-workers.o -MD -MP -MF src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Tpo -c -o src/poller/tests_unit_test_process_abort-workers.o `test -f 'src/poller/workers.c' || echo '$(srcdir)/'`src/poller/workers.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Tpo src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/poller/workers.c' object='src/poller/tests_unit_test_process_abort-workers.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/poller/tests_unit_test_process_abort-workers.o `test -f 'src/poller/workers.c' || echo '$(srcdir)/'`src/poller/workers.c
+
+src/poller/tests_unit_test_process_abort-workers.obj: src/poller/workers.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/poller/tests_unit_test_process_abort-workers.obj -MD -MP -MF src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Tpo -c -o src/poller/tests_unit_test_process_abort-workers.obj `if test -f 'src/poller/workers.c'; then $(CYGPATH_W) 'src/poller/workers.c'; else $(CYGPATH_W) '$(srcdir)/src/poller/workers.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Tpo src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/poller/workers.c' object='src/poller/tests_unit_test_process_abort-workers.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/poller/tests_unit_test_process_abort-workers.obj `if test -f 'src/poller/workers.c'; then $(CYGPATH_W) 'src/poller/workers.c'; else $(CYGPATH_W) '$(srcdir)/src/poller/workers.c'; fi`
+
+src/platform/tests_unit_test_process_abort-worker_set.o: src/platform/worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/platform/tests_unit_test_process_abort-worker_set.o -MD -MP -MF src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Tpo -c -o src/platform/tests_unit_test_process_abort-worker_set.o `test -f 'src/platform/worker_set.c' || echo '$(srcdir)/'`src/platform/worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Tpo src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/platform/worker_set.c' object='src/platform/tests_unit_test_process_abort-worker_set.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/platform/tests_unit_test_process_abort-worker_set.o `test -f 'src/platform/worker_set.c' || echo '$(srcdir)/'`src/platform/worker_set.c
+
+src/platform/tests_unit_test_process_abort-worker_set.obj: src/platform/worker_set.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/platform/tests_unit_test_process_abort-worker_set.obj -MD -MP -MF src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Tpo -c -o src/platform/tests_unit_test_process_abort-worker_set.obj `if test -f 'src/platform/worker_set.c'; then $(CYGPATH_W) 'src/platform/worker_set.c'; else $(CYGPATH_W) '$(srcdir)/src/platform/worker_set.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Tpo src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/platform/worker_set.c' object='src/platform/tests_unit_test_process_abort-worker_set.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o src/platform/tests_unit_test_process_abort-worker_set.obj `if test -f 'src/platform/worker_set.c'; then $(CYGPATH_W) 'src/platform/worker_set.c'; else $(CYGPATH_W) '$(srcdir)/src/platform/worker_set.c'; fi`
+
 src/database/tests_unit_test_process_abort-sql.o: src/database/sql.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_unit_test_process_abort_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT src/database/tests_unit_test_process_abort-sql.o -MD -MP -MF src/database/$(DEPDIR)/tests_unit_test_process_abort-sql.Tpo -c -o src/database/tests_unit_test_process_abort-sql.o `test -f 'src/database/sql.c' || echo '$(srcdir)/'`src/database/sql.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/database/$(DEPDIR)/tests_unit_test_process_abort-sql.Tpo src/database/$(DEPDIR)/tests_unit_test_process_abort-sql.Po
@@ -6111,6 +6151,7 @@ distclean: distclean-am
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-privileges.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-socket.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-thread.Po
+	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po
 	-rm -f src/platform/$(DEPDIR)/thread.Po
 	-rm -f src/platform/$(DEPDIR)/worker_set.Po
@@ -6146,6 +6187,7 @@ distclean: distclean-am
 	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-reindex.Po
 	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-result.Po
 	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-system.Po
+	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Po
 	-rm -f src/poller/$(DEPDIR)/workers.Po
 	-rm -f src/process/$(DEPDIR)/fd.Po
 	-rm -f src/process/$(DEPDIR)/nft_popen.Po
@@ -6412,6 +6454,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-privileges.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-socket.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-thread.Po
+	-rm -f src/platform/$(DEPDIR)/tests_unit_test_process_abort-worker_set.Po
 	-rm -f src/platform/$(DEPDIR)/tests_unit_test_worker_set-worker_set.Po
 	-rm -f src/platform/$(DEPDIR)/thread.Po
 	-rm -f src/platform/$(DEPDIR)/worker_set.Po
@@ -6447,6 +6490,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-reindex.Po
 	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-result.Po
 	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-system.Po
+	-rm -f src/poller/$(DEPDIR)/tests_unit_test_process_abort-workers.Po
 	-rm -f src/poller/$(DEPDIR)/workers.Po
 	-rm -f src/process/$(DEPDIR)/fd.Po
 	-rm -f src/process/$(DEPDIR)/nft_popen.Po

@@ -212,14 +212,14 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/support/spine_ru
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_process_abort_SOURCES = tests/unit/test_process_abort.c tests/support/spine_runtime.c \
+tests_unit_test_process_abort_SOURCES = tests/unit/test_process_abort.c tests/support/spine_runtime.c src/poller/workers.c src/platform/worker_set.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_process_abort_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_process_abort_CPPFLAGS = $(AM_CPPFLAGS)
 if HAVE_LD_WRAP
 tests_unit_test_process_abort_CPPFLAGS += -DSPINE_TEST_ABORT_FAULTS
-tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep
+tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep -Wl,--wrap=spine_worker_set_reap
 endif
 
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
