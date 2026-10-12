@@ -34,6 +34,97 @@
 #include "common.h"
 #include "spine.h"
 #include <fcntl.h>
+#include <poll.h>
+#include <limits.h>
+#include <fcntl.h>
+
+static double ping_monotonic_time(void) {
+	struct timespec now;
+	if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) die("ERROR: Unable to read monotonic clock");
+	return (double)now.tv_sec + (double)now.tv_nsec / 1000000000;
+}
+static void ping_wait_left(double deadline, struct timeval *timeout) {
+	double remaining = deadline - ping_monotonic_time();
+	if (remaining < 0) remaining = 0;
+	timeout->tv_sec = (time_t)remaining;
+	timeout->tv_usec = (suseconds_t)((remaining - (double)timeout->tv_sec) * 1000000);
+}
+
+static int split_host_spec(const char *spec, int *method, char *address, size_t capacity, int *port) {
+	static const char *const methods[] = {"TCP", "UDP", "TCP6", "UDP6"};
+	const char *host = spec;
+	const char *colon;
+	const char *end;
+	const char *port_text = NULL;
+	size_t length;
+	size_t i;
+	int ipv6 = FALSE;
+
+	*method = 0;
+	*port = 0;
+
+	colon = strchr(spec, ':');
+
+	if (colon != NULL) {
+		for (i = 0; i < sizeof(methods) / sizeof(methods[0]); i++) {
+			length = strlen(methods[i]);
+
+			if ((size_t) (colon - spec) == length && strncasecmp(spec, methods[i], length) == 0) {
+				*method = (int) i + 1;
+				host = colon + 1;
+				break;
+			}
+		}
+	}
+
+	if (host[0] == '[' && (end = strchr(host, ']')) != NULL) {
+		ipv6 = TRUE;
+		host = host + 1;
+		length = (size_t) (end - host);
+
+		if (end[1] == ':') {
+			port_text = end + 2;
+		}
+	} else if (char_count(host, ':') > 1 || host[0] == '[') {
+		ipv6 = TRUE;
+		length = strlen(host);
+	} else if ((colon = strchr(host, ':')) != NULL) {
+		length = (size_t) (colon - host);
+		port_text = colon + 1;
+	} else {
+		length = strlen(host);
+	}
+
+	if (length >= capacity) {
+		length = capacity - 1;
+	}
+
+	memcpy(address, host, length);
+	address[length] = '\0';
+
+	if (port_text != NULL && port_text[0] >= '0' && port_text[0] <= '9') {
+		char *rest;
+		long value;
+
+		errno = 0;
+		value = strtol(port_text, &rest, 10);
+
+		if (errno == 0 && *rest == '\0' && value > 0 && value <= 65535) {
+			*port = (int) value;
+		}
+	}
+
+	return ipv6;
+}
+
+static const char *ping_address(const char *hostname, char *address, size_t capacity) {
+	int method;
+	int port;
+
+	split_host_spec(hostname, &method, address, capacity, &port);
+
+	return address;
+}
 
 #ifdef __CYGWIN__
 static void icmp_discard_reply(int icmp_socket, char *buffer) {
@@ -271,7 +362,7 @@ int ping_snmp(host_t *host, ping_t *ping) {
 int ping_icmp(host_t *host, ping_t *ping) {
 	int    icmp_socket;
 
-	double begin_time, end_time, total_time;
+	double begin_time, deadline, total_time;
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
@@ -296,6 +387,11 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	struct   ip    *ip;
 	struct   icmp  *pkt;
 	unsigned char  *packet;
+
+	if (host->ping_timeout <= 0 || host->ping_retries < 0) {
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		return HOST_DOWN;
+	}
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering ICMP Ping", host->id));
@@ -413,6 +509,13 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
+	if (icmp_socket >= FD_SETSIZE) {
+		close(icmp_socket);
+		SPINE_FREE(packet);
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		return HOST_DOWN;
+	}
+
 	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
@@ -443,11 +546,9 @@ int ping_icmp(host_t *host, ping_t *ping) {
 					SPINE_LOG_DEBUG(("DEBUG: Device[%i] Attempting to ping %s, seq %d (Retry %d of %d)", host->id, host->hostname, icmp->icmp_seq, retry_count, host->ping_retries));
 				}
 
-				/* decrement the timeout value by the total time */
-				timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
-				timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
-
-				/* set the socket send and receive timeout */
+				begin_time = ping_monotonic_time();
+				deadline = begin_time + host_timeout / one_thousand;
+				ping_wait_left(deadline, &timeout);
 				setsockopt(icmp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
 				setsockopt(icmp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
@@ -458,15 +559,16 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				keep_listening:
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				FD_ZERO(&socket_fds);
+				FD_SET(icmp_socket, &socket_fds);
+				ping_wait_left(deadline, &timeout);
+				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
-				/* record end time */
-				end_time = get_time_as_double();
+				/* Each interrupted wait retains the same attempt deadline. */
+				total_time = (ping_monotonic_time() - begin_time) * one_thousand;
 
-				/* caculate total time */
-				total_time = (end_time - begin_time) * one_thousand;
-
-				if (total_time < host_timeout) {
+				if (return_code < 0 && errno == EINTR && total_time < host_timeout) goto keep_listening;
+				if (return_code > 0 && total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
 					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 					#else
@@ -532,11 +634,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						 * IP packet.  Keep listening until that
 						 * correlation is available; never report the host up. */
 						ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
-						if (total_time > host_timeout) {
-							retry_count++;
-							total_time = 0;
-						}
-						continue;
+						goto keep_listening;
 					}
 				} else {
 					if (is_debug_device(host->id)) {
@@ -583,7 +681,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
  *
  */
 int ping_udp(host_t *host, ping_t *ping) {
-	double begin_time, end_time, total_time;
+	double begin_time, deadline, total_time;
 	double host_timeout;
 	double one_thousand = 1000.00;
 	struct timeval timeout;
@@ -595,6 +693,11 @@ int ping_udp(host_t *host, ping_t *ping) {
 	int    request_len;
 	int    return_code;
 	fd_set socket_fds;
+
+	if (host->ping_timeout <= 0 || host->ping_retries < 0) {
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		return HOST_DOWN;
+	}
 
 	if (is_debug_device(host->id)) {
 		SPINE_LOG(("Device[%i] DEBUG: Entering UDP Ping", host->id));
@@ -614,6 +717,12 @@ int ping_udp(host_t *host, ping_t *ping) {
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	/* hostname must be nonblank */
+	if (udp_socket >= FD_SETSIZE) {
+		close(udp_socket);
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		return HOST_DOWN;
+	}
+
 	if ((strlen(host->hostname) != 0) && (udp_socket != -1)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
@@ -646,37 +755,24 @@ int ping_udp(host_t *host, ping_t *ping) {
 					return HOST_DOWN;
 				}
 
-				/* record start time */
-				if (total_time == 0) {
-					/* establish timeout value */
-					timeout.tv_sec  = rint(host_timeout / 1000);
-					timeout.tv_usec = rint((int) host_timeout % 1000) * 1000;
-
-					/* set the socket send and receive timeout */
-					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-				} else {
-					/* decrement the timeout value by the total time */
-					timeout.tv_sec  = rint((host_timeout - total_time) / 1000);
-					timeout.tv_usec = ((int) (host_timeout - total_time) % 1000) * 1000;
-
-					/* set the socket send and receive timeout */
-					setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-					setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-				}
+				begin_time = ping_monotonic_time();
+				deadline = begin_time + host_timeout / one_thousand;
+				ping_wait_left(deadline, &timeout);
+				setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+				setsockopt(udp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
 				/* send packet to destination */
 				send(udp_socket, request, request_len, 0);
 
 				/* wait for a response on the socket */
 				wait_more:
-				return_code = select(FD_SETSIZE, &socket_fds, NULL, NULL, &timeout);
+				FD_ZERO(&socket_fds);
+				FD_SET(udp_socket, &socket_fds);
+				ping_wait_left(deadline, &timeout);
+				return_code = select(udp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
-				/* record end time */
-				end_time = get_time_as_double();
-
-				/* caculate total time */
-				total_time = (end_time - begin_time) * one_thousand;
+				/* Each interrupted wait retains the same attempt deadline. */
+				total_time = (ping_monotonic_time() - begin_time) * one_thousand;
 
 				/* check to see which socket talked */
 				if (return_code > 0) {
@@ -696,7 +792,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 						}
 					}
 				} else if (return_code == -1) {
-					if (errno == EINTR) {
+					if (errno == EINTR && total_time < host_timeout) {
 						/* interrupted, try again */
 						usleep(10000);
 						goto wait_more;
@@ -748,104 +844,78 @@ int ping_udp(host_t *host, ping_t *ping) {
  *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
  *
  */
-int ping_tcp(host_t *host, ping_t *ping) {
-	double begin_time, end_time, total_time;
-	double host_timeout;
-	double one_thousand = 1000.00;
-	struct timeval timeout;
-	int    tcp_socket;
-	struct sockaddr_in servername;
-	int    retry_count;
-	int    return_code;
+static int ping_tcp_attempt(const struct sockaddr_in *address, double deadline) {
+	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	int flags, error, ready;
+	socklen_t length;
+	struct pollfd waiter;
+	double remaining;
 
-	if (is_debug_device(host->id)) {
-		SPINE_LOG(("Device[%i] DEBUG: Entering TCP Ping", host->id));
-	} else {
-		SPINE_LOG_DEBUG(("DEBUG: Device[%i] Entering TCP Ping", host->id));
+	if (fd < 0) return errno;
+	flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+		error = errno;
+		close(fd);
+		return error;
 	}
-
-	/* convert the host timeout to a double precision number in seconds */
-	host_timeout = host->ping_timeout;
-
-	/* initilize the socket */
-	tcp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	/* initialize total time */
-	total_time = 0;
-
-	/* initialize begin time */
-	begin_time = get_time_as_double();
-
-	/* hostname must be nonblank */
-	if ((strlen(host->hostname) != 0) && (tcp_socket != -1)) {
-		/* initialize variables */
-		snprintf(ping->ping_status, 50, "down");
-		snprintf(ping->ping_response, SMALL_BUFSIZE, "default");
-
-		/* get address of hostname */
-		if (init_sockaddr(&servername, host->hostname, host->ping_port)) {
-			/* first attempt a connect */
-			retry_count = 0;
-
-			while (1) {
-				/* establish timeout value */
-				timeout.tv_sec  = rint(host_timeout / 1000);
-				timeout.tv_usec = ((int) host_timeout % 1000) * 1000;
-
-				/* set the socket send and receive timeout */
-				setsockopt(tcp_socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-				setsockopt(tcp_socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-
-				/* make the connection */
-				return_code = connect(tcp_socket, (struct sockaddr *) &servername, sizeof(servername));
-
-				/* record end time */
-				end_time = get_time_as_double();
-
-				/* caculate total time */
-				total_time = (end_time - begin_time) * one_thousand;
-
-				if ((return_code == -1 && errno == ECONNREFUSED && host->ping_method == PING_TCP_CLOSED) || return_code == 0) {
-					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] INFO: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-					} else {
-						SPINE_LOG_MEDIUM(("Device[%i] INFO: TCP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-					}
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Device is Alive");
-					snprintf(ping->ping_status, 50, "%.5f", total_time);
-					close(tcp_socket);
-					return HOST_UP;
-				} else {
-					#if defined(__CYGWIN__)
-					snprintf(ping->ping_status, 50, "down");
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-					close(tcp_socket);
-					return HOST_DOWN;
-					#else
-					if (retry_count > host->ping_retries) {
-						snprintf(ping->ping_status, 50, "down");
-						snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Cannot connect to host");
-						close(tcp_socket);
-						return HOST_DOWN;
-					} else {
-						retry_count++;
-					}
-					#endif
-				}
-			}
-		} else {
-			snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination hostname invalid");
-			snprintf(ping->ping_status, 50, "down");
-			close(tcp_socket);
-			return HOST_DOWN;
+	if (connect(fd, (const struct sockaddr *)address, sizeof(*address)) == 0) {
+		close(fd);
+		return 0;
+	}
+	error = errno;
+	if (error == EINPROGRESS || error == EINTR) {
+		waiter.fd = fd;
+		waiter.events = POLLOUT;
+		for (;;) {
+			remaining = deadline - ping_monotonic_time();
+			if (remaining <= 0) { error = ETIMEDOUT; break; }
+			ready = poll(&waiter, 1, remaining >= (double)INT_MAX / 1000
+				? INT_MAX : (int)ceil(remaining * 1000));
+			if (ready < 0 && errno == EINTR) continue;
+			if (ready < 0) { error = errno; break; }
+			if (ready == 0) { error = ETIMEDOUT; break; }
+			length = sizeof(error);
+			if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length) < 0) error = errno;
+			break;
 		}
-	} else {
-		snprintf(ping->ping_response, SMALL_BUFSIZE, "TCP: Destination address invalid or unable to create socket");
-		snprintf(ping->ping_status, 50, "down");
-		if (tcp_socket != -1) close(tcp_socket);
+	}
+	close(fd);
+	return error;
+}
+
+int ping_tcp(host_t *host, ping_t *ping) {
+	struct sockaddr_in address;
+	double begin, deadline, elapsed;
+	unsigned int attempt;
+	int error;
+
+	if (host->hostname[0] == '\0' || !init_sockaddr(&address, host->hostname, host->ping_port) ||
+		host->ping_timeout <= 0 || host->ping_retries < 0) {
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Cannot connect to host");
 		return HOST_DOWN;
 	}
+	begin = ping_monotonic_time();
+	for (attempt = 0;; attempt++) {
+		deadline = ping_monotonic_time() + (double)host->ping_timeout / 1000;
+		error = ping_tcp_attempt(&address, deadline);
+		if (error == 0 || (error == ECONNREFUSED && host->ping_method == PING_TCP_CLOSED)) {
+			elapsed = (ping_monotonic_time() - begin) * 1000;
+			snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Device is Alive");
+			snprintf(ping->ping_status, sizeof(ping->ping_status), "%.5f", elapsed);
+			return HOST_UP;
+		}
+#ifdef __CYGWIN__
+		break;
+#else
+		if (attempt >= (unsigned int)host->ping_retries) break;
+#endif
+	}
+	snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+	snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Cannot connect to host");
+	return HOST_DOWN;
 }
+
 
 /*! \fn int get_address_type(host_t *host)
  *  \brief determines using getaddrinfo the iptype and returns the iptype
@@ -913,6 +983,7 @@ int get_address_type(host_t *host) {
 int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short int port) {
 	struct addrinfo hints, *hostinfo;
 	int rv, retry_count;
+	char address[BUFSIZE];
 
 	// Initialize the hints structure
 	memset(&hints, 0, sizeof hints);
@@ -923,7 +994,7 @@ int init_sockaddr(struct sockaddr_in *name, const char *hostname, unsigned short
 	rv = 0;
 
 	while (TRUE) {
-		rv = getaddrinfo(hostname, NULL, &hints, &hostinfo);
+		rv = getaddrinfo(ping_address(hostname, address, sizeof(address)), NULL, &hints, &hostinfo);
 
 		if (rv == 0) {
 			break;

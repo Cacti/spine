@@ -33,6 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
+#include <limits.h>
 
 /* resolve problems in debian */
 #ifndef NETSNMP_DS_LIB_DONT_PERSIST_STATE
@@ -114,6 +115,301 @@ void snmp_spine_close(void) {
  *  in question.
  *
  */
+typedef struct {
+	int host_id;
+	char *hostname;
+	int snmp_version;
+	char *snmp_community;
+	char *snmp_username;
+	const char *snmp_password;
+	char *snmp_auth_protocol;
+	const char *snmp_priv_passphrase;
+	char *snmp_priv_protocol;
+	char *snmp_context;
+	char *snmp_engine_id;
+	int snmp_port;
+	int snmp_timeout;
+} maintenance_snmp_options_t;
+
+static int spine_snmpv3_protocol_is_set(const char *value) {
+	if (value == NULL) {
+		return FALSE;
+	}
+
+	if (value[0] == '\0') {
+		return FALSE;
+	}
+
+	if (strcmp(value, "[None]") == 0) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*! \fn int spine_snmpv3_passphrase_is_set(const char *value)
+ *  \brief Whether a Cacti-supplied SNMPv3 passphrase is nonempty.
+ *
+ *  Unlike protocol fields, passphrases do not use the "[None]" sentinel. That
+ *  text is therefore a valid (if weak) passphrase and must not be discarded.
+ */
+static int spine_snmpv3_passphrase_is_set(const char *value) {
+	return value != NULL && value[0] != '\0';
+}
+
+/*! \fn int spine_snmpv3_security_level(...)
+ *  \brief Pick the SNMPv3 security level from the values Cacti stores.
+ *
+ *  Authentication needs both a protocol and a password; privacy additionally
+ *  needs a privacy protocol and passphrase, and is only meaningful on top of
+ *  authentication. The session builder separately refuses half-configured
+ *  credential pairs before using this computed level.
+ *
+ *  \return SNMP_SEC_LEVEL_NOAUTH, SNMP_SEC_LEVEL_AUTHNOPRIV or
+ *          SNMP_SEC_LEVEL_AUTHPRIV
+ */
+static int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_password,
+	const char *priv_protocol, const char *priv_passphrase) {
+	int authenticates;
+	int encrypts;
+
+	authenticates = spine_snmpv3_protocol_is_set(auth_protocol) &&
+		spine_snmpv3_passphrase_is_set(auth_password);
+
+	encrypts = authenticates &&
+		spine_snmpv3_protocol_is_set(priv_protocol) &&
+		spine_snmpv3_passphrase_is_set(priv_passphrase);
+
+	if (encrypts) {
+		return SNMP_SEC_LEVEL_AUTHPRIV;
+	}
+
+	if (authenticates) {
+		return SNMP_SEC_LEVEL_AUTHNOPRIV;
+	}
+
+	return SNMP_SEC_LEVEL_NOAUTH;
+}
+
+
+static void spine_clear_sensitive(void *buffer, size_t length) {
+	volatile unsigned char *bytes = buffer;
+	while (length > 0) { *bytes++ = 0; length--; }
+}
+
+static bool snmp_set_security_keys(struct snmp_session *session, int host_id,
+	const char *auth_password, const char *priv_password) {
+	char *Apsz = NULL;
+	char *Xpsz = NULL;
+	// Auth Protocol Setup
+
+	Apsz = strdup(auth_password);
+	if (Apsz == NULL) die("ERROR: Fatal malloc error: SNMP authentication passphrase");
+
+	// Privacy Protocol Setup
+
+	Xpsz = strdup(priv_password);
+	if (Xpsz == NULL) {
+		spine_clear_sensitive(Apsz, strlen(Apsz));
+		free(Apsz);
+		die("ERROR: Fatal malloc error: SNMP privacy passphrase");
+	}
+
+	session->securityAuthKeyLen = USM_AUTH_KU_LEN;
+	if (session->securityAuthProto == NULL) {
+		/*
+		 * get .conf set default
+		 */
+		const oid *def = get_default_authtype(&session->securityAuthProtoLen);
+		session->securityAuthProto = snmp_duplicate_objid(def, session->securityAuthProtoLen);
+	}
+
+	if (session->securityAuthProto == NULL) {
+		session->securityAuthProto = snmp_duplicate_objid(SNMP_DEFAULT_AUTH_PROTO, SNMP_DEFAULT_AUTH_PROTOLEN);
+		session->securityAuthProtoLen = SNMP_DEFAULT_AUTH_PROTOLEN;
+	}
+
+	if (generate_Ku(session->securityAuthProto,
+			(u_int) session->securityAuthProtoLen,
+			(u_char *) Apsz, strlen(Apsz),
+			session->securityAuthKey,
+			&session->securityAuthKeyLen) != SNMPERR_SUCCESS) {
+		SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
+		if (Apsz != NULL) spine_clear_sensitive(Apsz, strlen(Apsz));
+		free(Apsz);
+		spine_clear_sensitive(Xpsz, strlen(Xpsz));
+		free(Xpsz);
+		return FALSE;
+	}
+
+	if (Apsz != NULL) spine_clear_sensitive(Apsz, strlen(Apsz));
+	free(Apsz);
+	Apsz = NULL;
+	if (session->securityLevel == SNMP_SEC_LEVEL_AUTHNOPRIV) {
+		spine_clear_sensitive(Xpsz, strlen(Xpsz));
+		free(Xpsz);
+		return TRUE;
+	}
+
+	session->securityPrivKeyLen = USM_PRIV_KU_LEN;
+	if (session->securityPrivProto == NULL) {
+		/*
+		 * get .conf set default
+		 */
+		const oid *def = get_default_privtype(&session->securityPrivProtoLen);
+		session->securityPrivProto =
+			snmp_duplicate_objid(def, session->securityPrivProtoLen);
+	}
+
+	if (session->securityPrivProto == NULL) {
+#ifdef HAVE_USM_DES_PRIV_PROTOCOL
+		session->securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
+		session->securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
+#else
+		/* The header's default macro expands to usmDESPrivProtocol, but some
+		 * distributions (e.g. Fedora) ship a net-snmp-config.h that advertises it
+		 * without libnetsnmp actually exporting the symbol, which fails to link.
+		 * Fall back to AES, which configure confirmed libnetsnmp provides. */
+		session->securityPrivProto = snmp_duplicate_objid(usmAESPrivProtocol, OID_LENGTH(usmAESPrivProtocol));
+		session->securityPrivProtoLen = OID_LENGTH(usmAESPrivProtocol);
+#endif
+	}
+
+	if (generate_Ku(session->securityAuthProto,
+			(u_int) session->securityAuthProtoLen,
+			(u_char *) Xpsz, strlen(Xpsz),
+			session->securityPrivKey,
+			&session->securityPrivKeyLen) != SNMPERR_SUCCESS) {
+		SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
+		if (Apsz != NULL) spine_clear_sensitive(Apsz, strlen(Apsz));
+		free(Apsz);
+		spine_clear_sensitive(Xpsz, strlen(Xpsz));
+		free(Xpsz);
+		return FALSE;
+	}
+
+	spine_clear_sensitive(Xpsz, strlen(Xpsz));
+	free(Xpsz);
+	Xpsz = NULL;
+	return TRUE;
+}
+
+static void snmp_host_init_release(struct snmp_session *session, char *auth, char *priv) {
+	if (auth != NULL) spine_clear_sensitive(auth, strlen(auth));
+	if (priv != NULL) spine_clear_sensitive(priv, strlen(priv));
+	free(auth);
+	free(priv);
+#if SNMP_LOCALNAME == 1
+	free(session->localname);
+#endif
+	free(session->securityAuthProto);
+	free(session->securityPrivProto);
+	spine_clear_sensitive(session->securityAuthKey, sizeof(session->securityAuthKey));
+	spine_clear_sensitive(session->securityPrivKey, sizeof(session->securityPrivKey));
+}
+
+static bool snmp_install_auth_protocol(struct snmp_session *session, const maintenance_snmp_options_t *options) {
+	/* A protocol that is set but unrecognised is a configuration error at any
+	 * security level; validating only on the authenticated path would let a
+	 * typo through as noAuthNoPriv. Install it whenever it is configured so a
+	 * device never falls back to the library default. */
+	int auth_type = usm_lookup_auth_type(options->snmp_auth_protocol);
+	if (auth_type <= 0) {
+		SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", options->host_id, options->snmp_auth_protocol));
+		return FALSE;
+	}
+
+	const oid *auth_proto = sc_get_auth_oid(auth_type, &session->securityAuthProtoLen);
+	free(session->securityAuthProto);
+	session->securityAuthProto = auth_proto == NULL ? NULL : snmp_duplicate_objid(auth_proto, session->securityAuthProtoLen);
+	if (session->securityAuthProto == NULL) {
+		SPINE_LOG(("SNMP: Device[%i] Error installing auth protocol %s.", options->host_id, options->snmp_auth_protocol));
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static bool snmp_set_security_protocols(struct snmp_session *session, const maintenance_snmp_options_t *options) {
+	/* Cacti stores "[None]" when no protocol is selected. Match cmd.php's
+	 * effective-level rules for incomplete pairs, but report the downgrade
+	 * explicitly so an operator does not mistake it for auth or privacy. */
+	int security_level = spine_snmpv3_security_level(options->snmp_auth_protocol, options->snmp_password,
+		options->snmp_priv_protocol, options->snmp_priv_passphrase);
+
+	/* Refusals precede downgrade warnings so the log never promises that a
+	 * device will be polled when this function is about to reject it. */
+	if (spine_snmpv3_passphrase_is_set(options->snmp_password) && options->snmp_auth_protocol[0] == '\0') {
+		SPINE_LOG(("SNMP: Device[%i] Error authentication password is set but the authentication protocol is empty.", options->host_id));
+		return FALSE;
+	}
+
+	if (spine_snmpv3_passphrase_is_set(options->snmp_priv_passphrase) && options->snmp_priv_protocol[0] == '\0') {
+		SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is set but the privacy protocol is empty.", options->host_id));
+		return FALSE;
+	}
+
+	/* Complete privacy credentials with no usable authentication cannot be
+	 * honoured by USM. */
+	if (security_level == SNMP_SEC_LEVEL_NOAUTH &&
+		spine_snmpv3_protocol_is_set(options->snmp_priv_protocol) &&
+		spine_snmpv3_passphrase_is_set(options->snmp_priv_passphrase)) {
+		SPINE_LOG(("SNMP: Device[%i] Error privacy passphrase is configured but authentication is unavailable; set an auth protocol and password, or clear the privacy passphrase.", options->host_id));
+		return FALSE;
+	}
+
+	if (spine_snmpv3_protocol_is_set(options->snmp_auth_protocol) !=
+		spine_snmpv3_passphrase_is_set(options->snmp_password)) {
+		SPINE_LOG_LOW(("SNMP: Device[%i] WARNING incomplete authentication settings; Cacti's effective security level is noAuthNoPriv.", options->host_id));
+	}
+
+	if (spine_snmpv3_protocol_is_set(options->snmp_priv_protocol) !=
+		spine_snmpv3_passphrase_is_set(options->snmp_priv_passphrase)) {
+		SPINE_LOG_LOW(("SNMP: Device[%i] WARNING incomplete privacy settings; Cacti's effective security level does not include encryption.", options->host_id));
+	}
+
+	if (spine_snmpv3_protocol_is_set(options->snmp_auth_protocol) && !snmp_install_auth_protocol(session, options)) {
+		return FALSE;
+	}
+
+	session->securityLevel = security_level;
+
+	/* Privacy follows the computed level, which requires authentication
+	 * before encryption. */
+	if (security_level != SNMP_SEC_LEVEL_AUTHPRIV) {
+		session->securityPrivProto = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol));
+		session->securityPrivProtoLen = OID_LENGTH(usmNoPrivProtocol);
+		session->securityPrivKeyLen = 0;
+		if (session->securityPrivProto == NULL) {
+			session->securityPrivProtoLen = 0;
+			SPINE_LOG(("SNMP: Device[%i] Error installing the no-privacy protocol.", options->host_id));
+			return FALSE;
+		}
+
+		/* authNoPriv needs its authentication key derived here too. */
+		if (security_level == SNMP_SEC_LEVEL_AUTHNOPRIV) {
+			return snmp_set_security_keys(session, options->host_id, options->snmp_password, options->snmp_priv_passphrase);
+		}
+		return TRUE;
+	}
+
+	int priv_type = usm_lookup_priv_type(options->snmp_priv_protocol);
+	if (priv_type < 0) {
+		SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", options->host_id, options->snmp_priv_protocol));
+		return FALSE;
+	}
+
+	const oid *priv_proto = sc_get_priv_oid(priv_type, &session->securityPrivProtoLen);
+	free(session->securityPrivProto);
+	session->securityPrivProto = priv_proto == NULL ? NULL : snmp_duplicate_objid(priv_proto, session->securityPrivProtoLen);
+	if (session->securityPrivProto == NULL) {
+		SPINE_LOG(("SNMP: Device[%i] Error installing privacy protocol %s.", options->host_id, options->snmp_priv_protocol));
+		return FALSE;
+	}
+
+	return snmp_set_security_keys(session, options->host_id, options->snmp_password, options->snmp_priv_passphrase);
+}
+
+
 static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_version, char *snmp_community,
 	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 	char *snmp_priv_passphrase, char *snmp_priv_protocol,
@@ -126,7 +422,21 @@ static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_versi
 	char   *Apsz = NULL;
 	char   *Xpsz = NULL;
 	char   *Cpsz = NULL;
-	int    priv_type;
+
+
+	maintenance_snmp_options_t options = {
+		.host_id = host_id, .hostname = hostname, .snmp_version = snmp_version,
+		.snmp_community = snmp_community, .snmp_username = snmp_username,
+		.snmp_password = snmp_password, .snmp_auth_protocol = snmp_auth_protocol,
+		.snmp_priv_passphrase = snmp_priv_passphrase, .snmp_priv_protocol = snmp_priv_protocol,
+		.snmp_context = snmp_context, .snmp_engine_id = snmp_engine_id,
+		.snmp_port = snmp_port, .snmp_timeout = snmp_timeout
+	};
+
+	if (snmp_timeout <= 0) return NULL;
+#if LONG_MAX / 1000L < INT_MAX
+	if (snmp_timeout > LONG_MAX / 1000L) return NULL;
+#endif
 
 	/* initialize SNMP */
 	snmp_sess_init(&session);
@@ -185,13 +495,14 @@ static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_versi
 		session.securityModel = USM_SEC_MODEL_NUMBER;
 	} else {
 		SPINE_LOG(("Device[%i] ERROR: SNMP Version Error for Device '%s'", host_id, hostname));
+		snmp_host_init_release(&session, Apsz, Xpsz);
 		return 0;
 	}
 
 	snprintf(hostnameport, BUFSIZE, "%s:%i", hostname, snmp_port);
 	session.peername    = hostnameport;
 	session.retries     = set.snmp_retries;
-	session.timeout     = (snmp_timeout * 1000); /* net-snmp likes microseconds */
+	session.timeout     = ((long)snmp_timeout * 1000L); /* net-snmp likes microseconds */
 
 	SPINE_LOG_HIGH(("Device[%i] INFO: SNMP Device '%s' has a timeout of %ld (%d), with %d retries", host_id, hostnameport, session.timeout, snmp_timeout, session.retries));
 
@@ -215,129 +526,9 @@ static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_versi
 			session.contextEngineIDLen = strlen(snmp_engine_id);
 		}
 
-		/* set the authentication protocol */
-		int auth_type = usm_lookup_auth_type(snmp_auth_protocol);
-		if (auth_type > 0) {
-			const oid *auth_proto;
-
-            auth_proto = sc_get_auth_oid(auth_type, &session.securityAuthProtoLen);
-            free(session.securityAuthProto);
-            session.securityAuthProto = snmp_duplicate_objid(auth_proto, session.securityAuthProtoLen);
-		} else {
-			SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", host_id, snmp_auth_protocol));
-			return 0;
-		}
-
-		/* set the privacy protocol to none */
-		if (strcmp(snmp_priv_protocol, "[None]") == 0 || (strlen(snmp_priv_passphrase) == 0)) {
-			session.securityPrivProto    = snmp_duplicate_objid(usmNoPrivProtocol, OID_LENGTH(usmNoPrivProtocol));
-			session.securityPrivProtoLen = OID_LENGTH(usmNoPrivProtocol);
-			session.securityPrivKeyLen   = USM_PRIV_KU_LEN;
-
-			/* set the security level to authenticate, but not encrypted */
-			if (strlen(snmp_password)) {
-				session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
-			} else {
-				session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
-			}
-		} else {
-			const oid *priv_proto;
-
-			priv_type = usm_lookup_priv_type(snmp_priv_protocol);
-
-			if (priv_type < 0) {
-				SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", host_id, snmp_priv_protocol));
-				return 0;
-			}
-
-			priv_proto = sc_get_priv_oid(priv_type, &session.securityPrivProtoLen);
-			free(session.securityPrivProto);
-			session.securityPrivProto = snmp_duplicate_objid(priv_proto, session.securityPrivProtoLen);
-			session.securityLevel     = SNMP_SEC_LEVEL_AUTHPRIV;
-
-			// Auth Protocol Setup: Apsz/Xpsz are this module's own heap copies. The live
-			// passphrase they hold is scrubbed immediately before each of their frees
-			// below, not here, since neither is assigned yet on entry to this block.
-			// snmp_password/snmp_priv_passphrase are host_t-owned and reused for later
-			// session rebuilds on this same host, so they are left intact rather than
-			// zeroed in place.
-			free(Apsz);
-			Apsz = strdup(snmp_password);
-
-			// Privacy Protocol Setup
-			free(Xpsz);
-			Xpsz = strdup(snmp_priv_passphrase);
-
-			if (Apsz) {
-				session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-				if (session.securityAuthProto == NULL) {
-					/*
-					 * get .conf set default
-					 */
-					const oid *def = get_default_authtype(&session.securityAuthProtoLen);
-					session.securityAuthProto = snmp_duplicate_objid(def, session.securityAuthProtoLen);
-				}
-
-				if (session.securityAuthProto == NULL) {
-					session.securityAuthProto    = snmp_duplicate_objid(SNMP_DEFAULT_AUTH_PROTO, SNMP_DEFAULT_AUTH_PROTOLEN);
-					session.securityAuthProtoLen = SNMP_DEFAULT_AUTH_PROTOLEN;
-				}
-
-				if (generate_Ku(session.securityAuthProto,
-					session.securityAuthProtoLen,
-					(u_char *) Apsz, strlen(Apsz),
-					session.securityAuthKey,
-					&session.securityAuthKeyLen) != SNMPERR_SUCCESS) {
-					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from authentication passphrase.", host_id));
-					if (Apsz) memset(Apsz, 0x0, strlen(Apsz));
-					if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
-					return 0;
-				}
-
-				if (Apsz) memset(Apsz, 0x0, strlen(Apsz));
-				free(Apsz);
-				Apsz = NULL;
-			}
-
-			if (Xpsz) {
-				session.securityPrivKeyLen = USM_PRIV_KU_LEN;
-				if (session.securityPrivProto == NULL) {
-					/*
-					 * get .conf set default
-					 */
-					const oid *def = get_default_privtype(&session.securityPrivProtoLen);
-					session.securityPrivProto =
-					snmp_duplicate_objid(def, session.securityPrivProtoLen);
-				}
-
-				if (session.securityPrivProto == NULL) {
-					#ifdef HAVE_USM_DES_PRIV_PROTOCOL
-					session.securityPrivProto = snmp_duplicate_objid(SNMP_DEFAULT_PRIV_PROTO, SNMP_DEFAULT_PRIV_PROTOLEN);
-					session.securityPrivProtoLen = SNMP_DEFAULT_PRIV_PROTOLEN;
-					#else
-					/* The header's default macro expands to usmDESPrivProtocol, but some
-					 * distributions (e.g. Fedora) ship a net-snmp-config.h that advertises it
-					 * without libnetsnmp actually exporting the symbol, which fails to link.
-					 * Fall back to AES, which configure confirmed libnetsnmp provides. */
-					session.securityPrivProto = snmp_duplicate_objid(usmAESPrivProtocol, OID_LENGTH(usmAESPrivProtocol));
-					session.securityPrivProtoLen = OID_LENGTH(usmAESPrivProtocol);
-					#endif
-				}
-
-				if (generate_Ku(session.securityAuthProto,
-					session.securityAuthProtoLen,
-					(u_char *) Xpsz, strlen(Xpsz),
-					session.securityPrivKey,
-					&session.securityPrivKeyLen) != SNMPERR_SUCCESS) {
-					SPINE_LOG(("SNMP: Device[%i] Error generating SNMPv3 Ku from privacy pass phrase.", host_id));
-					if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
-					return 0;
-				}
-
-				if (Xpsz) memset(Xpsz, 0x0, strlen(Xpsz));
-				free(Xpsz);
-				Xpsz = NULL;
-			}
+		if (!snmp_set_security_protocols(&session, &options)) {
+			snmp_host_init_release(&session, Apsz, Xpsz);
+			return NULL;
 		}
 
 		SPINE_LOG_MEDIUM(("Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", host_id, snmp_auth_protocol, snmp_priv_protocol));
@@ -354,6 +545,7 @@ static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_versi
 		}
 	}
 
+	snmp_host_init_release(&session, Apsz, Xpsz);
 	return sessp;
 }
 
@@ -839,6 +1031,7 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
 	int status;
+	int attempts = 0;
 	int i;
 	int array_count;
 	int index_count;
@@ -857,6 +1050,12 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 		die("ERROR: Fatal malloc error: snmp.c snmp_get_multi!");
 	}
 	pdu = snmp_pdu_create(SNMP_MSG_GET);
+	if (pdu == NULL) {
+		for (i = 0; i < num_oids; i++) SET_UNDEFINED(snmp_oids[i].result);
+		free(name);
+		current_host->snmp_status = STAT_ERROR;
+		return;
+	}
 	for (i = 0; i < num_oids; i++) {
 		namep->name_len = MAX_OID_LEN;
 
@@ -876,6 +1075,12 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 
 	/* execute the multi-get request */
 	retry:
+	if (++attempts > num_oids) {
+		snmp_free_pdu(pdu);
+		pdu = NULL;
+		status = STAT_ERROR;
+		goto finish;
+	}
 	status = snmp_synchronized_response(current_host, pdu, &response);
 
 	/* liftoff, successful poll, process it!! */
@@ -932,11 +1137,17 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 						/* all OID's errored out so exit cleanly */
 						status = STAT_SUCCESS;
 					}
+				} else {
+					status = STAT_ERROR;
 				}
 			}
 		}
 	}
 
+finish:
+	if (status != STAT_SUCCESS) {
+		for (i = 0; i < num_oids; i++) SET_UNDEFINED(snmp_oids[i].result);
+	}
 	if (status == STAT_TIMEOUT) {
 		current_host->ignore_host = 1;
 		for (i = 0; i < num_oids; i++) {
