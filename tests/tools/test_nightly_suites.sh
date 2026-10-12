@@ -30,4 +30,8 @@ printf '%s' "$(cat inventory)" > no-newline
 bash "$gate" no-newline
 chmod 644 tests/unit/test_external_policy
 if bash "$gate" inventory 2>/dev/null; then echo 'Nonexecutable suite passed' >&2; exit 1; fi
+chmod 755 tests/unit/test_external_policy
+rm tests/unit/test_external_policy
+mkdir tests/unit/test_external_policy
+if bash "$gate" inventory 2>/dev/null; then echo 'Directory suite passed' >&2; exit 1; fi
 echo 'Nightly suite-presence positive and negative contracts passed'

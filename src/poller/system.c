@@ -35,7 +35,7 @@ static void poll_system_uptime(host_t *host) {
 		poll_result = snmp_get_allow_fail(host, ".1.3.6.1.6.3.10.2.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get_allow_fail(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
-		if (parse_uptime(poll_result, &ticks)) {
+		if (parse_uptime(poll_result, &ticks) && ticks <= ULLONG_MAX / 100) {
 			host->system.snmp_sysUpTimeInstance = ticks * 100;
 		}
 	}
