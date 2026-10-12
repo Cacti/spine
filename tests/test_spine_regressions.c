@@ -125,7 +125,7 @@ static void test_cli_case(const char *flag, const char *input, int expected, con
 	int status;
 	assert(waitpid(child, &status, 0) == child);
 	assert(WIFEXITED(status) && WEXITSTATUS(status) == expected);
-	if (expected == EXIT_FAILURE) assert(strstr(message, error) != NULL);
+	if (expected == EXIT_FAILURE || error != NULL) assert(strstr(message, error) != NULL);
 	else assert(message[0] == '\0');
 }
 
@@ -138,6 +138,27 @@ static void test_cli_option_shape(void) {
 	test_cli_case("--mode", "offline", EXIT_SUCCESS, NULL);
 	test_cli_case("--mode", "recovery", EXIT_SUCCESS, NULL);
 	test_cli_case("--mode", "invalid", EXIT_FAILURE, "ERROR: invalid polling mode 'invalid' specified");
+	static const char *const bad_threads[] = {"0", "-1", "abc", "5x", " 5", "+5", "", "99999999999999999999"};
+	for (size_t index = 0; index < sizeof(bad_threads) / sizeof(bad_threads[0]); index++) {
+		test_cli_case("--threads", bad_threads[index], EXIT_FAILURE, "is an invalid thread count, use 1 to 100");
+		test_cli_case("-t", bad_threads[index], EXIT_FAILURE, "is an invalid thread count, use 1 to 100");
+	}
+	test_cli_case("--threads", "1", EXIT_SUCCESS, NULL);
+	test_cli_case("-t", "100", EXIT_SUCCESS, NULL);
+	/* above the cap still runs, as it did with atoi(), but says so */
+	test_cli_case("-t", "101", EXIT_SUCCESS, "WARNING: '-t=101' exceeds the maximum thread count, using 100");
+	test_cli_case("--threads", "150", EXIT_SUCCESS, "WARNING: '--threads=150' exceeds the maximum thread count, using 100");
+	static const char *const bad_ids[] = {"abc", "1x", "-1", "+1", " 1", "", "2147483648", "99999999999999999999"};
+	for (size_t index = 0; index < sizeof(bad_ids) / sizeof(bad_ids[0]); index++) {
+		test_cli_case("--first", bad_ids[index], EXIT_FAILURE, "is invalid first-host ID");
+		test_cli_case("-l", bad_ids[index], EXIT_FAILURE, "is invalid last-host ID");
+	}
+	test_cli_case("-f", "0", EXIT_SUCCESS, NULL);
+	test_cli_case("--last", "2147483647", EXIT_SUCCESS, NULL);
+	/* the positional "first last" form poller.php uses */
+	test_cli_case("7", "99999999999999999999", EXIT_FAILURE, "is invalid last-host ID");
+	test_cli_case("99999999999999999999", "7", EXIT_FAILURE, "is invalid first-host ID");
+	test_cli_case("7", "9", EXIT_SUCCESS, NULL);
 	int errors[2];
 	assert(pipe(errors) == 0);
 	pid_t child = fork();
