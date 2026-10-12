@@ -1,7 +1,7 @@
 The Cacti Group | spine
 
 1.2.32
--issue#661: Separate SNMP batches by hostname and reject truncated or NUL-containing script responses while retaining one-shot reads and asynchronous child cleanup
+-issue#661: Separate SNMP batches by hostname and timeout; validate whole uptimes and conversion bounds; reject truncated or NUL-containing script responses while retaining one-shot reads and asynchronous child cleanup
 -issue#622: RECACHE Event and ASSERT FAILED
 -issue#447: Correct off-by-one OOB write in strncopy() when src fills the buffer
 -issue#561: Reserve room for the terminator in php_readpipe() so a full script server result cannot write past result_string

@@ -33,6 +33,27 @@
 
 #include "common.h"
 #include "spine.h"
+#include <limits.h>
+
+/* Uptime is a whole nonnegative counter, not a floating point result. */
+static bool parse_uptime(const char *text, unsigned long long *ticks) {
+	unsigned long long value = 0;
+	unsigned int digit;
+
+	if (text == NULL || ticks == NULL) return FALSE;
+	while (isspace((unsigned char)*text)) text++;
+	if (*text < '0' || *text > '9') return FALSE;
+	while (*text >= '0' && *text <= '9') {
+		digit = (unsigned int)(*text++ - '0');
+		if (value > (ULLONG_MAX - digit) / 10) return FALSE;
+		value = value * 10 + digit;
+	}
+	while (isspace((unsigned char)*text)) text++;
+	if (*text != '\0') return FALSE;
+	*ticks = value;
+	return TRUE;
+}
+
 
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
@@ -187,6 +208,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	int  last_snmp_version = 0;
 	int  last_snmp_port    = 0;
+	int  last_snmp_timeout = 0;
 	char last_snmp_hostname[sizeof(((target_t *)0)->hostname)];
 	char last_snmp_community[50];
 	char last_snmp_username[50];
@@ -965,10 +987,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 									   when the engine OID isn't present with numeric data. */
 									poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 
-									uptime_use_engine_oid = (poll_result != NULL && is_numeric(poll_result));
+									uptime_use_engine_oid = parse_uptime(poll_result, &curr_uptime) && curr_uptime <= ULLONG_MAX / 100;
 
 									if (uptime_use_engine_oid) {
-										snprintf(sysUptime, BUFSIZE, "%llu", (unsigned long long) (atoll(poll_result) * 100));
+										snprintf(sysUptime, BUFSIZE, "%llu", curr_uptime * 100);
 									}
 
 									SPINE_FREE(poll_result);
@@ -983,8 +1005,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 										// Engine OID unavailable, fall back to the legacy sysUpTime OID
 										poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 
-										if (poll_result && is_numeric(poll_result)) {
-											snprintf(sysUptime, BUFSIZE, "%s", poll_result);
+										if (parse_uptime(poll_result, &curr_uptime)) {
+											snprintf(sysUptime, BUFSIZE, "%llu", curr_uptime);
 										}
 
 										if (is_debug_device(host->id)) {
@@ -1187,12 +1209,16 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 								assert_fail = TRUE;
 								previous_assert_failure = TRUE;
 							} else {
-								previous_uptime = atoll(reindex->assert_value);
-								curr_uptime     = atoll(poll_result);
+								/* Do not compare or persist a malformed uptime response. */
+								if (!parse_uptime(poll_result, &curr_uptime)) {
+									SET_UNDEFINED(poll_result);
+								}
+								previous_uptime = 0;
+								parse_uptime(reindex->assert_value, &previous_uptime);
 
 								/* if uptime is set to '0' don't fail out */
 								if (strcmp(reindex->assert_value, "0")) {
-									if ((!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime)) {
+									if (!IS_UNDEFINED(poll_result) && (!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime)) {
 										if (is_debug_device(host->id) || set.spine_log_level == 2) {
 											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 										} else {
@@ -1400,6 +1426,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				if (k == 0) {
 					last_snmp_port = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
+					last_snmp_timeout = poller_items[i].snmp_timeout;
 
 					STRNCOPY(last_snmp_hostname,        poller_items[i].hostname);
 					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
@@ -1431,6 +1458,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				/* some snmp data changed from poller item to poller item.  therefore, poll host and store data */
 				if (!STRMATCH(last_snmp_hostname, poller_items[i].hostname) ||
 					(last_snmp_port != poller_items[i].snmp_port) ||
+					(last_snmp_timeout != poller_items[i].snmp_timeout) ||
 					(last_snmp_version != poller_items[i].snmp_version) ||
 					(poller_items[i].snmp_version < 3 &&
 					(!STRMATCH(last_snmp_community, poller_items[i].snmp_community))) ||
@@ -1533,6 +1561,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 					last_snmp_port    = poller_items[i].snmp_port;
 					last_snmp_version = poller_items[i].snmp_version;
+					last_snmp_timeout = poller_items[i].snmp_timeout;
 
 					STRNCOPY(last_snmp_hostname,        poller_items[i].hostname);
 					STRNCOPY(last_snmp_community,       poller_items[i].snmp_community);
@@ -2110,6 +2139,7 @@ int is_multipart_output(char *result) {
 
 void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 	char *poll_result;
+	unsigned long long ticks;
 
 	SPINE_LOG_MEDIUM(("Device[%d] Checking for System Information Update", host->id));
 
@@ -2143,8 +2173,8 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
-		if (poll_result && is_numeric(poll_result)) {
-			host->snmp_sysUpTimeInstance = atoll(poll_result);
+		if (parse_uptime(poll_result, &ticks)) {
+			host->snmp_sysUpTimeInstance = ticks;
 			SPINE_FREE(poll_result);
 
 			// Attempt to get the more modern version
@@ -2152,13 +2182,15 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			poll_result = snmp_get_base(host, ".1.3.6.1.6.3.10.2.1.3.0", false);
 			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
-			if (poll_result && is_numeric(poll_result)) {
-				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
+			if (parse_uptime(poll_result, &ticks) && ticks <= ULLONG_MAX / 100) {
+				host->snmp_sysUpTimeInstance = ticks * 100;
 				snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
 			}
 
 			SPINE_FREE(poll_result);
 		}
+
+		SPINE_FREE(poll_result);
 
 		SPINE_LOG_DEVDBG(("DEVDBG: Device [%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.4.0');", host->id));
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.4.0");
@@ -2198,8 +2230,8 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 		poll_result = snmp_get(host, ".1.3.6.1.2.1.1.3.0");
 		SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.2.1.1.3.0'); [complete]", host->id));
 
-		if (poll_result && is_numeric(poll_result)) {
-			host->snmp_sysUpTimeInstance = atoll(poll_result);
+		if (parse_uptime(poll_result, &ticks)) {
+			host->snmp_sysUpTimeInstance = ticks;
 			SPINE_FREE(poll_result);
 
 			// Attempt to get the more modern version
@@ -2207,14 +2239,15 @@ void get_system_information(host_t *host, MYSQL *mysql, int system)  {
 			poll_result = snmp_get(host, ".1.3.6.1.6.3.10.2.1.3.0");
 			SPINE_LOG_DEVDBG(("DEVDGB: Device[%d] poll_result = snmp_get(host, '.1.3.6.1.6.3.10.2.1.3.0'); [complete]", host->id));
 
-			if (poll_result && is_numeric(poll_result)) {
-				host->snmp_sysUpTimeInstance = atoll(poll_result) * 100;
+			if (parse_uptime(poll_result, &ticks) && ticks <= ULLONG_MAX / 100) {
+				host->snmp_sysUpTimeInstance = ticks * 100;
 				snprintf(poll_result, BUFSIZE, "%llu", host->snmp_sysUpTimeInstance);
 			}
 
 			SPINE_FREE(poll_result);
 		}
 	}
+	SPINE_FREE(poll_result);
 }
 
 /*! \fn int validate_result(char *result)
