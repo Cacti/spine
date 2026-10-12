@@ -1053,6 +1053,7 @@ static poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
  * which then never matched their own item and forced a session per OID. */
 typedef struct {
 	int initialized;
+	char hostname[sizeof(((target_t *)0)->hostname)];
 	snmp_profile_t profile;
 } snmp_item_key_t;
 
@@ -1066,6 +1067,7 @@ typedef struct {
 
 static void remember_snmp_item(snmp_item_key_t *key, const target_t *item) {
 	key->profile = item->snmp;
+	STRNCOPY(key->hostname, item->hostname);
 }
 
 static void *open_snmp_item(const host_t *host, target_t *item) {
@@ -1087,7 +1089,8 @@ static void *open_snmp_item(const host_t *host, target_t *item) {
 }
 
 static bool snmp_item_changed(const snmp_item_key_t *key, const target_t *item) {
-	return (key->profile.port != item->snmp.port) ||
+	return !STRMATCH(key->hostname, item->hostname) ||
+					(key->profile.port != item->snmp.port) ||
 					(key->profile.timeout != item->snmp.timeout) ||
 					(key->profile.version != item->snmp.version) ||
 					(item->snmp.version < 3 &&
@@ -1714,9 +1717,9 @@ static bool read_script_result(const script_result_context_t *context, int fd, d
 		SET_UNDEFINED(result);
 		return FALSE;
 	}
-	/* Preserve the single-read response contract; later output is ignored. */
-	ssize_t bytes = read(fd, result, RESULTS_BUFFER - 1);
-	if (bytes > 0 && bytes < RESULTS_BUFFER) {
+	/* Use the full capacity to detect truncation without waiting for EOF. */
+	ssize_t bytes = read(fd, result, RESULTS_BUFFER);
+	if (bytes > 0 && bytes < RESULTS_BUFFER && memchr(result, '\0', (size_t)bytes) == NULL) {
 		result[bytes] = '\0';
 	} else {
 		char script[SMALL_BUFSIZE];
