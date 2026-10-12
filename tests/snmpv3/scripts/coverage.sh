@@ -19,7 +19,11 @@ docker wait "$sid" >/dev/null
 rm -rf "$out" && mkdir -p "$out"
 docker cp "$sid:/src" "$out/src"
 
-docker run --rm -v "$out/src:/src" debian:bookworm-slim sh -c '
+docker run --rm -v "$out/src:/src" debian:bookworm-slim bash -c '
+	set -euo pipefail
 	apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq gcc >/dev/null 2>&1
-	cd /src && gcov -n *.c 2>/dev/null | grep -B1 "^Lines executed" | grep -A1 "^File .\(poller\|ping\|snmp\|util\|php\)\.c"
+	cd /src
+	mapfile -d "" -t profiles < <(find src -type f -name "*.gcda" -print0)
+	(( ${#profiles[@]} > 0 ))
+	gcov -n "${profiles[@]}" | grep -B1 "^Lines executed"
 '
