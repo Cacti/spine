@@ -1170,13 +1170,20 @@ static void test_script_execution(void) {
 		assert(close(output_fd) == 0);
 		spine_snprintf(output_command, sizeof(output_command), "/bin/dd if=%s bs=%d count=1 2>/dev/null", output_path, 2 * RESULTS_BUFFER);
 		result = exec_poll(&host, output_command, 1, "DS");
-		assert(strlen(result) == RESULTS_BUFFER - 1);
-		assert(result[RESULTS_BUFFER - 1] == '\0');
+		if (excess) assert(strcmp(result, "U") == 0);
+		else {
+			assert(strlen(result) == RESULTS_BUFFER - 1);
+			assert(result[RESULTS_BUFFER - 1] == '\0');
+		}
 		free(result);
 		assert(unlink(output_path) == 0);
 		memcpy(output_path + sizeof(output_path) - 7, "XXXXXX", 6);
 		assert(spine_permits_available(&available_scripts) == 1);
 	}
+	char embedded_nul[] = "/usr/bin/printf '42\\000junk'";
+	result = exec_poll(&host, embedded_nul, 1, "DS");
+	assert(strcmp(result, "U") == 0);
+	free(result);
 	char empty[] = "/usr/bin/printf ''";
 	result = exec_poll(&host, empty, 1, "DQ");
 	assert(strcmp(result, "U") == 0);
