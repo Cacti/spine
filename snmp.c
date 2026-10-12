@@ -43,7 +43,8 @@ static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *reque
 	struct snmp_pdu **response) {
 	int status;
 	int cancellation_state;
-	bool serialized = host->snmp.profile.version == 3;
+	const struct snmp_session *session = snmp_sess_session(host->snmp.session);
+	bool serialized = session == NULL || session->version == SNMP_VERSION_3;
 
 	if (serialized) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
