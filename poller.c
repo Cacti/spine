@@ -2384,7 +2384,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 
 	/* used for checking executable status */
 	char executable[BUFSIZE];
-	char *saveptr = NULL;
+	size_t executable_length;
 
 	pthread_cleanup_push(child_cleanup_script, NULL);
 
@@ -2418,16 +2418,21 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 		/* record start time */
 		begin_time = get_time_as_double();
 
-		/* peel the executable from the command */
-		saveptr = proc_command;
-		sprintf(executable, "%s", proc_command);
-		strtok_r(executable, " ", &saveptr);
-
-		/* cheesy little hack to add /usr/bin/ if its not included */
-		if (strstr(executable, "/") == NULL) {
-			saveptr = proc_command;
-			sprintf(executable, "/usr/bin/%s", proc_command);
-			strtok_r(executable, " ", &saveptr);
+		/* Check only the executable token, never copy the whole argument stream. */
+		executable_length = strcspn(proc_command, " \t\r\n");
+		if (executable_length >= sizeof(executable)) {
+			SET_UNDEFINED(result_string);
+			goto script_done;
+		}
+		memcpy(executable, proc_command, executable_length);
+		executable[executable_length] = '\0';
+		if (strchr(executable, '/') == NULL) {
+			if (executable_length + 9 >= sizeof(executable)) {
+				SET_UNDEFINED(result_string);
+				goto script_done;
+			}
+			memmove(executable + 9, executable, executable_length + 1);
+			memcpy(executable, "/usr/bin/", 9);
 		}
 
 		SPINE_LOG_DEBUG(("The executable is '%s'", executable));
@@ -2532,6 +2537,7 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 			SET_UNDEFINED(result_string);
 		}
 
+		script_done: ;
 		#if defined(__CYGWIN__)
 		SPINE_FREE(proc_command);
 		#endif

@@ -298,3 +298,25 @@ subprocess.run([*compiler, *flags, str(path), str(spine_object), *objects,
                 *make_variable("LDFLAGS"), *make_variable("LIBS"), "-o", str(executable)], check=True)
 subprocess.run([str(executable)], check=True, timeout=20)
 print("maintenance-snmp-security-and-error-contracts: passed")
+
+sql = (root / 'sql.c').read_text()
+run('maintenance-required-tls-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n' + '''
+config_t set;static int options,fail_option;static jmp_buf failed;
+int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;assert(value);options++;return fail_option;}
+void die(const char *format,...){(void)format;longjmp(failed,1);}
+''' + function(sql, 'static void db_require_tls(') + '''
+int main(void){MYSQL mysql;set.db_ssl=0;db_require_tls(&mysql,LOCAL);assert(options==0);
+ set.db_ssl=1;db_require_tls(&mysql,LOCAL);assert(options==1);
+ set.rdb_ssl=1;db_require_tls(&mysql,REMOTE);assert(options==2);
+ fail_option=1;if(setjmp(failed)==0){db_require_tls(&mysql,LOCAL);assert(0);}return 0;}
+''')
+
+util = (root / 'util.c').read_text()
+a = util.index('static struct {')
+b = util.index('} opttable[256];', a) + len('} opttable[256];')
+run('maintenance-option-capacity-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n' + '''
+static jmp_buf rejected;static int nopts;
+void die(const char *format,...){(void)format;longjmp(rejected,1);}
+''' + util[a:b] + '\n' + function(util, 'void set_option(') + '''
+int main(void){int i;for(i=0;i<256;i++)set_option("fixture","value");if(setjmp(rejected)==0){set_option("fixture","value");assert(0);}return 0;}
+''')

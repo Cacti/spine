@@ -60,6 +60,9 @@ static struct {
  *
  */
 void set_option(const char *option, const char *value) {
+	if (option == NULL || value == NULL || nopts >= (int)(sizeof(opttable) / sizeof(opttable[0]))) {
+		die("ERROR: Invalid or excessive option overrides");
+	}
 	opttable[nopts  ].opt = option;
 	opttable[nopts++].val = value;
 }
