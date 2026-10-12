@@ -1118,11 +1118,18 @@ static void test_script_execution(void) {
 	for (int excess = 0; excess <= 1; excess++) {
 		spine_snprintf(output_command, sizeof(output_command), "/usr/bin/printf '%%%ds' x", RESULTS_BUFFER - 1 + excess);
 		result = exec_poll(&host, output_command, 1, "DS");
-		assert(strlen(result) == RESULTS_BUFFER - 1);
-		assert(result[RESULTS_BUFFER - 1] == '\0');
+		if (excess) assert(strcmp(result, "U") == 0);
+		else {
+			assert(strlen(result) == RESULTS_BUFFER - 1);
+			assert(result[RESULTS_BUFFER - 1] == '\0');
+		}
 		free(result);
 		assert(spine_permits_available(&available_scripts) == 1);
 	}
+	char embedded_nul[] = "/usr/bin/printf '42\\000junk'";
+	result = exec_poll(&host, embedded_nul, 1, "DS");
+	assert(strcmp(result, "U") == 0);
+	free(result);
 	char empty[] = "/usr/bin/printf ''";
 	result = exec_poll(&host, empty, 1, "DQ");
 	assert(strcmp(result, "U") == 0);
