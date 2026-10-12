@@ -194,7 +194,7 @@ spine_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
-am__v_lt_1 =
+am__v_lt_1 = 
 am__test_spine_faults_SOURCES_DIST = src/database/sql.c \
 	src/database/connection.c src/database/pool.c \
 	src/database/transfer.c src/database/cacti_query.c \
@@ -468,11 +468,11 @@ am__v_P_1 = :
 AM_V_GEN = $(am__v_GEN_@AM_V@)
 am__v_GEN_ = $(am__v_GEN_@AM_DEFAULT_V@)
 am__v_GEN_0 = @echo "  GEN     " $@;
-am__v_GEN_1 =
+am__v_GEN_1 = 
 AM_V_at = $(am__v_at_@AM_V@)
 am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
-am__v_at_1 =
+am__v_at_1 = 
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__maybe_remake_depfiles = depfiles
@@ -642,7 +642,7 @@ LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 AM_V_CC = $(am__v_CC_@AM_V@)
 am__v_CC_ = $(am__v_CC_@AM_DEFAULT_V@)
 am__v_CC_0 = @echo "  CC      " $@;
-am__v_CC_1 =
+am__v_CC_1 = 
 CCLD = $(CC)
 LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -650,7 +650,7 @@ LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
-am__v_CCLD_1 =
+am__v_CCLD_1 = 
 SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(test_spine_regressions_SOURCES) \
 	$(tests_support_php_test_server_SOURCES) \
@@ -1313,7 +1313,7 @@ config/config.h: config/stamp-h1
 config/stamp-h1: $(top_srcdir)/config/config.h.in $(top_builddir)/config.status
 	@rm -f config/stamp-h1
 	cd $(top_builddir) && $(SHELL) ./config.status config/config.h
-$(top_srcdir)/config/config.h.in:  $(am__configure_deps)
+$(top_srcdir)/config/config.h.in:  $(am__configure_deps) 
 	($(am__cd) $(top_srcdir) && $(AUTOHEADER))
 	rm -f config/stamp-h1
 	touch $@
@@ -1552,7 +1552,7 @@ src/poller/workers.$(OBJEXT): src/poller/$(am__dirstamp) \
 src/app/main.$(OBJEXT): src/app/$(am__dirstamp) \
 	src/app/$(DEPDIR)/$(am__dirstamp)
 
-spine$(EXEEXT): $(spine_OBJECTS) $(spine_DEPENDENCIES) $(EXTRA_spine_DEPENDENCIES)
+spine$(EXEEXT): $(spine_OBJECTS) $(spine_DEPENDENCIES) $(EXTRA_spine_DEPENDENCIES) 
 	@rm -f spine$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(spine_OBJECTS) $(spine_LDADD) $(LIBS)
 tests/regression/$(am__dirstamp):
@@ -1565,7 +1565,7 @@ tests/regression/test_spine_faults.$(OBJEXT):  \
 	tests/regression/$(am__dirstamp) \
 	tests/regression/$(DEPDIR)/$(am__dirstamp)
 
-test_spine_faults$(EXEEXT): $(test_spine_faults_OBJECTS) $(test_spine_faults_DEPENDENCIES) $(EXTRA_test_spine_faults_DEPENDENCIES)
+test_spine_faults$(EXEEXT): $(test_spine_faults_OBJECTS) $(test_spine_faults_DEPENDENCIES) $(EXTRA_test_spine_faults_DEPENDENCIES) 
 	@rm -f test_spine_faults$(EXEEXT)
 	$(AM_V_CCLD)$(test_spine_faults_LINK) $(test_spine_faults_OBJECTS) $(test_spine_faults_LDADD) $(LIBS)
 tests/regression/test_spine_regressions.$(OBJEXT):  \
@@ -1602,7 +1602,7 @@ tests/contracts/test_spine_privilege_contracts.$(OBJEXT):  \
 	tests/contracts/$(am__dirstamp) \
 	tests/contracts/$(DEPDIR)/$(am__dirstamp)
 
-test_spine_regressions$(EXEEXT): $(test_spine_regressions_OBJECTS) $(test_spine_regressions_DEPENDENCIES) $(EXTRA_test_spine_regressions_DEPENDENCIES)
+test_spine_regressions$(EXEEXT): $(test_spine_regressions_OBJECTS) $(test_spine_regressions_DEPENDENCIES) $(EXTRA_test_spine_regressions_DEPENDENCIES) 
 	@rm -f test_spine_regressions$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_spine_regressions_OBJECTS) $(test_spine_regressions_LDADD) $(LIBS)
 tests/support/$(am__dirstamp):
@@ -4668,6 +4668,12 @@ coverage-object-list:
 .PHONY: coverage-unit-program-list coverage-unit-object-list
 coverage-unit-program-list:
 	@printf '%s\n' $(filter tests/unit/%,$(check_PROGRAMS))
+
+.PHONY: coverage-helper-program-list coverage-helper-object-list
+coverage-helper-program-list:
+	@printf '%s\n' tests/support/php_test_server$(EXEEXT)
+coverage-helper-object-list:
+	@printf '%s\n' $(tests_support_php_test_server_OBJECTS)
 
 # spine_runtime.c contains only test globals and generates no executable
 # coverage profile. All production sources remain in coverage-object-list.

@@ -59,14 +59,22 @@ static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *requ
 static bool check_request_lock;
 static bool expect_serialized_request;
 static int captured_request_status;
+static struct snmp_session captured_request_session;
+static struct snmp_session *capture_snmp_sess_session(void *session);
 
 #define snmp_sess_open capture_snmp_sess_open
 #define snmp_sess_synch_response capture_snmp_sess_synch_response
+#define snmp_sess_session capture_snmp_sess_session
 #include "../../src/snmp/session.c"
 #include "../../src/snmp/requests.c"
 #include "../../src/snmp/response.c"
 #undef snmp_sess_open
 #undef snmp_sess_synch_response
+#undef snmp_sess_session
+
+static struct snmp_session *capture_snmp_sess_session(void *session) {
+	return session == NULL ? NULL : &captured_request_session;
+}
 
 static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response) {
 	static const oid name[] = {1, 3, 6, 1, 2, 1, 1, 1, 0};
@@ -632,22 +640,28 @@ static void test_request_lock_and_cancellation_contract(void **state) {
 	struct snmp_pdu *response = NULL;
 	int cancellation_state;
 	int version;
+	size_t session_index;
 	const int statuses[] = {STAT_SUCCESS, STAT_TIMEOUT, STAT_ERROR};
+	const int session_versions[] = {SNMP_VERSION_1, SNMP_VERSION_2c, SNMP_VERSION_3};
 	size_t index;
 
 	(void) state;
 	check_request_lock = TRUE;
+	host.snmp.session = &captured_request_session;
 	for (version = 1; version <= 3; version++) {
 		host.snmp.profile.version = version;
-		expect_serialized_request = version == 3;
-		for (index = 0; index < sizeof(statuses) / sizeof(statuses[0]); index++) {
-			captured_request_status = statuses[index];
-			assert_int_equal(snmp_synchronized_response(&host, NULL, &response), statuses[index]);
-			assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
-			thread_mutex_unlock(LOCK_SNMP);
-			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
-			pthread_setcancelstate(cancellation_state, NULL);
-			assert_int_equal(cancellation_state, PTHREAD_CANCEL_ENABLE);
+		for (session_index = 0; session_index < sizeof(session_versions) / sizeof(session_versions[0]); session_index++) {
+			captured_request_session.version = session_versions[session_index];
+			expect_serialized_request = captured_request_session.version == SNMP_VERSION_3;
+			for (index = 0; index < sizeof(statuses) / sizeof(statuses[0]); index++) {
+				captured_request_status = statuses[index];
+				assert_int_equal(snmp_synchronized_response(&host, NULL, &response), statuses[index]);
+				assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+				thread_mutex_unlock(LOCK_SNMP);
+				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+				pthread_setcancelstate(cancellation_state, NULL);
+				assert_int_equal(cancellation_state, PTHREAD_CANCEL_ENABLE);
+			}
 		}
 	}
 }
