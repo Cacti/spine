@@ -123,7 +123,9 @@ check_PROGRAMS = test_spine_regressions$(EXEEXT) $(am__EXEEXT_1) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_classify_result \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_util_paths \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp
+@HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_ping_timing \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_log_config
 
 @HAVE_CMOCKA_TRUE@noinst_PROGRAMS =  \
 @HAVE_CMOCKA_TRUE@	tests/unit/php_test_server$(EXEEXT)
@@ -157,7 +159,9 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_classify_result$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_util_paths$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session$(EXEEXT) \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp$(EXEEXT)
+@HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_ping_timing$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_log_config$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__EXEEXT_3 = tests/unit/test_php_runtime$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poll_host$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
@@ -263,6 +267,16 @@ tests_unit_test_linked_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(tests_unit_test_linked_LDFLAGS) \
 	$(LDFLAGS) -o $@
+am_tests_unit_test_log_config_OBJECTS =  \
+	tests/unit/test_log_config.$(OBJEXT) \
+	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
+	snmp.$(OBJEXT) src/core/locks.$(OBJEXT) poller.$(OBJEXT) \
+	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
+	src/core/keywords.$(OBJEXT) error.$(OBJEXT)
+tests_unit_test_log_config_OBJECTS =  \
+	$(am_tests_unit_test_log_config_OBJECTS)
+tests_unit_test_log_config_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_tests_unit_test_php_runtime_OBJECTS =  \
 	tests/unit/test_php_runtime-test_php_runtime.$(OBJEXT) \
 	tests/fuzz/unit_test_php_runtime-stubs.$(OBJEXT) \
@@ -290,6 +304,16 @@ am_tests_unit_test_ping_icmp_OBJECTS =  \
 tests_unit_test_ping_icmp_OBJECTS =  \
 	$(am_tests_unit_test_ping_icmp_OBJECTS)
 tests_unit_test_ping_icmp_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+am_tests_unit_test_ping_timing_OBJECTS =  \
+	tests/unit/test_ping_timing.$(OBJEXT) \
+	tests/fuzz/stubs.$(OBJEXT) sql.$(OBJEXT) util.$(OBJEXT) \
+	snmp.$(OBJEXT) src/core/locks.$(OBJEXT) poller.$(OBJEXT) \
+	nft_popen.$(OBJEXT) php.$(OBJEXT) src/core/keywords.$(OBJEXT) \
+	error.$(OBJEXT)
+tests_unit_test_ping_timing_OBJECTS =  \
+	$(am_tests_unit_test_ping_timing_OBJECTS)
+tests_unit_test_ping_timing_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_tests_unit_test_poll_host_OBJECTS =  \
 	tests/unit/test_poll_host.$(OBJEXT) tests/fuzz/stubs.$(OBJEXT) \
@@ -410,8 +434,10 @@ am__depfiles_remade = ./$(DEPDIR)/error.Po ./$(DEPDIR)/nft_popen.Po \
 	tests/unit/$(DEPDIR)/test_build_fixes.Po \
 	tests/unit/$(DEPDIR)/test_classify_result.Po \
 	tests/unit/$(DEPDIR)/test_linked-test_linked.Po \
+	tests/unit/$(DEPDIR)/test_log_config.Po \
 	tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po \
 	tests/unit/$(DEPDIR)/test_ping_icmp.Po \
+	tests/unit/$(DEPDIR)/test_ping_timing.Po \
 	tests/unit/$(DEPDIR)/test_poll_host.Po \
 	tests/unit/$(DEPDIR)/test_safety_fixes.Po \
 	tests/unit/$(DEPDIR)/test_snmpv3_session.Po \
@@ -442,8 +468,10 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_unit_test_build_fixes_SOURCES) \
 	$(tests_unit_test_classify_result_SOURCES) \
 	$(tests_unit_test_linked_SOURCES) \
+	$(tests_unit_test_log_config_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
 	$(tests_unit_test_ping_icmp_SOURCES) \
+	$(tests_unit_test_ping_timing_SOURCES) \
 	$(tests_unit_test_poll_host_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
@@ -455,8 +483,10 @@ DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(tests_unit_test_build_fixes_SOURCES) \
 	$(tests_unit_test_classify_result_SOURCES) \
 	$(tests_unit_test_linked_SOURCES) \
+	$(tests_unit_test_log_config_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
 	$(tests_unit_test_ping_icmp_SOURCES) \
+	$(tests_unit_test_ping_timing_SOURCES) \
 	$(tests_unit_test_poll_host_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
@@ -963,6 +993,18 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
 	-Wl,--wrap=ping_host
 
+
+# Includes ping.c directly so its socket calls can be steered; see the file.
+tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	src/core/keywords.c error.c
+
+tests_unit_test_ping_timing_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/fuzz/stubs.c \
+	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	src/core/keywords.c error.c
+
+tests_unit_test_log_config_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/fuzz/stubs.c \
 	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
 	src/core/keywords.c error.c
@@ -1202,6 +1244,12 @@ src/core/tests_unit_test_linked-keywords.$(OBJEXT):  \
 tests/unit/test_linked$(EXEEXT): $(tests_unit_test_linked_OBJECTS) $(tests_unit_test_linked_DEPENDENCIES) $(EXTRA_tests_unit_test_linked_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_linked$(EXEEXT)
 	$(AM_V_CCLD)$(tests_unit_test_linked_LINK) $(tests_unit_test_linked_OBJECTS) $(tests_unit_test_linked_LDADD) $(LIBS)
+tests/unit/test_log_config.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_log_config$(EXEEXT): $(tests_unit_test_log_config_OBJECTS) $(tests_unit_test_log_config_DEPENDENCIES) $(EXTRA_tests_unit_test_log_config_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_log_config$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_log_config_OBJECTS) $(tests_unit_test_log_config_LDADD) $(LIBS)
 tests/unit/test_php_runtime-test_php_runtime.$(OBJEXT):  \
 	tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
@@ -1222,6 +1270,12 @@ tests/unit/test_ping_icmp.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_ping_icmp$(EXEEXT): $(tests_unit_test_ping_icmp_OBJECTS) $(tests_unit_test_ping_icmp_DEPENDENCIES) $(EXTRA_tests_unit_test_ping_icmp_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_ping_icmp$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_ping_icmp_OBJECTS) $(tests_unit_test_ping_icmp_LDADD) $(LIBS)
+tests/unit/test_ping_timing.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_ping_timing$(EXEEXT): $(tests_unit_test_ping_timing_OBJECTS) $(tests_unit_test_ping_timing_DEPENDENCIES) $(EXTRA_tests_unit_test_ping_timing_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_ping_timing$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_ping_timing_OBJECTS) $(tests_unit_test_ping_timing_LDADD) $(LIBS)
 tests/unit/test_poll_host.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -1332,8 +1386,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_build_fixes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_classify_result.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_linked-test_linked.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_log_config.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_ping_icmp.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_ping_timing.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_poll_host.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_safety_fixes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_session.Po@am__quote@ # am--include-marker
@@ -2484,6 +2540,20 @@ tests/unit/test_ping_icmp.log: tests/unit/test_ping_icmp$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_ping_timing.log: tests/unit/test_ping_timing$(EXEEXT)
+	@p='tests/unit/test_ping_timing$(EXEEXT)'; \
+	b='tests/unit/test_ping_timing'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_log_config.log: tests/unit/test_log_config$(EXEEXT)
+	@p='tests/unit/test_log_config$(EXEEXT)'; \
+	b='tests/unit/test_log_config'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/unit/test_php_runtime.log: tests/unit/test_php_runtime$(EXEEXT)
 	@p='tests/unit/test_php_runtime$(EXEEXT)'; \
 	b='tests/unit/test_php_runtime'; \
@@ -2811,8 +2881,10 @@ distclean: distclean-am
 	-rm -f tests/unit/$(DEPDIR)/test_build_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_classify_result.Po
 	-rm -f tests/unit/$(DEPDIR)/test_linked-test_linked.Po
+	-rm -f tests/unit/$(DEPDIR)/test_log_config.Po
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_icmp.Po
+	-rm -f tests/unit/$(DEPDIR)/test_ping_timing.Po
 	-rm -f tests/unit/$(DEPDIR)/test_poll_host.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
@@ -2935,8 +3007,10 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/unit/$(DEPDIR)/test_build_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_classify_result.Po
 	-rm -f tests/unit/$(DEPDIR)/test_linked-test_linked.Po
+	-rm -f tests/unit/$(DEPDIR)/test_log_config.Po
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_icmp.Po
+	-rm -f tests/unit/$(DEPDIR)/test_ping_timing.Po
 	-rm -f tests/unit/$(DEPDIR)/test_poll_host.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
