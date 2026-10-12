@@ -97,6 +97,16 @@ void test_cli_alias_contracts(void) {
 		run_cli_contract(arguments, EXIT_FAILURE, output, sizeof(output));
 		assert(strstr(output, "ERROR: invalid or oversized host list") != NULL);
 	}
+	/* the longest list that fits host_id_list is accepted whole */
+	char *longest = malloc(BIG_BUFSIZE);
+	assert(longest != NULL);
+	for (size_t index = 0; index < BIG_BUFSIZE - 1; index++) longest[index] = index % 2 == 0 ? '7' : ',';
+	longest[BIG_BUFSIZE - 1] = '\0';
+	if (longest[BIG_BUFSIZE - 2] == ',') longest[BIG_BUFSIZE - 2] = '\0';
+	char *longest_args[] = {"spine", "-H", longest, "--version", NULL};
+	run_cli_contract(longest_args, EXIT_SUCCESS, output, sizeof(output));
+	assert(strcmp(version, output) == 0);
+	free(longest);
 	char *oversized = malloc(BIG_BUFSIZE + 1);
 	assert(oversized != NULL);
 	memset(oversized, '0', BIG_BUFSIZE);

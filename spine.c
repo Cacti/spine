@@ -251,6 +251,20 @@ static void parse_host_list(const char *input) {
 	}
 }
 
+/* atoi() turned "-f abc" into device 0 and let "-t -1" size the connection
+ * pools, so only a whole unsigned decimal number inside the range passes. */
+static bool parse_cli_int(const char *text, long minimum, long maximum, int *value) {
+	char *end;
+	long parsed;
+
+	if (text[0] < '0' || text[0] > '9') return FALSE;
+	errno = 0;
+	parsed = strtol(text, &end, 10);
+	if (errno != 0 || *end != '\0' || parsed < minimum || parsed > maximum) return FALSE;
+	*value = (int)parsed;
+	return TRUE;
+}
+
 static void parse_cli_argument(const char *arg, char *opt, char ***argv, char **conf_file) {
 	switch (lookup_cli_option(arg)) {
 		case CLI_FIRST: {
@@ -259,9 +273,8 @@ static void parse_cli_argument(const char *arg, char *opt, char ***argv, char **
 			}
 
 			opt = getarg(opt, argv);
-			set.hosts.start_host_id = atoi(opt);
 
-			if (!HOSTID_DEFINED(set.hosts.start_host_id)) {
+			if (!parse_cli_int(opt, 0, INT_MAX, &set.hosts.start_host_id)) {
 				die("ERROR: '%s=%s' is invalid first-host ID", arg, opt);
 			}
 			break;
@@ -272,9 +285,8 @@ static void parse_cli_argument(const char *arg, char *opt, char ***argv, char **
 			}
 
 			opt = getarg(opt, argv);
-			set.hosts.end_host_id = atoi(opt);
 
-			if (!HOSTID_DEFINED(set.hosts.end_host_id)) {
+			if (!parse_cli_int(opt, 0, INT_MAX, &set.hosts.end_host_id)) {
 				die("ERROR: '%s=%s' is invalid last-host ID", arg, opt);
 			}
 			break;
@@ -284,7 +296,18 @@ static void parse_cli_argument(const char *arg, char *opt, char ***argv, char **
 			break;
 		}
 		case CLI_THREADS: {
-			set.poller.threads = atoi(getarg(opt, argv));
+			opt = getarg(opt, argv);
+
+			if (!parse_cli_int(opt, 1, INT_MAX, &set.poller.threads)) {
+				die("ERROR: '%s=%s' is an invalid thread count, use 1 to %d", arg, opt, MAX_THREADS);
+			}
+
+			/* the database setting is capped the same way, and existing
+			 * invocations above the cap have always run */
+			if (set.poller.threads > MAX_THREADS) {
+				fprintf(stderr, "WARNING: '%s=%s' exceeds the maximum thread count, using %d\n", arg, opt, MAX_THREADS);
+				set.poller.threads = MAX_THREADS;
+			}
 			set.poller.threads_set = TRUE;
 			break;
 		}
@@ -352,11 +375,15 @@ static void parse_cli_argument(const char *arg, char *opt, char ***argv, char **
 		}
 		default:
 			if (!HOSTID_DEFINED(set.hosts.start_host_id) && all_digits(arg)) {
-				set.hosts.start_host_id = atoi(arg);
+				if (!parse_cli_int(arg, 0, INT_MAX, &set.hosts.start_host_id)) {
+					die("ERROR: '%s' is invalid first-host ID", arg);
+				}
 			}
 
 			else if (!HOSTID_DEFINED(set.hosts.end_host_id) && all_digits(arg)) {
-				set.hosts.end_host_id = atoi(arg);
+				if (!parse_cli_int(arg, 0, INT_MAX, &set.hosts.end_host_id)) {
+					die("ERROR: '%s' is invalid last-host ID", arg);
+				}
 			}
 
 			else {
