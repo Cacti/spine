@@ -12,7 +12,7 @@ name: Distro matrix
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, 'refactor/c17-series-*']
     paths: &build_paths
       - "configure.ac"
       - "Makefile.am"
