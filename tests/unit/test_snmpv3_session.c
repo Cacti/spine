@@ -44,7 +44,8 @@ typedef enum {
 	REPLY_AGENT_ERROR,
 	REPLY_NAMELESS,
 	REPLY_NOSUCH_INSTANCE,
-	REPLY_END_OF_MIB
+	REPLY_END_OF_MIB,
+	REPLY_OVERSIZED
 } test_reply_kind_t;
 
 static int reply_status;
@@ -82,6 +83,7 @@ static struct snmp_session *capture_snmp_sess_session(void *session) {
 
 static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response) {
 	static const oid name[] = {1, 3, 6, 1, 2, 1, 1, 1, 0};
+	static u_char oversized[RESULTS_BUFFER + 512];
 	long value = 42;
 
 	assert_ptr_equal(session, (void *) (uintptr_t) 1);
@@ -112,6 +114,11 @@ static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_p
 			(*response)->variables->name = NULL;
 			(*response)->variables->name_length = 0;
 		}
+	}
+	if (reply_kind == REPLY_OVERSIZED) {
+		/* A string longer than RESULTS_BUFFER makes snprint_value() fail. */
+		memset(oversized, 'a', sizeof(oversized));
+		assert_non_null(snmp_pdu_add_variable(*response, name, sizeof(name) / sizeof(name[0]), ASN_OCTET_STR, oversized, sizeof(oversized)));
 	}
 	if (reply_kind == REPLY_AGENT_ERROR) (*response)->errstat = SNMP_ERR_GENERR;
 	return reply_status;
@@ -635,7 +642,9 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 		{STAT_SUCCESS, REPLY_NAMELESS, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
 		/* A GETNEXT exception varbind is an answer from a reachable agent. */
 		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS},
-		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS}};
+		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS},
+		/* An unprintable value is unknown data, not a transport failure. */
+		{STAT_SUCCESS, REPLY_OVERSIZED, "U", "U", "U", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS}};
 	char text_oid[] = ".1.3.6.1.2.1.1.1.0";
 
 	(void) state;
