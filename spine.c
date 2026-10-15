@@ -1210,8 +1210,11 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* initialize threads and mutexes */
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	if (spine_thread_attr_init(&attr) != 0 ||
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0) {
+		set.exit.exit_code = EXIT_FAILURE;
+		die("ERROR: Unable to initialize polling thread attributes");
+	}
 
 	init_mutexes();
 
