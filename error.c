@@ -132,6 +132,9 @@ static void spine_signal_handler(int spine_signal) {
 		case SIGQUIT:
 			message = "FATAL: Spine Encountered a Keyboard Quit Command\n";
 			break;
+		case SIGPIPE:
+			message = "FATAL: Spine Encountered a Broken Pipe\n";
+			break;
 		default:
 			break;
 	}

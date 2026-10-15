@@ -36,7 +36,6 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <limits.h>
-#include <fcntl.h>
 
 static double ping_monotonic_time(void) {
 	struct timespec now;
