@@ -264,7 +264,13 @@ char *snmp_getnext(host_t *host, char *text_oid) {
 			status = STAT_ERROR;
 		} else if (reply.response->errstat == SNMP_ERR_NOERROR) {
 			const struct variable_list *variable = reply.response->variables;
-			status = variable == NULL || snmp_varbind_is_exception(variable) ? STAT_ERROR : snmp_format_scalar(output, variable, TRUE);
+			if (variable != NULL && snmp_varbind_is_exception(variable)) {
+				/* endOfMibView and noSuch* come from a reachable agent: the
+				 * value is unknown, the host is not. */
+				SET_UNDEFINED(output);
+			} else {
+				status = variable == NULL ? STAT_ERROR : snmp_format_scalar(output, variable, TRUE);
+			}
 		}
 	} else if (status == STAT_TIMEOUT) {
 		SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", text_oid, host->id, status));

@@ -633,8 +633,9 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 		{STAT_SUCCESS, REPLY_AGENT_ERROR, "", "", "", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
 		{STAT_SUCCESS, REPLY_SCALAR, "42", "42", "42", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
 		{STAT_SUCCESS, REPLY_NAMELESS, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
-		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
-		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR}};
+		/* A GETNEXT exception varbind is an answer from a reachable agent. */
+		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS}};
 	char text_oid[] = ".1.3.6.1.2.1.1.1.0";
 
 	(void) state;
