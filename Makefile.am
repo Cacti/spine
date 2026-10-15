@@ -69,7 +69,7 @@ test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_q
  -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
  -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
  -Wl,--wrap=malloc -Wl,--wrap=strdup \
- -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create \
+ -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create -Wl,--wrap=pthread_attr_setstacksize \
  -Wl,--wrap=getuid -Wl,--wrap=geteuid -Wl,--wrap=getgid -Wl,--wrap=getegid \
  -Wl,--wrap=setuid -Wl,--wrap=setgid -Wl,--wrap=seteuid -Wl,--wrap=setegid -Wl,--wrap=socket
 endif
