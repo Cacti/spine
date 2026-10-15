@@ -561,11 +561,21 @@ void read_config_options() {
 	/* get Cacti defined max threads override spine.conf */
 	if (set.threads_set == FALSE) {
 		if ((res = getpsetting(&mysql, mode, "threads")) != 0) {
-			set.threads = atoi(res);
-			free((char *)res);
-			if (set.threads > MAX_THREADS) {
+			char *end;
+			long threads;
+
+			/* Zero or garbage would start no workers; match the -t bounds. */
+			errno = 0;
+			threads = strtol(res, &end, 10);
+			if (res[0] < '0' || res[0] > '9' || errno != 0 || *end != '\0' || threads < 1) {
+				SPINE_LOG(("WARNING: Invalid threads setting, using %d", DEFAULT_THREADS));
+				set.threads = DEFAULT_THREADS;
+			} else if (threads > MAX_THREADS) {
 				set.threads = MAX_THREADS;
+			} else {
+				set.threads = (int) threads;
 			}
+			free((char *)res);
 		}
 	}
 
@@ -1124,7 +1134,7 @@ int read_spine_config(char *file) {
 					set.log_destination = LOGDEST_BOTH;
 				} else if (STRIMATCH(p1, "SNMP_Clientaddr"))  STRNCOPY(set.snmp_clientaddr, p2);
 				else if (!set.stderr_notty) {
-					fprintf(stderr,"WARNING: Unrecognized directive in config file\n");
+					fprintf(stderr,"WARNING: Unrecognized directive %s in config file\n", p1);
 				}
 
 				*p1 = '\0';
