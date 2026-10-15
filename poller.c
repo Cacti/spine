@@ -1320,7 +1320,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 		} else {
 			SPINE_LOG(("Device[%i] HT[%i] ERROR: RECACHE Query Returned Null Result!", host->id, host_thread));
 			output_failed = TRUE;
-			host->ignore_host = TRUE;
 		}
 
 		/* close the host snmp session, we will create again momentarily */
