@@ -192,7 +192,9 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 
 	/* used for checking executable status */
 	char executable[BUFSIZE];
-	char *saveptr = NULL;
+	const char *program;
+	size_t program_length;
+	const char *prefix;
 
 	pthread_cleanup_push(cancel_script_read, &execution_owner);
 
@@ -208,22 +210,28 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 		/* record start time */
 		deadline = spine_monotonic_time() + set.php.script_timeout;
 
-		/* peel the executable from the command */
-		saveptr = proc_command;
-		spine_snprintf(executable, sizeof(executable), "%s", proc_command);
-		strtok_r(executable, " ", &saveptr);
+		/* peel the executable from the command; only the first token is a
+		 * path, so long arguments cannot overflow the candidate below */
+		program = proc_command + strspn(proc_command, " ");
+		program_length = strcspn(program, " ");
 
 		/* cheesy little hack to add /usr/bin/ if its not included */
-		if (strstr(executable, "/") == NULL) {
-			saveptr = proc_command;
-			spine_snprintf(executable, sizeof(executable), "/usr/bin/%s", proc_command);
-			strtok_r(executable, " ", &saveptr);
+		prefix = memchr(program, '/', program_length) == NULL ? "/usr/bin/" : "";
+
+		executable[0] = '\0';
+		if (program_length + strlen(prefix) >= sizeof(executable)) {
+			/* One oversized item must not terminate the poller. */
+			SPINE_LOG(("Device[%i] %s[%i] ERROR: Script executable path exceeds %d bytes", current_host->id, type, id, BUFSIZE - 1));
+		} else {
+			spine_snprintf(executable, sizeof(executable), "%s%.*s", prefix, (int) program_length, program);
+
+			/* executable is the first token; the arguments can carry credentials. */
+			SPINE_LOG_DEBUG(("The executable is '%s'", executable));
 		}
 
-		/* executable is the first token; the arguments can carry credentials. */
-		SPINE_LOG_DEBUG(("The executable is '%s'", executable));
-
-		if (access(executable, X_OK | F_OK) != -1) {
+		if (executable[0] == '\0') {
+			SET_UNDEFINED(result_string);
+		} else if (access(executable, X_OK | F_OK) != -1) {
 			cmd_fd = nft_popen(proc_command, "r");
 			SPINE_LOG_DEVICE(current_host->id, POLLER_VERBOSITY_DEBUG, ("Device[%i] DEBUG: The NIFTY POPEN returned the following File Descriptor %i", current_host->id, cmd_fd));
 

@@ -153,7 +153,35 @@ static void test_close_handoff_defers_cancellation(void **state) {
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
+/* Long arguments or an over-long executable path are an invalid item. Building
+ * the /usr/bin/ candidate used to terminate Spine on the formatting guard. */
+static void test_long_command_is_an_invalid_item(void **state) {
+	host_t host = {.id = 1};
+	char command[BUFSIZE + 200];
+	char *result;
+	(void) state;
+	set.php.script_timeout = 5;
+	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+
+	memset(command, 'x', sizeof(command) - 1);
+	command[sizeof(command) - 1] = '\0';
+	memcpy(command, "spine_no_such_tool ", strlen("spine_no_such_tool "));
+	result = exec_poll(&host, command, 1, "DS");
+	assert_string_equal(result, "U");
+	free(result);
+
+	command[0] = '/';
+	memset(command + 1, 'x', sizeof(command) - 2);
+	result = exec_poll(&host, command, 1, "DS");
+	assert_string_equal(result, "U");
+	free(result);
+
+	assert_int_equal(spine_permits_available(&available_scripts), 1);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
 int main(void) {
-	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation)};
+	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item)};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }
