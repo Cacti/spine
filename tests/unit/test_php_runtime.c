@@ -858,6 +858,21 @@ static void test_init_timeout_does_not_recurse(void **state) {
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
 
+/* Startup is not under a slot lock, so a slow PHP start gets the full
+ * script_timeout. Recovery holds the slot lock and keeps the short cap. */
+static void test_startup_handshake_uses_script_timeout(void **state) {
+	(void) state;
+	set.php.php_servers = 1;
+	set.php.script_timeout = 5;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "slow-start");
+	assert_int_equal(php_init(PHP_INIT), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+
+	php_close(0);
+	assert_int_equal(php_init(0), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
+}
+
 static void test_spawn_failure_releases_every_resource(void **state) {
 	(void) state;
 	/* calloc-like zeroes reproduce the process-wide initialization that used to
@@ -1146,6 +1161,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_nft_write_collision_cloexec_failure_is_clean, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_cloexec_pipe_failure_releases_both_descriptors, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_init_timeout_does_not_recurse, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_startup_handshake_uses_script_timeout, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawn_failure_releases_every_resource, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_rejects_a_writable_poisoned_slot, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_readpipe_rejects_invalid_slots, php_setup, php_teardown),
