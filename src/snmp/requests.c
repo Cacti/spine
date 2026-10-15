@@ -232,8 +232,10 @@ char *snmp_get_base(host_t *host, char *text_oid, bool should_fail) {
 	if (host->snmp.session != NULL) status = snmp_get_response(host, text_oid, &reply, output);
 	if (reply.response != NULL) snmp_free_pdu(reply.response);
 	host->snmp.status = status;
-	if (status != STAT_SUCCESS && should_fail) {
-		host->ignore_host = TRUE;
+	/* A failed read is unknown even when the caller tolerates the failure;
+	 * an empty string would be stored as if the agent had sent it. */
+	if (status != STAT_SUCCESS) {
+		if (should_fail) host->ignore_host = TRUE;
 		SET_UNDEFINED(output);
 	}
 	return output;

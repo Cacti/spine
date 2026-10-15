@@ -27,6 +27,7 @@
 
 #include "internal/common.h"
 #include "app/spine.h"
+#include "poller/poller.h"
 
 static int captured_security_level;
 static size_t captured_auth_key_len;
@@ -634,7 +635,7 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 	} response_case_t;
 	static const response_case_t cases[] = {
 		{STAT_SUCCESS, REPLY_NONE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
-		{STAT_TIMEOUT, REPLY_NONE, "U", "", "U", TRUE, TRUE, STAT_TIMEOUT, STAT_TIMEOUT},
+		{STAT_TIMEOUT, REPLY_NONE, "U", "U", "U", TRUE, TRUE, STAT_TIMEOUT, STAT_TIMEOUT},
 		{STAT_TIMEOUT, REPLY_SCALAR, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_TIMEOUT},
 		{STAT_SUCCESS, REPLY_EMPTY, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
 		{STAT_SUCCESS, REPLY_AGENT_ERROR, "", "", "", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
@@ -671,6 +672,43 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 			free(result);
 		}
 	}
+}
+
+/* A timed-out system read must not overwrite the stored strings with "". */
+static void test_failed_system_read_keeps_stored_values(void **state) {
+	static const char *const stored[] = {"stored descr", "stored oid", "stored contact", "stored name", "stored location"};
+	MYSQL mysql;
+	host_t host = {0};
+
+	(void) state;
+	assert_non_null(mysql_init(&mysql));
+	host.snmp.session = (void *) (uintptr_t) 1;
+	snprintf(host.system.snmp_sysDescr, sizeof(host.system.snmp_sysDescr), "%s", stored[0]);
+	snprintf(host.system.snmp_sysObjectID, sizeof(host.system.snmp_sysObjectID), "%s", stored[1]);
+	snprintf(host.system.snmp_sysContact, sizeof(host.system.snmp_sysContact), "%s", stored[2]);
+	snprintf(host.system.snmp_sysName, sizeof(host.system.snmp_sysName), "%s", stored[3]);
+	snprintf(host.system.snmp_sysLocation, sizeof(host.system.snmp_sysLocation), "%s", stored[4]);
+	host.system.snmp_sysUpTimeInstance = 4200;
+	reply_status = STAT_TIMEOUT;
+	reply_kind = REPLY_NONE;
+
+	get_system_information(&host, &mysql, TRUE);
+
+	assert_string_equal(host.system.snmp_sysDescr, stored[0]);
+	assert_string_equal(host.system.snmp_sysObjectID, stored[1]);
+	assert_string_equal(host.system.snmp_sysContact, stored[2]);
+	assert_string_equal(host.system.snmp_sysName, stored[3]);
+	assert_string_equal(host.system.snmp_sysLocation, stored[4]);
+	assert_int_equal(host.system.snmp_sysUpTimeInstance, 4200);
+	assert_false(host.ignore_host);
+
+	/* A successful read still replaces the stored value. */
+	reply_status = STAT_SUCCESS;
+	reply_kind = REPLY_SCALAR;
+	get_system_information(&host, &mysql, TRUE);
+	assert_string_equal(host.system.snmp_sysDescr, "42");
+	assert_string_equal(host.system.snmp_sysLocation, "42");
+	mysql_close(&mysql);
 }
 
 /* Only a lost transport ignores the host. An agent that answers with an error
@@ -778,6 +816,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_failed_session_restores_lock_and_cancellation, session_reset),
 		cmocka_unit_test_setup(test_single_request_transport_and_response_contracts, session_reset),
 		cmocka_unit_test_setup(test_count_ignores_host_only_for_transport_failures, session_reset),
+		cmocka_unit_test_setup(test_failed_system_read_keeps_stored_values, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
