@@ -491,15 +491,40 @@ int nft_pchild(int fd) {
 	return pid;
 }
 
+/* A script may write its value, close its output and keep working, for
+ * example to save state. With a deadline, wait for it while that deadline
+ * allows, polling with WNOHANG so the thread never blocks past it, then ask
+ * it to stop with SIGTERM before nft_pclose_deadline() escalates. */
+static int nft_reap_closed_child(pid_t *pid, int *pstat, double deadline) {
+	const double term_grace = (double) NFT_PCLOSE_SPIN_ATTEMPTS * NFT_PCLOSE_SPIN_USEC / 1000000.0;
+	double remaining;
+	int rc = spine_reap_child_owned(pid, pstat, NFT_PCLOSE_SPIN_ATTEMPTS, &ListMutex);
+
+	if (rc != 1 || deadline <= 0) return rc;
+	while (rc == 1 && (remaining = deadline - term_grace - spine_monotonic_time()) > 0) {
+		spine_sleep_usec(remaining * 1000000.0 < NFT_PCLOSE_REAP_USEC ? (unsigned int) (remaining * 1000000.0) : NFT_PCLOSE_REAP_USEC);
+		rc = spine_reap_child_owned(pid, pstat, 1, &ListMutex);
+	}
+	if (rc != 1) return rc;
+
+	/* The negative pid reaches the script's whole process group. */
+	(void) kill(-*pid, SIGTERM);
+	return spine_reap_child_owned(pid, pstat, NFT_PCLOSE_SPIN_ATTEMPTS, &ListMutex);
+}
+
 /*! ------------------------------------------------------------------------------
  *
- *  nft_pclose
+ *  nft_pclose_deadline
  *
  *  Close the pipe and check the child's status with a brief (~20ms),
  *  non-escalating bounded waitpid(). A child still running past that point,
  *  or one whose waitpid() call itself failed, is killed and handed to the
  *  abandoned-pid sweep rather than waited for here, so this call never
  *  blocks the caller on a lingering script.
+ *
+ *  A deadline greater than zero, on the spine_monotonic_time() clock, extends
+ *  that check until the deadline and sends SIGTERM before SIGKILL. The caller
+ *  is then held at most ~20ms past the deadline. nft_pclose() passes none.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
@@ -515,7 +540,7 @@ int nft_pchild(int fd) {
  *
  *------------------------------------------------------------------------------
  */
-int nft_pclose(int fd) {
+int nft_pclose_deadline(int fd, double deadline) {
 	struct pid *cur;
 	int pstat;
 	int cancel_state;
@@ -546,7 +571,7 @@ int nft_pclose(int fd) {
 	 * that is killed and handed to the abandoned-pid sweep instead of this
 	 * thread waiting for it. */
 	pid = cur->pid;
-	switch (spine_reap_child_owned(&cur->pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS, &ListMutex)) {
+	switch (nft_reap_closed_child(&cur->pid, &pstat, deadline)) {
 		case 0:
 			break;
 		case 1:
@@ -572,6 +597,10 @@ int nft_pclose(int fd) {
 	pthread_cleanup_pop(1); /* Execute the cleanup handler. */
 
 	return (pid == -1 ? -1 : pstat);
+}
+
+int nft_pclose(int fd) {
+	return nft_pclose_deadline(fd, 0);
 }
 
 /*! ------------------------------------------------------------------------------

@@ -247,7 +247,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				/* Resolve child ownership before delivering a pending cancellation. */
 				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 				owner.fd = -1;
-				child_status = nft_pclose(cmd_fd);
+				child_status = nft_pclose_deadline(cmd_fd, deadline);
 				pthread_setcancelstate(cancel_state, NULL);
 				if ((set.php.script_max_output != 0 || set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0) &&
 					(child_status < 0 || !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0)) {
