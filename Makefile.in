@@ -1189,7 +1189,7 @@ EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
 	tests/fixtures/c17_develop_behavior_baseline.json \
 	scripts/debug.sh scripts/package.sh \
 	tests/regression/test_helper_scripts.sh \
-	docs/architecture/source-modules.md \
+	docs/architecture/source-modules.md docs/platforms.md \
 	tests/tools/test_configure_contracts.sh \
 	tests/tools/test_clang_tidy_gate.py scripts/cppcheck/spine.cfg \
 	tests/tools/test_memory_soak_fit.sh \

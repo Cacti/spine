@@ -294,7 +294,7 @@ noinst_HEADERS += src/script/server_internal.h
 
 noinst_HEADERS += src/process/process_internal.h
 
-EXTRA_DIST += docs/architecture/source-modules.md
+EXTRA_DIST += docs/architecture/source-modules.md docs/platforms.md
 
 
 noinst_HEADERS += src/app/buffer.h \

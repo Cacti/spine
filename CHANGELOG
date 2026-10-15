@@ -1,6 +1,7 @@
 The Cacti Group | spine
 
 1.3.0
+-issue: Validate stacked build PRs in the distro matrix and include platform requirements in release archives
 -feature: Use C17 with checked native interfaces and production-linked polling contracts
 -issue: Drop root before untrusted input and retain only owned ICMP resources
 -issue: Bound database reconnects and isolate worker failures without losing completion or cleanup
