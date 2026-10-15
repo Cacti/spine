@@ -438,6 +438,49 @@ static void test_success_path_frees_once(void **state) {
 	free(r);
 }
 
+/* An absent setting must reach the callers' else-defaults. Only a stored
+ * empty value is reported as "", whether it comes from the bulk cache or a
+ * single-row query. */
+static void test_absent_setting_is_null_and_keeps_defaults(void **state) {
+	setting_cache_t stored_empty = {"snmp_retries", ""};
+	char *r;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	row_is_null = 0;
+	rows_to_report = 0;
+
+	assert_null(getsetting(&fake_mysql, LOCAL, "snmp_retries"));
+
+	settings_cache = &stored_empty;
+	settings_cache_count = 1;
+	r = getsetting(&fake_mysql, LOCAL, "snmp_retries");
+	assert_non_null(r);
+	assert_string_equal(r, "");
+	free(r);
+	assert_null(getsetting(&fake_mysql, LOCAL, "ping_timeout"));
+	settings_cache = NULL;
+	settings_cache_count = 0;
+
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "/configured/script_server.php");
+	read_logging_options(&fake_mysql);
+	read_ping_options(&fake_mysql);
+	read_process_options(&fake_mysql, LOCAL);
+	read_script_options(&fake_mysql);
+	read_snmp_batch_size(&fake_mysql);
+
+	assert_string_equal(set.php.path_php_server, "/configured/script_server.php");
+	assert_string_equal(set.logging.path_logfile, "");
+	assert_int_equal(set.availability.ping_timeout, 400);
+	assert_int_equal(set.snmp.snmp_retries, 3);
+	assert_int_equal(set.poller.num_parent_processes, 1);
+	assert_int_equal(set.php.script_timeout, 25);
+	assert_int_equal(set.php.php_servers, 2);
+	assert_int_equal(set.snmp.snmp_max_get_size, 25);
+	assert_int_equal(getboolsetting(&fake_mysql, LOCAL, "log_pstats", TRUE), TRUE);
+}
+
 /* ---- issue#588: a row that crosses a batch boundary is still sent once -- */
 
 static int count_occurrences(const char *haystack, const char *needle) {
@@ -661,6 +704,7 @@ int main(void) {
 		cmocka_unit_test(test_getglobalvariable_frees_on_null_row),
 		cmocka_unit_test(test_get_cacti_version_frees_on_null_row),
 		cmocka_unit_test(test_success_path_frees_once),
+		cmocka_unit_test(test_absent_setting_is_null_and_keeps_defaults),
 		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
 		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
 		cmocka_unit_test(test_remote_push_stops_on_failed_batch),

@@ -185,15 +185,16 @@ char *getsetting(MYSQL *psql, int mode, const char *setting) {
 			}
 		}
 
-		return strdup("");
+		/* Absent is not empty: callers fall back to their defaults on NULL. */
+		return NULL;
 	}
 
 	spine_snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = config_query(psql, mode, qstring);
-	if (result == NULL) return strdup("");
+	if (result == NULL) return NULL;
 	mysql_row = mysql_num_rows(result) > 0 ? mysql_fetch_row(result) : NULL;
-	retval = mysql_row != NULL && mysql_row[0] != NULL ? strdup(mysql_row[0]) : strdup("");
+	retval = mysql_row != NULL ? strdup(mysql_row[0] != NULL ? mysql_row[0] : "") : NULL;
 	db_free_result(result);
 	return retval;
 }
