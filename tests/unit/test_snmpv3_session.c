@@ -663,6 +663,37 @@ static void test_single_request_transport_and_response_contracts(void **state) {
 	}
 }
 
+/* Only a lost transport ignores the host. An agent that answers with an error
+ * or a walk that stops increasing still yields U for the count. */
+static void test_count_ignores_host_only_for_transport_failures(void **state) {
+	typedef struct {
+		int status;
+		test_reply_kind_t kind;
+		bool ignored;
+		int snmp_status;
+	} count_case_t;
+	static const count_case_t cases[] = {
+		{STAT_TIMEOUT, REPLY_NONE, TRUE, STAT_TIMEOUT},
+		{STAT_ERROR, REPLY_NONE, TRUE, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_AGENT_ERROR, FALSE, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_SCALAR, FALSE, STAT_SUCCESS}};
+	char text_oid[] = ".1.3.6.1.2.1.1";
+
+	(void) state;
+	for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
+		host_t host = {0};
+
+		host.snmp.session = (void *) (uintptr_t) 1;
+		reply_status = cases[index].status;
+		reply_kind = cases[index].kind;
+		print_message("count status=%d response kind=%d\n", reply_status, reply_kind);
+		/* REPLY_SCALAR repeats the same OID, so the second step does not increase. */
+		assert_int_equal(snmp_count(&host, text_oid), -1);
+		assert_int_equal(host.ignore_host, cases[index].ignored);
+		assert_int_equal(host.snmp.status, cases[index].snmp_status);
+	}
+}
+
 static void test_request_lock_and_cancellation_contract(void **state) {
 	host_t host = {0};
 	struct snmp_pdu *response = NULL;
@@ -736,6 +767,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_request_lock_and_cancellation_contract, session_reset),
 		cmocka_unit_test_setup(test_failed_session_restores_lock_and_cancellation, session_reset),
 		cmocka_unit_test_setup(test_single_request_transport_and_response_contracts, session_reset),
+		cmocka_unit_test_setup(test_count_ignores_host_only_for_transport_failures, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

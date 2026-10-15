@@ -357,10 +357,10 @@ int snmp_count(host_t *host, char *text_oid) {
 		more = snmp_count_response(&walk, &reply);
 		if (reply.response != NULL) snmp_free_pdu(reply.response);
 	}
-	if (walk.failed) {
-		host->ignore_host = TRUE;
-		if (host->snmp.status == STAT_SUCCESS) host->snmp.status = STAT_ERROR;
-	}
+	/* host->snmp.status holds the last transport outcome. An agent that
+	 * answered with an error or a broken walk is still reachable, so only
+	 * this count becomes U and the rest of the host keeps polling. */
+	if (walk.failed && host->snmp.status != STAT_SUCCESS) host->ignore_host = TRUE;
 	/* A negative count tells the caller this walk never produced a usable
 	 * result, so it is not mistaken for a legitimate zero-item count. */
 	return walk.failed ? -1 : walk.count;
