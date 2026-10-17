@@ -32,7 +32,9 @@
  */
 /* A connected socket accepts datagrams only from its peer. Port-unreachable
  * errors also indicate a response, but EHOSTUNREACH cannot distinguish a
- * firewall rejection from an unreachable host or failed neighbour lookup. */
+ * firewall rejection from an unreachable host or failed neighbour lookup. It
+ * is neither proof of life nor a reason to stop retrying, so the wait
+ * continues until the deadline and the caller decides whether to try again. */
 static int ping_udp_response(int fd, double deadline) {
 	char response[BUFSIZE];
 	for (;;) {
@@ -41,6 +43,10 @@ static int ping_udp_response(int fd, double deadline) {
 		ssize_t received = recv(fd, response, sizeof(response), 0);
 		if (received >= 0) return 1;
 		if (errno == ECONNRESET || errno == ECONNREFUSED) return 1;
+		if (errno == EHOSTUNREACH || errno == ENETUNREACH) continue;
+#ifdef EHOSTDOWN
+		if (errno == EHOSTDOWN) continue;
+#endif
 		if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 	}
 }
