@@ -12,7 +12,7 @@ Version:        1.3.0
 Release:        1%{?dist}
 Summary:        High-performance SNMP poller for Cacti
 
-License:        LGPL-2.1-or-later AND LGPL-2.1-only AND GPL-2.0-or-later AND BSD-4-Clause AND LicenseRef-Xenadyne
+License:        LGPL-2.1-or-later AND LGPL-2.1-only AND GPL-2.0-or-later AND BSD-1-Clause AND BSD-4-Clause AND LicenseRef-Xenadyne
 URL:            https://www.cacti.net/
 Source0:        https://github.com/Cacti/spine/archive/refs/tags/%{version}.tar.gz#/cacti-spine-%{version}.tar.gz
 
