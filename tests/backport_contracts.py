@@ -352,3 +352,17 @@ finish = spine_main[spine_main.rindex("SOCK_CLEANUP;"):]
 assert "exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);" in finish
 assert "exit(EXIT_SUCCESS)" not in finish
 print("maintenance-exit-status-contract: passed")
+
+# Transport-qualified device names must resolve to the address family of the
+# address itself, not fail the lookup because of the prefix or the port.
+ping_source = (root / "ping.c").read_text()
+util_source = (root / "util.c").read_text()
+run('maintenance-address-type-contract', '#include "common.h"\n#include "spine.h"\n#include "ping.h"\n' + '''
+config_t set;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+''' + function(util_source, 'int char_count(') + '\n' + function(ping_source, 'static int split_host_spec(') + '\n' + function(ping_source, 'static const char *ping_address(') + '\n' + function(ping_source, 'int get_address_type(') + '''
+int main(void){host_t host;const char *ipv4[]={"127.0.0.2","tcp:127.0.0.2","tcp:127.0.0.2:8080","UDP:127.0.0.2:161"};size_t i;
+ memset(&host,0,sizeof(host));
+ for(i=0;i<sizeof(ipv4)/sizeof(ipv4[0]);i++){snprintf(host.hostname,sizeof(host.hostname),"%s",ipv4[i]);assert(get_address_type(&host)==SPINE_IPV4);}
+ snprintf(host.hostname,sizeof(host.hostname),"%s","[::1]");assert(get_address_type(&host)!=SPINE_IPV4);return 0;}
+''')

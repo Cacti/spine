@@ -927,6 +927,7 @@ int ping_tcp(host_t *host, ping_t *ping) {
 int get_address_type(host_t *host) {
 	struct addrinfo hints, *res, *res_list;
 	char addrstr[255];
+	char address[BUFSIZE];
 	void *ptr = NULL;
 	int addr_found = FALSE;
 
@@ -937,7 +938,8 @@ int get_address_type(host_t *host) {
 	hints.ai_flags    = AI_CANONNAME | AI_ADDRCONFIG;
 	int error;
 
-	if ((error = getaddrinfo(host->hostname, NULL, &hints, &res_list)) != 0) {
+	/* The device name may carry a transport prefix and port, as in tcp:192.0.2.1:8080 */
+	if ((error = getaddrinfo(ping_address(host->hostname, address, sizeof(address)), NULL, &hints, &res_list)) != 0) {
 		SPINE_LOG(("WARNING: Unable to determine address info for %s (%s)", host->hostname, gai_strerror(error)));
 		return SPINE_NONE;
 	}
