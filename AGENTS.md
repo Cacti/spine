@@ -69,3 +69,12 @@ Keep credentials, customer data, `.omc/`, `.worktrees/` and generated output out
 of commits. Never disable checks or suppress findings just to obtain a passing
 result. Report the commands run, results and untested environments. Publishing,
 deploying, modifying live systems and merging require task authorization.
+
+## Maintenance fix scope
+
+Read and follow [.github/copilot-instructions.md](.github/copilot-instructions.md)
+for defect fixes. Before adding cache lifecycle machinery or hooks across APIs,
+show why the existing mechanism cannot support the fix and which operations
+change the derived result. Reconsider designs that introduce dependencies across
+unrelated subsystems. Passing tests alone do not justify expanded scope. Keep
+maintenance fixes small and compatible with the target branch.
