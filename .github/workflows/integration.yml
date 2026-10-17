@@ -3,7 +3,7 @@ name: Integration
 on:
   pull_request:
     branches: [develop, 'refactor/c17-series-*']
-    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/integration/**', 'tests/test-harness.sh', 'tests/snmpv3/**', '.github/workflows/integration.yml']
+    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/integration/**', 'tests/support/test-harness.sh', 'tests/snmpv3/**', '.github/workflows/integration.yml']
   workflow_dispatch:
 
 permissions:
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload integration diagnostics
         if: always() && matrix.database == 'mariadb'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.4.3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.4.3
         with:
           name: integration-diagnostics-${{ matrix.database }}
           path: test-artifacts
