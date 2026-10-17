@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: 2004-2026 The Cacti Group
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
+# This code is designed, written, and maintained by the Cacti Group. See
+# CONTRIBUTORS.md for developer information.
+#
 # Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 
@@ -96,7 +99,7 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h s
 
 EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
 	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
-	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
+	LICENSES/BSD-1-Clause.txt LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
 	tests/README.md \
 	tests/support/test-harness.sh \
 	tests/integration/test_concurrency.sh \
@@ -321,3 +324,5 @@ EXTRA_DIST += scripts/cppcheck/spine.cfg
 
 TESTS += tests/tools/test_memory_soak_fit.sh
 EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk
+TESTS += tests/tools/test_licensing.sh
+EXTRA_DIST += tests/tools/test_licensing.sh tests/tools/check_licensing.py
