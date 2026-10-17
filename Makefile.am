@@ -22,9 +22,35 @@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
-spine_shared_sources = sql.c util.c snmp.c src/core/locks.c poller.c \
-	nft_popen.c php.c ping.c src/core/keywords.c error.c
-spine_SOURCES = $(spine_shared_sources) spine.c
+spine_util_sources = util.c \
+	src/config/settings.c \
+	src/config/options.c \
+	src/config/file.c \
+	src/database/transfer.c \
+	src/core/log.c \
+	src/core/result.c \
+	src/core/privileges.c \
+	src/core/regex.c
+spine_database_sources = sql.c \
+	src/database/connection.c \
+	src/database/pool.c
+spine_snmp_sources = snmp.c \
+	src/snmp/session.c
+spine_ping_sources = ping.c \
+	src/ping/icmp_shared.c \
+	src/ping/icmp4.c \
+	src/ping/icmp6.c \
+	src/ping/transport.c \
+	src/ping/address.c
+spine_poller_sources = poller.c \
+	src/poller/script.c src/poller/query.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c
+
+spine_php_sources = php.c src/php/read.c src/php/process.c
+spine_process_sources = nft_popen.c src/process/fd.c
+
+spine_shared_sources = $(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) \
+	$(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) src/core/keywords.c error.c
+spine_SOURCES = $(spine_shared_sources) spine.c src/core/cli.c src/core/startup.c src/core/workers.c
 
 configdir = $(sysconfdir)
 dist_config_DATA = spine.conf.dist
@@ -61,7 +87,7 @@ if HAVE_LINKER_WRAP
 check_PROGRAMS += test_spine_faults
 # Reuse the real renamed spine object for its production globals, avoiding
 # another production main-renaming flag on the fault-test translation units.
-test_spine_faults_SOURCES = $(spine_shared_sources) tests/test_spine_faults.c
+test_spine_faults_SOURCES = $(spine_shared_sources) src/core/cli.c src/core/startup.c src/core/workers.c tests/test_spine_faults.c
 test_spine_faults_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)
 test_spine_faults_LDADD = test_spine_regressions-spine.$(OBJEXT)
 test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
@@ -157,7 +183,7 @@ tests_unit_test_safety_fixes_LDADD   = $(CMOCKA_LIBS)
 # Everything except spine.c is linked as built; tests/support/spine_runtime.c supplies the
 # globals that spine.c would define.
 tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
@@ -177,7 +203,7 @@ tests_unit_test_linked_CPPFLAGS += -DSPINE_TEST_WRAP_WAITPID
 endif
 
 tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
@@ -186,19 +212,19 @@ tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \
-	sql.c util.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	$(spine_database_sources) $(spine_util_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_ping_icmp_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 # poll_host() against an in-memory database and SNMP agent: the wrapped
 # calls are the ones poller.o makes into sql.o, snmp.o, ping.o and libmysql.
 tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_poll_host_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poll_host_LDFLAGS = \
@@ -211,22 +237,22 @@ tests_unit_test_poll_host_LDFLAGS = \
 
 # Includes ping.c directly so its socket calls can be steered; see the file.
 tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_ping_timing_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_log_config_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
-	sql.c util.c snmp.c src/core/locks.c poller.c nft_popen.c php.c ping.c \
+	$(spine_database_sources) $(spine_util_sources) $(spine_snmp_sources) src/core/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/core/keywords.c error.c
 tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_php_runtime_LDFLAGS = \
 	-Wl,--wrap=posix_spawn -Wl,--wrap=dup -Wl,--wrap=fcntl \
-	-Wl,--wrap=pthread_sigmask -Wl,--wrap=write \
+	-Wl,--wrap=write \
 	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
 	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/support/php_test_server"' \
@@ -245,6 +271,17 @@ EXTRA_DIST += scripts/debug.sh scripts/package.sh
 
 TESTS += tests/regression/test_helper_scripts.sh
 EXTRA_DIST += tests/regression/test_helper_scripts.sh
+
+noinst_HEADERS += src/config/settings_internal.h src/ping/ping_internal.h src/core/cli_internal.h
+
+noinst_HEADERS += src/poller/poller_internal.h src/core/startup_internal.h
+
+noinst_HEADERS += src/php/php_internal.h
+
+noinst_HEADERS += src/process/process_internal.h
+
+EXTRA_DIST += docs/architecture/source-modules.md
+
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg
 

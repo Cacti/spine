@@ -85,13 +85,18 @@ fi
 
 # Copy repository
 mkdir -p "${TMP_DIR}/cacti-spine-${VERSION}"
-if ! tar -cf - --exclude 'scripts/package.sh' --exclude '.svn' --exclude '.travis.yml' -- * | (
+if ! tar -cf - ./* | (
   cd "${TMP_DIR}/cacti-spine-${VERSION}" || exit 1
   tar -xf -
 ); then
   echo "ERROR: Unable to copy repository to ${TMP_DIR}/cacti-spine-${VERSION}" >&2
   exit 1
 fi
+
+# Native BSD tar has no GNU --exclude option. Prune obsolete metadata only
+# from the staged copy, after copying with portable tar arguments.
+find "${TMP_DIR}/cacti-spine-${VERSION}" \
+  \( -name .svn -o -name .travis.yml \) -prune -exec rm -rf -- {} +
 
 # Change working directory
 pushd "${TMP_DIR}/cacti-spine-${VERSION}" > /dev/null || exit 1

@@ -71,13 +71,12 @@ static int duplicate_at_fdsetsize(int fd) {
 	return duplicate;
 }
 
-int __real_pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
-int __wrap_pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
+int spine_php_test_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
 	if (fail_next_sigmask && how == SIG_BLOCK) {
 		fail_next_sigmask = FALSE;
 		return EAGAIN;
 	}
-	return __real_pthread_sigmask(how, set, oldset);
+	return pthread_sigmask(how, set, oldset);
 }
 
 ssize_t __real_write(int fd, const void *buffer, size_t length);
@@ -857,7 +856,9 @@ static void test_spawn_failure_releases_every_resource(void **state) {
 	/* calloc-like zeroes reproduce the process-wide initialization that used to
 	 * let a failed slot masquerade as stdin. php_init() must replace them. */
 	memset(&php_processes[0], 0, sizeof(php_processes[0]));
-	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", "/does/not/exist/spine-php-test");
+	/* POSIX allows exec errors to appear in the child. Inject an actual
+	 * parent-side spawn failure so this exercises the cleanup on every OS. */
+	fail_php_spawn_call = 1;
 	assert_int_equal(php_init(0), FALSE);
 	assert_int_equal(php_processes[0].php_pid, -1);
 	assert_int_equal(php_processes[0].php_read_fd, -1);

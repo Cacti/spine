@@ -17,6 +17,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #include "common.h"
 #include "spine.h"
@@ -87,6 +88,33 @@ static void test_spine_log_fits_a_musl_thread_stack(void **state) {
 		fail_msg("spine_log() killed a 128 KiB thread with signal %d", WTERMSIG(status));
 	}
 	assert_int_equal(WEXITSTATUS(status), 0);
+}
+
+static void test_new_log_permissions(void **state) {
+	char directory[] = "spine-log-mode-XXXXXX";
+	char path[128];
+	struct stat info;
+	mode_t previous_umask;
+	int result;
+
+	(void) state;
+	assert_non_null(mkdtemp(directory));
+	snprintf(path, sizeof(path), "%s/poller.log", directory);
+	memset(&set, 0, sizeof(set));
+	config_defaults();
+	set.logging.log_destination = LOGDEST_FILE;
+	set.logging.logfile_processed = TRUE;
+	set.console.stdout_notty = FALSE;
+	set.console.stderr_notty = TRUE;
+	STRNCOPY(set.logging.path_logfile, path);
+	previous_umask = umask(0);
+	spine_log("permission check");
+	umask(previous_umask);
+	result = stat(path, &info);
+	unlink(path);
+	rmdir(directory);
+	assert_int_equal(result, 0);
+	assert_int_equal(info.st_mode & 0777, 0640);
 }
 
 /* --- spine.conf parsing -------------------------------------------------- */
@@ -242,6 +270,7 @@ static void test_config_last_line_without_newline_is_read(void **state) {
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_spine_log_fits_a_musl_thread_stack),
+		cmocka_unit_test(test_new_log_permissions),
 		cmocka_unit_test_setup_teardown(test_config_long_key_is_not_truncated_into_a_known_key, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_every_known_key_is_accepted, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_long_value_is_kept_whole, config_setup, config_teardown),

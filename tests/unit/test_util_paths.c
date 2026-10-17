@@ -171,6 +171,15 @@ int ping_icmp_open_shared(void) { return 0; }
 int ping_icmp_shared_available(void) { return 0; }
 
 #include "../../util.c"
+#include "../../src/config/settings.c"
+#include "../../src/config/options.c"
+#include "../../src/config/file.c"
+#include "../../src/database/transfer.c"
+#include "../../src/core/log.c"
+#include "../../src/core/result.c"
+#include "../../src/core/privileges.c"
+#include "../../src/core/regex.c"
+
 
 #undef mysql_num_rows
 #undef mysql_get_server_version
