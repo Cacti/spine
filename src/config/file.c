@@ -95,8 +95,10 @@ static int apply_config_directive(const char *name, const char *value) {
  * the last byte nonzero before reading: fgets() only clears it when it filled
  * the buffer, which a string search cannot tell once the line holds a NUL. */
 static bool config_line_complete(FILE *fp, const char *line, size_t capacity) {
+	int next;
+
 	if (line[capacity - 1] != '\0' || line[capacity - 2] == '\n') return TRUE;
-	int next = getc(fp);
+	next = getc(fp);
 	if (next == EOF || next == '\n') return TRUE;
 	while (next != EOF && next != '\n') next = getc(fp);
 	return FALSE;
@@ -109,6 +111,7 @@ int read_spine_config(const char *file) {
 	char value[BUFSIZE];
 	char display_file[BUFSIZE];
 	int line = 0;
+	int fields;
 	strncopy(display_file, file, sizeof(display_file));
 	spine_sanitize_log_message(display_file);
 
@@ -136,7 +139,7 @@ int read_spine_config(const char *file) {
 		if (buff[0] == '#' || buff[0] == ' ' || buff[0] == '\n') continue;
 		/* Field widths match the line buffer, so no token is ever cut; the old
 		 * %15s handed the tail of a long key over as its value. */
-		int fields = sscanf(buff, "%1023s %1023s", name, value);
+		fields = sscanf(buff, "%1023s %1023s", name, value);
 		if (fields < 1) continue;
 		/* -C accepts any path, so report where the line is, never what it holds.
 		 * A lone token is a key without a value, or a line that is no

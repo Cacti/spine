@@ -43,8 +43,10 @@ standard, `configure` warns and continues.
 
 The supported compiler floor is:
 
-- GCC 8, the system compiler on Rocky Linux 8 and AlmaLinux 8, which are
-  supported until 2029-05-31;
+- GCC 8, the system compiler on Rocky Linux 8 and AlmaLinux 8. Those
+  releases left full vendor support on 2024-05-31 and receive security fixes
+  only until 2029-05-31, so the floor serves packagers who still build there
+  and is not a statement of CI coverage;
 - Clang 6 and Apple Clang;
 - MSVC 2019 16.8 (`/std:c17`), for the planned Windows port.
 
