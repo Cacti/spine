@@ -21,6 +21,14 @@ API = 'https://endoflife.date/api/v1/products/{}/'
 # support as eoasFrom for these families and keeps eolFrom for their later
 # phases (Debian LTS, the EL security-only phase), which do not qualify.
 # Elsewhere eolFrom is the end of full support.
+#
+# A release with no announced date is not supported forever. Its product needs
+# a manual review date here; once that date passes, the lane fails until
+# someone checks the vendor and moves the date.
+REVIEW_BY = {
+    'netbsd': datetime.date(2027, 4, 1),
+}
+
 FULL_SUPPORT_FIELD = {
     'almalinux': ('eoasFrom', 'isEoas'),
     'debian': ('eoasFrom', 'isEoas'),
@@ -77,11 +85,18 @@ def main() -> int:
         ended = bool(release.get(flag_field))
         if isinstance(eol, str) and datetime.date.fromisoformat(eol) <= today:
             ended = True
+        review = REVIEW_BY.get(product)
         if ended:
             print(f'{lane}: {product} {name} full support ended on {eol}')
             failures += 1
+        elif not isinstance(eol, str) and (review is None or review <= today):
+            print(f'{lane}: {product} {name} has no announced end of life and its review date '
+                  f'({review or "none set"}) has passed; check the vendor and update REVIEW_BY')
+            failures += 1
+        elif not isinstance(eol, str):
+            print(f'{lane}: no announced date, review due {review}')
         else:
-            print(f'{lane}: supported until {eol or "no announced date"}')
+            print(f'{lane}: supported until {eol}')
 
     if failures:
         print(f'{failures} lane(s) are past end of life or unknown; '
