@@ -37,12 +37,12 @@ SPINE_SRC := $(addprefix $(SPINE_ROOT)/, \
 	src/config/options.c \
 	src/config/file.c \
 	src/database/transfer.c \
-	src/log/log.c \
+	src/log/log.c src/log/json.c \
 	src/poller/result.c \
 	src/platform/privileges.c \
 	src/poller/regex.c src/database/sql.c \
 	src/database/connection.c \
-	src/database/pool.c src/snmp/requests.c src/snmp/response.c \
+	src/database/pool.c src/database/lease.c src/database/tls.c src/database/upsert.c src/snmp/requests.c src/snmp/response.c \
 	src/snmp/session.c src/platform/locks.c src/poller/poller.c \
 	src/script/external.c src/database/cacti_query.c src/database/persistence.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c src/process/nft_popen.c src/process/fd.c src/script/protocol.c src/script/read.c src/script/server.c \
 	src/config/keywords.c src/app/signals.c)
