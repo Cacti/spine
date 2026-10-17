@@ -3,7 +3,7 @@ name: Integration
 on:
   pull_request:
     branches: [develop, 'refactor/c17-series-*']
-    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/integration/**', 'tests/test-harness.sh', 'tests/snmpv3/**', '.github/workflows/integration.yml']
+    paths: ['**.c', '**.h', 'Dockerfile', '.dockerignore', 'tests/integration/**', 'tests/support/test-harness.sh', 'tests/snmpv3/**', '.github/workflows/integration.yml']
   workflow_dispatch:
 
 permissions:
