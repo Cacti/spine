@@ -58,13 +58,13 @@ struct keyword {
  *
  */
 static const struct keyword log_level[] = {
-	{ "NONE",   POLLER_VERBOSITY_NONE   },
-	{ "LOW",    POLLER_VERBOSITY_LOW    },
-	{ "MEDIUM", POLLER_VERBOSITY_MEDIUM },
-	{ "HIGH",   POLLER_VERBOSITY_HIGH   },
-	{ "DEBUG",  POLLER_VERBOSITY_DEBUG  },
+	{"NONE", POLLER_VERBOSITY_NONE},
+	{"LOW", POLLER_VERBOSITY_LOW},
+	{"MEDIUM", POLLER_VERBOSITY_MEDIUM},
+	{"HIGH", POLLER_VERBOSITY_HIGH},
+	{"DEBUG", POLLER_VERBOSITY_DEBUG},
 
-	{ 0, 0 }	/* ENDMARKER */
+	{.word = NULL, .value = 0} /* ENDMARKER */
 };
 
 /*! Log Destination Structure
@@ -74,12 +74,12 @@ static const struct keyword log_level[] = {
  *
  */
 static const struct keyword logdest[] = {
-	{ "FILE",   LOGDEST_FILE   },
-	{ "SYSLOG", LOGDEST_SYSLOG },
-	{ "BOTH",   LOGDEST_BOTH   },
-	{ "STDOUT", LOGDEST_STDOUT },
+	{"FILE", LOGDEST_FILE},
+	{"SYSLOG", LOGDEST_SYSLOG},
+	{"BOTH", LOGDEST_BOTH},
+	{"STDOUT", LOGDEST_STDOUT},
 
-	{ 0, 0 }	/* ENDMARKER */
+	{.word = NULL, .value = 0} /* ENDMARKER */
 };
 
 /*! Poller Action Structure
@@ -89,14 +89,14 @@ static const struct keyword logdest[] = {
  *
  */
 static const struct keyword actions[] = {
-	{ "SNMP",       POLLER_ACTION_SNMP               },
-	{ "SCRIPT",     POLLER_ACTION_SCRIPT             },
-	{ "PHPSCRIPT",	POLLER_ACTION_PHP_SCRIPT_SERVER  },
-	{ "SNMP_CT",        POLLER_ACTION_SNMP_COUNT               },
-	{ "SCRIPT_CT",      POLLER_ACTION_SCRIPT_COUNT             },
-	{ "PHPSCRIPT_CT",	POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT  },
+	{"SNMP", POLLER_ACTION_SNMP},
+	{"SCRIPT", POLLER_ACTION_SCRIPT},
+	{"PHPSCRIPT", POLLER_ACTION_PHP_SCRIPT_SERVER},
+	{"SNMP_CT", POLLER_ACTION_SNMP_COUNT},
+	{"SCRIPT_CT", POLLER_ACTION_SCRIPT_COUNT},
+	{"PHPSCRIPT_CT", POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT},
 
-	{ 0, 0 }	/* ENDMARKER */
+	{.word = NULL, .value = 0} /* ENDMARKER */
 };
 
 /*! \fn find_keyword_by_word(const struct keyword *tbl, const char *word, int dflt)
@@ -121,8 +121,8 @@ static const struct keyword actions[] = {
  */
 static int find_keyword_by_word(const struct keyword *tbl, const char *word, int dflt)
 {
-	assert(tbl  != 0);
-	assert(word != 0);
+	assert(tbl != NULL);
+	assert(word != NULL);
 
 	if (all_digits(word)) {
 		return atoi(word);
@@ -154,7 +154,7 @@ static int find_keyword_by_word(const struct keyword *tbl, const char *word, int
  *
  */
 static const char *find_keyword_by_value(const struct keyword *tbl, int value, const char *dflt) {
-	assert(tbl != 0);
+	assert(tbl != NULL);
 
 	for (; tbl->word; tbl++ ) {
 		if (tbl->value == value) {

@@ -124,16 +124,15 @@ int db_set_session_mode(MYSQL *mysql) {
  * -1 when the server could not be reached. After -1 the handle is initialized
  * but unconnected, so the next attempt closes and reconnects it again. */
 int db_reconnect(MYSQL *mysql, int type, int error, const char *function) {
-	unsigned long  mysql_thread = 0;
+	const unsigned long mysql_thread = mysql_thread_id(mysql);
 	char   query[100];
 	int    ping_status;
 
-	mysql_thread = mysql_thread_id(mysql);
 	ping_status  = mysql_ping(mysql);
 
 	if (mysql_thread_id(mysql) != mysql_thread) {
 		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect via mysql_ping() successful.", function, error));
-		snprintf(query, 100, "KILL %lu;", mysql_thread);
+		snprintf(query, sizeof(query), "KILL %lu;", mysql_thread);
 		mysql_query(mysql, query);
 
 		if (!db_set_session_mode(mysql)) return -1;
@@ -563,13 +562,12 @@ void db_free_result(MYSQL_RES *result) {
 
 /* TRUE or FALSE, or -1 when the probe itself failed. */
 int db_column_exists(MYSQL *mysql, int type, const char *table, const char *column) {
-	char       query_frag[BUFSIZE];
-   MYSQL_RES *result;
+	char query_frag[BUFSIZE] = {0};
+	MYSQL_RES *result;
 	int        exists;
 
 	/* save a fragment just in case */
-	memset(query_frag, 0, BUFSIZE);
-	snprintf(query_frag, BUFSIZE, "SHOW COLUMNS FROM `%s` LIKE '%s'", table, column);
+	snprintf(query_frag, sizeof(query_frag), "SHOW COLUMNS FROM `%s` LIKE '%s'", table, column);
 
 	/* show the sql query */
 	SPINE_LOG_DEVDBG(("DEVDBG: db_column_exists('%s','%s'): %s", table, column, query_frag));

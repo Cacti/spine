@@ -1,4 +1,4 @@
-name: Concurrency soak
+name: Polling soak
 
 on:
   schedule:
@@ -37,5 +37,56 @@ jobs:
         with:
           name: concurrency-soak
           path: test-artifacts/concurrency-soak
+          if-no-files-found: error
+          retention-days: 30
+
+  memory-soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    services:
+      database:
+        image: mirror.gcr.io/library/mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: spine_regressions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build polling binary and load disposable fixtures
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool help2man libmariadb-dev mariadb-client libsnmp-dev snmpd libssl-dev libcmocka-dev time
+          mkdir -p config m4
+          autoreconf -fi
+          ./configure
+          make -j2
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/configuration.sql
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/poller.sql
+      - name: Measure repeated complete polling cycles for one hour
+        env:
+          SPINE_TEST_DB_HOST: 127.0.0.1
+          SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_TEST_ARTIFACT_DIR: test-artifacts/memory-soak
+        run: |
+          set -euo pipefail
+          mkdir -p test-artifacts/memory-soak
+          snmpd -f -Lo -C -c tests/fixtures/snmpd.conf > test-artifacts/memory-soak/snmp-agent.log 2>&1 &
+          agent_pid=$!
+          trap 'kill "$agent_pid"; wait "$agent_pid" || true' EXIT
+          sleep 1
+          tests/integration/test_memory_soak.sh
+      - name: Upload memory soak diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.4.3
+        with:
+          name: memory-soak
+          path: test-artifacts/memory-soak
           if-no-files-found: error
           retention-days: 30

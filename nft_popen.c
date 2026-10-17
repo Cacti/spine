@@ -405,7 +405,7 @@ int nft_popen(const char * command, const char * type) {
 	/* Disable thread cancellation from this point forward. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
-	if ((cur = malloc(sizeof(struct pid))) == NULL) {
+	if ((cur = malloc(sizeof(*cur))) == NULL) {
 		(void)close(pdes[0]);
 		(void)close(pdes[1]);
 		pthread_setcancelstate(cancel_state, NULL);

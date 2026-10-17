@@ -1165,7 +1165,7 @@ static MYSQL_RES *select_poll_items(MYSQL *mysql, const poller_queries_t *querie
 static poll_item_storage_t load_poll_items(MYSQL_RES *result, host_t *host, int num_rows) {
 	poll_item_storage_t storage;
 	/* retrieve each hosts polling items from poller cache and load into array */
-	storage.items = (target_t *) calloc(num_rows, sizeof(target_t));
+	storage.items = calloc(num_rows, sizeof(*storage.items));
 	if (storage.items == NULL) die("ERROR: Fatal calloc error: poller.c poller_items");
 
 	int i = 0;
@@ -1183,7 +1183,7 @@ static poll_item_storage_t load_poll_items(MYSQL_RES *result, host_t *host, int 
 	if (host->snmp.max_oids <= 0) {
 		host->snmp.max_oids = 1;
 	}
-	storage.oids = (snmp_oids_t *) calloc(host->snmp.max_oids, sizeof(snmp_oids_t));
+	storage.oids = calloc(host->snmp.max_oids, sizeof(*storage.oids));
 	if (storage.oids == NULL) {
 		die("ERROR: Fatal calloc error: poller.c snmp_oids");
 	}
@@ -1308,7 +1308,7 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 
 	if (!poll_failed && errors > 0) {
 		int error_query_len = spine_count_to_int(strlen(error_string) + BUFSIZE);
-		char *error_query = (char *)malloc(error_query_len);
+		char *error_query = malloc(error_query_len);
 		if (error_query == NULL) die("ERROR: Fatal malloc error: poller.c error_query!");
 
 		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"
@@ -1378,9 +1378,9 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 
 
 	int  errors = 0;
-	int  *buf_errors;
-	int  *buf_size;
-	char *error_string;
+	int buf_errors = 0;
+	int buf_size = 0;
+	char error_string[DBL_BUFSIZE] = {0};
 
 	int    num_rows;
 	int    spike_kill = FALSE;
@@ -1404,27 +1404,13 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	target_t    *poller_items = NULL;
 	snmp_oids_t *snmp_oids = NULL;
 
-	if (!(error_string = malloc(DBL_BUFSIZE))) {
-		die("ERROR: Fatal malloc error: poller.c error_string!");
-	}
-	if (!(buf_size = malloc(sizeof(int)))) {
-		die("ERROR: Fatal malloc error: poller.c buf_size!");
-	}
-	if (!(buf_errors = malloc(sizeof(int)))) {
-		die("ERROR: Fatal malloc error: poller.c buf_errors!");
-	}
-
-	if (error_string == NULL || buf_size == NULL || buf_errors == NULL) {
-		die("ERROR: Fatal malloc error: poller error buffer!");
-	}
-	/* Reindex assertion failures count errors without naming a data source,
-	 * so the list can reach the host_errors INSERT before anything is added. */
-	error_string[0] = '\0';
-	*buf_size = 0;
-	*buf_errors = 0;
 	const poll_error_context_t error_context = {
-		error_string, buf_size, buf_errors, &errors, host_id, host_thread
-	};
+		.buffer = error_string,
+		.size = &buf_size,
+		.count = &buf_errors,
+		.errors = &errors,
+		.host_id = host_id,
+		.thread_id = host_thread};
 
 	MYSQL     *mysql;
 	MYSQL     *mysqlr = NULL;
@@ -1442,9 +1428,6 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	if (local_cnn == NULL) {
 		SPINE_LOG(("ERROR: Device[%i] HT[%i] No database connection available for polling", host_id, host_thread));
 		complete_poll_host(NULL, NULL, work, &error_context, FALSE, TRUE, poll_time);
-		SPINE_FREE(error_string);
-		SPINE_FREE(buf_size);
-		SPINE_FREE(buf_errors);
 		mysql_thread_end();
 		return;
 	}
@@ -1489,9 +1472,6 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 		SPINE_FREE(host);
 		SPINE_FREE(reindex);
 		SPINE_FREE(ping);
-		SPINE_FREE(error_string);
-		SPINE_FREE(buf_size);
-		SPINE_FREE(buf_errors);
 		mysql_thread_end();
 
 		return;
@@ -1505,9 +1485,6 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 		SPINE_FREE(host);
 		SPINE_FREE(reindex);
 		SPINE_FREE(ping);
-		SPINE_FREE(error_string);
-		SPINE_FREE(buf_size);
-		SPINE_FREE(buf_errors);
 
 		release_poll_connections(work, local_cnn, remote_cnn);
 
@@ -1574,12 +1551,8 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_DEBUG, ("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 
 	if (set.logging.spine_log_level == 1) {
-		buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, 0, true);
+		buffer_output_errors(error_string, &buf_size, &buf_errors, host_id, host_thread, 0, true);
 	}
-
-	SPINE_FREE(error_string);
-	SPINE_FREE(buf_size);
-	SPINE_FREE(buf_errors);
 
 	*host_errors = errors;
 }

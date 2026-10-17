@@ -21,17 +21,17 @@
 # | http://www.cacti.net/                                                   |
 # +-------------------------------------------------------------------------+
 
-if [[ -z $SPINE_CONFIG ]]; then
+if [[ -z ${SPINE_CONFIG:-} ]]; then
 	export SPINE_CONFIG="/etc/spine.conf";
 fi
 
-make
-
-if [[ $? -eq 0 ]]; then
+if make; then
 	echo
 	echo ------
-	echo Debugging using SPINE_CONFIG = $SPINE_CONFIG
+	echo "Debugging using SPINE_CONFIG = $SPINE_CONFIG"
 	echo
 	echo
-	gdb -quiet -ex run --args ./spine -R -V 6 -C $SPINE_CONFIG
+	gdb -quiet -ex run --args ./spine -R -V 6 -C "$SPINE_CONFIG"
+else
+	exit 1
 fi

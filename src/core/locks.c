@@ -72,7 +72,7 @@ DEFINE_SPINE_LOCK(php_proc_14)
 DEFINE_SPINE_LOCK(thdet)
 DEFINE_SPINE_LOCK(host_time)
 
-void init_mutexes() {
+void init_mutexes(void) {
 	pthread_once(get_attr(LOCK_SNMP_O),        init_snmp_lock);
 	pthread_once(get_attr(LOCK_ICMP_O),        init_icmp_lock);
 	pthread_once(get_attr(LOCK_GHBN_O),        init_ghbn_lock);
@@ -242,7 +242,7 @@ void thread_mutex_unlock(int mutex) {
 
 int thread_mutex_trylock(int mutex) {
 	SPINE_LOG_DEVDBG(("LOCKS: [START] Mutex try lock for %s", get_name(mutex)));
-	int ret_val = pthread_mutex_trylock(get_lock(mutex));
+	const int ret_val = pthread_mutex_trylock(get_lock(mutex));
 	SPINE_LOG_DEVDBG(("LOCKS: [END]   Mutex try lock for %s, result = %d", get_name(mutex), ret_val));
 	return ret_val;
 }
