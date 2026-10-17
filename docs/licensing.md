@@ -19,6 +19,14 @@ nonstandard permission text in `LICENSES/LicenseRef-Xenadyne.txt`. This cleanup
 does not relicense those contributions or resolve historical license-compatibility
 questions.
 
+The vendored `vendor/uthash/uthash.h` is Troy D. Hanson's BSD-1-Clause code; its
+text is in `LICENSES/BSD-1-Clause.txt` and in `packaging/debian/copyright`. It
+keeps its own notice and carries no SPDX line.
+
 Vendored sources, historical SQL/behavior fixtures and fuzz corpora retain their
 original bytes. Generated Autotools files retain their generator's notices.
 These scoped annotations are not a claim of whole-repository REUSE certification.
+
+`tests/tools/check_licensing.py` fails when a tracked source file lacks an SPDX
+header or when `packaging/debian/copyright` names a different license for it. It
+runs as part of `make check`.
