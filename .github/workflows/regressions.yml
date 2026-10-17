@@ -12,7 +12,18 @@ permissions:
 jobs:
   regressions:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        client:
+          - choice: mariadb
+            package: libmariadb-dev
+          - choice: mysql
+            package: libmysqlclient-dev
+    env:
+      SPINE_CLIENT_PACKAGE: ${{ matrix.client.package }}
+      SPINE_CLIENT_CHOICE: ${{ matrix.client.choice }}
     services:
       database:
         image: mirror.gcr.io/library/mariadb:10.11
@@ -26,6 +37,19 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      remote-database:
+        image: mirror.gcr.io/library/mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: '1'
+          MYSQL_ROOT_HOST: '%'
+          MYSQL_DATABASE: spine_regressions
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,23 +58,31 @@ jobs:
         run: |
           set -eu
           sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool help2man libmariadb-dev mariadb-client libsnmp-dev snmpd libssl-dev libcap2-bin libcmocka-dev lcov
+          sudo apt-get install -y autoconf automake libtool help2man "$SPINE_CLIENT_PACKAGE" mariadb-client libsnmp-dev snmpd libssl-dev libcap2-bin libcmocka-dev lcov
       - name: Build and test production code
         run: |
           set -eu
           mkdir -p config m4
           autoreconf -fi
-          ./configure
-          make -j2 check
+          ./configure --with-mysql-client="$SPINE_CLIENT_CHOICE"
+          if ! make -j2 check; then
+            cat test-suite.log
+            exit 1
+          fi
       - name: Verify database configuration loading
         env:
           SPINE_TEST_DB_HOST: 127.0.0.1
+          SPINE_TEST_REMOTE_DB_HOST: 127.0.0.1
         run: |
           set -eu
           mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/configuration.sql
           mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions < tests/fixtures/poller.sql
+          # The fixture preserves Cacti's historical zero-date defaults.
+          mariadb --protocol=TCP --host=127.0.0.1 --port=3307 --user=root --init-command="SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'" spine_regressions < tests/fixtures/configuration.sql
+          mariadb --protocol=TCP --host=127.0.0.1 --port=3307 --user=root --init-command="SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'" spine_regressions < tests/fixtures/poller.sql
           ./test_spine_regressions --database
       - name: Verify SNMP availability against local agent
+        # TLS fixtures are separate from the schema-mutating database suites.
         env:
           SPINE_TEST_SNMP_HOST: 127.0.0.1
           SPINE_TEST_DB_HOST: 127.0.0.1
@@ -67,6 +99,15 @@ jobs:
         env:
           SPINE_SNMPV3_EVIDENCE_DIR: snmpv3-evidence
         run: tests/tools/run_snmpv3.sh
+      - name: Verify database TLS trust and downgrade boundaries
+        run: bash tests/tools/run_database_tls.sh
+      - name: Preserve database TLS evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: database-tls-${{ matrix.client.choice }}-${{ github.sha }}
+          path: tls-evidence/
+          if-no-files-found: error
       - name: Verify ICMP against local loopback
         run: |
           set -eu
@@ -100,6 +141,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: production-coverage-${{ github.sha }}
+          name: production-coverage-${{ matrix.client.choice }}-${{ github.sha }}
           path: coverage/
           if-no-files-found: error

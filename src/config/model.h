@@ -16,6 +16,8 @@
 #ifndef SPINE_CONFIG_MODEL_H
 #define SPINE_CONFIG_MODEL_H
 
+#include <stdbool.h>
+
 #include <stddef.h>
 #include "internal/constants.h"
 
@@ -56,6 +58,15 @@ typedef struct {
 } spine_hosts_config_t;
 
 /* Database configuration and runtime state. */
+typedef enum {
+	SPINE_TLS_LEGACY = 0,
+	SPINE_TLS_DISABLED,
+	SPINE_TLS_PREFERRED,
+	SPINE_TLS_REQUIRED,
+	SPINE_TLS_VERIFY_CA,
+	SPINE_TLS_VERIFY_FULL
+} spine_tls_mode_t;
+
 typedef struct {
 	char host[BUFSIZE];
 	char database[BUFSIZE];
@@ -65,6 +76,10 @@ typedef struct {
 	char ssl_key[BUFSIZE];
 	char ssl_cert[BUFSIZE];
 	char ssl_ca[BUFSIZE];
+	spine_tls_mode_t tls_mode;
+	int tls_min_version;
+	char tls_cipher[BUFSIZE];
+	char tls_ciphersuites[BUFSIZE];
 	unsigned int port;
 	char version[BUFSIZE];
 	int onupdate;
@@ -75,6 +90,10 @@ typedef struct {
 	char path_php[BUFSIZE];
 	char path_php_server[BUFSIZE];
 	int script_timeout;
+	unsigned int script_max_output;
+	unsigned int script_cpu_seconds;
+	unsigned int script_memory_mb;
+	char script_executable[BUFSIZE];
 	int php_required;
 	int php_initialized;
 	int php_servers;
@@ -94,6 +113,7 @@ typedef struct {
 	int spine_log_level;
 	int log_datetime_separator;
 	int log_datetime_format;
+	bool json_logs;
 } spine_logging_config_t;
 
 /* Availability configuration and runtime state. */

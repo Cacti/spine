@@ -215,6 +215,10 @@ typedef struct db_connection {
 	int id;
 	int free;
 	MYSQL mysql;
+	struct db_pool_ownership *ownership;
+	pthread_t borrower;
+	uint64_t generation;
+	bool leased;
 } pool_t;
 
 #endif /* SPINE_TYPES_H */

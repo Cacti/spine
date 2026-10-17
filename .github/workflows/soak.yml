@@ -5,6 +5,8 @@ name: Soak
 # an hour every night and fails when peak RSS per cycle trends upward.
 
 on:
+  pull_request:
+    types: [labeled, synchronize]
   schedule:
     - cron: '23 5 * * 1'
     - cron: '7 3 * * *'
@@ -24,14 +26,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: spine-concurrency-soak
+  group: spine-concurrency-soak-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   concurrency-soak:
     if: >-
       github.event.schedule == '23 5 * * 1' ||
-      (github.event_name == 'workflow_dispatch' && inputs.soak != 'memory')
+      (github.event_name == 'workflow_dispatch' && inputs.soak != 'memory') ||
+      (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -63,7 +68,10 @@ jobs:
   memory-soak:
     if: >-
       github.event.schedule == '7 3 * * *' ||
-      (github.event_name == 'workflow_dispatch' && inputs.soak != 'concurrency')
+      (github.event_name == 'workflow_dispatch' && inputs.soak != 'concurrency') ||
+      (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
     runs-on: ubuntu-24.04
     # 100 minutes of polling at most, plus the build and fixture setup.
     timeout-minutes: 120

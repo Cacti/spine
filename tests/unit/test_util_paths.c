@@ -56,12 +56,22 @@ static int host_insert_failures;
 
 #define mysql_num_rows test_mysql_num_rows
 #define mysql_get_server_version test_mysql_get_server_version
+#define mysql_get_server_info test_mysql_get_server_info
+static const char *destination_version = "10.11.0-MariaDB";
+static unsigned long destination_number = 101100;
+const char *test_mysql_get_server_info(MYSQL *mysql) {
+	(void) mysql;
+	return destination_version;
+}
 #define mysql_fetch_row test_mysql_fetch_row
 #define mysql_num_fields test_mysql_num_fields
 #define mysql_errno test_mysql_errno
 
 my_ulonglong test_mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
-unsigned long test_mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+unsigned long test_mysql_get_server_version(MYSQL *mysql) {
+	(void) mysql;
+	return destination_number;
+}
 /* The remote push checks the column count against its transfer plan. */
 unsigned int test_mysql_num_fields(MYSQL_RES *res) { (void) res; return fake_query_kind == FAKE_QUERY_ITEMS ? 5 : 21; }
 unsigned int test_mysql_errno(MYSQL *mysql) { (void) mysql; return 0; }
@@ -189,6 +199,7 @@ int ping_icmp_shared_available(void) { return 0; }
 #include "../../src/config/settings.c"
 #include "../../src/config/options.c"
 #include "../../src/config/file.c"
+#include "../../src/database/upsert.c"
 #include "../../src/database/transfer.c"
 #include "../../src/log/log.c"
 #include "../../src/poller/result.c"
@@ -199,6 +210,37 @@ int ping_icmp_shared_available(void) { return 0; }
 
 #undef mysql_num_rows
 #undef mysql_get_server_version
+#undef mysql_get_server_info
+
+static void test_upsert_destination_capabilities(void **state) {
+	MYSQL destination;
+	char suffix[BUFSIZE];
+	const char *const updates[] = {"output", "rrd_next_step"};
+	const char *const invalid[] = {NULL};
+	const char *const empty[] = {""};
+	const char *versions[] = {"5.7.44", "8.0.18", "8.0.19", "8.4.0", "5.5.5-11.4.0-MariaDB", NULL};
+	const unsigned long numbers[] = {50744, 80018, 80019, 80400, 110400, 0};
+	size_t i;
+	(void) state;
+	memset(&destination, 0, sizeof(destination));
+	for (i = 0; i < sizeof(versions) / sizeof(versions[0]); i++) {
+		destination_version = versions[i];
+		destination_number = numbers[i];
+		assert_true(db_upsert_suffix(&destination, suffix, sizeof(suffix), updates, 2));
+		assert_non_null(strstr(suffix, i == 2 || i == 3 ? "output=spine_row.output" : "output=VALUES(output)"));
+	}
+	assert_true(db_upsert_suffix(NULL, suffix, sizeof(suffix), updates, 2));
+	assert_false(db_upsert_suffix(NULL, NULL, 1, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, 0, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), NULL, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), updates, 0));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), invalid, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), empty, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, 2, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, strlen(" ON DUPLICATE KEY UPDATE ") + 1, updates, 1));
+	destination_version = "10.11.0-MariaDB";
+	destination_number = 101100;
+}
 #undef mysql_fetch_row
 #undef mysql_num_fields
 #undef mysql_errno
@@ -605,6 +647,7 @@ static void test_spine_log_does_not_double_an_existing_newline(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_upsert_destination_capabilities),
 		cmocka_unit_test(test_initial_value_matches_the_default),
 		cmocka_unit_test(test_each_format_code_is_distinct),
 		cmocka_unit_test(test_format_codes_produce_expected_strings),

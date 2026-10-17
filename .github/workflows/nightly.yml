@@ -6,6 +6,8 @@ name: Nightly
 # memcheck and helgrind.
 
 on:
+  pull_request:
+    types: [labeled, synchronize]
   schedule:
     - cron: "41 2 * * *"
   workflow_dispatch:
@@ -19,6 +21,10 @@ concurrency:
 
 jobs:
   dynamic:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
     name: ${{ matrix.tool }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -101,6 +107,12 @@ jobs:
       - name: Build
         run: make -j"$(nproc)"
 
+      - name: Verify expected test suites are enabled
+        run: |
+          set -euo pipefail
+          make --no-print-directory coverage-unit-program-list > nightly-suites.txt
+          printf '%s\n' test_spine_regressions test_spine_faults >> nightly-suites.txt
+
       # Under Valgrind, test_linked's 20 ms reap budget is too short, and
       # posix_spawn() cannot report a missing executable, which the PHP
       # startup tests in the other two programs assert. Those three report
@@ -119,6 +131,7 @@ jobs:
       - name: Load the regression fixtures
         run: |
           set -euo pipefail
+          bash .github/scripts/verify-nightly-suites.sh nightly-suites.txt
           for fixture in configuration poller; do
             mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions \
               < "tests/fixtures/$fixture.sql"
@@ -154,12 +167,13 @@ jobs:
           done
 
       - name: Upload logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nightly-${{ matrix.tool }}-logs
           path: |
+            nightly-suites.txt
             test-suite.log
             tests/**/*.log
             ./*.log
-          if-no-files-found: ignore
+          if-no-files-found: error

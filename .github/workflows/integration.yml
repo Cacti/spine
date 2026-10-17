@@ -2,7 +2,7 @@ name: Integration
 
 on:
   pull_request:
-    branches: [develop, 'refactor/c17-series-*']
+    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening']
     paths:
       - '**.c'
       - '**.h'
@@ -29,7 +29,7 @@ jobs:
   snmpv3:
     name: SNMPv3 integration (${{ matrix.database }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -70,8 +70,21 @@ jobs:
           set -euo pipefail
           tests/integration/test_network_faults.sh
 
+      - name: Exercise healthy hosts beside a delayed or unreachable v3 device
+        if: matrix.database == 'mariadb'
+        run: |
+          set -euo pipefail
+          for fault in delay loss; do
+            SPINE_TEST_SNMP_FAULT="$fault" SPINE_TEST_HOSTS=8 SPINE_TEST_THREAD_COUNTS='1 4 12' \
+              SPINE_TEST_ARTIFACT_DIR="test-artifacts/mixed-$fault" tests/integration/test_concurrency.sh
+          done
+
       - name: Reap a real PHP script-server process
         run: tests/integration/test_script_server_reap.sh
+
+      - name: Verify destination-specific inserts and duplicate updates
+        if: matrix.database == 'mariadb'
+        run: bash tests/integration/test_destination_upserts.sh
 
       - name: Show container logs on failure
         if: failure()
