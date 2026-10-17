@@ -390,6 +390,32 @@ EXTRA_DIST += tests/tools/benchmark_builds.py \
 	docs/benchmarks/results/2026-10-11-default-logging/metadata.json \
 	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
 	docs/benchmarks/results/2026-10-11-default-logging/summary.json
+
+EXTRA_DIST += docs/benchmarks/results/2026-10-11-recovered-runtime/README.md \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/baseline-binary.sha256 \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/baseline-revision.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/candidate-binary.sha256 \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/candidate-revision.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/compiler.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/cycles.csv \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/metadata.json \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/summary.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/README.md \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/compiler.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cycles.csv \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/metadata.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/revisions.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json
+
+EXTRA_DIST += docs/adr/0004-formatting-and-json-dependencies.md \
+	docs/operations/database-tls.md \
+	docs/operations/issue-boundaries.md
 EXTRA_DIST += docs/platforms.md
 
 TESTS += tests/tools/test_memory_soak_fit.sh
