@@ -1207,7 +1207,8 @@ static void start_test_worker(pthread_t *worker, void *(*start)(void *), void *a
 	assert(pthread_attr_destroy(&attributes) == 0);
 }
 
-/* A larger default is kept, and a refused size is reported, not ignored. */
+/* A larger default is kept, and a refused size is reported, not ignored.
+ * pthread_setattr_default_np() is a glibc extension; musl lacks it. */
 static void test_thread_attr_init(void) {
 	pthread_attr_t attributes;
 	size_t stack_size = 0;
@@ -1216,6 +1217,7 @@ static void test_thread_attr_init(void) {
 	assert(spine_thread_attr_init(&attributes) == EINVAL);
 	assert(stack_size_failures == 0);
 
+#if defined(__GLIBC__)
 	fflush(NULL);
 	pid_t process = fork();
 	assert(process >= 0);
@@ -1233,6 +1235,7 @@ static void test_thread_attr_init(void) {
 	int status;
 	assert(waitpid(process, &status, 0) == process);
 	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+#endif
 
 	assert(spine_thread_attr_init(&attributes) == 0);
 	assert(pthread_attr_getstacksize(&attributes, &stack_size) == 0);

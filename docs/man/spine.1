@@ -90,6 +90,12 @@ Per-process virtual address-space limit in MiB using Linux RLIMIT_AS.
 Nonzero values are rejected on other platforms. This is not an RSS or aggregate
 descendant-memory limit.
 .PP
+With ScriptCpuSeconds or ScriptMemoryMB set, each command starts through a second
+execution of the Spine binary. When Spine is installed setuid root, the C
+library treats that execution as secure and removes LD_LIBRARY_PATH,
+LD_PRELOAD, TMPDIR and similar variables from the command's environment.
+Commands that depend on them need the values set inside the command itself.
+.PP
 Values must be nonnegative decimal integers. Invalid or unsupported configured
 limits fail startup. A missing resource helper fails command submission.
 Timeouts and output breaches terminate the owned process group. Diagnostics
