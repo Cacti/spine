@@ -100,7 +100,6 @@ void *child(void *arg) {
 	int device_counter;
 	int host_id;
 	int host_thread;
-	int host_threads;
 	int host_data_ids;
 	int host_errors;
 	double host_time_double;
@@ -113,7 +112,6 @@ void *child(void *arg) {
 	device_counter   = poller_details.device_counter;
 	host_id          = poller_details.host_id;
 	host_thread      = poller_details.host_thread;
-	host_threads     = poller_details.host_threads;
 	host_data_ids    = poller_details.host_data_ids;
 	host_time_double = poller_details.host_time_double;
 
@@ -130,7 +128,7 @@ void *child(void *arg) {
 		SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] In Poller, About to Start Polling", host_id, host_thread));
 	}
 
-	poll_host(device_counter, host_id, host_thread, host_threads, host_data_ids, host_time, &host_errors, host_time_double);
+	poll_host(device_counter, host_id, host_thread, host_data_ids, host_time, &host_errors, host_time_double);
 
 	pthread_cleanup_pop(1);
 
@@ -140,7 +138,7 @@ void *child(void *arg) {
 	exit(0);
 }
 
-/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
+/*! \fn void poll_host(int device_counter, int host_id, int host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double)
  *  \brief core Spine function that polls a host
  *  \param host_id integer value for the host_id from the hosts table in Cacti
  *
@@ -162,7 +160,7 @@ void *child(void *arg) {
  *  as the host poller_items table dictates.
  *
  */
-void poll_host(int device_counter, int host_id, int host_thread, int host_threads, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
+void poll_host(int device_counter, int host_id, int host_thread, int host_data_ids, char *host_time, int *host_errors, double host_time_double) {
 	char query1[BUFSIZE];
 	char query2[BIG_BUFSIZE];
 	char *query3 = NULL;
@@ -414,15 +412,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			"INSERT INTO poller_output"
 			" (local_data_id, rrd_name, time, output) VALUES");
 
-		/* query suffix to add rows to the poller output table */
-		if (set.dbonupdate == 0) {
-			snprintf(posuffix, BUFSIZE,
-				" ON DUPLICATE KEY UPDATE output=VALUES(output)");
-		} else {
-			snprintf(posuffix, BUFSIZE,
-				" AS rs ON DUPLICATE KEY UPDATE output=rs.output");
-		}
-
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
 			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
@@ -553,10 +542,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 			"INSERT INTO poller_output"
 			" (local_data_id, rrd_name, time, output) VALUES");
 
-		/* query suffix to add rows to the poller output table */
-		snprintf(posuffix, BUFSIZE,
-			" ON DUPLICATE KEY UPDATE output=VALUES(output)");
-
 		/* number of agent's count for single polling interval */
 		snprintf(query9, BUFSIZE,
 			"SELECT SQL_NO_CACHE snmp_port, count(snmp_port)"
@@ -591,7 +576,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 
 	query8_len   = strlen(query8);
 	query11_len  = strlen(query11);
-	posuffix_len = strlen(posuffix);
 
 	/* initialize the ping structure variables */
 	snprintf(ping->ping_status,   50,            "down");
@@ -628,6 +612,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				SPINE_FREE(error_string);
 				SPINE_FREE(buf_size);
 				SPINE_FREE(buf_errors);
+
+				/* A missing or duplicated device row means this partition never
+				 * polled; keep the schedule from advancing and report it. */
+				thread_mutex_lock(LOCK_THDET);
+				details[device_counter]->output_failed = TRUE;
+				set.exit_code = EXIT_FAILURE;
+				thread_mutex_unlock(LOCK_THDET);
 
 				mysql_thread_end();
 
