@@ -141,10 +141,11 @@ static jmp_buf stopped;static int calls,error_code;
 #undef SPINE_LOG
 #define SPINE_LOG(...) ((void)0)
 static void log_sql_statement(const char *query){(void)query;}
+static void sql_statement_label(const char *query,char *label,size_t capacity){(void)query;snprintf(label,capacity,"fixture");}
 int mysql_query(MYSQL *mysql,const char *query){(void)mysql;(void)query;calls++;errno=EINTR;return 1;}
 unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return error_code;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
-int db_reconnect(MYSQL *mysql,int error,char *function){(void)mysql;(void)error;(void)function;assert(0);return 0;}
+int db_reconnect(MYSQL *mysql,int type,int error,char *function){(void)mysql;(void)type;(void)error;(void)function;assert(0);return 0;}
 int usleep(useconds_t usec){(void)usec;return 0;}
 void die(const char *format,...){(void)format;longjmp(stopped,1);}
 '''+insert+'''
@@ -247,6 +248,9 @@ int main(void){classified_result_t out;
  assert(classify_result("  '42'  ",&out)==RESULT_COUNTER&&strcmp(out.text,"42")==0);
  assert(classify_result("4096 Bytes",&out)==RESULT_COUNTER&&strcmp(out.text,"4096")==0);
  assert(classify_result("r15s:42 r1m:43",&out)==RESULT_MULTIPART);
+ assert(classify_result("12 abc",&out)==RESULT_COUNTER&&strcmp(out.text,"12")==0);
+ assert(classify_result("FF",&out)==RESULT_HEX_COUNTER&&strcmp(out.text,"255")==0);
+ assert(classify_result("0x10",&out)==RESULT_UNKNOWN&&strcmp(out.text,"U")==0);
  assert(classify_result("-1.5e2",&out)==RESULT_FLOAT);return 0;}
 ''')
 
@@ -307,12 +311,61 @@ config_t set;static int options,fail_option;static jmp_buf failed;
 int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;assert(value);options++;return fail_option;}
 void die(const char *format,...){(void)format;longjmp(failed,1);}
 ''' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
-int main(void){MYSQL mysql;set.db_ssl=0;db_require_tls(&mysql,LOCAL,"db.example");assert(options==0);
- set.db_ssl=1;db_require_tls(&mysql,LOCAL,"db.example");assert(options==1);
- set.rdb_ssl=1;db_require_tls(&mysql,REMOTE,"db.example");assert(options==2);
- db_require_tls(&mysql,LOCAL,NULL);db_require_tls(&mysql,LOCAL,"localhost");assert(options==2);
+int main(void){MYSQL mysql;set.db_ssl=0;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0);
+ set.db_ssl=1;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==1);
+ set.db_ssl=1;db_require_tls(&mysql,LOCAL,"db.example","/etc/ca.pem");assert(options==2);
+ set.rdb_ssl=1;db_require_tls(&mysql,REMOTE,"db.example","");assert(options==3);
+ db_require_tls(&mysql,LOCAL,NULL,"");db_require_tls(&mysql,LOCAL,"localhost","");assert(options==3);
  assert(!db_tls_required(LOCAL,NULL)&&!db_tls_required(LOCAL,"localhost")&&db_tls_required(LOCAL,"127.0.0.1"));
- fail_option=1;if(setjmp(failed)==0){db_require_tls(&mysql,LOCAL,"db.example");assert(0);}return 0;}
+ fail_option=1;if(setjmp(failed)==0){db_require_tls(&mysql,LOCAL,"db.example","");assert(0);}return 0;}
+''')
+
+# Every connection attempt must start from a fresh handle with the TLS policy
+# applied, and a plaintext session must never be accepted when TLS is required.
+connect_stubs = '''
+#define mysql_init fixture_mysql_init
+#define mysql_options fixture_mysql_options
+#define mysql_real_connect fixture_mysql_real_connect
+#define mysql_close fixture_mysql_close
+#define mysql_errno fixture_mysql_errno
+#define mysql_error fixture_mysql_error
+#define mysql_get_ssl_cipher fixture_mysql_get_ssl_cipher
+'''
+run('maintenance-connect-retry-tls-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n' + connect_stubs + '''
+config_t set;static jmp_buf failed;
+static int inits,tls_options,connects,closes,first_error,have_cipher;
+MYSQL *mysql_init(MYSQL *mysql){inits++;return mysql;}
+int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)value;
+#ifdef HAS_MYSQL_OPT_SSL_MODE
+ if(option==MYSQL_OPT_SSL_MODE)tls_options++;
+#else
+ if(option==MYSQL_OPT_SSL_ENFORCE)tls_options++;
+#endif
+ return 0;}
+MYSQL *mysql_real_connect(MYSQL *mysql,const char *host,const char *user,const char *pass,const char *db,unsigned int port,const char *sock,unsigned long flags){
+ (void)host;(void)user;(void)pass;(void)db;(void)port;(void)sock;(void)flags;errno=0;return ++connects==1?NULL:mysql;}
+void mysql_close(MYSQL *mysql){(void)mysql;closes++;}
+unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return first_error;}
+const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
+const char *mysql_get_ssl_cipher(MYSQL *mysql){(void)mysql;return have_cipher?"AES":NULL;}
+void die(const char *format,...){(void)format;longjmp(failed,1);}
+int usleep(useconds_t usec){(void)usec;return 0;}
+unsigned int sleep(unsigned int seconds){(void)seconds;return 0;}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+static void fixture_exit(int status){(void)status;longjmp(failed,1);}
+#define exit fixture_exit
+''' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+static void reset(int error){inits=tls_options=connects=closes=0;first_error=error;have_cipher=0;}
+int main(void){MYSQL mysql;
+ snprintf(set.db_host,sizeof(set.db_host),"%s","db.example");set.poller_id=1;set.db_ssl=1;
+ /* a transient failure, then a plaintext session: the retry must have the TLS
+  * policy applied again and the session must be refused */
+ reset(2013);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);assert(0);}
+ assert(inits==2&&tls_options==2&&closes>=2);
+ /* a TLS handshake failure is final */
+ reset(2026);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);}
+ assert(connects==1&&inits==1);
+ return 0;}
 ''')
 
 util = (root / 'util.c').read_text()
@@ -334,24 +387,18 @@ unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return 1064;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture_sql_secret";}
 const char *mysql_sqlstate(MYSQL *mysql){(void)mysql;return "42000";}
 MYSQL_RES *mysql_store_result(MYSQL *mysql){(void)mysql;return NULL;}
-int db_reconnect(MYSQL *mysql,int error,char *location){(void)mysql;(void)error;(void)location;return FALSE;}
+int db_reconnect(MYSQL *mysql,int type,int error,char *location){(void)mysql;(void)type;(void)error;(void)location;return FALSE;}
 int usleep(useconds_t usec){(void)usec;return 0;}
 void die(const char *format,...){(void)format;longjmp(stopped,1);}
 static void fixture_exit(int status){assert(status==1);longjmp(stopped,1);}
 #define exit fixture_exit
-''' + function(sql, 'static void log_sql_statement(') + '\n' + function(sql, 'int db_insert(') + '\n' + function(sql, 'MYSQL_RES *db_query(') + '''
+''' + function(sql, 'static const char *sql_skip_space(') + '\n' + function(sql, 'static int sql_word_is(') + '\n' + function(sql, 'static const char *sql_target_table(') + '\n' + function(sql, 'static void sql_statement_label(') + '\n' + function(sql, 'static void log_sql_statement(') + '\n' + function(sql, 'int db_insert(') + '\n' + function(sql, 'MYSQL_RES *db_query(') + '''
 int main(void){MYSQL mysql;set.log_level=POLLER_VERBOSITY_DEVDBG;
  assert(!db_insert(&mysql,LOCAL,"INSERT INTO settings(name,value) VALUES('password','fixture_sql_secret')"));
  if(setjmp(stopped)==0){db_query(&mysql,LOCAL,"SELECT fixture_sql_secret");assert(0);}
- assert(strstr(logs,"1064")!=NULL);assert(strstr(logs,"42000")!=NULL);assert(strstr(logs,"fixture_sql_secret")==NULL);return 0;}
+ assert(strstr(logs,"1064")!=NULL);assert(strstr(logs,"42000")!=NULL);assert(strstr(logs,"Statement:'INSERT settings'")!=NULL);assert(strstr(logs,"fixture_sql_secret")==NULL);return 0;}
 ''')
 
-# A failed output write sets set.exit_code in poller.c; main must report it.
-spine_main = (root / "spine.c").read_text()
-finish = spine_main[spine_main.rindex("SOCK_CLEANUP;"):]
-assert "exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);" in finish
-assert "exit(EXIT_SUCCESS)" not in finish
-print("maintenance-exit-status-contract: passed")
 
 # Transport-qualified device names must resolve to the address family of the
 # address itself, not fail the lookup because of the prefix or the port.

@@ -34,10 +34,110 @@
 #include "common.h"
 #include "spine.h"
 
-/* SQL and server-echoed literals can contain credentials, including INSERTs
- * that cannot be safely redacted by looking for assignment keys. */
+static const char *sql_skip_space(const char *cursor) {
+	while (*cursor != '\0' && isspace((unsigned char) *cursor)) {
+		cursor++;
+	}
+
+	return cursor;
+}
+
+static int sql_word_is(const char *cursor, const char *word) {
+	size_t length = strlen(word);
+
+	return strncasecmp(cursor, word, length) == 0 &&
+		!(isalnum((unsigned char) cursor[length]) || cursor[length] == '_');
+}
+
+/* Names the table a statement targets: the identifier after INTO, UPDATE,
+ * DELETE FROM or the first FROM outside quotes. Only identifier characters
+ * are ever returned, never literals. */
+static const char *sql_target_table(const char *cursor) {
+	const char *begin = cursor;
+	char quote = '\0';
+
+	if (sql_word_is(cursor, "INSERT") || sql_word_is(cursor, "REPLACE")) {
+		cursor = sql_skip_space(cursor + (sql_word_is(cursor, "INSERT") ? 6 : 7));
+		if (sql_word_is(cursor, "IGNORE")) {
+			cursor = sql_skip_space(cursor + 6);
+		}
+		return sql_word_is(cursor, "INTO") ? sql_skip_space(cursor + 4) : NULL;
+	}
+
+	if (sql_word_is(cursor, "UPDATE")) {
+		cursor = sql_skip_space(cursor + 6);
+		if (sql_word_is(cursor, "LOW_PRIORITY")) {
+			cursor = sql_skip_space(cursor + 12);
+		}
+		if (sql_word_is(cursor, "IGNORE")) {
+			cursor = sql_skip_space(cursor + 6);
+		}
+		return cursor;
+	}
+
+	for (; *cursor != '\0'; cursor++) {
+		if (quote != '\0') {
+			if (*cursor == quote) {
+				quote = '\0';
+			}
+		} else if (*cursor == '\'' || *cursor == '"') {
+			quote = *cursor;
+		} else if (cursor != begin && isspace((unsigned char) cursor[-1]) && sql_word_is(cursor, "FROM")) {
+			return sql_skip_space(cursor + 4);
+		}
+	}
+
+	return NULL;
+}
+
+/* A fixed description of a statement for the log: its verb and target table.
+ * SQL text and the server's message can carry credentials, including INSERTs
+ * that cannot be safely redacted by looking for assignment keys, so neither is
+ * ever logged. */
+static void sql_statement_label(const char *query, char *label, size_t capacity) {
+	static const char *const verbs[] = {"SELECT", "INSERT", "REPLACE", "UPDATE", "DELETE",
+		"SET", "KILL", "SHOW", "CREATE", "DROP", "ALTER", "TRUNCATE"};
+	const char *cursor = sql_skip_space(query);
+	const char *table;
+	size_t index;
+	size_t used;
+
+	snprintf(label, capacity, "SQL");
+
+	for (index = 0; index < sizeof(verbs) / sizeof(verbs[0]); index++) {
+		if (sql_word_is(cursor, verbs[index])) {
+			break;
+		}
+	}
+
+	if (index == sizeof(verbs) / sizeof(verbs[0])) {
+		return;
+	}
+
+	snprintf(label, capacity, "%s", verbs[index]);
+	table = sql_target_table(cursor);
+
+	if (table == NULL) {
+		return;
+	}
+
+	used = strlen(label);
+	if (used + 2 < capacity) {
+		label[used++] = ' ';
+	}
+
+	while (used + 1 < capacity && (isalnum((unsigned char) *table) || *table == '_' || *table == '$' || *table == '`' || *table == '.')) {
+		label[used++] = *table++;
+	}
+
+	label[used] = '\0';
+}
+
 static void log_sql_statement(const char *query) {
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement (%zu bytes)", strlen(query)));
+	char label[SMALL_BUFSIZE];
+
+	sql_statement_label(query, label, sizeof(label));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement %s (%zu bytes)", label, strlen(query)));
 }
 
 /* MariaDB can advertise a MySQL compatibility prefix. Test the vendor first. */
@@ -76,7 +176,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 						die("FATAL: Too many Reconnect Attempts!");
 					}
 					if (errno != EINTR) {
-						db_reconnect(mysql, error, "db_insert");
+						db_reconnect(mysql, type, error, "db_insert");
 
 
 						continue;
@@ -97,7 +197,12 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 
 					continue;
 				} else {
-					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', State:'%s'", error, mysql_sqlstate(mysql)));
+					{
+						char label[SMALL_BUFSIZE];
+
+						sql_statement_label(query, label, sizeof(label));
+						SPINE_LOG(("ERROR: SQL Failed! Error:'%i', State:'%s', Statement:'%s'", error, mysql_sqlstate(mysql), label));
+					}
 					return FALSE;
 				}
 			} else {
@@ -109,7 +214,36 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
-int db_reconnect(MYSQL *mysql, int error, char *function) {
+/* The legacy SSL flag must not silently fall back to plaintext. A Unix socket
+ * never leaves the host and the client library does not negotiate TLS on it,
+ * so requiring TLS there would fail every connection. */
+static int db_tls_required(int type, const char *hostname) {
+	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return FALSE;
+	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
+}
+
+/* Whether a connection of this type is expected to be encrypted: TLS was
+ * requested and the host is neither a Unix socket file nor localhost. */
+static int db_tls_expected(int type) {
+	const char *host = (set.poller_id > 1 && type == REMOTE) ? set.rdb_host : set.db_host;
+	char name[BUFSIZE];
+	char *colon;
+	struct stat socket_stat;
+
+	if (stat(host, &socket_stat) == 0 && (socket_stat.st_mode & S_IFSOCK)) {
+		return FALSE;
+	}
+
+	snprintf(name, sizeof(name), "%s", host);
+	colon = strchr(name, ':');
+	if (colon != NULL) {
+		*colon = '\0';
+	}
+
+	return db_tls_required(type, name);
+}
+
+int db_reconnect(MYSQL *mysql, int type, int error, char *function) {
 	unsigned long  mysql_thread = 0;
 	char   query[100];
 
@@ -117,6 +251,13 @@ int db_reconnect(MYSQL *mysql, int error, char *function) {
 	mysql_ping(mysql);
 
 	if (mysql_thread_id(mysql) != mysql_thread) {
+		/* The client library reconnects with the handle's stored options; make
+		 * sure the required encryption survived that. */
+		if (db_tls_expected(type) && mysql_get_ssl_cipher(mysql) == NULL) {
+			mysql_close(mysql);
+			die("ERROR: Database reconnect completed without the required TLS");
+		}
+
 		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect successful.", function, error));
 		snprintf(query, 100, "KILL %lu;", mysql_thread);
 		mysql_query(mysql, query);
@@ -165,7 +306,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 					die("FATAL: Too many Reconnect Attempts!");
 				}
 				if (errno != EINTR) {
-					db_reconnect(mysql, error, "db_query");
+					db_reconnect(mysql, type, error, "db_query");
 
 					continue;
 				} else {
@@ -185,7 +326,12 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 				continue;
 			} else {
-				SPINE_LOG(("FATAL: Database Error:'%i', State:'%s'", error, mysql_sqlstate(mysql)));
+				{
+					char label[SMALL_BUFSIZE];
+
+					sql_statement_label(query, label, sizeof(label));
+					SPINE_LOG(("FATAL: Database Error:'%i', State:'%s', Statement:'%s'", error, mysql_sqlstate(mysql), label));
+				}
 				log_sql_statement(query);
 				exit(1);
 			}
@@ -199,6 +345,80 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	return mysql_res;
 }
 
+/* REQUIRED encrypts the session but does not authenticate the server. When a
+ * CA is configured the MySQL client can also verify the certificate chain. */
+static void db_require_tls(MYSQL *mysql, int type, const char *hostname, const char *ssl_ca) {
+	if (!db_tls_required(type, hostname)) return;
+#ifdef HAS_MYSQL_OPT_SSL_MODE
+	enum mysql_ssl_mode policy = (ssl_ca != NULL && ssl_ca[0] != '\0') ? SSL_MODE_VERIFY_CA : SSL_MODE_REQUIRED;
+	if (mysql_options(mysql, MYSQL_OPT_SSL_MODE, &policy) != 0) {
+		die("ERROR: Unable to require database TLS");
+	}
+#elif defined(HAS_MYSQL_OPT_SSL_ENFORCE)
+	unsigned char required = 1;
+	(void)ssl_ca;
+	if (mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &required) != 0) {
+		die("ERROR: Unable to require database TLS");
+	}
+#else
+	(void)mysql;
+	(void)ssl_ca;
+	die("ERROR: Database client cannot enforce required TLS");
+#endif
+}
+
+/* A failed handshake can leave the handle's options consumed, so every
+ * attempt starts from a freshly initialized handle with the complete policy. */
+static void db_prepare_handle(MYSQL *mysql, int type, const char *hostname,
+	const char *ssl_key, const char *ssl_ca, const char *ssl_cert) {
+	int  options_error;
+	int  tries     = 2;
+	int  timeout   = 5;
+	int  rtimeout  = 30;
+	int  wtimeout  = 30;
+	bool reconnect = TRUE;
+
+	mysql_init(mysql);
+
+	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (int *)&rtimeout, "read timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (int *)&wtimeout, "write timeout");
+	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (int *)&timeout, "general timeout");
+
+	#if defined(MARIADB_BASE_VERSION) || (MYSQL_VERSION_ID < 80034 && MYSQL_VERSION_ID >= 50013)
+		MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
+	#endif
+
+	#ifdef HAS_MYSQL_OPT_RETRY_COUNT
+	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
+	#endif
+
+	db_require_tls(mysql, type, hostname, ssl_ca);
+
+	/* set SSL options if available */
+	#ifdef HAS_MYSQL_OPT_SSL_KEY
+
+	/* if the users has explicitly said to disable SSL, do that now */
+	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+	if ((type == LOCAL ? set.db_ssl : set.rdb_ssl) == 0) {
+		bool ssl_enforce = 0;
+		MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
+	}
+	#endif
+
+	if (strlen(ssl_key)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY, ssl_key,  "ssl key");
+	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
+	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
+
+	#else
+	(void)ssl_key;
+	(void)ssl_ca;
+	(void)ssl_cert;
+	#endif
+
+	(void)tries;
+	(void)reconnect;
+}
+
 /*! \fn void db_connect(char *database, MYSQL *mysql)
  *  \brief opens a connection to a MySQL databse.
  *  \param database a string pointer to the database name
@@ -209,45 +429,18 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
  *  fails more than 20 times, the function will fail and Spine will terminate.
  *
  */
-/* The legacy SSL flag must not silently fall back to plaintext. A Unix socket
- * never leaves the host and the client library does not negotiate TLS on it,
- * so requiring TLS there would fail every connection. */
-static int db_tls_required(int type, const char *hostname) {
-	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return FALSE;
-	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
-}
-
-static void db_require_tls(MYSQL *mysql, int type, const char *hostname) {
-	if (!db_tls_required(type, hostname)) return;
-#ifdef HAS_MYSQL_OPT_SSL_MODE
-	enum mysql_ssl_mode policy = SSL_MODE_REQUIRED;
-	if (mysql_options(mysql, MYSQL_OPT_SSL_MODE, &policy) != 0) {
-		die("ERROR: Unable to require database TLS");
-	}
-#elif defined(HAS_MYSQL_OPT_SSL_ENFORCE)
-	unsigned char required = 1;
-	if (mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &required) != 0) {
-		die("ERROR: Unable to require database TLS");
-	}
-#else
-	(void)mysql;
-	die("ERROR: Database client cannot enforce required TLS");
-#endif
-}
-
 void db_connect(int type, MYSQL *mysql) {
 	int     tries;
 	int     attempts;
-	int     timeout;
-	int     rtimeout;
-	int     wtimeout;
-	int     options_error;
 	int     success;
 	int     error = 0;
-	bool    reconnect;
 	MYSQL   *connect_error;
 	char    *hostname = NULL;
 	char    *socket = NULL;
+	char    *ssl_key  = NULL;
+	char    *ssl_ca   = NULL;
+	char    *ssl_cert = NULL;
+	char    last_error[BUFSIZE];
 	struct  stat socket_stat;
 	static int connections = 0;
 
@@ -285,53 +478,8 @@ void db_connect(int type, MYSQL *mysql) {
 	/* initialalize variables */
 	tries     = 2;
 	success   = FALSE;
-	timeout   = 5;
-	rtimeout  = 30;
-	wtimeout  = 30;
-	reconnect = 1;
 	attempts  = 1;
-
-	mysql_init(mysql);
-
-	if (mysql == NULL) {
-		printf("FATAL: Database unable to allocate memory and therefore can not connect\n");
-		exit(1);
-	}
-
-	MYSQL_SET_OPTION(MYSQL_OPT_READ_TIMEOUT, (int *)&rtimeout, "read timeout");
-	MYSQL_SET_OPTION(MYSQL_OPT_WRITE_TIMEOUT, (int *)&wtimeout, "write timeout");
-	MYSQL_SET_OPTION(MYSQL_OPT_CONNECT_TIMEOUT, (int *)&timeout, "general timeout");
-
-	#if defined(MARIADB_BASE_VERSION) || (MYSQL_VERSION_ID < 80034 && MYSQL_VERSION_ID >= 50013)
-		MYSQL_SET_OPTION(MYSQL_OPT_RECONNECT, &reconnect, "reconnect");
-	#endif
-
-	#ifdef HAS_MYSQL_OPT_RETRY_COUNT
-	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
-	#endif
-
-	db_require_tls(mysql, type, hostname);
-
-	/* set SSL options if available */
-	#ifdef HAS_MYSQL_OPT_SSL_KEY
-	char *ssl_key  = NULL;
-	char *ssl_ca   = NULL;
-	char *ssl_cert = NULL;
-
-	/* if the users has explicitly said to disable SSL, do that now */
-	#ifdef HAS_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
-	if (type == LOCAL) {
-		if (set.db_ssl == 0) {
-			bool ssl_enforce = 0;
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
-		}
-	} else {
-		if (set.rdb_ssl == 0) {
-			bool ssl_enforce = 0;
-			MYSQL_SET_OPTION(MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_enforce, "ssl disable");
-		}
-	}
-	#endif
+	last_error[0] = '\0';
 
 	if (type == REMOTE) {
 		STRDUP_OR_DIE(ssl_key, set.rdb_ssl_key, "rdb_ssl_key");
@@ -343,14 +491,10 @@ void db_connect(int type, MYSQL *mysql) {
 		STRDUP_OR_DIE(ssl_cert, set.db_ssl_cert, "db_ssl_cert");
 	}
 
-	if (strlen(ssl_key)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_KEY, ssl_key,  "ssl key");
-	if (strlen(ssl_ca)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CA, ssl_ca,   "ssl ca");
-	if (strlen(ssl_cert)) 	MYSQL_SET_OPTION(MYSQL_OPT_SSL_CERT, ssl_cert, "ssl cert");
-
-	#endif
-
 	while (tries > 0) {
 		tries--;
+
+		db_prepare_handle(mysql, type, hostname, ssl_key, ssl_ca, ssl_cert);
 
 		if (set.poller_id > 1) {
 			if (type == LOCAL) {
@@ -364,22 +508,34 @@ void db_connect(int type, MYSQL *mysql) {
 
 		if (!connect_error) {
 			error = mysql_errno(mysql);
+			snprintf(last_error, sizeof(last_error), "%s", mysql_error(mysql));
 
 			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
 				usleep(5000);
 				tries++;
 				success = FALSE;
 			} else if (error == 2002) {
-				printf("Database: Connection Failed: Attempt:'%u', Error:'%u', Message:'%s'\n", attempts, mysql_errno(mysql), mysql_error(mysql));
+				printf("Database: Connection Failed: Attempt:'%u', Error:'%u', Message:'%s'\n", attempts, error, last_error);
 				sleep(1);
 				success = FALSE;
+			} else if (error == 2026) {
+				/* The TLS handshake failed; another attempt cannot succeed
+				 * and must not be allowed to fall back to a plain session. */
+				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", error, last_error);
+				tries   = 0;
+				success = FALSE;
 			} else if (error != 1049 && error != 2005 && error != 1045) {
-				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", error, mysql_error(mysql));
+				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", error, last_error);
 				success = FALSE;
 				usleep(50000);
 			} else {
 				tries   = 0;
 				success = FALSE;
+			}
+
+			/* Another attempt starts from a freshly initialized handle. */
+			if (tries > 0) {
+				mysql_close(mysql);
 			}
 		} else {
 			tries   = 0;
@@ -398,22 +554,12 @@ void db_connect(int type, MYSQL *mysql) {
 		free(hostname);
 	}
 
-    #ifdef HAS_MYSQL_OPT_SSL_KEY
-	if (ssl_key != NULL) {
-		free(ssl_key);
-	}
-
-	if (ssl_ca != NULL) {
-		free(ssl_ca);
-	}
-
-	if (ssl_cert != NULL) {
-		free(ssl_cert);
-	}
-    #endif
+	free(ssl_key);
+	free(ssl_ca);
+	free(ssl_cert);
 
 	if (!success){
-		printf("FATAL: Connection Failed, Error:'%i', Message:'%s'\n", error, mysql_error(mysql));
+		printf("FATAL: Connection Failed, Error:'%i', Message:'%s'\n", error, last_error);
 		exit(1);
 	}
 
