@@ -378,7 +378,6 @@ typedef struct config_struct {
 	int    d_b;
 	unsigned int db_port;
 	char   dbversion[BUFSIZE];
-	int    dbonupdate;
 	int    cacti_version;
 	/* path information */
 	char   path_logfile[DBL_BUFSIZE];

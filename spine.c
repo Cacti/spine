@@ -119,7 +119,7 @@ poller_thread_t** details = NULL;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
-void poller_push_data_to_main();
+bool poller_push_data_to_main();
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -1115,7 +1115,7 @@ int main(int argc, char *argv[]) {
 
 	/* push data back to the main server */
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && !set.SQL_readonly) {
-		poller_push_data_to_main();
+		if (!poller_push_data_to_main()) set.exit_code = EXIT_FAILURE;
 	}
 
 	/* update the db for |data_time| on graphs */
@@ -1125,10 +1125,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-		if (mode == REMOTE) {
-			db_insert(&mysqlr, REMOTE, querybuf);
-		} else {
-			db_insert(&mysql, LOCAL, querybuf);
+		if (!db_insert(mode == REMOTE ? &mysqlr : &mysql, mode, querybuf)) {
+			set.exit_code = EXIT_FAILURE;
 		}
 	}
 
