@@ -120,6 +120,8 @@ s=(root/'sql.c').read_text();a=s.index('bool db_row_alias(');b=s.index('\n}',a)+
 run('maintenance-destination-contract','''#include "common.h"
 #include "spine.h"
 static const char *vendor;static unsigned long version;
+/* MySQL declares a const return type and MariaDB does not. */
+#define mysql_get_server_info fixture_get_server_info
 char *mysql_get_server_info(MYSQL *mysql){(void)mysql;return (char*)vendor;}
 unsigned long mysql_get_server_version(MYSQL *mysql){(void)mysql;return version;}
 '''+helper+'''
