@@ -73,7 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           archive="trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz"
-          curl -sSfL -o "${RUNNER_TEMP}/${archive}" \
+          curl --proto '=https' --tlsv1.2 -sSfL -o "${RUNNER_TEMP}/${archive}" \
             "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/${archive}"
           echo "${TRUFFLEHOG_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
           mkdir -p "${RUNNER_TEMP}/trufflehog"
