@@ -113,17 +113,20 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 	/* Echo the probe back as the reply a datagram ICMP socket delivers. */
 	assert_true(length >= last_request_length);
 	memcpy(reply, last_request, last_request_length);
-	reply[0] = icmp6_mode ? ICMP6_ECHO_REPLY : ICMP_ECHOREPLY;
-
+#ifdef SPINE_HAVE_ICMPV6
 	if (icmp6_mode) {
 		struct sockaddr_in6 *source = (struct sockaddr_in6 *) address;
+		reply[0] = ICMP6_ECHO_REPLY;
 		assert_true(*address_len >= sizeof(*source));
 		memset(source, 0, sizeof(*source));
 		source->sin6_family = AF_INET6;
 		source->sin6_addr = in6addr_loopback;
 		*address_len = sizeof(*source);
-	} else {
+	} else
+#endif
+	{
 		struct sockaddr_in *source = (struct sockaddr_in *) address;
+		reply[0] = ICMP_ECHOREPLY;
 		assert_true(*address_len >= sizeof(*source));
 		memset(source, 0, sizeof(*source));
 		source->sin_family = AF_INET;
