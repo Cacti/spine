@@ -167,7 +167,7 @@ jobs:
             --suppress=redundantAssignment \
             --suppress=toomanyconfigs \
             --library=scripts/cppcheck/spine.cfg \
-            ./*.c ./*.h
+            src
 
   shellcheck:
     runs-on: ubuntu-24.04

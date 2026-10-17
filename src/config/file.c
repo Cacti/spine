@@ -31,8 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 #define SPINE_STRINGIFY_INNER(value) #value
 #define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
 

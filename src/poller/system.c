@@ -31,9 +31,9 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "spine.h"
-#include "src/poller/poller_internal.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller_internal.h"
 #include <limits.h>
 
 static void poll_system_uptime(host_t *host) {

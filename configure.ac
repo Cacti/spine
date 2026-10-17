@@ -26,7 +26,7 @@ AC_CONFIG_AUX_DIR(config)
 AC_SUBST(ac_aux_dir)
 
 AC_CANONICAL_HOST
-AC_CONFIG_SRCDIR(spine.c)
+AC_CONFIG_SRCDIR(src/app/main.c)
 AC_PREFIX_DEFAULT(/usr/local/spine)
 AC_LANG(C)
 

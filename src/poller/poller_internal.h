@@ -34,8 +34,9 @@
 #ifndef SPINE_POLLER_INTERNAL_H
 #define SPINE_POLLER_INTERNAL_H
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "database/persistence.h"
 
 typedef struct poll_error_context {
 	char *buffer;
@@ -46,11 +47,6 @@ typedef struct poll_error_context {
 	int thread_id;
 } poll_error_context_t;
 
-typedef struct {
-	char *output;
-	char *boost;
-	bool failed;
-} poll_output_buffers_t;
 
 typedef struct {
 	int initialized;
@@ -80,12 +76,6 @@ typedef struct {
 	int *spike_kill;
 } reindex_evaluation_t;
 
-typedef struct {
-	int host_id;
-	const char *limits;
-	bool due_only;
-	bool group_ports;
-} poller_query_filter_t;
 
 typedef enum {
 	POLL_HOST_LOADED,
@@ -93,17 +83,11 @@ typedef enum {
 	POLL_HOST_FAILED
 } poll_host_load_t;
 
-poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
-	const poller_queries_t *queries, const target_t *poller_items,
-	int rows_processed, const char *host_time);
-MYSQL_RES *select_poll_items(MYSQL *mysql, const poller_queries_t *queries,
-	const host_t *host, const poller_thread_t *work, int *num_rows);
 poll_item_storage_t load_poll_items(MYSQL_RES *result, host_t *host, int num_rows);
 int collect_poll_items(host_t *host, snmp_poll_batch_t *batch, int num_rows, bool spike_kill);
 bool parse_uptime(const char *text, unsigned long long *ticks);
 bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 	const reindex_evaluation_t *evaluation);
-void persist_host_status(MYSQL *mysql, const host_t *host, bool include_system_information);
 void load_host_metadata(MYSQL *mysql, MYSQL_ROW row, host_t *host, const poller_thread_t *work);
 void initialize_host_snmp(host_t *host);
 bool refresh_host_availability(MYSQL *mysql, host_t *host, ping_t *ping, int host_thread);

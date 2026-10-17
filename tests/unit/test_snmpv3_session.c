@@ -18,8 +18,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 static int captured_security_level;
 static size_t captured_auth_key_len;
@@ -43,7 +43,8 @@ static struct snmp_session *capture_snmp_sess_session(void *session);
 #define snmp_sess_synch_response capture_snmp_sess_synch_response
 #define snmp_sess_session capture_snmp_sess_session
 #include "../../src/snmp/session.c"
-#include "../../snmp.c"
+#include "../../src/snmp/requests.c"
+#include "../../src/snmp/response.c"
 #undef snmp_sess_open
 #undef snmp_sess_synch_response
 #undef snmp_sess_session

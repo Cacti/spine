@@ -57,10 +57,10 @@ sockets for ICMP availability checking without running setuid-root.
 
 %install
 %make_install
-install -D -m 0640 spine.conf.dist %{buildroot}%{_sysconfdir}/spine.conf.dist
+install -D -m 0640 etc/spine.conf.dist %{buildroot}%{_sysconfdir}/spine.conf.dist
 
 # Install man page (generated during build); upstream installs into man1
-[ -f spine.1 ] && install -D -m 0644 spine.1 %{buildroot}%{_mandir}/man1/spine.1 || true
+[ -f docs/man/spine.1 ] && install -D -m 0644 docs/man/spine.1 %{buildroot}%{_mandir}/man1/spine.1 || true
 
 %post
 # Grant CAP_NET_RAW so spine can open raw ICMP sockets without setuid-root.

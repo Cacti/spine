@@ -128,7 +128,7 @@ else
 	pass "spine connected to database"
 fi
 
-# Check that SNMP polling ran (exercises the switch cases in poller.c)
+# Check that SNMP polling ran (exercises the switch cases in src/poller/poller.c)
 if echo "$poll_output" | grep -q "SNMP: v3:.*value:"; then
 	pass "SNMPv3 poll returned data"
 elif echo "$poll_output" | grep -q "Device\[1\].*SNMP"; then
@@ -153,14 +153,14 @@ else
 	pass "spine completed without crash"
 fi
 
-# Check memory cleanup ran (validates SPINE_FREE fix in spine.c)
+# Check memory cleanup ran (validates SPINE_FREE fix in src/app/runtime.c)
 if echo "$poll_output" | grep -q "Allocated Variable Memory Freed"; then
 	pass "memory cleanup completed (SPINE_FREE fix validated)"
 else
 	fail "memory cleanup did not complete"
 fi
 
-# Check DB close ran (validates get_cacti_version MYSQL_RES fix in util.c)
+# Check DB close ran (validates get_cacti_version MYSQL_RES ownership)
 if echo "$poll_output" | grep -q "MYSQL Free & Close Completed"; then
 	pass "database close completed (MYSQL_RES fix validated)"
 else
@@ -193,7 +193,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Phase 4: Add SNMPv2c host and re-poll (exercises poller.c switch cases)
+# Phase 4: Add SNMPv2c host and re-poll (exercises src/poller/poller.c switch cases)
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Phase 4: SNMPv2c poll test ==="
@@ -259,7 +259,7 @@ fi
 echo ""
 echo "=== Phase 5: runtime fix validation ==="
 
-# Poll both devices simultaneously; exercises the poller.c switch statement
+# Poll both devices simultaneously; exercises the src/poller/poller.c switch statement
 # across two concurrent threads to confirm multi-device dispatch is intact.
 multi_output=$("${COMPOSE[@]}" run --rm --entrypoint spine spine \
 	--conf=/etc/spine/spine.conf -f 1 -l 2 -S 2>&1 || true)

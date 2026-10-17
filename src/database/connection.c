@@ -31,8 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 /*! \fn void db_connect(char *database, MYSQL *mysql)
  *  \brief opens a connection to a MySQL database.

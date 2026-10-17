@@ -31,8 +31,8 @@
  +-------------------------------------------------------------------------+
 */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 /*! \fn void db_create_connection_pool(int type)
  *  \brief Creates a connection pool for spine

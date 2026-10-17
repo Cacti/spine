@@ -19,8 +19,8 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 #define MUSL_DEFAULT_STACK (128 * 1024)
 

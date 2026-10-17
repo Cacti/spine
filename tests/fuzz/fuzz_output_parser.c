@@ -14,10 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
-#include "poller.h"
-#include "util.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller.h"
+#include "internal/util.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	char value[1025];
