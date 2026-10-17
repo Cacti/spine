@@ -304,11 +304,13 @@ run('maintenance-required-tls-contract', '#include "common.h"\n#include "spine.h
 config_t set;static int options,fail_option;static jmp_buf failed;
 int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;assert(value);options++;return fail_option;}
 void die(const char *format,...){(void)format;longjmp(failed,1);}
-''' + function(sql, 'static void db_require_tls(') + '''
-int main(void){MYSQL mysql;set.db_ssl=0;db_require_tls(&mysql,LOCAL);assert(options==0);
- set.db_ssl=1;db_require_tls(&mysql,LOCAL);assert(options==1);
- set.rdb_ssl=1;db_require_tls(&mysql,REMOTE);assert(options==2);
- fail_option=1;if(setjmp(failed)==0){db_require_tls(&mysql,LOCAL);assert(0);}return 0;}
+''' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
+int main(void){MYSQL mysql;set.db_ssl=0;db_require_tls(&mysql,LOCAL,"db.example");assert(options==0);
+ set.db_ssl=1;db_require_tls(&mysql,LOCAL,"db.example");assert(options==1);
+ set.rdb_ssl=1;db_require_tls(&mysql,REMOTE,"db.example");assert(options==2);
+ db_require_tls(&mysql,LOCAL,NULL);db_require_tls(&mysql,LOCAL,"localhost");assert(options==2);
+ assert(!db_tls_required(LOCAL,NULL)&&!db_tls_required(LOCAL,"localhost")&&db_tls_required(LOCAL,"127.0.0.1"));
+ fail_option=1;if(setjmp(failed)==0){db_require_tls(&mysql,LOCAL,"db.example");assert(0);}return 0;}
 ''')
 
 util = (root / 'util.c').read_text()
@@ -328,6 +330,7 @@ int spine_log(const char *format,...){va_list args;size_t used=strlen(logs);va_s
 int mysql_query(MYSQL *mysql,const char *query){(void)mysql;(void)query;return 1;}
 unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return 1064;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture_sql_secret";}
+const char *mysql_sqlstate(MYSQL *mysql){(void)mysql;return "42000";}
 MYSQL_RES *mysql_store_result(MYSQL *mysql){(void)mysql;return NULL;}
 int db_reconnect(MYSQL *mysql,int error,char *location){(void)mysql;(void)error;(void)location;return FALSE;}
 int usleep(useconds_t usec){(void)usec;return 0;}
@@ -338,5 +341,12 @@ static void fixture_exit(int status){assert(status==1);longjmp(stopped,1);}
 int main(void){MYSQL mysql;set.log_level=POLLER_VERBOSITY_DEVDBG;
  assert(!db_insert(&mysql,LOCAL,"INSERT INTO settings(name,value) VALUES('password','fixture_sql_secret')"));
  if(setjmp(stopped)==0){db_query(&mysql,LOCAL,"SELECT fixture_sql_secret");assert(0);}
- assert(strstr(logs,"1064")!=NULL);assert(strstr(logs,"fixture_sql_secret")==NULL);return 0;}
+ assert(strstr(logs,"1064")!=NULL);assert(strstr(logs,"42000")!=NULL);assert(strstr(logs,"fixture_sql_secret")==NULL);return 0;}
 ''')
+
+# A failed output write sets set.exit_code in poller.c; main must report it.
+spine_main = (root / "spine.c").read_text()
+finish = spine_main[spine_main.rindex("SOCK_CLEANUP;"):]
+assert "exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);" in finish
+assert "exit(EXIT_SUCCESS)" not in finish
+print("maintenance-exit-status-contract: passed")

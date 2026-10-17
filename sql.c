@@ -97,7 +97,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 
 					continue;
 				} else {
-					SPINE_LOG(("ERROR: SQL Failed! Error:'%i'", error));
+					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', State:'%s'", error, mysql_sqlstate(mysql)));
 					return FALSE;
 				}
 			} else {
@@ -185,7 +185,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 				continue;
 			} else {
-				SPINE_LOG(("FATAL: Database Error:'%i'", error));
+				SPINE_LOG(("FATAL: Database Error:'%i', State:'%s'", error, mysql_sqlstate(mysql)));
 				log_sql_statement(query);
 				exit(1);
 			}
@@ -209,9 +209,16 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
  *  fails more than 20 times, the function will fail and Spine will terminate.
  *
  */
-/* The legacy SSL flag must not silently fall back to plaintext. */
-static void db_require_tls(MYSQL *mysql, int type) {
-	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return;
+/* The legacy SSL flag must not silently fall back to plaintext. A Unix socket
+ * never leaves the host and the client library does not negotiate TLS on it,
+ * so requiring TLS there would fail every connection. */
+static int db_tls_required(int type, const char *hostname) {
+	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return FALSE;
+	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
+}
+
+static void db_require_tls(MYSQL *mysql, int type, const char *hostname) {
+	if (!db_tls_required(type, hostname)) return;
 #ifdef HAS_MYSQL_OPT_SSL_MODE
 	enum mysql_ssl_mode policy = SSL_MODE_REQUIRED;
 	if (mysql_options(mysql, MYSQL_OPT_SSL_MODE, &policy) != 0) {
@@ -303,7 +310,7 @@ void db_connect(int type, MYSQL *mysql) {
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 	#endif
 
-	db_require_tls(mysql, type);
+	db_require_tls(mysql, type, hostname);
 
 	/* set SSL options if available */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
@@ -376,7 +383,7 @@ void db_connect(int type, MYSQL *mysql) {
 			}
 		} else {
 			tries   = 0;
-			if ((type == REMOTE ? set.rdb_ssl : set.db_ssl) && mysql_get_ssl_cipher(mysql) == NULL) {
+			if (db_tls_required(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL) {
 				mysql_close(mysql);
 				die("ERROR: Required database TLS was not negotiated");
 			}
