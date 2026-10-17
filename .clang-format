@@ -1,0 +1,40 @@
+# Describes the style the existing sources already use, so that
+# `git clang-format` on a change touches only the lines it changes. The tree
+# is not formatted with this file and must not be: hand-aligned assignment
+# blocks, tables and macro bodies would all churn. CI checks changed lines
+# only, with clang-format 18.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+UseTab: ForContinuationAndIndentation
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+IndentCaseLabels: true
+
+# Zero keeps the author's line breaks. Many log and SQL lines run past 200
+# columns and rewrapping them would hide the real change in review.
+ColumnLimit: 0
+
+BreakBeforeBraces: Attach
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortFunctionsOnASingleLine: All
+AllowShortCaseLabelsOnASingleLine: true
+
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments: false
+AlignEscapedNewlines: DontAlign
+
+DerivePointerAlignment: true
+PointerAlignment: Right
+SpaceAfterCStyleCast: true
+
+SortIncludes: Never
+ReflowComments: false
+MaxEmptyLinesToKeep: 4
+KeepEmptyLinesAtTheStartOfBlocks: true
+...

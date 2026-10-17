@@ -1,0 +1,10 @@
+# net-snmp's snmp_shutdown() does not free the MIB tree buckets that
+# init_snmp() allocates, so every init and shutdown pair leaks them. The
+# allocation and the loss are both inside libnetsnmp.
+{
+   net-snmp MIB tree buckets survive snmp_shutdown
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:netsnmp_init_mib_internals
+}

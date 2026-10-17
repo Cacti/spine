@@ -5,6 +5,7 @@ on:
     branches: [develop, '1.2.x']
   pull_request:
     branches: [develop, '1.2.x', 'refactor/c17-series-*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
           # pull_request normally checks out GitHub's synthetic merge commit,
           # which cannot carry the contributor's DCO trailer.
@@ -39,13 +41,17 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
+        # libmysqlclient is deprecated (docs/adr/0003). Drop its lanes in the
+        # release that removes --with-mysql-client=mysql.
         client:
           - name: MariaDB Connector/C
             package: libmariadb-dev
             config: mariadb_config
-          - name: MySQL Connector/C
+            choice: mariadb
+          - name: libmysqlclient (deprecated)
             package: libmysqlclient-dev
             config: mysql_config
+            choice: mysql
     env:
       CC: ${{ matrix.compiler }}
       MYSQL_CONFIG: ${{ matrix.client.config }}
@@ -54,10 +60,13 @@ jobs:
       STRICT_CFLAGS: -Wall -Wextra -Wformat=2 -Wno-format-nonliteral
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/build-spine
         with:
           mysql-client-package: ${{ matrix.client.package }}
+          configure-args: --with-mysql-client=${{ matrix.client.choice }}
           cflags: ${{ env.STRICT_CFLAGS }}
 
       - name: Build Spine
@@ -87,6 +96,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/build-spine
         with:
@@ -110,6 +121,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install build dependencies
         run: |
@@ -132,13 +145,18 @@ jobs:
           ./bootstrap
           ./configure --enable-warnings --with-snmp="$net_snmp_prefix"
           make -j"$(sysctl -n hw.ncpu)"
-          make check || { cat test-suite.log; exit 1; }
+          if ! make check; then
+            cat test-suite.log
+            exit 1
+          fi
 
   cppcheck:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run cppcheck
         run: |
@@ -148,6 +166,7 @@ jobs:
           # Project data structures are consumed across translation units;
           # checking headers in isolation otherwise reports every member. A
           # few externally visible helpers are deliberate unit-test seams.
+          # cppcheck 2.13 accepts --std=c17 but still analyses as C11.
           cppcheck \
             --enable=all \
             --std=c11 \
@@ -167,13 +186,89 @@ jobs:
             --suppress=redundantAssignment \
             --suppress=toomanyconfigs \
             --library=scripts/cppcheck/spine.cfg \
+            -I. -Isrc -Ivendor/uthash \
             src
+
+  # GCC 15 and later default to gnu23. Build with the newest Fedora GCC to
+  # show that configure still selects gnu17 there.
+  newest-gcc:
+    name: Newest GCC (Fedora 44)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and test with the newest GCC
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80 \
+            bash -euo pipefail -c '
+              dnf -y install gcc make autoconf automake libtool help2man \
+                mariadb-connector-c-devel net-snmp-devel openssl-devel \
+                libcmocka-devel shadow-utils util-linux
+              gcc --version
+              echo | gcc -dM -E - | grep __STDC_VERSION__
+              # As root the ICMP tests get a raw socket; run them as the
+              # unprivileged user they expect, as on the hosted runner.
+              useradd --create-home builder
+              cp -a /src/. /home/builder/spine
+              chown -R builder: /home/builder/spine
+              cd /home/builder/spine
+              runuser -u builder -- ./bootstrap
+              runuser -u builder -- ./configure --enable-warnings
+              grep "^CFLAGS = .*-std=gnu17" Makefile
+              runuser -u builder -- make --jobs "$(nproc)"
+              runuser -u builder -- make check
+            '
+
+  # The Clang counterpart of newest-gcc. Pin the major version so a Fedora
+  # update cannot change the compiler under a green lane; raise it on purpose.
+  newest-clang:
+    name: Newest Clang (Fedora 44)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLANG_MAJOR: "22"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and test with the newest Clang
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --env CLANG_MAJOR \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80 \
+            bash -euo pipefail -c '
+              dnf -y install "clang-${CLANG_MAJOR}.*" make autoconf automake \
+                libtool help2man mariadb-connector-c-devel net-snmp-devel \
+                openssl-devel libcmocka-devel shadow-utils util-linux
+              clang --version
+              test "$(clang -dumpversion | cut -d. -f1)" = "$CLANG_MAJOR"
+              useradd --create-home builder
+              cp -a /src/. /home/builder/spine
+              chown -R builder: /home/builder/spine
+              cd /home/builder/spine
+              runuser -u builder -- ./bootstrap
+              runuser -u builder -- ./configure CC=clang --enable-warnings
+              grep "^CFLAGS = .*-std=gnu17" Makefile
+              runuser -u builder -- make --jobs "$(nproc)"
+              runuser -u builder -- make check
+            '
 
   shellcheck:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run shellcheck
         run: |
@@ -204,13 +299,26 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - uses: ./.github/actions/build-spine
         with:
-          extra-packages: gcovr python3-pip mariadb-client snmpd libcap2-bin
+          # The tests start polling threads; non-atomic arc counters race and
+          # gcov then reports negative branch counts (GCC bug 68080).
+          extra-packages: mariadb-client snmpd libcap2-bin
           cflags: -g -O0 --coverage -fprofile-update=atomic
           ldflags: --coverage
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/requirements-coverage.txt
+
+      - name: Install pinned coverage tools
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r .github/requirements-coverage.txt
 
       - name: Build instrumented
         run: |
@@ -267,14 +375,13 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          python3 -m pip install --break-system-packages diff-cover==10.5.1
           diff-cover coverage.xml \
             --compare-branch="origin/${BASE_REF}" \
             --fail-under=70
 
       - name: Upload coverage reports
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.4.3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: |
@@ -288,13 +395,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.x"
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/requirements-analysis.txt
 
       - name: Install flawfinder
-        run: pip install flawfinder==2.0.19
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r .github/requirements-analysis.txt
 
       # Note: flawfinder will light up like a christmas tree on this codebase.
       # error-level=5 means only critical hits fail the build — the rest is
@@ -327,6 +439,8 @@ jobs:
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/build-spine
         with:
@@ -360,6 +474,8 @@ jobs:
       TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/build-spine
         with:
@@ -384,6 +500,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/build-spine
 
@@ -404,7 +522,10 @@ jobs:
       - build
       - linux-capabilities
       - macos
+      - configure-contracts
       - cppcheck
+      - newest-gcc
+      - newest-clang
       - shellcheck
       - coverage
       - flawfinder
@@ -425,3 +546,14 @@ jobs:
             echo "$failures"
             exit 1
           fi
+
+  configure-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-spine
+      - name: Verify C17 and compiler configuration contracts
+        run: tests/tools/test_configure_contracts.sh

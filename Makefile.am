@@ -294,7 +294,7 @@ noinst_HEADERS += src/script/server_internal.h
 
 noinst_HEADERS += src/process/process_internal.h
 
-EXTRA_DIST += docs/architecture/source-modules.md
+EXTRA_DIST += docs/architecture/source-modules.md docs/platforms.md
 
 
 noinst_HEADERS += src/app/buffer.h \
@@ -316,6 +316,9 @@ noinst_HEADERS += src/app/buffer.h \
 	src/snmp/response.h
 
 noinst_HEADERS += src/database/cacti_query.h src/database/persistence.h
+
+EXTRA_DIST += tests/tools/test_configure_contracts.sh
+EXTRA_DIST += tests/tools/test_clang_tidy_gate.py
 
 EXTRA_DIST += scripts/cppcheck/spine.cfg
 

@@ -27,12 +27,14 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install build dependencies
         run: |
           set -eu
           sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool help2man libmariadb-dev libcmocka-dev mariadb-client libsnmp-dev snmpd libssl-dev libcap2-bin lcov
+          sudo apt-get install -y autoconf automake libtool help2man libmariadb-dev mariadb-client libsnmp-dev snmpd libssl-dev libcap2-bin libcmocka-dev lcov
       - name: Build and test production code
         run: |
           set -eu
@@ -71,6 +73,18 @@ jobs:
           ./test_spine_regressions --icmp-no-capability
           sudo setcap cap_net_raw+ep ./test_spine_regressions
           ./test_spine_regressions --raw-icmp
+      - name: Verify the setuid root privilege drop
+        run: |
+          set -eu
+          mariadb --protocol=TCP --host=127.0.0.1 --user=root -e "CREATE USER IF NOT EXISTS 'cactiuser'@'%' IDENTIFIED BY 'cactiuser'; GRANT SELECT, INSERT, UPDATE, DELETE ON spine_regressions.* TO 'cactiuser'@'%';"
+          sudo ./test_spine_regressions --privilege-drop
+          sudo install -o root -g root -m 4755 ./test_spine_regressions /usr/local/bin/test_spine_setuid
+          # Close the unprivileged datagram path so the setuid one answers.
+          ping_range=$(sysctl -n net.ipv4.ping_group_range)
+          sudo sysctl -w net.ipv4.ping_group_range="1 0"
+          /usr/local/bin/test_spine_setuid --setuid-icmp
+          sudo sysctl -w net.ipv4.ping_group_range="$ping_range"
+          sudo SPINE_TEST_DB_HOST=127.0.0.1 top_builddir="$PWD" sh tests/regression/test_setuid_privilege_drop.sh
       - name: Measure every production translation unit
         env:
           SPINE_TEST_SNMP_HOST: 127.0.0.1
@@ -84,7 +98,7 @@ jobs:
           tests/tools/run_coverage.sh
       - name: Preserve coverage and source provenance
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: production-coverage-${{ github.sha }}
           path: coverage/

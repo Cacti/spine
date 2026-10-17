@@ -1,0 +1,203 @@
+name: Static analysis
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop, 'refactor/c17-series-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # go install verifies the module against the Go checksum database, so
+      # the version tag cannot be moved under us.
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Run actionlint
+        run: actionlint -color
+
+  codespell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # CHANGELOG keeps upstream release notes verbatim, misspellings and all.
+      - name: Run codespell
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y codespell
+          git ls-files -z -- '*.c' '*.h' '*.md' '*.sh' '*.yml' '*.yaml' \
+            configure.ac Makefile.am \
+            | xargs -0 codespell --ignore-words=.codespell-ignore-words.txt
+
+  # Only lines the pull request changes are checked. The existing tree does
+  # not match .clang-format exactly and is not meant to be reformatted. The
+  # major version is pinned because formatting differs between releases.
+  clang-format:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check formatting of changed lines
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          status=0
+          git clang-format-18 --binary clang-format-18 --diff --extensions c,h \
+            "$base" HEAD -- ':(exclude)vendor/uthash/uthash.h' > clang-format.diff || status=$?
+          cat clang-format.diff
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Changed lines do not match .clang-format. Run 'git clang-format origin/$BASE_REF' and commit the result."
+            exit 1
+          fi
+
+  # Findings are compared with a reviewed baseline, without line numbers so
+  # unrelated edits do not churn it. A new finding fails the job; fix it, or
+  # add it to the baseline in the same pull request with the reason it is
+  # safe. Excluded checks: the insecureAPI family recommends C11 Annex K
+  # functions that glibc and musl do not provide, and the four bugprone
+  # checks below report naming and style, not defects.
+  clang-tidy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CC: clang
+      CHECKS: >-
+        -*,clang-analyzer-*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+        bugprone-*,-bugprone-easily-swappable-parameters,-bugprone-reserved-identifier,
+        -bugprone-assignment-in-if-condition,-bugprone-casting-through-void
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/build-spine
+        with:
+          mysql-client-package: libmariadb-dev
+          extra-packages: clang clang-tidy bear
+
+      - name: Record the compile database
+        run: |
+          set -euo pipefail
+          bear -- make -j"$(nproc)" check TESTS=
+
+      # Test code is left out: cmocka's assertions are not marked noreturn,
+      # so the analyzer follows paths past every failed assertion.
+      - name: Test the clang-tidy failure gate
+        run: python3 tests/tools/test_clang_tidy_gate.py
+
+      - name: Run clang-tidy on the production sources
+        run: |
+          set -euo pipefail
+          checks=$(tr -d ' \n' <<<"$CHECKS")
+          sources_list=$(make -s coverage-source-list | sort -u)
+          test -n "$sources_list"
+          mapfile -t sources <<< "$sources_list"
+          if clang-tidy -p . --quiet -checks="$checks" "${sources[@]}" \
+              > clang-tidy-report.txt 2> clang-tidy-stderr.txt; then
+            analyzer_status=0
+          else
+            analyzer_status=$?
+          fi
+          if [ "$analyzer_status" -ne 0 ]; then
+            cat clang-tidy-report.txt clang-tidy-stderr.txt
+            echo "clang-tidy failed with exit status $analyzer_status."
+            exit "$analyzer_status"
+          fi
+          if grep -E ': (fatal )?error: ' clang-tidy-report.txt clang-tidy-stderr.txt; then
+            echo "clang-tidy reported a compilation error."
+            exit 1
+          fi
+          grep ': warning: ' clang-tidy-report.txt \
+            | sed -E "s#^$PWD/##; s#^([^:]+):[0-9]+:[0-9]+: warning: #\\1: #" \
+            | LC_ALL=C sort > clang-tidy-findings.txt || true
+          sed '/^#/d' .github/clang-tidy-baseline.txt | LC_ALL=C sort > baseline.sorted
+          LC_ALL=C comm -13 baseline.sorted clang-tidy-findings.txt > clang-tidy-new.txt
+          LC_ALL=C comm -23 baseline.sorted clang-tidy-findings.txt > clang-tidy-fixed.txt
+          if [ -s clang-tidy-fixed.txt ]; then
+            echo "Baseline entries no longer reported; remove them:"
+            cat clang-tidy-fixed.txt
+          fi
+          if [ -s clang-tidy-new.txt ]; then
+            echo "New clang-tidy findings:"
+            cat clang-tidy-new.txt
+            exit 1
+          fi
+          echo "$(wc -l < clang-tidy-findings.txt) findings, all in the reviewed baseline."
+
+      - name: Upload clang-tidy report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: clang-tidy-report
+          path: |
+            clang-tidy-report.txt
+            clang-tidy-stderr.txt
+            clang-tidy-findings.txt
+            clang-tidy-new.txt
+          if-no-files-found: ignore
+
+  scan-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool build-essential \
+            help2man clang clang-tools libmariadb-dev libsnmp-dev libssl-dev
+
+      # Production code only, for the same reason as clang-tidy. The dead
+      # store checker is off here because the clang-tidy job runs the same
+      # checker and tracks each of its findings in the reviewed baseline.
+      - name: Analyze with scan-build
+        run: |
+          set -euo pipefail
+          ./bootstrap
+          scan-build --use-cc=clang ./configure
+          scan-build --use-cc=clang --status-bugs -o scan-build-report \
+            -disable-checker deadcode.DeadStores make -j"$(nproc)"
+
+      - name: Upload scan-build report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-build-report
+          path: scan-build-report
+          if-no-files-found: ignore
