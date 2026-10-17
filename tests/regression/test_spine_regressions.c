@@ -22,6 +22,7 @@ extern int run_script_stream_fixture(const char *scenario);
 extern void test_script_stream_contracts(void);
 extern void test_additional_database_contracts(MYSQL *mysql);
 extern void test_settings_write_contracts(MYSQL *mysql);
+extern void test_config_option_boundaries(MYSQL *mysql);
 extern void test_additional_reindex_contracts(MYSQL *mysql);
 extern void test_reindex_result_contracts(MYSQL *mysql);
 extern void test_additional_snmp_session_boundaries(void);
@@ -2456,6 +2457,7 @@ static void test_database_configuration(void) {
 	read_config_options();
 	assert(set.availability.ping_timeout == 777);
 	db_connect(LOCAL, &mysql);
+	test_config_option_boundaries(&mysql);
 	test_settings_write_contracts(&mysql);
 	test_additional_database_contracts(&mysql);
 	test_poller_queries(&mysql);
@@ -2761,6 +2763,50 @@ static void test_host_status_transitions(void) {
 	assert(no_snmp.statistics.cur_time == 0);
 	update_host_status(HOST_DOWN, &no_snmp, &ping, AVAIL_SNMP);
 	assert(strcmp(no_snmp.state.status_last_error, "Device does not require SNMP") == 0);
+	/* Public transition/output matrix, including devices that do not require
+	 * SNMP. A failed poll never contributes a response-time sample. */
+	set.logging.log_level = POLLER_VERBOSITY_HIGH;
+	set.logging.log_destination = LOGDEST_STDOUT;
+	const int states[] = {HOST_UNKNOWN, HOST_UP, HOST_DOWN, HOST_RECOVERING};
+	for (int threshold = 1; threshold <= 2; threshold++) {
+		set.availability.ping_failure_count = threshold;
+		set.availability.ping_recovery_count = threshold;
+		for (size_t method = 0; method < sizeof(methods) / sizeof(methods[0]); method++) {
+			for (size_t state = 0; state < sizeof(states) / sizeof(states[0]); state++) {
+				for (int snmp = 0; snmp <= 1; snmp++) {
+					for (int up = 0; up <= 1; up++) {
+						host_t sample = {0};
+						int expected_status;
+						double expected_time = expected[method];
+
+						sample.state.status = states[state];
+						sample.snmp.profile.version = snmp ? 3 : 2;
+						sample.statistics.min_time = 1000;
+						if (!snmp && methods[method] == AVAIL_SNMP) expected_time = 0;
+						if (!snmp && methods[method] == AVAIL_SNMP_AND_PING) expected_time = 4;
+						update_host_status(up ? HOST_UP : HOST_DOWN, &sample, &ping, methods[method]);
+						if (up) {
+							expected_status = threshold == 2 && (states[state] == HOST_DOWN || states[state] == HOST_RECOVERING) ? HOST_RECOVERING : HOST_UP;
+							assert(sample.statistics.failed_polls == 0 && sample.statistics.availability == 100);
+							assert(sample.statistics.cur_time == expected_time && sample.statistics.avg_time == expected_time);
+							assert(sample.statistics.min_time == expected_time && sample.statistics.max_time == expected_time);
+						} else {
+							expected_status = states[state] == HOST_UP && threshold == 2 ? HOST_UP : HOST_DOWN;
+							assert(sample.statistics.failed_polls == 1 && sample.statistics.availability == 0);
+							assert(sample.statistics.cur_time == 0 && sample.statistics.avg_time == 0);
+							if (methods[method] == AVAIL_SNMP) {
+								assert(strcmp(sample.state.status_last_error, snmp ? "SNMP unavailable" : "Device does not require SNMP") == 0);
+							} else {
+								const char *message = snmp && (methods[method] == AVAIL_SNMP_AND_PING || methods[method] == AVAIL_SNMP_OR_PING) ? "SNMP unavailable, network unavailable" : "network unavailable";
+								assert(strcmp(sample.state.status_last_error, message) == 0);
+							}
+						}
+						assert(sample.statistics.total_polls == 1 && sample.state.status == expected_status);
+					}
+				}
+			}
+		}
+	}
 	set = previous;
 }
 

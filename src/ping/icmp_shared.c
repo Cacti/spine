@@ -352,7 +352,7 @@ static void icmp_shared_dispatch(int family, const unsigned char *reply, ssize_t
 		else {
 			const struct sockaddr_in6 *source = (const struct sockaddr_in6 *) from;
 
-			if (memcmp(&source->sin6_addr, &waiter->peer6, sizeof(waiter->peer6)) != 0 ||
+			if (memcmp(source->sin6_addr.s6_addr, waiter->peer6.s6_addr, sizeof(waiter->peer6.s6_addr)) != 0 ||
 				!icmp6_reply_matches(reply, len, waiter->id, waiter->seq, TRUE)) {
 				continue;
 			}

@@ -121,6 +121,25 @@ coverage-fault-source-list:
 # Production and linked tests share runtime objects. Report real object names.
 coverage-object-list:
 	@printf '%s\n' $(spine_OBJECTS) $(test_spine_regressions_OBJECTS) $(test_spine_faults_OBJECTS) | LC_ALL=C sort -u
+
+# The cmocka suites exercise shipped code, including socket/error paths via
+# syscall interception. Keep their measured producers separate from the
+# unmodified production-linked regression/fault producers above.
+.PHONY: coverage-unit-program-list coverage-unit-object-list
+coverage-unit-program-list:
+	@printf '%s\n' $(filter tests/unit/%,$(check_PROGRAMS))
+
+.PHONY: coverage-helper-program-list coverage-helper-object-list
+coverage-helper-program-list:
+	@printf '%s\n' tests/support/php_test_server$(EXEEXT)
+coverage-helper-object-list:
+	@printf '%s\n' $(tests_support_php_test_server_OBJECTS)
+
+# spine_runtime.c contains only test globals and generates no executable
+# coverage profile. All production sources remain in coverage-object-list.
+coverage-unit-object-list:
+	@printf '%s\n' $(filter-out tests/support/spine_runtime.o tests/support/%-spine_runtime.o, \
+	 $(foreach program,$(filter tests/unit/%,$(check_PROGRAMS)),$($(subst /,_,$(program))_OBJECTS))) | LC_ALL=C sort -u
 # Docker targets — require Dockerfile and docker/dev.Dockerfile (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
 

@@ -37,10 +37,26 @@ static unsigned char captured_auth_key[USM_AUTH_KU_LEN];
 static unsigned char captured_priv_key[USM_PRIV_KU_LEN];
 static oid captured_auth_proto[MAX_OID_LEN];
 static oid captured_priv_proto[MAX_OID_LEN];
+typedef enum {
+	REPLY_NONE,
+	REPLY_EMPTY,
+	REPLY_SCALAR,
+	REPLY_AGENT_ERROR,
+	REPLY_NAMELESS,
+	REPLY_NOSUCH_INSTANCE,
+	REPLY_END_OF_MIB
+} test_reply_kind_t;
+
+static int reply_status;
+static test_reply_kind_t reply_kind;
+static int request_calls;
+static int request_command;
 
 static void *capture_snmp_sess_open(struct snmp_session *session);
+static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response);
 static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
 	struct snmp_pdu **response);
+static bool check_request_lock;
 static bool expect_serialized_request;
 static int captured_request_status;
 static struct snmp_session captured_request_session;
@@ -58,6 +74,43 @@ static struct snmp_session *capture_snmp_sess_session(void *session);
 
 static struct snmp_session *capture_snmp_sess_session(void *session) {
 	return session == NULL ? NULL : &captured_request_session;
+}
+
+static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response) {
+	static const oid name[] = {1, 3, 6, 1, 2, 1, 1, 1, 0};
+	long value = 42;
+
+	assert_ptr_equal(session, (void *) (uintptr_t) 1);
+	assert_non_null(request);
+	assert_non_null(request->variables);
+	request_command = request->command;
+	request_calls++;
+	/* Match Net-SNMP ownership, including a failed/timeout send. */
+	snmp_free_pdu(request);
+	*response = NULL;
+	if (reply_kind == REPLY_NONE) return reply_status;
+	*response = snmp_pdu_create(SNMP_MSG_RESPONSE);
+	assert_non_null(*response);
+	(*response)->errstat = SNMP_ERR_NOERROR;
+	(*response)->errindex = 0;
+	if (reply_kind == REPLY_SCALAR || reply_kind == REPLY_NAMELESS || reply_kind == REPLY_NOSUCH_INSTANCE || reply_kind == REPLY_END_OF_MIB) {
+		u_char type = reply_kind == REPLY_NOSUCH_INSTANCE ? SNMP_NOSUCHINSTANCE : reply_kind == REPLY_END_OF_MIB ? SNMP_ENDOFMIBVIEW
+																												 : ASN_INTEGER;
+		const u_char *contents = type == ASN_INTEGER ? (const u_char *) &value : NULL;
+		size_t length = type == ASN_INTEGER ? sizeof(value) : 0;
+
+		assert_non_null(snmp_pdu_add_variable(*response, name, sizeof(name) / sizeof(name[0]), type, contents, length));
+		if (reply_kind == REPLY_NAMELESS) {
+			/* Short OIDs use the varbind's inline name storage. */
+			if ((*response)->variables->name != (*response)->variables->name_loc) {
+				SNMP_FREE((*response)->variables->name);
+			}
+			(*response)->variables->name = NULL;
+			(*response)->variables->name_length = 0;
+		}
+	}
+	if (reply_kind == REPLY_AGENT_ERROR) (*response)->errstat = SNMP_ERR_GENERR;
+	return reply_status;
 }
 
 static void *capture_snmp_sess_open(struct snmp_session *session) {
@@ -100,8 +153,9 @@ static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *requ
 	int lock_status;
 	int cancellation_state;
 
-	(void) session;
-	(void) request;
+	if (!check_request_lock) {
+		return capture_synch_response(session, request, response);
+	}
 	*response = NULL;
 	lock_status = thread_mutex_trylock(LOCK_SNMP);
 	if (lock_status == 0) {
@@ -117,6 +171,7 @@ static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *requ
 
 static int session_reset(void **state) {
 	(void) state;
+	check_request_lock = FALSE;
 	config_defaults();
 	init_mutexes();
 	set.snmp.snmp_retries = 1;
@@ -125,6 +180,10 @@ static int session_reset(void **state) {
 	captured_priv_key_len = 0;
 	captured_auth_proto_len = 0;
 	captured_priv_proto_len = 0;
+	reply_status = STAT_SUCCESS;
+	reply_kind = REPLY_NONE;
+	request_calls = 0;
+	request_command = 0;
 	memset(captured_auth_key, 0, sizeof(captured_auth_key));
 	memset(captured_priv_key, 0, sizeof(captured_priv_key));
 	memset(captured_auth_proto, 0, sizeof(captured_auth_proto));
@@ -526,6 +585,56 @@ static void test_multi_get_refuses_a_missing_session(void **state) {
 	assert_true(IS_UNDEFINED(request.result));
 }
 
+static void test_single_request_transport_and_response_contracts(void **state) {
+	typedef struct {
+		int status;
+		test_reply_kind_t kind;
+		const char *get_value;
+		const char *optional_value;
+		const char *next_value;
+		bool get_failed;
+		bool next_failed;
+		int get_status;
+		int next_status;
+	} response_case_t;
+	static const response_case_t cases[] = {
+		{STAT_SUCCESS, REPLY_NONE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
+		{STAT_TIMEOUT, REPLY_NONE, "U", "", "U", TRUE, TRUE, STAT_TIMEOUT, STAT_TIMEOUT},
+		{STAT_TIMEOUT, REPLY_SCALAR, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_TIMEOUT},
+		{STAT_SUCCESS, REPLY_EMPTY, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_AGENT_ERROR, "", "", "", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_SCALAR, "42", "42", "42", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_NAMELESS, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR}};
+	char text_oid[] = ".1.3.6.1.2.1.1.1.0";
+
+	(void) state;
+	for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
+		for (int operation = 0; operation < 3; operation++) {
+			host_t host = {0};
+			char *result;
+			const char *expected = operation == 0 ? cases[index].get_value : operation == 1 ? cases[index].optional_value
+																							: cases[index].next_value;
+
+			host.snmp.session = (void *) (uintptr_t) 1;
+			reply_status = cases[index].status;
+			reply_kind = cases[index].kind;
+			request_calls = 0;
+			print_message("transport status=%d response kind=%d operation=%d\n", reply_status, reply_kind, operation);
+			result = operation == 2 ? snmp_getnext(&host, text_oid) : snmp_get_base(&host, text_oid, operation == 0);
+			assert_non_null(result);
+			assert_string_equal(result, expected);
+			assert_int_equal(host.snmp.status, operation == 2 ? cases[index].next_status : cases[index].get_status);
+			assert_int_equal(host.ignore_host, operation == 0 ? cases[index].get_failed : operation == 1 ? FALSE
+																										 : cases[index].next_failed);
+			assert_int_equal(request_calls, 1);
+			assert_int_equal(request_command, operation == 2 ? SNMP_MSG_GETNEXT : SNMP_MSG_GET);
+			free(result);
+		}
+	}
+}
+
 static void test_request_lock_and_cancellation_contract(void **state) {
 	host_t host = {0};
 	struct snmp_pdu *response = NULL;
@@ -537,6 +646,7 @@ static void test_request_lock_and_cancellation_contract(void **state) {
 	size_t index;
 
 	(void) state;
+	check_request_lock = TRUE;
 	host.snmp.session = &captured_request_session;
 	for (version = 1; version <= 3; version++) {
 		host.snmp.profile.version = version;
@@ -596,6 +706,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_multi_get_refuses_a_missing_session, session_reset),
 		cmocka_unit_test_setup(test_request_lock_and_cancellation_contract, session_reset),
 		cmocka_unit_test_setup(test_failed_session_restores_lock_and_cancellation, session_reset),
+		cmocka_unit_test_setup(test_single_request_transport_and_response_contracts, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
