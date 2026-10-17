@@ -61,6 +61,10 @@ The Cacti Group | spine
 -issue: Preserve coverage fingerprints across build cleanup and run memory-soak contracts with POSIX shells
 -issue: Preserve portable executable PATH lookup and compile process helpers across Linux, BSD and macOS
 -issue: Verify independent maintenance PR stacks and preserve shallow-worktree history boundaries
+-issue: SIGTERM aborts the running script process groups
+-issue: A NULL setting in the database now leaves the built-in default in effect
+-issue: An SNMP exception reply such as noSuchObject no longer marks the device down
+-issue: SQL error logs name the statement verb and table with the error number and SQLSTATE, and never include the statement text or the server's message
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
 -feature#440: Add idiomatic Debian packaging
