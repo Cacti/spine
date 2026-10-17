@@ -34,99 +34,10 @@
 #include "common.h"
 #include "spine.h"
 
-static int is_identifier_char(unsigned char c) {
-	return (isalnum(c) || c == '_');
-}
-
-static void redact_sql_value_for_key(char *query, const char *key) {
-	char *match;
-	size_t key_len;
-
-	key_len = strlen(key);
-	match = query;
-
-	while ((match = strstr(match, key)) != NULL) {
-		char *cursor;
-		char quote = '\0';
-
-		if (match > query && is_identifier_char((unsigned char) *(match - 1))) {
-			match += key_len;
-			continue;
-		}
-
-		if (is_identifier_char((unsigned char) match[key_len])) {
-			match += key_len;
-			continue;
-		}
-
-		cursor = match + key_len;
-		while (*cursor && isspace((unsigned char) *cursor)) {
-			cursor++;
-		}
-
-		if (*cursor != '=') {
-			match += key_len;
-			continue;
-		}
-
-		cursor++;
-		while (*cursor && isspace((unsigned char) *cursor)) {
-			cursor++;
-		}
-
-		if (*cursor == '\'' || *cursor == '\"') {
-			quote = *cursor;
-			cursor++;
-		}
-
-		while (*cursor) {
-			if (quote) {
-				if (*cursor == quote) {
-					break;
-				}
-
-				*cursor = '*';
-				cursor++;
-				continue;
-			}
-
-			if (*cursor == ',' || *cursor == ')' || isspace((unsigned char) *cursor)) {
-				break;
-			}
-
-			*cursor = '*';
-			cursor++;
-		}
-
-		match = cursor;
-	}
-}
-
-static void log_redacted_sql_query(const char *query_frag) {
-	char *redacted_query;
-	int j;
-	static const char *sensitive_keys[] = {
-		"snmp_community",
-		"snmp_password",
-		"snmp_priv_passphrase",
-		"password"
-	};
-
-	if (set.log_level < POLLER_VERBOSITY_DEVDBG) {
-		return;
-	}
-
-	redacted_query = strdup(query_frag);
-	if (redacted_query == NULL) {
-		return;
-	}
-
-	for (j = 0; j < (int) (sizeof(sensitive_keys) / sizeof(sensitive_keys[0])); j++) {
-		redact_sql_value_for_key(redacted_query, sensitive_keys[j]);
-	}
-
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", redacted_query));
-	free(redacted_query);
+/* SQL and server-echoed literals can contain credentials, including INSERTs
+ * that cannot be safely redacted by looking for assignment keys. */
+static void log_sql_statement(const char *query) {
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement (%zu bytes)", strlen(query)));
 }
 
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
@@ -151,14 +62,9 @@ bool db_row_alias(MYSQL *destination) {
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int    error;
 	int    error_count = 0;
-	char   query_frag[LRG_BUFSIZE];
-
-	/* save a fragment just in case */
-	memset(query_frag, 0, LRG_BUFSIZE);
-	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	log_redacted_sql_query(query_frag);
+	log_sql_statement(query);
 
 	while(1) {
 		if (set.SQL_readonly == FALSE) {
@@ -191,7 +97,7 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 
 					continue;
 				} else {
-					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s'", error, mysql_error(mysql)));
+					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', State:'%s'", error, mysql_sqlstate(mysql)));
 					return FALSE;
 				}
 			} else {
@@ -246,14 +152,9 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	int    error       = 0;
 	int    error_count = 0;
 
-	char   query_frag[LRG_BUFSIZE];
-
-	/* save a fragment just in case */
-	memset(query_frag, 0, LRG_BUFSIZE);
-	snprintf(query_frag, LRG_BUFSIZE, "%s", query);
 
 	/* show the sql query */
-	log_redacted_sql_query(query_frag);
+	log_sql_statement(query);
 
 	while (1) {
 		if (mysql_query(mysql, query)) {
@@ -284,8 +185,8 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 				continue;
 			} else {
-				SPINE_LOG(("FATAL: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
-				log_redacted_sql_query(query);
+				SPINE_LOG(("FATAL: Database Error:'%i', State:'%s'", error, mysql_sqlstate(mysql)));
+				log_sql_statement(query);
 				exit(1);
 			}
 		} else {
@@ -308,6 +209,32 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
  *  fails more than 20 times, the function will fail and Spine will terminate.
  *
  */
+/* The legacy SSL flag must not silently fall back to plaintext. A Unix socket
+ * never leaves the host and the client library does not negotiate TLS on it,
+ * so requiring TLS there would fail every connection. */
+static int db_tls_required(int type, const char *hostname) {
+	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return FALSE;
+	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
+}
+
+static void db_require_tls(MYSQL *mysql, int type, const char *hostname) {
+	if (!db_tls_required(type, hostname)) return;
+#ifdef HAS_MYSQL_OPT_SSL_MODE
+	enum mysql_ssl_mode policy = SSL_MODE_REQUIRED;
+	if (mysql_options(mysql, MYSQL_OPT_SSL_MODE, &policy) != 0) {
+		die("ERROR: Unable to require database TLS");
+	}
+#elif defined(HAS_MYSQL_OPT_SSL_ENFORCE)
+	unsigned char required = 1;
+	if (mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &required) != 0) {
+		die("ERROR: Unable to require database TLS");
+	}
+#else
+	(void)mysql;
+	die("ERROR: Database client cannot enforce required TLS");
+#endif
+}
+
 void db_connect(int type, MYSQL *mysql) {
 	int     tries;
 	int     attempts;
@@ -383,6 +310,8 @@ void db_connect(int type, MYSQL *mysql) {
 	MYSQL_SET_OPTION(MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 	#endif
 
+	db_require_tls(mysql, type, hostname);
+
 	/* set SSL options if available */
 	#ifdef HAS_MYSQL_OPT_SSL_KEY
 	char *ssl_key  = NULL;
@@ -454,6 +383,10 @@ void db_connect(int type, MYSQL *mysql) {
 			}
 		} else {
 			tries   = 0;
+			if (db_tls_required(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL) {
+				mysql_close(mysql);
+				die("ERROR: Required database TLS was not negotiated");
+			}
 			success = TRUE;
 			break;
 		}

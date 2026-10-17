@@ -192,7 +192,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	/* if write status is <= 0 then the script server may be hung */
 	if (bytes <= 0) {
 		STRDUP_OR_DIE(result_string, "U", "php_cmd result");
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending Command[%s].  Restarting PHP Script Server", php_process, command));
+		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending a command.  Restarting PHP Script Server", php_process));
 
 		php_close(php_process);
 		if (!php_init(php_process)) {
@@ -423,7 +423,7 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 	case 0:
 		/* record end time */
 		end_time = get_time_as_double();
-		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f], Command[%s] and will therefore be restarted", php_process, end_time - begin_time, command));
+		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not respond in time for Timeout[%0.2f] and will therefore be restarted", php_process, end_time - begin_time));
 		SET_UNDEFINED(result_string);
 
 		/* kill script server because it is misbehaving */

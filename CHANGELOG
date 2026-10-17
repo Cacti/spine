@@ -18,6 +18,10 @@ The Cacti Group | spine
 -issue#575: Probe for usmDESPrivProtocol instead of assuming the header's advertised default
 -issue#632: Reap nft_pclose() with a single bounded non-blocking check, killing and parking anything still running for a later sweep instead of the previous unbounded blocking waitpid()
 -issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
+-issue: Backport polling fixes from develop #641 and #660: separate SNMP endpoints and timeouts, check whole uptime conversions, reject truncated script output, and preserve one-shot reads (#661)
+-issue: Backport worker stack sizing, SNMP synchronization, PHP slot validation, and CLI/config boundaries from develop #644, #646 and #660 (#662)
+-issue: Backport connection ownership, destination upserts, retry limits, and failure-aware completion from develop #641, #655 and #660 (#663)
+-issue: Backport SNMPv3 key handling, probe deadlines, result normalization, safe signal/logging paths, input limits, and required legacy TLS; collect offline regression contracts (#664)
 
 1.2.31
 -issue#365: Removed Backtrace Support due to lack of OS support

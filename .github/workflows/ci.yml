@@ -38,6 +38,10 @@ jobs:
         run: |
           make -j"$(nproc)"
 
+      - name: Run backport contracts
+        run: |
+          python3 tests/backport_contracts.py
+
   flawfinder:
     runs-on: ubuntu-latest
     steps:
