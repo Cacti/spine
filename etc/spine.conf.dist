@@ -1,6 +1,8 @@
 # Optional external-command limits (0 preserves existing behavior).
 # ScriptMaxOutputBytes must be less than the configured RESULTS_BUFFER.
 # ScriptMemoryMB requires Linux and limits per-process virtual address space.
+# On a setuid root install, a limited command loses LD_LIBRARY_PATH, LD_PRELOAD
+# and TMPDIR from its environment.
 # ScriptMaxOutputBytes 0
 # ScriptCpuSeconds 0
 # ScriptMemoryMB 0
