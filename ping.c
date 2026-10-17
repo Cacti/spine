@@ -1727,8 +1727,7 @@ static int split_host_spec(const char *spec, int *method, char *address, size_t 
 		length = capacity - 1;
 	}
 
-	memcpy(address, host, length);
-	address[length] = '\0';
+	snprintf(address, capacity, "%.*s", (int) length, host);
 
 	if (port_text != NULL && port_text[0] >= '0' && port_text[0] <= '9') {
 		char *rest;
