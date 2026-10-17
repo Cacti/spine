@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: 2004-2026 The Cacti Group
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
+# This code is designed, written, and maintained by the Cacti Group. See
+# CONTRIBUTORS.md for developer information.
+#
 # Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 
@@ -106,7 +109,7 @@ noinst_HEADERS += src/database/lease.h src/platform/worker_set.h
 
 EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
 	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
-	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
+	LICENSES/BSD-1-Clause.txt LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
 	tests/README.md \
 	tests/support/test-harness.sh \
 	tests/integration/test_concurrency.sh \
@@ -331,9 +334,9 @@ tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
-TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
+TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh tests/regression/test_script_child_setuid.sh
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
-EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
+EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh tests/regression/test_script_child_setuid.sh
 
 EXTRA_DIST += tests/fixtures/c17_develop_behavior_baseline.json
 
@@ -434,3 +437,5 @@ EXTRA_DIST += docs/platforms.md
 
 TESTS += tests/tools/test_memory_soak_fit.sh
 EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk
+TESTS += tests/tools/test_licensing.sh
+EXTRA_DIST += tests/tools/test_licensing.sh tests/tools/check_licensing.py

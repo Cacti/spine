@@ -195,9 +195,12 @@ static bool log_to_file(const char *message) {
  * stack.  Each thread takes its buffers from the heap on its first message
  * and keeps them until it exits; if that allocation fails the record is
  * still written, cut to BUFSIZE. */
+#define JSON_LOG_CAPACITY ((size_t) LOGSIZE + 256)
+
 typedef struct {
 	char message[LOGSIZE];
 	char formatted[LOGSIZE];
+	char json[JSON_LOG_CAPACITY];
 } log_buffers_t;
 
 static pthread_key_t log_buffers_key;
@@ -221,32 +224,30 @@ static log_buffers_t *log_buffers(void) {
 	return buffers;
 }
 
-_Static_assert((size_t) LOGSIZE <= (SIZE_MAX - 256) / 6, "JSON log allocation size overflows");
-
-static int log_json_message(const char *message) {
-	static const char failure[] = "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: invalid UTF-8 or formatting failure\"}\n";
+/* Every message byte encodes to at most six output bytes (\u00XX); a message
+ * too long for the buffer is cut, as the text path cuts at LOGSIZE. */
+static int log_json_message(char *message, char *record_buffer, size_t record_capacity) {
+	static const char failure[] = "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: formatting failure\"}\n";
 	const char *severity = strstr(message, "FATAL") ? "FATAL" : strstr(message, "ERROR") ? "ERROR"
 		: strstr(message, "WARNING")                                                     ? "WARNING"
 																						 : "INFO";
 	char timestamp[32] = "unknown";
 	struct tm utc;
 	time_t now = time(NULL);
-	size_t length = strlen(message);
-	char *owned = NULL;
+	size_t limit = (record_capacity - 256) / 6;
 	const char *record = failure;
 	bool valid;
 	bool success;
 
 	valid = gmtime_r(&now, &utc) != NULL &&
 		strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc) != 0;
-	owned = malloc(length * 6 + 256);
-	if (owned != NULL && spine_json_log_record(owned, length * 6 + 256, timestamp, severity, message)) {
-		record = owned;
+	if (strlen(message) > limit) message[limit] = '\0';
+	if (spine_json_log_record(record_buffer, record_capacity, timestamp, severity, message)) {
+		record = record_buffer;
 	} else {
 		valid = FALSE;
 	}
 	success = valid;
-	pthread_cleanup_push(free, owned);
 	if (IS_LOGGING_TO_STDOUT()) {
 		if (printf("%s", record) < 0) success = FALSE;
 	} else {
@@ -256,13 +257,13 @@ static int log_json_message(const char *message) {
 		if (set.logging.log_level >= POLLER_VERBOSITY_NONE && log_stream_available(stream) &&
 			fprintf(stream, "%s", record) < 0) success = FALSE;
 	}
-	pthread_cleanup_pop(1);
 	return success;
 }
 
 int spine_log(const char *format, ...) {
 	char fallback_message[BUFSIZE];
 	char fallback_formatted[BUFSIZE];
+	char fallback_json[(size_t) BUFSIZE + 256];
 	log_buffers_t *buffers = log_buffers();
 	char *message = buffers != NULL ? buffers->message : fallback_message;
 	char *formatted = buffers != NULL ? buffers->formatted : fallback_formatted;
@@ -271,7 +272,10 @@ int spine_log(const char *format, ...) {
 	va_start(args, format);
 	vsnprintf(message, capacity - 1, format, args);
 	va_end(args);
-	if (set.logging.json_logs) return log_json_message(message);
+	if (set.logging.json_logs) {
+		return buffers != NULL ? log_json_message(message, buffers->json, sizeof(buffers->json))
+							   : log_json_message(message, fallback_json, sizeof(fallback_json));
+	}
 	spine_sanitize_log_message(message);
 	if (IS_LOGGING_TO_STDOUT()) {
 		return printf("Total[%3.4f] %s\n", get_time_as_double() - start_time, message) < 0 ? FALSE : TRUE;

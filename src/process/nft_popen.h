@@ -3,6 +3,9 @@
  * SPDX-FileCopyrightText: 2002 Xenadyne, Inc.
  * SPDX-License-Identifier: GPL-2.0-or-later AND LicenseRef-Xenadyne-Header
  *
+ * This code is designed, written, and maintained by the Cacti Group. See
+ * CONTRIBUTORS.md for developer information.
+ *
  * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  */

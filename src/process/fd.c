@@ -4,6 +4,9 @@
  * SPDX-FileCopyrightText: 1988, 1993 The Regents of the University of California
  * SPDX-License-Identifier: GPL-2.0-or-later AND BSD-4-Clause AND LicenseRef-Xenadyne
  *
+ * This code is designed, written, and maintained by the Cacti Group. See
+ * CONTRIBUTORS.md for developer information.
+ *
  * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  */

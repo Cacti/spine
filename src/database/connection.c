@@ -77,6 +77,14 @@ static void db_set_ssl_options(MYSQL *mysql, int type) {
 }
 #endif
 
+/* A rejected connection leaves the caller a handle it can close again. */
+static int db_reject_handle(MYSQL *mysql, db_address_t *address) {
+	mysql_close(mysql);
+	mysql_init(mysql);
+	db_address_release(address);
+	return FALSE;
+}
+
 /* Reports failure instead of exiting: worker threads reconnect through here,
  * and a lost database must fail a device rather than the poller. Startup
  * callers turn FALSE into a process exit. */
@@ -126,9 +134,7 @@ int db_connect(int type, MYSQL *mysql) {
 #endif
 	if (!db_apply_tls_policy(mysql, local_address ? &set.database : &set.remote_database)) {
 		SPINE_LOG(("ERROR: Database TLS policy is invalid or unsupported by the selected client library"));
-		mysql_close(mysql);
-		db_address_release(&address);
-		return FALSE;
+		return db_reject_handle(mysql, &address);
 	}
 
 		tries--;
@@ -164,10 +170,7 @@ int db_connect(int type, MYSQL *mysql) {
 			const spine_database_config_t *configuration = local_address ? &set.database : &set.remote_database;
 			if (configuration->tls_mode >= SPINE_TLS_REQUIRED && mysql_get_ssl_cipher(mysql) == NULL) {
 				SPINE_LOG(("ERROR: Database connection rejected because the explicit TLS policy requires encryption"));
-				mysql_close(mysql);
-				mysql_init(mysql);
-				db_address_release(&address);
-				return FALSE;
+				return db_reject_handle(mysql, &address);
 			}
 			success = TRUE;
 			break;

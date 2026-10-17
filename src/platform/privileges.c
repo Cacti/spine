@@ -135,7 +135,7 @@ int privileges_dropped(uid_t uid, gid_t gid) {
  *
  *  Never returns while spine is setuid root: it drops or exits.
  */
-void drop_privileges(void) {
+static void drop_privileges_with(int open_icmp) {
 	uid_t uid = getuid();
 	gid_t gid = getgid();
 	int icmp_ready;
@@ -154,7 +154,7 @@ void drop_privileges(void) {
 #ifdef HAVE_LCAP
 	icmp_ready = drop_root(uid, gid);
 #else
-	icmp_ready = ping_icmp_open_shared();
+	icmp_ready = open_icmp ? ping_icmp_open_shared() : FALSE;
 
 	/* With an effective uid of 0, POSIX setgid() and setuid() replace the
 	 * real, effective and saved ids; seteuid() would keep root in reserve.
@@ -172,7 +172,23 @@ void drop_privileges(void) {
 
 	/* Missing ICMP is not a reason to stop polling: checkAsRoot() tries
 	 * datagram ICMP and otherwise warns, and ICMP pings fall back to UDP. */
-	setuid_icmp_lost = !icmp_ready;
+	if (open_icmp) {
+		setuid_icmp_lost = !icmp_ready;
+	}
+}
+
+void drop_privileges(void) {
+	drop_privileges_with(TRUE);
+}
+
+/*! \fn void drop_privileges_for_child(void)
+ *  \brief drops setuid root without opening the shared raw ICMP sockets
+ *
+ *  A script child only needs to run as the invoking user; it must not hold
+ *  sockets that only the poller uses.
+ */
+void drop_privileges_for_child(void) {
+	drop_privileges_with(FALSE);
 }
 
 int hasCaps(void) {

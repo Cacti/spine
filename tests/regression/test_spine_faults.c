@@ -780,9 +780,12 @@ static void test_logger_cancellation_unlocks_file(void) {
 		fail_log_mutex = TRUE;
 		assert(!spine_log("file mutex fault"));
 		assert(!fail_log_mutex);
+		/* The record is built in the thread's own buffer, so an allocation
+		 * failure has nothing to fail once that buffer exists. */
 		allocation_failures = 1;
-		assert(!spine_log("allocation fault"));
-		assert(allocation_failures == 0);
+		assert(spine_log("allocation fault"));
+		assert(allocation_failures == 1);
+		allocation_failures = 0;
 		format_failures = 1;
 		assert(!spine_log("timestamp fault"));
 		assert(format_failures == 0);

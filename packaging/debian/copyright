@@ -6,13 +6,15 @@ Source: https://github.com/Cacti/spine
 Files: *
 Copyright: 2004-2026 The Cacti Group
 License: LGPL-2.1-or-later
-Comment: Each source file names its own SPDX identifier, either
- LGPL-2.1-or-later or LGPL-2.1-only. The root LICENSE is the LGPL 2.1 text.
+Comment: Each source file names its own SPDX identifier. This default covers
+ files that name LGPL-2.1-or-later; other identifiers have stanzas below,
+ and tests/tools/check_licensing.py keeps them in agreement.
 
 Files: Makefile.am
  Makefile.in
  bootstrap
  configure.ac
+ docs/adr/0001-c17-language-standard.md
  scripts/copyright_year.sh
  scripts/debug.sh
  scripts/package.sh
@@ -24,13 +26,63 @@ License: GPL-2.0-or-later
 Files: src/platform/descriptor.c
  src/process/fd.c
  src/process/nft_popen.c
- src/process/nft_popen.h
 Copyright: 1993 The Regents of the University of California
- Xenadyne
+ 2002 Xenadyne Inc.
  2004-2026 The Cacti Group
 License: GPL-2.0-or-later and BSD-4-Clause and LicenseRef-Xenadyne
-Comment: The Xenadyne permission text is in LICENSES/LicenseRef-Xenadyne.txt
- and LICENSES/LicenseRef-Xenadyne-Header.txt.
+
+Files: src/process/nft_popen.h
+Copyright: 1993 The Regents of the University of California
+ 2002 Xenadyne Inc.
+ 2004-2026 The Cacti Group
+License: GPL-2.0-or-later and LicenseRef-Xenadyne-Header
+
+Files: scripts/check-dco.sh
+ scripts/test-distros.sh
+ scripts/verify.sh
+ tests/fuzz/fuzz_icmp_reply.c
+ tests/fuzz/fuzz_namebyhost.c
+ tests/integration/smoke_test.sh
+ tests/integration/test_alloc_failure.sh
+ tests/integration/test_cli_args.sh
+ tests/integration/test_concurrency.sh
+ tests/integration/test_db_column_detect.sh
+ tests/integration/test_memory_soak.sh
+ tests/integration/test_network_faults.sh
+ tests/integration/test_output_regex.sh
+ tests/integration/test_script_server_reap.sh
+ tests/integration/test_unprivileged_icmp.sh
+ tests/regression/test_child_process_safety.sh
+ tests/regression/test_remote_push.sh
+ tests/regression/test_setuid_privilege_drop.sh
+ tests/snmpv3/scripts/coverage.sh
+ tests/snmpv3/scripts/run-integration.sh
+ tests/snmpv3/scripts/run_test.sh
+ tests/snmpv3/scripts/test-script.sh
+ tests/snmpv3/scripts/verify.sh
+ tests/support/php_test_server.c
+ tests/support/spine_runtime.c
+ tests/support/test-harness.sh
+ tests/tools/normalize_entry_coverage.py
+ tests/tools/test_entry_coverage.py
+ tests/unit/test_build_fixes.c
+ tests/unit/test_classify_result.c
+ tests/unit/test_linked.c
+ tests/unit/test_log_config.c
+ tests/unit/test_php_runtime.c
+ tests/unit/test_ping_icmp.c
+ tests/unit/test_ping_timing.c
+ tests/unit/test_poll_host.c
+ tests/unit/test_safety_fixes.c
+ tests/unit/test_snmpv3_session.c
+ tests/unit/test_util_paths.c
+ tests/unit/test_util_strings.c
+Copyright: 2004-2026 The Cacti Group
+License: LGPL-2.1-only
+
+Files: vendor/uthash/uthash.h
+Copyright: 2003-2021 Troy D. Hanson
+License: BSD-1-Clause
 
 License: LGPL-2.1-or-later
  This library is free software; you can redistribute it and/or
@@ -75,3 +127,34 @@ License: LicenseRef-Xenadyne
  The permission, advertising and disclaimer text is kept verbatim in
  LICENSES/LicenseRef-Xenadyne.txt and LICENSES/LicenseRef-Xenadyne-Header.txt
  in the source tree.
+
+License: LGPL-2.1-only
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation, version 2.1 of the License.
+ .
+ On Debian systems, the full text of the GNU Lesser General Public License
+ version 2.1 can be found in the file `/usr/share/common-licenses/LGPL-2.1'.
+
+License: BSD-1-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ * Redistributions of source code must retain the above copyright
+ notice, this list of conditions and the following disclaimer.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: LicenseRef-Xenadyne-Header
+ The Xenadyne header notice is kept verbatim in
+ LICENSES/LicenseRef-Xenadyne-Header.txt in the source tree.
