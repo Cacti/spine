@@ -47,16 +47,13 @@ jobs:
         # The Docker Hub "rockylinux" library image stopped updating in 2024;
         # the Rocky project publishes current images as rockylinux/rockylinux.
         image:
-          - rockylinux/rockylinux:8
           - rockylinux/rockylinux:9
           - rockylinux/rockylinux:10
-          - almalinux:8
           - almalinux:9
           - almalinux:10
           - mirror.gcr.io/library/ubuntu:22.04
           - mirror.gcr.io/library/ubuntu:24.04
           - mirror.gcr.io/library/ubuntu:26.04
-          - mirror.gcr.io/library/debian:12
           - mirror.gcr.io/library/debian:13
           - mirror.gcr.io/library/fedora:44
           - opensuse/leap:16.0
