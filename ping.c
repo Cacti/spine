@@ -80,7 +80,9 @@ static int split_host_spec(const char *spec, int *method, char *address, size_t 
 		}
 	}
 
-	if (host[0] == '[' && (end = strchr(host, ']')) != NULL) {
+	end = host[0] == '[' ? strchr(host, ']') : NULL;
+
+	if (end != NULL) {
 		ipv6 = TRUE;
 		host = host + 1;
 		length = (size_t) (end - host);
@@ -834,18 +836,7 @@ int ping_udp(host_t *host, ping_t *ping) {
 }
 
 
-/*! \fn int ping_tcp(host_t *host, ping_t *ping)
- *  \brief ping a host using an TCP syn
- *  \param host a pointer to the current host structure
- *  \param ping a pointer to the current hosts ping structure
- *
- *  This function pings a host using TCP.  The TCP socket contains a marker
- *  to the "Cacti" application so that firewall's can be configured to allow.
- *  It will modify the ping structure to include the specifics of the ping results.
- *
- *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
- *
- */
+/* One nonblocking connect bounded by the deadline; returns 0 or an errno value. */
 static int ping_tcp_attempt(const struct sockaddr_in *address, double deadline) {
 	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	int flags, error, ready;
@@ -885,14 +876,35 @@ static int ping_tcp_attempt(const struct sockaddr_in *address, double deadline) 
 	return error;
 }
 
+/*! \fn int ping_tcp(host_t *host, ping_t *ping)
+ *  \brief ping a host using an TCP syn
+ *  \param host a pointer to the current host structure
+ *  \param ping a pointer to the current hosts ping structure
+ *
+ *  This function pings a host using TCP.  The TCP socket contains a marker
+ *  to the "Cacti" application so that firewall's can be configured to allow.
+ *  It will modify the ping structure to include the specifics of the ping results.
+ *
+ *  \return HOST_UP if the host is reachable, HOST_DOWN otherwise.
+ *
+ */
 int ping_tcp(host_t *host, ping_t *ping) {
 	struct sockaddr_in address;
 	double begin, deadline, elapsed;
 	unsigned int attempt;
 	int error;
 
-	if (host->hostname[0] == '\0' || !init_sockaddr(&address, host->hostname, host->ping_port) ||
-		host->ping_timeout <= 0 || host->ping_retries < 0) {
+	if (host->hostname[0] == '\0') {
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Destination address invalid or unable to create socket");
+		return HOST_DOWN;
+	}
+	if (!init_sockaddr(&address, host->hostname, host->ping_port)) {
+		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
+		snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Destination hostname invalid");
+		return HOST_DOWN;
+	}
+	if (host->ping_timeout <= 0 || host->ping_retries < 0) {
 		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
 		snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Cannot connect to host");
 		return HOST_DOWN;
@@ -903,6 +915,11 @@ int ping_tcp(host_t *host, ping_t *ping) {
 		error = ping_tcp_attempt(&address, deadline);
 		if (error == 0 || (error == ECONNREFUSED && host->ping_method == PING_TCP_CLOSED)) {
 			elapsed = (ping_monotonic_time() - begin) * 1000;
+			if (is_debug_device(host->id)) {
+				SPINE_LOG(("Device[%i] INFO: TCP Device Alive, Try Count:%u, Time:%.4f ms", host->id, attempt + 1, elapsed));
+			} else {
+				SPINE_LOG_MEDIUM(("Device[%i] INFO: TCP Device Alive, Try Count:%u, Time:%.4f ms", host->id, attempt + 1, elapsed));
+			}
 			snprintf(ping->ping_response, sizeof(ping->ping_response), "TCP: Device is Alive");
 			snprintf(ping->ping_status, sizeof(ping->ping_status), "%.5f", elapsed);
 			return HOST_UP;
