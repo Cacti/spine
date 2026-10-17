@@ -64,6 +64,17 @@ def group_stacks(prs, repository, branches):
     return groups
 
 
+def changed_paths(git, old, new):
+    return set(git('diff-tree', '-r', '--name-only', '--no-renames', old, new).splitlines())
+
+
+def blob_at(git, revision, path):
+    try:
+        return git('rev-parse', f'{revision}:{path}')
+    except StackError:
+        return None
+
+
 def verify(source, prs, repository, root_branch='develop', fetch=False):
     ordered = order_prs(prs, (repository, root_branch))
     with tempfile.TemporaryDirectory(prefix='spine-stack-') as directory:
@@ -98,15 +109,17 @@ def verify(source, prs, repository, root_branch='develop', fetch=False):
                         for pr in ordered)
             git('fetch', '--no-tags', url, *refs)
             root_ref = 'refs/audit/root'
+            # The API reports the base tip as of the PR's last update, which is
+            # stale as soon as the base branch moves. Only the head is a stable
+            # identity; the base is whatever the branch is now.
             for pr in ordered:
-                for side in ('head', 'base'):
-                    ref = f'refs/audit/{"pr" if side == "head" else "base"}/{pr["number"]}'
-                    if git('rev-parse', ref) != pr[side]['sha']:
-                        raise StackError('PR moved during fetch; repeat the audit')
+                if git('rev-parse', f'refs/audit/pr/{pr["number"]}') != pr['head']['sha']:
+                    raise StackError('PR moved during fetch; repeat the audit')
         current = original_root = git('rev-parse', root_ref)
         results = []
         for pr in ordered:
-            base, head = pr['base']['sha'], pr['head']['sha']
+            head = pr['head']['sha']
+            base = git('rev-parse', f'refs/audit/base/{pr["number"]}') if fetch else pr['base']['sha']
             # Check the existing PR independently, then replay its complete delta
             # on the simulated squashed parent. Ordinary merges retain ancestry;
             # squash merges require this explicit restacking step.
@@ -119,10 +132,21 @@ def verify(source, prs, repository, root_branch='develop', fetch=False):
             pivot = synthetic(git('rev-parse', current + '^{tree}'), ancestor,
                               f'Unpublished replay pivot for PR #{pr["number"]}')
             tree = git('merge-tree', '--write-tree', pivot, head).splitlines()[0]
+            # A restack must carry every path the PR changes: a path in the
+            # direct delta that the replay left alone must already match the
+            # head, otherwise the delta was dropped without a textual conflict.
+            direct_paths = changed_paths(git, ancestor, head)
+            parent_tree = git('rev-parse', current + '^{tree}')
+            restacked_paths = changed_paths(git, parent_tree, tree)
+            for path in sorted(direct_paths - restacked_paths):
+                if blob_at(git, tree, path) != blob_at(git, head, path):
+                    raise StackError(f'Restack of PR #{pr["number"]} dropped its change to {path}')
             current = synthetic(tree, current,
                                 f'Unpublished squash/restack simulation of PR #{pr["number"]}')
             results.append({'number': pr['number'], 'base_sha': base, 'head_sha': head,
                             'direct_tree': direct_tree, 'restacked_tree': tree,
+                            'direct_paths': len(direct_paths),
+                            'restacked_paths': len(restacked_paths),
                             'simulated_squash': current})
         return {'checked_at_utc': datetime.now(timezone.utc).isoformat(),
                 'repository': repository, 'root_branch': root_branch,

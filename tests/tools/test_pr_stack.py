@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from verify_pr_stack import StackError, group_stacks, order_prs, run, verify
+from verify_pr_stack import StackError, changed_paths, group_stacks, order_prs, run, verify
 
 
 class StackTests(unittest.TestCase):
@@ -62,6 +62,15 @@ class StackTests(unittest.TestCase):
                          self.git('rev-parse', 'two^{tree}'))
         self.assertEqual(self.git('show-ref'), refs)
         self.assertEqual(self.git('status', '--porcelain'), status)
+
+    def test_restack_reports_the_paths_it_carries(self):
+        prs = self.stack()
+        report = verify(self.repo, prs, 'Cacti/spine')
+        for result in report['results']:
+            self.assertEqual(result['direct_paths'], 1)
+            self.assertEqual(result['restacked_paths'], 1)
+        git = lambda *args, **kwargs: self.git(*args, **kwargs)
+        self.assertEqual(changed_paths(git, self.root, prs[1]['head']['sha']), {'file'})
 
     def test_preserves_new_upstream_changes(self):
         prs = self.stack()
