@@ -30,4 +30,3 @@
 
 flawfinder==2.0.19 \
     --hash=sha256:f18f0021d9a2f3ffc1c1e32aa7bb1bb5ca1bad91b82b32157f44e5d0a1a23ad0
-    # via -r .github/flawfinder-requirements.txt
