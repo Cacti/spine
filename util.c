@@ -364,14 +364,6 @@ void read_config_options() {
 		free((char *)res);
 	}
 
-	if (STRIMATCH(set.dbversion, "mariadb")) {
-		set.dbonupdate = 0;
-	} else if (strpos(set.dbversion, "8.") == 0) {
-		set.dbonupdate = 1;
-	} else {
-		set.dbonupdate = 0;
-	}
-
 	/* get the cacti version from the database */
 	set.cacti_version = get_cacti_version(&mysql, LOCAL);
 
@@ -814,7 +806,8 @@ void read_config_options() {
 	}
 }
 
-void poller_push_data_to_main() {
+bool poller_push_data_to_main() {
+	bool       pushed = TRUE;
 	MYSQL      mysql;
 	MYSQL      mysqlr;
 	MYSQL_RES  *result;
@@ -969,7 +962,7 @@ void poller_push_data_to_main() {
 					rows++;
 				} else {
 					sqlp += sprintf(sqlp, "%s", suffix);
-					db_insert(&mysqlr, REMOTE, sqlbuf);
+					if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
 					rows = 0;
 				}
@@ -978,7 +971,7 @@ void poller_push_data_to_main() {
 
 		if (rows > 0) {
 			sqlp += sprintf(sqlp, "%s", suffix);
-			db_insert(&mysqlr, REMOTE, sqlbuf);
+			if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 		}
 	}
 
@@ -1037,7 +1030,7 @@ void poller_push_data_to_main() {
 					rows++;
 				} else {
 					sqlp += sprintf(sqlp, "%s", suffix);
-					db_insert(&mysqlr, REMOTE, sqlbuf);
+					if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
 					rows = 0;
 				}
@@ -1046,7 +1039,7 @@ void poller_push_data_to_main() {
 
 		if (rows > 0) {
 			sqlp += sprintf(sqlp, "%s", suffix);
-			db_insert(&mysqlr, REMOTE, sqlbuf);
+			if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
 			rows = 0;
 		}
@@ -1056,6 +1049,8 @@ void poller_push_data_to_main() {
 
 	db_disconnect(&mysql);
 	db_disconnect(&mysqlr);
+
+	return pushed;
 }
 
 /*! \fn int read_spine_config(char *file)

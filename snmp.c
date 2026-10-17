@@ -105,16 +105,6 @@ void snmp_spine_close(void) {
 	snmp_shutdown("spine");
 }
 
-/*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
- * char *snmp_community, char *snmp_username, char *snmp_password,
- * char *snmp_auth_protocol, char *snmp_priv_passphrase, char *snmp_priv_protocol,
- * char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout)
- *  \brief initializes an snmp_session object for a Spine host
- *
- *	This function will initialize NET-SNMP for the Spine host
- *  in question.
- *
- */
 typedef struct {
 	int host_id;
 	char *hostname;
@@ -410,6 +400,7 @@ static bool snmp_set_security_protocols(struct snmp_session *session, const main
 }
 
 
+/* Session construction body; the caller holds LOCK_SNMP. */
 static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_version, char *snmp_community,
 	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 	char *snmp_priv_passphrase, char *snmp_priv_protocol,
@@ -550,13 +541,23 @@ static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_versi
 }
 
 
-/* Net-SNMP USM state is shared across sessions. Serialize construction with
- * authenticated transactions, keeping v1/v2c requests parallel.
+/*! \fn void *snmp_host_init(int host_id, char *hostname, int snmp_version,
+ * char *snmp_community, char *snmp_username, char *snmp_password,
+ * char *snmp_auth_protocol, char *snmp_priv_passphrase, char *snmp_priv_protocol,
+ * char *snmp_context, char *snmp_engine_id, int snmp_port, int snmp_timeout)
+ *  \brief initializes an snmp_session object for a Spine host
+ *
+ *	This function will initialize NET-SNMP for the Spine host
+ *  in question.
+ *
+ */
+/* Serialize v3 session construction and requests, keeping v1/v2c requests
+ * parallel. Net-SNMP's README.thread says "SNMPv3 support was never checked
+ * for multi-threading correctness", so spine takes the conservative course of
+ * allowing only one v3 transaction in the library at a time.
  *
  * The lock is held for the whole blocking v3 request, so an unresponsive agent
  * delays other v3 polls and session opens by up to timeout * (retries + 1).
- * It cannot be narrowed to session setup alone: the engine boots/time and user
- * tables the library updates on each authenticated response are process wide.
  * Bounding the wait needs the asynchronous interface, which is a develop-branch
  * change rather than a maintenance fix. */
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
@@ -604,12 +605,9 @@ static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *reque
  */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {
-		int cancellation_state;
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
 		thread_mutex_lock(LOCK_SNMP);
 		snmp_sess_close(snmp_session);
 		thread_mutex_unlock(LOCK_SNMP);
-		pthread_setcancelstate(cancellation_state, NULL);
 	}
 }
 

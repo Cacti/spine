@@ -40,6 +40,13 @@ static void log_sql_statement(const char *query) {
 	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement (%zu bytes)", strlen(query)));
 }
 
+/* MariaDB can advertise a MySQL compatibility prefix. Test the vendor first. */
+bool db_row_alias(MYSQL *destination) {
+	const char *server = mysql_get_server_info(destination);
+	return server != NULL && strstr(server, "MariaDB") == NULL &&
+		mysql_get_server_version(destination) >= 80019;
+}
+
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
@@ -52,13 +59,6 @@ static void log_sql_statement(const char *query) {
  *  \return TRUE if successful, or FALSE if not.
  *
  */
-/* MariaDB can advertise a MySQL compatibility prefix. Test the vendor first. */
-bool db_row_alias(MYSQL *destination) {
-	const char *server = mysql_get_server_info(destination);
-	return server != NULL && strstr(server, "MariaDB") == NULL &&
-		mysql_get_server_version(destination) >= 80019;
-}
-
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int    error;
 	int    error_count = 0;

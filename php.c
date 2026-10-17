@@ -131,6 +131,20 @@ static void php_set_state(int php_process, int state) {
 	thread_mutex_unlock(LOCK_PHP);
 }
 
+/* Returns an undefined ("U") result for a slot that cannot be addressed, or
+ * NULL when php_process names a usable script server slot. */
+static char *php_unavailable_slot(int php_process) {
+	char *unavailable;
+
+	if (php_processes != NULL && set.php_servers >= 0 && set.php_servers <= MAX_PHP_SERVERS &&
+		php_process >= 0 && php_process < set.php_servers) {
+		return NULL;
+	}
+
+	STRDUP_OR_DIE(unavailable, "U", "PHP unavailable slot");
+	return unavailable;
+}
+
 /*! \fn char *php_cmd(const char *php_command, int php_process)
  *  \brief calls the script server and executes a script command
  *  \param php_command the formatted php script server command
@@ -152,10 +166,8 @@ char *php_cmd(const char *php_command, int php_process) {
 	int retries = 0;
 
 
-	if (php_processes == NULL || set.php_servers < 0 || set.php_servers > MAX_PHP_SERVERS || php_process < 0 || php_process >= set.php_servers) {
-		char *unavailable;
-		STRDUP_OR_DIE(unavailable, "U", "PHP unavailable slot");
-		return unavailable;
+	if ((result_string = php_unavailable_slot(php_process)) != NULL) {
+		return result_string;
 	}
 
 	assert(php_command != 0);
@@ -315,10 +327,8 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 	char *cp;
 	char *bptr;
 
-	if (php_processes == NULL || set.php_servers < 0 || set.php_servers > MAX_PHP_SERVERS || php_process < 0 || php_process >= set.php_servers) {
-		char *unavailable;
-		STRDUP_OR_DIE(unavailable, "U", "PHP unavailable slot");
-		return unavailable;
+	if ((result_string = php_unavailable_slot(php_process)) != NULL) {
+		return result_string;
 	}
 
 	if (!(result_string = (char *)malloc(RESULTS_BUFFER))) {
