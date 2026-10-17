@@ -49,7 +49,7 @@ static int controlled_popen(const char *command, const char *type) {
 	if (handoff_test) handoff_fd = fd;
 	return fd;
 }
-static int controlled_pclose(int fd) {
+static int controlled_pclose(int fd, double deadline) {
 	int previous;
 	if (handoff_test) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &previous);
@@ -58,17 +58,17 @@ static int controlled_pclose(int fd) {
 		pthread_cancel(pthread_self());
 		pthread_testcancel();
 	}
-	return nft_pclose(fd);
+	return nft_pclose_deadline(fd, deadline);
 }
 #define nft_popen controlled_popen
-#define nft_pclose controlled_pclose
+#define nft_pclose_deadline controlled_pclose
 #define spine_wait_readable controlled_wait
 #define read controlled_read
 #include "../../src/script/external.c"
 #undef read
 #undef spine_wait_readable
 #undef nft_popen
-#undef nft_pclose
+#undef nft_pclose_deadline
 
 static bool reject_upsert(MYSQL *destination, char *buffer, size_t capacity,
 	const char *const *columns, size_t count) {
@@ -153,7 +153,85 @@ static void test_close_handoff_defers_cancellation(void **state) {
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
+/* Long arguments or an over-long executable path are an invalid item. Building
+ * the /usr/bin/ candidate used to terminate Spine on the formatting guard. */
+static void test_long_command_is_an_invalid_item(void **state) {
+	host_t host = {.id = 1};
+	char command[BUFSIZE + 200];
+	char *result;
+	(void) state;
+	set.php.script_timeout = 5;
+	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+
+	memset(command, 'x', sizeof(command) - 1);
+	command[sizeof(command) - 1] = '\0';
+	memcpy(command, "spine_no_such_tool ", strlen("spine_no_such_tool "));
+	result = exec_poll(&host, command, 1, "DS");
+	assert_string_equal(result, "U");
+	free(result);
+
+	command[0] = '/';
+	memset(command + 1, 'x', sizeof(command) - 2);
+	result = exec_poll(&host, command, 1, "DS");
+	assert_string_equal(result, "U");
+	free(result);
+
+	assert_int_equal(spine_permits_available(&available_scripts), 1);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
+/* A script may print its value, close stdout and keep working. It must be
+ * allowed to finish inside script_timeout instead of being killed at EOF. */
+static void test_script_finishes_after_closing_its_output(void **state) {
+	host_t host = {.id = 1};
+	char saved[64];
+	char command[256];
+	char *result;
+	(void) state;
+	scenario = calls = 0;
+	set.php.script_timeout = 5;
+	set.php.script_max_output = 2;
+	set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+	snprintf(saved, sizeof(saved), "/tmp/spine_script_grace_%d", (int) getpid());
+	unlink(saved);
+	snprintf(command, sizeof(command), "/bin/echo 42; exec >&-; sleep 0.05; echo saved > %s", saved);
+
+	result = exec_poll(&host, command, 1, "DS");
+	assert_string_equal(result, "42");
+	free(result);
+	assert_int_equal(access(saved, F_OK), 0);
+	unlink(saved);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
+/* The grace period ends at the script deadline: a script that never exits,
+ * even one that ignores SIGTERM, is still killed and reaped. */
+static void test_lingering_script_is_bounded_by_its_deadline(void **state) {
+	host_t host = {.id = 1};
+	double start;
+	char *result;
+	int attempts;
+	(void) state;
+	scenario = calls = 0;
+	set.php.script_timeout = 1;
+	set.php.script_max_output = 2;
+	set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+
+	start = spine_monotonic_time();
+	result = exec_poll(&host, "/bin/echo 42; exec >&-; trap '' TERM; while :; do sleep 1; done", 1, "DS");
+	assert_true(spine_monotonic_time() - start < set.php.script_timeout + 1.0);
+	assert_string_equal(result, "U");
+	free(result);
+	for (attempts = 0; attempts < 100 && nft_abandoned_pending() != 0; attempts++) usleep(20000);
+	assert_int_equal(nft_abandoned_pending(), 0);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
 int main(void) {
-	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation)};
+	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item),
+		cmocka_unit_test(test_script_finishes_after_closing_its_output), cmocka_unit_test(test_lingering_script_is_bounded_by_its_deadline)};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }

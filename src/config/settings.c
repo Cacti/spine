@@ -185,15 +185,16 @@ char *getsetting(MYSQL *psql, int mode, const char *setting) {
 			}
 		}
 
-		return strdup("");
+		/* Absent is not empty: callers fall back to their defaults on NULL. */
+		return NULL;
 	}
 
 	spine_snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = config_query(psql, mode, qstring);
-	if (result == NULL) return strdup("");
+	if (result == NULL) return NULL;
 	mysql_row = mysql_num_rows(result) > 0 ? mysql_fetch_row(result) : NULL;
-	retval = mysql_row != NULL && mysql_row[0] != NULL ? strdup(mysql_row[0]) : strdup("");
+	retval = mysql_row != NULL ? strdup(mysql_row[0] != NULL ? mysql_row[0] : "") : NULL;
 	db_free_result(result);
 	return retval;
 }
@@ -209,27 +210,17 @@ char *getsetting(MYSQL *psql, int mode, const char *setting) {
  */
 int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
 	char qstring[BUFSIZE];
-	int result = 0;
+	char suffix[BUFSIZE];
+	static const char *const columns[] = {"value"};
 
 	assert(psql != 0);
 	assert(mysetting != 0);
 	assert(myvalue != 0);
-
-	if (set.database.onupdate == 0) {
-		spine_snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
-												 "VALUES ('%s', '%s') "
-												 "ON DUPLICATE KEY UPDATE value = VALUES(value)",
-			mysetting, myvalue);
-	} else {
-		spine_snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
-												 "VALUES ('%s', '%s') AS rs "
-												 "ON DUPLICATE KEY UPDATE value = rs.value",
-			mysetting, myvalue);
-	}
-
-	result = db_insert(psql, mode, qstring);
-
-	return result;
+	if (!db_upsert_suffix(psql, suffix, sizeof(suffix), columns, 1)) return FALSE;
+	spine_snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
+											 "VALUES ('%s', '%s')%s",
+		mysetting, myvalue, suffix);
+	return db_insert(psql, mode, qstring);
 }
 
 /*! \fn static char *getpsetting(MYSQL *psql, const char *setting)

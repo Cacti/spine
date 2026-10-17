@@ -72,9 +72,10 @@ broader audit open rather than treating helper coverage as whole-program proof.
 ## Poller-wide script aborts (#476)
 
 The explicit script policy and per-call cancellation cleanup are implemented
-and tested with real children. The broader acceptance criteria also include
-poller-wide fatal/signal aborts while other threads own subprocesses. The fatal
-signal handler intentionally uses async-signal-safe operations and cannot take
-the subprocess registry mutex. A complete process-wide abort policy still
-requires an ownership/shutdown design and dedicated tests; per-call cleanup is
-not evidence for that path. Leave #476 open for this remaining acceptance work.
+and tested with real children. Parent/worker `die()` and SIGINT/SIGTERM/SIGQUIT
+now stop external-script groups owned by other workers, with production-linked
+child/descendant tests. Handlers notify an ordinary-context coordinator rather
+than locking the registry. See [resource ownership](resource-ownership.md) for
+the reviewed lock consumers and precise contract. Hardware-fault exits and
+PHP's separate process-wide ownership remain outside that guarantee. Leave
+#476 open for those remaining acceptance boundaries.

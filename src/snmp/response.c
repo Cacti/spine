@@ -19,9 +19,17 @@
 
 int snmp_format_scalar(char *output, const struct variable_list *variable, bool ascii) {
 	char temporary[RESULTS_BUFFER] = {0};
-	if (variable->name == NULL || snprint_value(temporary, sizeof(temporary), variable->name, variable->name_length, variable) < 0) {
+	if (variable->name == NULL) {
 		SET_UNDEFINED(output);
 		return STAT_ERROR;
+	}
+	/* The agent answered with a value too large to store. That is unknown
+	 * data, not a transport failure, so it must not mark the host down.
+	 * temporary may be unterminated here and is not read. */
+	if (snprint_value(temporary, sizeof(temporary), variable->name, variable->name_length, variable) < 0) {
+		SPINE_LOG_HIGH(("WARNING: SNMP value does not fit in %d bytes and is recorded as U", RESULTS_BUFFER));
+		SET_UNDEFINED(output);
+		return STAT_SUCCESS;
 	}
 	if (ascii) {
 		if (snprint_asciistring(output, RESULTS_BUFFER, (unsigned char *) temporary, strlen(temporary)) < 0) {

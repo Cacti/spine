@@ -17,6 +17,7 @@
 #define SPINE_CONFIG_MODEL_H
 
 #include <stdbool.h>
+#include <stdatomic.h>
 
 #include <stddef.h>
 #include "internal/constants.h"
@@ -145,8 +146,9 @@ typedef struct {
 } spine_boost_config_t;
 
 /* Exit configuration and runtime state. */
+_Static_assert(ATOMIC_INT_LOCK_FREE == 2, "Exit status requires lock-free integer atomics for signal safety");
 typedef struct {
-	int exit_code;
+	atomic_int exit_code;
 	size_t exit_size;
 	void *exit_stack[10];
 } spine_exit_config_t;

@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop, '1.2.x']
   pull_request:
-    branches: [develop, '1.2.x', 'refactor/c17-series-*', 'fix/post-c17-execution-hardening']
+    branches: [develop, '1.2.x', 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
   workflow_dispatch:
 
 permissions:

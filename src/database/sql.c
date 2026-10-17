@@ -48,26 +48,24 @@ static bool retry_disconnected_query(MYSQL *mysql, int type, int error, const ch
 
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int error_count = 0;
-	char query_frag[LRG_BUFSIZE];
-	snprintf(query_frag, sizeof(query_frag), "%s", query);
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement (%zu bytes)", strlen(query)));
 	if (set.poller.SQL_readonly != FALSE) return TRUE;
 	while (mysql_query(mysql, query) != 0) {
 		int error = mysql_errno(mysql);
 		if (error == 2013 || error == 2006) {
 			if (retry_disconnected_query(mysql, type, error, "db_insert", &error_count)) continue;
-			SPINE_LOG(("ERROR: SQL Failed! Connection lost, SQL Fragment:'%s'", query_frag));
+			SPINE_LOG(("ERROR: SQL Failed! Connection lost"));
 			return FALSE;
 		}
 		if (error == 1213 || error == 1205) {
 			spine_sleep_usec(50000);
 			if (++error_count > 30) {
-				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!"));
 				return FALSE;
 			}
 			continue;
 		}
-		SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
+		SPINE_LOG(("ERROR: SQL Failed! Error:'%i'", error));
 		return FALSE;
 	}
 	return TRUE;
@@ -156,26 +154,23 @@ int db_reconnect(MYSQL *mysql, int type, int error, const char *function) {
  */
 MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	int error_count = 0;
-	char query_frag[LRG_BUFSIZE];
-	snprintf(query_frag, sizeof(query_frag), "%s", query);
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement (%zu bytes)", strlen(query)));
 	while (mysql_query(mysql, query) != 0) {
 		int error = mysql_errno(mysql);
 		if (error == 2013 || error == 2006) {
 			if (retry_disconnected_query(mysql, type, error, "db_query", &error_count)) continue;
-			SPINE_LOG(("ERROR: Database connection lost, SQL Fragment:'%s'", query_frag));
+			SPINE_LOG(("ERROR: Database connection lost"));
 			return NULL;
 		}
 		if (error == 1213 || error == 1205) {
 			spine_sleep_usec(50000);
 			if (++error_count > 30) {
-				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!"));
 				return NULL;
 			}
 			continue;
 		}
-		SPINE_LOG(("ERROR: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
-		SPINE_LOG(("ERROR: The Query Was:'%s'", query));
+		SPINE_LOG(("ERROR: Database Error:'%i'", error));
 		return NULL;
 	}
 	return mysql_store_result(mysql);

@@ -45,7 +45,8 @@ static void poll_system_uptime(host_t *host) {
 static void poll_system_field(host_t *host, MYSQL *mysql, char *oid, char *destination, size_t capacity) {
 	SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] requesting system OID %s", host->id, oid));
 	char *result = snmp_get_allow_fail(host, oid);
-	if (result != NULL) db_escape(mysql, destination, (int) capacity, result);
+	/* Keep the stored value when the agent gave us nothing usable. */
+	if (result != NULL && result[0] != '\0' && !IS_UNDEFINED(result)) db_escape(mysql, destination, (int) capacity, result);
 	SPINE_FREE(result);
 }
 

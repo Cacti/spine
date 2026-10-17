@@ -2,7 +2,7 @@ name: Integration
 
 on:
   pull_request:
-    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening']
+    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
     paths:
       - '**.c'
       - '**.h'

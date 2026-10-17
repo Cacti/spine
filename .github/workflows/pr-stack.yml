@@ -1,0 +1,39 @@
+name: PR stack validation
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  squash-restack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify stack validator contracts
+        run: python3 tests/tools/test_pr_stack.py
+      - name: Verify current PR deltas with squash and ordered restacking
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 tests/tools/verify_pr_stack.py --repository "$GH_REPO" --other-root 1.2.x --fetch --output pr-stack-audit.json
+      - name: Preserve exact revision evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr-stack-audit
+          path: pr-stack-audit.json
+          if-no-files-found: error
