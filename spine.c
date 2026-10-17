@@ -733,7 +733,7 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c threads!");
 	}
 
-	if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
+	if (!(details = (poller_thread_t **)calloc(num_rows, sizeof(poller_thread_t*)))) {
 		die("ERROR: Fatal malloc error: spine.c details!");
 	}
 
@@ -909,9 +909,10 @@ int main(int argc, char *argv[]) {
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
 		poller_details->threads_complete = 0;
+		poller_details->output_failed    = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
-		details[device_counter] = poller_details;
+		if (current_thread == 1) details[device_counter] = poller_details;
 		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
@@ -1003,6 +1004,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!spine_timeout) {
+			/* child_cleanup frees every partition after the first as soon as
+			 * its poll ends, which can precede the logging below. */
+			int created_host_id       = poller_details->host_id;
+			int created_host_thread   = poller_details->host_thread;
+			int created_host_threads  = poller_details->host_threads;
+			int created_host_data_ids = poller_details->host_data_ids;
+			int created_complete      = poller_details->complete;
+
 			/* create child process */
 			thread_retry:
 
@@ -1011,25 +1020,25 @@ int main(int argc, char *argv[]) {
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 			if (thread_status == 0) {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", poller_details->host_id, (unsigned long int)threads[device_counter]));
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", created_host_id, (unsigned long int)threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
 				}
 
 				sem_getvalue(&available_threads, &a_threads_value);
-				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
+				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", created_host_id, a_threads_value, set.threads - a_threads_value));
 
 				sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" host_threads = %d, host_data_ids = %d, complete = %d",
 					device_counter-1,
-					poller_details->host_id,
-					poller_details->host_thread,
-					poller_details->host_threads,
-					poller_details->host_data_ids,
-					poller_details->complete));
+					created_host_id,
+					created_host_thread,
+					created_host_threads,
+					created_host_data_ids,
+					created_complete));
 			} else if (thread_status == EAGAIN) {
 				usleep(10000);
 				goto thread_retry;
@@ -1193,7 +1202,8 @@ int main(int argc, char *argv[]) {
 	/* clueanup winsock library on Windows */
 	SOCK_CLEANUP;
 
-	exit(EXIT_SUCCESS);
+	/* poller.c records a failed output write in set.exit_code */
+	exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /*! \fn static void display_help()
