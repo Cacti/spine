@@ -57,11 +57,13 @@ static bool parse_uptime(const char *text, unsigned long long *ticks) {
 }
 
 
-static void normalize_poll_result(char *text) {
+/* The normalized form can be longer than the input ("FF" becomes "255"), so
+ * the copy back is bounded by the caller's buffer, not the input length. */
+static void normalize_poll_result(char *text, size_t capacity) {
 	classified_result_t normalized;
 	if (text == NULL) return;
 	classify_result(text, &normalized);
-	memcpy(text, normalized.text, strlen(normalized.text) + 1);
+	strncopy(text, normalized.text, capacity);
 }
 /* Script arguments may contain credentials. Log the executable token only. */
 static const char *script_log_name(const char *command, char *buffer, size_t capacity) {
@@ -1503,7 +1505,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 						for (j = 0; j < num_oids; j++) {
 
-							normalize_poll_result(snmp_oids[j].result);
+							normalize_poll_result(snmp_oids[j].result, sizeof(snmp_oids[j].result));
 							if (host->ignore_host) {
 								SPINE_LOG(("Device[%i] HT[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 								SET_UNDEFINED(snmp_oids[j].result);
@@ -1608,7 +1610,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 					for (j = 0; j < num_oids; j++) {
 
-						normalize_poll_result(snmp_oids[j].result);
+						normalize_poll_result(snmp_oids[j].result, sizeof(snmp_oids[j].result));
 						if (host->ignore_host) {
 							SPINE_LOG(("Device[%i] HT[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 							SET_UNDEFINED(snmp_oids[j].result);
@@ -1696,7 +1698,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				poll_result = exec_poll(host, poller_items[i].arg1, poller_items[i].local_data_id, "DS");
 
 				/* process the result */
-				normalize_poll_result(poll_result);
+				normalize_poll_result(poll_result, RESULTS_BUFFER);
 				if (IS_UNDEFINED(poll_result)) {
 					SET_UNDEFINED(poller_items[i].result);
 					if (set.spine_log_level == 2) {
@@ -1759,7 +1761,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				}
 
 				/* process the output */
-				normalize_poll_result(poll_result);
+				normalize_poll_result(poll_result, RESULTS_BUFFER);
 				if (IS_UNDEFINED(poll_result)) {
 					SET_UNDEFINED(poller_items[i].result);
 					if (set.spine_log_level == 2) {
@@ -1828,7 +1830,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 			for (j = 0; j < num_oids; j++) {
 
-				normalize_poll_result(snmp_oids[j].result);
+				normalize_poll_result(snmp_oids[j].result, sizeof(snmp_oids[j].result));
 				if (host->ignore_host) {
 					SPINE_LOG(("Device[%i] HT[%i] DS[%i] WARNING: SNMP timeout detected [%i ms], ignoring host '%s'", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, host->snmp_timeout, host->hostname));
 					SET_UNDEFINED(snmp_oids[j].result);
