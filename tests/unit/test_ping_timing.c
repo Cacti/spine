@@ -36,6 +36,7 @@ static int select_calls;
 static unsigned char last_request[64];
 static size_t last_request_length;
 static int recv_errno;
+static int recv_errno_limit;
 static int recv_calls;
 
 static int test_socket(int domain, int type, int protocol);
@@ -145,7 +146,8 @@ static ssize_t test_recv(int fd, void *buffer, size_t length, int flags) {
 	ssize_t received = recv(fd, buffer, length, flags);
 
 	recv_calls++;
-	if (received >= 0 && recv_errno != 0) {
+	if (received >= 0 && recv_errno != 0 &&
+		(recv_errno_limit == 0 || recv_calls <= recv_errno_limit)) {
 		errno = recv_errno;
 		return -1;
 	}
@@ -178,6 +180,7 @@ static int timing_setup(void **state) {
 	memset(&first_select_timeout, 0, sizeof(first_select_timeout));
 	last_request_length = 0;
 	recv_errno = 0;
+	recv_errno_limit = 0;
 	recv_calls = 0;
 	return 0;
 }
@@ -318,14 +321,23 @@ static void *udp_peer(void *argument) {
 	char buffer[64];
 	ssize_t received;
 
-	received = recvfrom(peer->fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &client, &length);
-	if (received > 0 && peer->reply) {
-		sendto(peer->fd, "pong", 4, 0, (struct sockaddr *) &client, length);
+	int probes;
+
+	/* a second probe is only seen when the client retries */
+	for (probes = 0; probes < 2; probes++) {
+		length = sizeof(client);
+		received = recvfrom(peer->fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &client, &length);
+		if (received <= 0) {
+			break;
+		}
+		if (peer->reply) {
+			sendto(peer->fd, "pong", 4, 0, (struct sockaddr *) &client, length);
+		}
 	}
 	return NULL;
 }
 
-static int run_udp_probe(int injected_errno, int reply, ping_t *ping) {
+static int run_udp_probe_retries(int injected_errno, int reply, int retries, ping_t *ping) {
 	struct sockaddr_in address;
 	socklen_t length = sizeof(address);
 	udp_peer_t peer;
@@ -345,7 +357,7 @@ static int run_udp_probe(int injected_errno, int reply, ping_t *ping) {
 
 	make_host(&host, "127.0.0.1", PING_UDP);
 	host.availability.port    = ntohs(address.sin_port);
-	host.availability.retries = 0;
+	host.availability.retries = retries;
 	host.availability.timeout = 500;
 	recv_errno = injected_errno;
 	memset(ping, 0, sizeof(*ping));
@@ -359,6 +371,10 @@ static int run_udp_probe(int injected_errno, int reply, ping_t *ping) {
 	return rc;
 }
 
+static int run_udp_probe(int injected_errno, int reply, ping_t *ping) {
+	return run_udp_probe_retries(injected_errno, reply, 0, ping);
+}
+
 /* EHOSTUNREACH includes ordinary unreachable hosts and failed neighbour
  * resolution; it is not evidence that the device responded. */
 static void test_udp_host_unreachable_is_down(void **state) {
@@ -367,6 +383,18 @@ static void test_udp_host_unreachable_is_down(void **state) {
 	(void) state;
 	assert_int_equal(run_udp_probe(EHOSTUNREACH, 1, &ping), HOST_DOWN);
 	assert_true(recv_calls >= 1);
+	assert_string_equal(ping.ping_response, "UDP: Ping timed out");
+}
+
+/* One unreachable report, for instance while a neighbour entry resolves, uses
+ * up an attempt but must not stop the retries that follow. */
+static void test_udp_unreachable_then_reply_is_alive(void **state) {
+	ping_t ping;
+
+	(void) state;
+	recv_errno_limit = 1;
+	assert_int_equal(run_udp_probe_retries(EHOSTUNREACH, 1, 1, &ping), HOST_UP);
+	assert_string_equal(ping.ping_response, "UDP: Device is Alive");
 }
 
 static void test_udp_network_unreachable_is_down(void **state) {
@@ -487,6 +515,7 @@ int main(void) {
 		#endif
 		cmocka_unit_test_setup_teardown(test_udp_host_unreachable_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_network_unreachable_is_down, timing_setup, timing_teardown),
+		cmocka_unit_test_setup_teardown(test_udp_unreachable_then_reply_is_alive, timing_setup, timing_teardown),
 		#ifdef EHOSTDOWN
 		cmocka_unit_test_setup_teardown(test_udp_host_down_is_down, timing_setup, timing_teardown),
 		#endif
