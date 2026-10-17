@@ -61,6 +61,7 @@ The Cacti Group | spine
 -issue: Preserve coverage fingerprints across build cleanup and run memory-soak contracts with POSIX shells
 -issue: Preserve portable executable PATH lookup and compile process helpers across Linux, BSD and macOS
 -issue: Verify independent maintenance PR stacks and preserve shallow-worktree history boundaries
+-issue: Pin database service images by digest
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
 -feature#440: Add idiomatic Debian packaging
