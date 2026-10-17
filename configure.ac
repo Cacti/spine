@@ -720,8 +720,8 @@ AC_CACHE_CHECK([whether the linker accepts $1], [spine_cv],
   [spine_save_CFLAGS=$CFLAGS
    spine_save_LDFLAGS=$LDFLAGS
    spine_save_LIBS=$LIBS
-   CFLAGS="$CFLAGS $spine_hardening_cflags -Werror"
-   LDFLAGS="$LDFLAGS $spine_hardening_ldflags $1"
+   CFLAGS="$spine_hardening_cflags $CFLAGS -Werror"
+   LDFLAGS="$spine_hardening_ldflags $1 $LDFLAGS"
    LIBS=
    AC_LINK_IFELSE([AC_LANG_PROGRAM()],
      [AS_VAR_SET([spine_cv], [yes])],
@@ -742,8 +742,14 @@ if test "x$enable_hardening" != xno; then
   SPINE_HARDEN_CFLAG([-fcf-protection])
   SPINE_HARDEN_CFLAG([-Wformat -Wformat-security])
 
-  dnl -static and -pie produce different, conflicting link modes.
-  if test "x$with_static" != xyes; then
+  dnl -static and -pie produce different, conflicting link modes. A caller
+  dnl that opts out of PIE keeps a non-PIE build: -fPIE in front of
+  dnl -fno-pie would compile non-PIE objects that the -pie link then rejects.
+  spine_pie_optout=no
+  case " $CFLAGS $LDFLAGS " in
+  *" -fno-pie "*|*" -fno-PIE "*|*" -no-pie "*|*" -nopie "*) spine_pie_optout=yes ;;
+  esac
+  if test "x$with_static" != xyes && test "x$spine_pie_optout" != xyes; then
     SPINE_HARDEN_CFLAG([-fPIE])
     case " $spine_hardening_cflags " in
     *" -fPIE "*)

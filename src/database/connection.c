@@ -126,6 +126,7 @@ int db_connect(int type, MYSQL *mysql) {
 #endif
 	if (!db_apply_tls_policy(mysql, local_address ? &set.database : &set.remote_database)) {
 		SPINE_LOG(("ERROR: Database TLS policy is invalid or unsupported by the selected client library"));
+		mysql_close(mysql);
 		db_address_release(&address);
 		return FALSE;
 	}
