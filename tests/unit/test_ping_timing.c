@@ -317,6 +317,7 @@ static void test_icmpv6_wait_matches_the_device_timeout(void **state) {
 typedef struct {
 	int fd;
 	int reply;
+	int probes;
 } udp_peer_t;
 
 /* Answers one probe, which is what makes the client socket readable.  The
@@ -330,8 +331,9 @@ static void *udp_peer(void *argument) {
 
 	int probes;
 
-	/* a second probe is only seen when the client retries */
-	for (probes = 0; probes < 2; probes++) {
+	/* shutdown() does not wake a parked recvfrom() on every platform, so the
+	 * peer waits for exactly the probes the client will send */
+	for (probes = 0; probes < peer->probes; probes++) {
 		length = sizeof(client);
 		received = recvfrom(peer->fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &client, &length);
 		if (received <= 0) {
@@ -355,6 +357,7 @@ static int run_udp_probe_retries(int injected_errno, int reply, int retries, pin
 	peer.fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	assert_true(peer.fd >= 0);
 	peer.reply = reply;
+	peer.probes = retries + 1;
 	memset(&address, 0, sizeof(address));
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
