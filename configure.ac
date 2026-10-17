@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: 2004-2026 The Cacti Group
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
+# This code is designed, written, and maintained by the Cacti Group. See
+# CONTRIBUTORS.md for developer information.
+#
 # Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 
