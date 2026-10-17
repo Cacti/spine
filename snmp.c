@@ -551,7 +551,14 @@ static void *snmp_host_init_unlocked(int host_id, char *hostname, int snmp_versi
 
 
 /* Net-SNMP USM state is shared across sessions. Serialize construction with
- * authenticated transactions, keeping v1/v2c requests parallel. */
+ * authenticated transactions, keeping v1/v2c requests parallel.
+ *
+ * The lock is held for the whole blocking v3 request, so an unresponsive agent
+ * delays other v3 polls and session opens by up to timeout * (retries + 1).
+ * It cannot be narrowed to session setup alone: the engine boots/time and user
+ * tables the library updates on each authenticated response are process wide.
+ * Bounding the wait needs the asynchronous interface, which is a develop-branch
+ * change rather than a maintenance fix. */
 void *snmp_host_init(int host_id, char *hostname, int snmp_version, char *snmp_community,
 	char *snmp_username, char *snmp_password, char *snmp_auth_protocol,
 	char *snmp_priv_passphrase, char *snmp_priv_protocol,

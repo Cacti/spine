@@ -1225,7 +1225,8 @@ int main(int argc, char *argv[]) {
 	/* clueanup winsock library on Windows */
 	SOCK_CLEANUP;
 
-	exit(EXIT_SUCCESS);
+	/* poller.c records a failed output write in set.exit_code */
+	exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /*! \fn static void display_help()
