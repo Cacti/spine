@@ -37,14 +37,14 @@ int main(int argc, char *argv[]) {
 	}
 	if (strcmp(argv[1], "linger") == 0) {
 		(void) signal(SIGTERM, SIG_IGN);
-		(void) write(STDOUT_FILENO, "42", 2);
+		if (write(STDOUT_FILENO, "42", 2) != 2) return 2;
 		sleep(30);
 		return 0;
 	}
 	if (strcmp(argv[1], "chunked") == 0) {
-		(void) write(STDOUT_FILENO, "4", 1);
+		if (write(STDOUT_FILENO, "4", 1) != 1) return 2;
 		usleep(100000);
-		(void) write(STDOUT_FILENO, "2", 1);
+		if (write(STDOUT_FILENO, "2", 1) != 1) return 2;
 		return 0;
 	}
 	return 2;
