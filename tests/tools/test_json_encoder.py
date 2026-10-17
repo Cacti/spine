@@ -74,18 +74,38 @@ class EncoderContracts(unittest.TestCase):
                                           "message": value.decode("utf-8")})
                 self.assertEqual(result.stdout.count(b"\n"), 1)
 
-    def test_invalid_utf8_is_rejected(self):
+    @staticmethod
+    def replace_invalid(value):
+        """Expected text: each byte that does not begin a valid sequence is U+FFFD."""
+        out, index = [], 0
+        while index < len(value):
+            for width in (1, 2, 3, 4):
+                try:
+                    out.append(value[index:index + width].decode("utf-8"))
+                    index += width
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                out.append("\ufffd")
+                index += 1
+        return "".join(out)
+
+    def test_invalid_utf8_is_replaced(self):
         values = [bytes([value]) for value in range(128, 256)]
         values += [b"\xc0\xaf", b"\xc1\xbf", b"\xe1\x80", b"\xf1\x80\x80",
                    b"\xe0\x9f\xbf", b"\xed\xa0\x80", b"\xf0\x8f\xbf\xbf",
-                   b"\xf4\x90\x80\x80", b"\xe1A\x80", b"\xe1\xc0\x80", b"\xe1\x80A"]
+                   b"\xf4\x90\x80\x80", b"\xe1A\x80", b"\xe1\xc0\x80", b"\xe1\x80A",
+                   b"ok \xff tail", b"\xe6\xbc"]
         for value in values:
             with self.subTest(value=value):
                 with self.assertRaises(UnicodeDecodeError):
                     value.decode("utf-8")
                 result = self.encode(value)
-                self.assertEqual(result.returncode, 3, result.stderr)
-                self.assertEqual(result.stdout, b"")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                record = json.loads(result.stdout)
+                self.assertEqual(record["message"], self.replace_invalid(value))
+                self.assertEqual(result.stdout.count(b"\n"), 1)
 
     def test_every_capacity_boundary(self):
         for value in [b"", b'quote" slash\\', bytes(range(1, 32)), "漢字".encode()]:

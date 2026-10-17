@@ -311,8 +311,9 @@ static void test_json_record_utf8_contract(void **state) {
 		assert_non_null(strstr(output, valid[index]));
 	}
 	for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); index++) {
-		assert_false(spine_json_log_record(output, sizeof(output), "now", "INFO", invalid[index]));
-		assert_string_equal(output, "");
+		/* every byte that begins no valid sequence becomes U+FFFD */
+		assert_true(spine_json_log_record(output, sizeof(output), "now", "INFO", invalid[index]));
+		assert_non_null(strstr(output, "\xef\xbf\xbd"));
 	}
 }
 
@@ -333,14 +334,15 @@ static void test_json_log_file_and_config(void **state) {
 	set.logging.logfile_processed = TRUE;
 	set.logging.log_level = POLLER_VERBOSITY_LOW;
 	assert_true(spine_log("WARNING: Device[7] quote\" slash\\ value\nnext"));
-	assert_false(spine_log("bad UTF-8: %s", "\xff"));
+	assert_true(spine_log("bad UTF-8: %s", "\xff"));
 	file = fopen(path, "r");
 	assert_non_null(file);
 	assert_non_null(fgets(line, sizeof(line), file));
 	assert_non_null(strstr(line, "\"severity\":\"WARNING\""));
 	assert_non_null(strstr(line, "quote\\\" slash\\\\ value\\u000anext"));
 	assert_non_null(fgets(line, sizeof(line), file));
-	assert_non_null(strstr(line, "\"severity\":\"ERROR\""));
+	assert_non_null(strstr(line, "\"severity\":\"INFO\""));
+	assert_non_null(strstr(line, "bad UTF-8: \xef\xbf\xbd"));
 	assert_null(strstr(line, "\xff"));
 	assert_null(fgets(line, sizeof(line), file));
 	assert_int_equal(fclose(file), 0);
