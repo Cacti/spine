@@ -329,7 +329,8 @@ jobs:
           cache-dependency-path: .github/requirements-coverage.txt
 
       - name: Install pinned coverage tools
-        run: python3 -m pip install --require-hashes -r .github/requirements-coverage.txt
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r .github/requirements-coverage.txt
 
       - name: Build instrumented
         run: |
@@ -424,7 +425,8 @@ jobs:
           cache-dependency-path: .github/requirements-analysis.txt
 
       - name: Install flawfinder
-        run: python3 -m pip install --require-hashes -r .github/requirements-analysis.txt
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r .github/requirements-analysis.txt
 
       # Note: flawfinder will light up like a christmas tree on this codebase.
       # error-level=5 means only critical hits fail the build — the rest is
