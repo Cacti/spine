@@ -4,8 +4,11 @@
 # Recovered runtime comparison, 2026-10-11
 
 This completed local measurement compares the active recovered implementation:
-baseline PR #655 revision `a8bd78d712df17196b880130520f42a49105f99d` and candidate
-PR #656 revision `3db06ab315041187680b896c3658db0fbe8c60e3`. The candidate adds
+baseline PR #655 revision `a8bd78d712df17196b880130520f42a49105f99d` (git tree
+`7b769ca52f1f6f16c25a84fd2122239b5dd85f45`) and candidate
+PR #656 revision `3db06ab315041187680b896c3658db0fbe8c60e3` (git tree
+`6eec0ced13e38545019099869bdb8088bac9ece2`, which stays checkable after the
+squash merge makes the commit unreachable). The candidate adds
 joined worker ownership, checked database leases, explicit TLS policy and opt-in
 JSON logging to the baseline's script limits and destination-aware upserts.
 It also contains the paired-build harness. The measurement was already retained
