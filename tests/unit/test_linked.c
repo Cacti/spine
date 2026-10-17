@@ -199,6 +199,33 @@ static void test_bounded_formatters(void **state) {
 
 /* --- predicates ----------------------------------------------------------- */
 
+static void test_statement_label_names_the_verb_and_table_only(void **state) {
+	char label[SMALL_BUFSIZE];
+
+	(void) state;
+	db_statement_label("INSERT INTO poller_output (a) VALUES ('fixture_secret')", label, sizeof(label));
+	assert_string_equal(label, "INSERT poller_output");
+	db_statement_label("insert ignore into `host_errors`(x) values (1)", label, sizeof(label));
+	assert_string_equal(label, "INSERT `host_errors`");
+	db_statement_label("REPLACE INTO settings (name,value) VALUES ('password','fixture_secret')", label, sizeof(label));
+	assert_string_equal(label, "REPLACE settings");
+	db_statement_label("UPDATE host SET snmp_password='fixture_secret' WHERE id=1", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("SELECT value FROM settings WHERE name='from poller'", label, sizeof(label));
+	assert_string_equal(label, "SELECT settings");
+	db_statement_label("SELECT 'a from b'", label, sizeof(label));
+	assert_string_equal(label, "SELECT");
+	db_statement_label("DELETE FROM poller_output", label, sizeof(label));
+	assert_string_equal(label, "DELETE poller_output");
+	db_statement_label("SET SESSION sql_mode = ''", label, sizeof(label));
+	assert_string_equal(label, "SET");
+	db_statement_label("  nonsense fixture_secret", label, sizeof(label));
+	assert_string_equal(label, "SQL");
+	db_statement_label("INSERT INTO a_very_long_table_name_that_does_not_fit", label, 12);
+	assert_string_equal(label, "INSERT a_ve");
+	assert_null(strstr(label, "fixture_secret"));
+}
+
 static void test_all_digits(void **state) {
 	(void) state;
 	assert_int_equal(all_digits("12345"), TRUE);
@@ -1285,6 +1312,7 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
 		cmocka_unit_test(test_bounded_formatters),
 		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
+		cmocka_unit_test(test_statement_label_names_the_verb_and_table_only),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_trim_family),
