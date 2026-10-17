@@ -26,8 +26,9 @@ _Noreturn void die(const char *format, ...) __attribute__((format(printf, 1, 2))
 bool spine_should_log_device(int host_id, int verbosity);
 void set_date_format(void);
 char *get_date_format(void);
-/* Caller-owned output; invalid UTF-8 or insufficient capacity rejects the
- * whole record and clears output. No untrusted text becomes a JSON key. */
+/* Caller-owned output. Bytes that are not valid UTF-8 become U+FFFD;
+ * insufficient capacity rejects the whole record and clears output. No
+ * untrusted text becomes a JSON key. */
 bool spine_json_log_record(char *output, size_t capacity, const char *timestamp,
 	const char *severity, const char *message);
 

@@ -7,7 +7,8 @@
 #include "log/log.h"
 
 /* A fixed log record needs only JSON string encoding, not a general parser.
- * Preserve valid UTF-8 and reject invalid sequences before emitting a record. */
+ * Valid UTF-8 is preserved. Each byte that does not begin a valid sequence is
+ * replaced by U+FFFD, so a malformed script result never costs the record. */
 typedef struct {
 	char *cursor;
 	size_t remaining;
@@ -51,7 +52,12 @@ static bool json_string(json_writer_t *writer, const char *text) {
 	while (remaining != 0) {
 		size_t count = utf8_length(cursor, remaining);
 		char escape[7];
-		if (count == 0) return false;
+		if (count == 0) {
+			if (!json_bytes(writer, "\xef\xbf\xbd", 3)) return false;
+			cursor++;
+			remaining--;
+			continue;
+		}
 		if (*cursor < 0x20 || *cursor == 0x7f) {
 			snprintf(escape, sizeof(escape), "\\u%04x", (unsigned int) *cursor);
 			if (!json_bytes(writer, escape, 6)) return false;
