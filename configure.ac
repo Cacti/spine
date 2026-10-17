@@ -505,7 +505,6 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ],[AC_MSG_RESULT(no)
 ])
 
-AC_CONFIG_FILES([Makefile])
 AC_MSG_CHECKING([for a client SSL mode option])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
   #include "$MYSQL_INC_DIR/mysql.h"
@@ -523,4 +522,5 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
   AC_DEFINE([HAS_MYSQL_OPT_SSL_ENFORCE], [1], [Client supports TLS enforcement])],
  [AC_MSG_RESULT([no])])
 
+AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

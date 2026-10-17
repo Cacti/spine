@@ -299,17 +299,20 @@ static void snmp_host_init_release(struct snmp_session *session, char *auth, cha
 }
 
 static bool snmp_install_auth_protocol(struct snmp_session *session, const maintenance_snmp_options_t *options) {
+	int auth_type;
+	const oid *auth_proto;
+
 	/* A protocol that is set but unrecognised is a configuration error at any
 	 * security level; validating only on the authenticated path would let a
 	 * typo through as noAuthNoPriv. Install it whenever it is configured so a
 	 * device never falls back to the library default. */
-	int auth_type = usm_lookup_auth_type(options->snmp_auth_protocol);
+	auth_type = usm_lookup_auth_type(options->snmp_auth_protocol);
 	if (auth_type <= 0) {
 		SPINE_LOG(("SNMP: Device[%i] Error auth protocol %s is invalid.", options->host_id, options->snmp_auth_protocol));
 		return FALSE;
 	}
 
-	const oid *auth_proto = sc_get_auth_oid(auth_type, &session->securityAuthProtoLen);
+	auth_proto = sc_get_auth_oid(auth_type, &session->securityAuthProtoLen);
 	free(session->securityAuthProto);
 	session->securityAuthProto = auth_proto == NULL ? NULL : snmp_duplicate_objid(auth_proto, session->securityAuthProtoLen);
 	if (session->securityAuthProto == NULL) {
@@ -320,10 +323,14 @@ static bool snmp_install_auth_protocol(struct snmp_session *session, const maint
 }
 
 static bool snmp_set_security_protocols(struct snmp_session *session, const maintenance_snmp_options_t *options) {
+	int security_level;
+	int priv_type;
+	const oid *priv_proto;
+
 	/* Cacti stores "[None]" when no protocol is selected. Match cmd.php's
 	 * effective-level rules for incomplete pairs, but report the downgrade
 	 * explicitly so an operator does not mistake it for auth or privacy. */
-	int security_level = spine_snmpv3_security_level(options->snmp_auth_protocol, options->snmp_password,
+	security_level = spine_snmpv3_security_level(options->snmp_auth_protocol, options->snmp_password,
 		options->snmp_priv_protocol, options->snmp_priv_passphrase);
 
 	/* Refusals precede downgrade warnings so the log never promises that a
@@ -382,13 +389,13 @@ static bool snmp_set_security_protocols(struct snmp_session *session, const main
 		return TRUE;
 	}
 
-	int priv_type = usm_lookup_priv_type(options->snmp_priv_protocol);
+	priv_type = usm_lookup_priv_type(options->snmp_priv_protocol);
 	if (priv_type < 0) {
 		SPINE_LOG(("SNMP: Device[%i] Error privacy protocol %s is invalid.", options->host_id, options->snmp_priv_protocol));
 		return FALSE;
 	}
 
-	const oid *priv_proto = sc_get_priv_oid(priv_type, &session->securityPrivProtoLen);
+	priv_proto = sc_get_priv_oid(priv_type, &session->securityPrivProtoLen);
 	free(session->securityPrivProto);
 	session->securityPrivProto = priv_proto == NULL ? NULL : snmp_duplicate_objid(priv_proto, session->securityPrivProtoLen);
 	if (session->securityPrivProto == NULL) {

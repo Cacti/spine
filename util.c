@@ -1402,8 +1402,12 @@ int spine_log(const char *format, ...) {
 		ulog_len = LOGSIZE - flog_len - prefix_len - 1;
 	}
 
-	strncat(flogmessage, logprefix,   prefix_len);
-	strncat(flogmessage, ulogmessage, ulog_len);
+	/* both lengths were clamped above so the three pieces fit in LOGSIZE */
+	flog_len = (int) strlen(flogmessage);
+	memcpy(flogmessage + flog_len, logprefix, (size_t) prefix_len);
+	flog_len += prefix_len;
+	memcpy(flogmessage + flog_len, ulogmessage, (size_t) ulog_len);
+	flogmessage[flog_len + ulog_len] = '\0';
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {

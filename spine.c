@@ -244,17 +244,19 @@ static bool parse_cli_int(const char *text, long minimum, long maximum, int *val
 }
 
 static void parse_host_list(const char *input) {
+	size_t used = 0;
+	const char *cursor = input;
+	char *end;
+	unsigned long id;
+
 	if (strlen(input) >= sizeof(set.host_id_list)) {
 		die("ERROR: invalid or oversized host list");
 	}
-	size_t used = 0;
-	const char *cursor = input;
 	for (;;) {
 		while (isspace((unsigned char) *cursor)) cursor++;
 		if (*cursor < '0' || *cursor > '9') die("ERROR: invalid or oversized host list");
 		errno = 0;
-		char *end;
-		unsigned long id = strtoul(cursor, &end, 10);
+		id = strtoul(cursor, &end, 10);
 		if (errno == ERANGE || id > INT_MAX) die("ERROR: invalid or oversized host list");
 		while (isspace((unsigned char) *end)) end++;
 		if (*end != '\0' && *end != ',') die("ERROR: invalid or oversized host list");
