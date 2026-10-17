@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Copyright (C) 2026 The Cacti Group
-# Licensed under the GNU Lesser General Public License, version 2.1 or later.
+# SPDX-FileCopyrightText: 2026 The Cacti Group
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Run only against isolated regression services; database tests mutate fixtures.
 set -euo pipefail
 : "${SPINE_TEST_DB_HOST:?Set the isolated regression database host}"

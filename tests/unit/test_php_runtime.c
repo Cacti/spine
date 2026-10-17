@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* Production-linked PHP Script Server runtime tests.
  *
  * These use a real child, real close-on-exec pipes and the shipped php.c.

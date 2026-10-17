@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* ping_icmp() resource ownership and the shared raw socket.
  *
  * The function runs in a SUID-root binary, and its five exits were collapsed

@@ -1,23 +1,8 @@
-# +-------------------------------------------------------------------------+
-# | Copyright (C) 2004-2026 The Cacti Group                                 |
-# |                                                                         |
-# | This program is free software; you can redistribute it and/or           |
-# | modify it under the terms of the GNU General Public License             |
-# | as published by the Free Software Foundation; either version 2          |
-# | of the License, or (at your option) any later version.                  |
-# |                                                                         |
-# | This program is distributed in the hope that it will be useful,         |
-# | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
-# | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
-# | GNU General Public License for more details.                            |
-# +-------------------------------------------------------------------------+
-# | Cacti: The Complete RRDtool-based Graphing Solution                     |
-# +-------------------------------------------------------------------------+
-# | This code is designed, written, and maintained by the Cacti Group. See  |
-# | about.php and/or the AUTHORS file for specific developer information.   |
-# +-------------------------------------------------------------------------+
-# | http://www.cacti.net/                                                   |
-# +-------------------------------------------------------------------------+
+# SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
@@ -110,6 +95,8 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h s
 	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h
 
 EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
+	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
+	LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
 	tests/README.md \
 	tests/support/test-harness.sh \
 	tests/integration/test_concurrency.sh \

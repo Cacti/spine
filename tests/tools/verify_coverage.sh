@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Copyright (C) 2026 The Cacti Group
-# Licensed under the GNU Lesser General Public License, version 2.1 or later.
+# SPDX-FileCopyrightText: 2026 The Cacti Group
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 set -euo pipefail
 if [[ "${1:-}" = '--producers' ]]; then
     : "${2:?Usage: verify_coverage.sh --producers BUILD_DIRECTORY MANIFEST gcno|gcda}"

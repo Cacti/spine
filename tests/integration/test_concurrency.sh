@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Exercise Spine against many independent hosts while sweeping worker counts.
 # This is deliberately backend-neutral so the same contract can exercise the
 # legacy pthread poller and the future sharded libuv reactor.

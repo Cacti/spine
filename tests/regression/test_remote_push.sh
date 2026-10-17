@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Structural guards for the remote push path's cross-vendor and batching rules.
 set -eu
 

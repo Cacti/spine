@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Integration tests for output_regex column detection and application.
 #
 # Validates that spine correctly detects the presence or absence of the

@@ -1,4 +1,11 @@
 /*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
+/*
  * Coverage for the util.c paths changed by #578: the cached log timestamp
  * format (issue#567), the bounded newline append in spine_log() (issue#565)
  * and the result-set release on the NULL-row branch of the settings helpers

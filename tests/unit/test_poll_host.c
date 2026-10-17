@@ -1,3 +1,9 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
 /* Drives the shipped poll_host() without a database or an SNMP agent.
  *
  * GNU ld --wrap replaces the database and SNMP calls that poller.o makes into

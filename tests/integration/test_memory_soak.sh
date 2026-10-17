@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Run complete Spine polling cycles back to back for a fixed time, record the
 # peak RSS of every cycle, and fail when a least-squares fit of RSS against
 # elapsed time projects more growth over the run than the threshold allows.

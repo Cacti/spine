@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Thomas Vincent
 # SPDX-License-Identifier: LGPL-2.1-only
 # Fork maintenance: Thomas Vincent. Project contributor history: CONTRIBUTORS.md.
 """Supply LCOV's omitted zero totals only for a measured branchless main."""

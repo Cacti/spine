@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* SNMPv3 session construction.
  *
  * The security-level predicates and the session they drive both need coverage:

@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Build spine and run "make check" inside stock Linux distribution images.
 #
 #   scripts/test-distros.sh                  every Linux lane, one at a time

@@ -5,11 +5,41 @@ Source: https://github.com/Cacti/spine
 
 Files: *
 Copyright: 2004-2026 The Cacti Group
+License: LGPL-2.1-or-later
+Comment: Each source file names its own SPDX identifier, either
+ LGPL-2.1-or-later or LGPL-2.1-only. The root LICENSE is the LGPL 2.1 text.
+
+Files: Makefile.am
+ Makefile.in
+ bootstrap
+ configure.ac
+ scripts/copyright_year.sh
+ scripts/debug.sh
+ scripts/package.sh
+ src/platform/spine_sem.h
+ tests/regression/test_helper_scripts.sh
+Copyright: 2004-2026 The Cacti Group
 License: GPL-2.0-or-later
 
-Files: src/process/nft_popen.c src/process/nft_popen.h
+Files: src/platform/descriptor.c
+ src/process/fd.c
+ src/process/nft_popen.c
+ src/process/nft_popen.h
 Copyright: 1993 The Regents of the University of California
-License: BSD-4-Clause
+ Xenadyne
+ 2004-2026 The Cacti Group
+License: GPL-2.0-or-later and BSD-4-Clause and LicenseRef-Xenadyne
+Comment: The Xenadyne permission text is in LICENSES/LicenseRef-Xenadyne.txt
+ and LICENSES/LicenseRef-Xenadyne-Header.txt.
+
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public License as
+ published by the Free Software Foundation; either version 2.1 of the
+ License, or (at your option) any later version.
+ .
+ On Debian systems, the full text of the GNU Lesser General Public License
+ version 2.1 can be found in the file `/usr/share/common-licenses/LGPL-2.1'.
 
 License: GPL-2.0-or-later
  This program is free software; you can redistribute it and/or modify
@@ -40,3 +70,8 @@ License: BSD-4-Clause
  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  ARE DISCLAIMED.
+
+License: LicenseRef-Xenadyne
+ The permission, advertising and disclaimer text is kept verbatim in
+ LICENSES/LicenseRef-Xenadyne.txt and LICENSES/LicenseRef-Xenadyne-Header.txt
+ in the source tree.
