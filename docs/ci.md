@@ -53,6 +53,11 @@ enabled in repository settings and are not delayed by the version cooldown.
 | pip | `.github/requirements-*.in` and their complete hash-pinned `.txt` locks |
 | pre-commit | Remote hook revisions in `.pre-commit-config.yaml` |
 
+Service-container images in workflows (`mariadb:10.11` and `mysql:8.4`) are pinned
+by digest. Dependabot does not update `services.<name>.image`, so refresh them by
+hand: resolve the tag with `docker buildx imagetools inspect <image>:<tag>`, copy
+the index digest into every workflow that names the image, and let CI confirm it.
+
 There is no npm application or manifest. Distro-managed C libraries, vendored
 uthash bytes, local hook `additional_dependencies`, and tool/image versions
 embedded in shell or environment variables still require explicit review.
