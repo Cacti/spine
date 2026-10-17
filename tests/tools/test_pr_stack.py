@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from verify_pr_stack import StackError, changed_paths, group_stacks, order_prs, run, verify
+from verify_pr_stack import StackError, changed_paths, group_stacks, order_prs, run, scope_to_pull_request, verify
 
 
 class StackTests(unittest.TestCase):
@@ -62,6 +62,17 @@ class StackTests(unittest.TestCase):
                          self.git('rev-parse', 'two^{tree}'))
         self.assertEqual(self.git('show-ref'), refs)
         self.assertEqual(self.git('status', '--porcelain'), status)
+
+    def test_scope_keeps_the_pull_request_and_what_it_is_stacked_on(self):
+        prs = self.stack()
+        other = self.pr(9, 'unrelated', self.root, 'develop', self.root)
+        groups = group_stacks([other, *prs], 'Cacti/spine', ['develop'])
+        root, chain = scope_to_pull_request(groups, 2)
+        self.assertEqual((root, [pr['number'] for pr in chain]), ('develop', [1, 2]))
+        root, chain = scope_to_pull_request(groups, 9)
+        self.assertEqual([pr['number'] for pr in chain], [9])
+        with self.assertRaises(StackError):
+            scope_to_pull_request(groups, 77)
 
     def test_restack_reports_the_paths_it_carries(self):
         prs = self.stack()

@@ -75,6 +75,24 @@ def blob_at(git, revision, path):
         return None
 
 
+def scope_to_pull_request(groups, number):
+    """Keep only the PR and the open PRs it is stacked on, in dependency order."""
+    for root, ordered in groups.items():
+        by_head = {(pr['head']['repo']['full_name'], pr['head']['ref']): pr for pr in ordered}
+        selected = next((pr for pr in ordered if pr['number'] == number), None)
+        if selected is None:
+            continue
+        chain = [selected]
+        while True:
+            parent = by_head.get((selected['base']['repo']['full_name'], selected['base']['ref']))
+            if parent is None:
+                break
+            chain.insert(0, parent)
+            selected = parent
+        return root, chain
+    raise StackError(f'Pull request #{number} is not in an open stack')
+
+
 def verify(source, prs, repository, root_branch='develop', fetch=False):
     ordered = order_prs(prs, (repository, root_branch))
     with tempfile.TemporaryDirectory(prefix='spine-stack-') as directory:
@@ -164,6 +182,8 @@ def main():
                         help='Additional independent target branch to verify')
     parser.add_argument('--inventory', type=Path)
     parser.add_argument('--fetch', action='store_true')
+    parser.add_argument('--pull-request', type=int,
+                        help='Verify only this PR and the open PRs below it')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repository):
@@ -176,11 +196,15 @@ def main():
                                     f'repos/{args.repository}/pulls?state=open&per_page=100']))
             prs = [pr for page in pages for pr in page]
         groups = group_stacks(prs, args.repository, [args.root, *args.other_root])
-        report = verify(args.source, groups[args.root], args.repository, args.root, args.fetch)
-        if args.other_root:
-            report['independent_stacks'] = [
-                verify(args.source, groups[branch], args.repository, branch, args.fetch)
-                for branch in args.other_root]
+        if args.pull_request is not None:
+            root, chain = scope_to_pull_request(groups, args.pull_request)
+            report = verify(args.source, chain, args.repository, root, args.fetch)
+        else:
+            report = verify(args.source, groups[args.root], args.repository, args.root, args.fetch)
+            if args.other_root:
+                report['independent_stacks'] = [
+                    verify(args.source, groups[branch], args.repository, branch, args.fetch)
+                    for branch in args.other_root]
 
     except (StackError, KeyError, TypeError, ValueError) as error:
         args.output.write_text(json.dumps({'all_clean': False, 'error': str(error)}, indent=2) + '\n')
