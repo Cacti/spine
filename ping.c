@@ -1687,6 +1687,10 @@ static int split_host_spec(const char *spec, int *method, char *address, size_t 
 	*method = 0;
 	*port   = 0;
 
+	if (capacity == 0) {
+		return FALSE;
+	}
+
 	colon = strchr(spec, ':');
 
 	if (colon != NULL) {

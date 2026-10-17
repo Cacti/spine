@@ -71,7 +71,10 @@ static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
 	if (!use_controlled_socket || fd != controlled_pair[0]) {
 		return sendto(fd, buffer, length, flags, address, address_len);
 	}
-	assert_true(length <= sizeof(last_request));
+	if (length > sizeof(last_request)) {
+		errno = EMSGSIZE;
+		return -1;
+	}
 	memcpy(last_request, buffer, length);
 	last_request_length = length;
 	sends++;
