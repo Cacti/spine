@@ -11,9 +11,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 ## Support policy
 
-A release is supported until its vendor end-of-life date. New releases are
-added after general availability, and a lane is removed when its release
-reaches end of life. Dates come from [endoflife.date](https://endoflife.date).
+A release is supported until its vendor's full support ends. Extended
+phases do not count: Debian LTS, the Rocky Linux and AlmaLinux security-only
+phase, and paid expanded security maintenance. New releases are added after
+general availability, and a lane is removed when full support for its release
+ends. Dates come from [endoflife.date](https://endoflife.date).
 `.github/workflows/distro-eol.yml` runs `.github/scripts/check-distro-eol.py`
 weekly and fails if any lane has passed end of life or is not listed. It
 only reports; it opens no issue or pull request.
@@ -22,10 +24,10 @@ only reports; it opens no issue or pull request.
 
 | Platform | Releases | How |
 | --- | --- | --- |
-| Rocky Linux | 8, 9, 10 | `rockylinux/rockylinux` container |
-| AlmaLinux | 8, 9, 10 | `almalinux` container |
+| Rocky Linux | 9, 10 | `rockylinux/rockylinux` container |
+| AlmaLinux | 9, 10 | `almalinux` container |
 | Ubuntu | 22.04, 24.04, 26.04 | container |
-| Debian | 12, 13 | container |
+| Debian | 13 | container |
 | Fedora | 44 | container |
 | openSUSE Leap | 16.0 | container |
 | Alpine Linux | 3.24 | container |

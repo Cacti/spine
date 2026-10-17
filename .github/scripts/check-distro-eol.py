@@ -17,19 +17,26 @@ import urllib.request
 
 API = 'https://endoflife.date/api/v1/products/{}/'
 
+# Only full vendor support counts. endoflife.date reports the end of full
+# support as eoasFrom for these families and keeps eolFrom for their later
+# phases (Debian LTS, the EL security-only phase), which do not qualify.
+# Elsewhere eolFrom is the end of full support.
+FULL_SUPPORT_FIELD = {
+    'almalinux': ('eoasFrom', 'isEoas'),
+    'debian': ('eoasFrom', 'isEoas'),
+    'rocky-linux': ('eoasFrom', 'isEoas'),
+}
+
 # (lane, endoflife.date product, release). Keep in step with
 # .github/workflows/distro-matrix.yml and scripts/test-distros.sh.
 LANES = [
-    ('rockylinux/rockylinux:8', 'rocky-linux', '8'),
     ('rockylinux/rockylinux:9', 'rocky-linux', '9'),
     ('rockylinux/rockylinux:10', 'rocky-linux', '10'),
-    ('almalinux:8', 'almalinux', '8'),
     ('almalinux:9', 'almalinux', '9'),
     ('almalinux:10', 'almalinux', '10'),
     ('ubuntu:22.04', 'ubuntu', '22.04'),
     ('ubuntu:24.04', 'ubuntu', '24.04'),
     ('ubuntu:26.04', 'ubuntu', '26.04'),
-    ('debian:12', 'debian', '12'),
     ('debian:13', 'debian', '13'),
     ('fedora:44', 'fedora', '44'),
     ('opensuse/leap:16.0', 'opensuse', '16.0'),
@@ -65,12 +72,13 @@ def main() -> int:
             failures += 1
             continue
 
-        eol = release.get('eolFrom')
-        ended = bool(release.get('isEol'))
+        date_field, flag_field = FULL_SUPPORT_FIELD.get(product, ('eolFrom', 'isEol'))
+        eol = release.get(date_field)
+        ended = bool(release.get(flag_field))
         if isinstance(eol, str) and datetime.date.fromisoformat(eol) <= today:
             ended = True
         if ended:
-            print(f'{lane}: {product} {name} reached end of life on {eol}')
+            print(f'{lane}: {product} {name} full support ended on {eol}')
             failures += 1
         else:
             print(f'{lane}: supported until {eol or "no announced date"}')
