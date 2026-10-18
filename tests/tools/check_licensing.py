@@ -22,7 +22,16 @@ SPDX = re.compile(r'SPDX-License-Identifier:\s*(.+?)\s*(?:\*/|-->)?\s*$')
 
 
 def tracked_files():
+    """Tracked files of this checkout, or None when ROOT is not a repository root.
+
+    A release tarball unpacked inside another checkout would otherwise be
+    checked against that checkout's file list.
+    """
     try:
+        top = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--show-toplevel'], check=True,
+                             capture_output=True, text=True).stdout.strip()
+        if Path(top).resolve() != ROOT or not (ROOT / 'packaging/debian/copyright').is_file():
+            return None
         out = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '-z'], check=True,
                              capture_output=True, text=True).stdout
     except (OSError, subprocess.CalledProcessError):
