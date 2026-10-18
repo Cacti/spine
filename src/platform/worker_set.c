@@ -14,7 +14,7 @@ static void finish_worker(void *argument) {
   * the parent still joins before reclaiming any slot or argument. */
 	pthread_mutex_lock(&slot->owner->mutex);
 	atomic_store_explicit(&slot->finished, true, memory_order_release);
-	pthread_mutex_unlock(&slot->owner->mutex);
+	pthread_mutex_unlock(&slot->owner->mutex); /* NOSONAR: releases the only mutex this handler holds, the one locked above */
 }
 
 void *spine_worker_entry(void *argument) {
