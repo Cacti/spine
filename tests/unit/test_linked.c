@@ -211,6 +211,12 @@ static void test_statement_label_names_the_verb_and_table_only(void **state) {
 	assert_string_equal(label, "REPLACE settings");
 	db_statement_label("UPDATE host SET snmp_password='fixture_secret' WHERE id=1", label, sizeof(label));
 	assert_string_equal(label, "UPDATE host");
+	db_statement_label("UPDATE LOW_PRIORITY host SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("UPDATE IGNORE `host` SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE `host`");
+	db_statement_label("UPDATE LOW_PRIORITY IGNORE host SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
 	db_statement_label("SELECT value FROM settings WHERE name='from poller'", label, sizeof(label));
 	assert_string_equal(label, "SELECT settings");
 	db_statement_label("SELECT 'a from b'", label, sizeof(label));

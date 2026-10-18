@@ -239,8 +239,7 @@ static int spine_fatal_signals[] = {
 	SIGQUIT,
 	SIGSYS,
 	SIGABRT,
-	0
-};
+	0};
 
 /* A caught disposition is reset to SIG_DFL by exec(), unlike SIG_IGN. Keep
  * broken pipes non-fatal in Spine while preserving normal SIGPIPE semantics
