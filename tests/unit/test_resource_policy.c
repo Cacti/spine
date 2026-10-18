@@ -28,7 +28,7 @@ static struct rlimit applied;
 static int fake_executable(char *buffer, uint32_t *capacity) {
 	(void) capacity;
 	if (path_error) return -1;
-	strcpy(buffer, "/tmp/spine");
+	strcpy(buffer, "/usr/local/spine/bin/spine");
 	return 0;
 }
 #endif
@@ -42,7 +42,7 @@ static char *fake_realpath(const char *path, char *resolved) {
 	if (resolve_long) {
 		memset(result, 'a', BUFSIZE);
 		result[BUFSIZE] = '\0';
-	} else memcpy(result, "/tmp/spine", sizeof("/tmp/spine"));
+	} else memcpy(result, "/usr/local/spine/bin/spine", sizeof("/usr/local/spine/bin/spine"));
 	return result;
 }
 static int fake_getrlimit(int resource, struct rlimit *limit) {
@@ -90,20 +90,20 @@ static void test_executable_resolution(void **state) {
 	(void) state;
 #ifdef __APPLE__
 	path_error = 1;
-	spine_script_executable("/tmp/spine");
+	spine_script_executable("/usr/local/spine/bin/spine");
 	assert_string_equal(set.php.script_executable, "");
 	path_error = 0;
 #endif
 	resolve_error = 1;
-	spine_script_executable("/tmp/spine");
+	spine_script_executable("/usr/local/spine/bin/spine");
 	assert_string_equal(set.php.script_executable, "");
 	resolve_error = 0;
 	resolve_long = 1;
-	spine_script_executable("/tmp/spine");
+	spine_script_executable("/usr/local/spine/bin/spine");
 	assert_string_equal(set.php.script_executable, "");
 	resolve_long = 0;
-	spine_script_executable("/tmp/spine");
-	assert_string_equal(set.php.script_executable, "/tmp/spine");
+	spine_script_executable("/usr/local/spine/bin/spine");
+	assert_string_equal(set.php.script_executable, "/usr/local/spine/bin/spine");
 }
 
 #if !defined(__linux__) && !defined(__APPLE__)
