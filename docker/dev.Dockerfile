@@ -24,9 +24,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gdb \
   && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /build
+RUN useradd --create-home spine
 
-COPY . .
+WORKDIR /build
+RUN chown spine:spine /build
+
+COPY --chown=spine:spine bootstrap configure.ac Makefile.am ./
+COPY --chown=spine:spine docs/man/ docs/man/
+COPY --chown=spine:spine etc/ etc/
+COPY --chown=spine:spine scripts/ scripts/
+COPY --chown=spine:spine src/ src/
+COPY --chown=spine:spine tests/fixtures/ tests/fixtures/
+COPY --chown=spine:spine vendor/ vendor/
+
+COPY scripts/verify.sh /usr/local/bin/verify.sh
+RUN chmod +x /usr/local/bin/verify.sh
+
+USER spine
 
 # ASan build: catches heap/stack overflows and use-after-free at runtime.
 # -fno-omit-frame-pointer gives usable stack traces under valgrind/gdb.
@@ -34,8 +48,5 @@ RUN ./bootstrap \
   && CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -Wall -Wextra" \
      ./configure --enable-warnings \
   && make -j"$(nproc)"
-
-COPY scripts/verify.sh /usr/local/bin/verify.sh
-RUN chmod +x /usr/local/bin/verify.sh
 
 CMD ["/usr/local/bin/verify.sh"]
