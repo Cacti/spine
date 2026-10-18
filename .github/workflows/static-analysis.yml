@@ -18,18 +18,26 @@ jobs:
   actionlint:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      # sha256 of actionlint_${VERSION}_linux_amd64.tar.gz, taken from the
+      # release checksums file.
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # go install verifies the module against the Go checksum database, so
-      # the version tag cannot be moved under us.
       - name: Install actionlint
         run: |
           set -euo pipefail
-          GOBIN="$RUNNER_TEMP/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/bin" actionlint
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Run actionlint
         run: actionlint -color
