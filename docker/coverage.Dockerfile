@@ -5,8 +5,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc make autoconf automake libtool pkg-config \
         libmariadb-dev libsnmp-dev libssl-dev gcovr \
     && rm -rf /var/lib/apt/lists/*
+RUN useradd --create-home spine
 WORKDIR /src
-COPY . .
+RUN chown spine:spine /src
+COPY --chown=spine:spine configure.ac Makefile.am ./
+COPY --chown=spine:spine src/ src/
+COPY --chown=spine:spine vendor/ vendor/
+# The instrumented binary writes its .gcda files under /src at run time.
+USER spine
 RUN autoreconf -fi \
     && ./configure CFLAGS="-fprofile-arcs -ftest-coverage -O0 -g" LDFLAGS="-fprofile-arcs" \
     && make -j"$(nproc)" spine
