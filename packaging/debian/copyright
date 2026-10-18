@@ -10,16 +10,39 @@ Comment: Each source file names its own SPDX identifier. This default covers
  files that name LGPL-2.1-or-later; other identifiers have stanzas below,
  and tests/tools/check_licensing.py keeps them in agreement.
 
-Files: Makefile.am
+Files: AGENTS.md
+ CONTRIBUTING.md
+ Makefile.am
  Makefile.in
  bootstrap
  configure.ac
  docs/adr/0001-c17-language-standard.md
+ docs/adr/0003-mariadb-connector.md
+ docs/adr/0004-formatting-and-json-dependencies.md
+ docs/benchmarks/README.md
+ docs/benchmarks/results/2026-10-11-default-logging/README.md
+ docs/benchmarks/results/2026-10-11-recovered-runtime/README.md
+ docs/benchmarks/results/2026-10-11-runtime-ownership/README.md
+ docs/operations/database-tls.md
+ docs/operations/issue-boundaries.md
+ docs/operations/pr-stack.md
+ docs/operations/resource-ownership.md
+ docs/platforms.md
  scripts/copyright_year.sh
  scripts/debug.sh
  scripts/package.sh
  src/platform/spine_sem.h
  tests/regression/test_helper_scripts.sh
+ tests/tools/benchmark_builds.py
+ tests/tools/build_benchmark_pair.sh
+ tests/tools/test_benchmark_record.py
+ tests/tools/test_clang_tidy_gate.py
+ tests/tools/test_configure_contracts.sh
+ tests/tools/test_pr_stack.py
+ tests/tools/test_pr_stack.sh
+ tests/tools/verify_benchmark_record.py
+ tests/tools/verify_pr_stack.py
+ tests/unit/test_process_abort.c
 Copyright: 2004-2026 The Cacti Group
 License: GPL-2.0-or-later
 
@@ -37,7 +60,9 @@ Copyright: 1993 The Regents of the University of California
  2004-2026 The Cacti Group
 License: GPL-2.0-or-later and LicenseRef-Xenadyne-Header
 
-Files: scripts/check-dco.sh
+Files: .github/scripts/check-distro-eol.py
+ .github/scripts/valgrind-test.sh
+ scripts/check-dco.sh
  scripts/test-distros.sh
  scripts/verify.sh
  tests/fuzz/fuzz_icmp_reply.c

@@ -185,6 +185,7 @@ static void test_long_command_is_an_invalid_item(void **state) {
  * allowed to finish inside script_timeout instead of being killed at EOF. */
 static void test_script_finishes_after_closing_its_output(void **state) {
 	host_t host = {.id = 1};
+	char directory[] = "spine-script-grace-XXXXXX";
 	char saved[64];
 	char command[256];
 	char *result;
@@ -194,15 +195,16 @@ static void test_script_finishes_after_closing_its_output(void **state) {
 	set.php.script_max_output = 2;
 	set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
 	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
-	snprintf(saved, sizeof(saved), "/tmp/spine_script_grace_%d", (int) getpid());
-	unlink(saved);
+	assert_non_null(mkdtemp(directory));
+	snprintf(saved, sizeof(saved), "%s/saved", directory);
 	snprintf(command, sizeof(command), "/bin/echo 42; exec >&-; sleep 0.05; echo saved > %s", saved);
 
 	result = exec_poll(&host, command, 1, "DS");
 	assert_string_equal(result, "42");
 	free(result);
 	assert_int_equal(access(saved, F_OK), 0);
-	unlink(saved);
+	assert_int_equal(unlink(saved), 0);
+	assert_int_equal(rmdir(directory), 0);
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
