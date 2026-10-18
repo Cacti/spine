@@ -86,6 +86,7 @@ check_PROGRAMS += test_spine_faults
 # Link the same runtime implementation with a separate fault-test entry point.
 test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
 test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
+ -Wl,--wrap=spine_json_log_record \
  -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
  -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
  -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \

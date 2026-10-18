@@ -43,6 +43,18 @@ extern poller_thread_t **details;
 
 extern ssize_t __real_write(int, const void *, size_t);
 static bool cancel_log_write;
+static bool fail_json_record;
+extern bool __real_spine_json_log_record(char *, size_t, const char *, const char *, const char *);
+
+bool __wrap_spine_json_log_record(char *output, size_t capacity, const char *timestamp,
+	const char *severity, const char *message) {
+	if (fail_json_record) {
+		fail_json_record = FALSE;
+		if (capacity > 0) output[0] = '\0';
+		return FALSE;
+	}
+	return __real_spine_json_log_record(output, capacity, timestamp, severity, message);
+}
 
 ssize_t __wrap_write(int fd, const void *bytes, size_t length) {
 	if (cancel_log_write && fd > STDERR_FILENO) {
@@ -789,6 +801,25 @@ static void test_logger_cancellation_unlocks_file(void) {
 		format_failures = 1;
 		assert(!spine_log("timestamp fault"));
 		assert(format_failures == 0);
+		fail_json_record = TRUE;
+		assert(!spine_log("encoder failure must not report success"));
+		assert(!fail_json_record);
+		{
+			char line[1024];
+			bool found = FALSE;
+			FILE *logged = fopen(path, "r");
+
+			assert(logged != NULL);
+			while (fgets(line, sizeof(line), logged) != NULL) {
+				if (strstr(line, "JSON log rejected: formatting failure") != NULL) {
+					assert(strcmp(line, "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: formatting failure\"}\n") == 0);
+					found = TRUE;
+				}
+			}
+			assert(fclose(logged) == 0);
+			assert(found);
+		}
+		assert(spine_log("logging recovers after encoder failure"));
 		assert(freopen("/dev/full", "w", stderr) != NULL);
 		assert(setvbuf(stderr, NULL, _IONBF, 0) == 0);
 		set.console.stderr_notty = FALSE;
