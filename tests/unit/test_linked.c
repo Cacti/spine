@@ -681,7 +681,7 @@ static void test_read_spine_config_rejects_a_missing_file(void **state) {
 }
 
 static void test_read_spine_config_reads_settings(void **state) {
-	char path[] = "/tmp/spine-linked-config-XXXXXX";
+	char path[] = "spine-linked-config-XXXXXX";
 	int descriptor;
 	int read_status;
 	FILE *fp;
