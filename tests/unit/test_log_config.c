@@ -114,7 +114,7 @@ static void test_new_log_permissions(void **state) {
 	set.console.stdout_notty = FALSE;
 	set.console.stderr_notty = TRUE;
 	STRNCOPY(set.logging.path_logfile, path);
-	previous_umask = umask(0);
+	previous_umask = umask(0); /* NOSONAR: the test needs umask 0 to show the 0640 mode comes from spine */
 	spine_log("permission check");
 	umask(previous_umask);
 	result = stat(path, &info);
