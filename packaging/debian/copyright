@@ -18,14 +18,20 @@ Files: AGENTS.md
  configure.ac
  docs/adr/0001-c17-language-standard.md
  docs/adr/0003-mariadb-connector.md
+ docs/benchmarks/README.md
+ docs/benchmarks/results/2026-10-11-default-logging/README.md
  docs/platforms.md
  scripts/copyright_year.sh
  scripts/debug.sh
  scripts/package.sh
  src/platform/spine_sem.h
  tests/regression/test_helper_scripts.sh
+ tests/tools/benchmark_builds.py
+ tests/tools/build_benchmark_pair.sh
+ tests/tools/test_benchmark_record.py
  tests/tools/test_clang_tidy_gate.py
  tests/tools/test_configure_contracts.sh
+ tests/tools/verify_benchmark_record.py
 Copyright: 2004-2026 The Cacti Group
 License: GPL-2.0-or-later
 
