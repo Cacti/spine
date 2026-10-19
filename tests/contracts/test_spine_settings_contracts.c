@@ -114,12 +114,12 @@ void test_config_option_boundaries(MYSQL *mysql) {
 	assert(db_insert(mysql, LOCAL, "DELETE FROM settings"));
 	assert(db_insert(mysql, LOCAL, "INSERT INTO settings(name,value) VALUES('log_destination','STDOUT')"));
 	read_config_options();
-	/* getsetting() represents absent rows as owned empty strings. Preserve
-	 * that contract: numeric reads become zero before their existing clamps. */
-	assert(set.php.script_timeout == 5 && set.php.php_servers == 1);
-	assert(set.snmp.snmp_max_get_size == 0 && set.snmp.snmp_retries == 0);
+	/* getsetting() returns NULL for absent rows, so each reader applies its
+	 * own default instead of clamping a zero parsed from "". */
+	assert(set.php.script_timeout == 25 && set.php.php_servers == 2);
+	assert(set.snmp.snmp_max_get_size == 25 && set.snmp.snmp_retries == 3);
 	assert(set.poller.active_profiles == 0 && set.snmp.total_snmp_ports == 0);
-	assert(set.poller.poller_interval == 0 && set.poller.num_parent_processes == 0);
+	assert(set.poller.poller_interval == 0 && set.poller.num_parent_processes == 1);
 	assert(!set.logging.log_perror && !set.logging.log_pwarn && !set.logging.log_pstats);
 	assert(!set.boost.boost_enabled && !set.boost.boost_redirect);
 	assert(set.availability.ping_timeout == 777);

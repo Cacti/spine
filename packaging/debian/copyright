@@ -25,6 +25,8 @@ Files: AGENTS.md
  docs/benchmarks/results/2026-10-11-runtime-ownership/README.md
  docs/operations/database-tls.md
  docs/operations/issue-boundaries.md
+ docs/operations/pr-stack.md
+ docs/operations/resource-ownership.md
  docs/platforms.md
  scripts/copyright_year.sh
  scripts/debug.sh
@@ -36,7 +38,11 @@ Files: AGENTS.md
  tests/tools/test_benchmark_record.py
  tests/tools/test_clang_tidy_gate.py
  tests/tools/test_configure_contracts.sh
+ tests/tools/test_pr_stack.py
+ tests/tools/test_pr_stack.sh
  tests/tools/verify_benchmark_record.py
+ tests/tools/verify_pr_stack.py
+ tests/unit/test_process_abort.c
 Copyright: 2004-2026 The Cacti Group
 License: GPL-2.0-or-later
 

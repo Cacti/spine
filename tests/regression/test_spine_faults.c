@@ -1136,6 +1136,12 @@ static void test_fake_database_wrappers(void) {
 	fake_repeat(1213, 40);
 	assert(db_query(&handle, LOCAL, "SELECT 1") == NULL);
 	assert(fake_error_next == 31);
+	fake_repeat(1213, 40);
+	assert(db_insert(&handle, LOCAL, "UPDATE host SET status=1") == FALSE);
+	assert(fake_error_next == 31);
+	fake_repeat(1205, 40);
+	assert(db_insert(&handle, LOCAL, "UPDATE host SET status=1") == FALSE);
+	assert(fake_error_next == 31);
 
 	fake_script(NULL, 0);
 	fake_rows = 1;

@@ -189,11 +189,23 @@ int wait_for_workers(double begin_time, spine_worker_set_t *workers) {
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller.poller_interval) {
+			int attempt;
 			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.poller.threads - a_threads_value));
-			/* Active workers still own pool entries and completion state. Exit the
-			 * process before normal cleanup can invalidate those borrowed objects. */
+			/* Killing external scripts lets their owners finish and be joined.
+			 * Retain all shared state during this bounded grace period. */
 			set.exit.exit_code = EXIT_FAILURE;
-			die("ERROR: Polling deadline expired with active workers; polling is incomplete");
+			nft_abort_children();
+			for (attempt = 0; attempt < 25; attempt++) {
+				error = spine_worker_set_reap(workers, &remaining);
+				if (error != 0) break;
+				if (remaining == 0) die("ERROR: Polling deadline expired; stopped workers were joined and polling is incomplete");
+				spine_sleep_usec(10000);
+			}
+			/* A remaining owner may be blocked on a lock or non-script I/O.
+			 * Do not run exit callbacks or normal shared-state teardown while
+			 * it can still access that state. Terminate the whole process. */
+			fputs("ERROR: Polling deadline expired with active workers; polling is incomplete\n", stderr);
+			_exit(EXIT_FAILURE);
 		}
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.poller.threads - a_threads_value));

@@ -190,6 +190,7 @@ static void test_fatal_signal_contracts(void) {
 		const char *message;
 	} cases[] = {
 		{SIGINT, "Console Operator"},
+		{SIGTERM, "Termination Signal"},
 		{SIGSEGV, "Segmentation Fault"}, {SIGBUS, "Bus Error"},
 		{SIGFPE, "Floating Point Exception"}, {SIGQUIT, "Keyboard Quit"},
 		{SIGSYS, "Unhandled Exception"}, {SIGABRT, "Abort Signal"}};
@@ -209,8 +210,9 @@ static void test_fatal_signal_contracts(void) {
 			assert(signal(cases[i].signal, SIG_DFL) != SIG_ERR);
 			install_spine_signal_handler();
 			assert(raise(cases[i].signal) == 0);
-			/* A fatal signal must end the process once it is logged. */
-			_exit(0);
+			/* Operator termination hands off to an ordinary-context coordinator;
+			 * the existing alarm bounds the time to the final signal status. */
+			for (;;) pause();
 		}
 		close(diagnostic[1]);
 		char message[512] = {0};

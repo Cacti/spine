@@ -4,6 +4,7 @@
 #include "app/spine.h"
 #include "database/cacti_query.h"
 #include "database/persistence.h"
+#include "config/settings_internal.h"
 
 static void stored(MYSQL *connection, const char *query, const char *expected) {
 	MYSQL_RES *result = db_query(connection, LOCAL, query);
@@ -15,6 +16,37 @@ static void stored(MYSQL *connection, const char *query, const char *expected) {
 	db_free_result(result);
 }
 
+static void sql_log_contract(MYSQL *connection) {
+	FILE *capture = tmpfile();
+	int saved_stdout;
+	int destination = set.logging.log_destination;
+	int level = set.logging.log_level;
+	char contents[LRG_BUFSIZE];
+	size_t bytes;
+
+	assert(capture != NULL);
+	fflush(stdout);
+	saved_stdout = dup(STDOUT_FILENO);
+	assert(saved_stdout >= 0);
+	assert(dup2(fileno(capture), STDOUT_FILENO) >= 0);
+	set.logging.log_destination = LOGDEST_STDOUT;
+	set.logging.log_level = POLLER_VERBOSITY_DEVDBG;
+	assert(db_query(connection, LOCAL, "SELECT fixture_sql_secret") == NULL);
+	assert(db_insert(connection, LOCAL, "INSERT INTO settings(name,value) VALUES('sql_log_fixture','fixture_sql_secret')"));
+	fflush(stdout);
+	assert(dup2(saved_stdout, STDOUT_FILENO) >= 0);
+	close(saved_stdout);
+	set.logging.log_destination = destination;
+	set.logging.log_level = level;
+	rewind(capture);
+	bytes = fread(contents, 1, sizeof(contents) - 1, capture);
+	contents[bytes] = '\0';
+	fclose(capture);
+	assert(strstr(contents, "Database Error") != NULL);
+	assert(strstr(contents, "fixture_sql_secret") == NULL);
+	assert(db_insert(connection, LOCAL, "DELETE FROM settings WHERE name='sql_log_fixture'"));
+}
+
 static void output_contract(MYSQL *local, MYSQL *remote, int mode) {
 	poller_queries_t queries;
 	target_t item = {0};
@@ -22,6 +54,14 @@ static void output_contract(MYSQL *local, MYSQL *remote, int mode) {
 	MYSQL *destination = mode == REMOTE_ONLINE ? remote : local;
 	const char *values[] = {"42", "updated'\\value"};
 	size_t i;
+	sql_log_contract(destination);
+	/* Settings writes must use this connection's vendor, even when the local
+	 * server advertised a different upsert mode. */
+	set.database.onupdate = mysql_get_server_version(destination) < 80019;
+	assert(putsetting(destination, mode == REMOTE_ONLINE ? REMOTE : LOCAL, "destination_fixture", "first"));
+	stored(destination, "SELECT value FROM settings WHERE name='destination_fixture'", "first");
+	assert(putsetting(destination, mode == REMOTE_ONLINE ? REMOTE : LOCAL, "destination_fixture", "second"));
+	stored(destination, "SELECT value FROM settings WHERE name='destination_fixture'", "second");
 	set.poller.mode = mode;
 	set.boost.boost_enabled = set.boost.boost_redirect = TRUE;
 	poller_prepare_queries(&queries, 991, 1, 0);

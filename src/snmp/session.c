@@ -519,8 +519,12 @@ void *snmp_host_init(const snmp_connection_t *options) {
  */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {
+		int cancellation_state;
+
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
 		thread_mutex_lock(LOCK_SNMP);
 		snmp_sess_close(snmp_session);
 		thread_mutex_unlock(LOCK_SNMP);
+		pthread_setcancelstate(cancellation_state, NULL);
 	}
 }
