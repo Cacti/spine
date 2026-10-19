@@ -236,6 +236,9 @@ static void check_abort(int signal_number, int worker_fatal) {
 		control_fd = control[0];
 		abort_from_worker = worker_fatal;
 		init_mutexes();
+		/* The handler is installed only over SIG_DFL. A test driver such as
+		 * busybox sh can start this process with SIGINT or SIGQUIT ignored. */
+		if (signal_number != 0) (void) signal(signal_number, SIG_DFL);
 		install_spine_signal_handler();
 		if (pthread_attr_init(&attributes) != 0 ||
 			pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED) != 0) _exit(109);
