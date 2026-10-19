@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HEADER_SUFFIXES = {'.c', '.h', '.sh', '.py', '.awk'}
 HEADER_NAMES = {'Makefile.am', 'configure.ac', 'bootstrap'}
 EXEMPT_PREFIXES = ('vendor/', 'LICENSES/')
-SPDX = re.compile(r'SPDX-License-Identifier:\s*(.+?)\s*(?:\*/)?\s*$')
+SPDX = re.compile(r'SPDX-License-Identifier:\s*(.+?)\s*(?:\*/|-->)?\s*$')
 
 
 def tracked_files():

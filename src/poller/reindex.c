@@ -89,14 +89,14 @@ bool parse_uptime(const char *text, unsigned long long *ticks) {
 	unsigned int digit;
 
 	if (text == NULL || ticks == NULL) return FALSE;
-	while (isspace((unsigned char)*text)) text++;
+	while (isspace((unsigned char) *text)) text++;
 	if (*text < '0' || *text > '9') return FALSE;
 	while (*text >= '0' && *text <= '9') {
-		digit = (unsigned int)(*text++ - '0');
+		digit = (unsigned int) (*text++ - '0');
 		if (value > (ULLONG_MAX - digit) / 10) return FALSE;
 		value = value * 10 + digit;
 	}
-	while (isspace((unsigned char)*text)) text++;
+	while (isspace((unsigned char) *text)) text++;
 	if (*text != '\0') return FALSE;
 	*ticks = value;
 	return TRUE;

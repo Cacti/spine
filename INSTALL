@@ -83,7 +83,7 @@ CYGWIN Prerequisite
       * gcc-debuginfo
       * gzip
       * help2man
-      * libmariadb-devel (preferred) or libmysqlclient
+      * libmariadb-devel (libmysqlclient is deprecated)
       * libtool
       * m4
       * make

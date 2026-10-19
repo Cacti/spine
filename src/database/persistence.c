@@ -50,6 +50,12 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	size_t out_buffer;
 	MYSQL *mysqlt;
 	int i;
+	char suffix[BUFSIZE];
+	static const char *const updates[] = {"output"};
+
+	/* Abort can close a blocked script's pipe while die() is still printing.
+	 * Its resulting undefined value must not become a completed poll result. */
+	if (nft_abort_requested()) return (poll_output_buffers_t){.failed = TRUE};
 
 	/* insert the query results into the database */
 	query3 = allocate_output_query(queries->output, "ERROR: Fatal malloc error: poller.c query3 output buffer!");
@@ -69,6 +75,9 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 		SPINE_LOG_DEBUG(("DEBUG: Setting up writes to local database"));
 		mysqlt = mysql;
 		mode = LOCAL;
+	}
+	if (!db_upsert_suffix(mysqlt, suffix, sizeof(suffix), updates, 1)) {
+		return (poll_output_buffers_t){query3, query12, TRUE};
 	}
 
 	i = 0;
@@ -94,8 +103,8 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 
 		/* if the next element to the buffer will overflow it, write to the database */
 		if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
-			if (!flush_output_query(mysqlt, mode, query3, queries->suffix, queries->output)) failed = TRUE;
-			if (!flush_output_query(mysqlt, mode, query12, queries->suffix, queries->boost_output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query3, suffix, queries->output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query12, suffix, queries->boost_output)) failed = TRUE;
 
 			/* reset the output buffer length */
 			out_buffer = strlen(query3);
@@ -120,8 +129,8 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 
 	/* perform the last insert if there is data to process */
 	if (out_buffer > strlen(queries->output)) {
-		if (!flush_output_query(mysqlt, mode, query3, queries->suffix, NULL)) failed = TRUE;
-		if (!flush_output_query(mysqlt, mode, query12, queries->suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query3, suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query12, suffix, NULL)) failed = TRUE;
 	}
 	/* MEMORY output tables can retain earlier rows after a rejected write.
 	 * Confirmed partial output remains; keep due items eligible for recollection. */

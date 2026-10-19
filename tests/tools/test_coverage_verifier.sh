@@ -13,6 +13,19 @@ for source in one.c two.c; do
     printf 'SF:/source/%s\nLF:2\nLH:1\nBRF:2\nBRH:1\nFNF:1\nFNH:1\nend_of_record\n' "$source" >> "$owned_dir/complete.info"
 done
 "$verifier" "$owned_dir/complete.info" /source "$owned_dir/sources.txt"
+printf '%s\n' src/worker.c > "$owned_dir/ownership.txt"
+printf '%s\n' src/worker.c > "$owned_dir/ownership-sources.txt"
+printf 'SF:/source/src/worker.c\nLF:2\nLH:2\nBRF:2\nBRH:2\nFNF:1\nFNH:1\nend_of_record\n' > "$owned_dir/ownership.info"
+"$verifier" "$owned_dir/ownership.info" /source "$owned_dir/ownership-sources.txt" "$owned_dir/ownership.txt"
+for metric in LH BRH; do
+    sed "s/$metric:2/$metric:1/" "$owned_dir/ownership.info" > "$owned_dir/ownership-gap.info"
+    if "$verifier" "$owned_dir/ownership-gap.info" /source "$owned_dir/ownership-sources.txt" "$owned_dir/ownership.txt" >/dev/null 2>&1; then
+        printf 'Ownership coverage gap was incorrectly admitted\n' >&2
+        exit 1
+    fi
+done
+printf '%s\n' src/absent.c > "$owned_dir/absent-ownership.txt"
+if "$verifier" "$owned_dir/ownership.info" /source "$owned_dir/ownership-sources.txt" "$owned_dir/absent-ownership.txt" >/dev/null 2>&1; then exit 1; fi
 reject() {
     local profile="$1"
     if "$verifier" "$profile" /source "$owned_dir/sources.txt" > /dev/null 2>&1; then

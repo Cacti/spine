@@ -47,8 +47,11 @@ static void read_logging_options(MYSQL *mysql) {
 			}
 		}
 		free(res);
-	} else {
+	} else if (strlen(web_root) != 0) {
 		snprintf(set.logging.path_logfile, DBL_BUFSIZE, "%s/log/cacti.log", web_root);
+	} else {
+		/* Without a web root this would name /log/cacti.log at the filesystem root. */
+		set.logging.path_logfile[0] = '\0';
 	}
 
 	/* get log separator */

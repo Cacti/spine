@@ -127,7 +127,7 @@ static void prepare_device_partition(MYSQL *mysql, int host_id, int current_thre
 }
 
 static bool start_poll_worker(const poller_thread_t *device, int current_thread, spine_permits_t *startup,
-	const pthread_attr_t *attributes, pthread_t *thread) {
+	const pthread_attr_t *attributes, spine_worker_set_t *workers) {
 	if (!acquire_worker_permits(startup, device->host_id, current_thread)) {
 		thread_mutex_lock(LOCK_THDET);
 		set.exit.exit_code = EXIT_FAILURE;
@@ -142,11 +142,11 @@ static bool start_poll_worker(const poller_thread_t *device, int current_thread,
 	worker->host_thread = current_thread;
 	int status;
 	do {
-		status = pthread_create(thread, attributes, child, worker);
+		status = spine_worker_set_start(workers, attributes, child, worker);
 		if (status == EAGAIN) spine_sleep_usec(10000);
 	} while (status == EAGAIN && get_time_as_double() - start_time < set.poller.poller_interval);
 	if (status == 0) {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Valid Thread to be Created (%ld)", device->host_id, (unsigned long int) *thread));
+		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Polling worker created", device->host_id));
 		return TRUE;
 	}
 	SPINE_LOG(("ERROR: Device[%i] HT[%i] unable to create polling thread (error %d)", device->host_id, current_thread, status));
@@ -170,23 +170,42 @@ static void report_worker_launch(const poller_thread_t *device, int device_count
 	thread_mutex_unlock(LOCK_THDET);
 }
 
-int wait_for_workers(double begin_time) {
+int wait_for_workers(double begin_time, spine_worker_set_t *workers) {
 	int a_threads_value;
 	double cur_time;
+	size_t remaining;
 	a_threads_value = spine_permits_available(&available_threads);
 
 	/* wait for all threads to 'complete'
 	 * using the mutex here as the semaphore will
      * show zero before the children are done */
-	while (a_threads_value < set.poller.threads) {
+	for (;;) {
+		int error = spine_worker_set_reap(workers, &remaining);
+		if (error != 0) {
+			set.exit.exit_code = EXIT_FAILURE;
+			die("ERROR: Unable to join polling workers (error %i)", error);
+		}
+		if (remaining == 0 && a_threads_value == set.poller.threads) break;
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller.poller_interval) {
+			int attempt;
 			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.poller.threads - a_threads_value));
-			/* Active workers still own pool entries and completion state. Exit the
-			 * process before normal cleanup can invalidate those borrowed objects. */
+			/* Killing external scripts lets their owners finish and be joined.
+			 * Retain all shared state during this bounded grace period. */
 			set.exit.exit_code = EXIT_FAILURE;
-			die("ERROR: Polling deadline expired with active workers; polling is incomplete");
+			nft_abort_children();
+			for (attempt = 0; attempt < 25; attempt++) {
+				error = spine_worker_set_reap(workers, &remaining);
+				if (error != 0) break;
+				if (remaining == 0) die("ERROR: Polling deadline expired; stopped workers were joined and polling is incomplete");
+				spine_sleep_usec(10000);
+			}
+			/* A remaining owner may be blocked on a lock or non-script I/O.
+			 * Do not run exit callbacks or normal shared-state teardown while
+			 * it can still access that state. Terminate the whole process. */
+			fputs("ERROR: Polling deadline expired with active workers; polling is incomplete\n", stderr);
+			_exit(EXIT_FAILURE);
 		}
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.poller.threads - a_threads_value));
@@ -241,7 +260,7 @@ void report_worker_completion(int num_rows) {
 }
 
 void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
-	pthread_t *threads, spine_permits_t *thread_init_sem,
+	spine_worker_set_t *workers, spine_permits_t *thread_init_sem,
 	const pthread_attr_t *attr, char *host_time) {
 	poller_partition_t partition = {.timestamp = host_time};
 	poller_thread_t *poller_details = NULL;
@@ -328,7 +347,7 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 		}
 
 
-		if (start_poll_worker(poller_details, current_thread, thread_init_sem, attr, &threads[device_counter])) {
+		if (start_poll_worker(poller_details, current_thread, thread_init_sem, attr, workers)) {
 			if (change_host) device_counter++;
 			report_worker_launch(poller_details, device_counter);
 		} else {
@@ -338,9 +357,8 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 }
 
 void prepare_worker_storage(MYSQL_RES *result, int *rows,
-	pthread_t **worker_threads, int **host_ids, char **timestamp) {
+	int **host_ids, char **timestamp) {
 	int num_rows;
-	pthread_t *threads = NULL;
 	int *ids = NULL;
 	char *host_time = NULL;
 	if (set.poller.poller_id == 1) {
@@ -354,10 +372,6 @@ void prepare_worker_storage(MYSQL_RES *result, int *rows,
 	}
 
 	if (num_rows > 0) {
-		if (!(threads = malloc(num_rows * sizeof(*threads)))) {
-			die("ERROR: Fatal malloc error: spine.c threads!");
-		}
-
 		if (!(details = (poller_thread_t **) calloc((size_t) num_rows, sizeof(poller_thread_t *)))) {
 			die("ERROR: Fatal malloc error: spine.c details!");
 		}
@@ -375,12 +389,11 @@ void prepare_worker_storage(MYSQL_RES *result, int *rows,
 
 
 	*rows = num_rows;
-	*worker_threads = threads;
 	*host_ids = ids;
 	*timestamp = host_time;
 }
 
-void free_worker_storage(int num_rows, pthread_t *threads, int *ids,
+void free_worker_storage(int num_rows, int *ids,
 	char *conf_file, char *host_time) {
 	/* free malloc'd variables */
 	for (int i = 0; i < num_rows; i++) {
@@ -390,7 +403,6 @@ void free_worker_storage(int num_rows, pthread_t *threads, int *ids,
 	}
 
 	SPINE_FREE(details);
-	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);
 	SPINE_FREE(debug_devices);
