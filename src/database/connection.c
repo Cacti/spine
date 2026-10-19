@@ -126,16 +126,16 @@ int db_connect(int type, MYSQL *mysql) {
 		db_set_option(mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout, "general timeout");
 
 #ifdef HAS_MYSQL_OPT_RETRY_COUNT
-	db_set_option(mysql, MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
+		db_set_option(mysql, MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 #endif
 
 #ifdef HAS_MYSQL_OPT_SSL_KEY
-	db_set_ssl_options(mysql, local_address ? LOCAL : REMOTE);
+		db_set_ssl_options(mysql, local_address ? LOCAL : REMOTE);
 #endif
-	if (!db_apply_tls_policy(mysql, local_address ? &set.database : &set.remote_database)) {
-		SPINE_LOG(("ERROR: Database TLS policy is invalid or unsupported by the selected client library"));
-		return db_reject_handle(mysql, &address);
-	}
+		if (!db_apply_tls_policy(mysql, local_address ? &set.database : &set.remote_database)) {
+			SPINE_LOG(("ERROR: Database TLS policy is invalid or unsupported by the selected client library"));
+			return db_reject_handle(mysql, &address);
+		}
 
 		tries--;
 
