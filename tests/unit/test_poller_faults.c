@@ -11,8 +11,8 @@
  * reindex.c is compiled into the test so its static helpers can be driven
  * directly, with the allocators it calls redirected. Allocation failure ends
  * in die(), so those cases run in a child and the parent checks the exit
- * status. The thread-local storage calls behind regex_replace() are wrapped
- * at link time and fail only while armed.
+ * status. The thread-local storage calls behind regex_replace() and the
+ * logger fail only while armed.
  */
 
 #include <stdarg.h>
@@ -52,30 +52,39 @@ static char *controlled_strdup(const char *text) {
 	return strdup(text);
 }
 
+static int controlled_once(pthread_once_t *once, void (*initializer)(void)) {
+	if (fail_once) return EINVAL;
+	return pthread_once(once, initializer);
+}
+
+static int controlled_key_create(pthread_key_t *key, void (*destructor)(void *)) {
+	if (fail_key_create) return EAGAIN;
+	return pthread_key_create(key, destructor);
+}
+
+static int controlled_setspecific(pthread_key_t key, const void *value) {
+	setspecific_calls++;
+	if (fail_setspecific) return ENOMEM;
+	return pthread_setspecific(key, value);
+}
+
 #define malloc controlled_malloc
 #define strdup controlled_strdup
 #include "../../src/poller/reindex.c"
 #undef strdup
 #undef malloc
 
-int __real_pthread_once(pthread_once_t *once, void (*initializer)(void));
-int __wrap_pthread_once(pthread_once_t *once, void (*initializer)(void)) {
-	if (fail_once) return EINVAL;
-	return __real_pthread_once(once, initializer);
-}
-
-int __real_pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
-int __wrap_pthread_key_create(pthread_key_t *key, void (*destructor)(void *)) {
-	if (fail_key_create) return EAGAIN;
-	return __real_pthread_key_create(key, destructor);
-}
-
-int __real_pthread_setspecific(pthread_key_t key, const void *value);
-int __wrap_pthread_setspecific(pthread_key_t key, const void *value) {
-	setspecific_calls++;
-	if (fail_setspecific) return ENOMEM;
-	return __real_pthread_setspecific(key, value);
-}
+/* regex.c and log.c keep per-thread buffers behind pthread keys. They are
+ * compiled in so the key calls can fail on demand without interposing on
+ * libc, which sanitizer runtimes also call during their own start-up. */
+#define pthread_once controlled_once
+#define pthread_key_create controlled_key_create
+#define pthread_setspecific controlled_setspecific
+#include "../../src/poller/regex.c"
+#include "../../src/log/log.c"
+#undef pthread_setspecific
+#undef pthread_key_create
+#undef pthread_once
 
 static int faults_setup(void **state) {
 	(void) state;
@@ -150,14 +159,14 @@ static void run_reindex_action(void) {
 	char uptime[BUFSIZE] = "";
 	bool unavailable = FALSE;
 
-	(void) poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &unavailable);
+	free(poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &unavailable));
 }
 
 static void run_reindex_uptime_action(void) {
 	char uptime[BUFSIZE] = "12345";
 	bool unavailable = FALSE;
 
-	(void) poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &unavailable);
+	free(poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &unavailable));
 }
 
 static void test_reindex_result_allocation_failures_are_fatal(void **state) {
@@ -209,7 +218,9 @@ static void test_regex_storage_failures_are_fatal(void **state) {
 
 static void *log_from_a_fresh_thread(void *argument) {
 	(void) argument;
+	fail_setspecific = TRUE;
 	spine_log("probe from a thread without log buffers");
+	fail_setspecific = FALSE;
 	return NULL;
 }
 
@@ -219,10 +230,8 @@ static void test_log_buffers_that_cannot_be_attached_are_released(void **state) 
 
 	(void) state;
 	set.logging.log_destination = LOGDEST_STDOUT;
-	fail_setspecific = TRUE;
 	assert_int_equal(pthread_create(&thread, NULL, log_from_a_fresh_thread, NULL), 0);
 	assert_int_equal(pthread_join(thread, NULL), 0);
-	fail_setspecific = FALSE;
 	assert_true(setspecific_calls >= 1);
 }
 

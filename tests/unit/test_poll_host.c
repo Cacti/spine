@@ -60,7 +60,9 @@ static struct {
 	bool drop_leases;
 	db_lease_t *leases[2];
 	int lease_releases;
-	size_t fail_malloc_size;
+	int fail_poll_allocation;
+	int poll_allocations_seen;
+	bool poll_allocations_armed;
 	size_t fail_calloc_size;
 	const char *settings[2][2];
 	int setting_count;
@@ -195,6 +197,7 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
 	lease->type = type;
 	lease->connection = &fake_pool;
+	if (fake.fail_poll_allocation != 0) fake.poll_allocations_armed = TRUE;
 	if (type == LOCAL || type == REMOTE) fake.leases[type == LOCAL ? 0 : 1] = lease;
 	return TRUE;
 }
@@ -205,17 +208,27 @@ bool __wrap_db_release_lease(db_lease_t *lease) {
 	return TRUE;
 }
 
+/* poll_host() allocates its host, ping and reindex records in that order.
+ * An optimizing compiler turns malloc plus memset into calloc(1, size), so
+ * both entry points count them, in either argument order, and only after the database lease is taken. */
+static bool fail_this_poll_allocation(size_t size) {
+	if (!fake.poll_allocations_armed) return FALSE;
+	if (size != sizeof(host_t) && size != sizeof(ping_t) && size != sizeof(reindex_t)) return FALSE;
+	return ++fake.poll_allocations_seen == fake.fail_poll_allocation;
+}
+
 extern void *__real_malloc(size_t size);
 void *__wrap_malloc(size_t size) {
-	if (fake.fail_malloc_size != 0 && size == fake.fail_malloc_size) {
-		fake.fail_malloc_size = 0;
-		return NULL;
-	}
+	if (fail_this_poll_allocation(size)) return NULL;
 	return __real_malloc(size);
 }
 
 extern void *__real_calloc(size_t count, size_t size);
 void *__wrap_calloc(size_t count, size_t size) {
+	/* the optimizer emits calloc(size, 1) as often as calloc(1, size) */
+	size_t bytes = count == 1 ? size : (size == 1 ? count : 0);
+
+	if (bytes != 0 && fail_this_poll_allocation(bytes)) return NULL;
 	if (fake.fail_calloc_size != 0 && size == fake.fail_calloc_size) {
 		fake.fail_calloc_size = 0;
 		return NULL;
@@ -678,15 +691,14 @@ static void poll_without_memory(void) {
 }
 
 static void test_poll_structure_allocation_failures_are_fatal(void **state) {
-	const size_t sizes[] = {sizeof(host_t), sizeof(ping_t), sizeof(reindex_t)};
-	size_t index;
+	int record;
 
 	(void) state;
-	for (index = 0; index < sizeof(sizes) / sizeof(sizes[0]); index++) {
+	for (record = 1; record <= 3; record++) {
 		setup(NULL);
 		set_host("regression", "5", AVAIL_NONE);
-		fake.fail_malloc_size = sizes[index];
-		print_message("allocation of %zu bytes\n", sizes[index]);
+		fake.fail_poll_allocation = record;
+		print_message("record %d of 3\n", record);
 		assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
 	}
 }

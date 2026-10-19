@@ -313,6 +313,8 @@ static void prepare_storage_for_seven_rows(void) {
 
 	fake_result.count = 7;
 	prepare_worker_storage((MYSQL_RES *) &fake_result, &rows, &ids, &host_time);
+	/* only reached if no allocation failed */
+	free_worker_storage(rows, ids, NULL, host_time);
 }
 
 static void test_storage_allocation_failures_are_fatal(void **state) {

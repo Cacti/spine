@@ -5,6 +5,10 @@
  * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  */
+
+/* posix_openpt() and the other pty calls are XSI declarations on glibc, which
+ * the coverage job only saw through its -include of a header that defines this. */
+#define _GNU_SOURCE
 #include "internal/common.h"
 #include "app/spine.h"
 #include "app/startup_internal.h"
@@ -84,6 +88,7 @@ static void test_startup_script_servers(void) {
 	assert(php_processes[1].php_state == PHP_BUSY);
 	php_close(PHP_INIT);
 	free(php_processes);
+	php_processes = NULL;
 	assert(unlink(claim) == 0);
 
 	prepare_script_server_pool("normal");
@@ -91,9 +96,9 @@ static void test_startup_script_servers(void) {
 	assert(php_processes[0].php_state == PHP_READY && php_processes[1].php_state == PHP_READY);
 	php_close(PHP_INIT);
 	free(php_processes);
+	php_processes = NULL;
 
 	/* with no server able to start there is nothing to poll with */
-	php_processes = NULL;
 	assert(spine_test_run_child(start_script_servers_that_cannot_run) == EXIT_FAILURE);
 	php_processes = previous_processes;
 	set = previous;
@@ -115,7 +120,7 @@ static void read_a_named_configuration_that_does_not_exist(void) {
 }
 
 static void test_startup_configuration_search(void) {
-	char directory[] = "/tmp/spine-startup-XXXXXX";
+	char directory[] = "spine-startup-XXXXXX";
 	char file_name[SMALL_BUFSIZE];
 	char expected[SMALL_BUFSIZE];
 	char saved_paths[CONFIG_PATHS][BUFSIZE];

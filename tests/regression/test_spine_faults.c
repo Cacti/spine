@@ -39,6 +39,7 @@ extern void *__real_snmp_sess_open(netsnmp_session *);
 extern int __real_snmp_sess_close(void *);
 extern int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*) (void *), void *);
 #include "app/runtime.h"
+#include "app/startup_internal.h"
 extern poller_thread_t **details;
 
 extern ssize_t __real_write(int, const void *, size_t);
@@ -1633,7 +1634,7 @@ static void test_signal_setup_failures_are_survivable(void) {
 
 /* A client library built without thread support is reported at startup. */
 static void test_startup_reports_a_library_that_is_not_thread_safe(void) {
-	char log_path[] = "/tmp/spine-startup-log-XXXXXX";
+	char log_path[] = "spine-startup-log-XXXXXX";
 	char contents[1024] = "";
 	int status;
 	pid_t child;

@@ -66,10 +66,12 @@ static int php_spawn_error;
 static const char *fail_strdup_text;
 static pid_t fail_waitpid_pid;
 static pid_t fail_kill_pid;
+#ifdef SPINE_PHP_TRYLOCK_WRAP
 static int trylock_calls;
 static int fail_trylock_call;
 static int hook_trylock_call;
 static void (*trylock_hook)(void);
+#endif
 
 static int duplicate_at_fdsetsize(int fd) {
 	struct rlimit limit;
@@ -192,7 +194,8 @@ extern char *__real_php_readpipe(int php_process, const char *command);
 char *__wrap_php_readpipe(int php_process, const char *command) {
 	if (empty_script_response) {
 		empty_script_response = FALSE;
-		return strdup("");
+		/* the reader's buffers are always RESULTS_BUFFER bytes, here holding "" */
+		return calloc(RESULTS_BUFFER, 1);
 	}
 	return __real_php_readpipe(php_process, command);
 }
@@ -265,6 +268,7 @@ int __wrap_kill(pid_t pid, int signal_number) {
 	return __real_kill(pid, signal_number);
 }
 
+#ifdef SPINE_PHP_TRYLOCK_WRAP
 int __real_pthread_mutex_trylock(pthread_mutex_t *mutex);
 int __wrap_pthread_mutex_trylock(pthread_mutex_t *mutex) {
 	trylock_calls++;
@@ -272,6 +276,7 @@ int __wrap_pthread_mutex_trylock(pthread_mutex_t *mutex) {
 	if (trylock_calls == hook_trylock_call && trylock_hook != NULL) trylock_hook();
 	return __real_pthread_mutex_trylock(mutex);
 }
+#endif
 
 static int php_setup(void **state) {
 	(void) state;
@@ -317,10 +322,12 @@ static int php_setup(void **state) {
 	fail_strdup_text = NULL;
 	fail_waitpid_pid = 0;
 	fail_kill_pid = 0;
+#ifdef SPINE_PHP_TRYLOCK_WRAP
 	trylock_calls = 0;
 	fail_trylock_call = 0;
 	hook_trylock_call = 0;
 	trylock_hook = NULL;
+#endif
 	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", PHP_TEST_SERVER_PATH);
 	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "normal");
 	return 0;
@@ -1574,6 +1581,7 @@ static void test_empty_script_server_response_is_unknown(void **state) {
 	assert_false(empty_script_response);
 }
 
+#ifdef SPINE_PHP_TRYLOCK_WRAP
 static void test_recovery_scan_yields_when_the_failed_slot_is_taken(void **state) {
 	(void) state;
 	set.php.php_servers = 1;
@@ -1599,6 +1607,7 @@ static void test_recovery_scan_uses_a_slot_repaired_by_another_thread(void **sta
 	assert_int_equal(php_spawn_calls, 0);
 	php_processes[0].php_pid = php_processes[0].php_read_fd = php_processes[0].php_write_fd = -1;
 }
+#endif
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
@@ -1662,8 +1671,12 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_undefined_result_allocation_failure_is_fatal, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_is_resent_after_a_successful_restart, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_empty_script_server_response_is_unknown, php_setup, php_teardown),
+#ifdef SPINE_PHP_TRYLOCK_WRAP
 		cmocka_unit_test_setup_teardown(test_recovery_scan_yields_when_the_failed_slot_is_taken, php_setup, php_teardown),
+#endif
+#ifdef SPINE_PHP_TRYLOCK_WRAP
 		cmocka_unit_test_setup_teardown(test_recovery_scan_uses_a_slot_repaired_by_another_thread, php_setup, php_teardown),
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

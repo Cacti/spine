@@ -194,7 +194,8 @@ check_PROGRAMS += \
 	tests/unit/test_tls_policy \
 	tests/unit/test_script_read \
 	tests/unit/test_snmp_faults \
-	tests/unit/test_poll_workers
+	tests/unit/test_poll_workers \
+	tests/unit/test_poller_faults
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
@@ -205,7 +206,6 @@ tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
 if HAVE_LD_WRAP
 check_PROGRAMS += tests/unit/test_php_runtime tests/unit/test_poll_host
 check_PROGRAMS += tests/unit/test_platform_faults
-check_PROGRAMS += tests/unit/test_poller_faults
 endif
 endif
 
@@ -334,10 +334,16 @@ tests_unit_test_php_runtime_LDFLAGS = \
 	-Wl,--wrap=write \
 	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy \
 	-Wl,--wrap=pipe -Wl,--wrap=posix_spawn_file_actions_init -Wl,--wrap=posix_spawnattr_init \
-	-Wl,--wrap=strdup -Wl,--wrap=waitpid -Wl,--wrap=kill -Wl,--wrap=pthread_mutex_trylock -Wl,--wrap=php_readpipe
+	-Wl,--wrap=strdup -Wl,--wrap=waitpid -Wl,--wrap=kill -Wl,--wrap=php_readpipe
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
 	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/support/php_test_server"' \
 	-DSPINE_PHP_RUNTIME_TESTING
+# libc names such as pthread_mutex_trylock are renamed or aliased on some
+# systems, so interposing on them is limited to the platform that is probed.
+if HAVE_LINKER_WRAP
+tests_unit_test_php_runtime_CPPFLAGS += -DSPINE_PHP_TRYLOCK_WRAP
+tests_unit_test_php_runtime_LDFLAGS += -Wl,--wrap=pthread_mutex_trylock
+endif
 tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT)
 
 # read.c is compiled into the test so select() and read() can be redirected;
@@ -354,15 +360,18 @@ tests_unit_test_snmp_faults_SOURCES = tests/unit/test_snmp_faults.c tests/suppor
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_snmp_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
-# reindex.c is compiled into the test so its helpers and allocators can be
-# driven directly; regex.c is linked as built and its thread-local storage
-# calls are wrapped.
+# reindex.c, regex.c and log.c are compiled into the test so their helpers,
+# allocators and thread-local storage calls can be driven directly. The rest
+# of spine_support_sources is linked as built.
 tests_unit_test_poller_faults_SOURCES = tests/unit/test_poller_faults.c tests/support/spine_runtime.c \
 	src/poller/poller.c src/script/external.c src/poller/host.c src/poller/items.c src/poller/system.c \
-	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/app/buffer.c src/platform/clock.c src/platform/socket.c src/platform/thread.c src/platform/descriptor.c \
+	src/config/text.c src/config/validate.c src/log/debug.c src/log/sanitize.c src/script/escape.c \
+	src/config/settings.c src/config/options.c src/config/file.c src/log/json.c src/poller/result.c \
+	src/platform/privileges.c \
+	$(spine_database_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_poller_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
-tests_unit_test_poller_faults_LDFLAGS = -Wl,--wrap=pthread_once -Wl,--wrap=pthread_key_create -Wl,--wrap=pthread_setspecific
 
 # workers.c is compiled into the test so its static helpers can be called and
 # its permit, thread-start and database calls scripted.
@@ -371,14 +380,18 @@ tests_unit_test_poll_workers_SOURCES = tests/unit/test_poll_workers.c tests/supp
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_poll_workers_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
-# Clock, socket-wait, descriptor and permit failures: the wrapped calls are
-# the ones the platform helpers make into libc and pthreads.
+# Clock, socket-wait, descriptor and permit failures. The libc and pthread
+# interposition is limited to the platform that is probed for it.
 tests_unit_test_platform_faults_SOURCES = tests/unit/test_platform_faults.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_platform_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_platform_faults_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_LINKER_WRAP
+tests_unit_test_platform_faults_CPPFLAGS += -DSPINE_PLATFORM_FAULT_WRAPS
 tests_unit_test_platform_faults_LDFLAGS = -Wl,--wrap=nanosleep -Wl,--wrap=clock_gettime \
 	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init
+endif
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)

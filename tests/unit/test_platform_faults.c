@@ -33,6 +33,7 @@
 #include "platform/socket.h"
 #include "tests/support/child_run.h"
 
+#ifdef SPINE_PLATFORM_FAULT_WRAPS
 static int fail_nanosleep;
 static int fail_clock_gettime;
 static pthread_mutex_t *fail_lock_mutex;
@@ -85,18 +86,22 @@ int __wrap_pthread_attr_init(pthread_attr_t *attributes) {
 	}
 	return __real_pthread_attr_init(attributes);
 }
+#endif
 
 static int platform_setup(void **state) {
 	(void) state;
 	memset(&set, 0, sizeof(set));
+#ifdef SPINE_PLATFORM_FAULT_WRAPS
 	fail_nanosleep = FALSE;
 	fail_clock_gettime = FALSE;
 	fail_lock_mutex = NULL;
 	fail_unlock_mutex = NULL;
 	fail_attr_init = FALSE;
+#endif
 	return 0;
 }
 
+#ifdef SPINE_PLATFORM_FAULT_WRAPS
 static void sleep_with_a_broken_timer(void) {
 	fail_nanosleep = TRUE;
 	spine_sleep_usec(1);
@@ -116,6 +121,7 @@ static void test_monotonic_clock_failure_is_fatal(void **state) {
 	(void) state;
 	assert_int_equal(spine_test_run_child(read_a_broken_clock), EXIT_FAILURE);
 }
+#endif
 
 static void test_wait_rejects_descriptors_select_cannot_hold(void **state) {
 	(void) state;
@@ -191,8 +197,10 @@ static void test_dup_cloexec_reports_a_descriptor_that_is_not_open(void **state)
 	assert_int_equal(errno, EBADF);
 }
 
+#ifdef SPINE_PLATFORM_FAULT_WRAPS
 static void lock_a_permit_set_whose_mutex_fails(void) {
-	spine_permits_t permits;
+	/* static: the fault hook keeps this mutex address after the call returns */
+	static spine_permits_t permits;
 
 	if (spine_permits_init(&permits, 1) != 0) _exit(2);
 	fail_lock_mutex = &permits.mutex;
@@ -200,7 +208,7 @@ static void lock_a_permit_set_whose_mutex_fails(void) {
 }
 
 static void unlock_a_permit_set_whose_mutex_fails(void) {
-	spine_permits_t permits;
+	static spine_permits_t permits;
 
 	if (spine_permits_init(&permits, 1) != 0) _exit(2);
 	fail_unlock_mutex = &permits.mutex;
@@ -224,20 +232,25 @@ static void test_thread_attributes_report_an_init_failure(void **state) {
 	fail_attr_init = TRUE;
 	assert_int_equal(spine_thread_attr_init(&attributes), ENOMEM);
 }
+#endif
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
+#ifdef SPINE_PLATFORM_FAULT_WRAPS
 		cmocka_unit_test_setup(test_sleep_failure_other_than_eintr_is_fatal, platform_setup),
 		cmocka_unit_test_setup(test_monotonic_clock_failure_is_fatal, platform_setup),
+#endif
 		cmocka_unit_test_setup(test_wait_rejects_descriptors_select_cannot_hold, platform_setup),
 		cmocka_unit_test_setup(test_wait_rejects_a_non_finite_deadline, platform_setup),
 		cmocka_unit_test_setup(test_wait_rejects_a_deadline_beyond_the_select_range, platform_setup),
 		cmocka_unit_test_setup(test_wait_resumes_after_an_interrupted_select, platform_setup),
 		cmocka_unit_test_setup(test_cloexec_reports_a_descriptor_that_is_not_open, platform_setup),
 		cmocka_unit_test_setup(test_dup_cloexec_reports_a_descriptor_that_is_not_open, platform_setup),
+#ifdef SPINE_PLATFORM_FAULT_WRAPS
 		cmocka_unit_test_setup(test_permit_lock_failure_is_fatal, platform_setup),
 		cmocka_unit_test_setup(test_permit_unlock_failure_is_fatal, platform_setup),
 		cmocka_unit_test_setup(test_thread_attributes_report_an_init_failure, platform_setup),
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

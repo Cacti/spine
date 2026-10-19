@@ -158,10 +158,13 @@ static void test_spine_appendf_reports_truncation_and_guards(void **state) {
  * error: vsnprintf fails, and the buffer must still be a valid empty string. */
 static void test_spine_appendf_terminates_after_an_encoding_error(void **state) {
 	char buffer[8] = "junk";
+	char probe[8];
 	char *cursor = buffer;
 	size_t remaining = sizeof(buffer);
 	(void) state;
 
+	/* whether the C locale rejects this wide character is a libc property */
+	if (snprintf(probe, sizeof(probe), "%ls", L"\x00e9") >= 0) skip();
 	assert_false(spine_appendf(&cursor, &remaining, "%ls", L"\x00e9"));
 	assert_int_equal(buffer[0], '\0');
 	assert_ptr_equal(cursor, buffer);
