@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: "37 3 * * 6"
   pull_request:
-    branches: [develop, 'refactor/c17-series-*']
+    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
     paths:
       - "configure.ac"
       - "Makefile.am"

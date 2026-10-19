@@ -199,6 +199,39 @@ static void test_bounded_formatters(void **state) {
 
 /* --- predicates ----------------------------------------------------------- */
 
+static void test_statement_label_names_the_verb_and_table_only(void **state) {
+	char label[SMALL_BUFSIZE];
+
+	(void) state;
+	db_statement_label("INSERT INTO poller_output (a) VALUES ('fixture_secret')", label, sizeof(label));
+	assert_string_equal(label, "INSERT poller_output");
+	db_statement_label("insert ignore into `host_errors`(x) values (1)", label, sizeof(label));
+	assert_string_equal(label, "INSERT `host_errors`");
+	db_statement_label("REPLACE INTO settings (name,value) VALUES ('password','fixture_secret')", label, sizeof(label));
+	assert_string_equal(label, "REPLACE settings");
+	db_statement_label("UPDATE host SET snmp_password='fixture_secret' WHERE id=1", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("UPDATE LOW_PRIORITY host SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("UPDATE IGNORE `host` SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE `host`");
+	db_statement_label("UPDATE LOW_PRIORITY IGNORE host SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("SELECT value FROM settings WHERE name='from poller'", label, sizeof(label));
+	assert_string_equal(label, "SELECT settings");
+	db_statement_label("SELECT 'a from b'", label, sizeof(label));
+	assert_string_equal(label, "SELECT");
+	db_statement_label("DELETE FROM poller_output", label, sizeof(label));
+	assert_string_equal(label, "DELETE poller_output");
+	db_statement_label("SET SESSION sql_mode = ''", label, sizeof(label));
+	assert_string_equal(label, "SET");
+	db_statement_label("  nonsense fixture_secret", label, sizeof(label));
+	assert_string_equal(label, "SQL");
+	db_statement_label("INSERT INTO a_very_long_table_name_that_does_not_fit", label, 12);
+	assert_string_equal(label, "INSERT a_ve");
+	assert_null(strstr(label, "fixture_secret"));
+}
+
 static void test_all_digits(void **state) {
 	(void) state;
 	assert_int_equal(all_digits("12345"), TRUE);
@@ -332,6 +365,147 @@ static void test_get_checksum_accepts_unaligned_bytes(void **state) {
 			assert_int_equal(get_checksum(bytes + offset, (int) length), get_checksum(aligned, (int) length));
 		}
 	}
+}
+
+static void test_local_and_remote_database_lease_adapters(void **state) {
+	pool_t local[1] = {0};
+	pool_t remote[1] = {0};
+	pool_t *previous_local = db_pool_local;
+	pool_t *previous_remote = db_pool_remote;
+	int previous_exit = set.exit.exit_code;
+	db_lease_t local_lease = {0};
+	db_lease_t remote_lease = {0};
+	db_lease_t stale;
+	(void) state;
+	assert_int_equal(db_pool_ownership_init(local, 1), 0);
+	assert_int_equal(db_pool_ownership_init(remote, 1), 0);
+	local[0].free = remote[0].free = TRUE;
+	db_pool_local = local;
+	db_pool_remote = remote;
+	assert_false(db_acquire_lease(99, &local_lease));
+	assert_false(db_acquire_lease(LOCAL, NULL));
+	assert_false(db_release_lease(NULL));
+	assert_true(db_acquire_lease(LOCAL, &local_lease));
+	assert_true(db_acquire_lease(REMOTE, &remote_lease));
+	assert_ptr_equal(local_lease.connection, &local[0]);
+	assert_ptr_equal(remote_lease.connection, &remote[0]);
+	assert_false(db_acquire_lease(LOCAL, &local_lease));
+	stale = local_lease;
+	stale.type = REMOTE;
+	assert_false(db_release_lease(&stale));
+	assert_false(local[0].free);
+	assert_false(remote[0].free);
+	assert_true(db_release_lease(&local_lease));
+	stale = remote_lease;
+	assert_true(db_release_lease(&remote_lease));
+	assert_true(db_acquire_lease(REMOTE, &remote_lease));
+	assert_false(db_release_lease(&stale));
+	assert_false(remote[0].free);
+	assert_true(db_release_lease(&remote_lease));
+	assert_int_equal(db_pool_ownership_destroy(local), 0);
+	assert_int_equal(db_pool_ownership_destroy(remote), 0);
+	db_pool_local = previous_local;
+	db_pool_remote = previous_remote;
+	set.exit.exit_code = previous_exit;
+}
+
+#if HAVE_DECL_MYSQL_OPT_TLS_VERSION
+static void assert_tls_version_readback(MYSQL *mysql, const char *expected) {
+	const char *value = NULL;
+#if defined(MARIADB_PACKAGE_VERSION_ID) && MARIADB_PACKAGE_VERSION_ID < 30300
+	/* Connector/C 3.2 accepts TLS_VERSION in mysql_optionsv(), but its
+  * mysql_get_optionv() has no corresponding case. Assert that documented
+  * API boundary rather than assuming a setter implies a getter. The
+  * TLS option-injection suite separately checks exact setter values. */
+	(void) expected;
+	assert_int_equal(mysql_get_option(mysql, MYSQL_OPT_TLS_VERSION, &value), 1);
+	assert_null(value);
+#else
+	assert_int_equal(mysql_get_option(mysql, MYSQL_OPT_TLS_VERSION, &value), 0);
+	assert_string_equal(value, expected);
+#endif
+}
+#endif
+
+static void test_database_tls_policy(void **state) {
+	MYSQL mysql;
+	spine_database_config_t configuration = {0};
+	int mode;
+	bool verify_full_supported = FALSE;
+	const char *version = NULL;
+	(void) state;
+
+	assert_non_null(mysql_init(&mysql));
+	assert_false(db_apply_tls_policy(NULL, &configuration));
+	assert_false(db_apply_tls_policy(&mysql, NULL));
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_min_version = 12;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_PREFERRED;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_REQUIRED;
+	configuration.tls_min_version = 11;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_min_version = 0;
+	configuration.tls_mode = (spine_tls_mode_t) 99;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	STRNCOPY(configuration.ssl_ca, "/fixture/ca.pem");
+	for (mode = SPINE_TLS_DISABLED; mode <= SPINE_TLS_VERIFY_FULL; mode++) {
+		bool supported;
+		configuration.tls_mode = (spine_tls_mode_t) mode;
+#if HAVE_DECL_MYSQL_OPT_SSL_MODE
+		supported = TRUE;
+#elif HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+#ifdef HAVE_MARIADB_TLS_VERIFICATION_CALLBACK
+		supported = mode != SPINE_TLS_DISABLED;
+#elif HAVE_DECL_MARIADB_OPT_TLS_VERIFICATION_CALLBACK
+		supported = mode == SPINE_TLS_PREFERRED;
+#else
+		supported = mode == SPINE_TLS_PREFERRED || mode == SPINE_TLS_VERIFY_FULL;
+#endif
+#else
+		supported = FALSE;
+#endif
+		assert_int_equal(db_apply_tls_policy(&mysql, &configuration), supported);
+		if (mode == SPINE_TLS_VERIFY_FULL) verify_full_supported = supported;
+	}
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	configuration.tls_min_version = 12;
+#if HAVE_DECL_MYSQL_OPT_TLS_VERSION && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_tls_version_readback(&mysql, "TLSv1.2,TLSv1.3");
+	}
+	configuration.tls_min_version = 13;
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_tls_version_readback(&mysql, "TLSv1.3");
+	}
+#else
+	(void) version;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	configuration.tls_min_version = 0;
+	STRNCOPY(configuration.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
+#if HAVE_DECL_MYSQL_OPT_SSL_CIPHER && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_SSL_CIPHER, &version), 0);
+		assert_string_equal(version, configuration.tls_cipher);
+	}
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	configuration.tls_cipher[0] = '\0';
+	STRNCOPY(configuration.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+#if HAVE_DECL_MYSQL_OPT_TLS_CIPHERSUITES && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	mysql_close(&mysql);
 }
 
 static void test_rtrim_empty_and_fully_trimmed(void **state) {
@@ -913,8 +1087,15 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	int i;
 	int created = 0;
 	int status;
+	int closing_fd;
+	pid_t closing_pid;
+	char ready;
 
 	(void) state;
+	closing_fd = nft_popen("printf x; exec sleep 300", "r");
+	assert_true(closing_fd >= 0);
+	closing_pid = nft_pchild(closing_fd);
+	assert_int_equal(read(closing_fd, &ready, 1), 1);
 	for (i = 0; i < NFT_ABANDONED_MAX + 1; i++) {
 		pids[i] = fork();
 		if (pids[i] < 0)
@@ -928,6 +1109,8 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	}
 
 	if (created != NFT_ABANDONED_MAX + 1) {
+		(void) nft_pclose(closing_fd);
+		(void) waitpid(closing_pid, &status, 0);
 		for (i = 0; i < created; i++) {
 			(void)kill(pids[i], SIGKILL);
 			(void)waitpid(pids[i], &status, 0);
@@ -937,6 +1120,9 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	}
 
 	assert_int_equal(nft_abandoned_pending(), NFT_ABANDONED_MAX);
+	assert_int_equal(nft_pclose(closing_fd), -1);
+	assert_int_equal(waitpid(closing_pid, &status, 0), closing_pid);
+	assert_true(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL);
 	for (i = 0; i < created; i++) {
 		assert_int_equal(kill(pids[i], SIGKILL), 0);
 		assert_int_equal(waitpid(pids[i], &status, 0), pids[i]);
@@ -1132,6 +1318,7 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
 		cmocka_unit_test(test_bounded_formatters),
 		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
+		cmocka_unit_test(test_statement_label_names_the_verb_and_table_only),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_trim_family),
@@ -1142,6 +1329,8 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_row_alias_upsert_version_gate),
+		cmocka_unit_test(test_database_tls_policy),
+		cmocka_unit_test(test_local_and_remote_database_lease_adapters),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),

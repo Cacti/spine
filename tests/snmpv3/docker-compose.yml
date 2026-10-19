@@ -29,6 +29,10 @@ services:
       timeout: 5s
       retries: 20
 
+  snmpd-slow:
+    extends:
+      service: snmpd
+
   spine:
     build:
       context: ../..

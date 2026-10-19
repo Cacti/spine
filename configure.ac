@@ -657,6 +657,23 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ],[AC_MSG_RESULT(no)
 ])
 
+AC_CHECK_DECLS([MYSQL_OPT_SSL_MODE, MYSQL_OPT_SSL_ENFORCE,
+  MYSQL_OPT_SSL_VERIFY_SERVER_CERT, MYSQL_OPT_TLS_VERSION,
+  MYSQL_OPT_SSL_CIPHER, MYSQL_OPT_TLS_CIPHERSUITES,
+  MARIADB_OPT_TLS_VERIFICATION_CALLBACK], [], [], [[#include <mysql.h>]])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+  #include <mysql.h>
+  struct st_ma_pvio_tls;
+  extern int ma_pvio_tls_verify_server_cert(struct st_ma_pvio_tls *, unsigned int);
+]], [[
+  MYSQL mysql;
+  unsigned int flags = MARIADB_TLS_VERIFY_HOST | MARIADB_TLS_VERIFY_TRUST;
+  mysql_options(&mysql, MARIADB_OPT_TLS_VERIFICATION_CALLBACK,
+    (const void *) ma_pvio_tls_verify_server_cert);
+  return ma_pvio_tls_verify_server_cert((struct st_ma_pvio_tls *) 0, flags);
+]])], [AC_DEFINE([HAVE_MARIADB_TLS_VERIFICATION_CALLBACK], [1],
+  [Can we require MariaDB certificate identity verification for every address?])], [])
+
 spine_saved_ldflags=$LDFLAGS
 spine_linker_wrap=no
 case "$host_os" in

@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop, '1.2.x']
   pull_request:
-    branches: [develop, '1.2.x', 'refactor/c17-series-*']
+    branches: [develop, '1.2.x', 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
   workflow_dispatch:
 
 permissions:
@@ -114,7 +114,10 @@ jobs:
       - name: Run the unit tests
         run: |
           set -euo pipefail
-          make check
+          if ! make check; then
+            cat test-suite.log
+            exit 1
+          fi
 
   macos:
     runs-on: macos-15
@@ -158,16 +161,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: ./.github/actions/build-spine
+        with:
+          extra-packages: cppcheck
+
       - name: Run cppcheck
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
           # Project data structures are consumed across translation units;
           # checking headers in isolation otherwise reports every member. A
           # few externally visible helpers are deliberate unit-test seams.
           # cppcheck 2.13 accepts --std=c17 but still analyses as C11.
           cppcheck \
+            --include=config/config.h \
             --enable=all \
             --std=c11 \
             --error-exitcode=1 \
@@ -222,7 +228,10 @@ jobs:
               runuser -u builder -- ./configure --enable-warnings
               grep "^CFLAGS = .*-std=gnu17" Makefile
               runuser -u builder -- make --jobs "$(nproc)"
-              runuser -u builder -- make check
+              if ! runuser -u builder -- make check; then
+                cat test-suite.log
+                exit 1
+              fi
             '
 
   # The Clang counterpart of newest-gcc. Pin the major version so a Fedora
@@ -259,7 +268,10 @@ jobs:
               runuser -u builder -- ./configure CC=clang --enable-warnings
               grep "^CFLAGS = .*-std=gnu17" Makefile
               runuser -u builder -- make --jobs "$(nproc)"
-              runuser -u builder -- make check
+              if ! runuser -u builder -- make check; then
+                cat test-suite.log
+                exit 1
+              fi
             '
 
   shellcheck:
@@ -307,7 +319,7 @@ jobs:
           # The tests start polling threads; non-atomic arc counters race and
           # gcov then reports negative branch counts (GCC bug 68080).
           extra-packages: mariadb-client snmpd libcap2-bin
-          cflags: -g -O0 --coverage -fprofile-update=atomic
+          cflags: -g -O0 --coverage -fprofile-update=atomic -include tests/tools/coverage_process_exit.h
           ldflags: --coverage
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -328,7 +340,10 @@ jobs:
       - name: Run the unit tests
         run: |
           set -euo pipefail
-          make check
+          if ! make check; then
+            cat test-suite.log
+            exit 1
+          fi
 
       - name: Cover production database and protocol scenarios
         env:
@@ -352,6 +367,7 @@ jobs:
           ./test_spine_regressions --snmp-agent
           ./test_spine_faults --database
           tests/tools/run_snmpv3.sh
+          bash tests/tools/run_database_tls.sh
           ./test_spine_regressions --icmp-no-capability
           sudo setcap cap_net_raw+ep ./test_spine_regressions
           ./test_spine_regressions --raw-icmp
@@ -359,6 +375,7 @@ jobs:
       - name: Report coverage
         run: |
           set -euo pipefail
+          python3 tests/tools/test_json_encoder.py
           # configure leaves instrumented conftest objects behind and gcovr
           # cannot resolve their sources
           rm -f ./*conftest*.gcno ./*conftest*.gcda
@@ -377,7 +394,10 @@ jobs:
           set -euo pipefail
           diff-cover coverage.xml \
             --compare-branch="origin/${BASE_REF}" \
-            --fail-under=70
+            --fail-under=100
+          python3 tests/tools/test_changed_coverage.py
+          git diff --no-ext-diff --no-textconv --unified=0 "origin/${BASE_REF}...HEAD" -- src/ > changed-production.diff
+          python3 tests/tools/verify_changed_coverage.py coverage.xml changed-production.diff
 
       - name: Upload coverage reports
         if: always()
@@ -456,7 +476,10 @@ jobs:
       - name: Run the unit tests under the sanitizers
         run: |
           set -euo pipefail
-          make check
+          if ! make check; then
+            cat test-suite.log
+            exit 1
+          fi
 
       - name: Smoke-test the binary under the sanitizers
         run: |
@@ -491,7 +514,10 @@ jobs:
       - name: Run the unit tests under ThreadSanitizer
         run: |
           set -euo pipefail
-          make check
+          if ! make check; then
+            cat test-suite.log
+            exit 1
+          fi
 
   # A release tarball that cannot be compiled is a release blocker, and the
   # only way to catch it is to build from the tarball the way a packager does.

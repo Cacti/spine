@@ -93,6 +93,16 @@ extern int nft_pchild(int fd);
 extern int nft_pclose(int fd);
 
 /*!
+ *  nft_pclose_deadline
+ *
+ *  nft_pclose() for a caller with a script deadline on the
+ *  spine_monotonic_time() clock. A child that closed its output but is still
+ *  working may finish until that deadline; it then gets SIGTERM and, after a
+ *  short grace, SIGKILL and the abandoned-pid sweep.
+ */
+extern int nft_pclose_deadline(int fd, double deadline);
+
+/*!
  *  spine_set_cloexec
  *
  *  Mark a descriptor close-on-exec.
@@ -135,6 +145,12 @@ extern int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
  *  exhausted.
  */
 extern int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
+/* Reaping and clearing the owned PID share the registry's mutex. */
+extern int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_mutex_t *mutex);
+/* Permanently stop spawning and kill registered external script groups.
+ * This function takes a mutex and must never run in a signal handler. */
+extern void nft_abort_children(void);
+extern int nft_abort_requested(void);
 
 /*!
  *  The cap on parked pids. Past it a child is logged and dropped, because an

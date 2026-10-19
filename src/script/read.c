@@ -20,8 +20,8 @@
 #include <spawn.h>
 #include <sys/wait.h>
 
-/*! \fn static char *php_read_result(int php_process, const char *command, int allow_restart)
- *  \brief reads one script server response.
+/*! \fn char *php_read_response(int php_process, const char *command, int allow_restart, int response_timeout)
+ *  \brief reads one script server response within response_timeout seconds.
  *
  *  allow_restart is FALSE for the startup handshake. php_init() calls this to
  *  confirm the server it just spawned is answering, and a restart from inside
@@ -30,14 +30,13 @@
  *  recursion, spawning a fresh server at every level. Refusing the restart on
  *  the handshake bounds the depth at one by construction.
  */
-char *php_read_result(int php_process, const char *command, int allow_restart) {
+char *php_read_response(int php_process, const char *command, int allow_restart, int response_timeout) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
 	double remaining_usec = 0;
 	char *result_string;
-	int response_timeout;
 	double read_deadline;
 	char script[SMALL_BUFSIZE];
 
@@ -61,10 +60,6 @@ char *php_read_result(int php_process, const char *command, int allow_restart) {
 	begin_time = get_time_as_double();
 
 	/* establish timeout value for the PHP script server to respond */
-	/* Selection-path recovery runs this handshake while holding the slot lock.
-	 * Bound startup independently so a bad PHP configuration cannot pin every
-	 * selector for the full per-command timeout. */
-	response_timeout = allow_restart || set.php.script_timeout < 2 ? set.php.script_timeout : 2;
 	timeout.tv_sec = response_timeout;
 	timeout.tv_usec = 0;
 
@@ -223,6 +218,14 @@ retry:
 	}
 
 	return result_string;
+}
+
+/* Selection-path recovery runs the restart handshake while holding the slot
+ * lock. Bound it independently so a bad PHP configuration cannot pin every
+ * selector for the full per-command timeout. */
+char *php_read_result(int php_process, const char *command, int allow_restart) {
+	return php_read_response(php_process, command, allow_restart,
+		allow_restart || set.php.script_timeout < 2 ? set.php.script_timeout : 2);
 }
 
 /*! \fn char *php_readpipe(int php_process, const char *command)

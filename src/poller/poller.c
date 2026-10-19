@@ -135,15 +135,15 @@ enum poll_result_status normalize_poll_result(char *result, bool snmp) {
 }
 
 static void release_poll_connections(const poller_thread_t *work,
-	const pool_t *local, const pool_t *remote) {
-	if (local != NULL) {
-		db_release_connection(LOCAL, local->id);
+	db_lease_t *local, db_lease_t *remote) {
+	if (local->connection != NULL) {
+		db_release_lease(local);
 	} else {
 		SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized local connection.", work->host_id, work->host_thread));
 	}
 	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
-		if (remote != NULL) {
-			db_release_connection(REMOTE, remote->id);
+		if (remote->connection != NULL) {
+			db_release_lease(remote);
 		} else {
 			SPINE_LOG(("WARNING: Device[%i] HT[%i] Trying to close uninitialized remote connection.", work->host_id, work->host_thread));
 		}
@@ -207,6 +207,9 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 	bool last_partition;
 	bool failed;
 	bool write_failed = FALSE;
+	/* A script killed by process-wide abort must not advance completion or
+	 * scheduling while the fatal thread is still logging its diagnostic. */
+	poll_failed = poll_failed || nft_abort_requested();
 
 	SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
 
@@ -301,6 +304,10 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 
 	pool_t *local_cnn = NULL;
 	pool_t *remote_cnn = NULL;
+	db_lease_t local_lease = {0};
+	db_lease_t remote_lease = {0};
+	int old_cancel_state;
+	bool report_completion = FALSE;
 
 	reindex_t *reindex = NULL;
 	host_t *host = NULL;
@@ -318,13 +325,17 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 
 	MYSQL *mysql;
 	MYSQL *mysqlr = NULL;
-	MYSQL_RES *result;
+	MYSQL_RES *result = NULL;
 
-	local_cnn = db_get_connection(LOCAL);
+	/* A device's bounded I/O completes ownership transfers before cancellation
+	 * is delivered. Helpers may allocate private resources before returning;
+	 * cancellation must not strand those resources or a database lease. */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancel_state);
+	if (db_acquire_lease(LOCAL, &local_lease)) local_cnn = local_lease.connection;
 	if (local_cnn != NULL && set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
-		remote_cnn = db_get_connection(REMOTE);
+		if (db_acquire_lease(REMOTE, &remote_lease)) remote_cnn = remote_lease.connection;
 		if (remote_cnn == NULL) {
-			db_release_connection(LOCAL, local_cnn->id);
+			db_release_lease(&local_lease);
 			local_cnn = NULL;
 		}
 	}
@@ -333,6 +344,7 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 		SPINE_LOG(("ERROR: Device[%i] HT[%i] No database connection available for polling", host_id, host_thread));
 		complete_poll_host(NULL, NULL, work, &error_context, FALSE, TRUE, poll_time);
 		mysql_thread_end();
+		pthread_setcancelstate(old_cancel_state, NULL);
 		return;
 	}
 
@@ -372,29 +384,11 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 		complete_poll_host(mysql, &queries, work, &error_context, FALSE, TRUE, poll_time);
 	}
 	if (loaded != POLL_HOST_LOADED) {
-		release_poll_connections(work, local_cnn, remote_cnn);
-		SPINE_FREE(host);
-		SPINE_FREE(reindex);
-		SPINE_FREE(ping);
-		mysql_thread_end();
-
-		return;
+		goto finish_poll;
 	}
 
 	if (set.availability.ping_only) {
-		if (host->snmp.session != NULL) {
-			snmp_host_cleanup(host->snmp.session);
-			host->snmp.session = NULL;
-		}
-		SPINE_FREE(host);
-		SPINE_FREE(reindex);
-		SPINE_FREE(ping);
-
-		release_poll_connections(work, local_cnn, remote_cnn);
-
-		mysql_thread_end();
-
-		return;
+		goto finish_poll;
 	}
 
 	const reindex_evaluation_t evaluation = {mysql, mysqlr, host, work, &errors, &spike_kill};
@@ -410,6 +404,7 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 
 	if (num_rows > 0) {
 		poll_item_storage_t storage = load_poll_items(result, host, num_rows);
+		result = NULL; /* load_poll_items consumes the result. */
 		poller_items = storage.items;
 		snmp_oids = storage.oids;
 
@@ -423,42 +418,38 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 		query3 = output.output;
 		query12 = output.boost;
 		output_failed = output.failed;
-
-		/* cleanup memory and prepare for function exit */
-		if (host->snmp.session != NULL) {
-			snmp_host_cleanup(host->snmp.session);
-			host->snmp.session = NULL;
-		}
-
-		SPINE_FREE(query3);
-		if (query12 != NULL) {
-			SPINE_FREE(query12);
-		}
-
-		SPINE_FREE(poller_items);
-		SPINE_FREE(snmp_oids);
-	} else {
-		/* free the mysql result */
-		db_free_result(result);
 	}
 
+	complete_poll_host(mysql, &queries, work, &error_context, output_failed, poll_failed, poll_time);
+	report_completion = TRUE;
+
+finish_poll:
+	if (host != NULL && host->snmp.session != NULL) {
+		snmp_host_cleanup(host->snmp.session);
+		host->snmp.session = NULL;
+	}
+	if (result != NULL) db_free_result(result);
+	SPINE_FREE(query3);
+	SPINE_FREE(query12);
+	SPINE_FREE(poller_items);
+	SPINE_FREE(snmp_oids);
 	SPINE_FREE(host);
 	SPINE_FREE(reindex);
 	SPINE_FREE(ping);
 
-	complete_poll_host(mysql, &queries, work, &error_context, output_failed, poll_failed, poll_time);
-
-	release_poll_connections(work, local_cnn, remote_cnn);
+	release_poll_connections(work, &local_lease, &remote_lease);
 
 	mysql_thread_end();
 
-	SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_DEBUG, ("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
+	if (report_completion) SPINE_LOG_DEVICE(host_id, POLLER_VERBOSITY_DEBUG, ("Device[%i] HT[%i] DEBUG: HOST COMPLETE: About to Exit Device Polling Thread Function", host_id, host_thread));
 
-	if (set.logging.spine_log_level == 1) {
+	if (report_completion && set.logging.spine_log_level == 1) {
 		buffer_output_errors(error_string, &buf_size, &buf_errors, host_id, host_thread, 0, true);
 	}
 
-	*host_errors = errors;
+	/* Early ping-only/deleted-device returns preserve the caller's value. */
+	if (report_completion) *host_errors = errors;
+	pthread_setcancelstate(old_cancel_state, NULL);
 }
 
 /*! \fn void buffer_output_errors(local_data_id) {
