@@ -25,6 +25,7 @@ typedef struct db_address {
 extern void db_address_init(db_address_t *address, const char *value, bool parse_socket);
 extern void db_address_release(db_address_t *address);
 
+extern void db_statement_label(const char *query, char *label, size_t capacity);
 extern int db_insert(MYSQL *mysql, int type, const char *query);
 extern MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query);
 extern int db_connect(int type, MYSQL *mysql);

@@ -35,6 +35,14 @@ class BenchmarkRecordTests(unittest.TestCase):
     def test_measured_record(self):
         verify(self.record)
 
+    def test_all_checked_in_records(self):
+        records = sorted(RECORD.parent.iterdir())
+        self.assertGreaterEqual(len(records), 2)
+        for record in records:
+            if record.is_dir():
+                with self.subTest(record=record.name):
+                    verify(record)
+
     def test_missing_cycle(self):
         self.change_rows(lambda rows: rows.pop())
         with self.assertRaisesRegex(ValueError, "missing cycle"):

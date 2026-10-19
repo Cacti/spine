@@ -53,6 +53,10 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	char suffix[BUFSIZE];
 	static const char *const updates[] = {"output"};
 
+	/* Abort can close a blocked script's pipe while die() is still printing.
+	 * Its resulting undefined value must not become a completed poll result. */
+	if (nft_abort_requested()) return (poll_output_buffers_t){.failed = TRUE};
+
 	/* insert the query results into the database */
 	query3 = allocate_output_query(queries->output, "ERROR: Fatal malloc error: poller.c query3 output buffer!");
 

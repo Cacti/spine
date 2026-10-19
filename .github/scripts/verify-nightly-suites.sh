@@ -7,7 +7,7 @@ if [[ -n $(sort "$1" | uniq -d) ]]; then
   echo 'Duplicate nightly suite identity' >&2
   exit 1
 fi
-for required in tests/unit/test_resource_policy tests/unit/test_external_policy tests/unit/test_worker_set tests/unit/test_db_lease tests/unit/test_tls_policy test_spine_regressions test_spine_faults; do
+for required in tests/unit/test_resource_policy tests/unit/test_external_policy tests/unit/test_process_abort tests/unit/test_worker_set tests/unit/test_db_lease tests/unit/test_tls_policy test_spine_regressions test_spine_faults; do
   grep -Fxq "$required" "$1" || { echo "Missing expected suite: $required" >&2; exit 1; }
 done
 while IFS= read -r program || [[ -n "$program" ]]; do

@@ -87,6 +87,8 @@ static struct pid {
 	int fd;
 	pid_t pid;
 } *PidList;
+static struct pid *ClosingList;
+static int AbortRequested;
 
 /* Serialize access to PidList. */
 static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -125,7 +127,8 @@ static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd) {
 			(void) close(cur->fd);
 			cur->fd = -1;
 			*link = cur->next;
-			cur->next = NULL;
+			cur->next = ClosingList;
+			ClosingList = cur;
 			break;
 		}
 	}
@@ -271,6 +274,10 @@ int nft_popen(const char *command, const char *type) {
 		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
 		return -1;
+	}
+	if (AbortRequested) {
+		failure_errno = ECANCELED;
+		goto spawn_failed;
 	}
 
 	/* Each script leads its own process group so a timeout can kill the
@@ -487,15 +494,40 @@ int nft_pchild(int fd) {
 	return pid;
 }
 
+/* A script may write its value, close its output and keep working, for
+ * example to save state. With a deadline, wait for it while that deadline
+ * allows, polling with WNOHANG so the thread never blocks past it, then ask
+ * it to stop with SIGTERM before nft_pclose_deadline() escalates. */
+static int nft_reap_closed_child(pid_t *pid, int *pstat, double deadline) {
+	const double term_grace = (double) NFT_PCLOSE_SPIN_ATTEMPTS * NFT_PCLOSE_SPIN_USEC / 1000000.0;
+	double remaining;
+	int rc = spine_reap_child_owned(pid, pstat, NFT_PCLOSE_SPIN_ATTEMPTS, &ListMutex);
+
+	if (rc != 1 || deadline <= 0) return rc;
+	while (rc == 1 && (remaining = deadline - term_grace - spine_monotonic_time()) > 0) {
+		spine_sleep_usec(remaining * 1000000.0 < NFT_PCLOSE_REAP_USEC ? (unsigned int) (remaining * 1000000.0) : NFT_PCLOSE_REAP_USEC);
+		rc = spine_reap_child_owned(pid, pstat, 1, &ListMutex);
+	}
+	if (rc != 1) return rc;
+
+	/* The negative pid reaches the script's whole process group. */
+	(void) kill(-*pid, SIGTERM);
+	return spine_reap_child_owned(pid, pstat, NFT_PCLOSE_SPIN_ATTEMPTS, &ListMutex);
+}
+
 /*! ------------------------------------------------------------------------------
  *
- *  nft_pclose
+ *  nft_pclose_deadline
  *
  *  Close the pipe and check the child's status with a brief (~20ms),
  *  non-escalating bounded waitpid(). A child still running past that point,
  *  or one whose waitpid() call itself failed, is killed and handed to the
  *  abandoned-pid sweep rather than waited for here, so this call never
  *  blocks the caller on a lingering script.
+ *
+ *  A deadline greater than zero, on the spine_monotonic_time() clock, extends
+ *  that check until the deadline and sends SIGTERM before SIGKILL. The caller
+ *  is then held at most ~20ms past the deadline. nft_pclose() passes none.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
@@ -511,7 +543,7 @@ int nft_pchild(int fd) {
  *
  *------------------------------------------------------------------------------
  */
-int nft_pclose(int fd) {
+int nft_pclose_deadline(int fd, double deadline) {
 	struct pid *cur;
 	int pstat;
 	int cancel_state;
@@ -541,14 +573,14 @@ int nft_pclose(int fd) {
 	 * script that is not actually misbehaving. Anything still running past
 	 * that is killed and handed to the abandoned-pid sweep instead of this
 	 * thread waiting for it. */
-	switch (spine_reap_child_bounded(cur->pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS)) {
+	pid = cur->pid;
+	switch (nft_reap_closed_child(&cur->pid, &pstat, deadline)) {
 		case 0:
-			pid = cur->pid;
 			break;
 		case 1:
 			/* The negative pid reaches the script's whole process group. */
 			(void) kill(-cur->pid, SIGKILL);
-			nft_abandon_child(cur->pid, "did not exit before pipe close");
+			/* Cleanup transfers the unreaped child to the parked registry. */
 			errno = ETIMEDOUT;
 			pid = -1;
 			break;
@@ -559,7 +591,6 @@ int nft_pclose(int fd) {
 			{
 				int saved_errno = errno;
 				(void) kill(-cur->pid, SIGKILL);
-				nft_abandon_child(cur->pid, "waitpid failed");
 				errno = saved_errno;
 			}
 			pid = -1;
@@ -569,6 +600,10 @@ int nft_pclose(int fd) {
 	pthread_cleanup_pop(1); /* Execute the cleanup handler. */
 
 	return (pid == -1 ? -1 : pstat);
+}
+
+int nft_pclose(int fd) {
+	return nft_pclose_deadline(fd, 0);
 }
 
 /*! ------------------------------------------------------------------------------
@@ -668,6 +703,79 @@ void nft_abandon_child(pid_t pid, const char *reason) {
 static void
 close_cleanup(void *arg) {
 	struct pid *cur = arg;
+	struct pid **link;
+	int oldstate;
+	int saved_errno = errno;
+	pid_t parked_pid = 0;
+	int parked = FALSE;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	pthread_mutex_lock(&ListMutex);
+	nft_sweep_abandoned();
+	if (cur->pid > 1) {
+		(void) kill(-cur->pid, SIGKILL);
+		parked_pid = cur->pid;
+		if (AbandonedCount < NFT_ABANDONED_MAX) {
+			AbandonedPids[AbandonedCount++] = cur->pid;
+			parked = TRUE;
+		}
+	}
+	for (link = &ClosingList; *link != NULL; link = &(*link)->next) {
+		if (*link == cur) {
+			*link = cur->next;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&ListMutex);
+	if (parked_pid > 1) {
+		if (parked) {
+			SPINE_LOG(("WARNING: SCRIPT: pid %ld killed during pipe cleanup; parked for reaping", (long) parked_pid));
+		} else {
+			SPINE_LOG(("ERROR: SCRIPT: pid %ld killed during pipe cleanup and the abandoned list is full; it will remain a zombie", (long) parked_pid));
+		}
+	}
 
 	SPINE_FREE(cur);
+	errno = saved_errno;
+	pthread_setcancelstate(oldstate, NULL);
+}
+
+/* Ordinary thread context only. Spawn publication, closing ownership and
+ * reaping all use ListMutex, so shutdown cannot miss a spawned child or signal
+ * a PID after this registry has reaped it. Pipe owners retain their descriptors
+ * and memory until their existing cleanup paths finish. */
+void nft_abort_children(void) {
+	struct pid *cur;
+	int i;
+	int oldstate;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	pthread_mutex_lock(&ListMutex);
+	AbortRequested = TRUE;
+	for (cur = PidList; cur != NULL; cur = cur->next) {
+		if (cur->pid > 1) (void) kill(-cur->pid, SIGKILL);
+	}
+	for (cur = ClosingList; cur != NULL; cur = cur->next) {
+		if (cur->pid > 1) (void) kill(-cur->pid, SIGKILL);
+	}
+	for (i = 0; i < AbandonedCount; i++) {
+		if (AbandonedPids[i] > 1) {
+			(void) kill(-AbandonedPids[i], SIGKILL);
+			(void) kill(AbandonedPids[i], SIGKILL);
+		}
+	}
+	pthread_mutex_unlock(&ListMutex);
+	pthread_setcancelstate(oldstate, NULL);
+}
+
+int nft_abort_requested(void) {
+	int requested;
+	int oldstate;
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	pthread_mutex_lock(&ListMutex);
+	requested = AbortRequested;
+	pthread_mutex_unlock(&ListMutex);
+	pthread_setcancelstate(oldstate, NULL);
+	return requested;
 }
