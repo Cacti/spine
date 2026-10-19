@@ -28,6 +28,7 @@
 
 #include "internal/common.h"
 #include "app/spine.h"
+#include "tests/support/child_run.h"
 
 #define MUSL_DEFAULT_STACK (128 * 1024)
 
@@ -452,6 +453,74 @@ static void test_invalid_tls_configuration_is_refused(void **state) {
 	}
 }
 
+/* On a terminal the reader explains what it skipped: a retired directive, an
+ * unreadable file at debug level and a line that did not fit the buffer. */
+static void test_config_warnings_reach_a_terminal(void **state) {
+	char capture_path[] = "spine-conf-stderr-XXXXXX";
+	char output[1024] = "";
+	char *long_line;
+	int saved_stderr;
+	int capture;
+	ssize_t length;
+
+	(void) state;
+	capture = mkstemp(capture_path);
+	assert_true(capture >= 0);
+	saved_stderr = dup(STDERR_FILENO);
+	assert_true(saved_stderr >= 0);
+	fflush(stderr);
+	assert_true(dup2(capture, STDERR_FILENO) >= 0);
+	set.console.stderr_notty = FALSE;
+	set.logging.log_level = POLLER_VERBOSITY_DEBUG;
+
+	write_config("DB_PreG 1\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	unlink(config_path);
+
+	long_line = malloc(2 * BUFSIZE);
+	assert_non_null(long_line);
+	memset(long_line, 'c', 2 * BUFSIZE - 2);
+	long_line[2 * BUFSIZE - 2] = '\n';
+	long_line[2 * BUFSIZE - 1] = '\0';
+	write_config(long_line);
+	free(long_line);
+	assert_int_equal(read_spine_config(config_path), 0);
+
+	assert_int_equal(read_spine_config("spine-conf-does-not-exist"), -1);
+
+	fflush(stderr);
+	assert_true(dup2(saved_stderr, STDERR_FILENO) >= 0);
+	close(saved_stderr);
+	assert_true(lseek(capture, 0, SEEK_SET) == 0);
+	length = read(capture, output, sizeof(output) - 1);
+	assert_true(length > 0);
+	close(capture);
+	unlink(capture_path);
+
+	assert_non_null(strstr(output, "DB_PreG is no longer supported"));
+	assert_non_null(strstr(output, "Ignoring line 1 of"));
+	assert_non_null(strstr(output, "Could not open config file [spine-conf-does-not-exist]"));
+}
+
+static void die_with_an_errno_description(void) {
+	set.logging.log_perror = TRUE;
+	set.logging.log_destination = LOGDEST_STDOUT;
+	errno = ENOENT;
+	die("ERROR: scripted failure");
+}
+
+static void die_from_the_parent_with_a_script_server(void) {
+	set.poller.parent_fork = SPINE_PARENT;
+	set.php.php_initialized = TRUE;
+	die("ERROR: scripted failure");
+}
+
+static void test_fatal_errors_report_errno_and_close_the_script_server(void **state) {
+	(void) state;
+	assert_int_equal(spine_test_run_child(die_with_an_errno_description), EXIT_FAILURE);
+	assert_int_equal(spine_test_run_child(die_from_the_parent_with_a_script_server), EXIT_FAILURE);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_local_and_remote_tls_configuration, config_setup, config_teardown),
@@ -470,6 +539,8 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_config_line_filling_the_buffer_exactly_is_read, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_embedded_nul_does_not_swallow_the_next_line, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_last_line_without_newline_is_read, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_config_warnings_reach_a_terminal, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_fatal_errors_report_errno_and_close_the_script_server, config_setup, config_teardown),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

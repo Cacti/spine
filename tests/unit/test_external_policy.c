@@ -6,17 +6,35 @@
 #include <cmocka.h>
 #include "internal/common.h"
 #include "app/spine.h"
+#include "tests/support/child_run.h"
 
 static int scenario;
 static int calls;
+static int wait_errno;
+static int permit_failures;
+static size_t failing_allocation;
 static int controlled_wait(int fd, double deadline) {
 	(void) fd;
 	(void) deadline;
 	if (scenario == 1) {
-		errno = EBADF;
+		errno = wait_errno != 0 ? wait_errno : EBADF;
 		return -1;
 	}
 	return scenario == 2 ? 0 : 1;
+}
+static int controlled_acquire(spine_permits_t *permits) {
+	if (permit_failures > 0) {
+		permit_failures--;
+		return EIO;
+	}
+	return spine_permits_try_acquire(permits);
+}
+static void *controlled_malloc(size_t size) {
+	if (size == failing_allocation) {
+		failing_allocation = 0;
+		return NULL;
+	}
+	return malloc(size);
 }
 static ssize_t controlled_read(int fd, void *buffer, size_t capacity) {
 	(void) fd;
@@ -64,7 +82,11 @@ static int controlled_pclose(int fd, double deadline) {
 #define nft_pclose_deadline controlled_pclose
 #define spine_wait_readable controlled_wait
 #define read controlled_read
+#define spine_permits_try_acquire controlled_acquire
+#define malloc controlled_malloc
 #include "../../src/script/external.c"
+#undef malloc
+#undef spine_permits_try_acquire
 #undef read
 #undef spine_wait_readable
 #undef nft_popen
@@ -100,6 +122,70 @@ static void test_limited_read_outcomes(void **state) {
 	scenario = calls = 0;
 	assert_true(read_script_result(&context, -1, 1.0, result));
 	assert_string_equal(result, "42");
+}
+
+/* Without output limits the reader takes the plain select() path, which names
+ * the failure and leaves the item undefined. */
+static void test_unlimited_read_reports_wait_failures(void **state) {
+	host_t host = {.id = 1};
+	script_result_context_t context = {&host, "fixture", 1, "DS"};
+	const int failures[] = {EBADF, EINVAL, EIO};
+	char result[RESULTS_BUFFER];
+	size_t index;
+	(void) state;
+	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	scenario = 1;
+	for (index = 0; index < sizeof(failures) / sizeof(failures[0]); index++) {
+		wait_errno = failures[index];
+		memset(result, 0, sizeof(result));
+		assert_false(read_script_result(&context, -1, 1.0, result));
+		assert_string_equal(result, "U");
+	}
+	wait_errno = 0;
+	scenario = 0;
+}
+
+static void test_timeout_without_a_registered_child_is_undefined(void **state) {
+	host_t host = {.id = 1};
+	script_result_context_t context = {&host, "fixture", 1, "DS"};
+	char result[RESULTS_BUFFER];
+	(void) state;
+	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	scenario = 2;
+	memset(result, 0, sizeof(result));
+	assert_false(read_script_result(&context, -1, 1.0, result));
+	assert_string_equal(result, "U");
+	scenario = 0;
+}
+
+static void test_script_permit_errors_are_retried(void **state) {
+	host_t host = {.id = 1};
+	char *result;
+	(void) state;
+	scenario = calls = 0;
+	set.php.script_timeout = 5;
+	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+	permit_failures = 2;
+
+	result = exec_poll(&host, "/bin/echo 42", 1, "DS");
+	assert_int_equal(permit_failures, 0);
+	assert_string_equal(result, "42");
+	free(result);
+	assert_int_equal(spine_permits_available(&available_scripts), 1);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
+static void poll_with_no_result_buffer(void) {
+	host_t host = {.id = 1};
+
+	failing_allocation = RESULTS_BUFFER;
+	free(exec_poll(&host, "/bin/echo 42", 1, "DS"));
+}
+
+static void test_result_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	assert_int_equal(spine_test_run_child(poll_with_no_result_buffer), EXIT_FAILURE);
 }
 
 static void test_suffix_failure_preserves_buffer_ownership(void **state) {
@@ -233,7 +319,8 @@ static void test_lingering_script_is_bounded_by_its_deadline(void **state) {
 }
 
 int main(void) {
-	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item),
+	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_unlimited_read_reports_wait_failures), cmocka_unit_test(test_timeout_without_a_registered_child_is_undefined), cmocka_unit_test(test_script_permit_errors_are_retried), cmocka_unit_test(test_result_allocation_failure_is_fatal),
+		cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item),
 		cmocka_unit_test(test_script_finishes_after_closing_its_output), cmocka_unit_test(test_lingering_script_is_bounded_by_its_deadline)};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }

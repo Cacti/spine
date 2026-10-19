@@ -79,6 +79,36 @@ void test_cli_alias_contracts(void) {
 		run_cli_contract(ping_forms[index], EXIT_SUCCESS, output, sizeof(output));
 		assert(strcmp(version, output) == 0);
 	}
+	/* flags that take no value, and the log destination alias, parse cleanly */
+	char *flag_forms[][8] = {
+		{"spine", "-M", "-R", "-D", "STDOUT", "--version", NULL},
+		{"spine", "--mibs", "--readonly", "--log", "STDOUT", "--version", NULL},
+		{"spine", "--read-only", "--version", NULL},
+	};
+	for (size_t index = 0; index < sizeof(flag_forms) / sizeof(flag_forms[0]); index++) {
+		run_cli_contract(flag_forms[index], EXIT_SUCCESS, output, sizeof(output));
+		assert(strcmp(version, output) == 0);
+	}
+	char *repeated_first[] = {"spine", "-f", "1", "-f", "2", "--version", NULL};
+	run_cli_contract(repeated_first, EXIT_FAILURE, output, sizeof(output));
+	assert(strstr(output, "ERROR: -f can only be used once") != NULL);
+	char *repeated_last[] = {"spine", "-l", "1", "-l", "2", "--version", NULL};
+	run_cli_contract(repeated_last, EXIT_FAILURE, output, sizeof(output));
+	assert(strstr(output, "ERROR: -l can only be used once") != NULL);
+	char *unknown_option[] = {"spine", "--no-such-option", "--version", NULL};
+	run_cli_contract(unknown_option, EXIT_FAILURE, output, sizeof(output));
+	assert(strstr(output, "ERROR: --no-such-option is an unknown command-line parameter") != NULL);
+	/* host ranges are checked before any configuration is read */
+	char *first_only[] = {"spine", "-f", "1", NULL};
+	run_cli_contract(first_only, EXIT_FAILURE, output, sizeof(output));
+	assert(strstr(output, "ERROR: must provide both -f/-l, a hostlist (-H/--hostlist), or neither") != NULL);
+	char *reversed_range[] = {"spine", "-f", "5", "-l", "2", NULL};
+	run_cli_contract(reversed_range, EXIT_FAILURE, output, sizeof(output));
+	assert(strstr(output, "ERROR: Invalid row spec; first host_id must be less than the second") != NULL);
+	/* ping-only polling clears the MIB refresh request, then the missing file ends the run */
+	char *missing_config[] = {"spine", "-C", "/nonexistent/spine-cli-contract.conf", "-P", "-M", NULL};
+	run_cli_contract(missing_config, EXIT_FAILURE, output, sizeof(output));
+	assert(strstr(output, "ERROR: Could not read config file: /nonexistent/spine-cli-contract.conf") != NULL);
 	char *missing_poller[] = {"spine", "-p", NULL};
 	run_cli_contract(missing_poller, EXIT_FAILURE, output, sizeof(output));
 	assert(strstr(output, "ERROR: option -p requires a parameter") != NULL);

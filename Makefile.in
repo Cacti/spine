@@ -126,14 +126,20 @@ check_PROGRAMS = test_spine_regressions$(EXEEXT) $(am__EXEEXT_1) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_process_abort \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_worker_set \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_tls_policy
+@HAVE_CMOCKA_TRUE@	tests/unit/test_tls_policy \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_script_read \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_snmp_faults \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_poll_workers
 
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
 # pipe, spawn, command, response, shutdown and reap paths.
 @HAVE_CMOCKA_TRUE@am__append_3 = tests/support/php_test_server
-@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__append_4 = tests/unit/test_php_runtime tests/unit/test_poll_host
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__append_4 = tests/unit/test_php_runtime \
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poll_host \
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_platform_faults \
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poller_faults
 @HAVE_LD_WRAP_TRUE@am__append_5 = -DSPINE_TEST_ABORT_FAULTS
 @HAVE_LD_WRAP_TRUE@am__append_6 = -DSPINE_TEST_WRAP_WAITPID
 @HAVE_LINKER_WRAP_TRUE@am__append_7 = -DSPINE_WORKER_TEST_WRAP
@@ -174,9 +180,14 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_process_abort$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_worker_set$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_db_lease$(EXEEXT) \
-@HAVE_CMOCKA_TRUE@	tests/unit/test_tls_policy$(EXEEXT)
+@HAVE_CMOCKA_TRUE@	tests/unit/test_tls_policy$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_script_read$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_snmp_faults$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_poll_workers$(EXEEXT)
 @HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@am__EXEEXT_3 = tests/unit/test_php_runtime$(EXEEXT) \
-@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poll_host$(EXEEXT)
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poll_host$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_platform_faults$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@@HAVE_LD_WRAP_TRUE@	tests/unit/test_poller_faults$(EXEEXT)
 @HAVE_CMOCKA_TRUE@am__EXEEXT_4 =  \
 @HAVE_CMOCKA_TRUE@	tests/support/php_test_server$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
@@ -267,6 +278,7 @@ am_test_spine_regressions_OBJECTS = $(am__objects_9) \
 	tests/contracts/test_spine_stream_contracts.$(OBJEXT) \
 	tests/contracts/test_spine_output_contracts.$(OBJEXT) \
 	tests/contracts/test_spine_privilege_contracts.$(OBJEXT) \
+	tests/contracts/test_spine_startup_contracts.$(OBJEXT) \
 	tests/contracts/test_execution_policy.$(OBJEXT) \
 	tests/contracts/test_spine_tls_contracts.$(OBJEXT)
 test_spine_regressions_OBJECTS = $(am_test_spine_regressions_OBJECTS)
@@ -503,6 +515,21 @@ tests_unit_test_ping_timing_OBJECTS =  \
 	$(am_tests_unit_test_ping_timing_OBJECTS)
 tests_unit_test_ping_timing_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
+am_tests_unit_test_platform_faults_OBJECTS =  \
+	tests/unit/test_platform_faults.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) $(am__objects_1) \
+	$(am__objects_2) $(am__objects_3) src/platform/locks.$(OBJEXT) \
+	$(am__objects_4) $(am__objects_5) $(am__objects_6) \
+	$(am__objects_7) src/config/keywords.$(OBJEXT) \
+	src/app/signals.$(OBJEXT)
+tests_unit_test_platform_faults_OBJECTS =  \
+	$(am_tests_unit_test_platform_faults_OBJECTS)
+tests_unit_test_platform_faults_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+tests_unit_test_platform_faults_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) \
+	$(tests_unit_test_platform_faults_LDFLAGS) $(LDFLAGS) -o $@
 am_tests_unit_test_poll_host_OBJECTS =  \
 	tests/unit/test_poll_host.$(OBJEXT) \
 	tests/support/spine_runtime.$(OBJEXT) $(am__objects_1) \
@@ -518,6 +545,35 @@ tests_unit_test_poll_host_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(tests_unit_test_poll_host_LDFLAGS) \
 	$(LDFLAGS) -o $@
+am_tests_unit_test_poll_workers_OBJECTS =  \
+	tests/unit/test_poll_workers.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) \
+	src/platform/worker_set.$(OBJEXT) $(am__objects_1) \
+	$(am__objects_2) $(am__objects_3) src/platform/locks.$(OBJEXT) \
+	$(am__objects_4) $(am__objects_5) $(am__objects_6) \
+	$(am__objects_7) src/config/keywords.$(OBJEXT) \
+	src/app/signals.$(OBJEXT)
+tests_unit_test_poll_workers_OBJECTS =  \
+	$(am_tests_unit_test_poll_workers_OBJECTS)
+tests_unit_test_poll_workers_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+am_tests_unit_test_poller_faults_OBJECTS =  \
+	tests/unit/test_poller_faults.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) \
+	src/poller/poller.$(OBJEXT) src/script/external.$(OBJEXT) \
+	src/poller/host.$(OBJEXT) src/poller/items.$(OBJEXT) \
+	src/poller/system.$(OBJEXT) $(am__objects_1) $(am__objects_2) \
+	$(am__objects_3) src/platform/locks.$(OBJEXT) $(am__objects_5) \
+	$(am__objects_6) $(am__objects_7) \
+	src/config/keywords.$(OBJEXT) src/app/signals.$(OBJEXT)
+tests_unit_test_poller_faults_OBJECTS =  \
+	$(am_tests_unit_test_poller_faults_OBJECTS)
+tests_unit_test_poller_faults_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+tests_unit_test_poller_faults_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) \
+	$(tests_unit_test_poller_faults_LDFLAGS) $(LDFLAGS) -o $@
 am__objects_24 =  \
 	src/database/tests_unit_test_process_abort-sql.$(OBJEXT) \
 	src/database/tests_unit_test_process_abort-connection.$(OBJEXT) \
@@ -602,6 +658,28 @@ am_tests_unit_test_safety_fixes_OBJECTS =  \
 tests_unit_test_safety_fixes_OBJECTS =  \
 	$(am_tests_unit_test_safety_fixes_OBJECTS)
 tests_unit_test_safety_fixes_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am_tests_unit_test_script_read_OBJECTS =  \
+	tests/unit/test_script_read.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) \
+	src/script/protocol.$(OBJEXT) src/script/server.$(OBJEXT) \
+	$(am__objects_1) $(am__objects_2) $(am__objects_3) \
+	src/platform/locks.$(OBJEXT) $(am__objects_4) $(am__objects_5) \
+	$(am__objects_7) src/config/keywords.$(OBJEXT) \
+	src/app/signals.$(OBJEXT)
+tests_unit_test_script_read_OBJECTS =  \
+	$(am_tests_unit_test_script_read_OBJECTS)
+tests_unit_test_script_read_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+am_tests_unit_test_snmp_faults_OBJECTS =  \
+	tests/unit/test_snmp_faults.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) $(am__objects_1) \
+	$(am__objects_2) src/platform/locks.$(OBJEXT) $(am__objects_4) \
+	$(am__objects_5) $(am__objects_6) $(am__objects_7) \
+	src/config/keywords.$(OBJEXT) src/app/signals.$(OBJEXT)
+tests_unit_test_snmp_faults_OBJECTS =  \
+	$(am_tests_unit_test_snmp_faults_OBJECTS)
+tests_unit_test_snmp_faults_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_tests_unit_test_snmpv3_session_OBJECTS =  \
 	tests/unit/test_snmpv3_session.$(OBJEXT) \
 	tests/support/spine_runtime.$(OBJEXT) $(am__objects_1) \
@@ -867,6 +945,7 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po \
+	tests/contracts/$(DEPDIR)/test_spine_startup_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po \
 	tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po \
 	tests/regression/$(DEPDIR)/test_spine_faults.Po \
@@ -886,10 +965,15 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po \
 	tests/unit/$(DEPDIR)/test_ping_icmp.Po \
 	tests/unit/$(DEPDIR)/test_ping_timing.Po \
+	tests/unit/$(DEPDIR)/test_platform_faults.Po \
 	tests/unit/$(DEPDIR)/test_poll_host.Po \
+	tests/unit/$(DEPDIR)/test_poll_workers.Po \
+	tests/unit/$(DEPDIR)/test_poller_faults.Po \
 	tests/unit/$(DEPDIR)/test_process_abort-test_process_abort.Po \
 	tests/unit/$(DEPDIR)/test_resource_policy.Po \
 	tests/unit/$(DEPDIR)/test_safety_fixes.Po \
+	tests/unit/$(DEPDIR)/test_script_read.Po \
+	tests/unit/$(DEPDIR)/test_snmp_faults.Po \
 	tests/unit/$(DEPDIR)/test_snmpv3_session.Po \
 	tests/unit/$(DEPDIR)/test_tls_policy.Po \
 	tests/unit/$(DEPDIR)/test_util_paths.Po \
@@ -928,10 +1012,15 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_unit_test_php_runtime_SOURCES) \
 	$(tests_unit_test_ping_icmp_SOURCES) \
 	$(tests_unit_test_ping_timing_SOURCES) \
+	$(tests_unit_test_platform_faults_SOURCES) \
 	$(tests_unit_test_poll_host_SOURCES) \
+	$(tests_unit_test_poll_workers_SOURCES) \
+	$(tests_unit_test_poller_faults_SOURCES) \
 	$(tests_unit_test_process_abort_SOURCES) \
 	$(tests_unit_test_resource_policy_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
+	$(tests_unit_test_script_read_SOURCES) \
+	$(tests_unit_test_snmp_faults_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_tls_policy_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
@@ -951,10 +1040,15 @@ DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(tests_unit_test_php_runtime_SOURCES) \
 	$(tests_unit_test_ping_icmp_SOURCES) \
 	$(tests_unit_test_ping_timing_SOURCES) \
+	$(tests_unit_test_platform_faults_SOURCES) \
 	$(tests_unit_test_poll_host_SOURCES) \
+	$(tests_unit_test_poll_workers_SOURCES) \
+	$(tests_unit_test_poller_faults_SOURCES) \
 	$(tests_unit_test_process_abort_SOURCES) \
 	$(tests_unit_test_resource_policy_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
+	$(tests_unit_test_script_read_SOURCES) \
+	$(tests_unit_test_snmp_faults_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_tls_policy_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
@@ -1426,18 +1520,19 @@ test_spine_regressions_SOURCES = $(spine_runtime_sources) \
 	tests/contracts/test_spine_stream_contracts.c \
 	tests/contracts/test_spine_output_contracts.c \
 	tests/contracts/test_spine_privilege_contracts.c \
+	tests/contracts/test_spine_startup_contracts.c \
 	tests/contracts/test_execution_policy.c \
 	tests/contracts/test_spine_tls_contracts.c
 # Link the same runtime implementation with a separate fault-test entry point.
 @HAVE_LINKER_WRAP_TRUE@test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
-@HAVE_LINKER_WRAP_TRUE@test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
+@HAVE_LINKER_WRAP_TRUE@test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=sigaction -Wl,--wrap=mysql_thread_safe -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=spine_json_log_record \
-@HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
+@HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_permits_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
-@HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=malloc -Wl,--wrap=strdup \
+@HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=strdup \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create -Wl,--wrap=pthread_attr_setstacksize \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=getuid -Wl,--wrap=geteuid -Wl,--wrap=getgid -Wl,--wrap=getegid \
 @HAVE_LINKER_WRAP_TRUE@ -Wl,--wrap=setuid -Wl,--wrap=setgid -Wl,--wrap=seteuid -Wl,--wrap=setegid -Wl,--wrap=socket
@@ -1456,9 +1551,9 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h \
 	src/config/settings_internal.h src/ping/ping_internal.h \
 	src/app/cli_internal.h src/poller/poller_internal.h \
 	src/app/startup_internal.h src/script/server_internal.h \
-	src/process/process_internal.h src/app/buffer.h \
-	src/app/runtime.h src/config/model.h src/config/state.h \
-	src/config/text.h src/config/validate.h \
+	tests/support/child_run.h src/process/process_internal.h \
+	src/app/buffer.h src/app/runtime.h src/config/model.h \
+	src/config/state.h src/config/text.h src/config/validate.h \
 	src/internal/constants.h src/log/debug.h src/log/log.h \
 	src/log/sanitize.h src/platform/clock.h \
 	src/platform/descriptor.h src/platform/socket.h \
@@ -1634,7 +1729,7 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
-	-Wl,--wrap=ping_host
+	-Wl,--wrap=ping_host -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=strdup
 
 
 # Includes src/poller/availability.c directly so its socket calls can be steered; see the file.
@@ -1669,13 +1764,61 @@ tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_php_runtime_LDFLAGS = \
 	-Wl,--wrap=posix_spawn -Wl,--wrap=dup -Wl,--wrap=fcntl \
 	-Wl,--wrap=write \
-	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
+	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy \
+	-Wl,--wrap=pipe -Wl,--wrap=posix_spawn_file_actions_init -Wl,--wrap=posix_spawnattr_init \
+	-Wl,--wrap=strdup -Wl,--wrap=waitpid -Wl,--wrap=kill -Wl,--wrap=pthread_mutex_trylock -Wl,--wrap=php_readpipe
 
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
 	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/support/php_test_server"' \
 	-DSPINE_PHP_RUNTIME_TESTING
 
 tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT)
+
+# read.c is compiled into the test so select() and read() can be redirected;
+# the rest of the script server is linked as built.
+tests_unit_test_script_read_SOURCES = tests/unit/test_script_read.c tests/support/spine_runtime.c src/script/protocol.c src/script/server.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+
+tests_unit_test_script_read_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# session.c, requests.c and response.c are compiled into the test so the
+# Net-SNMP calls they make can be scripted, as test_snmpv3_session does.
+tests_unit_test_snmp_faults_SOURCES = tests/unit/test_snmp_faults.c tests/support/spine_runtime.c \
+	$(spine_database_sources) $(spine_support_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+
+tests_unit_test_snmp_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# reindex.c is compiled into the test so its helpers and allocators can be
+# driven directly; regex.c is linked as built and its thread-local storage
+# calls are wrapped.
+tests_unit_test_poller_faults_SOURCES = tests/unit/test_poller_faults.c tests/support/spine_runtime.c \
+	src/poller/poller.c src/script/external.c src/poller/host.c src/poller/items.c src/poller/system.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+
+tests_unit_test_poller_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_poller_faults_LDFLAGS = -Wl,--wrap=pthread_once -Wl,--wrap=pthread_key_create -Wl,--wrap=pthread_setspecific
+
+# workers.c is compiled into the test so its static helpers can be called and
+# its permit, thread-start and database calls scripted.
+tests_unit_test_poll_workers_SOURCES = tests/unit/test_poll_workers.c tests/support/spine_runtime.c src/platform/worker_set.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+
+tests_unit_test_poll_workers_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# Clock, socket-wait, descriptor and permit failures: the wrapped calls are
+# the ones the platform helpers make into libc and pthreads.
+tests_unit_test_platform_faults_SOURCES = tests/unit/test_platform_faults.c tests/support/spine_runtime.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+
+tests_unit_test_platform_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_platform_faults_LDFLAGS = -Wl,--wrap=nanosleep -Wl,--wrap=clock_gettime \
+	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init
+
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
@@ -2007,6 +2150,9 @@ tests/contracts/test_spine_output_contracts.$(OBJEXT):  \
 	tests/contracts/$(am__dirstamp) \
 	tests/contracts/$(DEPDIR)/$(am__dirstamp)
 tests/contracts/test_spine_privilege_contracts.$(OBJEXT):  \
+	tests/contracts/$(am__dirstamp) \
+	tests/contracts/$(DEPDIR)/$(am__dirstamp)
+tests/contracts/test_spine_startup_contracts.$(OBJEXT):  \
 	tests/contracts/$(am__dirstamp) \
 	tests/contracts/$(DEPDIR)/$(am__dirstamp)
 tests/contracts/test_execution_policy.$(OBJEXT):  \
@@ -2402,12 +2548,30 @@ tests/unit/test_ping_timing.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_ping_timing$(EXEEXT): $(tests_unit_test_ping_timing_OBJECTS) $(tests_unit_test_ping_timing_DEPENDENCIES) $(EXTRA_tests_unit_test_ping_timing_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_ping_timing$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_ping_timing_OBJECTS) $(tests_unit_test_ping_timing_LDADD) $(LIBS)
+tests/unit/test_platform_faults.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_platform_faults$(EXEEXT): $(tests_unit_test_platform_faults_OBJECTS) $(tests_unit_test_platform_faults_DEPENDENCIES) $(EXTRA_tests_unit_test_platform_faults_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_platform_faults$(EXEEXT)
+	$(AM_V_CCLD)$(tests_unit_test_platform_faults_LINK) $(tests_unit_test_platform_faults_OBJECTS) $(tests_unit_test_platform_faults_LDADD) $(LIBS)
 tests/unit/test_poll_host.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
 tests/unit/test_poll_host$(EXEEXT): $(tests_unit_test_poll_host_OBJECTS) $(tests_unit_test_poll_host_DEPENDENCIES) $(EXTRA_tests_unit_test_poll_host_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_poll_host$(EXEEXT)
 	$(AM_V_CCLD)$(tests_unit_test_poll_host_LINK) $(tests_unit_test_poll_host_OBJECTS) $(tests_unit_test_poll_host_LDADD) $(LIBS)
+tests/unit/test_poll_workers.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_poll_workers$(EXEEXT): $(tests_unit_test_poll_workers_OBJECTS) $(tests_unit_test_poll_workers_DEPENDENCIES) $(EXTRA_tests_unit_test_poll_workers_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_poll_workers$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_poll_workers_OBJECTS) $(tests_unit_test_poll_workers_LDADD) $(LIBS)
+tests/unit/test_poller_faults.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_poller_faults$(EXEEXT): $(tests_unit_test_poller_faults_OBJECTS) $(tests_unit_test_poller_faults_DEPENDENCIES) $(EXTRA_tests_unit_test_poller_faults_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_poller_faults$(EXEEXT)
+	$(AM_V_CCLD)$(tests_unit_test_poller_faults_LINK) $(tests_unit_test_poller_faults_OBJECTS) $(tests_unit_test_poller_faults_LDADD) $(LIBS)
 tests/unit/test_process_abort-test_process_abort.$(OBJEXT):  \
 	tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
@@ -2577,6 +2741,18 @@ tests/unit/test_safety_fixes.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_safety_fixes$(EXEEXT): $(tests_unit_test_safety_fixes_OBJECTS) $(tests_unit_test_safety_fixes_DEPENDENCIES) $(EXTRA_tests_unit_test_safety_fixes_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_safety_fixes$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_safety_fixes_OBJECTS) $(tests_unit_test_safety_fixes_LDADD) $(LIBS)
+tests/unit/test_script_read.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_script_read$(EXEEXT): $(tests_unit_test_script_read_OBJECTS) $(tests_unit_test_script_read_DEPENDENCIES) $(EXTRA_tests_unit_test_script_read_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_script_read$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_script_read_OBJECTS) $(tests_unit_test_script_read_LDADD) $(LIBS)
+tests/unit/test_snmp_faults.$(OBJEXT): tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_snmp_faults$(EXEEXT): $(tests_unit_test_snmp_faults_OBJECTS) $(tests_unit_test_snmp_faults_DEPENDENCIES) $(EXTRA_tests_unit_test_snmp_faults_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_snmp_faults$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_snmp_faults_OBJECTS) $(tests_unit_test_snmp_faults_LDADD) $(LIBS)
 tests/unit/test_snmpv3_session.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -2859,6 +3035,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_startup_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/regression/$(DEPDIR)/test_spine_faults.Po@am__quote@ # am--include-marker
@@ -2878,10 +3055,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_ping_icmp.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_ping_timing.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_platform_faults.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_poll_host.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_poll_workers.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_poller_faults.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_process_abort-test_process_abort.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_resource_policy.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_safety_fixes.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_script_read.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmp_faults.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_session.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_tls_policy.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_paths.Po@am__quote@ # am--include-marker
@@ -5697,6 +5879,27 @@ tests/unit/test_tls_policy.log: tests/unit/test_tls_policy$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_script_read.log: tests/unit/test_script_read$(EXEEXT)
+	@p='tests/unit/test_script_read$(EXEEXT)'; \
+	b='tests/unit/test_script_read'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_snmp_faults.log: tests/unit/test_snmp_faults$(EXEEXT)
+	@p='tests/unit/test_snmp_faults$(EXEEXT)'; \
+	b='tests/unit/test_snmp_faults'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_poll_workers.log: tests/unit/test_poll_workers$(EXEEXT)
+	@p='tests/unit/test_poll_workers$(EXEEXT)'; \
+	b='tests/unit/test_poll_workers'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/unit/test_php_runtime.log: tests/unit/test_php_runtime$(EXEEXT)
 	@p='tests/unit/test_php_runtime$(EXEEXT)'; \
 	b='tests/unit/test_php_runtime'; \
@@ -5707,6 +5910,20 @@ tests/unit/test_php_runtime.log: tests/unit/test_php_runtime$(EXEEXT)
 tests/unit/test_poll_host.log: tests/unit/test_poll_host$(EXEEXT)
 	@p='tests/unit/test_poll_host$(EXEEXT)'; \
 	b='tests/unit/test_poll_host'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_platform_faults.log: tests/unit/test_platform_faults$(EXEEXT)
+	@p='tests/unit/test_platform_faults$(EXEEXT)'; \
+	b='tests/unit/test_platform_faults'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_poller_faults.log: tests/unit/test_poller_faults$(EXEEXT)
+	@p='tests/unit/test_poller_faults$(EXEEXT)'; \
+	b='tests/unit/test_poller_faults'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -6253,6 +6470,7 @@ distclean: distclean-am
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po
+	-rm -f tests/contracts/$(DEPDIR)/test_spine_startup_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po
 	-rm -f tests/regression/$(DEPDIR)/test_spine_faults.Po
@@ -6272,10 +6490,15 @@ distclean: distclean-am
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_icmp.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_timing.Po
+	-rm -f tests/unit/$(DEPDIR)/test_platform_faults.Po
 	-rm -f tests/unit/$(DEPDIR)/test_poll_host.Po
+	-rm -f tests/unit/$(DEPDIR)/test_poll_workers.Po
+	-rm -f tests/unit/$(DEPDIR)/test_poller_faults.Po
 	-rm -f tests/unit/$(DEPDIR)/test_process_abort-test_process_abort.Po
 	-rm -f tests/unit/$(DEPDIR)/test_resource_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
+	-rm -f tests/unit/$(DEPDIR)/test_script_read.Po
+	-rm -f tests/unit/$(DEPDIR)/test_snmp_faults.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_tls_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po
@@ -6556,6 +6779,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_reindex_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_settings_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_snmpv3_contracts.Po
+	-rm -f tests/contracts/$(DEPDIR)/test_spine_startup_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_stream_contracts.Po
 	-rm -f tests/contracts/$(DEPDIR)/test_spine_tls_contracts.Po
 	-rm -f tests/regression/$(DEPDIR)/test_spine_faults.Po
@@ -6575,10 +6799,15 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/unit/$(DEPDIR)/test_php_runtime-test_php_runtime.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_icmp.Po
 	-rm -f tests/unit/$(DEPDIR)/test_ping_timing.Po
+	-rm -f tests/unit/$(DEPDIR)/test_platform_faults.Po
 	-rm -f tests/unit/$(DEPDIR)/test_poll_host.Po
+	-rm -f tests/unit/$(DEPDIR)/test_poll_workers.Po
+	-rm -f tests/unit/$(DEPDIR)/test_poller_faults.Po
 	-rm -f tests/unit/$(DEPDIR)/test_process_abort-test_process_abort.Po
 	-rm -f tests/unit/$(DEPDIR)/test_resource_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
+	-rm -f tests/unit/$(DEPDIR)/test_script_read.Po
+	-rm -f tests/unit/$(DEPDIR)/test_snmp_faults.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_tls_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po

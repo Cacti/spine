@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "tests/support/child_run.h"
+
 #define UNIT_TESTING
 #include "../../src/internal/common.h"
 #include "../../src/app/spine.h"
@@ -193,14 +195,43 @@ int ping_icmp_shared_available(void) { return 0; }
 #include "../../src/platform/thread.c"
 #include "../../src/config/text.c"
 #include "../../src/log/debug.c"
+/* A string of more than half the address space cannot be built, so the
+ * overflow guard is reached through a sentinel pointer whose length is huge. */
+static const char oversized_command[] = "x";
+static size_t controlled_strlen(const char *text) {
+	if (text == oversized_command) return SIZE_MAX / 2 + 1;
+	return strlen(text);
+}
+#define strlen controlled_strlen
 #include "../../src/script/escape.c"
+#undef strlen
 #include "../../src/platform/descriptor.c"
 #include "../../src/log/sanitize.c"
 #include "../../src/config/settings.c"
+/* The capability formatter cannot fail for any real protocol list, so the
+ * error branch that follows it is reachable only through this stand-in. */
+static int capability_format_fails;
+static int controlled_format_capabilities(char *output, size_t output_size,
+	const char *auth_protocols, const char *priv_protocols) {
+	if (capability_format_fails) return FALSE;
+	return format_spine_capabilities(output, output_size, auth_protocols, priv_protocols);
+}
+#define format_spine_capabilities controlled_format_capabilities
 #include "../../src/config/options.c"
+#undef format_spine_capabilities
 #include "../../src/config/file.c"
 #include "../../src/database/upsert.c"
+static size_t failing_transfer_allocation;
+static void *controlled_transfer_malloc(size_t size) {
+	if (size == failing_transfer_allocation) {
+		failing_transfer_allocation = 0;
+		return NULL;
+	}
+	return malloc(size);
+}
+#define malloc controlled_transfer_malloc
 #include "../../src/database/transfer.c"
+#undef malloc
 void nft_abort_children(void) {}
 #include "../../src/log/log.c"
 #include "../../src/poller/result.c"
@@ -689,6 +720,60 @@ static void test_spine_log_does_not_double_an_existing_newline(void **state) {
 	unlink(log_path);
 }
 
+/* Capabilities are published once, by poller 1, and only when they could be
+ * formatted. */
+static void test_capabilities_are_not_published_when_formatting_fails(void **state) {
+	MYSQL mysql;
+	int before;
+	(void) state;
+
+	memset(&mysql, 0, sizeof(mysql));
+	memset(&set, 0, sizeof(set));
+	set.poller.poller_id = 1;
+	before = total_insert_count;
+
+	capability_format_fails = 1;
+	publish_snmp_capabilities(&mysql);
+	assert_int_equal(total_insert_count, before);
+
+	capability_format_fails = 0;
+	publish_snmp_capabilities(&mysql);
+	assert_int_equal(total_insert_count, before + 1);
+}
+
+static void escape_an_oversized_command(void) {
+	(void) add_slashes(oversized_command);
+}
+
+static void test_command_escaping_refuses_an_unaddressable_length(void **state) {
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	assert_int_equal(spine_test_run_child(escape_an_oversized_command), EXIT_FAILURE);
+}
+
+/* Without memory for the batch buffers the push reports failure and still
+ * releases the query result. */
+static void test_remote_push_fails_cleanly_without_batch_memory(void **state) {
+	int before;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 0;
+	host_insert_count = 0;
+	item_insert_count = 0;
+	failing_transfer_allocation = HUGE_BUFSIZE;
+	before = frees_seen;
+
+	assert_false(poller_transfer_status(&fake_mysql, &fake_mysql));
+	assert_int_equal(failing_transfer_allocation, 0);
+	assert_int_equal(frees_seen - before, 1);
+	assert_int_equal(host_insert_count, 0);
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_upsert_destination_capabilities),
@@ -708,6 +793,9 @@ int main(void) {
 		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
 		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
 		cmocka_unit_test(test_remote_push_stops_on_failed_batch),
+		cmocka_unit_test(test_capabilities_are_not_published_when_formatting_fails),
+		cmocka_unit_test(test_command_escaping_refuses_an_unaddressable_length),
+		cmocka_unit_test(test_remote_push_fails_cleanly_without_batch_memory),
 		cmocka_unit_test(test_spine_log_appends_a_newline),
 		cmocka_unit_test(test_spine_log_survives_a_full_line),
 		cmocka_unit_test(test_spine_log_does_not_double_an_existing_newline),
