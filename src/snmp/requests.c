@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	   |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -250,8 +232,10 @@ char *snmp_get_base(host_t *host, char *text_oid, bool should_fail) {
 	if (host->snmp.session != NULL) status = snmp_get_response(host, text_oid, &reply, output);
 	if (reply.response != NULL) snmp_free_pdu(reply.response);
 	host->snmp.status = status;
-	if (status != STAT_SUCCESS && should_fail) {
-		host->ignore_host = TRUE;
+	/* A failed read is unknown even when the caller tolerates the failure;
+	 * an empty string would be stored as if the agent had sent it. */
+	if (status != STAT_SUCCESS) {
+		if (should_fail) host->ignore_host = TRUE;
 		SET_UNDEFINED(output);
 	}
 	return output;
@@ -282,7 +266,13 @@ char *snmp_getnext(host_t *host, char *text_oid) {
 			status = STAT_ERROR;
 		} else if (reply.response->errstat == SNMP_ERR_NOERROR) {
 			const struct variable_list *variable = reply.response->variables;
-			status = variable == NULL || snmp_varbind_is_exception(variable) ? STAT_ERROR : snmp_format_scalar(output, variable, TRUE);
+			if (variable != NULL && snmp_varbind_is_exception(variable)) {
+				/* endOfMibView and noSuch* come from a reachable agent: the
+				 * value is unknown, the host is not. */
+				SET_UNDEFINED(output);
+			} else {
+				status = variable == NULL ? STAT_ERROR : snmp_format_scalar(output, variable, TRUE);
+			}
 		}
 	} else if (status == STAT_TIMEOUT) {
 		SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", text_oid, host->id, status));
@@ -375,10 +365,10 @@ int snmp_count(host_t *host, char *text_oid) {
 		more = snmp_count_response(&walk, &reply);
 		if (reply.response != NULL) snmp_free_pdu(reply.response);
 	}
-	if (walk.failed) {
-		host->ignore_host = TRUE;
-		if (host->snmp.status == STAT_SUCCESS) host->snmp.status = STAT_ERROR;
-	}
+	/* host->snmp.status holds the last transport outcome. An agent that
+	 * answered with an error or a broken walk is still reachable, so only
+	 * this count becomes U and the rest of the host keeps polling. */
+	if (walk.failed && host->snmp.status != STAT_SUCCESS) host->ignore_host = TRUE;
 	/* A negative count tells the caller this walk never produced a usable
 	 * result, so it is not mistaken for a legitimate zero-item count. */
 	return walk.failed ? -1 : walk.count;

@@ -147,3 +147,56 @@ chmod +s /usr/local/spine/bin/spine
 
 -----------------------------------------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.
+
+## C17 development and source modules
+
+Develop selects GNU C17 explicitly and uses POSIX interfaces and pthreads.
+The default database client is MariaDB Connector/C; select the legacy MySQL
+client explicitly with `--with-mysql-client=mysql`. A 64-bit `time_t` is required
+unless the compatibility check is explicitly disabled.
+
+Source responsibilities and ownership are described in
+[the module guide](docs/architecture/source-modules.md). The executable entry
+point lives in `src/app/main.c`; production-linked tests reuse the runtime
+objects without renaming `main`. Configuration templates live in `etc/`,
+manuals in `docs/man/`, release helpers in `scripts/`, and unchanged third-party
+code in `vendor/`.
+
+After installing the native dependencies, including cmocka for unit tests:
+
+```sh
+./bootstrap
+./configure --enable-warnings
+make
+make check
+```
+
+[The native test guide](tests/README.md) describes isolated SNMP and database
+fixtures. [Platform requirements](docs/platforms.md) list the compiler and
+library dependencies. Runtime contracts exercise availability, retries, script
+framing, result persistence, worker failures and shutdown. Portable checked
+buffer helpers use the existing C/POSIX interfaces without Annex K.
+
+### Database output compatibility
+
+Result writes inspect the connected destination's server version. MySQL 8.0.19
+and newer use row aliases for duplicate-key updates; older MySQL and MariaDB
+retain `VALUES(output)`. Local and remote writes choose independently, including
+after reconnects. Regression tests verify duplicate-key replacement in both
+output tables, with a separate MariaDB-to-MySQL destination lane in CI.
+
+### Structured logging
+
+
+Set `Log_Format json` in `spine.conf` to emit one JSON record per log message.
+Text remains the default. Records contain a UTC timestamp, severity, and the
+message, retaining device identifiers in the message without guessing structured
+fields from ambiguous text. File, console, and syslog destinations retain their
+existing routing. Startup banners and fatal diagnostics outside the logging
+API remain operational diagnostics.
+
+The fixed record encoder escapes quotes, backslashes, and controls, preserves
+valid UTF-8, and rejects malformed UTF-8 with a structured error record. An
+allocation or formatting failure also emits a structured error and returns
+failure to the caller. It does not add a JSON parser or a build dependency; the
+legacy capabilities-string contract remains separate from log formatting.

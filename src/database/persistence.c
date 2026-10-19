@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -68,6 +50,12 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	size_t out_buffer;
 	MYSQL *mysqlt;
 	int i;
+	char suffix[BUFSIZE];
+	static const char *const updates[] = {"output"};
+
+	/* Abort can close a blocked script's pipe while die() is still printing.
+	 * Its resulting undefined value must not become a completed poll result. */
+	if (nft_abort_requested()) return (poll_output_buffers_t){.failed = TRUE};
 
 	/* insert the query results into the database */
 	query3 = allocate_output_query(queries->output, "ERROR: Fatal malloc error: poller.c query3 output buffer!");
@@ -87,6 +75,9 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 		SPINE_LOG_DEBUG(("DEBUG: Setting up writes to local database"));
 		mysqlt = mysql;
 		mode = LOCAL;
+	}
+	if (!db_upsert_suffix(mysqlt, suffix, sizeof(suffix), updates, 1)) {
+		return (poll_output_buffers_t){query3, query12, TRUE};
 	}
 
 	i = 0;
@@ -112,8 +103,8 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 
 		/* if the next element to the buffer will overflow it, write to the database */
 		if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
-			if (!flush_output_query(mysqlt, mode, query3, queries->suffix, queries->output)) failed = TRUE;
-			if (!flush_output_query(mysqlt, mode, query12, queries->suffix, queries->boost_output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query3, suffix, queries->output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query12, suffix, queries->boost_output)) failed = TRUE;
 
 			/* reset the output buffer length */
 			out_buffer = strlen(query3);
@@ -138,8 +129,8 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 
 	/* perform the last insert if there is data to process */
 	if (out_buffer > strlen(queries->output)) {
-		if (!flush_output_query(mysqlt, mode, query3, queries->suffix, NULL)) failed = TRUE;
-		if (!flush_output_query(mysqlt, mode, query12, queries->suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query3, suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query12, suffix, NULL)) failed = TRUE;
 	}
 	/* MEMORY output tables can retain earlier rows after a rejected write.
 	 * Confirmed partial output remains; keep due items eligible for recollection. */

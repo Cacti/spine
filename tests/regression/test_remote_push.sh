@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Structural guards for the remote push path's cross-vendor and batching rules.
 set -eu
 
@@ -10,7 +14,7 @@ fail() {
 	exit 1
 }
 
-queries_body=$(awk '/^static void transfer_queries\(/{f=1} f{print} f&&/^\}/{exit}' src/database/transfer.c)
+queries_body=$(awk '/^static bool transfer_queries\(/{f=1} f{print} f&&/^\}/{exit}' src/database/transfer.c)
 table_body=$(awk '/^static bool transfer_table\(/{f=1} f{print} f&&/^\}/{exit}' src/database/transfer.c)
 prepare_body=$(awk '/^void poller_prepare_queries\(/{f=1} f{print} f&&/^\}/{exit}' src/database/cacti_query.c)
 
@@ -32,5 +36,10 @@ printf '%s\n' "$prepare_body" | grep -q 'onupdate' &&
 
 printf '%s\n' "$prepare_body" | grep -q 'output=VALUES(output)' ||
 	fail "poller_output must use the cross-vendor upsert form"
+
+printf '%s\n' "$queries_body" | grep -q 'db_upsert_suffix(destination' ||
+	fail "status transfer must select syntax from its actual destination"
+grep -q 'db_upsert_suffix(mysqlt' src/database/persistence.c ||
+	fail "poller output must select syntax from its actual write connection"
 
 exit 0

@@ -1,38 +1,23 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #ifndef SPINE_CONFIG_MODEL_H
 #define SPINE_CONFIG_MODEL_H
+
+#include <stdbool.h>
+#include <stdatomic.h>
 
 #include <stddef.h>
 #include "internal/constants.h"
@@ -74,6 +59,15 @@ typedef struct {
 } spine_hosts_config_t;
 
 /* Database configuration and runtime state. */
+typedef enum {
+	SPINE_TLS_LEGACY = 0,
+	SPINE_TLS_DISABLED,
+	SPINE_TLS_PREFERRED,
+	SPINE_TLS_REQUIRED,
+	SPINE_TLS_VERIFY_CA,
+	SPINE_TLS_VERIFY_FULL
+} spine_tls_mode_t;
+
 typedef struct {
 	char host[BUFSIZE];
 	char database[BUFSIZE];
@@ -83,6 +77,10 @@ typedef struct {
 	char ssl_key[BUFSIZE];
 	char ssl_cert[BUFSIZE];
 	char ssl_ca[BUFSIZE];
+	spine_tls_mode_t tls_mode;
+	int tls_min_version;
+	char tls_cipher[BUFSIZE];
+	char tls_ciphersuites[BUFSIZE];
 	unsigned int port;
 	char version[BUFSIZE];
 	int onupdate;
@@ -93,6 +91,10 @@ typedef struct {
 	char path_php[BUFSIZE];
 	char path_php_server[BUFSIZE];
 	int script_timeout;
+	unsigned int script_max_output;
+	unsigned int script_cpu_seconds;
+	unsigned int script_memory_mb;
+	char script_executable[BUFSIZE];
 	int php_required;
 	int php_initialized;
 	int php_servers;
@@ -112,6 +114,7 @@ typedef struct {
 	int spine_log_level;
 	int log_datetime_separator;
 	int log_datetime_format;
+	bool json_logs;
 } spine_logging_config_t;
 
 /* Availability configuration and runtime state. */
@@ -143,8 +146,9 @@ typedef struct {
 } spine_boost_config_t;
 
 /* Exit configuration and runtime state. */
+_Static_assert(ATOMIC_INT_LOCK_FREE == 2, "Exit status requires lock-free integer atomics for signal safety");
 typedef struct {
-	int exit_code;
+	atomic_int exit_code;
 	size_t exit_size;
 	void *exit_stack[10];
 } spine_exit_config_t;

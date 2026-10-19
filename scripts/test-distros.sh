@@ -1,8 +1,12 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Build spine and run "make check" inside stock Linux distribution images.
 #
 #   scripts/test-distros.sh                  every Linux lane, one at a time
-#   scripts/test-distros.sh debian:12 ...    only the named images
+#   scripts/test-distros.sh debian:13 ...    only the named images
 #
 # The BSD lanes in .github/workflows/distro-matrix.yml run the same steps
 # directly inside a VM: "--deps" as root, then "--build <dir>".
@@ -21,7 +25,7 @@ set -eu
 
 # Keep in step with .github/workflows/distro-matrix.yml and the lane list in
 # .github/scripts/check-distro-eol.py.
-default_images='rockylinux/rockylinux:8 rockylinux/rockylinux:9 rockylinux/rockylinux:10 almalinux:8 almalinux:9 almalinux:10 ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:12 debian:13 fedora:44 opensuse/leap:16.0 alpine:3.24'
+default_images='rockylinux/rockylinux:9 rockylinux/rockylinux:10 almalinux:9 almalinux:10 ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:13 fedora:44 opensuse/leap:16.0 alpine:3.24'
 build_user=spinebuild
 
 install_packages() {

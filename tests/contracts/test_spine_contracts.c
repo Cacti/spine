@@ -1,18 +1,13 @@
 /*
- * Copyright (C) 2004-2026 The Cacti Group
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation; either version 2.1 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
- * for more details.
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
  */
 #include "internal/common.h"
 #include "app/spine.h"
+#include "app/startup_internal.h"
 #include <stdint.h>
 #include <sys/resource.h>
 
@@ -69,15 +64,15 @@ static void *try_busy_lock(void *argument) {
 }
 
 static void test_lock_contracts(void) {
-	static const int locks[] = {LOCK_SNMP, LOCK_ICMP, LOCK_GHBN, LOCK_POOL, LOCK_PHP,
+	static const int locks[] = {LOCK_SNMP, LOCK_ICMP, LOCK_GHBN, LOCK_PHP,
 		LOCK_PHP_PROC_0, LOCK_PHP_PROC_1, LOCK_PHP_PROC_2, LOCK_PHP_PROC_3,
 		LOCK_PHP_PROC_4, LOCK_PHP_PROC_5, LOCK_PHP_PROC_6, LOCK_PHP_PROC_7,
 		LOCK_PHP_PROC_8, LOCK_PHP_PROC_9, LOCK_PHP_PROC_10, LOCK_PHP_PROC_11,
-		LOCK_PHP_PROC_12, LOCK_PHP_PROC_13, LOCK_PHP_PROC_14, LOCK_THDET, LOCK_HOST_TIME};
-	static const char *const names[] = {"snmp", "icmp", "ghbn", "pool", "php",
+		LOCK_PHP_PROC_12, LOCK_PHP_PROC_13, LOCK_PHP_PROC_14, LOCK_THDET};
+	static const char *const names[] = {"snmp", "icmp", "ghbn", "php",
 		"php_proc_0", "php_proc_1", "php_proc_2", "php_proc_3", "php_proc_4",
 		"php_proc_5", "php_proc_6", "php_proc_7", "php_proc_8", "php_proc_9",
-		"php_proc_10", "php_proc_11", "php_proc_12", "php_proc_13", "php_proc_14", "thdet", "host_time"};
+		"php_proc_10", "php_proc_11", "php_proc_12", "php_proc_13", "php_proc_14", "thdet"};
 	init_mutexes();
 	init_mutexes(); /* pthread_once must preserve the already-created locks. */
 	for (size_t i = 0; i < sizeof(locks) / sizeof(locks[0]); i++) {
@@ -195,6 +190,7 @@ static void test_fatal_signal_contracts(void) {
 		const char *message;
 	} cases[] = {
 		{SIGINT, "Console Operator"},
+		{SIGTERM, "Termination Signal"},
 		{SIGSEGV, "Segmentation Fault"}, {SIGBUS, "Bus Error"},
 		{SIGFPE, "Floating Point Exception"}, {SIGQUIT, "Keyboard Quit"},
 		{SIGSYS, "Unhandled Exception"}, {SIGABRT, "Abort Signal"}};
@@ -214,8 +210,9 @@ static void test_fatal_signal_contracts(void) {
 			assert(signal(cases[i].signal, SIG_DFL) != SIG_ERR);
 			install_spine_signal_handler();
 			assert(raise(cases[i].signal) == 0);
-			/* A fatal signal must end the process once it is logged. */
-			_exit(0);
+			/* Operator termination hands off to an ordinary-context coordinator;
+			 * the existing alarm bounds the time to the final signal status. */
+			for (;;) pause();
 		}
 		close(diagnostic[1]);
 		char message[512] = {0};
@@ -259,6 +256,54 @@ static void test_fatal_signal_contracts(void) {
 	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
 
+static void test_startup_output_contracts(void) {
+	config_t previous = set;
+	char output[DBL_BUFSIZE];
+
+	set.logging.log_destination = LOGDEST_STDOUT;
+	set.poller.threads = 3;
+	for (int debug = 0; debug <= 1; debug++) {
+		set.logging.log_level = debug ? POLLER_VERBOSITY_DEBUG : POLLER_VERBOSITY_LOW;
+		for (int hidden = 0; hidden <= 1; hidden++) {
+			set.console.stdout_notty = hidden;
+			for (int remote = 0; remote <= 1; remote++) {
+				for (int secondary = 0; secondary <= 1; secondary++) {
+					FILE *capture = tmpfile();
+					int saved_stdout;
+					size_t count;
+
+					assert(capture != NULL && fflush(stdout) == 0);
+					saved_stdout = dup(STDOUT_FILENO);
+					assert(saved_stdout >= 0 && dup2(fileno(capture), STDOUT_FILENO) == STDOUT_FILENO);
+					set.poller.poller_id = secondary ? 2 : 1;
+					set.hosts.has_device_0 = secondary;
+					report_startup(remote ? REMOTE : LOCAL);
+					report_poll_statistics(0.0, 7);
+					assert(fflush(stdout) == 0 && dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+					assert(close(saved_stdout) == 0);
+					rewind(capture);
+					count = fread(output, 1, sizeof(output) - 1, capture);
+					assert(count < sizeof(output) - 1 && !ferror(capture));
+					output[count] = '\0';
+					assert(fclose(capture) == 0);
+					assert((strstr(output, "Version " VERSION " starting") != NULL) == (debug || !hidden));
+					assert((strstr(output, "Threads: 3, Devices: 7") != NULL) == (debug || !hidden));
+					assert((strstr(output, "Sending entries to ") != NULL) == (secondary && (debug || !hidden)));
+					if (secondary && (debug || !hidden)) {
+						assert(strstr(output, remote ? "remote database in 'online' mode" : "local database in 'offline', or 'recovery' mode") != NULL);
+					}
+					if (debug) {
+						assert(strstr(output, secondary ? "Device 0 Poller Items found." : "No Device 0 Poller Items found.") != NULL);
+						assert(strstr(output, mysql_thread_safe() ? "MySQL is Thread Safe!" : "MySQL is NOT Thread Safe!") != NULL);
+					}
+				}
+			}
+		}
+	}
+	set = previous;
+	puts("production startup and statistics output contracts passed");
+}
+
 void test_additional_contracts(void) {
 	test_keyword_roundtrips();
 	test_lock_contracts();
@@ -266,6 +311,7 @@ void test_additional_contracts(void) {
 	test_legacy_ip_predicate();
 	test_multipart_boundaries();
 	test_fatal_signal_contracts();
+	test_startup_output_contracts();
 	puts("production additional contracts passed");
 }
 

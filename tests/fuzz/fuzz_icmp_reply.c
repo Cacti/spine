@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* libFuzzer target for the two ICMP reply classifiers.
  *
  * This parses a raw ICMP datagram straight off a shared SOCK_RAW socket, so

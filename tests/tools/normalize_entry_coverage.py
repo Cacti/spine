@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Thomas Vincent
 # SPDX-License-Identifier: LGPL-2.1-only
 # Fork maintenance: Thomas Vincent. Project contributor history: CONTRIBUTORS.md.
-"""Supply LCOV's omitted zero totals only for a measured branchless main."""
+"""Verify measured main branches, supplying zeros only when proven branchless."""
 import argparse
 import json
 from pathlib import Path
@@ -21,8 +22,9 @@ def normalize(profile: str, report: dict, entry: Path) -> str:
             or functions[0]['execution_count'] <= 0):
         raise ValueError('Expected an executed main function')
     lines = measured['lines']
-    if not lines or any(line.get('branches') != [] for line in lines):
-        raise ValueError('Entry is not proven branchless by gcov -b')
+    if not lines or any('branches' not in line for line in lines):
+        raise ValueError('Entry lacks explicit branch evidence from gcov -b')
+    branches = [branch for line in lines for branch in line['branches']]
     records = profile.split('end_of_record')
     found = 0
     for index, record in enumerate(records):
@@ -30,6 +32,15 @@ def normalize(profile: str, report: dict, entry: Path) -> str:
         if f'SF:{entry}' not in fields:
             continue
         found += 1
+        if branches:
+            expected = [f'BRF:{len(branches)}',
+                        f'BRH:{sum(branch["count"] > 0 for branch in branches)}']
+            measured_totals = [line for line in fields if line.startswith(('BRF:', 'BRH:'))]
+            if sorted(measured_totals) != sorted(expected):
+                raise ValueError('LCOV totals disagree with measured entry branches')
+            if len([line for line in fields if line.startswith('BRDA:')]) != len(branches):
+                raise ValueError('LCOV lacks measured entry branch records')
+            continue
         if any(line.startswith('BRDA:') for line in fields):
             raise ValueError('LCOV contradicts branchless gcov evidence')
         totals = [line for line in fields if line.startswith(('BRF:', 'BRH:'))]

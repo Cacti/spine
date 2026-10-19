@@ -1,0 +1,179 @@
+name: Nightly
+
+# Slow dynamic checks that do not fit the pull request budget: every unit
+# test and the database and SNMP regressions from regressions.yml, run under
+# ThreadSanitizer, under ASan and UBSan repeatedly, and under Valgrind's
+# memcheck and helgrind.
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dynamic:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
+    name: ${{ matrix.tool }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tool: tsan
+            cc: clang
+            cflags: -fsanitize=thread -fno-omit-frame-pointer -g -O1
+            ldflags: -fsanitize=thread
+            valgrind: ""
+            database_mode: true
+            rounds: 5
+          # Repeating the live suite gives races and leaks that depend on
+          # timing more than one chance to show up. test_spine_regressions
+          # --database asserts that mallopt(M_PERTURB) succeeds, which the
+          # ASan allocator does not support, so that mode is left out here
+          # until the test skips the check under a sanitizer.
+          - tool: asan-soak
+            cc: clang
+            cflags: -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
+            ldflags: -fsanitize=address,undefined
+            valgrind: ""
+            database_mode: false
+            rounds: 20
+          - tool: memcheck
+            cc: gcc
+            cflags: -g -O0
+            ldflags: ""
+            valgrind: memcheck
+            database_mode: true
+            rounds: 1
+          - tool: helgrind
+            cc: gcc
+            cflags: -g -O0
+            ldflags: ""
+            valgrind: helgrind
+            database_mode: true
+            rounds: 1
+    services:
+      database:
+        image: mirror.gcr.io/library/mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "1"
+          MARIADB_DATABASE: spine_regressions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      CC: ${{ matrix.cc }}
+      VALGRIND_TOOL: ${{ matrix.valgrind }}
+      ROUNDS: ${{ matrix.rounds }}
+      DATABASE_MODE: ${{ matrix.database_mode }}
+      SPINE_TEST_DB_HOST: 127.0.0.1
+      SPINE_TEST_SNMP_HOST: 127.0.0.1
+      SPINE_TEST_SNMPV3_HOST: 127.0.0.1
+      TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:detect_stack_use_after_return=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/suppressions/lsan.supp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/build-spine
+        with:
+          mysql-client-package: libmariadb-dev
+          # llvm provides llvm-symbolizer, which LSan needs to match the
+          # function named in its suppression file.
+          extra-packages: clang llvm valgrind mariadb-client snmpd
+          cflags: ${{ matrix.cflags }}
+          ldflags: ${{ matrix.ldflags }}
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Verify expected test suites are enabled
+        run: |
+          set -euo pipefail
+          make --no-print-directory coverage-unit-program-list > nightly-suites.txt
+          printf '%s\n' test_spine_regressions test_spine_faults >> nightly-suites.txt
+
+      # Under Valgrind, test_linked's 20 ms reap budget is too short, and
+      # posix_spawn() cannot report a missing executable, which the PHP
+      # startup tests in the other two programs assert. Those three report
+      # SKIP, not PASS, when they fail without a Valgrind error.
+      - name: Run the unit tests
+        env:
+          SPINE_VALGRIND_INCOMPATIBLE: test_linked test_php_runtime test_spine_regressions
+        run: |
+          set -euo pipefail
+          if [ -n "$VALGRIND_TOOL" ]; then
+            make -j"$(nproc)" check LOG_COMPILER="$PWD/.github/scripts/valgrind-test.sh"
+          else
+            make -j"$(nproc)" check
+          fi
+
+      - name: Load the regression fixtures
+        run: |
+          set -euo pipefail
+          bash .github/scripts/verify-nightly-suites.sh nightly-suites.txt
+          for fixture in configuration poller; do
+            mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions \
+              < "tests/fixtures/$fixture.sql"
+          done
+
+      - name: Run the database and SNMP regressions
+        run: |
+          set -euo pipefail
+          wrap=()
+          if [ -n "$VALGRIND_TOOL" ]; then
+            wrap=(.github/scripts/valgrind-test.sh)
+          fi
+          agent_dir=$(mktemp -d)
+          cp tests/fixtures/snmpv3-users.conf "$agent_dir/snmpd.conf"
+          snmpd -f -Lo -C -c tests/fixtures/snmpd.conf > snmp-agent.log 2>&1 &
+          v2_agent=$!
+          SNMP_PERSISTENT_DIR="$agent_dir" snmpd -f -Lo -C \
+            -c "$agent_dir/snmpd.conf,tests/fixtures/snmpv3-agent.conf" \
+            > snmpv3-agent.log 2>&1 &
+          v3_agent=$!
+          trap 'kill "$v2_agent" "$v3_agent"; wait || true' EXIT
+          sleep 1
+          kill -0 "$v2_agent" "$v3_agent"
+          for round in $(seq "$ROUNDS"); do
+            echo "::group::round $round of $ROUNDS"
+            if [ "$DATABASE_MODE" = true ]; then
+              "${wrap[@]}" ./test_spine_regressions --database
+            fi
+            "${wrap[@]}" ./test_spine_regressions --snmp-agent
+            "${wrap[@]}" ./test_spine_regressions --snmpv3-agent
+            "${wrap[@]}" ./test_spine_faults --database
+            echo "::endgroup::"
+          done
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-${{ matrix.tool }}-logs
+          path: |
+            nightly-suites.txt
+            test-suite.log
+            tests/**/*.log
+            ./*.log
+          if-no-files-found: error

@@ -1,25 +1,14 @@
 /*
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU General Public License             |
- | as published by the Free Software Foundation; either version 2          |
- | of the License, or (at your option) any later version.                  |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU General Public License for more details.                            |
- +-------------------------------------------------------------------------+
- | Cacti: The Complete RRDtool-based Graphing Solution                     |
- +-------------------------------------------------------------------------+
- | This code is designed, written, and maintained by the Cacti Group. See  |
- | about.php and/or the AUTHORS file for specific developer information.   |
- +-------------------------------------------------------------------------+
- | http://www.cacti.net/                                                   |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-FileCopyrightText: 2002 Xenadyne, Inc.
+ * SPDX-License-Identifier: GPL-2.0-or-later AND LicenseRef-Xenadyne-Header
+ *
+ * This code is designed, written, and maintained by the Cacti Group. See
+ * CONTRIBUTORS.md for developer information.
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
 
 #ifndef SPINE_NFT_POPEN_H
 #define SPINE_NFT_POPEN_H
@@ -104,6 +93,16 @@ extern int nft_pchild(int fd);
 extern int nft_pclose(int fd);
 
 /*!
+ *  nft_pclose_deadline
+ *
+ *  nft_pclose() for a caller with a script deadline on the
+ *  spine_monotonic_time() clock. A child that closed its output but is still
+ *  working may finish until that deadline; it then gets SIGTERM and, after a
+ *  short grace, SIGKILL and the abandoned-pid sweep.
+ */
+extern int nft_pclose_deadline(int fd, double deadline);
+
+/*!
  *  spine_set_cloexec
  *
  *  Mark a descriptor close-on-exec.
@@ -146,6 +145,12 @@ extern int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
  *  exhausted.
  */
 extern int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
+/* Reaping and clearing the owned PID share the registry's mutex. */
+extern int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_mutex_t *mutex);
+/* Permanently stop spawning and kill registered external script groups.
+ * This function takes a mutex and must never run in a signal handler. */
+extern void nft_abort_children(void);
+extern int nft_abort_requested(void);
 
 /*!
  *  The cap on parked pids. Past it a child is logged and dropped, because an

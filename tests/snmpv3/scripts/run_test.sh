@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # SNMPv3 regression test suite.
 #
 # Tests USM notInTimeWindow recovery, snmp_count off-by-one, and host state

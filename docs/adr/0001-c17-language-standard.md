@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 ## Status
 
-Accepted
+Proposed for upstream review
 
 ## Date
 
@@ -48,7 +48,6 @@ The supported compiler floor is:
   only until 2029-05-31, so the floor serves packagers who still build there
   and is not a statement of CI coverage;
 - Clang 6 and Apple Clang;
-- MSVC 2019 16.8 (`/std:c17`), for the planned Windows port.
 
 These rules stay as they are:
 
@@ -56,7 +55,7 @@ These rules stay as they are:
   declarations follow statements; leave them until that code changes for
   another reason.
 - No variable-length arrays.
-- Threads use pthreads until libuv's thread API replaces them in Phase 4.
+- Threads use pthreads.
   Do not use `<threads.h>`.
 - No C23 features until the oldest supported distribution's compiler builds
   C23.

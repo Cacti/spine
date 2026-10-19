@@ -1,3 +1,9 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
 /* Drives the shipped poll_host() without a database or an SNMP agent.
  *
  * GNU ld --wrap replaces the database and SNMP calls that poller.o makes into
@@ -155,14 +161,15 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 	snprintf(output, (size_t) max_size, "%s", input);
 }
 
-pool_t *__wrap_db_get_connection(int type) {
-	(void) type;
-	return &fake_pool;
+bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
+	lease->type = type;
+	lease->connection = &fake_pool;
+	return TRUE;
 }
 
-void __wrap_db_release_connection(int type, int id) {
-	(void) type;
-	(void) id;
+bool __wrap_db_release_lease(db_lease_t *lease) {
+	lease->connection = NULL;
+	return TRUE;
 }
 
 void __wrap_db_free_result(MYSQL_RES *opaque) {
@@ -471,7 +478,11 @@ static void test_script_reindex_and_completion(void **state) {
 /* sysUpTimeInstance takes the engine time in ticks when both OIDs read, and
  * ignores an uptime that is not a whole non-negative number. */
 static void test_system_uptime(void **state) {
-	static const struct { const char *legacy; const char *engine; const char *stored; } cases[] = {
+	static const struct {
+		const char *legacy;
+		const char *engine;
+		const char *stored;
+	} cases[] = {
 		{"4200", "42", "snmp_sysUpTimeInstance='4200'"},
 		{"4200", "-1", "snmp_sysUpTimeInstance='4200'"},
 		{"-5", "42", "snmp_sysUpTimeInstance='0'"},

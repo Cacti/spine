@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #ifndef SPINE_CONSTANTS_H
 #define SPINE_CONSTANTS_H
@@ -180,7 +162,6 @@
 #define LOCK_SNMP 0
 #define LOCK_ICMP 2
 #define LOCK_GHBN 3
-#define LOCK_POOL 4
 #define LOCK_PHP 6
 #define LOCK_PHP_PROC_0 7
 #define LOCK_PHP_PROC_1 8
@@ -198,12 +179,10 @@
 #define LOCK_PHP_PROC_13 20
 #define LOCK_PHP_PROC_14 21
 #define LOCK_THDET 40
-#define LOCK_HOST_TIME 41
 
 #define LOCK_SNMP_O 0
 #define LOCK_ICMP_O 2
 #define LOCK_GHBN_O 3
-#define LOCK_POOL_O 4
 #define LOCK_PHP_O 6
 #define LOCK_PHP_PROC_0_O 7
 #define LOCK_PHP_PROC_1_O 8
@@ -221,7 +200,6 @@
 #define LOCK_PHP_PROC_13_O 20
 #define LOCK_PHP_PROC_14_O 21
 #define LOCK_THDET_O 40
-#define LOCK_HOST_TIME_O 41
 
 /* poller actions */
 #define POLLER_ACTION_SNMP 0

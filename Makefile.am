@@ -1,23 +1,11 @@
-# +-------------------------------------------------------------------------+
-# | Copyright (C) 2004-2026 The Cacti Group                                 |
-# |                                                                         |
-# | This program is free software; you can redistribute it and/or           |
-# | modify it under the terms of the GNU General Public License             |
-# | as published by the Free Software Foundation; either version 2          |
-# | of the License, or (at your option) any later version.                  |
-# |                                                                         |
-# | This program is distributed in the hope that it will be useful,         |
-# | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
-# | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
-# | GNU General Public License for more details.                            |
-# +-------------------------------------------------------------------------+
-# | Cacti: The Complete RRDtool-based Graphing Solution                     |
-# +-------------------------------------------------------------------------+
-# | This code is designed, written, and maintained by the Cacti Group. See  |
-# | about.php and/or the AUTHORS file for specific developer information.   |
-# +-------------------------------------------------------------------------+
-# | http://www.cacti.net/                                                   |
-# +-------------------------------------------------------------------------+
+# SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This code is designed, written, and maintained by the Cacti Group. See
+# CONTRIBUTORS.md for developer information.
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
@@ -33,10 +21,10 @@ spine_support_sources = src/app/buffer.c \
 	src/log/sanitize.c \
 	src/script/escape.c \
 	src/config/settings.c src/config/options.c src/config/file.c \
-	src/log/log.c src/poller/result.c \
+	src/log/log.c src/log/json.c src/poller/result.c \
 	src/platform/privileges.c src/poller/regex.c
 spine_database_sources = src/database/sql.c \
-	src/database/connection.c \
+	src/database/connection.c src/database/upsert.c src/database/tls.c src/database/lease.c \
 	src/database/pool.c src/database/transfer.c \
 	src/database/cacti_query.c src/database/persistence.c
 spine_snmp_sources = src/snmp/requests.c src/snmp/response.c \
@@ -51,11 +39,11 @@ spine_poller_sources = src/poller/poller.c \
 	src/script/external.c src/poller/host.c src/poller/reindex.c src/poller/items.c src/poller/system.c
 
 spine_php_sources = src/script/protocol.c src/script/read.c src/script/server.c
-spine_process_sources = src/process/nft_popen.c src/process/fd.c
+spine_process_sources = src/process/nft_popen.c src/process/fd.c src/process/resource.c
 
 spine_shared_sources = $(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) \
 	$(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) src/config/keywords.c src/app/signals.c
-spine_runtime_sources = $(spine_shared_sources) src/app/runtime.c src/app/cli.c src/app/startup.c src/poller/workers.c
+spine_runtime_sources = $(spine_shared_sources) src/platform/worker_set.c src/app/runtime.c src/app/cli.c src/app/startup.c src/poller/workers.c
 spine_SOURCES = $(spine_runtime_sources) src/app/main.c
 
 configdir = $(sysconfdir)
@@ -77,6 +65,10 @@ uninstall-hook:
 	fi
 
 bin_PROGRAMS = spine
+noinst_PROGRAMS = tests/support/resource_fixture
+noinst_PROGRAMS += tests/contracts/test_database_destinations
+tests_contracts_test_database_destinations_SOURCES = $(spine_runtime_sources) tests/contracts/test_database_destinations.c
+tests_support_resource_fixture_SOURCES = tests/support/resource_fixture.c
 
 man_MANS = docs/man/spine.1
 
@@ -84,6 +76,8 @@ check_PROGRAMS = test_spine_regressions
 dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
 TESTS = $(check_PROGRAMS)
 test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
+test_spine_regressions_SOURCES += tests/contracts/test_execution_policy.c
+test_spine_regressions_SOURCES += tests/contracts/test_spine_tls_contracts.c
 # Link the real production translation units and globals, with a separate test
 # entry point. Production and regression binaries share the runtime objects.
 
@@ -91,7 +85,10 @@ if HAVE_LINKER_WRAP
 check_PROGRAMS += test_spine_faults
 # Link the same runtime implementation with a separate fault-test entry point.
 test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
-test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
+test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
+ -Wl,--wrap=spine_json_log_record \
+ -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
+ -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
  -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
  -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
  -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
@@ -105,17 +102,23 @@ endif
 # Headers are not referenced by any _SOURCES, so automake will not distribute
 # them unless they are listed. Without this the release tarball builds nothing.
 noinst_HEADERS = src/internal/common.h src/app/signals.h src/config/keywords.h src/platform/locks.h \
+	src/process/resource.h \
 	src/process/nft_popen.h src/script/server.h src/ping/ping.h src/poller/poller.h \
 	src/snmp/snmp.h src/app/spine.h src/platform/spine_sem.h src/internal/spine_types.h \
 	src/database/sql.h vendor/uthash/uthash.h src/internal/util.h
+noinst_HEADERS += src/database/lease.h src/platform/worker_set.h
 
 EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
+	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
+	LICENSES/BSD-1-Clause.txt LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
 	tests/README.md \
 	tests/support/test-harness.sh \
 	tests/integration/test_concurrency.sh \
 	tests/integration/test_network_faults.sh
 
 EXTRA_DIST += tests/integration/test_memory_soak.sh
+EXTRA_DIST += tests/integration/test_destination_upserts.sh tests/snmpv3/docker-compose.policy.yml \
+	tests/snmpv3/Dockerfile.policy tests/snmpv3/Dockerfile.policy.dockerignore
 
 EXTRA_DIST += tests/tools/run_snmpv3.sh tests/tools/run_coverage.sh tests/tools/coverage_process_exit.h \
  tests/tools/verify_coverage.sh tests/tools/test_coverage_verifier.sh \
@@ -134,6 +137,25 @@ coverage-fault-source-list:
 # Production and linked tests share runtime objects. Report real object names.
 coverage-object-list:
 	@printf '%s\n' $(spine_OBJECTS) $(test_spine_regressions_OBJECTS) $(test_spine_faults_OBJECTS) | LC_ALL=C sort -u
+
+# The cmocka suites exercise shipped code, including socket/error paths via
+# syscall interception. Keep their measured producers separate from the
+# unmodified production-linked regression/fault producers above.
+.PHONY: coverage-unit-program-list coverage-unit-object-list
+coverage-unit-program-list:
+	@printf '%s\n' $(filter tests/unit/%,$(check_PROGRAMS))
+
+.PHONY: coverage-helper-program-list coverage-helper-object-list
+coverage-helper-program-list:
+	@printf '%s\n' tests/support/php_test_server$(EXEEXT) tests/support/resource_fixture$(EXEEXT)
+coverage-helper-object-list:
+	@printf '%s\n' $(tests_support_php_test_server_OBJECTS) $(tests_support_resource_fixture_OBJECTS)
+
+# spine_runtime.c contains only test globals and generates no executable
+# coverage profile. All production sources remain in coverage-object-list.
+coverage-unit-object-list:
+	@printf '%s\n' $(filter-out tests/support/spine_runtime.o tests/support/%-spine_runtime.o, \
+	 $(foreach program,$(filter tests/unit/%,$(check_PROGRAMS)),$($(subst /,_,$(program))_OBJECTS))) | LC_ALL=C sort -u
 # Docker targets — require Dockerfile and docker/dev.Dockerfile (from PR #401)
 .PHONY: docker docker-dev verify cppcheck
 
@@ -163,12 +185,18 @@ check_PROGRAMS += \
 	tests/unit/test_snmpv3_session \
 	tests/unit/test_ping_icmp \
 	tests/unit/test_ping_timing \
-	tests/unit/test_log_config
+	tests/unit/test_log_config \
+	tests/unit/test_resource_policy \
+	tests/unit/test_external_policy \
+	tests/unit/test_process_abort \
+	tests/unit/test_worker_set \
+	tests/unit/test_db_lease \
+	tests/unit/test_tls_policy
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
 # pipe, spawn, command, response, shutdown and reap paths.
-noinst_PROGRAMS = tests/support/php_test_server
+noinst_PROGRAMS += tests/support/php_test_server
 tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
 
 if HAVE_LD_WRAP
@@ -178,7 +206,7 @@ endif
 
 # test_util_strings pulls in common.h and the sources under test, so it needs
 # the same libraries spine links against.  The others are self-contained.
-tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c
+tests_unit_test_util_strings_SOURCES = tests/unit/test_util_strings.c src/log/json.c
 tests_unit_test_util_strings_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_build_fixes_SOURCES  = tests/unit/test_build_fixes.c
@@ -194,6 +222,15 @@ tests_unit_test_linked_SOURCES = tests/unit/test_linked.c tests/support/spine_ru
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_linked_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_process_abort_SOURCES = tests/unit/test_process_abort.c tests/support/spine_runtime.c src/poller/workers.c src/platform/worker_set.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_process_abort_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_process_abort_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_LD_WRAP
+tests_unit_test_process_abort_CPPFLAGS += -DSPINE_TEST_ABORT_FAULTS
+tests_unit_test_process_abort_LDFLAGS = -Wl,--wrap=pipe -Wl,--wrap=fcntl -Wl,--wrap=pthread_create -Wl,--wrap=read -Wl,--wrap=__read_chk -Wl,--wrap=write -Wl,--wrap=raise -Wl,--wrap=pthread_kill -Wl,--wrap=usleep -Wl,--wrap=spine_worker_set_reap
+endif
 
 # waitpid() failing with anything other than ECHILD/EINTR has no reachable
 # real-syscall trigger (WNOHANG is always a valid options value), so covering
@@ -216,8 +253,17 @@ tests_unit_test_classify_result_SOURCES = tests/unit/test_classify_result.c test
 tests_unit_test_classify_result_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
 # Includes production helpers, so it needs the same libraries as Spine
-tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c
+tests_unit_test_util_paths_SOURCES = tests/unit/test_util_paths.c src/log/json.c
 tests_unit_test_util_paths_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_resource_policy_SOURCES = tests/unit/test_resource_policy.c
+tests_unit_test_resource_policy_LDADD = $(CMOCKA_LIBS)
+tests_unit_test_external_policy_SOURCES = tests/unit/test_external_policy.c tests/support/spine_runtime.c \
+	src/database/sql.c src/database/connection.c src/database/upsert.c src/database/tls.c src/database/lease.c src/database/pool.c \
+	src/database/transfer.c src/database/cacti_query.c $(spine_support_sources) $(spine_snmp_sources) \
+	src/platform/locks.c src/poller/poller.c src/poller/host.c src/poller/reindex.c \
+	src/poller/items.c src/poller/system.c $(spine_process_sources) $(spine_php_sources) \
+	$(spine_ping_sources) src/config/keywords.c src/app/signals.c
+tests_unit_test_external_policy_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
@@ -237,7 +283,7 @@ tests_unit_test_poll_host_SOURCES = tests/unit/test_poll_host.c tests/support/sp
 tests_unit_test_poll_host_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_query -Wl,--wrap=db_insert -Wl,--wrap=db_escape \
-	-Wl,--wrap=db_get_connection -Wl,--wrap=db_release_connection \
+	-Wl,--wrap=db_acquire_lease -Wl,--wrap=db_release_lease \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
@@ -254,6 +300,26 @@ tests_unit_test_log_config_SOURCES = tests/unit/test_log_config.c tests/support/
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_log_config_LDADD   = $(CMOCKA_LIBS) $(LIBS)
 
+tests_unit_test_worker_set_SOURCES = tests/unit/test_worker_set.c src/platform/worker_set.c
+tests_unit_test_worker_set_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_worker_set_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_LINKER_WRAP
+tests_unit_test_worker_set_CPPFLAGS += -DSPINE_WORKER_TEST_WRAP
+tests_unit_test_worker_set_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init \
+	-Wl,--wrap=pthread_mutex_destroy -Wl,--wrap=pthread_create -Wl,--wrap=pthread_join \
+	-Wl,--wrap=pthread_attr_getdetachstate
+endif
+
+tests_unit_test_db_lease_SOURCES = tests/unit/test_db_lease.c src/database/lease.c
+tests_unit_test_db_lease_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_db_lease_CPPFLAGS = $(AM_CPPFLAGS)
+tests_unit_test_tls_policy_SOURCES = tests/unit/test_tls_policy.c
+tests_unit_test_tls_policy_LDADD = $(CMOCKA_LIBS) $(LIBS)
+if HAVE_LINKER_WRAP
+tests_unit_test_db_lease_CPPFLAGS += -DSPINE_LEASE_TEST_WRAP
+tests_unit_test_db_lease_LDFLAGS = -Wl,--wrap=calloc -Wl,--wrap=pthread_mutex_init -Wl,--wrap=pthread_mutex_destroy
+endif
+
 tests_unit_test_php_runtime_SOURCES = tests/unit/test_php_runtime.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
@@ -269,9 +335,9 @@ tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
-TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
+TESTS += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh tests/regression/test_script_child_setuid.sh
 TESTS_ENVIRONMENT = top_builddir='$(abs_top_builddir)'
-EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh
+EXTRA_DIST += tests/regression/test_remote_push.sh tests/integration/test_alloc_failure.sh tests/regression/test_child_process_safety.sh tests/regression/test_setuid_privilege_drop.sh tests/regression/test_script_child_setuid.sh
 
 EXTRA_DIST += tests/fixtures/c17_develop_behavior_baseline.json
 
@@ -311,7 +377,66 @@ noinst_HEADERS += src/app/buffer.h \
 
 noinst_HEADERS += src/database/cacti_query.h src/database/persistence.h
 
+EXTRA_DIST += tests/tools/test_configure_contracts.sh
+EXTRA_DIST += tests/tools/test_clang_tidy_gate.py
+
 EXTRA_DIST += scripts/cppcheck/spine.cfg
+TESTS += tests/tools/test_nightly_suites.sh
+EXTRA_DIST += tests/tools/test_nightly_suites.sh .github/scripts/verify-nightly-suites.sh
+EXTRA_DIST += tests/tools/verify_changed_coverage.py tests/tools/test_changed_coverage.py
+
+EXTRA_DIST += tests/tools/test_json_encoder.py
+
+EXTRA_DIST += tests/tools/run_database_tls.sh tests/tools/ownership-coverage-sources.txt
+EXTRA_DIST += tests/tools/verify_pr_stack.py tests/tools/test_pr_stack.py
+# Git-based review tooling has its own required CI job; release builds and
+# platform regression lanes do not require the review tool's Git 2.38 floor.
+EXTRA_DIST += tests/tools/test_pr_stack.sh docs/operations/pr-stack.md docs/operations/resource-ownership.md
+
+EXTRA_DIST += tests/tools/benchmark_builds.py \
+	tests/tools/build_benchmark_pair.sh \
+	tests/tools/test_benchmark_record.py \
+	tests/tools/verify_benchmark_record.py \
+	docs/benchmarks/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/README.md \
+	docs/benchmarks/results/2026-10-11-default-logging/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-default-logging/compiler.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/cycles.csv \
+	docs/benchmarks/results/2026-10-11-default-logging/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/metadata.json \
+	docs/benchmarks/results/2026-10-11-default-logging/revisions.txt \
+	docs/benchmarks/results/2026-10-11-default-logging/summary.json
+
+EXTRA_DIST += docs/benchmarks/results/2026-10-11-recovered-runtime/README.md \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/baseline-binary.sha256 \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/baseline-revision.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/candidate-binary.sha256 \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/candidate-revision.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/compiler.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/cycles.csv \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/metadata.json \
+	docs/benchmarks/results/2026-10-11-recovered-runtime/summary.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/README.md \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/build-settings.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/builds.sha256 \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/compiler.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cpu-quota.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/cycles.csv \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/dependencies.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/metadata.json \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/revisions.txt \
+	docs/benchmarks/results/2026-10-11-runtime-ownership/summary.json
+
+EXTRA_DIST += docs/adr/0004-formatting-and-json-dependencies.md \
+	docs/operations/database-tls.md \
+	docs/operations/issue-boundaries.md
+EXTRA_DIST += docs/platforms.md
 
 TESTS += tests/tools/test_memory_soak_fit.sh
 EXTRA_DIST += tests/tools/test_memory_soak_fit.sh tests/tools/memory_soak_fit.awk
+TESTS += tests/tools/test_licensing.sh
+EXTRA_DIST += tests/tools/test_licensing.sh tests/tools/check_licensing.py

@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Structural guard for the child process hardening.
 #
 # The behaviour is covered by tests/unit/test_linked.c, which opens a pipe and
@@ -99,12 +103,17 @@ php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}
 printf '%s\n' "$php_init_body" | grep -q 'php_read_result(slot, command, FALSE)' ||
 	fail "php_init() must read the startup handshake with restarts disabled"
 
+# The initial PHP_INIT handshake uses the full script timeout through
+# php_read_response(); it must still pass allow_restart as FALSE.
+printf '%s\n' "$php_init_body" | grep -q 'php_read_response(slot, command, FALSE, ' ||
+	fail "php_init() must read the initial handshake with restarts disabled"
+
 printf '%s\n' "$php_init_body" | grep -q 'php_readpipe(' &&
 	fail "php_init() must not call php_readpipe(), which may restart the server"
 
-awk '/^char \*php_read_result/,/^\}/' src/script/read.c |
+awk '/^char \*php_read_response/,/^\}/' src/script/read.c |
 	grep -q 'php_fail_read(php_process, allow_restart)' ||
-	fail "php_read_result() must route failures through the guarded restart helper"
+	fail "php_read_response() must route failures through the guarded restart helper"
 
 awk '/^void php_fail_read/,/^\}/' src/script/protocol.c |
 	grep -q 'if (allow_restart) {' ||

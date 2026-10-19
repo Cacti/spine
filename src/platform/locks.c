@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	   |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -52,7 +34,6 @@
 DEFINE_SPINE_LOCK(snmp)
 DEFINE_SPINE_LOCK(icmp)
 DEFINE_SPINE_LOCK(ghbn)
-DEFINE_SPINE_LOCK(pool)
 DEFINE_SPINE_LOCK(php)
 DEFINE_SPINE_LOCK(php_proc_0)
 DEFINE_SPINE_LOCK(php_proc_1)
@@ -70,13 +51,11 @@ DEFINE_SPINE_LOCK(php_proc_12)
 DEFINE_SPINE_LOCK(php_proc_13)
 DEFINE_SPINE_LOCK(php_proc_14)
 DEFINE_SPINE_LOCK(thdet)
-DEFINE_SPINE_LOCK(host_time)
 
 void init_mutexes(void) {
 	pthread_once(get_attr(LOCK_SNMP_O), init_snmp_lock);
 	pthread_once(get_attr(LOCK_ICMP_O), init_icmp_lock);
 	pthread_once(get_attr(LOCK_GHBN_O), init_ghbn_lock);
-	pthread_once(get_attr(LOCK_POOL_O), init_pool_lock);
 	pthread_once(get_attr(LOCK_PHP_O), init_php_lock);
 	pthread_once(get_attr(LOCK_PHP_PROC_0_O), init_php_proc_0_lock);
 	pthread_once(get_attr(LOCK_PHP_PROC_1_O), init_php_proc_1_lock);
@@ -94,7 +73,6 @@ void init_mutexes(void) {
 	pthread_once(get_attr(LOCK_PHP_PROC_13_O), init_php_proc_13_lock);
 	pthread_once(get_attr(LOCK_PHP_PROC_14_O), init_php_proc_14_lock);
 	pthread_once(get_attr(LOCK_THDET_O), init_thdet_lock);
-	pthread_once(get_attr(LOCK_HOST_TIME_O), init_host_time_lock);
 }
 
 const char *get_name(int lock) {
@@ -102,7 +80,6 @@ const char *get_name(int lock) {
 		case LOCK_SNMP: return "snmp";
 		case LOCK_ICMP: return "icmp";
 		case LOCK_GHBN: return "ghbn";
-		case LOCK_POOL: return "pool";
 		case LOCK_PHP: return "php";
 		case LOCK_PHP_PROC_0: return "php_proc_0";
 		case LOCK_PHP_PROC_1: return "php_proc_1";
@@ -120,7 +97,6 @@ const char *get_name(int lock) {
 		case LOCK_PHP_PROC_13: return "php_proc_13";
 		case LOCK_PHP_PROC_14: return "php_proc_14";
 		case LOCK_THDET: return "thdet";
-		case LOCK_HOST_TIME: return "host_time";
 		default: return "Unknown lock";
 	}
 }
@@ -132,7 +108,6 @@ pthread_cond_t *get_cond(int lock) {
 		case LOCK_SNMP: ret_val = &snmp_cond; break;
 		case LOCK_ICMP: ret_val = &icmp_cond; break;
 		case LOCK_GHBN: ret_val = &ghbn_cond; break;
-		case LOCK_POOL: ret_val = &pool_cond; break;
 		case LOCK_PHP: ret_val = &php_cond; break;
 		case LOCK_PHP_PROC_0: ret_val = &php_proc_0_cond; break;
 		case LOCK_PHP_PROC_1: ret_val = &php_proc_1_cond; break;
@@ -150,7 +125,6 @@ pthread_cond_t *get_cond(int lock) {
 		case LOCK_PHP_PROC_13: ret_val = &php_proc_13_cond; break;
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_cond; break;
 		case LOCK_THDET: ret_val = &thdet_cond; break;
-		case LOCK_HOST_TIME: ret_val = &host_time_cond; break;
 		default: break;
 	}
 
@@ -166,7 +140,6 @@ pthread_mutex_t *get_lock(int lock) {
 		case LOCK_SNMP: ret_val = &snmp_lock; break;
 		case LOCK_ICMP: ret_val = &icmp_lock; break;
 		case LOCK_GHBN: ret_val = &ghbn_lock; break;
-		case LOCK_POOL: ret_val = &pool_lock; break;
 		case LOCK_PHP: ret_val = &php_lock; break;
 		case LOCK_PHP_PROC_0: ret_val = &php_proc_0_lock; break;
 		case LOCK_PHP_PROC_1: ret_val = &php_proc_1_lock; break;
@@ -184,7 +157,6 @@ pthread_mutex_t *get_lock(int lock) {
 		case LOCK_PHP_PROC_13: ret_val = &php_proc_13_lock; break;
 		case LOCK_PHP_PROC_14: ret_val = &php_proc_14_lock; break;
 		case LOCK_THDET: ret_val = &thdet_lock; break;
-		case LOCK_HOST_TIME: ret_val = &host_time_lock; break;
 		default: break;
 	}
 
@@ -200,7 +172,6 @@ pthread_once_t *get_attr(int locko) {
 		case LOCK_SNMP_O: ret_val = &snmp_lock_o; break;
 		case LOCK_ICMP_O: ret_val = &icmp_lock_o; break;
 		case LOCK_GHBN_O: ret_val = &ghbn_lock_o; break;
-		case LOCK_POOL_O: ret_val = &pool_lock_o; break;
 		case LOCK_PHP_O: ret_val = &php_lock_o; break;
 		case LOCK_PHP_PROC_0_O: ret_val = &php_proc_0_lock_o; break;
 		case LOCK_PHP_PROC_1_O: ret_val = &php_proc_1_lock_o; break;
@@ -218,7 +189,6 @@ pthread_once_t *get_attr(int locko) {
 		case LOCK_PHP_PROC_13_O: ret_val = &php_proc_13_lock_o; break;
 		case LOCK_PHP_PROC_14_O: ret_val = &php_proc_14_lock_o; break;
 		case LOCK_THDET_O: ret_val = &thdet_lock_o; break;
-		case LOCK_HOST_TIME_O: ret_val = &host_time_lock_o; break;
 		default: break;
 	}
 

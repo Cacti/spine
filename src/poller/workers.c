@@ -1,99 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * COMMAND-LINE PARAMETERS
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
  *
- * -h | --help
- * -v | --version
- *
- *	Show a brief help listing, then exit.
- *
- * -C | --conf=F
- *
- *	Provide the name of the Spine configuration file, which contains
- *	the parameters for connecting to the database. In the absence of
- *	this, it searches in order: the current directory, /etc/,
- *	/etc/cacti/, and ../etc/ for a file named spine.conf.
- *
- * -f | --first=ID
- *
- *	Start polling with device <ID> (else starts at the beginning)
- *
- * -l | --last=ID
- *
- *	Stop polling after device <ID> (else ends with the last one)
- *
- * -m | --mibs
- *
- *	Collect all system mibs this pass
- *
- * -N | --mode=online|offline|recovery
- *
- *	For remote pollers, the polling mode.  The default is 'online'
- *
- * -H | --hostlist="hostid1,hostid2,hostid3,...,hostidn"
- *
- *	Override the expected first host, last host behavior with a list of hostids.
- *
- * -O | --option=setting:value
- *
- *	Override a DB-provided value from the settings table in the DB.
- *
- * -C | -conf=FILE
- *
- *	Specify the location of the Spine configuration file.
- *
- * -R | --readonly
- *
- *	This processing is readonly with respect to the database: it's
- *	meant only for developer testing.
- *
- * -S | --stdout
- *
- *	All logging goes to the standard output
- *
- * -V | --verbosity=V
- *
- * Set the debug logging verbosity to <V>. Can be 1..5 or
- *	NONE/LOW/MEDIUM/HIGH/DEBUG (case insensitive).
- *
- * The First/Last device IDs are all relative to the "hosts" table in the
- * Cacti database, and this mechanism allows us to split up the polling
- * duties across multiple "spine" instances: each one gets a subset of
- * the polling range.
- *
- * For compatibility with poller.php, we also accept the first and last
- * device IDs as standalone parameters on the command line.
-*/
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -209,7 +127,7 @@ static void prepare_device_partition(MYSQL *mysql, int host_id, int current_thre
 }
 
 static bool start_poll_worker(const poller_thread_t *device, int current_thread, spine_permits_t *startup,
-	const pthread_attr_t *attributes, pthread_t *thread) {
+	const pthread_attr_t *attributes, spine_worker_set_t *workers) {
 	if (!acquire_worker_permits(startup, device->host_id, current_thread)) {
 		thread_mutex_lock(LOCK_THDET);
 		set.exit.exit_code = EXIT_FAILURE;
@@ -224,11 +142,11 @@ static bool start_poll_worker(const poller_thread_t *device, int current_thread,
 	worker->host_thread = current_thread;
 	int status;
 	do {
-		status = pthread_create(thread, attributes, child, worker);
+		status = spine_worker_set_start(workers, attributes, child, worker);
 		if (status == EAGAIN) spine_sleep_usec(10000);
 	} while (status == EAGAIN && get_time_as_double() - start_time < set.poller.poller_interval);
 	if (status == 0) {
-		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Valid Thread to be Created (%ld)", device->host_id, (unsigned long int) *thread));
+		SPINE_LOG_DEBUG(("Device[%i] DEBUG: Polling worker created", device->host_id));
 		return TRUE;
 	}
 	SPINE_LOG(("ERROR: Device[%i] HT[%i] unable to create polling thread (error %d)", device->host_id, current_thread, status));
@@ -252,23 +170,42 @@ static void report_worker_launch(const poller_thread_t *device, int device_count
 	thread_mutex_unlock(LOCK_THDET);
 }
 
-int wait_for_workers(double begin_time) {
+int wait_for_workers(double begin_time, spine_worker_set_t *workers) {
 	int a_threads_value;
 	double cur_time;
+	size_t remaining;
 	a_threads_value = spine_permits_available(&available_threads);
 
 	/* wait for all threads to 'complete'
 	 * using the mutex here as the semaphore will
      * show zero before the children are done */
-	while (a_threads_value < set.poller.threads) {
+	for (;;) {
+		int error = spine_worker_set_reap(workers, &remaining);
+		if (error != 0) {
+			set.exit.exit_code = EXIT_FAILURE;
+			die("ERROR: Unable to join polling workers (error %i)", error);
+		}
+		if (remaining == 0 && a_threads_value == set.poller.threads) break;
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller.poller_interval) {
+			int attempt;
 			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.poller.threads - a_threads_value));
-			/* Active workers still own pool entries and completion state. Exit the
-			 * process before normal cleanup can invalidate those borrowed objects. */
+			/* Killing external scripts lets their owners finish and be joined.
+			 * Retain all shared state during this bounded grace period. */
 			set.exit.exit_code = EXIT_FAILURE;
-			die("ERROR: Polling deadline expired with active workers; polling is incomplete");
+			nft_abort_children();
+			for (attempt = 0; attempt < 25; attempt++) {
+				error = spine_worker_set_reap(workers, &remaining);
+				if (error != 0) break;
+				if (remaining == 0) die("ERROR: Polling deadline expired; stopped workers were joined and polling is incomplete");
+				spine_sleep_usec(10000);
+			}
+			/* A remaining owner may be blocked on a lock or non-script I/O.
+			 * Do not run exit callbacks or normal shared-state teardown while
+			 * it can still access that state. Terminate the whole process. */
+			fputs("ERROR: Polling deadline expired with active workers; polling is incomplete\n", stderr);
+			_exit(EXIT_FAILURE);
 		}
 
 		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.poller.threads - a_threads_value));
@@ -323,7 +260,7 @@ void report_worker_completion(int num_rows) {
 }
 
 void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
-	pthread_t *threads, spine_permits_t *thread_init_sem,
+	spine_worker_set_t *workers, spine_permits_t *thread_init_sem,
 	const pthread_attr_t *attr, char *host_time) {
 	poller_partition_t partition = {.timestamp = host_time};
 	poller_thread_t *poller_details = NULL;
@@ -410,7 +347,7 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 		}
 
 
-		if (start_poll_worker(poller_details, current_thread, thread_init_sem, attr, &threads[device_counter])) {
+		if (start_poll_worker(poller_details, current_thread, thread_init_sem, attr, workers)) {
 			if (change_host) device_counter++;
 			report_worker_launch(poller_details, device_counter);
 		} else {
@@ -420,9 +357,8 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 }
 
 void prepare_worker_storage(MYSQL_RES *result, int *rows,
-	pthread_t **worker_threads, int **host_ids, char **timestamp) {
+	int **host_ids, char **timestamp) {
 	int num_rows;
-	pthread_t *threads = NULL;
 	int *ids = NULL;
 	char *host_time = NULL;
 	if (set.poller.poller_id == 1) {
@@ -436,10 +372,6 @@ void prepare_worker_storage(MYSQL_RES *result, int *rows,
 	}
 
 	if (num_rows > 0) {
-		if (!(threads = malloc(num_rows * sizeof(*threads)))) {
-			die("ERROR: Fatal malloc error: spine.c threads!");
-		}
-
 		if (!(details = (poller_thread_t **) calloc((size_t) num_rows, sizeof(poller_thread_t *)))) {
 			die("ERROR: Fatal malloc error: spine.c details!");
 		}
@@ -457,12 +389,11 @@ void prepare_worker_storage(MYSQL_RES *result, int *rows,
 
 
 	*rows = num_rows;
-	*worker_threads = threads;
 	*host_ids = ids;
 	*timestamp = host_time;
 }
 
-void free_worker_storage(int num_rows, pthread_t *threads, int *ids,
+void free_worker_storage(int num_rows, int *ids,
 	char *conf_file, char *host_time) {
 	/* free malloc'd variables */
 	for (int i = 0; i < num_rows; i++) {
@@ -472,7 +403,6 @@ void free_worker_storage(int num_rows, pthread_t *threads, int *ids,
 	}
 
 	SPINE_FREE(details);
-	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);
 	SPINE_FREE(debug_devices);

@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -50,6 +32,11 @@ void die(const char *format, ...) {
 	char logmessage[BUFSIZE];
 	char flogmessage[DBL_BUFSIZE];
 	int old_errno = errno;
+	int exit_code;
+
+	/* A fatal error can originate in any worker. Stop every registered script,
+	 * including groups another worker is closing, before logging or exiting. */
+	nft_abort_children();
 
 	va_start(args, format);
 	vsnprintf(logmessage, sizeof(logmessage), format, args);
@@ -79,7 +66,8 @@ void die(const char *format, ...) {
 		php_close(PHP_INIT);
 	}
 
-	exit(set.exit.exit_code == EXIT_SUCCESS ? EXIT_FAILURE : set.exit.exit_code);
+	exit_code = atomic_load_explicit(&set.exit.exit_code, memory_order_relaxed);
+	exit(exit_code == EXIT_SUCCESS ? EXIT_FAILURE : exit_code);
 }
 
 /* The log timestamp format depends only on two settings read once in
@@ -177,12 +165,15 @@ static bool log_to_file(const char *message) {
 	 * creates missing files without a stat/open race that can truncate them. */
 	static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 	static bool reported_error = FALSE;
-	if (pthread_mutex_lock(&mutex) != 0) return FALSE;
+	int oldstate;
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	if (pthread_mutex_lock(&mutex) != 0) {
+		pthread_setcancelstate(oldstate, NULL);
+		return FALSE;
+	}
 	/* O_APPEND selects the end atomically and one write() keeps another
 	 * process sharing the log from splicing into a record. Reopening per
 	 * message preserves log rotation. */
-	int oldstate;
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
 	int fd = open(set.logging.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0640);
 	bool success = FALSE;
 	if (fd >= 0) {
@@ -191,12 +182,12 @@ static bool log_to_file(const char *message) {
 		success = written >= 0 && (size_t) written == length;
 		if (close(fd) != 0) success = FALSE;
 	}
-	pthread_setcancelstate(oldstate, NULL);
 	if (!success && !reported_error) {
-		printf("ERROR: Spine Log File Could Not Be Opened/Created or Written\n");
+		printf("%s", set.logging.json_logs ? "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"Log file write failed\"}\n" : "ERROR: Spine Log File Could Not Be Opened/Created or Written\n");
 		reported_error = TRUE;
 	}
-	if (pthread_mutex_unlock(&mutex) != 0) return FALSE;
+	if (pthread_mutex_unlock(&mutex) != 0) success = FALSE;
+	pthread_setcancelstate(oldstate, NULL);
 	return success;
 }
 
@@ -204,9 +195,12 @@ static bool log_to_file(const char *message) {
  * stack.  Each thread takes its buffers from the heap on its first message
  * and keeps them until it exits; if that allocation fails the record is
  * still written, cut to BUFSIZE. */
+#define JSON_LOG_CAPACITY ((size_t) LOGSIZE + 256)
+
 typedef struct {
 	char message[LOGSIZE];
 	char formatted[LOGSIZE];
+	char json[JSON_LOG_CAPACITY];
 } log_buffers_t;
 
 static pthread_key_t log_buffers_key;
@@ -230,9 +224,46 @@ static log_buffers_t *log_buffers(void) {
 	return buffers;
 }
 
+/* Every message byte encodes to at most six output bytes (\u00XX); a message
+ * too long for the buffer is cut, as the text path cuts at LOGSIZE. */
+static int log_json_message(char *message, char *record_buffer, size_t record_capacity) {
+	static const char failure[] = "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: formatting failure\"}\n";
+	const char *severity = strstr(message, "FATAL") ? "FATAL" : strstr(message, "ERROR") ? "ERROR"
+		: strstr(message, "WARNING")                                                     ? "WARNING"
+																						 : "INFO";
+	char timestamp[32] = "unknown";
+	struct tm utc;
+	time_t now = time(NULL);
+	size_t limit = (record_capacity - 256) / 6;
+	const char *record = failure;
+	bool valid;
+	bool success;
+
+	valid = gmtime_r(&now, &utc) != NULL &&
+		strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc) != 0;
+	if (strlen(message) > limit) message[limit] = '\0';
+	if (spine_json_log_record(record_buffer, record_capacity, timestamp, severity, message)) {
+		record = record_buffer;
+	} else {
+		valid = FALSE;
+	}
+	success = valid;
+	if (IS_LOGGING_TO_STDOUT()) {
+		if (printf("%s", record) < 0) success = FALSE;
+	} else {
+		FILE *stream = strcmp(severity, "INFO") == 0 && valid ? stdout : log_error_stream();
+		log_to_syslog(record);
+		if (!log_to_file(record)) success = FALSE;
+		if (set.logging.log_level >= POLLER_VERBOSITY_NONE && log_stream_available(stream) &&
+			fprintf(stream, "%s", record) < 0) success = FALSE;
+	}
+	return success;
+}
+
 int spine_log(const char *format, ...) {
 	char fallback_message[BUFSIZE];
 	char fallback_formatted[BUFSIZE];
+	char fallback_json[(size_t) BUFSIZE + 256];
 	log_buffers_t *buffers = log_buffers();
 	char *message = buffers != NULL ? buffers->message : fallback_message;
 	char *formatted = buffers != NULL ? buffers->formatted : fallback_formatted;
@@ -241,6 +272,10 @@ int spine_log(const char *format, ...) {
 	va_start(args, format);
 	vsnprintf(message, capacity - 1, format, args);
 	va_end(args);
+	if (set.logging.json_logs) {
+		return buffers != NULL ? log_json_message(message, buffers->json, sizeof(buffers->json))
+							   : log_json_message(message, fallback_json, sizeof(fallback_json));
+	}
 	spine_sanitize_log_message(message);
 	if (IS_LOGGING_TO_STDOUT()) {
 		return printf("Total[%3.4f] %s\n", get_time_as_double() - start_time, message) < 0 ? FALSE : TRUE;

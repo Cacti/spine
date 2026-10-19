@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -203,15 +185,16 @@ char *getsetting(MYSQL *psql, int mode, const char *setting) {
 			}
 		}
 
-		return strdup("");
+		/* Absent is not empty: callers fall back to their defaults on NULL. */
+		return NULL;
 	}
 
 	spine_snprintf(qstring, sizeof(qstring), "SELECT SQL_NO_CACHE value FROM settings WHERE name = '%s'", setting);
 
 	result = config_query(psql, mode, qstring);
-	if (result == NULL) return strdup("");
+	if (result == NULL) return NULL;
 	mysql_row = mysql_num_rows(result) > 0 ? mysql_fetch_row(result) : NULL;
-	retval = mysql_row != NULL && mysql_row[0] != NULL ? strdup(mysql_row[0]) : strdup("");
+	retval = mysql_row != NULL ? strdup(mysql_row[0] != NULL ? mysql_row[0] : "") : NULL;
 	db_free_result(result);
 	return retval;
 }
@@ -227,27 +210,17 @@ char *getsetting(MYSQL *psql, int mode, const char *setting) {
  */
 int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue) {
 	char qstring[BUFSIZE];
-	int result = 0;
+	char suffix[BUFSIZE];
+	static const char *const columns[] = {"value"};
 
 	assert(psql != 0);
 	assert(mysetting != 0);
 	assert(myvalue != 0);
-
-	if (set.database.onupdate == 0) {
-		spine_snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
-												 "VALUES ('%s', '%s') "
-												 "ON DUPLICATE KEY UPDATE value = VALUES(value)",
-			mysetting, myvalue);
-	} else {
-		spine_snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
-												 "VALUES ('%s', '%s') AS rs "
-												 "ON DUPLICATE KEY UPDATE value = rs.value",
-			mysetting, myvalue);
-	}
-
-	result = db_insert(psql, mode, qstring);
-
-	return result;
+	if (!db_upsert_suffix(psql, suffix, sizeof(suffix), columns, 1)) return FALSE;
+	spine_snprintf(qstring, sizeof(qstring), "INSERT INTO settings (name, value) "
+											 "VALUES ('%s', '%s')%s",
+		mysetting, myvalue, suffix);
+	return db_insert(psql, mode, qstring);
 }
 
 /*! \fn static char *getpsetting(MYSQL *psql, const char *setting)

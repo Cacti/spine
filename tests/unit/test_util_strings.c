@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -43,7 +50,9 @@ int ping_icmp_shared_available(void) { return 0; }
 #include "../../src/config/settings.c"
 #include "../../src/config/options.c"
 #include "../../src/config/file.c"
+#include "../../src/database/upsert.c"
 #include "../../src/database/transfer.c"
+void nft_abort_children(void) {}
 #include "../../src/log/log.c"
 #include "../../src/poller/result.c"
 #include "../../src/config/validate.c"

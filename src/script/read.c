@@ -1,35 +1,17 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	   |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
 #include "internal/common.h"
 #include "app/spine.h"
@@ -38,8 +20,8 @@
 #include <spawn.h>
 #include <sys/wait.h>
 
-/*! \fn static char *php_read_result(int php_process, const char *command, int allow_restart)
- *  \brief reads one script server response.
+/*! \fn char *php_read_response(int php_process, const char *command, int allow_restart, int response_timeout)
+ *  \brief reads one script server response within response_timeout seconds.
  *
  *  allow_restart is FALSE for the startup handshake. php_init() calls this to
  *  confirm the server it just spawned is answering, and a restart from inside
@@ -48,14 +30,13 @@
  *  recursion, spawning a fresh server at every level. Refusing the restart on
  *  the handshake bounds the depth at one by construction.
  */
-char *php_read_result(int php_process, const char *command, int allow_restart) {
+char *php_read_response(int php_process, const char *command, int allow_restart, int response_timeout) {
 	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
 	double remaining_usec = 0;
 	char *result_string;
-	int response_timeout;
 	double read_deadline;
 	char script[SMALL_BUFSIZE];
 
@@ -79,10 +60,6 @@ char *php_read_result(int php_process, const char *command, int allow_restart) {
 	begin_time = get_time_as_double();
 
 	/* establish timeout value for the PHP script server to respond */
-	/* Selection-path recovery runs this handshake while holding the slot lock.
-	 * Bound startup independently so a bad PHP configuration cannot pin every
-	 * selector for the full per-command timeout. */
-	response_timeout = allow_restart || set.php.script_timeout < 2 ? set.php.script_timeout : 2;
 	timeout.tv_sec = response_timeout;
 	timeout.tv_usec = 0;
 
@@ -241,6 +218,14 @@ retry:
 	}
 
 	return result_string;
+}
+
+/* Selection-path recovery runs the restart handshake while holding the slot
+ * lock. Bound it independently so a bad PHP configuration cannot pin every
+ * selector for the full per-command timeout. */
+char *php_read_result(int php_process, const char *command, int allow_restart) {
+	return php_read_response(php_process, command, allow_restart,
+		allow_restart || set.php.script_timeout < 2 ? set.php.script_timeout : 2);
 }
 
 /*! \fn char *php_readpipe(int php_process, const char *command)
