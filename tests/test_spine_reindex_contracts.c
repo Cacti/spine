@@ -18,6 +18,7 @@
 #endif
 
 extern poller_thread_t **details;
+extern void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument);
 
 typedef struct {
 	poller_thread_t thread;
@@ -64,7 +65,7 @@ static void run_reindex_case(MYSQL *mysql, int action, const char *argument,
 	poller_thread_t **prior_details = details;
 	details = owned_details;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, run_reindex_worker, work) == 0);
+	start_test_worker(&worker, run_reindex_worker, work);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(work->thread.complete && work->thread.threads_complete == 1 && work->errors == 0);
 	assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);
@@ -100,7 +101,7 @@ static void run_uptime_cache_case(MYSQL *mysql) {
 	poller_thread_t **prior_details = details;
 	details = owned_details;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, run_reindex_worker, work) == 0);
+	start_test_worker(&worker, run_reindex_worker, work);
 	assert(pthread_join(worker, NULL) == 0);
 	assert(work->thread.complete && work->thread.threads_complete == 1 && work->errors == 0);
 	assert(db_pool_local[0].free && spine_permits_available(&available_scripts) == 2);
@@ -217,7 +218,7 @@ static int poll_reindex_result(MYSQL *mysql, int action, const char *argument,
 	poller_thread_t **prior_details = details;
 	details = owned_details;
 	pthread_t worker;
-	assert(pthread_create(&worker, NULL, run_reindex_worker, work) == 0);
+	start_test_worker(&worker, run_reindex_worker, work);
 	assert(pthread_join(worker, NULL) == 0);
 	details = prior_details;
 	free(owned_details);
@@ -318,7 +319,7 @@ void test_reindex_result_contracts(MYSQL *mysql) {
 		poller_thread_t **prior_details = details;
 		details = owned_details;
 		pthread_t worker;
-		assert(pthread_create(&worker, NULL, run_reindex_worker, work) == 0);
+		start_test_worker(&worker, run_reindex_worker, work);
 		assert(pthread_join(worker, NULL) == 0);
 		details = prior_details;
 		free(owned_details);
