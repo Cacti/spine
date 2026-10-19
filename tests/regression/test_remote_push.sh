@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Structural guards for the remote push path's cross-vendor and batching rules.
 set -eu
 
@@ -10,13 +14,13 @@ fail() {
 	exit 1
 }
 
-queries_body=$(awk '/^static void transfer_queries\(/{f=1} f{print} f&&/^\}/{exit}' util.c)
-table_body=$(awk '/^static bool transfer_table\(/{f=1} f{print} f&&/^\}/{exit}' util.c)
-prepare_body=$(awk '/^void poller_prepare_queries\(/{f=1} f{print} f&&/^\}/{exit}' poller.c)
+queries_body=$(awk '/^static bool transfer_queries\(/{f=1} f{print} f&&/^\}/{exit}' src/database/transfer.c)
+table_body=$(awk '/^static bool transfer_table\(/{f=1} f{print} f&&/^\}/{exit}' src/database/transfer.c)
+prepare_body=$(awk '/^void poller_prepare_queries\(/{f=1} f{print} f&&/^\}/{exit}' src/database/cacti_query.c)
 
-[ -n "$queries_body" ] || fail "could not find transfer_queries() in util.c"
-[ -n "$table_body" ] || fail "could not find transfer_table() in util.c"
-[ -n "$prepare_body" ] || fail "could not find poller_prepare_queries() in poller.c"
+[ -n "$queries_body" ] || fail "could not find transfer_queries() in src/database/transfer.c"
+[ -n "$table_body" ] || fail "could not find transfer_table() in src/database/transfer.c"
+[ -n "$prepare_body" ] || fail "could not find poller_prepare_queries() in src/database/cacti_query.c"
 
 printf '%s\n' "$queries_body" | grep -q 'AS rs' &&
 	fail "remote pushes must not use row-alias syntax selected from the local server"
@@ -32,5 +36,10 @@ printf '%s\n' "$prepare_body" | grep -q 'onupdate' &&
 
 printf '%s\n' "$prepare_body" | grep -q 'output=VALUES(output)' ||
 	fail "poller_output must use the cross-vendor upsert form"
+
+printf '%s\n' "$queries_body" | grep -q 'db_upsert_suffix(destination' ||
+	fail "status transfer must select syntax from its actual destination"
+grep -q 'db_upsert_suffix(mysqlt' src/database/persistence.c ||
+	fail "poller output must select syntax from its actual write connection"
 
 exit 0

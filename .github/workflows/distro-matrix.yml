@@ -1,0 +1,160 @@
+name: Distro matrix
+
+# Build spine and run "make check" on the distributions it is packaged for,
+# so header, libc and client-library differences show up on the pull
+# request instead of in a downstream package build. See docs/platforms.md.
+#
+# Support policy: a release is tested until its vendor end-of-life date,
+# new releases are added after general availability, and a lane is removed
+# when its release reaches end of life. distro-eol.yml checks the lanes
+# below against endoflife.date every week. Keep the lists here, in
+# scripts/test-distros.sh and in .github/scripts/check-distro-eol.py in step.
+
+on:
+  pull_request:
+    branches: [develop, 'refactor/c17-series-*']
+    paths: &build_paths
+      - "configure.ac"
+      - "Makefile.am"
+      - "bootstrap"
+      - ".github/actions/**"
+      - "**.c"
+      - "**.h"
+      - "tests/**"
+      - "scripts/test-distros.sh"
+      - ".github/scripts/check-distro-eol.py"
+      - ".github/workflows/distro-matrix.yml"
+  push:
+    branches: [develop]
+    paths: *build_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distro-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # The Docker Hub "rockylinux" library image stopped updating in 2024;
+        # the Rocky project publishes current images as rockylinux/rockylinux.
+        image:
+          - rockylinux/rockylinux:9
+          - rockylinux/rockylinux:10
+          - almalinux:9
+          - almalinux:10
+          - mirror.gcr.io/library/ubuntu:22.04
+          - mirror.gcr.io/library/ubuntu:24.04
+          - mirror.gcr.io/library/ubuntu:26.04
+          - mirror.gcr.io/library/debian:13
+          - mirror.gcr.io/library/fedora:44
+          - opensuse/leap:16.0
+          - mirror.gcr.io/library/alpine:3.24
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and test in ${{ matrix.image }}
+        id: build
+        env:
+          IMAGE: ${{ matrix.image }}
+          LOG_DIR: ${{ runner.temp }}/distro-logs
+        run: |
+          set -eu
+          printf 'artifact=distro-logs-%s\n' "$(printf '%s' "$IMAGE" | tr '/:' '--')" >> "$GITHUB_OUTPUT"
+          scripts/test-distros.sh "$IMAGE"
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.build.outputs.artifact }}
+          path: ${{ runner.temp }}/distro-logs
+          if-no-files-found: ignore
+
+  # GitHub has no BSD runners and no first-party action that boots a BSD
+  # guest. cross-platform-actions covers all three systems from one pinned
+  # action on a KVM-capable Linux runner; the vmactions alternative is one
+  # third-party action per system, three to pin and audit instead of one.
+  bsd:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # FreeBSD builds one package set per major release against its
+        # newest minor, so each lane uses the newest minor of its branch.
+        # FreeBSD is Tier 2 and must pass. NetBSD and OpenBSD are Tier 3,
+        # best effort until their lanes have been green for a full release.
+        include:
+          - name: FreeBSD 14.5
+            os: freebsd
+            version: "14.5"
+            tier: 2
+          - name: FreeBSD 15.1
+            os: freebsd
+            version: "15.1"
+            tier: 2
+          - name: NetBSD 10.1
+            os: netbsd
+            version: "10.1"
+            tier: 3
+          - name: NetBSD 11.0
+            os: netbsd
+            version: "11.0"
+            tier: 3
+          - name: OpenBSD 7.9
+            os: openbsd
+            version: "7.9"
+            tier: 3
+    # Retain the documented platform tier policy. Tests still run in full;
+    # Tier 3 promotion requires a full release of green lanes.
+    continue-on-error: ${{ matrix.tier == 3 }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start ${{ matrix.name }} VM
+        uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
+        with:
+          operating_system: ${{ matrix.os }}
+          version: ${{ matrix.version }}
+          sync_files: runner-to-vm
+
+      - name: Install dependencies
+        shell: cpa.sh {0} --sync-files none
+        run: sudo sh scripts/test-distros.sh --deps
+
+      - name: Build and test
+        shell: cpa.sh {0} --sync-files none
+        run: sh scripts/test-distros.sh --build .
+
+      # cpa.sh skips its own copy back when the command fails.
+      - name: Copy test logs out of the VM
+        if: failure()
+        run: cpa.sh --sync-files vm-to-runner
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: distro-logs-${{ matrix.os }}-${{ matrix.version }}
+          path: |
+            config.log
+            test-suite.log
+            ./*.log
+            tests/**/*.log
+          if-no-files-found: ignore

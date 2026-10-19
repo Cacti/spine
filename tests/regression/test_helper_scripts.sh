@@ -1,11 +1,16 @@
 #!/bin/sh
 # SPDX-FileCopyrightText: 2026 The Cacti Group
 # SPDX-License-Identifier: GPL-2.0-or-later
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Test helper entry points with fake make/gdb, never a running poller.
 set -eu
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/spine-helper-contract.XXXXXX")
-trap 'rm -rf -- "$work"' EXIT HUP INT TERM
+package_version="helper-contract-$(basename "$work")"
+package_stage="/tmp/cacti-spine-${package_version}"
+package_archive="${package_stage}.tar.gz"
+trap 'rm -rf -- "$work" "$package_stage"; rm -f -- "$package_archive"' EXIT HUP INT TERM
 cd "$root"
 bash scripts/package.sh --help > "$work/help"
 grep -q 'Spine Package Script' "$work/help"
@@ -18,6 +23,22 @@ if bash scripts/package.sh > "$work/missing" 2>&1; then
     echo 'package helper accepted a missing version' >&2
     exit 1
 fi
+# Exercise the packaging archive with a local bootstrap stub.
+mkdir -p "$work/source/scripts" "$work/source/nested/.svn"
+printf obsolete > "$work/source/nested/.svn/entries"
+printf obsolete > "$work/source/nested/.travis.yml"
+cp scripts/package.sh "$work/source/scripts/package.sh"
+printf 'AC_INIT(Spine, %s, example.invalid)\n' "$package_version" > "$work/source/configure.ac"
+printf '#!/bin/sh\nexit 0\n' > "$work/source/bootstrap"
+chmod +x "$work/source/bootstrap"
+(cd "$work/source" && bash scripts/package.sh "$package_version") > "$work/package"
+tar -tzf "$package_archive" > "$work/contents"
+grep -Fxq "cacti-spine-${package_version}/scripts/package.sh" "$work/contents"
+if grep -Eq '/(\.svn|\.travis\.yml)(/|$)' "$work/contents"; then
+    echo 'package helper included obsolete checkout metadata' >&2
+    exit 1
+fi
+
 mkdir "$work/bin"
 cat > "$work/bin/make" <<'SH'
 #!/bin/sh

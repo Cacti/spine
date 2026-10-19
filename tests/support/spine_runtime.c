@@ -1,12 +1,19 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* Spine runtime for the fuzz targets.
  *
- * Every translation unit except spine.c is linked as built, so the code under
- * test is the code that ships.  This file supplies only the globals that
- * spine.c would define, plus php_close, which lives beside main().
+ * Production helper objects are linked as built. This supplies process-wide
+ * globals in place of app/runtime.c for unit tests and fuzz targets; the
+ * production-linked regression/fault binaries use the real runtime objects.
  */
-#include "common.h"
-#include "spine.h"
-#include "php.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "script/server.h"
 
 spine_permits_t available_threads;
 spine_permits_t available_scripts;

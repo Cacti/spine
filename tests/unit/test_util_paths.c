@@ -1,4 +1,11 @@
 /*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
+/*
  * Coverage for the util.c paths changed by #578: the cached log timestamp
  * format (issue#567), the bounded newline append in spine_log() (issue#565)
  * and the result-set release on the NULL-row branch of the settings helpers
@@ -20,8 +27,8 @@
 #include <stdio.h>
 
 #define UNIT_TESTING
-#include "../../common.h"
-#include "../../spine.h"
+#include "../../src/internal/common.h"
+#include "../../src/app/spine.h"
 
 config_t set;
 double start_time;
@@ -49,12 +56,22 @@ static int host_insert_failures;
 
 #define mysql_num_rows test_mysql_num_rows
 #define mysql_get_server_version test_mysql_get_server_version
+#define mysql_get_server_info test_mysql_get_server_info
+static const char *destination_version = "10.11.0-MariaDB";
+static unsigned long destination_number = 101100;
+const char *test_mysql_get_server_info(MYSQL *mysql) {
+	(void) mysql;
+	return destination_version;
+}
 #define mysql_fetch_row test_mysql_fetch_row
 #define mysql_num_fields test_mysql_num_fields
 #define mysql_errno test_mysql_errno
 
 my_ulonglong test_mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
-unsigned long test_mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+unsigned long test_mysql_get_server_version(MYSQL *mysql) {
+	(void) mysql;
+	return destination_number;
+}
 /* The remote push checks the column count against its transfer plan. */
 unsigned int test_mysql_num_fields(MYSQL_RES *res) { (void) res; return fake_query_kind == FAKE_QUERY_ITEMS ? 5 : 21; }
 unsigned int test_mysql_errno(MYSQL *mysql) { (void) mysql; return 0; }
@@ -170,10 +187,61 @@ void php_close(int php_process) {}
 int ping_icmp_open_shared(void) { return 0; }
 int ping_icmp_shared_available(void) { return 0; }
 
-#include "../../util.c"
+#include "../../src/app/buffer.c"
+#include "../../src/platform/clock.c"
+#include "../../src/platform/socket.c"
+#include "../../src/platform/thread.c"
+#include "../../src/config/text.c"
+#include "../../src/log/debug.c"
+#include "../../src/script/escape.c"
+#include "../../src/platform/descriptor.c"
+#include "../../src/log/sanitize.c"
+#include "../../src/config/settings.c"
+#include "../../src/config/options.c"
+#include "../../src/config/file.c"
+#include "../../src/database/upsert.c"
+#include "../../src/database/transfer.c"
+void nft_abort_children(void) {}
+#include "../../src/log/log.c"
+#include "../../src/poller/result.c"
+#include "../../src/config/validate.c"
+#include "../../src/platform/privileges.c"
+#include "../../src/poller/regex.c"
+
 
 #undef mysql_num_rows
 #undef mysql_get_server_version
+#undef mysql_get_server_info
+
+static void test_upsert_destination_capabilities(void **state) {
+	MYSQL destination;
+	char suffix[BUFSIZE];
+	const char *const updates[] = {"output", "rrd_next_step"};
+	const char *const invalid[] = {NULL};
+	const char *const empty[] = {""};
+	const char *versions[] = {"5.7.44", "8.0.18", "8.0.19", "8.4.0", "5.5.5-11.4.0-MariaDB", NULL};
+	const unsigned long numbers[] = {50744, 80018, 80019, 80400, 110400, 0};
+	size_t i;
+	(void) state;
+	memset(&destination, 0, sizeof(destination));
+	for (i = 0; i < sizeof(versions) / sizeof(versions[0]); i++) {
+		destination_version = versions[i];
+		destination_number = numbers[i];
+		assert_true(db_upsert_suffix(&destination, suffix, sizeof(suffix), updates, 2));
+		assert_non_null(strstr(suffix, i == 2 || i == 3 ? "output=spine_row.output" : "output=VALUES(output)"));
+	}
+	assert_true(db_upsert_suffix(NULL, suffix, sizeof(suffix), updates, 2));
+	assert_false(db_upsert_suffix(NULL, NULL, 1, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, 0, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), NULL, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), updates, 0));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), invalid, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), empty, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, 2, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, strlen(" ON DUPLICATE KEY UPDATE ") + 1, updates, 1));
+	destination_version = "10.11.0-MariaDB";
+	destination_number = 101100;
+}
 #undef mysql_fetch_row
 #undef mysql_num_fields
 #undef mysql_errno
@@ -368,6 +436,49 @@ static void test_success_path_frees_once(void **state) {
 	r = getsetting(&fake_mysql, LOCAL, "anything");
 	assert_int_equal(frees_seen - before, 1);
 	free(r);
+}
+
+/* An absent setting must reach the callers' else-defaults. Only a stored
+ * empty value is reported as "", whether it comes from the bulk cache or a
+ * single-row query. */
+static void test_absent_setting_is_null_and_keeps_defaults(void **state) {
+	setting_cache_t stored_empty = {"snmp_retries", ""};
+	char *r;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	row_is_null = 0;
+	rows_to_report = 0;
+
+	assert_null(getsetting(&fake_mysql, LOCAL, "snmp_retries"));
+
+	settings_cache = &stored_empty;
+	settings_cache_count = 1;
+	r = getsetting(&fake_mysql, LOCAL, "snmp_retries");
+	assert_non_null(r);
+	assert_string_equal(r, "");
+	free(r);
+	assert_null(getsetting(&fake_mysql, LOCAL, "ping_timeout"));
+	settings_cache = NULL;
+	settings_cache_count = 0;
+
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "/configured/script_server.php");
+	read_logging_options(&fake_mysql);
+	read_ping_options(&fake_mysql);
+	read_process_options(&fake_mysql, LOCAL);
+	read_script_options(&fake_mysql);
+	read_snmp_batch_size(&fake_mysql);
+
+	assert_string_equal(set.php.path_php_server, "/configured/script_server.php");
+	assert_string_equal(set.logging.path_logfile, "");
+	assert_int_equal(set.availability.ping_timeout, 400);
+	assert_int_equal(set.snmp.snmp_retries, 3);
+	assert_int_equal(set.poller.num_parent_processes, 1);
+	assert_int_equal(set.php.script_timeout, 25);
+	assert_int_equal(set.php.php_servers, 2);
+	assert_int_equal(set.snmp.snmp_max_get_size, 25);
+	assert_int_equal(getboolsetting(&fake_mysql, LOCAL, "log_pstats", TRUE), TRUE);
 }
 
 /* ---- issue#588: a row that crosses a batch boundary is still sent once -- */
@@ -580,6 +691,7 @@ static void test_spine_log_does_not_double_an_existing_newline(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_upsert_destination_capabilities),
 		cmocka_unit_test(test_initial_value_matches_the_default),
 		cmocka_unit_test(test_each_format_code_is_distinct),
 		cmocka_unit_test(test_format_codes_produce_expected_strings),
@@ -592,6 +704,7 @@ int main(void) {
 		cmocka_unit_test(test_getglobalvariable_frees_on_null_row),
 		cmocka_unit_test(test_get_cacti_version_frees_on_null_row),
 		cmocka_unit_test(test_success_path_frees_once),
+		cmocka_unit_test(test_absent_setting_is_null_and_keeps_defaults),
 		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
 		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
 		cmocka_unit_test(test_remote_push_stops_on_failed_batch),

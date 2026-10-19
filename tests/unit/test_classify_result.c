@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* Table tests for classify_result(), linked against the shipped util.c.
  *
  * Each row is a raw script or SNMP output, what Spine must decide it is, and
@@ -12,9 +19,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "common.h"
-#include "spine.h"
-#include "util.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "internal/util.h"
 
 typedef struct {
 	const char *raw;

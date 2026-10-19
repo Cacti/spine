@@ -1,12 +1,9 @@
 /*
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public License      |
- | as published by the Free Software Foundation; either version 2.1       |
- | of the License, or (at your option) any later version.                  |
- +-------------------------------------------------------------------------+
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
  */
 
 #include <stddef.h>
@@ -14,10 +11,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
-#include "poller.h"
-#include "util.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller.h"
+#include "internal/util.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	char value[1025];

@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This code is designed, written, and maintained by the Cacti Group. See
+# CONTRIBUTORS.md for developer information.
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 set -euo pipefail
-# +-------------------------------------------------------------------------+
-# | Copyright (C) 2004-2026 The Cacti Group                                 |
-# |                                                                         |
-# | This program is free software; you can redistribute it and/or           |
-# | modify it under the terms of the GNU General Public License             |
-# | as published by the Free Software Foundation; either version 2          |
-# | of the License, or (at your option) any later version.                  |
-# |                                                                         |
-# | This program is distributed in the hope that it will be useful,         |
-# | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
-# | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
-# | GNU General Public License for more details.                            |
-# +-------------------------------------------------------------------------+
-# | Cacti: The Complete RRDtool-based Graphing Solution                     |
-# +-------------------------------------------------------------------------+
-# | This code is designed, written, and maintained by the Cacti Group. See  |
-# | about.php and/or the AUTHORS file for specific developer information.   |
-# +-------------------------------------------------------------------------+
-# | http://www.cacti.net/                                                   |
-# +-------------------------------------------------------------------------+
 
 # Variable Declaration
 TMP_DIR="/tmp"
@@ -85,13 +73,18 @@ fi
 
 # Copy repository
 mkdir -p "${TMP_DIR}/cacti-spine-${VERSION}"
-if ! tar -cf - --exclude 'scripts/package.sh' --exclude '.svn' --exclude '.travis.yml' -- * | (
+if ! tar -cf - ./* | (
   cd "${TMP_DIR}/cacti-spine-${VERSION}" || exit 1
   tar -xf -
 ); then
   echo "ERROR: Unable to copy repository to ${TMP_DIR}/cacti-spine-${VERSION}" >&2
   exit 1
 fi
+
+# Native BSD tar has no GNU --exclude option. Prune obsolete metadata only
+# from the staged copy, after copying with portable tar arguments.
+find "${TMP_DIR}/cacti-spine-${VERSION}" \
+  \( -name .svn -o -name .travis.yml \) -prune -exec rm -rf -- {} +
 
 # Change working directory
 pushd "${TMP_DIR}/cacti-spine-${VERSION}" > /dev/null || exit 1

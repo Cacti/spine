@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* Reachability verdicts and timing in ping.c.
  *
  * Each case drives the shipped probe through controlled socket calls, so a
@@ -18,9 +25,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include "common.h"
-#include "spine.h"
-#include "ping.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "ping/ping.h"
 
 extern int *debug_devices;
 
@@ -53,7 +60,14 @@ static ssize_t test_recv(int fd, void *buffer, size_t length, int flags);
 #define select test_select
 #define recvfrom test_recvfrom
 #define recv test_recv
-#include "../../ping.c"
+#include "../../src/poller/availability.c"
+#include "../../src/ping/icmp_shared.c"
+#include "../../src/ping/icmp4.c"
+#include "../../src/ping/icmp6.c"
+#include "../../src/ping/udp.c"
+#include "../../src/ping/tcp.c"
+#include "../../src/ping/address.c"
+
 #undef socket
 #undef sendto
 #undef select
@@ -512,23 +526,23 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_icmp_retry_after_one_lost_probe_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_wait_left_converts_without_rounding_up, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmp_wait_matches_the_device_timeout, timing_setup, timing_teardown),
-		#ifdef SPINE_HAVE_ICMPV6
+#ifdef SPINE_HAVE_ICMPV6
 		cmocka_unit_test_setup_teardown(test_icmpv6_retry_after_one_lost_probe_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmpv6_wait_matches_the_device_timeout, timing_setup, timing_teardown),
-		#endif
+#endif
 		cmocka_unit_test_setup_teardown(test_udp_host_unreachable_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_network_unreachable_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_unreachable_then_reply_is_alive, timing_setup, timing_teardown),
-		#ifdef EHOSTDOWN
+#ifdef EHOSTDOWN
 		cmocka_unit_test_setup_teardown(test_udp_host_down_is_down, timing_setup, timing_teardown),
-		#endif
+#endif
 		cmocka_unit_test_setup_teardown(test_udp_port_unreachable_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_data_reply_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_namebyhost_table, timing_setup, timing_teardown),
-		#ifdef SPINE_HAVE_ICMPV6
+#ifdef SPINE_HAVE_ICMPV6
 		cmocka_unit_test_setup_teardown(test_icmpv6_resolves_transport_qualified_names, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmpv6_pings_a_transport_qualified_name, timing_setup, timing_teardown),
-		#endif
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* SNMPv3 session construction.
  *
  * The security-level predicates and the session they drive both need coverage:
@@ -18,8 +25,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller.h"
 
 static int captured_security_level;
 static size_t captured_auth_key_len;
@@ -30,14 +38,100 @@ static unsigned char captured_auth_key[USM_AUTH_KU_LEN];
 static unsigned char captured_priv_key[USM_PRIV_KU_LEN];
 static oid captured_auth_proto[MAX_OID_LEN];
 static oid captured_priv_proto[MAX_OID_LEN];
+typedef enum {
+	REPLY_NONE,
+	REPLY_EMPTY,
+	REPLY_SCALAR,
+	REPLY_AGENT_ERROR,
+	REPLY_NAMELESS,
+	REPLY_NOSUCH_INSTANCE,
+	REPLY_END_OF_MIB,
+	REPLY_OVERSIZED
+} test_reply_kind_t;
 
+static int reply_status;
+static test_reply_kind_t reply_kind;
+static int request_calls;
+static int request_command;
+
+static int cleanup_cancellation_state;
+static int capture_snmp_sess_close(void *session);
 static void *capture_snmp_sess_open(struct snmp_session *session);
+static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response);
+static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
+	struct snmp_pdu **response);
+static bool check_request_lock;
+static bool expect_serialized_request;
+static int captured_request_status;
+static struct snmp_session captured_request_session;
+static struct snmp_session *capture_snmp_sess_session(void *session);
 
+#define snmp_sess_close capture_snmp_sess_close
 #define snmp_sess_open capture_snmp_sess_open
-#include "../../snmp.c"
+#define snmp_sess_synch_response capture_snmp_sess_synch_response
+#define snmp_sess_session capture_snmp_sess_session
+#include "../../src/snmp/session.c"
+#include "../../src/snmp/requests.c"
+#include "../../src/snmp/response.c"
+#undef snmp_sess_close
 #undef snmp_sess_open
+#undef snmp_sess_synch_response
+#undef snmp_sess_session
+
+static struct snmp_session *capture_snmp_sess_session(void *session) {
+	return session == NULL ? NULL : &captured_request_session;
+}
+
+static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_pdu **response) {
+	static const oid name[] = {1, 3, 6, 1, 2, 1, 1, 1, 0};
+	static u_char oversized[RESULTS_BUFFER + 512];
+	long value = 42;
+
+	assert_ptr_equal(session, (void *) (uintptr_t) 1);
+	assert_non_null(request);
+	assert_non_null(request->variables);
+	request_command = request->command;
+	request_calls++;
+	/* Match Net-SNMP ownership, including a failed/timeout send. */
+	snmp_free_pdu(request);
+	*response = NULL;
+	if (reply_kind == REPLY_NONE) return reply_status;
+	*response = snmp_pdu_create(SNMP_MSG_RESPONSE);
+	assert_non_null(*response);
+	(*response)->errstat = SNMP_ERR_NOERROR;
+	(*response)->errindex = 0;
+	if (reply_kind == REPLY_SCALAR || reply_kind == REPLY_NAMELESS || reply_kind == REPLY_NOSUCH_INSTANCE || reply_kind == REPLY_END_OF_MIB) {
+		u_char type = reply_kind == REPLY_NOSUCH_INSTANCE ? SNMP_NOSUCHINSTANCE : reply_kind == REPLY_END_OF_MIB ? SNMP_ENDOFMIBVIEW
+																												 : ASN_INTEGER;
+		const u_char *contents = type == ASN_INTEGER ? (const u_char *) &value : NULL;
+		size_t length = type == ASN_INTEGER ? sizeof(value) : 0;
+
+		assert_non_null(snmp_pdu_add_variable(*response, name, sizeof(name) / sizeof(name[0]), type, contents, length));
+		if (reply_kind == REPLY_NAMELESS) {
+			/* Short OIDs use the varbind's inline name storage. */
+			if ((*response)->variables->name != (*response)->variables->name_loc) {
+				SNMP_FREE((*response)->variables->name);
+			}
+			(*response)->variables->name = NULL;
+			(*response)->variables->name_length = 0;
+		}
+	}
+	if (reply_kind == REPLY_OVERSIZED) {
+		/* A string longer than RESULTS_BUFFER makes snprint_value() fail. */
+		memset(oversized, 'a', sizeof(oversized));
+		assert_non_null(snmp_pdu_add_variable(*response, name, sizeof(name) / sizeof(name[0]), ASN_OCTET_STR, oversized, sizeof(oversized)));
+	}
+	if (reply_kind == REPLY_AGENT_ERROR) (*response)->errstat = SNMP_ERR_GENERR;
+	return reply_status;
+}
 
 static void *capture_snmp_sess_open(struct snmp_session *session) {
+	int cancellation_state;
+
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), EBUSY);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	assert_int_equal(cancellation_state, PTHREAD_CANCEL_DISABLE);
 	captured_security_level = session->securityLevel;
 	captured_auth_key_len = session->securityAuthKeyLen;
 	captured_priv_key_len = session->securityPrivKeyLen;
@@ -63,11 +157,33 @@ static void *capture_snmp_sess_open(struct snmp_session *session) {
 		memcpy(captured_priv_proto, session->securityPrivProto,
 			captured_priv_proto_len * sizeof(*captured_priv_proto));
 	}
-	return (void *)(uintptr_t) 1;
+	return (void *) (uintptr_t) 1;
+}
+
+static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *request,
+	struct snmp_pdu **response) {
+	int lock_status;
+	int cancellation_state;
+
+	if (!check_request_lock) {
+		return capture_synch_response(session, request, response);
+	}
+	*response = NULL;
+	lock_status = thread_mutex_trylock(LOCK_SNMP);
+	if (lock_status == 0) {
+		thread_mutex_unlock(LOCK_SNMP);
+	}
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	assert_int_equal(lock_status, expect_serialized_request ? EBUSY : 0);
+	assert_int_equal(cancellation_state,
+		expect_serialized_request ? PTHREAD_CANCEL_DISABLE : PTHREAD_CANCEL_ENABLE);
+	return captured_request_status;
 }
 
 static int session_reset(void **state) {
 	(void) state;
+	check_request_lock = FALSE;
 	config_defaults();
 	init_mutexes();
 	set.snmp.snmp_retries = 1;
@@ -76,11 +192,41 @@ static int session_reset(void **state) {
 	captured_priv_key_len = 0;
 	captured_auth_proto_len = 0;
 	captured_priv_proto_len = 0;
+	reply_status = STAT_SUCCESS;
+	reply_kind = REPLY_NONE;
+	request_calls = 0;
+	request_command = 0;
 	memset(captured_auth_key, 0, sizeof(captured_auth_key));
 	memset(captured_priv_key, 0, sizeof(captured_priv_key));
 	memset(captured_auth_proto, 0, sizeof(captured_auth_proto));
 	memset(captured_priv_proto, 0, sizeof(captured_priv_proto));
 	return 0;
+}
+
+static int capture_snmp_sess_close(void *session) {
+	int cancellation_state;
+
+	assert_non_null(session);
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), EBUSY);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	cleanup_cancellation_state = cancellation_state;
+	return 1;
+}
+
+static void test_cleanup_restores_cancellation_and_unlocks(void **state) {
+	int original_state;
+	int restored_state;
+	int session = 0;
+
+	(void) state;
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &original_state);
+	snmp_host_cleanup(&session);
+	pthread_setcancelstate(original_state, &restored_state);
+	assert_int_equal(restored_state, PTHREAD_CANCEL_ENABLE);
+	assert_int_equal(cleanup_cancellation_state, PTHREAD_CANCEL_DISABLE);
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+	thread_mutex_unlock(LOCK_SNMP);
 }
 
 static int contains_nonzero(const unsigned char *value, size_t length) {
@@ -129,16 +275,12 @@ static int level_for(char *auth_protocol, char *auth_password,
 	char *priv_protocol, char *priv_passphrase) {
 	char host[] = "127.0.0.1";
 	char user[] = "snmpuser";
-	char ctx[]  = "";
-	char eid[]  = "";
+	char ctx[] = "";
+	char eid[] = "";
 	void *sessp;
 
 	const snmp_connection_t options = {
-		.host_id = 1, .hostname = host, .snmp_version = 3, .snmp_community = NULL,
-		.snmp_username = user, .snmp_password = auth_password, .snmp_auth_protocol = auth_protocol,
-		.snmp_priv_passphrase = priv_passphrase, .snmp_priv_protocol = priv_protocol,
-		.snmp_context = ctx, .snmp_engine_id = eid, .snmp_port = 161, .snmp_timeout = 500
-	};
+		.host_id = 1, .hostname = host, .snmp_version = 3, .snmp_community = NULL, .snmp_username = user, .snmp_password = auth_password, .snmp_auth_protocol = auth_protocol, .snmp_priv_passphrase = priv_passphrase, .snmp_priv_protocol = priv_protocol, .snmp_context = ctx, .snmp_engine_id = eid, .snmp_port = 161, .snmp_timeout = 500};
 
 	sessp = snmp_host_init(&options);
 
@@ -200,7 +342,8 @@ static void test_auth_without_privacy_is_authnopriv(void **state) {
 	expected_priv_len = OID_LENGTH(usmNoPrivProtocol);
 	assert_int_equal(captured_priv_proto_len, expected_priv_len);
 	assert_int_equal(snmp_oid_compare(captured_priv_proto, captured_priv_proto_len,
-		expected_priv, expected_priv_len), 0);
+						 expected_priv, expected_priv_len),
+		0);
 }
 
 static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) {
@@ -210,18 +353,18 @@ static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) 
 		size_t expected_len;
 	};
 	const struct auth_case cases[] = {
-		#ifndef NETSNMP_DISABLE_MD5
-		{ "MD5",    usmHMACMD5AuthProtocol,       OID_LENGTH(usmHMACMD5AuthProtocol) },
-		#endif
-		{ "SHA",    usmHMACSHA1AuthProtocol,      OID_LENGTH(usmHMACSHA1AuthProtocol) },
-		#ifdef HAVE_EVP_SHA224
-		{ "SHA224", usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol) },
-		{ "SHA256", usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol) },
-		#endif
-		#ifdef HAVE_EVP_SHA384
-		{ "SHA384", usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol) },
-		{ "SHA512", usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol) },
-		#endif
+#ifndef NETSNMP_DISABLE_MD5
+		{"MD5", usmHMACMD5AuthProtocol, OID_LENGTH(usmHMACMD5AuthProtocol)},
+#endif
+		{"SHA", usmHMACSHA1AuthProtocol, OID_LENGTH(usmHMACSHA1AuthProtocol)},
+#ifdef HAVE_EVP_SHA224
+		{"SHA224", usmHMAC128SHA224AuthProtocol, OID_LENGTH(usmHMAC128SHA224AuthProtocol)},
+		{"SHA256", usmHMAC192SHA256AuthProtocol, OID_LENGTH(usmHMAC192SHA256AuthProtocol)},
+#endif
+#ifdef HAVE_EVP_SHA384
+		{"SHA384", usmHMAC256SHA384AuthProtocol, OID_LENGTH(usmHMAC256SHA384AuthProtocol)},
+		{"SHA512", usmHMAC384SHA512AuthProtocol, OID_LENGTH(usmHMAC384SHA512AuthProtocol)},
+#endif
 	};
 	char password[] = "authpass123";
 	char none[] = "[None]";
@@ -238,8 +381,9 @@ static void test_auth_protocol_oids_match_the_selected_algorithms(void **state) 
 			SNMP_SEC_LEVEL_AUTHNOPRIV);
 		assert_int_equal(captured_auth_proto_len, cases[i].expected_len);
 		assert_int_equal(snmp_oid_compare(captured_auth_proto,
-			captured_auth_proto_len, cases[i].expected,
-			cases[i].expected_len), 0);
+							 captured_auth_proto_len, cases[i].expected,
+							 cases[i].expected_len),
+			0);
 	}
 
 	assert_true(exercised > 0);
@@ -477,8 +621,175 @@ static void test_multi_get_refuses_a_missing_session(void **state) {
 	assert_true(IS_UNDEFINED(request.result));
 }
 
+static void test_single_request_transport_and_response_contracts(void **state) {
+	typedef struct {
+		int status;
+		test_reply_kind_t kind;
+		const char *get_value;
+		const char *optional_value;
+		const char *next_value;
+		bool get_failed;
+		bool next_failed;
+		int get_status;
+		int next_status;
+	} response_case_t;
+	static const response_case_t cases[] = {
+		{STAT_SUCCESS, REPLY_NONE, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_ERROR},
+		{STAT_TIMEOUT, REPLY_NONE, "U", "U", "U", TRUE, TRUE, STAT_TIMEOUT, STAT_TIMEOUT},
+		{STAT_TIMEOUT, REPLY_SCALAR, "U", "U", "U", TRUE, TRUE, STAT_ERROR, STAT_TIMEOUT},
+		{STAT_SUCCESS, REPLY_EMPTY, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_AGENT_ERROR, "", "", "", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_SCALAR, "42", "42", "42", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_NAMELESS, "", "", "U", FALSE, TRUE, STAT_SUCCESS, STAT_ERROR},
+		/* A GETNEXT exception varbind is an answer from a reachable agent. */
+		{STAT_SUCCESS, REPLY_NOSUCH_INSTANCE, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_END_OF_MIB, "U", "U", "U", TRUE, FALSE, STAT_ERROR, STAT_SUCCESS},
+		/* An unprintable value is unknown data, not a transport failure. */
+		{STAT_SUCCESS, REPLY_OVERSIZED, "U", "U", "U", FALSE, FALSE, STAT_SUCCESS, STAT_SUCCESS}};
+	char text_oid[] = ".1.3.6.1.2.1.1.1.0";
+
+	(void) state;
+	for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
+		for (int operation = 0; operation < 3; operation++) {
+			host_t host = {0};
+			char *result;
+			const char *expected = operation == 0 ? cases[index].get_value : operation == 1 ? cases[index].optional_value
+																							: cases[index].next_value;
+
+			host.snmp.session = (void *) (uintptr_t) 1;
+			reply_status = cases[index].status;
+			reply_kind = cases[index].kind;
+			request_calls = 0;
+			print_message("transport status=%d response kind=%d operation=%d\n", reply_status, reply_kind, operation);
+			result = operation == 2 ? snmp_getnext(&host, text_oid) : snmp_get_base(&host, text_oid, operation == 0);
+			assert_non_null(result);
+			assert_string_equal(result, expected);
+			assert_int_equal(host.snmp.status, operation == 2 ? cases[index].next_status : cases[index].get_status);
+			assert_int_equal(host.ignore_host, operation == 0 ? cases[index].get_failed : operation == 1 ? FALSE
+																										 : cases[index].next_failed);
+			assert_int_equal(request_calls, 1);
+			assert_int_equal(request_command, operation == 2 ? SNMP_MSG_GETNEXT : SNMP_MSG_GET);
+			free(result);
+		}
+	}
+}
+
+/* A timed-out system read must not overwrite the stored strings with "". */
+static void test_failed_system_read_keeps_stored_values(void **state) {
+	static const char *const stored[] = {"stored descr", "stored oid", "stored contact", "stored name", "stored location"};
+	MYSQL mysql;
+	host_t host = {0};
+
+	(void) state;
+	assert_non_null(mysql_init(&mysql));
+	host.snmp.session = (void *) (uintptr_t) 1;
+	snprintf(host.system.snmp_sysDescr, sizeof(host.system.snmp_sysDescr), "%s", stored[0]);
+	snprintf(host.system.snmp_sysObjectID, sizeof(host.system.snmp_sysObjectID), "%s", stored[1]);
+	snprintf(host.system.snmp_sysContact, sizeof(host.system.snmp_sysContact), "%s", stored[2]);
+	snprintf(host.system.snmp_sysName, sizeof(host.system.snmp_sysName), "%s", stored[3]);
+	snprintf(host.system.snmp_sysLocation, sizeof(host.system.snmp_sysLocation), "%s", stored[4]);
+	host.system.snmp_sysUpTimeInstance = 4200;
+	reply_status = STAT_TIMEOUT;
+	reply_kind = REPLY_NONE;
+
+	get_system_information(&host, &mysql, TRUE);
+
+	assert_string_equal(host.system.snmp_sysDescr, stored[0]);
+	assert_string_equal(host.system.snmp_sysObjectID, stored[1]);
+	assert_string_equal(host.system.snmp_sysContact, stored[2]);
+	assert_string_equal(host.system.snmp_sysName, stored[3]);
+	assert_string_equal(host.system.snmp_sysLocation, stored[4]);
+	assert_int_equal(host.system.snmp_sysUpTimeInstance, 4200);
+	assert_false(host.ignore_host);
+
+	/* A successful read still replaces the stored value. */
+	reply_status = STAT_SUCCESS;
+	reply_kind = REPLY_SCALAR;
+	get_system_information(&host, &mysql, TRUE);
+	assert_string_equal(host.system.snmp_sysDescr, "42");
+	assert_string_equal(host.system.snmp_sysLocation, "42");
+	mysql_close(&mysql);
+}
+
+/* Only a lost transport ignores the host. An agent that answers with an error
+ * or a walk that stops increasing still yields U for the count. */
+static void test_count_ignores_host_only_for_transport_failures(void **state) {
+	typedef struct {
+		int status;
+		test_reply_kind_t kind;
+		bool ignored;
+		int snmp_status;
+	} count_case_t;
+	static const count_case_t cases[] = {
+		{STAT_TIMEOUT, REPLY_NONE, TRUE, STAT_TIMEOUT},
+		{STAT_ERROR, REPLY_NONE, TRUE, STAT_ERROR},
+		{STAT_SUCCESS, REPLY_AGENT_ERROR, FALSE, STAT_SUCCESS},
+		{STAT_SUCCESS, REPLY_SCALAR, FALSE, STAT_SUCCESS}};
+	char text_oid[] = ".1.3.6.1.2.1.1";
+
+	(void) state;
+	for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
+		host_t host = {0};
+
+		host.snmp.session = (void *) (uintptr_t) 1;
+		reply_status = cases[index].status;
+		reply_kind = cases[index].kind;
+		print_message("count status=%d response kind=%d\n", reply_status, reply_kind);
+		/* REPLY_SCALAR repeats the same OID, so the second step does not increase. */
+		assert_int_equal(snmp_count(&host, text_oid), -1);
+		assert_int_equal(host.ignore_host, cases[index].ignored);
+		assert_int_equal(host.snmp.status, cases[index].snmp_status);
+	}
+}
+
+static void test_request_lock_and_cancellation_contract(void **state) {
+	host_t host = {0};
+	struct snmp_pdu *response = NULL;
+	int cancellation_state;
+	int version;
+	size_t session_index;
+	const int statuses[] = {STAT_SUCCESS, STAT_TIMEOUT, STAT_ERROR};
+	const int session_versions[] = {SNMP_VERSION_1, SNMP_VERSION_2c, SNMP_VERSION_3};
+	size_t index;
+
+	(void) state;
+	check_request_lock = TRUE;
+	host.snmp.session = &captured_request_session;
+	for (version = 1; version <= 3; version++) {
+		host.snmp.profile.version = version;
+		for (session_index = 0; session_index < sizeof(session_versions) / sizeof(session_versions[0]); session_index++) {
+			captured_request_session.version = session_versions[session_index];
+			expect_serialized_request = captured_request_session.version == SNMP_VERSION_3;
+			for (index = 0; index < sizeof(statuses) / sizeof(statuses[0]); index++) {
+				captured_request_status = statuses[index];
+				assert_int_equal(snmp_synchronized_response(&host, NULL, &response), statuses[index]);
+				assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+				thread_mutex_unlock(LOCK_SNMP);
+				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+				pthread_setcancelstate(cancellation_state, NULL);
+				assert_int_equal(cancellation_state, PTHREAD_CANCEL_ENABLE);
+			}
+		}
+	}
+}
+
+static void test_failed_session_restores_lock_and_cancellation(void **state) {
+	const snmp_connection_t options = {.snmp_timeout = 0};
+	int original_state;
+	int restored_state;
+
+	(void) state;
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &original_state);
+	assert_null(snmp_host_init(&options));
+	pthread_setcancelstate(original_state, &restored_state);
+	assert_int_equal(restored_state, PTHREAD_CANCEL_DISABLE);
+	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+	thread_mutex_unlock(LOCK_SNMP);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup(test_cleanup_restores_cancellation_and_unlocks, session_reset),
 		cmocka_unit_test_setup(test_value_presence_contract, session_reset),
 		cmocka_unit_test_setup(test_security_level_contract, session_reset),
 		cmocka_unit_test_setup(test_no_credentials_is_noauthnopriv, session_reset),
@@ -501,6 +812,11 @@ int main(void) {
 		cmocka_unit_test_setup(test_session_construction_does_not_modify_caller_passphrases, session_reset),
 		cmocka_unit_test_setup(test_authnopriv_does_not_modify_caller_password, session_reset),
 		cmocka_unit_test_setup(test_multi_get_refuses_a_missing_session, session_reset),
+		cmocka_unit_test_setup(test_request_lock_and_cancellation_contract, session_reset),
+		cmocka_unit_test_setup(test_failed_session_restores_lock_and_cancellation, session_reset),
+		cmocka_unit_test_setup(test_single_request_transport_and_response_contracts, session_reset),
+		cmocka_unit_test_setup(test_count_ignores_host_only_for_transport_failures, session_reset),
+		cmocka_unit_test_setup(test_failed_system_read_keeps_stored_values, session_reset),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

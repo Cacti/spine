@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* libFuzzer target for get_namebyhost().
  *
  * host.hostname comes from the Cacti database and is parsed here into a
@@ -13,8 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	char   *input;

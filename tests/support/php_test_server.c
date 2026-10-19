@@ -1,11 +1,21 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 #include <stdio.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
 
 int main(int argc, char **argv) {
 	char command[4096];
 	const char *mode = argc > 2 ? argv[2] : "";
 	if (strstr(mode, "exit-before-start") != NULL) return 0;
+	/* Longer than the recovery handshake cap, shorter than script_timeout. */
+	if (strstr(mode, "slow-start") != NULL) sleep(3);
 
 	if (strstr(mode, "silent") == NULL) {
 		struct sigaction action;

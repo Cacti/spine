@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # A setuid root spine must give up root before it reads any option or file.
 #
 # Spine used to keep euid 0 through option parsing, the config file and the

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Run complete Spine polling cycles back to back for a fixed time, record the
 # peak RSS of every cycle, and fail when a least-squares fit of RSS against
 # elapsed time projects more growth over the run than the threshold allows.
@@ -45,8 +49,8 @@ done
 
 mkdir -p "$ARTIFACT_ROOT"
 export SPINE_TEST_ARTIFACT_DIR=$ARTIFACT_ROOT
-# shellcheck source=tests/test-harness.sh
-source "$REPO_ROOT/tests/test-harness.sh"
+# shellcheck source=tests/support/test-harness.sh
+source "$REPO_ROOT/tests/support/test-harness.sh"
 harness_init "Spine memory soak"
 
 SERIES="$ARTIFACT_ROOT/rss-series.csv"
