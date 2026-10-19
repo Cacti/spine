@@ -1,25 +1,15 @@
 /*
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU General Public License             |
- | as published by the Free Software Foundation; either version 2          |
- | of the License, or (at your option) any later version.                  |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU General Public License for more details.                            |
- +-------------------------------------------------------------------------+
- | Cacti: The Complete RRDtool-based Graphing Solution                     |
- +-------------------------------------------------------------------------+
- | This code is designed, written, and maintained by the Cacti Group. See  |
- | about.php and/or the AUTHORS file for specific developer information.   |
- +-------------------------------------------------------------------------+
- | http://www.cacti.net/                                                   |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-FileCopyrightText: 2002 Xenadyne Inc.
+ * SPDX-FileCopyrightText: 1988, 1993 The Regents of the University of California
+ * SPDX-License-Identifier: GPL-2.0-or-later AND BSD-4-Clause AND LicenseRef-Xenadyne
+ *
+ * This code is designed, written, and maintained by the Cacti Group. See
+ * CONTRIBUTORS.md for developer information.
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
 
 /*******************************************************************************
  ex: set tabstop=4 shiftwidth=4 autoindent:
@@ -84,47 +74,15 @@
  * SUCH DAMAGE.
  */
 
-#include "common.h"
-#include "spine.h"
-#include "src/process/process_internal.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "process/process_internal.h"
 #include <spawn.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 
-int spine_set_cloexec(int fd) {
-	int flags;
 
-	flags = fcntl(fd, F_GETFD);
-	if (flags < 0) {
-		SPINE_LOG(("ERROR: Unable to read descriptor flags on fd %d: %s", fd, strerror(errno)));
-		return -1;
-	}
 
-	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
-		SPINE_LOG(("ERROR: Unable to set close-on-exec on fd %d: %s", fd, strerror(errno)));
-		return -1;
-	}
-
-	return 0;
-}
-
-int spine_dup_cloexec(int fd) {
-	int duplicate;
-	int saved_errno;
-
-	duplicate = dup(fd);
-	if (duplicate < 0)
-		return -1;
-
-	if (spine_set_cloexec(duplicate) != 0) {
-		saved_errno = errno;
-		(void) close(duplicate);
-		errno = saved_errno;
-		return -1;
-	}
-
-	return duplicate;
-}
 
 /*! \fn static int open_pipe_cloexec(int pdes[2])
  *  \brief open a pipe whose descriptors are not inherited across exec
@@ -197,12 +155,13 @@ int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr) {
 /*! \fn static int reap_child_bounded(pid_t pid, int *pstat, int attempts)
  *  \return 0 when reaped, 1 when still running after attempts, -1 on error
  */
-int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
+static int reap_child_guarded(pid_t pid, pid_t *owned, int *pstat, int attempts, pthread_mutex_t *mutex) {
 	int attempt;
 	int eintr_budget;
 	int fast_attempts;
 	double deadline;
 	pid_t waited;
+	int oldstate = PTHREAD_CANCEL_ENABLE;
 
 	if (pstat == NULL) {
 		return -1;
@@ -221,9 +180,20 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 		/* Bounded so a stream of caught signals cannot spin this call
 		 * forever instead of returning within its attempt budget. */
 		eintr_budget = 1000;
+		if (mutex != NULL) {
+			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+			pthread_mutex_lock(mutex);
+		}
 		do {
 			waited = waitpid(pid, pstat, WNOHANG);
 		} while (waited < 0 && errno == EINTR && --eintr_budget > 0 && spine_monotonic_time() < deadline);
+		if (mutex != NULL) {
+			int saved_errno = errno;
+			if (waited == pid || (waited < 0 && errno == ECHILD)) *owned = 0;
+			pthread_mutex_unlock(mutex);
+			errno = saved_errno;
+			pthread_setcancelstate(oldstate, NULL);
+		}
 
 		if (waited == pid) {
 			return 0;
@@ -265,4 +235,16 @@ int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
 	}
 
 	return 1;
+}
+
+int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
+	return reap_child_guarded(pid, NULL, pstat, attempts, NULL);
+}
+
+int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_mutex_t *mutex) {
+	if (pid == NULL || mutex == NULL || *pid <= 1) {
+		errno = EINVAL;
+		return -1;
+	}
+	return reap_child_guarded(*pid, pid, pstat, attempts, mutex);
 }

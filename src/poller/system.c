@@ -1,39 +1,21 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
-#include "common.h"
-#include "spine.h"
-#include "src/poller/poller_internal.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller_internal.h"
 #include <limits.h>
 
 static void poll_system_uptime(host_t *host) {
@@ -63,7 +45,8 @@ static void poll_system_uptime(host_t *host) {
 static void poll_system_field(host_t *host, MYSQL *mysql, char *oid, char *destination, size_t capacity) {
 	SPINE_LOG_DEVDBG(("DEVDBG: Device[%d] requesting system OID %s", host->id, oid));
 	char *result = snmp_get_allow_fail(host, oid);
-	if (result != NULL) db_escape(mysql, destination, (int) capacity, result);
+	/* Keep the stored value when the agent gave us nothing usable. */
+	if (result != NULL && result[0] != '\0' && !IS_UNDEFINED(result)) db_escape(mysql, destination, (int) capacity, result);
 	SPINE_FREE(result);
 }
 

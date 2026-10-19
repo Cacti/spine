@@ -1,0 +1,49 @@
+# Reviewed clang-tidy findings in the production sources (clang-tidy 18,
+# Ubuntu 24.04). One line per finding, without line numbers; see the
+# clang-tidy job in .github/workflows/static-analysis.yml. Remove a line
+# when its finding is fixed.
+#
+# src/app/signals.c: the signal handler reads errno only to save and restore it.
+src/app/signals.c: standard function '__errno_location' may not be asynchronous-safe; calling it from a signal handler may be dangerous [bugprone-signal-handler]
+# src/process/nft_popen.c: inherit_fd is reset to -1 after close() as a guard.
+src/process/nft_popen.c: Value stored to 'inherit_fd' is never read [clang-analyzer-deadcode.DeadStores]
+src/process/nft_popen.c: Value stored to 'inherit_fd' is never read [clang-analyzer-deadcode.DeadStores]
+# PHP read/process modules: the narrowing conversions split a sub-second timeout into
+# struct timeval fields and keep a short write count; cp is only tested.
+src/script/read.c: Although the value stored to 'cp' is used in the enclosing expression, the value is never actually read from 'cp' [clang-analyzer-deadcode.DeadStores]
+src/script/read.c: narrowing conversion from '__time_t' (aka 'long') to 'double' [bugprone-narrowing-conversions]
+src/script/read.c: narrowing conversion from 'double' to '__suseconds_t' (aka 'long') [bugprone-narrowing-conversions]
+src/script/read.c: narrowing conversion from 'double' to '__time_t' (aka 'long') [bugprone-narrowing-conversions]
+src/script/server.c: narrowing conversion from 'ssize_t' (aka 'long') to signed type 'int' is implementation-defined [bugprone-narrowing-conversions]
+# IPv4/IPv6 probe modules: icmp_socket and total_time stores are defensive resets. The
+# return_code store keeps sendto()'s result unchecked; a failed send waits
+# out the full timeout instead of failing at once. Follow-up candidate.
+src/ping/icmp6.c: Value stored to 'icmp_socket' is never read [clang-analyzer-deadcode.DeadStores]
+src/ping/icmp4.c: Value stored to 'return_code' is never read [clang-analyzer-deadcode.DeadStores]
+src/ping/icmp4.c: Value stored to 'total_time' is never read [clang-analyzer-deadcode.DeadStores]
+src/ping/icmp4.c: Value stored to 'total_time' is never read [clang-analyzer-deadcode.DeadStores]
+src/ping/icmp6.c: Value stored to 'total_time' is never read [clang-analyzer-deadcode.DeadStores]
+src/ping/icmp6.c: Value stored to 'total_time' is never read [clang-analyzer-deadcode.DeadStores]
+src/ping/icmp6.c: Value stored to 'total_time' is never read [clang-analyzer-deadcode.DeadStores]
+# src/database/sql.c: mysql_errno() codes are small positive numbers.
+src/database/sql.c: narrowing conversion from 'unsigned int' to signed type 'int' is implementation-defined [bugprone-narrowing-conversions]
+src/database/sql.c: narrowing conversion from 'unsigned int' to signed type 'int' is implementation-defined [bugprone-narrowing-conversions]
+src/database/connection.c: narrowing conversion from 'unsigned int' to signed type 'int' is implementation-defined [bugprone-narrowing-conversions]
+# src/config/options.c: strcat() appends compile-time constants to BUFSIZE buffers in
+# publish_snmp_capabilities(). Rewrite candidate, not an overflow.
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+src/config/options.c: Call to function 'strcat' is insecure as it does not provide bounding of the memory buffer. Replace unbounded copy functions with analogous functions that support length arguments such as 'strlcat'. CWE-119 [clang-analyzer-security.insecureAPI.strcpy]
+# src/app/buffer.c and src/log/log.c: every vsnprintf call directly follows va_start on the same
+# va_list (spine_snprintf, die, spine_log, the bounded append helper). The
+# checker reports them on x86-64, where va_list is an array type, since the
+# build moved to -std=gnu17; it does not report them on arm64.
+src/app/buffer.c: Function 'vsnprintf' is called with an uninitialized va_list argument [clang-analyzer-valist.Uninitialized]
+src/app/buffer.c: Function 'vsnprintf' is called with an uninitialized va_list argument [clang-analyzer-valist.Uninitialized]
+src/log/log.c: Function 'vsnprintf' is called with an uninitialized va_list argument [clang-analyzer-valist.Uninitialized]
+src/log/log.c: Function 'vsnprintf' is called with an uninitialized va_list argument [clang-analyzer-valist.Uninitialized]

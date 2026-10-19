@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -7,8 +14,8 @@
 #include <stdio.h>
 
 #define UNIT_TESTING
-#include "../../common.h"
-#include "../../spine.h"
+#include "../../src/internal/common.h"
+#include "../../src/app/spine.h"
 
 /* Define globals that Spine expects */
 config_t set;
@@ -31,15 +38,26 @@ int ping_icmp_open_shared(void) { return 0; }
 int ping_icmp_shared_available(void) { return 0; }
 
 /* Include the actual source file */
-#include "../../util.c"
+#include "../../src/app/buffer.c"
+#include "../../src/platform/clock.c"
+#include "../../src/platform/socket.c"
+#include "../../src/platform/thread.c"
+#include "../../src/config/text.c"
+#include "../../src/log/debug.c"
+#include "../../src/script/escape.c"
+#include "../../src/platform/descriptor.c"
+#include "../../src/log/sanitize.c"
 #include "../../src/config/settings.c"
 #include "../../src/config/options.c"
 #include "../../src/config/file.c"
+#include "../../src/database/upsert.c"
 #include "../../src/database/transfer.c"
-#include "../../src/core/log.c"
-#include "../../src/core/result.c"
-#include "../../src/core/privileges.c"
-#include "../../src/core/regex.c"
+void nft_abort_children(void) {}
+#include "../../src/log/log.c"
+#include "../../src/poller/result.c"
+#include "../../src/config/validate.c"
+#include "../../src/platform/privileges.c"
+#include "../../src/poller/regex.c"
 
 
 static void test_strpos_found(void **state) {

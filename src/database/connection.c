@@ -1,38 +1,21 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version. 	   |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include <stdatomic.h>
 
 /*! \fn void db_connect(char *database, MYSQL *mysql)
  *  \brief opens a connection to a MySQL database.
@@ -94,6 +77,14 @@ static void db_set_ssl_options(MYSQL *mysql, int type) {
 }
 #endif
 
+/* A rejected connection leaves the caller a handle it can close again. */
+static int db_reject_handle(MYSQL *mysql, db_address_t *address) {
+	mysql_close(mysql);
+	mysql_init(mysql);
+	db_address_release(address);
+	return FALSE;
+}
+
 /* Reports failure instead of exiting: worker threads reconnect through here,
  * and a lost database must fail a device rather than the poller. Startup
  * callers turn FALSE into a process exit. */
@@ -107,7 +98,8 @@ int db_connect(int type, MYSQL *mysql) {
 	int error = 0;
 	const MYSQL *connect_error;
 	db_address_t address;
-	static int connections = 0;
+	static atomic_uint connections;
+	unsigned int total_connections;
 
 	bool local_address = set.poller.poller_id <= 1 || type == LOCAL;
 	db_address_init(&address, local_address ? set.database.host : set.remote_database.host, local_address);
@@ -120,25 +112,31 @@ int db_connect(int type, MYSQL *mysql) {
 	wtimeout = 30;
 	attempts = 1;
 
-	if (mysql_init(mysql) == NULL) {
-		db_address_release(&address);
-		printf("ERROR: Database unable to allocate memory and therefore can not connect\n");
-		return FALSE;
-	}
+	while (tries > 0) {
+		/* Failed handshakes may consume connector TLS state. Each attempt owns a
+	 * freshly initialized handle and reapplies the complete policy. */
+		if (mysql_init(mysql) == NULL) {
+			db_address_release(&address);
+			printf("ERROR: Database unable to allocate memory and therefore can not connect\n");
+			return FALSE;
+		}
 
-	db_set_option(mysql, MYSQL_OPT_READ_TIMEOUT, &rtimeout, "read timeout");
-	db_set_option(mysql, MYSQL_OPT_WRITE_TIMEOUT, &wtimeout, "write timeout");
-	db_set_option(mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout, "general timeout");
+		db_set_option(mysql, MYSQL_OPT_READ_TIMEOUT, &rtimeout, "read timeout");
+		db_set_option(mysql, MYSQL_OPT_WRITE_TIMEOUT, &wtimeout, "write timeout");
+		db_set_option(mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout, "general timeout");
 
 #ifdef HAS_MYSQL_OPT_RETRY_COUNT
 	db_set_option(mysql, MYSQL_OPT_RETRY_COUNT, &tries, "retry count");
 #endif
 
 #ifdef HAS_MYSQL_OPT_SSL_KEY
-	db_set_ssl_options(mysql, type);
+	db_set_ssl_options(mysql, local_address ? LOCAL : REMOTE);
 #endif
+	if (!db_apply_tls_policy(mysql, local_address ? &set.database : &set.remote_database)) {
+		SPINE_LOG(("ERROR: Database TLS policy is invalid or unsupported by the selected client library"));
+		return db_reject_handle(mysql, &address);
+	}
 
-	while (tries > 0) {
 		tries--;
 
 		if (set.poller.poller_id > 1) {
@@ -169,11 +167,17 @@ int db_connect(int type, MYSQL *mysql) {
 				success = FALSE;
 			}
 		} else {
+			const spine_database_config_t *configuration = local_address ? &set.database : &set.remote_database;
+			if (configuration->tls_mode >= SPINE_TLS_REQUIRED && mysql_get_ssl_cipher(mysql) == NULL) {
+				SPINE_LOG(("ERROR: Database connection rejected because the explicit TLS policy requires encryption"));
+				return db_reject_handle(mysql, &address);
+			}
 			success = TRUE;
 			break;
 		}
 
 		attempts++;
+		if (tries > 0) mysql_close(mysql);
 	}
 
 	db_address_release(&address);
@@ -185,9 +189,8 @@ int db_connect(int type, MYSQL *mysql) {
 		return FALSE;
 	}
 
-	SPINE_LOG_DEBUG(("DEBUG: Total Connections made %i", connections));
-
-	connections++;
+	total_connections = atomic_fetch_add_explicit(&connections, 1, memory_order_relaxed) + 1;
+	SPINE_LOG_DEBUG(("DEBUG: Total Connections made %u", total_connections));
 
 	return TRUE;
 }

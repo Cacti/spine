@@ -1,4 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Structural guard for the child process hardening.
 #
 # The behaviour is covered by tests/unit/test_linked.c, which opens a pipe and
@@ -20,32 +24,32 @@ fail() {
 	exit 1
 }
 
-# The close-on-exec helper lives in src/process/fd.c and both callers share it.
-grep -q 'FD_CLOEXEC' src/process/fd.c ||
-	fail "nft_popen.c must use the close-on-exec descriptor helpers"
+# Descriptor flags are platform behavior; process/fd.c owns pipe cleanup.
+grep -q 'FD_CLOEXEC' src/platform/descriptor.c ||
+	fail "src/process/nft_popen.c must use the close-on-exec descriptor helpers"
 
-grep -q 'spine_open_pipe_cloexec(pdes)' nft_popen.c ||
+grep -q 'spine_open_pipe_cloexec(pdes)' src/process/nft_popen.c ||
 	fail "nft_popen() must open its pipe with close-on-exec"
 
-grep -q 'spine_open_pipe_cloexec(cacti2php_pdes)' src/php/process.c ||
+grep -q 'spine_open_pipe_cloexec(cacti2php_pdes)' src/script/server.c ||
 	fail "PHP process module must protect the cacti-to-php pipe with close-on-exec"
 
-grep -q 'spine_open_pipe_cloexec(php2cacti_pdes)' src/php/process.c ||
+grep -q 'spine_open_pipe_cloexec(php2cacti_pdes)' src/script/server.c ||
 	fail "PHP process module must protect the php-to-cacti pipe with close-on-exec"
 
 # The reap must be bounded and must escalate.
 grep -q 'waitpid(pid, pstat, WNOHANG)' src/process/fd.c ||
-	fail "nft_popen.c must reap child processes with WNOHANG"
+	fail "src/process/nft_popen.c must reap child processes with WNOHANG"
 
 # The negative pid kills the script's process group, descendants included.
-grep -q 'kill(-cur->pid, SIGKILL)' nft_popen.c ||
-	fail "nft_popen.c must escalate a timed-out reap to SIGKILL"
+grep -q 'kill(-cur->pid, SIGKILL)' src/process/nft_popen.c ||
+	fail "src/process/nft_popen.c must escalate a timed-out reap to SIGKILL"
 
-if grep -q 'waitpid(cur->pid, &pstat, 0)' nft_popen.c; then
+if grep -q 'waitpid(cur->pid, &pstat, 0)' src/process/nft_popen.c; then
 	fail "nft_pclose() must not block in waitpid()"
 fi
 
-if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' src/php/process.c; then
+if grep -q 'waitpid(phpp->php_pid, &wstatus, 0)' src/script/server.c; then
 	fail "php_close() must not block in waitpid()"
 fi
 
@@ -54,14 +58,14 @@ fi
 # poller slowdown this guard exists to prevent. nft_pclose() must reap with a
 # single non-blocking check and hand anything still running to the abandoned-
 # pid sweep instead of spinning/sleeping in the calling thread.
-nft_pclose_body=$(awk '/^nft_pclose\(int fd\)/,/^}/' nft_popen.c)
+nft_pclose_body=$(awk '/^nft_pclose\(int fd\)/,/^}/' src/process/nft_popen.c)
 
 printf '%s\n' "$nft_pclose_body" | grep -qE 'usleep|NFT_PCLOSE_(TERM|KILL)_ATTEMPTS' &&
 	fail "nft_pclose() must not spin/sleep waiting for a child to exit"
 
 # php_terminate_and_reap() must hold the same invariant: one non-blocking
 # check, then kill and move on.
-php_terminate_body=$(awk '/^static int php_terminate_and_reap/,/^}/' src/php/process.c)
+php_terminate_body=$(awk '/^static int php_terminate_and_reap/,/^}/' src/script/server.c)
 
 printf '%s\n' "$php_terminate_body" | grep -qE 'usleep|for \(' &&
 	fail "php_terminate_and_reap() must not spin/sleep waiting for a child to exit"
@@ -81,7 +85,7 @@ awk '/^int spine_open_pipe_cloexec/,/^}/' src/process/fd.c |
 
 # php_init() must have exactly one teardown. Five hand-copied ones drifted and
 # every one of them leaked the command buffer.
-php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/php/process.c)
+php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/script/server.c)
 
 printf '%s\n' "$php_init_body" | grep -cE '^[[:space:]]+return FALSE;' | grep -qx '1' ||
 	fail "php_init() must reach its teardown by goto, not by a return that skips it"
@@ -94,19 +98,24 @@ printf '%s\n' "$php_init_body" | grep -q '^[[:space:]]*cleanup:' ||
 # reading, so a server that spawned but never answered recursed without bound,
 # spawning another server at every level. The handshake read must stay on the
 # non-restarting entry point.
-php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/php/process.c)
+php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/script/server.c)
 
 printf '%s\n' "$php_init_body" | grep -q 'php_read_result(slot, command, FALSE)' ||
 	fail "php_init() must read the startup handshake with restarts disabled"
 
+# The initial PHP_INIT handshake uses the full script timeout through
+# php_read_response(); it must still pass allow_restart as FALSE.
+printf '%s\n' "$php_init_body" | grep -q 'php_read_response(slot, command, FALSE, ' ||
+	fail "php_init() must read the initial handshake with restarts disabled"
+
 printf '%s\n' "$php_init_body" | grep -q 'php_readpipe(' &&
 	fail "php_init() must not call php_readpipe(), which may restart the server"
 
-awk '/^char \*php_read_result/,/^\}/' src/php/read.c |
+awk '/^char \*php_read_response/,/^\}/' src/script/read.c |
 	grep -q 'php_fail_read(php_process, allow_restart)' ||
-	fail "php_read_result() must route failures through the guarded restart helper"
+	fail "php_read_response() must route failures through the guarded restart helper"
 
-awk '/^void php_fail_read/,/^\}/' php.c |
+awk '/^void php_fail_read/,/^\}/' src/script/protocol.c |
 	grep -q 'if (allow_restart) {' ||
 	fail "php_fail_read() must gate the server restart on allow_restart"
 

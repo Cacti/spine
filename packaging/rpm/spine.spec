@@ -12,7 +12,7 @@ Version:        1.3.0
 Release:        1%{?dist}
 Summary:        High-performance SNMP poller for Cacti
 
-License:        GPL-2.0-or-later
+License:        LGPL-2.1-or-later AND LGPL-2.1-only AND GPL-2.0-or-later AND BSD-1-Clause AND BSD-4-Clause AND LicenseRef-Xenadyne
 URL:            https://www.cacti.net/
 Source0:        https://github.com/Cacti/spine/archive/refs/tags/%{version}.tar.gz#/cacti-spine-%{version}.tar.gz
 
@@ -57,10 +57,10 @@ sockets for ICMP availability checking without running setuid-root.
 
 %install
 %make_install
-install -D -m 0640 spine.conf.dist %{buildroot}%{_sysconfdir}/spine.conf.dist
+install -D -m 0640 etc/spine.conf.dist %{buildroot}%{_sysconfdir}/spine.conf.dist
 
 # Install man page (generated during build); upstream installs into man1
-[ -f spine.1 ] && install -D -m 0644 spine.1 %{buildroot}%{_mandir}/man1/spine.1 || true
+[ -f docs/man/spine.1 ] && install -D -m 0644 docs/man/spine.1 %{buildroot}%{_mandir}/man1/spine.1 || true
 
 %post
 # Grant CAP_NET_RAW so spine can open raw ICMP sockets without setuid-root.
@@ -70,7 +70,7 @@ setcap cap_net_raw+eip %{_sbindir}/spine || true
 exit 0
 
 %files
-%license LICENSE
+%license LICENSE LICENSES
 %doc README.md INSTALL CHANGELOG
 %attr(0755, root, root) %{_sbindir}/spine
 %ghost %config(noreplace) %{_sysconfdir}/spine.conf

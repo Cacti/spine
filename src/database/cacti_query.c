@@ -1,0 +1,114 @@
+/*
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
+
+#include "internal/common.h"
+#include "app/spine.h"
+#include "database/cacti_query.h"
+#include <limits.h>
+
+static void poller_item_query(char *buffer, size_t capacity, const char *columns, const poller_query_filter_t *filter) {
+	char *cursor = buffer;
+	cursor += spine_snprintf(cursor, capacity, "SELECT SQL_NO_CACHE %s FROM poller_item WHERE host_id = %i", columns, filter->host_id);
+	if (set.poller.poller_id != 0) cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " AND poller_id = %i", set.poller.poller_id);
+	if (filter->due_only) cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " AND rrd_next_step <= 0");
+	if (filter->group_ports) {
+		cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " GROUP BY snmp_port");
+	} else if (set.snmp.total_snmp_ports != 1) {
+		cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " ORDER BY snmp_port");
+	}
+	spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " %s", filter->limits);
+}
+
+void poller_prepare_queries(poller_queries_t *queries, int host_id, int host_thread, int host_data_ids) {
+	char limits[SMALL_BUFSIZE] = "";
+	if (host_data_ids > 0) {
+		if (host_thread < 1) die("ERROR: Invalid device thread for poller item selection");
+		long long offset = (long long) host_data_ids * ((long long) host_thread - 1);
+		spine_snprintf(limits, sizeof(limits), "LIMIT %lld, %i", offset, host_data_ids);
+	}
+	char columns[BUFSIZE];
+	/* optional output_regex column (added in Cacti 1.3.1) */
+	spine_snprintf(columns, sizeof(columns), "%s%s",
+		"action, hostname, snmp_community, snmp_version, snmp_username, snmp_password, "
+		"rrd_name, rrd_path, arg1, arg2, arg3, local_data_id, rrd_num, snmp_port, snmp_timeout, "
+		"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id",
+		set.hosts.has_output_regex ? ", output_regex" : "");
+	poller_query_filter_t filter = {host_id, limits, FALSE, FALSE};
+	poller_item_query(queries->items, sizeof(queries->items), columns, &filter);
+	filter.due_only = set.poller.active_profiles != 1;
+	poller_item_query(queries->due_items, sizeof(queries->due_items), columns, &filter);
+	filter.group_ports = TRUE;
+	filter.due_only = FALSE;
+	poller_item_query(queries->agents, sizeof(queries->agents), "snmp_port, count(snmp_port)", &filter);
+	filter.due_only = set.poller.active_profiles != 1;
+	poller_item_query(queries->due_agents, sizeof(queries->due_agents), "snmp_port, count(snmp_port)", &filter);
+	spine_snprintf(queries->host, sizeof(queries->host),
+		"SELECT SQL_NO_CACHE id, hostname, snmp_community, snmp_version, snmp_username, snmp_password, snmp_auth_protocol, "
+		"snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id, snmp_port, snmp_timeout, max_oids, "
+		"availability_method, ping_method, ping_port, ping_timeout, ping_retries, status, status_event_count, "
+		"UNIX_TIMESTAMP(status_fail_date), UNIX_TIMESTAMP(status_rec_date), status_last_error, min_time, max_time, "
+		"cur_time, avg_time, total_polls, failed_polls, availability, snmp_sysUpTimeInstance, snmp_sysDescr, snmp_sysObjectID, "
+		"snmp_sysContact, snmp_sysName, snmp_sysLocation FROM host WHERE id = %i AND deleted = ''",
+		host_id);
+	spine_snprintf(queries->reindex, sizeof(queries->reindex),
+		"SELECT SQL_NO_CACHE data_query_id, action, op, assert_value, arg1 FROM poller_reindex WHERE host_id = %i", host_id);
+	spine_snprintf(queries->schedule, sizeof(queries->schedule),
+		"UPDATE poller_item SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i)) WHERE host_id = %i",
+		set.poller.poller_interval, set.poller.poller_interval, set.poller.poller_interval, set.poller.poller_interval, host_id);
+	if (set.poller.poller_id != 0) {
+		size_t length = strlen(queries->schedule);
+		spine_snprintf(queries->schedule + length, sizeof(queries->schedule) - length, " AND poller_id = %i", set.poller.poller_id);
+	}
+	strncopy(queries->output, "INSERT INTO poller_output (local_data_id, rrd_name, time, output) VALUES", sizeof(queries->output));
+	strncopy(queries->boost_output, "INSERT INTO poller_output_boost (local_data_id, rrd_name, time, output) VALUES", sizeof(queries->boost_output));
+	/* The cached upsert capability describes the local connection, while output can
+	 * go to the remote one. VALUES() is accepted by both MySQL and MariaDB. */
+	strncopy(queries->suffix, " ON DUPLICATE KEY UPDATE output=VALUES(output)", sizeof(queries->suffix));
+}
+
+MYSQL_RES *select_poll_items(MYSQL *mysql, const poller_queries_t *queries,
+	const host_t *host, const poller_thread_t *work, int *num_rows) {
+	const char *query = set.poller.poller_interval == 0 ? queries->items : queries->due_items;
+	MYSQL_RES *result = db_query(mysql, LOCAL, query);
+	*num_rows = 0;
+	if (result != NULL) {
+		*num_rows = spine_count_to_int(mysql_num_rows(result));
+	} else {
+		SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to Retrieve Rows due to Null Result!", host->id, work->host_thread));
+	}
+	return result;
+}
+
+MYSQL_RES *select_poll_hosts(MYSQL *mysql) {
+	char querybuf[MEGA_BUFSIZE];
+	char *qp = querybuf;
+	/* obtain the list of hosts to poll */
+	qp += spine_snprintf(qp, sizeof(querybuf) - (size_t) (qp - querybuf), "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host AS h LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON h.id = pi.host_id");
+	qp += spine_snprintf(qp, sizeof(querybuf) - (size_t) (qp - querybuf), " WHERE disabled = ''");
+
+	qp += spine_snprintf(qp, sizeof(querybuf) - (size_t) (qp - querybuf), " AND availability_method != %d", AVAIL_STREAM);
+
+	if (!strlen(set.hosts.host_id_list)) {
+		qp += append_hostrange(qp, sizeof(querybuf) - (size_t) (qp - querybuf), "h.id"); /* AND id BETWEEN a AND b */
+	} else {
+		qp += spine_snprintf(qp, sizeof(querybuf) - (size_t) (qp - querybuf), " AND h.id IN(%s)", set.hosts.host_id_list);
+	}
+
+	qp += spine_snprintf(qp, sizeof(querybuf) - (size_t) (qp - querybuf), " AND h.poller_id = %i", set.poller.poller_id);
+	spine_snprintf(qp, sizeof(querybuf) - (size_t) (qp - querybuf), " ORDER BY picount DESC");
+
+	SPINE_LOG_DEVDBG(("DEVDBG: Host SQL:%s", querybuf));
+	return db_query(mysql, LOCAL, querybuf);
+}

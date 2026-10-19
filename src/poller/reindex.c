@@ -1,39 +1,21 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
-#include "common.h"
-#include "spine.h"
-#include "src/poller/poller_internal.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller_internal.h"
 #include <limits.h>
 
 static bool reindex_assertion_failed(const reindex_t *reindex, const char *value) {
@@ -107,14 +89,14 @@ bool parse_uptime(const char *text, unsigned long long *ticks) {
 	unsigned int digit;
 
 	if (text == NULL || ticks == NULL) return FALSE;
-	while (isspace((unsigned char)*text)) text++;
+	while (isspace((unsigned char) *text)) text++;
 	if (*text < '0' || *text > '9') return FALSE;
 	while (*text >= '0' && *text <= '9') {
-		digit = (unsigned int)(*text++ - '0');
+		digit = (unsigned int) (*text++ - '0');
 		if (value > (ULLONG_MAX - digit) / 10) return FALSE;
 		value = value * 10 + digit;
 	}
-	while (isspace((unsigned char)*text)) text++;
+	while (isspace((unsigned char) *text)) text++;
 	if (*text != '\0') return FALSE;
 	*ticks = value;
 	return TRUE;

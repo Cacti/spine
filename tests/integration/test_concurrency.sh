@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Exercise Spine against many independent hosts while sweeping worker counts.
 # This is deliberately backend-neutral so the same contract can exercise the
 # legacy pthread poller and the future sharded libuv reactor.
@@ -12,6 +16,8 @@ THREADS=${SPINE_TEST_THREAD_COUNTS:-"1 4 12"}
 REPEATS=${SPINE_TEST_REPEATS:-1}
 TIMEOUT_SECONDS=${SPINE_TEST_TIMEOUT_SECONDS:-120}
 DATABASE=${SPINE_TEST_DATABASE:-mariadb}
+FAULT=${SPINE_TEST_SNMP_FAULT:-none}
+case "$FAULT" in none|delay|loss) ;; *) echo 'Invalid SNMP fault scenario' >&2; exit 2;; esac
 PROJECT=${SPINE_TEST_PROJECT:-spine-concurrency-${DATABASE}-$$}
 ARTIFACT_ROOT=${SPINE_TEST_ARTIFACT_DIR:-"$REPO_ROOT/test-artifacts/concurrency"}
 EXTRA_ARGS=()
@@ -40,8 +46,8 @@ esac
 
 mkdir -p "$ARTIFACT_ROOT"
 export SPINE_TEST_ARTIFACT_DIR=$ARTIFACT_ROOT
-# shellcheck source=tests/test-harness.sh
-source "$REPO_ROOT/tests/test-harness.sh"
+# shellcheck source=tests/support/test-harness.sh
+source "$REPO_ROOT/tests/support/test-harness.sh"
 harness_init "Spine concurrency integration"
 
 cleanup() {
@@ -88,6 +94,9 @@ echo "=== Build and start the isolated fixture ==="
 "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 "${COMPOSE[@]}" build spine
 "${COMPOSE[@]}" up -d db snmpd
+if [[ $FAULT != none ]]; then
+	"${COMPOSE[@]}" up -d --wait snmpd-slow
+fi
 if wait_for_fixture; then
 	harness_pass "database and SNMP agent became ready"
 else
@@ -140,6 +149,20 @@ DELIMITER ;
 CALL seed_stress_hosts($HOSTS);
 DROP PROCEDURE seed_stress_hosts;"
 
+expected_results=$HOSTS
+expected_unhealthy=0
+if [[ $FAULT != none ]]; then
+	db_query "UPDATE host SET hostname='snmpd-slow',snmp_timeout=1000 WHERE id=2;
+		UPDATE poller_item SET hostname='snmpd-slow',snmp_timeout=1000 WHERE host_id=2;"
+	if [[ $FAULT == delay ]]; then
+		"${COMPOSE[@]}" exec -T snmpd-slow tc qdisc replace dev eth0 root netem delay 200ms
+	else
+		"${COMPOSE[@]}" exec -T snmpd-slow tc qdisc replace dev eth0 root netem loss 100%
+		expected_results=$((HOSTS - 1))
+		expected_unhealthy=1
+	fi
+fi
+
 harness_assert_eq "$HOSTS" "$(db_query 'SELECT COUNT(*) FROM host;')" \
 	"stress fixture has the requested host count"
 
@@ -157,12 +180,16 @@ for thread_count in $THREADS; do
 			UPDATE host SET total_polls=0, failed_polls=0, status=3;"
 
 		set +e
+		started_seconds=$SECONDS
 		run_with_timeout "${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
 			--conf=/etc/spine/spine.conf -f 1 -l "$HOSTS" -S -t "$thread_count" \
 			"${EXTRA_ARGS[@]}" \
 			> "$log_file" 2>&1
 		rc=$?
 		set -e
+		elapsed_seconds=$((SECONDS - started_seconds))
+		printf '%s\t%s\t%d\n' "$FAULT" "$case_id" "$elapsed_seconds" >> "$ARTIFACT_ROOT/timings.tsv"
+		db_query 'SELECT id,hostname,polling_time,failed_polls,status FROM host ORDER BY id;' > "$ARTIFACT_ROOT/$case_id-host-timings.tsv"
 
 		output=$(<"$log_file")
 		harness_assert_eq 0 "$rc" "$case_id exits successfully"
@@ -171,21 +198,35 @@ for thread_count in $THREADS; do
 			"$case_id has no fatal, crash, or shutdown-timeout diagnostics"
 		harness_assert_contains "$output" "Threads: ${thread_count}, Devices: ${HOSTS}" \
 			"$case_id reports every device completed"
-		harness_assert_eq "$HOSTS" \
+		harness_assert_eq "$expected_results" \
 			"$(db_query "SELECT COUNT(*) FROM poller_output WHERE rrd_name = 'uptime';")" \
 			"$case_id writes exactly one SNMP result per host"
-		harness_assert_eq "$((HOSTS + 1))" \
+		harness_assert_eq "$((expected_results + 1))" \
 			"$(db_query 'SELECT COUNT(*) FROM poller_output;')" \
 			"$case_id neither loses nor duplicates SNMP and script results"
 		harness_assert_eq "$HOSTS" \
 			"$(db_query 'SELECT COUNT(*) FROM host WHERE total_polls > 0;')" \
 			"$case_id accounts for every host poll"
-		harness_assert_eq 0 \
+		harness_assert_eq "$expected_unhealthy" \
 			"$(db_query 'SELECT COUNT(*) FROM host WHERE failed_polls > 0 OR status <> 3;')" \
 			"$case_id leaves every host healthy"
+		if [[ $FAULT != none ]]; then
+			harness_assert_eq 0 "$(db_query 'SELECT COUNT(*) FROM host WHERE id<>2 AND (failed_polls>0 OR status<>3);')" \
+				"$case_id keeps unaffected hosts healthy"
+		fi
 		harness_assert_eq 0 "$(db_query 'SELECT COUNT(*) FROM host_errors;')" \
 			"$case_id records no host-level errors"
 	done
 done
+
+if [[ $FAULT != none ]]; then
+	"${COMPOSE[@]}" exec -T snmpd-slow tc qdisc del dev eth0 root
+	db_query "UPDATE host SET hostname='snmpd' WHERE id=2; UPDATE poller_item SET hostname='snmpd' WHERE host_id=2;
+		TRUNCATE poller_output; UPDATE host SET status=3,failed_polls=0;"
+	run_with_timeout "${COMPOSE[@]}" run --rm --no-deps --entrypoint spine spine \
+		--conf=/etc/spine/spine.conf -f 1 -l "$HOSTS" -S -t 4 > "$ARTIFACT_ROOT/recovery.log" 2>&1
+	harness_assert_eq "$HOSTS" "$(db_query "SELECT COUNT(*) FROM poller_output WHERE rrd_name='uptime';")" \
+		"every host produces a fresh result after recovery"
+fi
 
 harness_finish

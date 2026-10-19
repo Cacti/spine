@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Integration tests for output_regex column detection and application.
 #
 # Validates that spine correctly detects the presence or absence of the
@@ -174,7 +178,7 @@ fi
 # ---------------------------------------------------------------------------
 # Test 4: the regex is applied to the trailing multi-get batch
 #
-# poller.c drains SNMP OIDs in two places: inside the item loop once MAX_OIDS
+# src/poller/poller.c drains SNMP OIDs in two places: inside the item loop once MAX_OIDS
 # have accumulated, and once more after the loop for whatever is left over.
 # Only the in-loop drain applied output_regex, so a host whose OID count did
 # not land on a MAX_OIDS boundary stored raw values.  A single data source is

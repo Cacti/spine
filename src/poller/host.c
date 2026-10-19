@@ -1,39 +1,21 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
-#include "common.h"
-#include "spine.h"
-#include "src/poller/poller_internal.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "poller/poller_internal.h"
 #include <limits.h>
 
 static void host_metadata_defaults(host_t *host) {
@@ -143,61 +125,7 @@ static void host_metadata_system(host_t *host, MYSQL_ROW row, MYSQL *mysql) {
 	if (row[36] != NULL) db_escape(mysql, host->system.snmp_sysLocation, sizeof(host->system.snmp_sysLocation), row[36]);
 }
 
-void persist_host_status(MYSQL *mysql, const host_t *host, bool include_system_information) {
-	char update_sql[BIG_BUFSIZE];
-	char escaped_last_error[BUFSIZE];
-	db_escape(mysql, escaped_last_error, sizeof(escaped_last_error), host->state.status_last_error);
-	if (include_system_information) {
-		snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
-										  "SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
-										  " status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
-										  " max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-										  " failed_polls='%i', availability='%.4f', snmp_sysDescr='%s', "
-										  " snmp_sysObjectID='%s', snmp_sysUpTimeInstance='%llu', "
-										  " snmp_sysContact='%s', snmp_sysName='%s', snmp_sysLocation='%s' "
-										  "WHERE id='%i'",
-			host->state.status,
-			host->state.status_event_count,
-			host->state.status_fail_date,
-			host->state.status_rec_date,
-			escaped_last_error,
-			host->statistics.min_time,
-			host->statistics.max_time,
-			host->statistics.cur_time,
-			host->statistics.avg_time,
-			host->statistics.total_polls,
-			host->statistics.failed_polls,
-			host->statistics.availability,
-			host->system.snmp_sysDescr,
-			host->system.snmp_sysObjectID,
-			host->system.snmp_sysUpTimeInstance,
-			host->system.snmp_sysContact,
-			host->system.snmp_sysName,
-			host->system.snmp_sysLocation,
-			host->id);
-	} else {
-		snprintf(update_sql, BIG_BUFSIZE, "UPDATE host "
-										  "SET status='%i', status_event_count='%i', status_fail_date=FROM_UNIXTIME(%s),"
-										  " status_rec_date=FROM_UNIXTIME(%s), status_last_error='%s', min_time='%f',"
-										  " max_time='%f', cur_time='%f', avg_time='%f', total_polls='%i',"
-										  " failed_polls='%i', availability='%.4f' "
-										  "WHERE id='%i'",
-			host->state.status,
-			host->state.status_event_count,
-			host->state.status_fail_date,
-			host->state.status_rec_date,
-			escaped_last_error,
-			host->statistics.min_time,
-			host->statistics.max_time,
-			host->statistics.cur_time,
-			host->statistics.avg_time,
-			host->statistics.total_polls,
-			host->statistics.failed_polls,
-			host->statistics.availability,
-			host->id);
-	}
-	db_insert(mysql, LOCAL, update_sql);
-}
+
 
 void load_host_metadata(MYSQL *mysql, MYSQL_ROW row, host_t *host, const poller_thread_t *work) {
 	host_metadata_defaults(host);

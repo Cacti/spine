@@ -1,40 +1,62 @@
 /*
- ex: set tabstop=4 shiftwidth=4 autoindent:
- +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2026 The Cacti Group                                 |
- |                                                                         |
- | This program is free software; you can redistribute it and/or           |
- | modify it under the terms of the GNU Lesser General Public              |
- | License as published by the Free Software Foundation; either            |
- | version 2.1 of the License, or (at your option) any later version.      |
- |                                                                         |
- | This program is distributed in the hope that it will be useful,         |
- | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
- | GNU Lesser General Public License for more details.                     |
- |                                                                         |
- | You should have received a copy of the GNU Lesser General Public        |
- | License along with this library; if not, write to the Free Software     |
- | Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA           |
- | 02110-1301, USA                                                         |
- |                                                                         |
- +-------------------------------------------------------------------------+
- | spine: a backend data gatherer for cacti                                |
- +-------------------------------------------------------------------------+
- | This poller would not have been possible without:                       |
- |   - Larry Adams (current development and enhancements)                  |
- |   - Rivo Nurges (rrd support, mysql poller cache, misc functions)       |
- |   - RTG (core poller code, pthreads, snmp, autoconf examples)           |
- |   - Brady Alleman/Doug Warner (threading ideas, implementation details) |
- +-------------------------------------------------------------------------+
- | - Cacti - http://www.cacti.net/                                         |
- +-------------------------------------------------------------------------+
-*/
+ * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ *
+ * Original credits:
+ * - Larry Adams (current development and enhancements)
+ * - Rivo Nurges (rrd support, mysql poller cache, misc functions)
+ * - RTG (core poller code, pthreads, snmp, autoconf examples)
+ * - Brady Alleman/Doug Warner (threading ideas, implementation details)
+ * - Cacti - http://www.cacti.net/
+ */
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include <limits.h>
 #define SPINE_STRINGIFY_INNER(value) #value
 #define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
+
+static bool apply_tls_directive(const char *name, const char *value) {
+	spine_database_config_t *configuration;
+	const char *option;
+	static const char *const modes[] = {"legacy", "disabled", "preferred", "required", "verify-ca", "verify-full"};
+	size_t index;
+	char *destination;
+
+	if (strncasecmp(name, "DB_SSL_", 7) == 0) {
+		configuration = &set.database;
+		option = name + 7;
+	} else if (strncasecmp(name, "RDB_SSL_", 8) == 0) {
+		configuration = &set.remote_database;
+		option = name + 8;
+	} else {
+		return FALSE;
+	}
+	if (STRIMATCH(option, "Mode")) {
+		for (index = 0; index < sizeof(modes) / sizeof(modes[0]); index++) {
+			if (STRIMATCH(value, modes[index])) {
+				configuration->tls_mode = (spine_tls_mode_t) index;
+				return TRUE;
+			}
+		}
+		die("ERROR: Invalid database TLS mode");
+	}
+	if (STRIMATCH(option, "MinVersion")) {
+		if (STRIMATCH(value, "TLSv1.2")) configuration->tls_min_version = 12;
+		else if (STRIMATCH(value, "TLSv1.3")) configuration->tls_min_version = 13;
+		else die("ERROR: Database TLS minimum must be TLSv1.2 or TLSv1.3");
+		return TRUE;
+	}
+	if (STRIMATCH(option, "Cipher")) destination = configuration->tls_cipher;
+	else if (STRIMATCH(option, "Ciphersuites")) destination = configuration->tls_ciphersuites;
+	else return FALSE;
+	if (strlen(value) >= BUFSIZE) die("ERROR: Database TLS cipher policy exceeds the configuration limit");
+	strncopy(destination, value, BUFSIZE);
+	return TRUE;
+}
 
 /*! \fn int read_spine_config(const char *file)
  *  \brief obtain default startup variables from the spine.conf file.
@@ -43,6 +65,26 @@
  *  \return 0 if successful or -1 if the file could not be opened
  */
 static int apply_config_directive(const char *name, const char *value) {
+	unsigned int *limit = NULL;
+	unsigned long parsed;
+	char *end;
+	if (apply_tls_directive(name, value)) return TRUE;
+	if (STRIMATCH(name, "ScriptMaxOutputBytes")) limit = &set.php.script_max_output;
+	else if (STRIMATCH(name, "ScriptCpuSeconds")) limit = &set.php.script_cpu_seconds;
+	else if (STRIMATCH(name, "ScriptMemoryMB")) limit = &set.php.script_memory_mb;
+	if (limit != NULL) {
+		errno = 0;
+		parsed = strtoul(value, &end, 10);
+		if (value[0] < '0' || value[0] > '9' || *end != '\0' || errno != 0 || parsed > UINT_MAX ||
+			(limit == &set.php.script_max_output && parsed >= RESULTS_BUFFER)) {
+			die("ERROR: Invalid external-script limit for %s", name);
+		}
+#if !defined(__linux__)
+		if (limit == &set.php.script_memory_mb && parsed != 0) die("ERROR: ScriptMemoryMB requires Linux RLIMIT_AS");
+#endif
+		*limit = (unsigned int) parsed;
+		return TRUE;
+	}
 	/* Immutable metadata cannot be changed by configuration values written
 	 * into set. Offsets and capacities describe the actual destination fields. */
 	static const struct {
@@ -77,7 +119,11 @@ static int apply_config_directive(const char *name, const char *value) {
 	else if (STRIMATCH(name, "DB_Port")) set.database.port = atoi(value);
 	else if (STRIMATCH(name, "DB_UseSSL")) set.database.ssl = atoi(value);
 	else if (STRIMATCH(name, "Poller")) set.poller.poller_id = atoi(value);
-	else if (STRIMATCH(name, "DB_PreG")) {
+	else if (STRIMATCH(name, "Log_Format")) {
+		if (STRIMATCH(value, "json")) set.logging.json_logs = TRUE;
+		else if (STRIMATCH(value, "text")) set.logging.json_logs = FALSE;
+		else die("ERROR: Log_Format must be text or json");
+	} else if (STRIMATCH(name, "DB_PreG")) {
 		if (!set.console.stderr_notty) fprintf(stderr, "WARNING: DB_PreG is no longer supported\n");
 	} else if (STRIMATCH(name, "Cacti_Log")) {
 		STRNCOPY(set.logging.path_logfile, value);
@@ -145,6 +191,8 @@ int read_spine_config(const char *file) {
 		 * A lone token is a key without a value, or a line that is no
 		 * directive at all; the old %15s split such a line in two. */
 		if (fields == 1) {
+			if (STRIMATCH(name, "ScriptMaxOutputBytes") || STRIMATCH(name, "ScriptCpuSeconds") || STRIMATCH(name, "ScriptMemoryMB"))
+				(void) apply_config_directive(name, "");
 			if (!set.console.stderr_notty) {
 				fprintf(stderr, "WARNING: Directive without a value on line %d of %s\n", line, display_file);
 			}
@@ -163,6 +211,14 @@ int read_spine_config(const char *file) {
  *
  */
 void config_defaults() {
+	set.php.script_max_output = 0;
+	set.php.script_cpu_seconds = 0;
+	set.php.script_memory_mb = 0;
+
+	set.database.tls_mode = set.remote_database.tls_mode = SPINE_TLS_LEGACY;
+	set.database.tls_min_version = set.remote_database.tls_min_version = 0;
+	set.database.tls_cipher[0] = set.remote_database.tls_cipher[0] = '\0';
+	set.database.tls_ciphersuites[0] = set.remote_database.tls_ciphersuites[0] = '\0';
 	set.poller.threads = DEFAULT_THREADS;
 
 	/* default server */
@@ -187,4 +243,5 @@ void config_defaults() {
 	STRNCOPY(config_paths[3], CONFIG_PATH_4);
 
 	set.logging.log_destination = LOGDEST_FILE;
+	set.logging.json_logs = FALSE;
 }
