@@ -10,6 +10,7 @@
 #define _GNU_SOURCE
 #include "internal/common.h"
 #include "app/spine.h"
+#include "platform/worker_set.h"
 #include <dirent.h>
 #include <spawn.h>
 #include <fcntl.h>
@@ -40,6 +41,77 @@ extern int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*) 
 #include "app/runtime.h"
 extern poller_thread_t **details;
 
+extern ssize_t __real_write(int, const void *, size_t);
+static bool cancel_log_write;
+static bool fail_json_record;
+extern bool __real_spine_json_log_record(char *, size_t, const char *, const char *, const char *);
+
+bool __wrap_spine_json_log_record(char *output, size_t capacity, const char *timestamp,
+	const char *severity, const char *message) {
+	if (fail_json_record) {
+		fail_json_record = FALSE;
+		if (capacity > 0) output[0] = '\0';
+		return FALSE;
+	}
+	return __real_spine_json_log_record(output, capacity, timestamp, severity, message);
+}
+
+ssize_t __wrap_write(int fd, const void *bytes, size_t length) {
+	if (cancel_log_write && fd > STDERR_FILENO) {
+		cancel_log_write = FALSE;
+		assert(pthread_cancel(pthread_self()) == 0);
+	}
+	return __real_write(fd, bytes, length);
+}
+
+static bool fail_mysql_init;
+static bool fail_log_mutex;
+static int fail_worker_init;
+static int fail_worker_destroy;
+static int fail_worker_reap;
+extern MYSQL *__real_mysql_init(MYSQL *);
+extern const char *__real_mysql_get_ssl_cipher(MYSQL *);
+extern int __real_pthread_mutex_lock(pthread_mutex_t *);
+extern int __real_spine_worker_set_init(spine_worker_set_t *, size_t);
+extern int __real_spine_worker_set_destroy(spine_worker_set_t *);
+extern int __real_spine_worker_set_reap(spine_worker_set_t *, size_t *);
+
+MYSQL *__wrap_mysql_init(MYSQL *mysql) {
+	if (fail_mysql_init) {
+		fail_mysql_init = FALSE;
+		return NULL;
+	}
+	return __real_mysql_init(mysql);
+}
+int __wrap_pthread_mutex_lock(pthread_mutex_t *mutex) {
+	if (fail_log_mutex) {
+		fail_log_mutex = FALSE;
+		return EINVAL;
+	}
+	return __real_pthread_mutex_lock(mutex);
+}
+int __wrap_spine_worker_set_init(spine_worker_set_t *workers, size_t count) {
+	if (fail_worker_init) {
+		fail_worker_init = 0;
+		return ENOMEM;
+	}
+	return __real_spine_worker_set_init(workers, count);
+}
+int __wrap_spine_worker_set_destroy(spine_worker_set_t *workers) {
+	if (fail_worker_destroy) {
+		fail_worker_destroy = 0;
+		return EBUSY;
+	}
+	return __real_spine_worker_set_destroy(workers);
+}
+int __wrap_spine_worker_set_reap(spine_worker_set_t *workers, size_t *remaining) {
+	if (fail_worker_reap) {
+		fail_worker_reap = 0;
+		return ESRCH;
+	}
+	return __real_spine_worker_set_reap(workers, remaining);
+}
+
 static int format_failures;
 static int format_fault_calls;
 static MYSQL *query_fault_connection;
@@ -53,6 +125,11 @@ static MYSQL *interrupted_connection;
  * without a database. While fake_database is set every client call below
  * answers from this script and nothing touches the network. */
 static bool fake_database;
+const char *__wrap_mysql_get_ssl_cipher(MYSQL *mysql) {
+	if (fake_database) return NULL;
+	return __real_mysql_get_ssl_cipher(mysql);
+}
+static bool cancel_fake_poll;
 static int fake_errors[64];
 static int fake_error_count;
 static int fake_error_next;
@@ -114,8 +191,9 @@ static int completion_writes_locked;
 
 int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attributes,
 	void *(*start)(void *), void *arg) {
-	if (!launch_case_active || start != &child) return __real_pthread_create(thread, attributes, start, arg);
-	const poller_thread_t *work = arg;
+	if (!launch_case_active || start != &spine_worker_entry) return __real_pthread_create(thread, attributes, start, arg);
+	const spine_worker_slot_t *slot = arg;
+	const poller_thread_t *work = slot->argument;
 	size_t stack_size = 0;
 	assert(work != NULL && work->host_id == 902);
 	assert(attributes != NULL && pthread_attr_getstacksize(attributes, &stack_size) == 0);
@@ -195,6 +273,10 @@ size_t __wrap_strftime(char *output, size_t capacity, const char *format, const 
 int __wrap_mysql_query(MYSQL *mysql, const char *query) {
 	if (fake_database) {
 		fake_queries++;
+		if (cancel_fake_poll) {
+			cancel_fake_poll = FALSE;
+			assert(pthread_cancel(pthread_self()) == 0);
+		}
 		if (strncmp(query, "UPDATE poller_item", strlen("UPDATE poller_item")) == 0) fake_schedule_writes++;
 		if (strncmp(query, "SELECT ", 7) == 0 && strstr(query, " FROM poller_item ") != NULL) fake_item_selects++;
 		/* Pause the first partition's error write while another partition
@@ -666,6 +748,91 @@ static void test_privilege_drop_faults(void) {
 	puts("production privilege drop faults passed");
 }
 
+static void *cancelled_logger(void *argument) {
+	assert(pthread_setcanceltype((int) (intptr_t) argument, NULL) == 0);
+	spine_log("cancellation ownership check");
+	pthread_testcancel();
+	return NULL;
+}
+
+static void test_logger_cancellation_unlocks_file(void) {
+	char path[] = "spine-log-cancellation-XXXXXX";
+	int fd = mkstemp(path);
+	pid_t process;
+	int status;
+
+	assert(fd >= 0 && close(fd) == 0);
+	fflush(NULL);
+	process = fork();
+	assert(process >= 0);
+	if (process == 0) {
+		pthread_t worker;
+		void *result = NULL;
+		config_t previous = set;
+		int kind;
+
+		signal(SIGALRM, SIG_DFL);
+		alarm(5);
+		set.logging.json_logs = TRUE;
+		set.logging.log_destination = LOGDEST_FILE;
+		set.logging.log_level = POLLER_VERBOSITY_LOW;
+		set.logging.logfile_processed = TRUE;
+		set.console.stdout_notty = TRUE;
+		set.console.stderr_notty = TRUE;
+		STRNCOPY(set.logging.path_logfile, path);
+		for (kind = PTHREAD_CANCEL_DEFERRED; kind <= PTHREAD_CANCEL_ASYNCHRONOUS; kind++) {
+			cancel_log_write = TRUE;
+			assert(pthread_create(&worker, NULL, cancelled_logger, (void *) (intptr_t) kind) == 0);
+			assert(pthread_join(worker, &result) == 0);
+			assert(!cancel_log_write);
+			assert(result == PTHREAD_CANCELED);
+			/* A stranded mutex would hang here; the alarm makes that a failure. */
+			assert(spine_log("logging remains usable after cancellation"));
+		}
+		fail_log_mutex = TRUE;
+		assert(!spine_log("file mutex fault"));
+		assert(!fail_log_mutex);
+		/* The record is built in the thread's own buffer, so an allocation
+		 * failure has nothing to fail once that buffer exists. */
+		allocation_failures = 1;
+		assert(spine_log("allocation fault"));
+		assert(allocation_failures == 1);
+		allocation_failures = 0;
+		format_failures = 1;
+		assert(!spine_log("timestamp fault"));
+		assert(format_failures == 0);
+		fail_json_record = TRUE;
+		assert(!spine_log("encoder failure must not report success"));
+		assert(!fail_json_record);
+		{
+			char line[1024];
+			bool found = FALSE;
+			FILE *logged = fopen(path, "r");
+
+			assert(logged != NULL);
+			while (fgets(line, sizeof(line), logged) != NULL) {
+				if (strstr(line, "JSON log rejected: formatting failure") != NULL) {
+					assert(strcmp(line, "{\"timestamp\":\"unknown\",\"severity\":\"ERROR\",\"message\":\"JSON log rejected: formatting failure\"}\n") == 0);
+					found = TRUE;
+				}
+			}
+			assert(fclose(logged) == 0);
+			assert(found);
+		}
+		assert(spine_log("logging recovers after encoder failure"));
+		assert(freopen("/dev/full", "w", stderr) != NULL);
+		assert(setvbuf(stderr, NULL, _IONBF, 0) == 0);
+		set.console.stderr_notty = FALSE;
+		assert(!spine_log("ERROR: failed JSON diagnostic sink"));
+		set = previous;
+		exit(0);
+	}
+	assert(waitpid(process, &status, 0) == process);
+	assert(unlink(path) == 0);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+	puts("production JSON logger cancellation and allocation faults passed");
+}
+
 static void test_logger_format_failure(void) {
 	config_t previous = set;
 	char filename[] = "spine-log-fault-XXXXXX";
@@ -969,6 +1136,12 @@ static void test_fake_database_wrappers(void) {
 	fake_repeat(1213, 40);
 	assert(db_query(&handle, LOCAL, "SELECT 1") == NULL);
 	assert(fake_error_next == 31);
+	fake_repeat(1213, 40);
+	assert(db_insert(&handle, LOCAL, "UPDATE host SET status=1") == FALSE);
+	assert(fake_error_next == 31);
+	fake_repeat(1205, 40);
+	assert(db_insert(&handle, LOCAL, "UPDATE host SET status=1") == FALSE);
+	assert(fake_error_next == 31);
 
 	fake_script(NULL, 0);
 	fake_rows = 1;
@@ -980,6 +1153,48 @@ static void test_fake_database_wrappers(void) {
 
 /* Pool creation and the collector push run in the main thread; the pool must
  * get the session mode and the push must skip cleanly when either side is down. */
+static void test_recovered_failure_contracts(void) {
+	config_t previous = set;
+	MYSQL handle;
+	int scenario, status;
+	pid_t child;
+	fake_database = TRUE;
+	fake_script(NULL, 0);
+	fail_mysql_init = TRUE;
+	assert(!db_connect(LOCAL, &handle) && !fail_mysql_init);
+	set.database.tls_mode = (spine_tls_mode_t) 99;
+	assert(!db_connect(LOCAL, &handle));
+	mysql_close(&handle);
+	set.database.tls_mode = SPINE_TLS_VERIFY_FULL;
+	STRNCOPY(set.database.ssl_ca, "unread-fake-ca.pem");
+	/* The fake handshake succeeds but has no cipher: reject plaintext. */
+	assert(!db_connect(LOCAL, &handle));
+	mysql_close(&handle);
+	fake_database = FALSE;
+	set = previous;
+	for (scenario = 0; scenario < 2; scenario++) {
+		fflush(NULL);
+		child = fork();
+		assert(child >= 0);
+		if (child == 0) {
+			db_lease_t lease = {0};
+			set.poller.threads = 1;
+			db_pool_local = NULL;
+			if (scenario == 0) db_create_connection_pool(LOCAL);
+			db_pool_local = calloc(1, sizeof(*db_pool_local));
+			assert(db_pool_local != NULL);
+			assert(db_pool_ownership_init(db_pool_local, 1) == 0);
+			db_pool_local[0].free = TRUE;
+			assert(db_acquire_lease(LOCAL, &lease));
+			db_close_connection_pool(LOCAL);
+			exit(3);
+		}
+		assert(waitpid(child, &status, 0) == child);
+		assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_FAILURE);
+	}
+	puts("production recovered pool and connection failure contracts passed");
+}
+
 static void test_fake_database_main_paths(void) {
 	config_t previous = set;
 	pool_t *previous_local = db_pool_local;
@@ -1074,6 +1289,7 @@ static void *fake_poll_worker(void *argument) {
 	assert(mysql_thread_init() == 0);
 	int errors = 0;
 	poll_host(argument, &errors);
+	pthread_testcancel();
 	return NULL;
 }
 
@@ -1115,6 +1331,7 @@ static void test_fake_database_poll_host(void) {
 	db_pool_local = calloc(2, sizeof(*db_pool_local));
 	assert(db_pool_local != NULL);
 	fake_script(NULL, 0);
+	assert(db_pool_ownership_init(db_pool_local, 2) == 0);
 	assert(db_connect(LOCAL, &db_pool_local[0].mysql));
 	assert(db_connect(LOCAL, &db_pool_local[1].mysql));
 	db_pool_local[1].id = 1;
@@ -1177,6 +1394,17 @@ static void test_fake_database_poll_host(void) {
 	run_fake_poll(&device, 0);
 	assert(!device.poll_failed && device.complete && set.exit.exit_code == EXIT_SUCCESS);
 	assert(fake_queries == 3 && db_pool_local[0].free);
+	/* Cancellation requested during a database operation is delivered only
+	 * after the common cleanup has returned the lease and thread state. */
+	{
+		pthread_t cancelled;
+		void *status;
+		fake_script(NULL, 0);
+		cancel_fake_poll = TRUE;
+		start_test_worker(&cancelled, fake_poll_worker, &device);
+		assert(pthread_join(cancelled, &status) == 0 && status == PTHREAD_CANCELED);
+		assert(!cancel_fake_poll && db_pool_local[0].free && !db_pool_local[0].leased);
+	}
 
 	/* A completion write that fails must leave the device incomplete and
 	 * fail the run. One invalid script result makes a host_errors write. */
@@ -1236,6 +1464,7 @@ static void test_fake_database_poll_host(void) {
 
 	db_disconnect(&db_pool_local[1].mysql);
 	db_disconnect(&db_pool_local[0].mysql);
+	assert(db_pool_ownership_destroy(db_pool_local) == 0);
 	free(db_pool_local);
 	fake_database = FALSE;
 	db_pool_local = previous_local;
@@ -1278,11 +1507,14 @@ static void test_fake_database_startup_reads(void) {
 
 /* The whole main path against the scripted server: startup, both pools, a
  * device list that ends early, completion and the collector push. */
-static int execute_fake_main_case(char *config) {
+static int execute_fake_main_case(char *config, int failure) {
 	fake_database = TRUE;
 	fake_script(NULL, 0);
 	fake_rows_prefix = "SELECT SQL_NO_CACHE id, device_threads";
-	fake_rows_matched = 1;
+	fake_rows_matched = failure == 0 ? 1 : 0;
+	fail_worker_init = failure == 1;
+	fail_worker_reap = failure == 2;
+	fail_worker_destroy = failure == 3;
 	alarm(15);
 	char interval[] = "poller_interval:5";
 	char *arguments[] = {"spine", "-C", "/nonexistent/spine-fault.conf", "--conf", config,
@@ -1291,6 +1523,7 @@ static int execute_fake_main_case(char *config) {
 }
 
 static void test_fake_database_main(void) {
+	int failure;
 	char directory[] = "/tmp/spine-fake-main-XXXXXX";
 	assert(mkdtemp(directory) != NULL);
 	char config[SMALL_BUFSIZE];
@@ -1301,18 +1534,22 @@ static void test_fake_database_main(void) {
 	assert(file != NULL);
 	assert(fprintf(file, "DB_Host 127.0.0.1\nDB_Database spine_fake\nCacti_Log %s\n", log_path) > 0);
 	assert(fclose(file) == 0);
-	fflush(NULL);
-	pid_t process = fork();
-	assert(process >= 0);
-	if (process == 0) {
-		execl("./test_spine_faults", "test_spine_faults", "--fake-main-case", config, NULL);
-		_exit(127);
+	for (failure = 0; failure <= 3; failure++) {
+		char value[8];
+		int status;
+		pid_t process;
+		snprintf(value, sizeof(value), "%d", failure);
+		fflush(NULL);
+		process = fork();
+		assert(process >= 0);
+		if (process == 0) {
+			execl("./test_spine_faults", "test_spine_faults", "--fake-main-case", config, value, NULL);
+			_exit(127);
+		}
+		assert(waitpid(process, &status, 0) == process);
+		fprintf(stderr, "fake main failure=%d status=%d\n", failure, status);
+		assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_FAILURE);
 	}
-	int status;
-	assert(waitpid(process, &status, 0) == process);
-	fprintf(stderr, "fake main case status=%d\n", status);
-	/* One device was promised and none could be read: polling is incomplete. */
-	assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_FAILURE);
 	assert(unlink(config) == 0);
 	if (unlink(log_path) != 0) assert(errno == ENOENT);
 	assert(rmdir(directory) == 0);
@@ -1418,6 +1655,7 @@ static void test_ping_only_session_lifetime(void) {
 	assert(db_pool_local != NULL);
 	db_pool_local[0].free = TRUE;
 	db_connect(LOCAL, &db_pool_local[0].mysql);
+	assert(db_pool_ownership_init(db_pool_local, 1) == 0);
 	assert(spine_permits_init(&available_threads, 2) == 0);
 	assert(spine_permits_init(&available_scripts, 3) == 0);
 	char escaped_agent[BUFSIZE];
@@ -1515,6 +1753,7 @@ static void test_snmp_batch_key_width(void) {
 	assert(db_pool_local != NULL);
 	db_pool_local[0].free = TRUE;
 	db_connect(LOCAL, &db_pool_local[0].mysql);
+	assert(db_pool_ownership_init(db_pool_local, 1) == 0);
 	assert(spine_permits_init(&available_scripts, 3) == 0);
 	char escaped_agent[BUFSIZE];
 	db_escape(&administrator, escaped_agent, sizeof(escaped_agent), agent);
@@ -1686,19 +1925,21 @@ int main(int argc, char **argv) {
 	if (argc == 4 && strcmp(argv[1], "--worker-launch-case") == 0) {
 		return execute_worker_launch_case(argv[2], argv[3]);
 	}
-	if (argc == 3 && strcmp(argv[1], "--fake-main-case") == 0) {
-		return execute_fake_main_case(argv[2]);
+	if (argc == 4 && strcmp(argv[1], "--fake-main-case") == 0) {
+		return execute_fake_main_case(argv[2], atoi(argv[3]));
 	}
 	config_defaults();
 	init_mutexes();
 	alarm(20);
 	test_logger_format_failure();
+	test_logger_cancellation_unlocks_file();
 	test_process_creation_failures();
 	test_spawn_group_failure();
 	test_interrupted_insert_retry();
 	test_snmpv3_privacy_copy_failure();
 	test_privilege_drop_faults();
 	test_fake_database_wrappers();
+	test_recovered_failure_contracts();
 	test_fake_database_main_paths();
 	test_thread_attr_init();
 	test_fake_database_poll_host();

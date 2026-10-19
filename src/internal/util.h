@@ -42,6 +42,7 @@ char *regex_replace(const char *expression, char *value);
 int format_spine_capabilities(char *output, size_t size,
 	const char *auth_protocols, const char *priv_protocols);
 void drop_privileges(void);
+void drop_privileges_for_child(void);
 int privileges_dropped(uid_t uid, gid_t gid);
 int hasCaps(void);
 void checkAsRoot(void);

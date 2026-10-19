@@ -27,19 +27,12 @@ typedef struct {
 	size_t row_limit;
 } poller_transfer_t;
 
-static void transfer_queries(const poller_transfer_t *plan, char *query, size_t query_capacity, char *prefix, size_t prefix_capacity, char *suffix, size_t suffix_capacity) {
+static bool transfer_queries(MYSQL *destination, const poller_transfer_t *plan, char *query, size_t query_capacity, char *prefix, size_t prefix_capacity, char *suffix, size_t suffix_capacity) {
 	size_t used = (size_t) spine_snprintf(query, query_capacity, "SELECT SQL_NO_CACHE %s FROM %s WHERE poller_id = %d", plan->columns, plan->table, set.poller.poller_id);
 	if (set.hosts.host_id_list[0] != '\0') used += (size_t) spine_snprintf(query + used, query_capacity - used, " AND %s IN (%s)", plan->filter_column, set.hosts.host_id_list);
 	spine_snprintf(query + used, query_capacity - used, " ORDER BY %s", plan->order_column);
 	spine_snprintf(prefix, prefix_capacity, "INSERT INTO %s (%s) VALUES ", plan->table, plan->columns);
-	/* These rows go to the main server. The cached upsert capability describes the
-	 * local server, so the row-alias form could reach a MariaDB main server
-	 * that rejects it. VALUES() is accepted by both (#590). */
-	used = (size_t) spine_snprintf(suffix, suffix_capacity, " ON DUPLICATE KEY UPDATE ");
-	for (size_t index = 0; index < plan->update_count; index++) {
-		const char *column = plan->updates[index];
-		used += (size_t) spine_snprintf(suffix + used, suffix_capacity - used, "%s%s=VALUES(%s)", index == 0 ? "" : ", ", column, column);
-	}
+	return db_upsert_suffix(destination, suffix, suffix_capacity, plan->updates, plan->update_count);
 }
 
 static size_t transfer_row(MYSQL *destination, MYSQL_ROW row, size_t field_count, char *output, size_t capacity) {
@@ -68,7 +61,7 @@ static bool transfer_table(MYSQL *source, MYSQL *destination, const poller_trans
 	char query[MEGA_BUFSIZE];
 	char prefix[BUFSIZE];
 	char suffix[BUFSIZE];
-	transfer_queries(plan, query, sizeof(query), prefix, sizeof(prefix), suffix, sizeof(suffix));
+	if (!transfer_queries(destination, plan, query, sizeof(query), prefix, sizeof(prefix), suffix, sizeof(suffix))) return FALSE;
 	MYSQL_RES *result = db_query(source, LOCAL, query);
 	if (result == NULL) return FALSE;
 	if (mysql_num_fields(result) != plan->field_count) {

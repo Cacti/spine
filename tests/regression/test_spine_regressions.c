@@ -13,6 +13,7 @@
 
 #include "app/runtime.h"
 extern void test_output_write_contracts(MYSQL *mysql);
+extern void test_database_tls_contracts(void);
 extern void test_additional_contracts(void);
 extern void test_cli_alias_contracts(void);
 extern void test_privilege_contracts(void);
@@ -27,6 +28,7 @@ extern void test_additional_reindex_contracts(MYSQL *mysql);
 extern void test_reindex_result_contracts(MYSQL *mysql);
 extern void test_additional_snmp_session_boundaries(void);
 extern void test_snmpv3_agent_contracts(void);
+extern void test_execution_policy(void);
 
 /* Threads that run poll_host() need the stack production workers get. */
 void start_test_worker(pthread_t *worker, void *(*start)(void *), void *argument) {
@@ -2918,6 +2920,11 @@ static void test_error_id_buffer_boundaries(void) {
 
 
 int main(int argc, char **argv) {
+	if (argc == 2 && strcmp(argv[1], "--database-tls") == 0) {
+		init_mutexes();
+		test_database_tls_contracts();
+		return 0;
+	}
 	if (argc == 3 && strcmp(argv[1], "--script-stream") == 0) return run_script_stream_fixture(argv[2]);
 	if (argc > 1 && strcmp(argv[1], "-q") == 0) return run_test_script_server(argc, argv);
 	extern int *debug_devices;
@@ -3016,6 +3023,7 @@ int main(int argc, char **argv) {
 	test_script_timeout_kills_descendants();
 	test_pclose_kills_descendants();
 	test_script_stream_contracts();
+	test_execution_policy();
 	test_cli_alias_contracts();
 	test_privilege_contracts();
 	test_error_id_buffer_boundaries();

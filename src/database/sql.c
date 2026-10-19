@@ -16,6 +16,108 @@
 #include "internal/common.h"
 #include "app/spine.h"
 
+static const char *sql_skip_space(const char *cursor) {
+	while (*cursor != '\0' && isspace((unsigned char) *cursor)) {
+		cursor++;
+	}
+
+	return cursor;
+}
+
+static int sql_word_is(const char *cursor, const char *word) {
+	size_t length = strlen(word);
+
+	return strncasecmp(cursor, word, length) == 0 &&
+		!(isalnum((unsigned char) cursor[length]) || cursor[length] == '_');
+}
+
+/* Names the table a statement targets: the identifier after INTO, UPDATE,
+ * DELETE FROM or the first FROM outside quotes. Only identifier characters
+ * are ever returned, never literals. */
+static const char *sql_target_table(const char *cursor) {
+	const char *begin = cursor;
+	char quote = '\0';
+
+	if (sql_word_is(cursor, "INSERT") || sql_word_is(cursor, "REPLACE")) {
+		cursor = sql_skip_space(cursor + (sql_word_is(cursor, "INSERT") ? 6 : 7));
+		if (sql_word_is(cursor, "IGNORE")) {
+			cursor = sql_skip_space(cursor + 6);
+		}
+		return sql_word_is(cursor, "INTO") ? sql_skip_space(cursor + 4) : NULL;
+	}
+
+	if (sql_word_is(cursor, "UPDATE")) {
+		cursor = sql_skip_space(cursor + 6);
+		if (sql_word_is(cursor, "LOW_PRIORITY")) {
+			cursor = sql_skip_space(cursor + 12);
+		}
+		if (sql_word_is(cursor, "IGNORE")) {
+			cursor = sql_skip_space(cursor + 6);
+		}
+		return cursor;
+	}
+
+	for (; *cursor != '\0'; cursor++) {
+		if (quote != '\0') {
+			if (*cursor == quote) {
+				quote = '\0';
+			}
+		} else if (*cursor == '\'' || *cursor == '"') {
+			quote = *cursor;
+		} else if (cursor != begin && isspace((unsigned char) cursor[-1]) && sql_word_is(cursor, "FROM")) {
+			return sql_skip_space(cursor + 4);
+		}
+	}
+
+	return NULL;
+}
+
+/*! \fn void db_statement_label(const char *query, char *label, size_t capacity)
+ *  \brief describes a statement for the log by its verb and target table
+ *
+ *  SQL text and the server's message can carry credentials, including INSERTs
+ *  that cannot be safely redacted by looking for assignment keys, so neither is
+ *  ever logged. The label holds only a fixed verb and identifier characters.
+ */
+void db_statement_label(const char *query, char *label, size_t capacity) {
+	static const char *const verbs[] = {"SELECT", "INSERT", "REPLACE", "UPDATE", "DELETE",
+		"SET", "KILL", "SHOW", "CREATE", "DROP", "ALTER", "TRUNCATE"};
+	const char *cursor = sql_skip_space(query);
+	const char *table;
+	size_t index;
+	size_t used;
+
+	snprintf(label, capacity, "SQL");
+
+	for (index = 0; index < sizeof(verbs) / sizeof(verbs[0]); index++) {
+		if (sql_word_is(cursor, verbs[index])) {
+			break;
+		}
+	}
+
+	if (index == sizeof(verbs) / sizeof(verbs[0])) {
+		return;
+	}
+
+	snprintf(label, capacity, "%s", verbs[index]);
+	table = sql_target_table(cursor);
+
+	if (table == NULL) {
+		return;
+	}
+
+	used = strlen(label);
+	if (used + 2 < capacity) {
+		label[used++] = ' ';
+	}
+
+	while (used + 1 < capacity && (isalnum((unsigned char) *table) || *table == '_' || *table == '$' || *table == '`' || *table == '.')) {
+		label[used++] = *table++;
+	}
+
+	label[used] = '\0';
+}
+
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
@@ -48,26 +150,27 @@ static bool retry_disconnected_query(MYSQL *mysql, int type, int error, const ch
 
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int error_count = 0;
-	char query_frag[LRG_BUFSIZE];
-	snprintf(query_frag, sizeof(query_frag), "%s", query);
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
+	char label[SMALL_BUFSIZE];
+
+	db_statement_label(query, label, sizeof(label));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement %s (%zu bytes)", label, strlen(query)));
 	if (set.poller.SQL_readonly != FALSE) return TRUE;
 	while (mysql_query(mysql, query) != 0) {
 		int error = mysql_errno(mysql);
 		if (error == 2013 || error == 2006) {
 			if (retry_disconnected_query(mysql, type, error, "db_insert", &error_count)) continue;
-			SPINE_LOG(("ERROR: SQL Failed! Connection lost, SQL Fragment:'%s'", query_frag));
+			SPINE_LOG(("ERROR: SQL Failed! Connection lost"));
 			return FALSE;
 		}
 		if (error == 1213 || error == 1205) {
 			spine_sleep_usec(50000);
 			if (++error_count > 30) {
-				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!"));
 				return FALSE;
 			}
 			continue;
 		}
-		SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
+		SPINE_LOG(("ERROR: SQL Failed! Error:'%i', State:'%s', Statement:'%s'", error, mysql_sqlstate(mysql), label));
 		return FALSE;
 	}
 	return TRUE;
@@ -156,26 +259,26 @@ int db_reconnect(MYSQL *mysql, int type, int error, const char *function) {
  */
 MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 	int error_count = 0;
-	char query_frag[LRG_BUFSIZE];
-	snprintf(query_frag, sizeof(query_frag), "%s", query);
-	SPINE_LOG_DEVDBG(("DEVDBG: SQL:%s", query_frag));
+	char label[SMALL_BUFSIZE];
+
+	db_statement_label(query, label, sizeof(label));
+	SPINE_LOG_DEVDBG(("DEVDBG: SQL statement %s (%zu bytes)", label, strlen(query)));
 	while (mysql_query(mysql, query) != 0) {
 		int error = mysql_errno(mysql);
 		if (error == 2013 || error == 2006) {
 			if (retry_disconnected_query(mysql, type, error, "db_query", &error_count)) continue;
-			SPINE_LOG(("ERROR: Database connection lost, SQL Fragment:'%s'", query_frag));
+			SPINE_LOG(("ERROR: Database connection lost"));
 			return NULL;
 		}
 		if (error == 1213 || error == 1205) {
 			spine_sleep_usec(50000);
 			if (++error_count > 30) {
-				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+				SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!"));
 				return NULL;
 			}
 			continue;
 		}
-		SPINE_LOG(("ERROR: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
-		SPINE_LOG(("ERROR: The Query Was:'%s'", query));
+		SPINE_LOG(("ERROR: Database Error:'%i', State:'%s', Statement:'%s'", error, mysql_sqlstate(mysql), label));
 		return NULL;
 	}
 	return mysql_store_result(mysql);

@@ -23,8 +23,21 @@ fi
 : "${3:?Usage: verify_coverage.sh PROFILE SOURCE_DIRECTORY PRODUCTION_MANIFEST}"
 [[ -s "$1" ]]
 [[ -s "$3" ]]
-awk -F: -v source_dir="$2" '
+if [[ -n "${4:-}" ]]; then [[ -s "$4" ]]; fi
+awk -F: -v source_dir="$2" -v ownership_manifest="${4:-}" '
   function fail(message) { print message > "/dev/stderr"; failed=1; exit 1 }
+  BEGIN {
+    if (ownership_manifest!="") {
+      while ((manifest_status=getline source < ownership_manifest)>0) {
+        if (source=="" || source !~ /^src\/[a-zA-Z0-9_\/-]+\.c$/) fail("Invalid ownership source manifest")
+        identity="SF:" source_dir "/" source
+        if (identity in ownership) fail("Duplicate ownership source")
+        ownership[identity]=1
+      }
+      if (manifest_status<0) fail("Cannot read ownership source manifest")
+      close(ownership_manifest)
+    }
+  }
   FNR==NR {
     if ($0=="" || $0 !~ /\.c$/) fail("Invalid production source manifest")
     identity="SF:" source_dir "/" $0
@@ -51,6 +64,7 @@ awk -F: -v source_dir="$2" '
     if (!open_record) fail("Coverage terminator without a source record")
     if (!("LF" in fields) || !("LH" in fields) || !("BRF" in fields) || !("BRH" in fields) || !("FNF" in fields) || !("FNH" in fields)) fail("Incomplete coverage metrics")
     if (fields["LF"]<=0 || fields["FNF"]<=0 || fields["LH"]>fields["LF"] || fields["BRH"]>fields["BRF"] || fields["FNH"]>fields["FNF"]) fail("Inconsistent coverage metrics")
+    if ((identity in ownership) && (fields["LH"]!=fields["LF"] || fields["BRH"]!=fields["BRF"])) fail("Ownership source requires 100% line and branch coverage: " identity)
     total_lines_hit+=fields["LH"]
     total_branches_hit+=fields["BRH"]
     produced[identity]=1
@@ -61,6 +75,7 @@ awk -F: -v source_dir="$2" '
     if (failed) exit 1
     if (open_record) fail("Unterminated final coverage record")
     for (identity in expected) if (!(identity in produced)) fail("Absent production coverage: " identity)
+    for (identity in ownership) if (!(identity in expected)) fail("Ownership source absent from production manifest: " identity)
     if (total_lines_hit<=0 || total_branches_hit<=0) fail("No measured line/branch execution")
   }
 ' "$3" "$1"

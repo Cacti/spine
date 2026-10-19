@@ -274,10 +274,195 @@ static void test_config_last_line_without_newline_is_read(void **state) {
 	assert_int_equal(set.database.port, 3399);
 }
 
+static void test_json_record_escaping_and_capacity(void **state) {
+	static const char expected[] = "{\"timestamp\":\"now\",\"severity\":\"INFO\",\"message\":\"quote\\\" slash\\\\ newline\\u000a tab\\u0009\\u007f\"}\n";
+	char output[1024];
+	size_t capacity;
+
+	(void) state;
+	assert_true(spine_json_log_record(output, sizeof(output), "now", "INFO", "quote\" slash\\ newline\n tab\t\177"));
+	assert_string_equal(output, expected);
+	for (capacity = 1; capacity <= strlen(expected); capacity++) {
+		memset(output, 0xa5, sizeof(output));
+		assert_false(spine_json_log_record(output, capacity, "now", "INFO", "quote\" slash\\ newline\n tab\t\177"));
+		assert_string_equal(output, "");
+		assert_int_equal((unsigned char) output[capacity], 0xa5);
+	}
+	assert_true(spine_json_log_record(output, strlen(expected) + 1, "now", "INFO", "quote\" slash\\ newline\n tab\t\177"));
+	assert_false(spine_json_log_record(NULL, sizeof(output), "now", "INFO", "x"));
+	assert_false(spine_json_log_record(output, 0, "now", "INFO", "x"));
+	assert_false(spine_json_log_record(output, sizeof(output), NULL, "INFO", "x"));
+	assert_false(spine_json_log_record(output, sizeof(output), "now", NULL, "x"));
+	assert_false(spine_json_log_record(output, sizeof(output), "now", "INFO", NULL));
+}
+
+static void test_json_record_utf8_contract(void **state) {
+	static const char *const valid[] = {"", "ascii", "\xc2\x80", "\xdf\xbf", "\xe0\xa0\x80",
+		"\xed\x9f\xbf", "\xef\xbf\xbf", "\xf0\x90\x80\x80", "\xf4\x8f\xbf\xbf"};
+	static const char *const invalid[] = {"\x80", "\xbf", "\xc0\xaf", "\xc1\xbf", "\xf5\x80\x80\x80",
+		"\xc2", "\xe1\x80", "\xf1\x80\x80", "\xe0\x9f\xbf", "\xed\xa0\x80", "\xf0\x8f\xbf\xbf",
+		"\xf4\x90\x80\x80", "\xe1\x41\x80", "\xe1\xc0\x80", "\xe1\x80\x41"};
+	char output[512];
+	size_t index;
+
+	(void) state;
+	for (index = 0; index < sizeof(valid) / sizeof(valid[0]); index++) {
+		assert_true(spine_json_log_record(output, sizeof(output), "now", "INFO", valid[index]));
+		assert_non_null(strstr(output, valid[index]));
+	}
+	for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); index++) {
+		/* every byte that begins no valid sequence becomes U+FFFD */
+		assert_true(spine_json_log_record(output, sizeof(output), "now", "INFO", invalid[index]));
+		assert_non_null(strstr(output, "\xef\xbf\xbd"));
+	}
+}
+
+static void test_json_log_file_and_config(void **state) {
+	char path[] = "spine-json-log-XXXXXX";
+	char line[1024];
+	FILE *file;
+	int fd;
+
+	(void) state;
+	fd = mkstemp(path);
+	assert_true(fd >= 0);
+	assert_int_equal(close(fd), 0);
+	write_config("Log_Format json\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	assert_true(set.logging.json_logs);
+	STRNCOPY(set.logging.path_logfile, path);
+	set.logging.logfile_processed = TRUE;
+	set.logging.log_level = POLLER_VERBOSITY_LOW;
+	assert_true(spine_log("WARNING: Device[7] quote\" slash\\ value\nnext"));
+	assert_true(spine_log("bad UTF-8: %s", "\xff"));
+	file = fopen(path, "r");
+	assert_non_null(file);
+	assert_non_null(fgets(line, sizeof(line), file));
+	assert_non_null(strstr(line, "\"severity\":\"WARNING\""));
+	assert_non_null(strstr(line, "quote\\\" slash\\\\ value\\u000anext"));
+	assert_non_null(fgets(line, sizeof(line), file));
+	assert_non_null(strstr(line, "\"severity\":\"INFO\""));
+	assert_non_null(strstr(line, "bad UTF-8: \xef\xbf\xbd"));
+	assert_null(strstr(line, "\xff"));
+	assert_null(fgets(line, sizeof(line), file));
+	assert_int_equal(fclose(file), 0);
+	unlink(path);
+	unlink(config_path);
+	write_config("Log_Format text\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	assert_false(set.logging.json_logs);
+}
+
+static void test_json_stdout_is_a_single_record(void **state) {
+	int descriptors[2];
+	pid_t child;
+	int status;
+	char output[1024];
+	ssize_t received;
+
+	(void) state;
+	assert_int_equal(pipe(descriptors), 0);
+	fflush(NULL);
+	child = fork();
+	assert_true(child >= 0);
+	if (child == 0) {
+		close(descriptors[0]);
+		assert_int_equal(dup2(descriptors[1], STDOUT_FILENO), STDOUT_FILENO);
+		close(descriptors[1]);
+		set.logging.json_logs = TRUE;
+		set.logging.log_destination = LOGDEST_STDOUT;
+		if (!spine_log("ERROR: quote\" newline\n")) _exit(1);
+		fflush(stdout);
+		_exit(0);
+	}
+	close(descriptors[1]);
+	received = read(descriptors[0], output, sizeof(output) - 1);
+	assert_true(received > 0);
+	output[received] = '\0';
+	close(descriptors[0]);
+	assert_int_equal(waitpid(child, &status, 0), child);
+	assert_true(WIFEXITED(status));
+	assert_int_equal(WEXITSTATUS(status), 0);
+	assert_true(output[0] == '{');
+	assert_non_null(strstr(output, "\"severity\":\"ERROR\""));
+	assert_non_null(strstr(output, "quote\\\" newline\\u000a"));
+	assert_ptr_equal(strchr(output, '\n'), output + received - 1);
+}
+
+static void test_invalid_log_format_is_refused(void **state) {
+	pid_t child;
+	int status;
+
+	(void) state;
+	write_config("Log_Format unknown\n");
+	fflush(NULL);
+	child = fork();
+	assert_true(child >= 0);
+	if (child == 0) {
+		read_spine_config(config_path);
+		_exit(0);
+	}
+	assert_int_equal(waitpid(child, &status, 0), child);
+	assert_true(WIFEXITED(status));
+	assert_int_not_equal(WEXITSTATUS(status), 0);
+}
+
+static void test_local_and_remote_tls_configuration(void **state) {
+	(void) state;
+	write_config("DB_SSL_Mode required\nDB_SSL_MinVersion TLSv1.2\n"
+				 "DB_SSL_Cipher ECDHE-RSA-AES128-GCM-SHA256\n"
+				 "RDB_SSL_Mode verify-full\nRDB_SSL_MinVersion TLSv1.3\n"
+				 "RDB_SSL_CA /fixture/ca.pem\nRDB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256\n");
+	assert_int_equal(read_spine_config(config_path), 0);
+	assert_int_equal(set.database.tls_mode, SPINE_TLS_REQUIRED);
+	assert_int_equal(set.database.tls_min_version, 12);
+	assert_string_equal(set.database.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
+	assert_string_equal(set.database.tls_ciphersuites, "");
+	assert_int_equal(set.remote_database.tls_mode, SPINE_TLS_VERIFY_FULL);
+	assert_int_equal(set.remote_database.tls_min_version, 13);
+	assert_string_equal(set.remote_database.tls_cipher, "");
+	assert_string_equal(set.remote_database.ssl_ca, "/fixture/ca.pem");
+	assert_string_equal(set.remote_database.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+	config_defaults();
+	assert_int_equal(set.database.tls_mode, SPINE_TLS_LEGACY);
+	assert_int_equal(set.remote_database.tls_min_version, 0);
+	assert_string_equal(set.database.tls_cipher, "");
+}
+
+static void test_invalid_tls_configuration_is_refused(void **state) {
+	const char *invalid[] = {"DB_SSL_Mode pretend\n", "RDB_SSL_MinVersion TLSv1.0\n"};
+	size_t index;
+	(void) state;
+	for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); index++) {
+		pid_t child;
+		int status;
+		write_config(invalid[index]);
+		fflush(NULL);
+		child = fork();
+		assert_true(child >= 0);
+		if (child == 0) {
+			read_spine_config(config_path);
+			_exit(0);
+		}
+		assert_int_equal(waitpid(child, &status, 0), child);
+		assert_true(WIFEXITED(status));
+		assert_int_not_equal(WEXITSTATUS(status), 0);
+		assert_int_equal(unlink(config_path), 0);
+		config_path[0] = '\0';
+	}
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup_teardown(test_local_and_remote_tls_configuration, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_invalid_tls_configuration_is_refused, config_setup, config_teardown),
 		cmocka_unit_test(test_spine_log_fits_a_musl_thread_stack),
 		cmocka_unit_test(test_new_log_permissions),
+		cmocka_unit_test(test_json_record_escaping_and_capacity),
+		cmocka_unit_test(test_json_record_utf8_contract),
+		cmocka_unit_test_setup_teardown(test_json_stdout_is_a_single_record, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_json_log_file_and_config, config_setup, config_teardown),
+		cmocka_unit_test_setup_teardown(test_invalid_log_format_is_refused, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_long_key_is_not_truncated_into_a_known_key, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_every_known_key_is_accepted, config_setup, config_teardown),
 		cmocka_unit_test_setup_teardown(test_config_long_value_is_kept_whole, config_setup, config_teardown),
