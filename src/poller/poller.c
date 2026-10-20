@@ -215,7 +215,7 @@ static void complete_poll_host(MYSQL *mysql, poller_queries_t *queries,
 
 	if (!poll_failed && errors > 0) {
 		int error_query_len = spine_count_to_int(strlen(error_string) + BUFSIZE);
-		char *error_query = (char *)malloc(error_query_len);
+		char *error_query = (char *) malloc(error_query_len);
 		if (error_query == NULL) die("ERROR: Fatal malloc error: poller.c error_query!");
 
 		snprintf(error_query, error_query_len, "INSERT INTO host_errors (host_id, poller_id, errors, local_data_ids)"

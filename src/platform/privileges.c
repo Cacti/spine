@@ -305,9 +305,13 @@ void checkAsRoot(void) {
 			set.availability.icmp_avail = TRUE;
 		}
 	} else {
+		/* hasCaps() is constant FALSE without --enable-lcap, so only a libcap
+		 * build reaches this branch and the coverage job does not build one. */
+		/* GCOVR_EXCL_START */
 		SPINE_LOG_DEBUG(("DEBUG: Spine has cap_net_raw capability."));
 		set.availability.icmp_avail = TRUE;
 		set.availability.icmp_uses_caps = TRUE;
+		/* GCOVR_EXCL_STOP */
 	}
 	SPINE_LOG_DEBUG(("DEBUG: Spine has %sgot ICMP", set.availability.icmp_avail ? "" : "not "));
 #endif

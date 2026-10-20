@@ -123,6 +123,11 @@ void test_config_option_boundaries(MYSQL *mysql) {
 	assert(!set.logging.log_perror && !set.logging.log_pwarn && !set.logging.log_pstats);
 	assert(!set.boost.boost_enabled && !set.boost.boost_redirect);
 	assert(set.availability.ping_timeout == 777);
+	/* with a web root and no log path setting, the log lives under the web root */
+	assert(db_insert(mysql, LOCAL, "DELETE FROM settings"));
+	assert(db_insert(mysql, LOCAL, "INSERT INTO settings(name,value) VALUES('log_destination','STDOUT'),('path_webroot','/fixture/web')"));
+	read_config_options();
+	assert(strcmp(set.logging.path_logfile, "/fixture/web/log/cacti.log") == 0);
 	assert(db_insert(mysql, LOCAL, "DELETE FROM settings"));
 	assert(db_insert(mysql, LOCAL, "INSERT INTO settings(name,value) SELECT name,value FROM spine_saved_option_settings"));
 	assert(db_insert(mysql, LOCAL, "UPDATE poller p JOIN spine_saved_option_poller s ON p.id=s.id SET p.threads=s.threads"));

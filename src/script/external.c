@@ -131,7 +131,7 @@ static bool read_script_result(const script_result_context_t *context, int fd, d
 	}
 	/* Use the full capacity to detect truncation without waiting for EOF. */
 	ssize_t bytes = read(fd, result, RESULTS_BUFFER);
-	if (bytes > 0 && bytes < RESULTS_BUFFER && memchr(result, '\0', (size_t)bytes) == NULL) {
+	if (bytes > 0 && bytes < RESULTS_BUFFER && memchr(result, '\0', (size_t) bytes) == NULL) {
 		result[bytes] = '\0';
 	} else {
 		char script[SMALL_BUFSIZE];

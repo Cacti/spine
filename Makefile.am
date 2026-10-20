@@ -75,7 +75,7 @@ man_MANS = docs/man/spine.1
 check_PROGRAMS = test_spine_regressions
 dist_noinst_DATA = tests/fixtures/configuration.sql tests/fixtures/poller.sql tests/fixtures/snmpd.conf tests/fixtures/snmpv3-agent.conf tests/fixtures/snmpv3-users.conf
 TESTS = $(check_PROGRAMS)
-test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c
+test_spine_regressions_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_regressions.c tests/contracts/test_spine_contracts.c tests/contracts/test_spine_reindex_contracts.c tests/contracts/test_spine_snmpv3_contracts.c tests/contracts/test_spine_settings_contracts.c tests/contracts/test_spine_cli_contracts.c tests/contracts/test_spine_stream_contracts.c tests/contracts/test_spine_output_contracts.c tests/contracts/test_spine_privilege_contracts.c tests/contracts/test_spine_startup_contracts.c
 test_spine_regressions_SOURCES += tests/contracts/test_execution_policy.c
 test_spine_regressions_SOURCES += tests/contracts/test_spine_tls_contracts.c
 # Link the real production translation units and globals, with a separate test
@@ -85,14 +85,14 @@ if HAVE_LINKER_WRAP
 check_PROGRAMS += test_spine_faults
 # Link the same runtime implementation with a separate fault-test entry point.
 test_spine_faults_SOURCES = $(spine_runtime_sources) tests/regression/test_spine_faults.c
-test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
+test_spine_faults_LDFLAGS = $(AM_LDFLAGS) -Wl,--wrap=write -Wl,--wrap=sigaction -Wl,--wrap=mysql_thread_safe -Wl,--wrap=mysql_init -Wl,--wrap=mysql_get_ssl_cipher \
  -Wl,--wrap=spine_json_log_record \
- -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
+ -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=spine_worker_set_init -Wl,--wrap=spine_permits_init -Wl,--wrap=spine_worker_set_destroy -Wl,--wrap=spine_worker_set_reap \
  -Wl,--wrap=strftime -Wl,--wrap=mysql_query -Wl,--wrap=mysql_ping -Wl,--wrap=mysql_errno \
  -Wl,--wrap=mysql_real_connect -Wl,--wrap=mysql_thread_id -Wl,--wrap=mysql_store_result \
  -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row -Wl,--wrap=mysql_free_result -Wl,--wrap=mysql_num_fields \
  -Wl,--wrap=pipe -Wl,--wrap=socketpair -Wl,--wrap=posix_spawn -Wl,--wrap=posix_spawnattr_setpgroup \
- -Wl,--wrap=malloc -Wl,--wrap=strdup \
+ -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=strdup \
  -Wl,--wrap=snmp_sess_open -Wl,--wrap=snmp_sess_close -Wl,--wrap=pthread_create -Wl,--wrap=pthread_attr_setstacksize \
  -Wl,--wrap=getuid -Wl,--wrap=geteuid -Wl,--wrap=getgid -Wl,--wrap=getegid \
  -Wl,--wrap=setuid -Wl,--wrap=setgid -Wl,--wrap=seteuid -Wl,--wrap=setegid -Wl,--wrap=socket
@@ -191,7 +191,11 @@ check_PROGRAMS += \
 	tests/unit/test_process_abort \
 	tests/unit/test_worker_set \
 	tests/unit/test_db_lease \
-	tests/unit/test_tls_policy
+	tests/unit/test_tls_policy \
+	tests/unit/test_script_read \
+	tests/unit/test_snmp_faults \
+	tests/unit/test_poll_workers \
+	tests/unit/test_poller_faults
 
 # A small executable which speaks the subset of the PHP Script Server protocol
 # needed by test_php_runtime. Keeping it as a real child covers the shipped
@@ -201,6 +205,7 @@ tests_support_php_test_server_SOURCES = tests/support/php_test_server.c
 
 if HAVE_LD_WRAP
 check_PROGRAMS += tests/unit/test_php_runtime tests/unit/test_poll_host
+check_PROGRAMS += tests/unit/test_platform_faults
 endif
 endif
 
@@ -287,7 +292,7 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
-	-Wl,--wrap=ping_host
+	-Wl,--wrap=ping_host -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=strdup
 
 # Includes src/poller/availability.c directly so its socket calls can be steered; see the file.
 tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/support/spine_runtime.c \
@@ -327,11 +332,66 @@ tests_unit_test_php_runtime_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_php_runtime_LDFLAGS = \
 	-Wl,--wrap=posix_spawn -Wl,--wrap=dup -Wl,--wrap=fcntl \
 	-Wl,--wrap=write \
-	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy
+	-Wl,--wrap=posix_spawnattr_setsigdefault -Wl,--wrap=posix_spawnattr_destroy \
+	-Wl,--wrap=pipe -Wl,--wrap=posix_spawn_file_actions_init -Wl,--wrap=posix_spawnattr_init \
+	-Wl,--wrap=strdup -Wl,--wrap=waitpid -Wl,--wrap=kill -Wl,--wrap=php_readpipe
 tests_unit_test_php_runtime_CPPFLAGS = $(AM_CPPFLAGS) \
 	-DPHP_TEST_SERVER_PATH='"$(abs_builddir)/tests/support/php_test_server"' \
 	-DSPINE_PHP_RUNTIME_TESTING
+# libc names such as pthread_mutex_trylock are renamed or aliased on some
+# systems, so interposing on them is limited to the platform that is probed.
+if HAVE_LINKER_WRAP
+tests_unit_test_php_runtime_CPPFLAGS += -DSPINE_PHP_TRYLOCK_WRAP
+tests_unit_test_php_runtime_LDFLAGS += -Wl,--wrap=pthread_mutex_trylock
+endif
 tests_unit_test_php_runtime_DEPENDENCIES = tests/support/php_test_server$(EXEEXT)
+
+# read.c is compiled into the test so select() and read() can be redirected;
+# the rest of the script server is linked as built.
+tests_unit_test_script_read_SOURCES = tests/unit/test_script_read.c tests/support/spine_runtime.c src/script/protocol.c src/script/server.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_script_read_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# session.c, requests.c and response.c are compiled into the test so the
+# Net-SNMP calls they make can be scripted, as test_snmpv3_session does.
+tests_unit_test_snmp_faults_SOURCES = tests/unit/test_snmp_faults.c tests/support/spine_runtime.c \
+	$(spine_database_sources) $(spine_support_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_snmp_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# reindex.c, regex.c and log.c are compiled into the test so their helpers,
+# allocators and thread-local storage calls can be driven directly. The rest
+# of spine_support_sources is linked as built.
+tests_unit_test_poller_faults_SOURCES = tests/unit/test_poller_faults.c tests/support/spine_runtime.c \
+	src/poller/poller.c src/script/external.c src/poller/host.c src/poller/items.c src/poller/system.c \
+	src/app/buffer.c src/platform/clock.c src/platform/socket.c src/platform/thread.c src/platform/descriptor.c \
+	src/config/text.c src/config/validate.c src/log/debug.c src/log/sanitize.c src/script/escape.c \
+	src/config/settings.c src/config/options.c src/config/file.c src/log/json.c src/poller/result.c \
+	src/platform/privileges.c \
+	$(spine_database_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_poller_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# workers.c is compiled into the test so its static helpers can be called and
+# its permit, thread-start and database calls scripted.
+tests_unit_test_poll_workers_SOURCES = tests/unit/test_poll_workers.c tests/support/spine_runtime.c src/platform/worker_set.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_poll_workers_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# Clock, socket-wait, descriptor and permit failures. The libc and pthread
+# interposition is limited to the platform that is probed for it.
+tests_unit_test_platform_faults_SOURCES = tests/unit/test_platform_faults.c tests/support/spine_runtime.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_platform_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
+tests_unit_test_platform_faults_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_LINKER_WRAP
+tests_unit_test_platform_faults_CPPFLAGS += -DSPINE_PLATFORM_FAULT_WRAPS
+tests_unit_test_platform_faults_LDFLAGS = -Wl,--wrap=nanosleep -Wl,--wrap=clock_gettime \
+	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init
+endif
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
@@ -350,7 +410,7 @@ noinst_HEADERS += src/config/settings_internal.h src/ping/ping_internal.h src/ap
 
 noinst_HEADERS += src/poller/poller_internal.h src/app/startup_internal.h
 
-noinst_HEADERS += src/script/server_internal.h
+noinst_HEADERS += src/script/server_internal.h tests/support/child_run.h
 
 noinst_HEADERS += src/process/process_internal.h
 

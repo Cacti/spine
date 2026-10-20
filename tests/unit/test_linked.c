@@ -35,6 +35,10 @@
 #include "poller/poller.h"
 
 #include "process/nft_popen.h"
+#include "process/process_internal.h"
+#include "config/settings_internal.h"
+#include "tests/support/child_run.h"
+#include "app/signals.h"
 
 #include <fcntl.h>
 
@@ -150,6 +154,23 @@ static void test_spine_appendf_reports_truncation_and_guards(void **state) {
 	assert_false(spine_appendf(&cursor, &zero, "%s", "x"));
 }
 
+/* A wide string that cannot be converted in the C locale is an encoding
+ * error: vsnprintf fails, and the buffer must still be a valid empty string. */
+static void test_spine_appendf_terminates_after_an_encoding_error(void **state) {
+	char buffer[8] = "junk";
+	char probe[8];
+	char *cursor = buffer;
+	size_t remaining = sizeof(buffer);
+	(void) state;
+
+	/* whether the C locale rejects this wide character is a libc property */
+	if (snprintf(probe, sizeof(probe), "%ls", L"\x00e9") >= 0) skip();
+	assert_false(spine_appendf(&cursor, &remaining, "%ls", L"\x00e9"));
+	assert_int_equal(buffer[0], '\0');
+	assert_ptr_equal(cursor, buffer);
+	assert_int_equal(remaining, sizeof(buffer));
+}
+
 static void test_bounded_formatters(void **state) {
 	char capabilities[BUFSIZE];
 	char row[DBL_BUFSIZE + SMALL_BUFSIZE];
@@ -194,8 +215,119 @@ static void test_bounded_formatters(void **state) {
 		"traffic_in", "1700000000); DROP TABLE host", long_value));
 	assert_false(format_poller_output_row(NULL, 0, 17,
 		"traffic_in", "1700000000.25", long_value));
+	/* a timestamp has one fractional part and at least one digit */
+	assert_false(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", "1700000000.25.5", long_value));
+	assert_false(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", ".", long_value));
 }
 
+
+/* A value the parser does not recognise falls back to the caller's default,
+ * and a command-line override answers for the poller and global lookups too. */
+static void test_settings_overrides_and_unrecognised_booleans(void **state) {
+	MYSQL mysql;
+	char *value;
+	(void) state;
+
+	memset(&mysql, 0, sizeof(mysql));
+	set_option("spine_test_flag", "maybe");
+	assert_true(getboolsetting(&mysql, LOCAL, "spine_test_flag", TRUE));
+	assert_false(getboolsetting(&mysql, LOCAL, "spine_test_flag", FALSE));
+
+	set_option("spine_test_poller_setting", "from-the-command-line");
+	value = getpsetting(&mysql, LOCAL, "spine_test_poller_setting");
+	assert_non_null(value);
+	assert_string_equal(value, "from-the-command-line");
+	free(value);
+
+	set_option("spine_test_global", "overridden");
+	value = getglobalvariable(&mysql, LOCAL, "spine_test_global");
+	assert_non_null(value);
+	assert_string_equal(value, "overridden");
+	free(value);
+}
+
+static void test_ltrim_of_only_trim_characters_is_empty(void **state) {
+	char text[] = " \"\t\n\r";
+	(void) state;
+	assert_string_equal(ltrim(text), "");
+	assert_null(ltrim(NULL));
+}
+
+static int handled_signal;
+static const char *handler_capture;
+
+/* A fatal-signal handler ends by raising its signal again, which would take
+ * the process down before its coverage counters are written. Blocking the
+ * signal leaves the re-raise pending, so the handler returns and the process
+ * exits normally. The handler is fetched after install, then called with the
+ * termination coordinator stopped, which is the state it reports from. */
+static void call_the_fatal_signal_handler(void) {
+	static const int fatal[] = {SIGINT, SIGTERM, SIGSEGV, SIGBUS, SIGFPE, SIGQUIT, SIGSYS, SIGABRT};
+	struct sigaction action;
+	sigset_t blocked;
+	void (*handler)(int);
+	size_t index;
+
+	for (index = 0; index < sizeof(fatal) / sizeof(fatal[0]); index++) signal(fatal[index], SIG_DFL);
+	if (freopen(handler_capture, "w", stderr) == NULL) _exit(120);
+	install_spine_signal_handler();
+	if (sigaction(handled_signal, NULL, &action) != 0) _exit(121);
+	handler = action.sa_handler;
+	uninstall_spine_signal_handler();
+	sigemptyset(&blocked);
+	sigaddset(&blocked, handled_signal);
+	if (pthread_sigmask(SIG_BLOCK, &blocked, NULL) != 0) _exit(122);
+	handler(handled_signal);
+	fflush(stderr);
+	_exit(0);
+}
+
+static void test_fatal_signal_handler_reports_each_signal(void **state) {
+	static const struct {
+		int signal_number;
+		const char *message;
+		int status;
+	} cases[] = {
+		{SIGABRT, "FATAL: Spine Interrupted by Abort Signal", 0},
+		{SIGINT, "FATAL: Spine Interrupted by Console Operator", 0},
+		{SIGTERM, "FATAL: Spine Interrupted by Termination Signal", 0},
+		{SIGBUS, "FATAL: Spine Encountered a Bus Error", 0},
+		{SIGFPE, "FATAL: Spine Encountered a Floating Point Exception", 0},
+		{SIGQUIT, "FATAL: Spine Encountered a Keyboard Quit Command", 0},
+		{SIGSYS, "FATAL: Spine Encountered An Unhandled Exception Signal Number: ", 0},
+		/* a segmentation fault exits at once instead of re-raising */
+		{SIGSEGV, "FATAL: Spine Encountered a Segmentation Fault", 1},
+	};
+	char capture[] = "spine-signal-XXXXXX";
+	char output[512];
+	size_t index;
+	ssize_t length;
+	int fd = mkstemp(capture);
+
+	(void) state;
+	assert_true(fd >= 0);
+	handler_capture = capture;
+	for (index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
+		handled_signal = cases[index].signal_number;
+		print_message("signal %d\n", handled_signal);
+		assert_int_equal(spine_test_run_child(call_the_fatal_signal_handler), cases[index].status);
+		assert_true(lseek(fd, 0, SEEK_SET) == 0);
+		length = read(fd, output, sizeof(output) - 1);
+		assert_true(length > 0);
+		output[length] = '\0';
+		assert_non_null(strstr(output, cases[index].message));
+		if (handled_signal == SIGSYS) {
+			char number[16];
+
+			snprintf(number, sizeof(number), "'%d'", SIGSYS);
+			assert_non_null(strstr(output, number));
+		}
+	}
+	close(fd);
+	unlink(capture);
+}
 
 /* --- predicates ----------------------------------------------------------- */
 
@@ -615,6 +747,39 @@ static void test_icmp_classify_rejects_a_null_buffer(void **state) {
 	const struct icmp *out = NULL;
 	(void) state;
 	assert_int_equal(spine_icmp_classify_reply(NULL, ICMP_TEST_BUFSIZE, 1, 1, &out), SPINE_ICMP_REPLY_TOO_SHORT);
+}
+
+static void test_icmp_dgram_classify_accepts_our_reply(void **state) {
+	unsigned char reply[ICMP_HDR_SIZE] = {ICMP_ECHOREPLY, 0, 0, 0, 0, 0, 0, 0};
+	const struct icmp *out = NULL;
+	uint16_t seq = 0x0107;
+	(void) state;
+
+	memcpy(reply + 6, &seq, sizeof(seq));
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, seq, &out), SPINE_ICMP_REPLY_OK);
+	assert_ptr_equal(out, (const struct icmp *) reply);
+}
+
+static void test_icmp_dgram_classify_rejects_what_is_not_our_reply(void **state) {
+	unsigned char reply[ICMP_HDR_SIZE] = {ICMP_ECHOREPLY, 0, 0, 0, 0, 0, 0, 0};
+	const struct icmp *out = (const struct icmp *) 1;
+	uint16_t seq = 0x0107;
+	(void) state;
+
+	memcpy(reply + 6, &seq, sizeof(seq));
+	assert_int_equal(spine_icmp_classify_dgram_reply(NULL, sizeof reply, seq, &out), SPINE_ICMP_REPLY_TOO_SHORT);
+	assert_null(out);
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply - 1, seq, &out), SPINE_ICMP_REPLY_TOO_SHORT);
+
+	/* a destination unreachable, and an echo reply with a nonzero code */
+	reply[0] = 3;
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, seq, &out), SPINE_ICMP_REPLY_NOT_ECHO);
+	reply[0] = ICMP_ECHOREPLY;
+	reply[1] = 1;
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, seq, &out), SPINE_ICMP_REPLY_NOT_ECHO);
+	reply[1] = 0;
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, (uint16_t) (seq + 1), &out), SPINE_ICMP_REPLY_NOT_OURS);
+	assert_null(out);
 }
 
 /* --- get_namebyhost(): the real parser ------------------------------------ */
@@ -1238,6 +1403,36 @@ static void test_reap_returns_still_running_rather_than_blocking(void **state) {
 	assert_int_equal(waitpid(pid, &status, 0), pid);
 }
 
+static void test_reap_requires_a_status_buffer(void **state) {
+	(void) state;
+	assert_int_equal(spine_reap_child_bounded(getpid(), NULL, 2), -1);
+}
+
+/* Past the spin attempts the wait settles into the long interval; the child
+ * is still running when the attempts run out. The spare attempts keep the
+ * elapsed-time bound from ending the wait while the spin phase is still
+ * running on a host with coarse sleep granularity. */
+static void test_reap_settles_into_the_long_interval_for_a_running_child(void **state) {
+	int pstat = 0;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 8), 1);
+
+	assert_int_equal(kill(pid, SIGKILL), 0);
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+}
+
 static void test_reap_collects_an_exited_child(void **state) {
 	int pstat = 0;
 	pid_t pid;
@@ -1251,7 +1446,9 @@ static void test_reap_collects_an_exited_child(void **state) {
 		_exit(3);
 	}
 
-	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 20), 0);
+	/* an instrumented child writes its coverage counters before it exits, which
+	 * can take longer than 20 short sleeps; the call returns once it is reaped */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 20), 0);
 	assert_true(WIFEXITED(pstat));
 	assert_int_equal(WEXITSTATUS(pstat), 3);
 }
@@ -1316,7 +1513,11 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_spine_appendf_terminates_after_an_encoding_error),
 		cmocka_unit_test(test_bounded_formatters),
+		cmocka_unit_test(test_settings_overrides_and_unrecognised_booleans),
+		cmocka_unit_test(test_ltrim_of_only_trim_characters_is_empty),
+		cmocka_unit_test(test_fatal_signal_handler_reports_each_signal),
 		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
 		cmocka_unit_test(test_statement_label_names_the_verb_and_table_only),
 		cmocka_unit_test(test_all_digits),
@@ -1342,6 +1543,8 @@ int main(void) {
 		cmocka_unit_test(test_icmp_classify_rejects_a_non_echo),
 		cmocka_unit_test(test_icmp_classify_rejects_another_hosts_reply),
 		cmocka_unit_test(test_icmp_classify_rejects_a_null_buffer),
+		cmocka_unit_test(test_icmp_dgram_classify_accepts_our_reply),
+		cmocka_unit_test(test_icmp_dgram_classify_rejects_what_is_not_our_reply),
 		cmocka_unit_test(test_namebyhost_plain_hostname),
 		cmocka_unit_test(test_namebyhost_is_reentrant_across_calls),
 		cmocka_unit_test(test_namebyhost_tcpv6_method_keeps_the_full_hostname),
@@ -1361,6 +1564,8 @@ int main(void) {
 		cmocka_unit_test(test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
+		cmocka_unit_test(test_reap_requires_a_status_buffer),
+		cmocka_unit_test(test_reap_settles_into_the_long_interval_for_a_running_child),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
 		cmocka_unit_test(test_nft_pclose_does_not_block_on_a_lingering_child),

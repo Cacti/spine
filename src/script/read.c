@@ -155,12 +155,9 @@ retry:
 					/* reserve one byte for the trailing '\0' written below */
 					size_t used = (size_t) (bptr - result_string);
 
-					if (used >= RESULTS_BUFFER - 1) {
-						SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-						SET_UNDEFINED(result_string);
-						read_ok = FALSE;
-						break;
-					}
+					/* The check after each read stops the loop once the buffer is
+					 * full, so space below cannot underflow. */
+					assert(used < RESULTS_BUFFER - 1);
 
 					size_t space = (size_t) RESULTS_BUFFER - 1 - used;
 

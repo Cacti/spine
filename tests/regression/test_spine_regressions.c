@@ -24,6 +24,7 @@ extern void test_script_stream_contracts(void);
 extern void test_additional_database_contracts(MYSQL *mysql);
 extern void test_settings_write_contracts(MYSQL *mysql);
 extern void test_config_option_boundaries(MYSQL *mysql);
+extern void test_startup_contracts(MYSQL *mysql);
 extern void test_additional_reindex_contracts(MYSQL *mysql);
 extern void test_reindex_result_contracts(MYSQL *mysql);
 extern void test_additional_snmp_session_boundaries(void);
@@ -2327,6 +2328,14 @@ static void test_cli_workers(MYSQL *source, const char *config) {
 	assert(db_insert(source, LOCAL, "INSERT INTO poller_item (local_data_id,host_id,poller_id,action,arg1,rrd_name) VALUES (701,42,1,1,'/usr/bin/printf 123','first'),(702,42,1,1,'/usr/bin/printf 456','second')"));
 	run_cli_poll(config, "1", "2", "poller_interval:5", EXIT_SUCCESS);
 	assert(database_count(source, "SELECT COUNT(*) FROM poller_output WHERE (local_data_id=701 AND output='123') OR (local_data_id=702 AND output='456')") == 2);
+	/* a zero interval falls back to the five minute default, and a selective
+	 * debug list is accepted, without changing what is collected */
+	assert(db_insert(source, LOCAL, "DELETE FROM poller_output"));
+	run_cli_poll(config, "1", "2", "poller_interval:0", EXIT_SUCCESS);
+	assert(database_count(source, "SELECT COUNT(*) FROM poller_output WHERE (local_data_id=701 AND output='123') OR (local_data_id=702 AND output='456')") == 2);
+	assert(db_insert(source, LOCAL, "DELETE FROM poller_output"));
+	run_cli_poll_profile(config, "1", "2", "poller_interval:5", "selective_device_debug:42", NULL, EXIT_SUCCESS);
+	assert(database_count(source, "SELECT COUNT(*) FROM poller_output WHERE (local_data_id=701 AND output='123') OR (local_data_id=702 AND output='456')") == 2);
 	assert(db_insert(source, LOCAL, "DELETE FROM poller_output"));
 	assert(db_insert(source, LOCAL, "INSERT INTO host(id,hostname,poller_id,disabled,device_threads,availability_method,status_fail_date,status_rec_date) VALUES(43,'127.0.0.1',1,'',1,0,'2026-10-05 00:00:00','2026-10-05 00:00:00')"));
 	assert(db_insert(source, LOCAL, "INSERT INTO poller_item(local_data_id,host_id,poller_id,action,arg1,rrd_name) VALUES(704,43,1,1,'/usr/bin/printf 789','excluded')"));
@@ -2460,6 +2469,7 @@ static void test_database_configuration(void) {
 	assert(set.availability.ping_timeout == 777);
 	db_connect(LOCAL, &mysql);
 	test_config_option_boundaries(&mysql);
+	test_startup_contracts(&mysql);
 	test_settings_write_contracts(&mysql);
 	test_additional_database_contracts(&mysql);
 	test_poller_queries(&mysql);

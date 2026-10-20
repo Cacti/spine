@@ -39,6 +39,7 @@ extern void *__real_snmp_sess_open(netsnmp_session *);
 extern int __real_snmp_sess_close(void *);
 extern int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*) (void *), void *);
 #include "app/runtime.h"
+#include "app/startup_internal.h"
 extern poller_thread_t **details;
 
 extern ssize_t __real_write(int, const void *, size_t);
@@ -56,12 +57,44 @@ bool __wrap_spine_json_log_record(char *output, size_t capacity, const char *tim
 	return __real_spine_json_log_record(output, capacity, timestamp, severity, message);
 }
 
+static int write_interruptions;
+
 ssize_t __wrap_write(int fd, const void *bytes, size_t length) {
+	if (write_interruptions > 0 && fd == STDERR_FILENO) {
+		write_interruptions--;
+		errno = EINTR;
+		return -1;
+	}
 	if (cancel_log_write && fd > STDERR_FILENO) {
 		cancel_log_write = FALSE;
 		assert(pthread_cancel(pthread_self()) == 0);
 	}
 	return __real_write(fd, bytes, length);
+}
+
+static int client_library_not_thread_safe;
+extern unsigned int __real_mysql_thread_safe(void);
+unsigned int __wrap_mysql_thread_safe(void) {
+	return client_library_not_thread_safe ? 0 : __real_mysql_thread_safe();
+}
+
+extern int __real_sigaction(int, const struct sigaction *, struct sigaction *);
+/* 1: installing the handler, 2: reading the disposition back, 3: restoring it */
+static int sigpipe_sigaction_fault;
+
+int __wrap_sigaction(int signal_number, const struct sigaction *action, struct sigaction *previous) {
+	if (signal_number == SIGPIPE && sigpipe_sigaction_fault != 0) {
+		int fault = sigpipe_sigaction_fault;
+
+		if ((fault == 1 && action != NULL && action->sa_handler != SIG_DFL) ||
+			(fault == 2 && action == NULL) ||
+			(fault == 3 && action != NULL && action->sa_handler == SIG_DFL)) {
+			sigpipe_sigaction_fault = 0;
+			errno = EINVAL;
+			return -1;
+		}
+	}
+	return __real_sigaction(signal_number, action, previous);
 }
 
 static bool fail_mysql_init;
@@ -96,6 +129,15 @@ int __wrap_spine_worker_set_init(spine_worker_set_t *workers, size_t count) {
 		return ENOMEM;
 	}
 	return __real_spine_worker_set_init(workers, count);
+}
+extern int __real_spine_permits_init(spine_permits_t *, int);
+static int fail_permit_init;
+int __wrap_spine_permits_init(spine_permits_t *permits, int count) {
+	if (fail_permit_init) {
+		fail_permit_init = 0;
+		return ENOMEM;
+	}
+	return __real_spine_permits_init(permits, count);
 }
 int __wrap_spine_worker_set_destroy(spine_worker_set_t *workers) {
 	if (fail_worker_destroy) {
@@ -469,6 +511,18 @@ void *__wrap_malloc(size_t size) {
 		return NULL;
 	}
 	return __real_malloc(size);
+}
+
+extern void *__real_calloc(size_t, size_t);
+static size_t failing_calloc_count;
+static size_t failing_calloc_size;
+void *__wrap_calloc(size_t count, size_t size) {
+	if (failing_calloc_size != 0 && count == failing_calloc_count && size == failing_calloc_size) {
+		failing_calloc_size = 0;
+		errno = ENOMEM;
+		return NULL;
+	}
+	return __real_calloc(count, size);
 }
 
 char *__wrap_strdup(const char *text) {
@@ -1515,11 +1569,117 @@ static int execute_fake_main_case(char *config, int failure) {
 	fail_worker_init = failure == 1;
 	fail_worker_reap = failure == 2;
 	fail_worker_destroy = failure == 3;
+	stack_size_failures = failure == 4;
+	fail_permit_init = failure == 5;
 	alarm(15);
 	char interval[] = "poller_interval:5";
 	char *arguments[] = {"spine", "-C", "/nonexistent/spine-fault.conf", "--conf", config,
 		"-p", "2", "-t", "1", "-O", interval, "-S", "-V", "1", NULL};
 	spine_run((int) (sizeof(arguments) / sizeof(arguments[0]) - 1), arguments);
+}
+
+/* The signal code reports a failure of its own bookkeeping and carries on,
+ * and a write interrupted by a signal is retried, not abandoned. */
+static void run_signal_fault_case(int scenario) {
+	struct sigaction action;
+	void (*handler)(int);
+	sigset_t blocked;
+
+	signal(SIGBUS, SIG_DFL);
+	if (freopen("/dev/null", "w", stderr) == NULL) _exit(120);
+	set.logging.log_destination = 0;
+	if (scenario == 0) sigpipe_sigaction_fault = 1;
+	install_spine_signal_handler();
+	if (scenario == 0) {
+		if (sigpipe_sigaction_fault != 0) _exit(121);
+		uninstall_spine_signal_handler();
+		_exit(0);
+	}
+	if (scenario == 1) {
+		sigpipe_sigaction_fault = 2;
+		uninstall_spine_signal_handler();
+		_exit(sigpipe_sigaction_fault == 0 ? 0 : 122);
+	}
+	if (scenario == 2) {
+		sigpipe_sigaction_fault = 3;
+		uninstall_spine_signal_handler();
+		_exit(sigpipe_sigaction_fault == 0 ? 0 : 123);
+	}
+	if (__real_sigaction(SIGBUS, NULL, &action) != 0) _exit(124);
+	handler = action.sa_handler;
+	uninstall_spine_signal_handler();
+	sigemptyset(&blocked);
+	sigaddset(&blocked, SIGBUS);
+	if (pthread_sigmask(SIG_BLOCK, &blocked, NULL) != 0) _exit(125);
+	write_interruptions = 2;
+	handler(SIGBUS);
+	_exit(write_interruptions == 0 ? 0 : 126);
+}
+
+static void test_signal_setup_failures_are_survivable(void) {
+	for (int scenario = 0; scenario <= 3; scenario++) {
+		int status;
+		pid_t child;
+
+		fflush(NULL);
+		child = fork();
+		assert(child >= 0);
+		if (child == 0) run_signal_fault_case(scenario);
+		assert(waitpid(child, &status, 0) == child);
+		fprintf(stderr, "signal fault scenario=%d status=%d\n", scenario, status);
+		assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+	}
+	puts("production signal setup fault regressions passed");
+}
+
+/* A client library built without thread support is reported at startup. */
+static void test_startup_reports_a_library_that_is_not_thread_safe(void) {
+	char log_path[] = "spine-startup-log-XXXXXX";
+	char contents[1024] = "";
+	int status;
+	pid_t child;
+	int fd = mkstemp(log_path);
+
+	assert(fd >= 0);
+	fflush(NULL);
+	child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		client_library_not_thread_safe = TRUE;
+		set.logging.log_destination = LOGDEST_FILE;
+		set.logging.logfile_processed = TRUE;
+		STRNCOPY(set.logging.path_logfile, log_path);
+		report_startup(LOCAL);
+		exit(0);
+	}
+	assert(waitpid(child, &status, 0) == child);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+	assert(read(fd, contents, sizeof(contents) - 1) > 0);
+	assert(strstr(contents, "WARNING: MySQL is NOT Thread Safe!") != NULL);
+	assert(close(fd) == 0);
+	assert(unlink(log_path) == 0);
+	puts("production startup library warning regressions passed");
+}
+
+/* Searching for a configuration file needs a buffer for the candidate path;
+ * without one startup ends instead of reading from a null pointer. */
+static void test_startup_configuration_search_without_memory(void) {
+	pid_t child;
+	int status;
+
+	fflush(NULL);
+	child = fork();
+	assert(child >= 0);
+	if (child == 0) {
+		failing_calloc_count = CONFIG_PATHS;
+		failing_calloc_size = DBL_BUFSIZE;
+		set.logging.log_destination = 0;
+		(void) load_startup_configuration(NULL);
+		_exit(0);
+	}
+	assert(waitpid(child, &status, 0) == child);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_FAILURE);
+	puts("production startup allocation regressions passed");
 }
 
 static void test_fake_database_main(void) {
@@ -1534,7 +1694,7 @@ static void test_fake_database_main(void) {
 	assert(file != NULL);
 	assert(fprintf(file, "DB_Host 127.0.0.1\nDB_Database spine_fake\nCacti_Log %s\n", log_path) > 0);
 	assert(fclose(file) == 0);
-	for (failure = 0; failure <= 3; failure++) {
+	for (failure = 0; failure <= 5; failure++) {
 		char value[8];
 		int status;
 		pid_t process;
@@ -1945,6 +2105,9 @@ int main(int argc, char **argv) {
 	test_fake_database_poll_host();
 	test_fake_database_startup_reads();
 	test_fake_database_main();
+	test_startup_configuration_search_without_memory();
+	test_signal_setup_failures_are_survivable();
+	test_startup_reports_a_library_that_is_not_thread_safe();
 	if (argc == 2 && strcmp(argv[1], "--database") == 0) {
 		test_real_database_retry();
 		test_ping_only_session_lifetime();

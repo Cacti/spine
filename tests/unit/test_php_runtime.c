@@ -32,6 +32,7 @@
 #include "internal/common.h"
 #include "app/spine.h"
 #include "script/server.h"
+#include "tests/support/child_run.h"
 
 static pthread_mutex_t spawn_barrier_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t spawn_barrier_cond = PTHREAD_COND_INITIALIZER;
@@ -53,6 +54,24 @@ static int track_write;
 static int write_calls;
 static struct rlimit saved_nofile;
 static int restore_nofile;
+static int pipe_calls;
+static int fail_pipe_call;
+static int stdout_pipe_call;
+static int fail_file_actions_init;
+static int fail_shell_spawn;
+static int empty_script_response;
+static int fail_spawnattr_init;
+static int php_spawn_errors_left;
+static int php_spawn_error;
+static const char *fail_strdup_text;
+static pid_t fail_waitpid_pid;
+static pid_t fail_kill_pid;
+#ifdef SPINE_PHP_TRYLOCK_WRAP
+static int trylock_calls;
+static int fail_trylock_call;
+static int hook_trylock_call;
+static void (*trylock_hook)(void);
+#endif
 
 static int duplicate_at_fdsetsize(int fd) {
 	struct rlimit limit;
@@ -136,7 +155,12 @@ int __wrap_posix_spawn(pid_t *pid, const char *path,
 	if (strcmp(path, PHP_TEST_SERVER_PATH) == 0) {
 		php_spawn_calls++;
 		if (php_spawn_calls == fail_php_spawn_call) return EIO;
+		if (php_spawn_errors_left > 0) {
+			php_spawn_errors_left--;
+			return php_spawn_error;
+		}
 	}
+	if (fail_shell_spawn && strcmp(path, "/bin/sh") == 0) return EIO;
 	if ((block_shell_spawn && strcmp(path, "/bin/sh") == 0) ||
 	    (block_php_spawn && strcmp(path, PHP_TEST_SERVER_PATH) == 0)) {
 		pthread_mutex_lock(&spawn_barrier_mutex);
@@ -165,6 +189,94 @@ int __wrap_posix_spawnattr_destroy(posix_spawnattr_t *attr) {
 	if (track_spawnattr_destroy) spawnattr_destroyed = TRUE;
 	return __real_posix_spawnattr_destroy(attr);
 }
+
+extern char *__real_php_readpipe(int php_process, const char *command);
+char *__wrap_php_readpipe(int php_process, const char *command) {
+	if (empty_script_response) {
+		empty_script_response = FALSE;
+		/* the reader's buffers are always RESULTS_BUFFER bytes, here holding "" */
+		return calloc(RESULTS_BUFFER, 1);
+	}
+	return __real_php_readpipe(php_process, command);
+}
+
+int __real_pipe(int descriptors[2]);
+int __wrap_pipe(int descriptors[2]) {
+	int result;
+
+	pipe_calls++;
+	if (pipe_calls == fail_pipe_call) {
+		errno = EMFILE;
+		return -1;
+	}
+	result = __real_pipe(descriptors);
+	/* Put the write end where the script server's stdout normally sits, as
+	 * happens when a daemon starts with descriptor 1 closed. */
+	if (result == 0 && pipe_calls == stdout_pipe_call) {
+		if (dup2(descriptors[1], STDOUT_FILENO) < 0) return -1;
+		close(descriptors[1]);
+		descriptors[1] = STDOUT_FILENO;
+	}
+	return result;
+}
+
+int __real_posix_spawn_file_actions_init(posix_spawn_file_actions_t *actions);
+int __wrap_posix_spawn_file_actions_init(posix_spawn_file_actions_t *actions) {
+	if (fail_file_actions_init) {
+		fail_file_actions_init = FALSE;
+		return ENOMEM;
+	}
+	return __real_posix_spawn_file_actions_init(actions);
+}
+
+int __real_posix_spawnattr_init(posix_spawnattr_t *attr);
+int __wrap_posix_spawnattr_init(posix_spawnattr_t *attr) {
+	if (fail_spawnattr_init) {
+		fail_spawnattr_init = FALSE;
+		return ENOMEM;
+	}
+	return __real_posix_spawnattr_init(attr);
+}
+
+char *__real_strdup(const char *text);
+char *__wrap_strdup(const char *text) {
+	if (fail_strdup_text != NULL && strcmp(text, fail_strdup_text) == 0) {
+		fail_strdup_text = NULL;
+		errno = ENOMEM;
+		return NULL;
+	}
+	return __real_strdup(text);
+}
+
+pid_t __real_waitpid(pid_t pid, int *status, int options);
+pid_t __wrap_waitpid(pid_t pid, int *status, int options) {
+	if (pid > 1 && pid == fail_waitpid_pid) {
+		fail_waitpid_pid = 0;
+		errno = EINVAL;
+		return -1;
+	}
+	return __real_waitpid(pid, status, options);
+}
+
+int __real_kill(pid_t pid, int signal_number);
+int __wrap_kill(pid_t pid, int signal_number) {
+	if (pid > 1 && pid == fail_kill_pid && signal_number == SIGKILL) {
+		fail_kill_pid = 0;
+		errno = EPERM;
+		return -1;
+	}
+	return __real_kill(pid, signal_number);
+}
+
+#ifdef SPINE_PHP_TRYLOCK_WRAP
+int __real_pthread_mutex_trylock(pthread_mutex_t *mutex);
+int __wrap_pthread_mutex_trylock(pthread_mutex_t *mutex) {
+	trylock_calls++;
+	if (trylock_calls == fail_trylock_call) return EBUSY;
+	if (trylock_calls == hook_trylock_call && trylock_hook != NULL) trylock_hook();
+	return __real_pthread_mutex_trylock(mutex);
+}
+#endif
 
 static int php_setup(void **state) {
 	(void) state;
@@ -198,6 +310,24 @@ static int php_setup(void **state) {
 	track_write = FALSE;
 	write_calls = 0;
 	restore_nofile = FALSE;
+	pipe_calls = 0;
+	fail_pipe_call = 0;
+	stdout_pipe_call = 0;
+	fail_file_actions_init = FALSE;
+	fail_shell_spawn = FALSE;
+	empty_script_response = FALSE;
+	fail_spawnattr_init = FALSE;
+	php_spawn_errors_left = 0;
+	php_spawn_error = 0;
+	fail_strdup_text = NULL;
+	fail_waitpid_pid = 0;
+	fail_kill_pid = 0;
+#ifdef SPINE_PHP_TRYLOCK_WRAP
+	trylock_calls = 0;
+	fail_trylock_call = 0;
+	hook_trylock_call = 0;
+	trylock_hook = NULL;
+#endif
 	snprintf(set.php.path_php, sizeof(set.php.path_php), "%s", PHP_TEST_SERVER_PATH);
 	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "normal");
 	return 0;
@@ -1131,6 +1261,354 @@ static void test_command_gives_up_after_three_failed_writes(void **state) {
 	free(result);
 }
 
+static void assert_failed_start_is_clean(int slot) {
+	assert_int_equal(php_processes[slot].php_pid, -1);
+	assert_int_equal(php_processes[slot].php_read_fd, -1);
+	assert_int_equal(php_processes[slot].php_write_fd, -1);
+	assert_int_equal(php_processes[slot].php_state, PHP_BUSY);
+}
+
+/* A failed pipe must not leak the descriptors already opened: the next open()
+ * has to land on the same number it would have before the attempt. */
+static void assert_pipe_failure_leaks_nothing(int failing_call) {
+	int before = open("/dev/null", O_RDONLY);
+	int after;
+
+	assert_true(before >= 0);
+	close(before);
+	fail_pipe_call = failing_call;
+	assert_int_equal(php_init(0), FALSE);
+	assert_failed_start_is_clean(0);
+	assert_int_equal(php_spawn_calls, 0);
+	after = open("/dev/null", O_RDONLY);
+	assert_int_equal(after, before);
+	close(after);
+}
+
+static void test_request_pipe_failure_is_clean(void **state) {
+	(void) state;
+	assert_pipe_failure_leaks_nothing(1);
+}
+
+static void test_response_pipe_failure_is_clean(void **state) {
+	(void) state;
+	assert_pipe_failure_leaks_nothing(2);
+}
+
+static void test_file_actions_failure_is_clean(void **state) {
+	(void) state;
+	fail_file_actions_init = TRUE;
+	assert_int_equal(php_init(0), FALSE);
+	assert_failed_start_is_clean(0);
+	assert_int_equal(php_spawn_calls, 0);
+}
+
+static void test_spawn_attribute_failure_during_start_is_clean(void **state) {
+	(void) state;
+	fail_next_setsigdefault = TRUE;
+	assert_int_equal(php_init(0), FALSE);
+	assert_failed_start_is_clean(0);
+	assert_int_equal(php_spawn_calls, 0);
+}
+
+static void test_sigpipe_attribute_helper_reports_its_failures(void **state) {
+	posix_spawnattr_t attr;
+
+	(void) state;
+	errno = 0;
+	assert_int_equal(spine_spawnattr_sigpipe_default(NULL), -1);
+	assert_int_equal(errno, EINVAL);
+
+	fail_spawnattr_init = TRUE;
+	errno = 0;
+	assert_int_equal(spine_spawnattr_sigpipe_default(&attr), -1);
+	assert_int_equal(errno, ENOMEM);
+}
+
+static void test_startup_command_allocation_failure_fails_the_start(void **state) {
+	(void) state;
+	fail_strdup_text = "INIT";
+	assert_int_equal(php_init(0), FALSE);
+	assert_int_equal(php_spawn_calls, 0);
+}
+
+/* With descriptor 1 closed the response pipe's write end can land on stdout.
+ * The server must still get a working stdout, not a closed one. */
+static void test_response_pipe_on_stdout_still_reaches_the_server(void **state) {
+	int saved_stdout = dup(STDOUT_FILENO);
+	char *result;
+	int started;
+
+	(void) state;
+	assert_true(saved_stdout >= 0);
+	stdout_pipe_call = 2;
+	started = php_init(0);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdout);
+
+	assert_int_equal(started, TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "42\n");
+	free(result);
+}
+
+/* Each early failure of a script launch must leave no descriptor behind: the
+ * next open() has to land on the number it would have before the attempt. */
+static void assert_script_launch_failure_leaks_nothing(const char *type, int stdin_closed) {
+	int saved_stdin = -1;
+	int before;
+	int after;
+	int result;
+
+	if (stdin_closed) {
+		saved_stdin = dup(STDIN_FILENO);
+		assert_true(saved_stdin >= 0);
+		close(STDIN_FILENO);
+	}
+	before = open("/dev/null", O_RDONLY);
+	assert_true(before >= 0);
+	close(before);
+
+	result = nft_popen("exit 0", type);
+
+	after = open("/dev/null", O_RDONLY);
+	close(after);
+	if (stdin_closed) {
+		dup2(saved_stdin, STDIN_FILENO);
+		close(saved_stdin);
+	}
+	assert_int_equal(result, -1);
+	assert_int_equal(after, before);
+}
+
+/* With stdin and stdout both closed the duplex socket pair lands on
+ * descriptors 0 and 1; the child must still get working ends. */
+static void test_duplex_script_runs_with_closed_stdio(void **state) {
+	int saved_stdin = dup(STDIN_FILENO);
+	int saved_stdout = dup(STDOUT_FILENO);
+	char answer[4] = "";
+	ssize_t length = -1;
+	int descriptor;
+
+	(void) state;
+	assert_true(saved_stdin >= 0);
+	assert_true(saved_stdout >= 0);
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+	descriptor = nft_popen("printf ok", "r+");
+	if (descriptor >= 0) {
+		length = read(descriptor, answer, 2);
+		(void) nft_pclose(descriptor);
+	}
+	dup2(saved_stdin, STDIN_FILENO);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdin);
+	close(saved_stdout);
+
+	assert_true(descriptor >= 0);
+	assert_int_equal(length, 2);
+	assert_string_equal(answer, "ok");
+}
+
+static void test_duplex_script_cloexec_failure_is_clean(void **state) {
+	(void) state;
+	fail_next_cloexec = TRUE;
+	assert_script_launch_failure_leaks_nothing("r+", FALSE);
+}
+
+static void test_script_file_actions_failure_is_clean(void **state) {
+	(void) state;
+	fail_file_actions_init = TRUE;
+	assert_script_launch_failure_leaks_nothing("r", FALSE);
+}
+
+static void test_script_spawn_failure_releases_the_stdin_duplicate(void **state) {
+	(void) state;
+	fail_shell_spawn = TRUE;
+	assert_script_launch_failure_leaks_nothing("w", TRUE);
+}
+
+static void test_stdout_collision_cloexec_failure_is_clean(void **state) {
+	int saved_stdout = dup(STDOUT_FILENO);
+	int started;
+
+	(void) state;
+	assert_true(saved_stdout >= 0);
+	stdout_pipe_call = 2;
+	fail_duplicated_cloexec = TRUE;
+	started = php_init(0);
+	dup2(saved_stdout, STDOUT_FILENO);
+	close(saved_stdout);
+
+	assert_int_equal(started, FALSE);
+	assert_failed_start_is_clean(0);
+	assert_int_equal(php_spawn_calls, 0);
+}
+
+static void test_transient_spawn_errors_are_retried(void **state) {
+	(void) state;
+	php_spawn_error = EAGAIN;
+	php_spawn_errors_left = 2;
+	assert_int_equal(php_init(0), TRUE);
+	assert_int_equal(php_spawn_calls, 3);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+}
+
+static void test_persistent_spawn_errors_stop_after_the_retry_budget(void **state) {
+	(void) state;
+	php_spawn_error = EAGAIN;
+	php_spawn_errors_left = 100;
+	assert_int_equal(php_init(0), FALSE);
+	assert_int_equal(php_spawn_calls, 4);
+	assert_failed_start_is_clean(0);
+
+	php_spawn_calls = 0;
+	php_spawn_error = ENOMEM;
+	php_spawn_errors_left = 100;
+	assert_int_equal(php_init(0), FALSE);
+	assert_int_equal(php_spawn_calls, 4);
+	assert_failed_start_is_clean(0);
+}
+
+static void test_close_ignores_slots_outside_the_configured_range(void **state) {
+	(void) state;
+	php_processes[0].php_pid = 4242;
+	php_close(set.php.php_servers);
+	php_close(-2);
+	assert_int_equal(php_processes[0].php_pid, 4242);
+	php_processes[0].php_pid = -1;
+}
+
+static pid_t start_idle_child(void) {
+	pid_t child = fork();
+
+	assert_true(child >= 0);
+	if (child == 0) {
+		pause();
+		_exit(0);
+	}
+	return child;
+}
+
+static void finish_idle_child(pid_t child) {
+	int attempts;
+
+	kill(child, SIGKILL);
+	waitpid(child, NULL, 0);
+	for (attempts = 0; attempts < 100 && nft_abandoned_pending() != 0; attempts++) usleep(20000);
+}
+
+static void test_close_parks_a_child_it_cannot_reap(void **state) {
+	pid_t child = start_idle_child();
+
+	(void) state;
+	php_processes[0].php_pid = child;
+	fail_waitpid_pid = child;
+	php_close(0);
+	assert_int_equal(fail_waitpid_pid, 0);
+	assert_int_equal(php_processes[0].php_pid, -1);
+	assert_int_equal(nft_abandoned_pending(), 1);
+	finish_idle_child(child);
+	assert_int_equal(nft_abandoned_pending(), 0);
+}
+
+static void test_close_parks_a_child_it_cannot_kill(void **state) {
+	pid_t child = start_idle_child();
+
+	(void) state;
+	php_processes[0].php_pid = child;
+	fail_kill_pid = child;
+	php_close(0);
+	assert_int_equal(fail_kill_pid, 0);
+	assert_int_equal(php_processes[0].php_pid, -1);
+	assert_int_equal(nft_abandoned_pending(), 1);
+	finish_idle_child(child);
+	assert_int_equal(nft_abandoned_pending(), 0);
+}
+
+static void test_slot_initialization_ignores_empty_requests(void **state) {
+	php_t slots[2];
+
+	(void) state;
+	memset(slots, 0x5a, sizeof(slots));
+	php_processes_initialize(NULL, 2);
+	php_processes_initialize(slots, 0);
+	php_processes_initialize(slots, -1);
+	assert_int_equal(slots[0].php_pid, 0x5a5a5a5a);
+	assert_int_equal(slots[1].php_read_fd, 0x5a5a5a5a);
+}
+
+static void unavailable_slot_with_no_undefined_copy(void) {
+	fail_strdup_text = "U";
+	free(php_cmd("poll 7", MAX_PHP_SERVERS));
+}
+
+static void test_undefined_result_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	assert_int_equal(spine_test_run_child(unavailable_slot_with_no_undefined_copy), EXIT_FAILURE);
+}
+
+/* A server that died between commands is restarted and the command is sent
+ * again to the replacement. */
+static void test_command_is_resent_after_a_successful_restart(void **state) {
+	char *result;
+
+	(void) state;
+	prepare_broken_ready_slot();
+	result = php_cmd("poll 7", 0);
+	track_write = FALSE;
+	assert_non_null(result);
+	assert_string_equal(result, "42\n");
+	free(result);
+	assert_int_equal(php_spawn_calls, 1);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+}
+
+/* A reader that hands back nothing at all still yields the unknown marker. */
+static void test_empty_script_server_response_is_unknown(void **state) {
+	char *result;
+
+	(void) state;
+	assert_int_equal(php_init(0), TRUE);
+	empty_script_response = TRUE;
+
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+	assert_false(empty_script_response);
+}
+
+#ifdef SPINE_PHP_TRYLOCK_WRAP
+static void test_recovery_scan_yields_when_the_failed_slot_is_taken(void **state) {
+	(void) state;
+	set.php.php_servers = 1;
+	fail_trylock_call = 2;
+	assert_int_equal(php_get_process(), -1);
+	assert_int_equal(trylock_calls, 2);
+	assert_int_equal(php_spawn_calls, 0);
+}
+
+static void revive_slot_zero(void) {
+	php_processes[0].php_state = PHP_READY;
+	php_processes[0].php_pid = 100;
+	php_processes[0].php_read_fd = 20;
+	php_processes[0].php_write_fd = 21;
+}
+
+static void test_recovery_scan_uses_a_slot_repaired_by_another_thread(void **state) {
+	(void) state;
+	set.php.php_servers = 1;
+	hook_trylock_call = 2;
+	trylock_hook = revive_slot_zero;
+	assert_int_equal(php_get_process(), 0);
+	assert_int_equal(php_spawn_calls, 0);
+	php_processes[0].php_pid = php_processes[0].php_read_fd = php_processes[0].php_write_fd = -1;
+}
+#endif
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_round_robin_wraps_at_server_count, php_setup, php_teardown),
@@ -1172,6 +1650,33 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_failed_write_stops_when_restart_handshake_is_not_ready, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_failed_write_stops_when_restart_spawn_fails, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_gives_up_after_three_failed_writes, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_request_pipe_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_response_pipe_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_file_actions_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_spawn_attribute_failure_during_start_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_sigpipe_attribute_helper_reports_its_failures, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_startup_command_allocation_failure_fails_the_start, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_response_pipe_on_stdout_still_reaches_the_server, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_duplex_script_runs_with_closed_stdio, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_duplex_script_cloexec_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_script_file_actions_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_script_spawn_failure_releases_the_stdin_duplicate, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_stdout_collision_cloexec_failure_is_clean, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_transient_spawn_errors_are_retried, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_persistent_spawn_errors_stop_after_the_retry_budget, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_close_ignores_slots_outside_the_configured_range, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_close_parks_a_child_it_cannot_reap, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_close_parks_a_child_it_cannot_kill, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_slot_initialization_ignores_empty_requests, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_undefined_result_allocation_failure_is_fatal, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_command_is_resent_after_a_successful_restart, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_empty_script_server_response_is_unknown, php_setup, php_teardown),
+#ifdef SPINE_PHP_TRYLOCK_WRAP
+		cmocka_unit_test_setup_teardown(test_recovery_scan_yields_when_the_failed_slot_is_taken, php_setup, php_teardown),
+#endif
+#ifdef SPINE_PHP_TRYLOCK_WRAP
+		cmocka_unit_test_setup_teardown(test_recovery_scan_uses_a_slot_repaired_by_another_thread, php_setup, php_teardown),
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

@@ -16,8 +16,6 @@
 #include "internal/common.h"
 #include "app/spine.h"
 #include "regex.h"
-#define SPINE_STRINGIFY_INNER(value) #value
-#define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
 
 /* pthread storage keeps the borrowed match valid without requiring C11 TLS.
  * Each polling thread owns its buffer, which is freed when the thread exits. */
@@ -91,8 +89,9 @@ int format_spine_capabilities(char *output, size_t output_size,
 	}
 
 	written = snprintf(output, output_size,
-		"{ authProtocols: \"%." SPINE_STRINGIFY(CAPABILITY_PROTOCOL_LIST_MAX) "s\", privProtocols: \"%." SPINE_STRINGIFY(CAPABILITY_PROTOCOL_LIST_MAX) "s\" }",
-		auth_protocols, priv_protocols);
+		"{ authProtocols: \"%.*s\", privProtocols: \"%.*s\" }",
+		CAPABILITY_PROTOCOL_LIST_MAX, auth_protocols,
+		CAPABILITY_PROTOCOL_LIST_MAX, priv_protocols);
 
 	return written >= 0 && (size_t) written < output_size;
 }

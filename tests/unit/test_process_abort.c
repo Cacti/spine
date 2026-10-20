@@ -20,6 +20,7 @@ struct owned_processes {
 };
 static int ready_fd;
 static int control_fd;
+static int hold_fd;
 static int abort_from_worker;
 
 #ifdef SPINE_TEST_ABORT_FAULTS
@@ -157,12 +158,20 @@ static void *script_worker(void *argument) {
 	struct owned_processes owned;
 	int fd;
 	char line[64];
+	char command[128];
 	char byte;
 	FILE *stream;
 	long descendant;
 	(void) argument;
 
-	fd = nft_popen("trap '' TERM; sleep 300 & printf '%s\\n' \"$!\"; wait", "r");
+	/* The descendant is a subshell blocked in a builtin read, not an exec'd
+	 * command. Readiness is reported as soon as $! exists, and NetBSD 10.1
+	 * drops a SIGKILL that arrives while its target is still inside execve.
+	 * The test runner holds the write end, so the read never returns while
+	 * survivors are counted. */
+	snprintf(command, sizeof(command),
+		"trap '' TERM; (read line) <&%d & printf '%%s\\n' \"$!\"; wait", hold_fd);
+	fd = nft_popen(command, "r");
 	if (fd < 0) _exit(91);
 	owned.leader = nft_pchild(fd);
 	stream = fdopen(dup(fd), "r");
@@ -209,6 +218,7 @@ static int process_alive(pid_t pid) {
 static void check_abort(int signal_number, int worker_fatal) {
 	int ready[2];
 	int control[2];
+	int hold[2];
 	pid_t fixture;
 	pid_t waited;
 	int status = 0;
@@ -224,6 +234,7 @@ static void check_abort(int signal_number, int worker_fatal) {
 #endif
 	assert_int_equal(pipe(ready), 0);
 	assert_int_equal(pipe(control), 0);
+	assert_int_equal(pipe(hold), 0);
 	fixture = fork();
 	assert_true(fixture >= 0);
 	if (fixture == 0) {
@@ -232,10 +243,15 @@ static void check_abort(int signal_number, int worker_fatal) {
 		char byte;
 		close(ready[0]);
 		close(control[1]);
+		close(hold[1]);
 		ready_fd = ready[1];
 		control_fd = control[0];
+		hold_fd = hold[0];
 		abort_from_worker = worker_fatal;
 		init_mutexes();
+		/* The handler is installed only over SIG_DFL. A test driver such as
+		 * busybox sh can start this process with SIGINT or SIGQUIT ignored. */
+		if (signal_number != 0) (void) signal(signal_number, SIG_DFL);
 		install_spine_signal_handler();
 		if (pthread_attr_init(&attributes) != 0 ||
 			pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED) != 0) _exit(109);
@@ -254,6 +270,7 @@ static void check_abort(int signal_number, int worker_fatal) {
 	}
 	close(ready[1]);
 	close(control[0]);
+	close(hold[0]);
 	for (i = 0; i < WORKERS; i++) {
 		assert_int_equal(read(ready[0], &owned[i], sizeof(owned[i])), sizeof(owned[i]));
 		assert_true(owned[i].leader > 1 && owned[i].descendant > 1);
@@ -282,6 +299,7 @@ static void check_abort(int signal_number, int worker_fatal) {
 		(void) waitpid(owned[i].descendant, NULL, 0);
 #endif
 	}
+	close(hold[1]);
 	assert_int_equal(waited, fixture);
 	assert_int_equal(survivors, 0);
 	if (signal_number == 0) {

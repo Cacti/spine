@@ -32,10 +32,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netdb.h>
 
 #include "internal/common.h"
 #include "app/spine.h"
 #include "ping/ping.h"
+#include "tests/support/child_run.h"
 
 extern int *debug_devices;
 
@@ -71,6 +75,20 @@ static int socket_cloexec_einval;
 static int fcntl_fails;
 static size_t reply_v6_count;
 static int check_wrong_peer;
+static int select_eintr_once;
+static int select_times_out;
+static int fail_packet_allocation;
+static int reply_defect;
+static int sendto_fails_once;
+static int getifaddrs_mode;
+static struct addrinfo *fake_hostinfo;
+
+enum {
+	DEFECT_NONE,
+	DEFECT_WRONG_SEQUENCE,
+	DEFECT_NOT_AN_ECHO_REPLY,
+	DEFECT_OTHER_PEER
+};
 
 static int test_socket(int domain, int type, int protocol);
 static int test_close(int fd);
@@ -86,6 +104,8 @@ static int test_select(int nfds, fd_set *readfds, fd_set *writefds,
 	fd_set *exceptfds, struct timeval *timeout);
 static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 	struct sockaddr *address, socklen_t *address_len);
+static int test_getifaddrs(struct ifaddrs **list);
+static void test_freeifaddrs(struct ifaddrs *list);
 
 /* Compile the shipped implementation into this test translation unit so its
  * resource sinks can be observed without root or Linux-only linker wrapping. */
@@ -99,6 +119,8 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 #define sendto test_sendto
 #define select test_select
 #define recvfrom test_recvfrom
+#define getifaddrs test_getifaddrs
+#define freeifaddrs test_freeifaddrs
 #include "../../src/poller/availability.c"
 #include "../../src/ping/icmp_shared.c"
 #include "../../src/ping/icmp4.c"
@@ -117,6 +139,8 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 #undef sendto
 #undef select
 #undef recvfrom
+#undef getifaddrs
+#undef freeifaddrs
 
 static int test_getaddrinfo(const char *node, const char *service,
 	const struct addrinfo *hints, struct addrinfo **res) {
@@ -129,13 +153,62 @@ static int test_getaddrinfo(const char *node, const char *service,
 		*res = (struct addrinfo *)(uintptr_t) 1;
 		return EAI_AGAIN;
 	}
+	/* resolution succeeds but yields nothing */
+	if (resolver_mode == 3) {
+		*res = NULL;
+		return 0;
+	}
+	/* resolution succeeds with a caller-supplied list */
+	if (resolver_mode == 4) {
+		*res = fake_hostinfo;
+		return 0;
+	}
 
 	return getaddrinfo(node, service, hints, res);
 }
 
 static void test_freeaddrinfo(struct addrinfo *res) {
 	freeaddrinfo_calls++;
+	if (resolver_mode == 4 && res == fake_hostinfo) return;
 	freeaddrinfo(res);
+}
+
+/* An interface list of the shapes apply_ipv6_scope_id() has to skip, ending in
+ * a usable one. The names are looked up for real by if_nametoindex(). */
+static struct ifaddrs fake_interfaces[5];
+static struct sockaddr_in fake_ipv4_address;
+static struct sockaddr_in6 fake_ipv6_address;
+
+static int test_getifaddrs(struct ifaddrs **list) {
+	if (getifaddrs_mode == 0) return getifaddrs(list);
+	if (getifaddrs_mode == 1) {
+		errno = ENOMEM;
+		return -1;
+	}
+	memset(fake_interfaces, 0, sizeof(fake_interfaces));
+	fake_ipv4_address.sin_family = AF_INET;
+	fake_ipv6_address.sin6_family = AF_INET6;
+	fake_interfaces[0].ifa_name = (char *) "lo";
+	fake_interfaces[0].ifa_next = &fake_interfaces[1];
+	fake_interfaces[1].ifa_name = (char *) "lo";
+	fake_interfaces[1].ifa_addr = (struct sockaddr *) &fake_ipv4_address;
+	fake_interfaces[1].ifa_next = &fake_interfaces[2];
+	fake_interfaces[2].ifa_name = (char *) "lo";
+	fake_interfaces[2].ifa_addr = (struct sockaddr *) &fake_ipv6_address;
+	fake_interfaces[2].ifa_flags = IFF_LOOPBACK;
+	fake_interfaces[2].ifa_next = &fake_interfaces[3];
+	fake_interfaces[3].ifa_name = (char *) "spine-no-such-if";
+	fake_interfaces[3].ifa_addr = (struct sockaddr *) &fake_ipv6_address;
+	fake_interfaces[3].ifa_next = &fake_interfaces[4];
+	fake_interfaces[4].ifa_name = (char *) "lo";
+	fake_interfaces[4].ifa_addr = (struct sockaddr *) &fake_ipv6_address;
+	*list = &fake_interfaces[0];
+	return 0;
+}
+
+static void test_freeifaddrs(struct ifaddrs *list) {
+	if (getifaddrs_mode == 2) return;
+	freeifaddrs(list);
 }
 
 static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
@@ -144,6 +217,11 @@ static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
 
 	if (!controlled_reply) {
 		return sendto(fd, buffer, length, flags, address, address_len);
+	}
+	if (sendto_fails_once) {
+		sendto_fails_once = 0;
+		errno = EIO;
+		return -1;
 	}
 #ifdef SPINE_HAVE_ICMPV6
 	if (controlled_reply_v6) {
@@ -162,7 +240,12 @@ static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
 static int test_select(int nfds, fd_set *readfds, fd_set *writefds,
 		fd_set *exceptfds, struct timeval *timeout) {
 	if (controlled_reply) {
-		return 1;
+		if (select_eintr_once) {
+			select_eintr_once = 0;
+			errno = EINTR;
+			return -1;
+		}
+		return select_times_out ? 0 : 1;
 	}
 	return select(nfds, readfds, writefds, exceptfds, timeout);
 }
@@ -200,6 +283,10 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 		reply6->icmp6_type = ICMP6_ECHO_REPLY;
 		reply6->icmp6_id = check_wrong_peer && controlled_socket_type == SOCK_DGRAM ? sent_icmp_id ^ htons(0x100) : sent_icmp_id;
 		reply6->icmp6_seq = sent_icmp_seq;
+		if (reply_defect == DEFECT_WRONG_SEQUENCE) {
+			reply_defect = DEFECT_NONE;
+			reply6->icmp6_seq ^= htons(0x100);
+		}
 		memcpy((unsigned char *) buffer + sizeof(*reply6), payload, sizeof(payload) - 1);
 		memset(source6, 0, sizeof(*source6));
 		source6->sin6_family = AF_INET6;
@@ -243,6 +330,18 @@ static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 		source->sin_family = AF_INET;
 		source->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		*address_len = sizeof(*source);
+		if (reply_defect == DEFECT_OTHER_PEER) {
+			reply_defect = DEFECT_NONE;
+			source->sin_addr.s_addr = htonl(INADDR_LOOPBACK + 1);
+		}
+	}
+	if (reply_defect == DEFECT_WRONG_SEQUENCE) {
+		reply_defect = DEFECT_NONE;
+		icmp_reply->icmp_seq = (uint16_t) (icmp_reply->icmp_seq + 1000);
+	} else if (reply_defect == DEFECT_NOT_AN_ECHO_REPLY) {
+		reply_defect = DEFECT_NONE;
+		/* destination unreachable; the wire value is not portable by name */
+		icmp_reply->icmp_type = 3;
 	}
 	return (ssize_t) reply_length;
 }
@@ -301,7 +400,13 @@ static int test_fcntl(int fd, int command, int argument) {
 }
 
 static void *intercepted_malloc(size_t size) {
-	void *ptr = malloc(size);
+	void *ptr;
+
+	if (fail_packet_allocation && size == packet_size) {
+		fail_packet_allocation = 0;
+		return NULL;
+	}
+	ptr = malloc(size);
 
 	if (track_packet && size == packet_size && packet_allocation == NULL) {
 		packet_allocation = ptr;
@@ -376,6 +481,13 @@ static int ping_reset(void **state) {
 	icmp_waiters = NULL;
 	reply_v6_count = 0;
 	check_wrong_peer = 0;
+	select_eintr_once = 0;
+	select_times_out = 0;
+	fail_packet_allocation = 0;
+	reply_defect = DEFECT_NONE;
+	sendto_fails_once = 0;
+	getifaddrs_mode = 0;
+	fake_hostinfo = NULL;
 	return 0;
 }
 
@@ -1162,6 +1274,502 @@ static void test_ipv6_socket_failure_budget_is_bounded(void **state) {
 	assert_null(packet_allocation);
 }
 
+static void set_debug_device(const host_t *host, int enabled) {
+	pi_debug_table[0] = enabled ? host->id : 0;
+}
+
+static void test_address_type_of_an_unresolvable_host_is_unknown(void **state) {
+	host_t host;
+
+	(void) state;
+	make_host(&host, "unresolvable.invalid");
+	resolver_mode = 1;
+
+	assert_int_equal(get_address_type(&host), SPINE_NONE);
+	assert_int_equal(resolver_calls, 1);
+}
+
+static void test_address_type_follows_the_families_the_resolver_returns(void **state) {
+	struct sockaddr_in6 v6_address;
+	struct sockaddr unix_address;
+	struct addrinfo entries[2];
+	host_t host;
+
+	(void) state;
+	make_host(&host, "dual.example");
+	memset(&v6_address, 0, sizeof(v6_address));
+	memset(&unix_address, 0, sizeof(unix_address));
+	memset(entries, 0, sizeof(entries));
+	v6_address.sin6_family = AF_INET6;
+	v6_address.sin6_addr = in6addr_loopback;
+	entries[0].ai_family = AF_UNIX;
+	entries[0].ai_addr = &unix_address;
+	entries[0].ai_next = &entries[1];
+	entries[1].ai_family = AF_INET6;
+	entries[1].ai_addr = (struct sockaddr *) &v6_address;
+	entries[1].ai_canonname = (char *) "dual.example";
+	fake_hostinfo = &entries[0];
+	resolver_mode = 4;
+
+	/* an unknown family is skipped, and an IPv6-only answer is IPv6 */
+	assert_int_equal(get_address_type(&host), SPINE_IPV6);
+
+	entries[0].ai_next = NULL;
+	assert_int_equal(get_address_type(&host), SPINE_NONE);
+}
+
+static void test_resolution_that_yields_no_address_is_a_failure(void **state) {
+	struct sockaddr_in name;
+
+	(void) state;
+	resolver_mode = 3;
+	assert_false(init_sockaddr(&name, "empty.example", 7));
+}
+
+static void test_address_extraction_respects_the_buffer_size(void **state) {
+	char buffer[8];
+
+	(void) state;
+	memset(buffer, 'x', sizeof(buffer));
+	assert_ptr_equal(ping_address("example.com", buffer, 0), buffer);
+	assert_int_equal(buffer[0], 'x');
+
+	assert_ptr_equal(ping_address("example.com", buffer, 4), buffer);
+	assert_string_equal(buffer, "exa");
+}
+
+static void test_interrupted_select_resumes_the_wait(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	select_eintr_once = 1;
+	make_host(&host, "127.0.0.1");
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
+	assert_int_equal(select_eintr_once, 0);
+	assert_int_equal(recvfrom_calls, 1);
+}
+
+static void test_interrupted_receive_is_retried(void **state) {
+	int debug;
+
+	(void) state;
+	for (debug = 0; debug <= 1; debug++) {
+		host_t host;
+		ping_t ping;
+
+		assert_int_equal(ping_reset(NULL), 0);
+		use_owned_controlled_socket();
+		controlled_reply = 1;
+		recvfrom_eintr_once = 1;
+		make_host(&host, "127.0.0.1");
+		set_debug_device(&host, debug);
+		memset(&ping, 0, sizeof(ping));
+
+		assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
+		assert_int_equal(recvfrom_calls, 2);
+		assert_int_equal(ping_teardown(NULL), 0);
+		controlled_pair[0] = controlled_pair[1] = -1;
+	}
+}
+
+/* A reply that is not ours, is not an echo reply, or comes from another host
+ * is dropped and the wait continues until the real answer arrives. Raw and
+ * datagram sockets classify it differently. */
+static void test_stray_replies_do_not_end_the_wait(void **state) {
+	const int defects[] = {DEFECT_WRONG_SEQUENCE, DEFECT_NOT_AN_ECHO_REPLY, DEFECT_OTHER_PEER};
+	size_t index;
+	int raw;
+
+	(void) state;
+	for (raw = 0; raw <= 1; raw++) {
+		for (index = 0; index < sizeof(defects) / sizeof(defects[0]); index++) {
+			host_t host;
+			ping_t ping;
+
+			assert_int_equal(ping_reset(NULL), 0);
+			use_owned_controlled_socket();
+			controlled_reply = 1;
+			socket_failures_remaining = raw;
+			reply_defect = defects[index];
+			make_host(&host, "127.0.0.1");
+			memset(&ping, 0, sizeof(ping));
+			print_message("raw=%d defect=%d\n", raw, defects[index]);
+
+			assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
+			assert_int_equal(controlled_socket_type, raw ? SOCK_RAW : SOCK_DGRAM);
+			assert_int_equal(recvfrom_calls, 2);
+			assert_string_equal(ping.ping_response, "ICMP: Device is Alive");
+			assert_int_equal(ping_teardown(NULL), 0);
+			controlled_pair[0] = controlled_pair[1] = -1;
+		}
+	}
+}
+
+static void test_debug_device_reports_a_live_host_and_a_timeout(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	make_host(&host, "127.0.0.1");
+	set_debug_device(&host, TRUE);
+	memset(&ping, 0, sizeof(ping));
+	assert_int_equal(ping_icmp(&host, &ping), HOST_UP);
+
+	assert_int_equal(ping_reset(NULL), 0);
+	assert_int_equal(ping_teardown(NULL), 0);
+	controlled_pair[0] = controlled_pair[1] = -1;
+	use_owned_controlled_socket();
+	make_host(&host, "127.0.0.1");
+	host.availability.timeout = 1;
+	host.availability.retries = 0;
+	set_debug_device(&host, TRUE);
+	memset(&ping, 0, sizeof(ping));
+	assert_int_equal(ping_icmp(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "timed out"));
+}
+
+static void ping_without_packet_memory(void) {
+	host_t host;
+	ping_t ping = {0};
+
+	use_controlled_socket = 1;
+	controlled_socket_fd = 42;
+	packet_size = ICMP_HDR_SIZE + strlen("cacti-monitoring-system");
+	fail_packet_allocation = 1;
+	make_host(&host, "127.0.0.1");
+	(void) ping_icmp(&host, &ping);
+}
+
+static void test_packet_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	assert_int_equal(spine_test_run_child(ping_without_packet_memory), EXIT_FAILURE);
+}
+
+#ifdef SPINE_HAVE_ICMPV6
+static void test_ipv6_resolution_failures_are_reported(void **state) {
+	struct sockaddr_in6 name;
+	struct addrinfo wrong_family;
+	struct sockaddr_in v4_address;
+
+	(void) state;
+	resolver_mode = 3;
+	assert_false(init_sockaddr6(&name, "empty.example"));
+
+	memset(&wrong_family, 0, sizeof(wrong_family));
+	memset(&v4_address, 0, sizeof(v4_address));
+	wrong_family.ai_family = AF_INET;
+	wrong_family.ai_addr = (struct sockaddr *) &v4_address;
+	wrong_family.ai_addrlen = sizeof(v4_address);
+	fake_hostinfo = &wrong_family;
+	resolver_mode = 4;
+	freeaddrinfo_calls = 0;
+	assert_false(init_sockaddr6(&name, "v4only.example"));
+	assert_int_equal(freeaddrinfo_calls, 1);
+}
+
+#if defined(HAVE_IFADDRS_H) && defined(HAVE_NET_IF_H) && defined(HAVE_GETIFADDRS) && defined(HAVE_IF_NAMETOINDEX)
+static void test_link_local_scope_comes_from_the_first_usable_interface(void **state) {
+	struct sockaddr_in6 name;
+	unsigned int expected = if_nametoindex("lo");
+
+	(void) state;
+	if (expected == 0) skip();
+
+	memset(&name, 0, sizeof(name));
+	getifaddrs_mode = 1;
+	apply_ipv6_scope_id(&name);
+	assert_int_equal(name.sin6_scope_id, 0);
+
+	/* null address, wrong family, loopback and unknown interface are skipped */
+	getifaddrs_mode = 2;
+	apply_ipv6_scope_id(&name);
+	assert_int_equal(name.sin6_scope_id, expected);
+}
+
+static void test_link_local_destination_gets_a_scope_before_sending(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	getifaddrs_mode = 2;
+	make_host(&host, "fe80::1");
+	host.availability.timeout = 50;
+	host.availability.retries = 0;
+	memset(&ping, 0, sizeof(ping));
+
+	/* the controlled reply comes from ::1, not the link-local peer */
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_DOWN);
+	assert_string_equal(ping.ping_response, "ICMPv6: Ping timed out");
+}
+#endif
+
+static void test_ipv6_send_failure_is_retried(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	sendto_fails_once = 1;
+	make_host6(&host);
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+	assert_int_equal(sendto_fails_once, 0);
+}
+
+static void test_ipv6_interrupted_select_resumes_the_wait(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	select_eintr_once = 1;
+	make_host6(&host);
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+	assert_int_equal(select_eintr_once, 0);
+}
+
+static void test_ipv6_interrupted_receive_is_retried(void **state) {
+	int debug;
+
+	(void) state;
+	for (debug = 0; debug <= 1; debug++) {
+		host_t host;
+		ping_t ping;
+
+		assert_int_equal(ping_reset(NULL), 0);
+		use_owned_controlled_socket();
+		controlled_reply = 1;
+		controlled_reply_v6 = 1;
+		recvfrom_eintr_once = 1;
+		make_host6(&host);
+		set_debug_device(&host, debug);
+		memset(&ping, 0, sizeof(ping));
+
+		assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+		assert_int_equal(ping_teardown(NULL), 0);
+		controlled_pair[0] = controlled_pair[1] = -1;
+	}
+}
+
+static void test_ipv6_reply_for_another_probe_is_dropped(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	reply_defect = DEFECT_WRONG_SEQUENCE;
+	make_host6(&host);
+	set_debug_device(&host, TRUE);
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_UP);
+	assert_int_equal(reply_defect, DEFECT_NONE);
+	assert_string_equal(ping.ping_response, "ICMPv6: Device is Alive");
+}
+
+static void test_ipv6_debug_device_reports_a_timeout(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	select_times_out = 1;
+	make_host6(&host);
+	host.availability.timeout = 1;
+	host.availability.retries = 0;
+	set_debug_device(&host, TRUE);
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_icmp_ipv6(&host, &ping), HOST_DOWN);
+	assert_string_equal(ping.ping_response, "ICMPv6: Ping timed out");
+}
+
+static void ping_ipv6_without_packet_memory(void) {
+	host_t host;
+	ping_t ping = {0};
+
+	use_controlled_socket = 1;
+	controlled_socket_fd = 42;
+	packet_size = sizeof(struct icmp6_hdr) + sizeof(icmp6_payload) - 1;
+	fail_packet_allocation = 1;
+	make_host6(&host);
+	(void) ping_icmp_ipv6(&host, &ping);
+}
+
+static void test_ipv6_packet_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	assert_int_equal(spine_test_run_child(ping_ipv6_without_packet_memory), EXIT_FAILURE);
+}
+#endif
+
+static struct addrinfo fake_entry;
+static struct sockaddr_in fake_entry_v4;
+static struct sockaddr_in6 fake_entry_v6;
+
+/* Pin the resolver to one loopback address so the family decision does not
+ * depend on which interfaces the test host has. */
+static void resolve_everything_to(int family) {
+	memset(&fake_entry, 0, sizeof(fake_entry));
+	memset(&fake_entry_v4, 0, sizeof(fake_entry_v4));
+	memset(&fake_entry_v6, 0, sizeof(fake_entry_v6));
+	fake_entry.ai_family = family;
+	fake_entry.ai_canonname = (char *) "fake.example";
+	if (family == AF_INET6) {
+		fake_entry_v6.sin6_family = AF_INET6;
+		fake_entry_v6.sin6_addr = in6addr_loopback;
+		fake_entry.ai_addr = (struct sockaddr *) &fake_entry_v6;
+		fake_entry.ai_addrlen = sizeof(fake_entry_v6);
+	} else {
+		fake_entry_v4.sin_family = AF_INET;
+		fake_entry_v4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		fake_entry.ai_addr = (struct sockaddr *) &fake_entry_v4;
+		fake_entry.ai_addrlen = sizeof(fake_entry_v4);
+	}
+	fake_hostinfo = &fake_entry;
+	resolver_mode = 4;
+}
+
+static void test_icmp_without_privilege_falls_back_to_udp(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	make_host(&host, "localhost");
+	set.availability.icmp_avail = FALSE;
+
+	assert_int_equal(ping_network(&host, &ping), HOST_UP);
+	assert_int_equal(host.availability.ping_method, PING_UDP);
+	assert_string_equal(ping.ping_response, "PING: Device does not require ping.");
+}
+
+static void test_unresolvable_device_is_reported_as_unknown(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	make_host(&host, "unresolvable.invalid");
+	set.availability.icmp_avail = TRUE;
+	resolver_mode = 1;
+
+	assert_int_equal(ping_network(&host, &ping), HOST_DOWN);
+	assert_non_null(strstr(ping.ping_response, "Unknown or is IPV6"));
+
+	/* an SNMP-only method keeps the ping fields untouched */
+	memset(&ping, 0, sizeof(ping));
+	host.availability.method = AVAIL_SNMP_AND_PING;
+	assert_int_equal(ping_network(&host, &ping), HOST_DOWN);
+	assert_string_equal(ping.ping_response, "");
+}
+
+static void test_network_ping_dispatches_on_the_configured_method(void **state) {
+	static const int methods[] = {PING_ICMP, PING_UDP, PING_TCP, PING_TCP_CLOSED, 99};
+	static const char *const prefixes[] = {"ICMP:", "UDP:", "TCP:", "TCP:", ""};
+	size_t index;
+
+	(void) state;
+	for (index = 0; index < sizeof(methods) / sizeof(methods[0]); index++) {
+		host_t host;
+		ping_t ping = {0};
+		int result;
+
+		assert_int_equal(ping_reset(NULL), 0);
+		set.availability.icmp_avail = TRUE;
+		resolve_everything_to(AF_INET);
+		if (methods[index] == PING_ICMP) {
+			use_owned_controlled_socket();
+			controlled_reply = 1;
+		}
+		make_host(&host, "fake.example");
+		host.availability.ping_method = methods[index];
+		host.availability.timeout = 100;
+		host.availability.retries = 0;
+		print_message("method=%d\n", methods[index]);
+
+		result = ping_network(&host, &ping);
+		if (methods[index] == PING_ICMP) assert_int_equal(result, HOST_UP);
+		if (methods[index] == 99) assert_int_equal(result, HOST_DOWN);
+		assert_int_equal(strncmp(ping.ping_response, prefixes[index], strlen(prefixes[index])), 0);
+		assert_int_equal(ping_teardown(NULL), 0);
+		controlled_pair[0] = controlled_pair[1] = -1;
+	}
+}
+
+#ifdef SPINE_HAVE_ICMPV6
+static void test_ipv6_device_is_pinged_with_icmpv6(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	set.availability.icmp_avail = TRUE;
+	resolve_everything_to(AF_INET6);
+	use_owned_controlled_socket();
+	controlled_reply = 1;
+	controlled_reply_v6 = 1;
+	make_host(&host, "fake.example");
+
+	assert_int_equal(ping_network(&host, &ping), HOST_UP);
+	assert_string_equal(ping.ping_response, "ICMPv6: Device is Alive");
+}
+#endif
+
+static void test_snmp_ping_of_a_device_without_a_community_is_skipped(void **state) {
+	host_t host;
+	ping_t ping = {0};
+
+	(void) state;
+	make_host(&host, "127.0.0.1");
+	host.snmp.session = (void *) (uintptr_t) 1;
+	host.snmp.profile.version = 2;
+	host.snmp.profile.community[0] = '\0';
+
+	assert_int_equal(ping_snmp(&host, &ping), HOST_UP);
+	assert_string_equal(ping.snmp_response, "Device does not require SNMP");
+	assert_string_equal(ping.snmp_status, "0.00");
+}
+
+static void test_snmp_ping_reports_a_device_that_does_not_answer(void **state) {
+	const int statuses[] = {STAT_TIMEOUT, STAT_ERROR};
+	size_t index;
+
+	(void) state;
+	for (index = 0; index < sizeof(statuses) / sizeof(statuses[0]); index++) {
+		host_t host;
+		ping_t ping = {0};
+
+		make_host(&host, "127.0.0.1");
+		host.snmp.session = (void *) (uintptr_t) 1;
+		host.snmp.profile.version = 2;
+		snprintf(host.snmp.profile.community, sizeof(host.snmp.profile.community), "public");
+		/* an ignored host is not queried, so the recorded status stands */
+		host.ignore_host = TRUE;
+		host.snmp.status = statuses[index];
+
+		assert_int_equal(ping_snmp(&host, &ping), HOST_DOWN);
+		assert_string_equal(ping.snmp_response, "Device did not respond to SNMP");
+	}
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_fd_setsize_guard_releases_the_packet, ping_reset, ping_teardown),
@@ -1194,6 +1802,38 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_ipv6_invalid_input_releases_resources, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_fd_boundary_releases_resources, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_socket_failure_budget_is_bounded, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_address_type_of_an_unresolvable_host_is_unknown, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_address_type_follows_the_families_the_resolver_returns, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_resolution_that_yields_no_address_is_a_failure, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_address_extraction_respects_the_buffer_size, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_interrupted_select_resumes_the_wait, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_interrupted_receive_is_retried, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_stray_replies_do_not_end_the_wait, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_debug_device_reports_a_live_host_and_a_timeout, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_packet_allocation_failure_is_fatal, ping_reset, ping_teardown),
+#ifdef SPINE_HAVE_ICMPV6
+		cmocka_unit_test_setup_teardown(test_ipv6_resolution_failures_are_reported, ping_reset, ping_teardown),
+#if defined(HAVE_IFADDRS_H) && defined(HAVE_NET_IF_H) && defined(HAVE_GETIFADDRS) && defined(HAVE_IF_NAMETOINDEX)
+		cmocka_unit_test_setup_teardown(test_link_local_scope_comes_from_the_first_usable_interface, ping_reset, ping_teardown),
+#endif
+#if defined(HAVE_IFADDRS_H) && defined(HAVE_NET_IF_H) && defined(HAVE_GETIFADDRS) && defined(HAVE_IF_NAMETOINDEX)
+		cmocka_unit_test_setup_teardown(test_link_local_destination_gets_a_scope_before_sending, ping_reset, ping_teardown),
+#endif
+		cmocka_unit_test_setup_teardown(test_ipv6_send_failure_is_retried, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_interrupted_select_resumes_the_wait, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_interrupted_receive_is_retried, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_reply_for_another_probe_is_dropped, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_debug_device_reports_a_timeout, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_ipv6_packet_allocation_failure_is_fatal, ping_reset, ping_teardown),
+#endif
+		cmocka_unit_test_setup_teardown(test_icmp_without_privilege_falls_back_to_udp, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_unresolvable_device_is_reported_as_unknown, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_network_ping_dispatches_on_the_configured_method, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_snmp_ping_of_a_device_without_a_community_is_skipped, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_snmp_ping_reports_a_device_that_does_not_answer, ping_reset, ping_teardown),
+#ifdef SPINE_HAVE_ICMPV6
+		cmocka_unit_test_setup_teardown(test_ipv6_device_is_pinged_with_icmpv6, ping_reset, ping_teardown),
+#endif
 #ifdef SPINE_HAVE_ICMPV6
 		cmocka_unit_test_setup_teardown(test_ipv6_datagram_rejects_every_wrong_source_octet, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_ipv6_raw_rejects_every_wrong_source_octet, ping_reset, ping_teardown),
