@@ -122,7 +122,7 @@ static void read_a_named_configuration_that_does_not_exist(void) {
 static void test_startup_configuration_search(void) {
 	char directory[] = "spine-startup-XXXXXX";
 	char file_name[SMALL_BUFSIZE];
-	char expected[SMALL_BUFSIZE];
+	char expected[SMALL_BUFSIZE + sizeof(DEFAULT_CONF_FILE)];
 	char saved_paths[CONFIG_PATHS][BUFSIZE];
 	config_t previous = set;
 	char *found;

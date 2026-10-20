@@ -43,7 +43,7 @@ static void cancellation_contract(host_t *host) {
 	for (attempts = 0; attempts < 100 && pid == 0; attempts++) {
 		file = fopen(filename, "r");
 		assert(file != NULL);
-		(void) fscanf(file, "%d", &pid);
+		if (fscanf(file, "%d", &pid) != 1) pid = 0;
 		assert(fclose(file) == 0);
 		if (pid == 0) usleep(10000);
 	}
