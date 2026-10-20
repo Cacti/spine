@@ -982,6 +982,8 @@ static void test_nft_pclose_has_one_owner_per_registry_entry(void **state) {
 	int reap_error;
 	int reap_result;
 	pid_t child;
+	siginfo_t child_info = {0};
+	int wait_status;
 	int i;
 	(void) state;
 
@@ -989,6 +991,19 @@ static void test_nft_pclose_has_one_owner_per_registry_entry(void **state) {
 	assert_true(fd >= 0);
 	child = nft_pchild(fd);
 	assert_true(child > 0);
+
+	/* Observe exit without reaping: this tests competing close ownership,
+	 * not whether the runner schedules the child within the close budget. */
+	do {
+		wait_status = waitid(P_PID, (id_t) child, &child_info, WEXITED | WNOWAIT);
+	} while (wait_status < 0 && errno == EINTR);
+	if (wait_status < 0) {
+		(void) nft_pclose(fd);
+	}
+	assert_int_equal(wait_status, 0);
+	assert_int_equal(child_info.si_pid, child);
+	assert_int_equal(child_info.si_code, CLD_EXITED);
+	assert_int_equal(child_info.si_status, 7);
 
 	for (i = 0; i < 2; i++) {
 		results[i].fd = fd;
