@@ -335,7 +335,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 				" FROM poller_item"
 				" WHERE host_id = %i"
-				" AND deleted = '' %s", host_id, limits);
+				" AND deleted = '' ORDER BY local_data_id, rrd_name %s", host_id, limits);
 		} else {
 			snprintf(query1, BUFSIZE,
 				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
@@ -346,7 +346,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND deleted = ''"
-				" ORDER BY snmp_port %s", host_id, limits);
+				" ORDER BY snmp_port, local_data_id, rrd_name %s", host_id, limits);
 		}
 
 		/* host structure for uptime checks */
@@ -382,7 +382,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					" FROM poller_item"
 					" WHERE host_id = %i"
 					" AND rrd_next_step <= 0"
-					" %s", host_id, limits);
+					" ORDER BY local_data_id, rrd_name %s", host_id, limits);
 			} else {
 				snprintf(query5, BUFSIZE,
 					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
@@ -393,7 +393,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					" FROM poller_item"
 					" WHERE host_id = %i"
 					" AND rrd_next_step <= 0"
-					" ORDER BY snmp_port %s", host_id, limits);
+					" ORDER BY snmp_port, local_data_id, rrd_name %s", host_id, limits);
 			}
 		} else {
 			if (set.total_snmp_ports == 1) {
@@ -405,7 +405,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 					" FROM poller_item"
 					" WHERE host_id = %i"
-					" %s", host_id, limits);
+					" ORDER BY local_data_id, rrd_name %s", host_id, limits);
 			} else {
 				snprintf(query5, BUFSIZE,
 					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
@@ -415,7 +415,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 					" FROM poller_item"
 					" WHERE host_id = %i"
-					" ORDER BY snmp_port %s", host_id, limits);
+					" ORDER BY snmp_port, local_data_id, rrd_name %s", host_id, limits);
 			}
 		}
 
@@ -462,7 +462,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 				" FROM poller_item"
 				" WHERE host_id = %i"
-				" AND poller_id=%i %s", host_id, set.poller_id, limits);
+				" AND poller_id=%i ORDER BY local_data_id, rrd_name %s", host_id, set.poller_id, limits);
 		} else {
 			snprintf(query1, BUFSIZE,
 				"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
@@ -473,7 +473,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				" FROM poller_item"
 				" WHERE host_id = %i"
 				" AND poller_id=%i"
-				" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+				" ORDER BY snmp_port, local_data_id, rrd_name %s", host_id, set.poller_id, limits);
 		}
 
 		/* host structure for uptime checks */
@@ -509,7 +509,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					" FROM poller_item"
 					" WHERE host_id = %i"
 					" AND rrd_next_step <= 0"
-					" AND poller_id = %i %s", host_id, set.poller_id, limits);
+					" AND poller_id = %i ORDER BY local_data_id, rrd_name %s", host_id, set.poller_id, limits);
 			} else {
 				snprintf(query5, BUFSIZE,
 					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
@@ -521,7 +521,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					" WHERE host_id = %i"
 					" AND rrd_next_step <= 0"
 					" AND poller_id = %i"
-					" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+					" ORDER BY snmp_port, local_data_id, rrd_name %s", host_id, set.poller_id, limits);
 			}
 		} else {
 			if (set.total_snmp_ports == 1) {
@@ -533,7 +533,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 						"snmp_auth_protocol, snmp_priv_passphrase, snmp_priv_protocol, snmp_context, snmp_engine_id "
 					" FROM poller_item"
 					" WHERE host_id = %i"
-					" AND poller_id = %i %s", host_id, set.poller_id, limits);
+					" AND poller_id = %i ORDER BY local_data_id, rrd_name %s", host_id, set.poller_id, limits);
 			} else {
 				snprintf(query5, BUFSIZE,
 					"SELECT SQL_NO_CACHE action, hostname, snmp_community, "
@@ -544,7 +544,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					" FROM poller_item"
 					" WHERE host_id = %i"
 					" AND poller_id = %i"
-					" ORDER BY snmp_port %s", host_id, set.poller_id, limits);
+					" ORDER BY snmp_port, local_data_id, rrd_name %s", host_id, set.poller_id, limits);
 			}
 		}
 
@@ -1361,6 +1361,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	if (num_rows > 0) {
 		/* retreive each hosts polling items from poller cache and load into array */
 		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
+		if (poller_items == NULL) {
+			die("ERROR: Fatal malloc error: poller.c poller_items!");
+		}
 
 		i = 0;
 		while ((row = mysql_fetch_row(result))) {
@@ -1434,6 +1437,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 		/* create an array for snmp oids */
 		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
+		if (snmp_oids == NULL) {
+			die("ERROR: Fatal malloc error: poller.c snmp_oids!");
+		}
 
 		/* initialize all the memory to insure we don't get issues */
 		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
