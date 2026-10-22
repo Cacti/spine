@@ -297,7 +297,7 @@ jobs:
     timeout-minutes: 20
     services:
       database:
-        image: mirror.gcr.io/library/mariadb:10.11
+        image: mirror.gcr.io/library/mariadb:10.11@sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
           MARIADB_DATABASE: spine_regressions
