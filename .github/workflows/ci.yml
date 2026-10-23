@@ -53,6 +53,9 @@ jobs:
         run: |
           python3 tests/backport_contracts.py
 
+      - name: Test script process ownership and cleanup
+        run: make check
+
       - name: Test polling failures, partitions, and query budget
         env:
           TEST_DATABASE_PORT: ${{ job.services.database.ports['3306'] }}
