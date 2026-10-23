@@ -18,9 +18,10 @@ and a GNU-compatible linker for the allocation-failure executable. Production
 Spine contains no allocation-failure hook. The tests cover one and ten device
 threads, uneven/empty partitions, multiple devices, device zero, poller filters,
 active profiles, multiple rows per source, mixed eligibility, completion order,
+ties between SNMP ports across partitions, the default polling interval,
 failed output writes, both worker allocations failing, one failed worker, and
 successful retry. Every successful cycle checks output identities and values,
-duplicate writes, schedule ordering,.
+duplicate writes, schedule ordering, and the query budget.
 
 Set `SPINE_TEST_CACTI_ROOT` to a complete upstream Cacti maintenance source
 tree to also exercise the real Script Server bootstrap at pool sizes 1, 10,

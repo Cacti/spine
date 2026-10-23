@@ -175,6 +175,9 @@ class Polling(unittest.TestCase):
                                  'ON po.local_data_id=ex.local_data_id AND po.rrd_name=ex.rrd_name '
                                  'WHERE po.local_data_id IS NULL OR po.output<>CAST(ex.local_data_id AS CHAR);'), '0')
         self.assertEqual(self.sql('SELECT attempts FROM audit_duplicates;'), '0')
+        counts = self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
+                          "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False)
+        self.assertEqual(int(counts), devices)
         if schedule:
             self.assertEqual(int(self.sql('SELECT COUNT(*) FROM audit_schedule;')), devices)
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
@@ -209,6 +212,12 @@ class Polling(unittest.TestCase):
         self.run_spine()
         self.check_complete()
 
+    def test_multiple_ports_and_rows(self):
+        self.seed(103, 10, multi=True)
+        self.sql("UPDATE settings SET value='2' WHERE name='total_snmp_ports';"
+                 'UPDATE poller_item SET snmp_port=IF(MOD(local_data_id,2)=0,161,1161);')
+        self.run_spine()
+        self.check_complete()
 
     def test_zero_interval_uses_default(self):
         self.seed(37, 10)
@@ -219,9 +228,13 @@ class Polling(unittest.TestCase):
         self.check_complete()
 
     def test_active_profiles(self):
-        self.seed(37, 10, profiles=True)
-        self.run_spine()
-        self.check_complete(schedule=False)
+        for threads in (1, 10):
+            with self.subTest(threads=threads):
+                self.setUp()
+                self.seed(37, threads, profiles=True)
+                self.sql('UPDATE poller_item SET rrd_next_step=0 WHERE MOD(local_data_id,2)=0;')
+                self.run_spine()
+                self.check_complete(schedule=False)
 
     def test_poller_filter(self):
         self.seed(37, 10, foreign=True)
@@ -260,6 +273,13 @@ class Polling(unittest.TestCase):
         self.assertGreater(count, 0)
         self.assertLess(count, 37)
 
+    def test_ping_only_skips_item_count(self):
+        self.seed(37, 10)
+        self.run_spine(ping=True)
+        self.assertEqual(self.result.returncode, 0)
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
+                                  "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False), '0')
 
     def test_allocation_failures_and_retry(self):
         for failure in ('target', 'target-once', 'snmp', 'snmp-once'):
