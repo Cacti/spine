@@ -1088,6 +1088,8 @@ int main(int argc, char *argv[]) {
 
 		if (cur_time - begin_time > set.poller_interval) {
 			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.threads - a_threads_value));
+			/* Unfinished threads have not written their output. */
+			set.exit_code = EXIT_FAILURE;
 			break;
 		}
 
