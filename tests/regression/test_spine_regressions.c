@@ -1619,6 +1619,27 @@ static void test_poller_query_case(MYSQL *mysql, int poller, int active, int por
 	assert(query_sample_count(mysql, queries.due_agents) == expected_due);
 }
 
+static void test_poller_partitions(MYSQL *mysql) {
+	int seen[3];
+	set.poller.poller_id = 0;
+	set.poller.active_profiles = 1;
+	set.snmp.total_snmp_ports = 1;
+	for (int thread = 1; thread <= 3; thread++) {
+		poller_queries_t queries;
+		poller_prepare_queries(&queries, 42, thread, 1);
+		/* LIMIT offset paging is only deterministic over a total order. */
+		assert(strstr(queries.items, " ORDER BY local_data_id, rrd_name LIMIT ") != NULL);
+		MYSQL_RES *result = db_query(mysql, LOCAL, queries.items);
+		assert(result != NULL && mysql_num_rows(result) == 1);
+		MYSQL_ROW row = mysql_fetch_row(result);
+		assert(row != NULL && row[11] != NULL);
+		seen[thread - 1] = atoi(row[11]);
+		db_free_result(result);
+	}
+	/* Each partition takes the next item in key order: no overlap, no gap. */
+	assert(seen[0] < seen[1] && seen[1] < seen[2]);
+}
+
 static void test_poller_schedule(MYSQL *mysql) {
 	poller_queries_t queries;
 	set.poller.poller_interval = 60;
@@ -1686,6 +1707,7 @@ static void test_poller_queries(MYSQL *mysql) {
 	result = db_query(mysql, LOCAL, queries.items);
 	assert(result != NULL && mysql_num_rows(result) == 1);
 	db_free_result(result);
+	test_poller_partitions(mysql);
 	test_poller_schedule(mysql);
 }
 

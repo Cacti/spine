@@ -25,8 +25,11 @@ static void poller_item_query(char *buffer, size_t capacity, const char *columns
 	if (filter->due_only) cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " AND rrd_next_step <= 0");
 	if (filter->group_ports) {
 		cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " GROUP BY snmp_port");
-	} else if (set.snmp.total_snmp_ports != 1) {
-		cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " ORDER BY snmp_port");
+	} else {
+		/* Device threads page with LIMIT offset, which needs a total order or
+		 * partitions can overlap or skip items. The key breaks port ties. */
+		cursor += spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " ORDER BY %slocal_data_id, rrd_name",
+			set.snmp.total_snmp_ports != 1 ? "snmp_port, " : "");
 	}
 	spine_snprintf(cursor, capacity - (size_t) (cursor - buffer), " %s", filter->limits);
 }
