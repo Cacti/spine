@@ -12,6 +12,16 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +36,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
           libmysqlclient-dev \
+          default-mysql-client \
           libsnmp-dev libssl-dev build-essential \
           help2man autoconf automake libtool dos2unix
 
@@ -41,6 +52,15 @@ jobs:
       - name: Run backport contracts
         run: |
           python3 tests/backport_contracts.py
+
+      - name: Test polling failures, partitions, and query budget
+        env:
+          TEST_DATABASE_PORT: ${{ job.services.database.ports['3306'] }}
+        run: |
+          config="$RUNNER_TEMP/spine-test-client.cnf"
+          umask 077
+          printf '[client]\nhost=127.0.0.1\nport=%s\nuser=root\n' "$TEST_DATABASE_PORT" > "$config"
+          SPINE_TEST_DB_CONFIG="$config" make integration-check
 
   flawfinder:
     runs-on: ubuntu-latest

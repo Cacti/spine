@@ -1362,7 +1362,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		/* retreive each hosts polling items from poller cache and load into array */
 		poller_items = (target_t *) calloc(num_rows, sizeof(target_t));
 		if (poller_items == NULL) {
-			die("ERROR: Fatal malloc error: poller.c poller_items!");
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to allocate %i polling items of %zu bytes", host_id, host_thread, num_rows, sizeof(target_t)));
+			output_failed = TRUE;
+			db_free_result(result);
+			goto poll_items_cleanup;
 		}
 
 		i = 0;
@@ -1438,11 +1441,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		/* create an array for snmp oids */
 		snmp_oids = (snmp_oids_t *) calloc(host->max_oids, sizeof(snmp_oids_t));
 		if (snmp_oids == NULL) {
-			die("ERROR: Fatal malloc error: poller.c snmp_oids!");
+			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to allocate %i SNMP items of %zu bytes", host_id, host_thread, host->max_oids, sizeof(snmp_oids_t)));
+			output_failed = TRUE;
+			goto poll_items_cleanup;
 		}
-
-		/* initialize all the memory to insure we don't get issues */
-		memset(snmp_oids, 0, sizeof(snmp_oids_t)*host->max_oids);
 
 		/* log an informative message */
 		if (is_debug_device(host_id)) {
@@ -2030,7 +2032,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			}
 		}
 
-		/* cleanup memory and prepare for function exit */
+		poll_items_cleanup:
+		/* Failed allocations follow the normal completion barrier and release
+		 * the same resources, without publishing output or advancing a device. */
 		if (host->snmp_session != NULL) {
 			snmp_host_cleanup(host->snmp_session);
 			host->snmp_session = NULL;

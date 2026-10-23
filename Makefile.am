@@ -26,7 +26,6 @@ spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c p
 
 configdir = $(sysconfdir)
 config_DATA = spine.conf.dist
-EXTRA_DIST = tests/backport_contracts.py
 
 # Seed a live config on first install without ever overwriting an existing one.
 install-data-hook:
@@ -44,6 +43,16 @@ uninstall-hook:
 	fi
 
 bin_PROGRAMS = spine
+
+EXTRA_PROGRAMS = tests/spine_alloc_fault
+tests_spine_alloc_fault_SOURCES = $(spine_SOURCES) tests/alloc_fault.c
+tests_spine_alloc_fault_LDFLAGS = -Wl,--wrap=calloc
+EXTRA_DIST = tests/backport_contracts.py tests/integration.py tests/schema.sql tests/README.md
+
+.PHONY: integration-check
+integration-check: spine tests/spine_alloc_fault
+	SPINE_TEST_BINARY="$(abs_builddir)/spine" SPINE_TEST_FAULT_BINARY="$(abs_builddir)/tests/spine_alloc_fault" python3 "$(srcdir)/tests/integration.py"
+
 
 man_MANS = spine.1
 
