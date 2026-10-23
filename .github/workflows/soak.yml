@@ -1,23 +1,48 @@
-name: Concurrency soak
+name: Soak
+
+# Two long runs that do not fit the pull request budget. The concurrency soak
+# sweeps worker counts weekly; the memory soak polls the fixture database for
+# an hour every night and fails when peak RSS per cycle trends upward.
 
 on:
+  pull_request:
+    types: [labeled, synchronize]
   schedule:
     - cron: '23 5 * * 1'
+    - cron: '7 3 * * *'
   workflow_dispatch:
+    inputs:
+      soak:
+        description: Which soak to run
+        type: choice
+        options: [both, concurrency, memory]
+        default: both
+      memory-minutes:
+        description: Minutes the memory soak polls for (5 to 100)
+        type: number
+        default: 60
 
 permissions:
   contents: read
 
 concurrency:
-  group: spine-concurrency-soak
+  group: spine-concurrency-soak-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   concurrency-soak:
+    if: >-
+      github.event.schedule == '23 5 * * 1' ||
+      (github.event_name == 'workflow_dispatch' && inputs.soak != 'memory') ||
+      (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run repeated many-host polling
         env:
@@ -33,9 +58,83 @@ jobs:
 
       - name: Upload soak diagnostics
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.4.3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: concurrency-soak
           path: test-artifacts/concurrency-soak
+          if-no-files-found: error
+          retention-days: 30
+
+  memory-soak:
+    if: >-
+      github.event.schedule == '7 3 * * *' ||
+      (github.event_name == 'workflow_dispatch' && inputs.soak != 'concurrency') ||
+      (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'runtime-validation') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'runtime-validation'))
+    runs-on: ubuntu-24.04
+    # 100 minutes of polling at most, plus the build and fixture setup.
+    timeout-minutes: 120
+    services:
+      database:
+        image: mirror.gcr.io/library/mariadb:10.11@sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "1"
+          MARIADB_DATABASE: spine_regressions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/build-spine
+        with:
+          mysql-client-package: libmariadb-dev
+          extra-packages: mariadb-client snmpd time
+
+      - name: Build
+        run: make -j"$(nproc)" spine
+
+      - name: Load the regression fixtures
+        run: |
+          set -euo pipefail
+          for fixture in configuration poller; do
+            mariadb --protocol=TCP --host=127.0.0.1 --user=root spine_regressions \
+              < "tests/fixtures/$fixture.sql"
+          done
+
+      - name: Poll repeatedly and check the RSS trend
+        env:
+          MINUTES: ${{ inputs.memory-minutes || 60 }}
+          SPINE_TEST_DB_HOST: 127.0.0.1
+          SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_TEST_ARTIFACT_DIR: test-artifacts/memory-soak
+        run: |
+          set -euo pipefail
+          if [[ ! "$MINUTES" =~ ^[0-9]+$ ]] || (( MINUTES < 5 || MINUTES > 100 )); then
+            echo "::error::memory-minutes must be a whole number from 5 to 100"
+            exit 2
+          fi
+          snmpd -f -Lo -C -c tests/fixtures/snmpd.conf > snmp-agent.log 2>&1 &
+          agent=$!
+          trap 'kill "$agent"; wait || true' EXIT
+          sleep 1
+          kill -0 "$agent"
+          SPINE_SOAK_SECONDS=$((MINUTES * 60)) tests/integration/test_memory_soak.sh
+
+      - name: Upload the RSS series
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: memory-soak
+          path: |
+            test-artifacts/memory-soak
+            snmp-agent.log
           if-no-files-found: error
           retention-days: 30

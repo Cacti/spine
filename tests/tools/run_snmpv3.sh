@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Copyright (C) 2026 The Cacti Group
-# Licensed under the GNU Lesser General Public License, version 2.1 or later.
+# SPDX-FileCopyrightText: 2026 The Cacti Group
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Run only against the owned local agent and public regression credentials.
 set -euo pipefail
 : "${SPINE_SNMPV3_EVIDENCE_DIR:?Set the owned agent evidence directory}"

@@ -1,4 +1,11 @@
 /*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
+/*
  * Coverage for the util.c paths changed by #578: the cached log timestamp
  * format (issue#567), the bounded newline append in spine_log() (issue#565)
  * and the result-set release on the NULL-row branch of the settings helpers
@@ -19,9 +26,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "tests/support/child_run.h"
+
 #define UNIT_TESTING
-#include "../../common.h"
-#include "../../spine.h"
+#include "../../src/internal/common.h"
+#include "../../src/app/spine.h"
 
 config_t set;
 double start_time;
@@ -49,12 +58,22 @@ static int host_insert_failures;
 
 #define mysql_num_rows test_mysql_num_rows
 #define mysql_get_server_version test_mysql_get_server_version
+#define mysql_get_server_info test_mysql_get_server_info
+static const char *destination_version = "10.11.0-MariaDB";
+static unsigned long destination_number = 101100;
+const char *test_mysql_get_server_info(MYSQL *mysql) {
+	(void) mysql;
+	return destination_version;
+}
 #define mysql_fetch_row test_mysql_fetch_row
 #define mysql_num_fields test_mysql_num_fields
 #define mysql_errno test_mysql_errno
 
 my_ulonglong test_mysql_num_rows(MYSQL_RES *res) { (void) res; return (my_ulonglong) rows_to_report; }
-unsigned long test_mysql_get_server_version(MYSQL *mysql) { (void) mysql; return 80020; }
+unsigned long test_mysql_get_server_version(MYSQL *mysql) {
+	(void) mysql;
+	return destination_number;
+}
 /* The remote push checks the column count against its transfer plan. */
 unsigned int test_mysql_num_fields(MYSQL_RES *res) { (void) res; return fake_query_kind == FAKE_QUERY_ITEMS ? 5 : 21; }
 unsigned int test_mysql_errno(MYSQL *mysql) { (void) mysql; return 0; }
@@ -170,10 +189,90 @@ void php_close(int php_process) {}
 int ping_icmp_open_shared(void) { return 0; }
 int ping_icmp_shared_available(void) { return 0; }
 
-#include "../../util.c"
+#include "../../src/app/buffer.c"
+#include "../../src/platform/clock.c"
+#include "../../src/platform/socket.c"
+#include "../../src/platform/thread.c"
+#include "../../src/config/text.c"
+#include "../../src/log/debug.c"
+/* A string of more than half the address space cannot be built, so the
+ * overflow guard is reached through a sentinel pointer whose length is huge. */
+static const char oversized_command[] = "x";
+static size_t controlled_strlen(const char *text) {
+	if (text == oversized_command) return SIZE_MAX / 2 + 1;
+	return strlen(text);
+}
+#define strlen controlled_strlen
+#include "../../src/script/escape.c"
+#undef strlen
+#include "../../src/platform/descriptor.c"
+#include "../../src/log/sanitize.c"
+#include "../../src/config/settings.c"
+/* The capability formatter cannot fail for any real protocol list, so the
+ * error branch that follows it is reachable only through this stand-in. */
+static int capability_format_fails;
+static int controlled_format_capabilities(char *output, size_t output_size,
+	const char *auth_protocols, const char *priv_protocols) {
+	if (capability_format_fails) return FALSE;
+	return format_spine_capabilities(output, output_size, auth_protocols, priv_protocols);
+}
+#define format_spine_capabilities controlled_format_capabilities
+#include "../../src/config/options.c"
+#undef format_spine_capabilities
+#include "../../src/config/file.c"
+#include "../../src/database/upsert.c"
+static size_t failing_transfer_allocation;
+static void *controlled_transfer_malloc(size_t size) {
+	if (size == failing_transfer_allocation) {
+		failing_transfer_allocation = 0;
+		return NULL;
+	}
+	return malloc(size);
+}
+#define malloc controlled_transfer_malloc
+#include "../../src/database/transfer.c"
+#undef malloc
+void nft_abort_children(void) {}
+#include "../../src/log/log.c"
+#include "../../src/poller/result.c"
+#include "../../src/config/validate.c"
+#include "../../src/platform/privileges.c"
+#include "../../src/poller/regex.c"
+
 
 #undef mysql_num_rows
 #undef mysql_get_server_version
+#undef mysql_get_server_info
+
+static void test_upsert_destination_capabilities(void **state) {
+	MYSQL destination;
+	char suffix[BUFSIZE];
+	const char *const updates[] = {"output", "rrd_next_step"};
+	const char *const invalid[] = {NULL};
+	const char *const empty[] = {""};
+	const char *versions[] = {"5.7.44", "8.0.18", "8.0.19", "8.4.0", "5.5.5-11.4.0-MariaDB", NULL};
+	const unsigned long numbers[] = {50744, 80018, 80019, 80400, 110400, 0};
+	size_t i;
+	(void) state;
+	memset(&destination, 0, sizeof(destination));
+	for (i = 0; i < sizeof(versions) / sizeof(versions[0]); i++) {
+		destination_version = versions[i];
+		destination_number = numbers[i];
+		assert_true(db_upsert_suffix(&destination, suffix, sizeof(suffix), updates, 2));
+		assert_non_null(strstr(suffix, i == 2 || i == 3 ? "output=spine_row.output" : "output=VALUES(output)"));
+	}
+	assert_true(db_upsert_suffix(NULL, suffix, sizeof(suffix), updates, 2));
+	assert_false(db_upsert_suffix(NULL, NULL, 1, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, 0, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), NULL, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), updates, 0));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), invalid, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, sizeof(suffix), empty, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, 2, updates, 1));
+	assert_false(db_upsert_suffix(NULL, suffix, strlen(" ON DUPLICATE KEY UPDATE ") + 1, updates, 1));
+	destination_version = "10.11.0-MariaDB";
+	destination_number = 101100;
+}
 #undef mysql_fetch_row
 #undef mysql_num_fields
 #undef mysql_errno
@@ -368,6 +467,49 @@ static void test_success_path_frees_once(void **state) {
 	r = getsetting(&fake_mysql, LOCAL, "anything");
 	assert_int_equal(frees_seen - before, 1);
 	free(r);
+}
+
+/* An absent setting must reach the callers' else-defaults. Only a stored
+ * empty value is reported as "", whether it comes from the bulk cache or a
+ * single-row query. */
+static void test_absent_setting_is_null_and_keeps_defaults(void **state) {
+	setting_cache_t stored_empty = {"snmp_retries", ""};
+	char *r;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	row_is_null = 0;
+	rows_to_report = 0;
+
+	assert_null(getsetting(&fake_mysql, LOCAL, "snmp_retries"));
+
+	settings_cache = &stored_empty;
+	settings_cache_count = 1;
+	r = getsetting(&fake_mysql, LOCAL, "snmp_retries");
+	assert_non_null(r);
+	assert_string_equal(r, "");
+	free(r);
+	assert_null(getsetting(&fake_mysql, LOCAL, "ping_timeout"));
+	settings_cache = NULL;
+	settings_cache_count = 0;
+
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "/configured/script_server.php");
+	read_logging_options(&fake_mysql);
+	read_ping_options(&fake_mysql);
+	read_process_options(&fake_mysql, LOCAL);
+	read_script_options(&fake_mysql);
+	read_snmp_batch_size(&fake_mysql);
+
+	assert_string_equal(set.php.path_php_server, "/configured/script_server.php");
+	assert_string_equal(set.logging.path_logfile, "");
+	assert_int_equal(set.availability.ping_timeout, 400);
+	assert_int_equal(set.snmp.snmp_retries, 3);
+	assert_int_equal(set.poller.num_parent_processes, 1);
+	assert_int_equal(set.php.script_timeout, 25);
+	assert_int_equal(set.php.php_servers, 2);
+	assert_int_equal(set.snmp.snmp_max_get_size, 25);
+	assert_int_equal(getboolsetting(&fake_mysql, LOCAL, "log_pstats", TRUE), TRUE);
 }
 
 /* ---- issue#588: a row that crosses a batch boundary is still sent once -- */
@@ -578,8 +720,63 @@ static void test_spine_log_does_not_double_an_existing_newline(void **state) {
 	unlink(log_path);
 }
 
+/* Capabilities are published once, by poller 1, and only when they could be
+ * formatted. */
+static void test_capabilities_are_not_published_when_formatting_fails(void **state) {
+	MYSQL mysql;
+	int before;
+	(void) state;
+
+	memset(&mysql, 0, sizeof(mysql));
+	memset(&set, 0, sizeof(set));
+	set.poller.poller_id = 1;
+	before = total_insert_count;
+
+	capability_format_fails = 1;
+	publish_snmp_capabilities(&mysql);
+	assert_int_equal(total_insert_count, before);
+
+	capability_format_fails = 0;
+	publish_snmp_capabilities(&mysql);
+	assert_int_equal(total_insert_count, before + 1);
+}
+
+static void escape_an_oversized_command(void) {
+	(void) add_slashes(oversized_command);
+}
+
+static void test_command_escaping_refuses_an_unaddressable_length(void **state) {
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	assert_int_equal(spine_test_run_child(escape_an_oversized_command), EXIT_FAILURE);
+}
+
+/* Without memory for the batch buffers the push reports failure and still
+ * releases the query result. */
+static void test_remote_push_fails_cleanly_without_batch_memory(void **state) {
+	int before;
+
+	(void) state;
+	memset(&set, 0, sizeof(set));
+	set.poller.poller_id = 2;
+	row_is_null = 0;
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+	byte_boundary_mode = 0;
+	host_insert_count = 0;
+	item_insert_count = 0;
+	failing_transfer_allocation = HUGE_BUFSIZE;
+	before = frees_seen;
+
+	assert_false(poller_transfer_status(&fake_mysql, &fake_mysql));
+	assert_int_equal(failing_transfer_allocation, 0);
+	assert_int_equal(frees_seen - before, 1);
+	assert_int_equal(host_insert_count, 0);
+	fake_query_kind = FAKE_QUERY_DEFAULT;
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_upsert_destination_capabilities),
 		cmocka_unit_test(test_initial_value_matches_the_default),
 		cmocka_unit_test(test_each_format_code_is_distinct),
 		cmocka_unit_test(test_format_codes_produce_expected_strings),
@@ -592,9 +789,13 @@ int main(void) {
 		cmocka_unit_test(test_getglobalvariable_frees_on_null_row),
 		cmocka_unit_test(test_get_cacti_version_frees_on_null_row),
 		cmocka_unit_test(test_success_path_frees_once),
+		cmocka_unit_test(test_absent_setting_is_null_and_keeps_defaults),
 		cmocka_unit_test(test_remote_push_keeps_batch_boundary_rows),
 		cmocka_unit_test(test_remote_push_flushes_wide_rows_before_overflow),
 		cmocka_unit_test(test_remote_push_stops_on_failed_batch),
+		cmocka_unit_test(test_capabilities_are_not_published_when_formatting_fails),
+		cmocka_unit_test(test_command_escaping_refuses_an_unaddressable_length),
+		cmocka_unit_test(test_remote_push_fails_cleanly_without_batch_memory),
 		cmocka_unit_test(test_spine_log_appends_a_newline),
 		cmocka_unit_test(test_spine_log_survives_a_full_line),
 		cmocka_unit_test(test_spine_log_does_not_double_an_existing_newline),

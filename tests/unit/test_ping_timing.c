@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* Reachability verdicts and timing in ping.c.
  *
  * Each case drives the shipped probe through controlled socket calls, so a
@@ -18,9 +25,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include "common.h"
-#include "spine.h"
-#include "ping.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "ping/ping.h"
 
 extern int *debug_devices;
 
@@ -38,6 +45,7 @@ static size_t last_request_length;
 static int recv_errno;
 static int recv_errno_limit;
 static int recv_calls;
+static int fail_connect;
 
 static int test_socket(int domain, int type, int protocol);
 static ssize_t test_sendto(int fd, const void *buffer, size_t length, int flags,
@@ -47,18 +55,28 @@ static int test_select(int nfds, fd_set *readfds, fd_set *writefds,
 static ssize_t test_recvfrom(int fd, void *buffer, size_t length, int flags,
 	struct sockaddr *address, socklen_t *address_len);
 static ssize_t test_recv(int fd, void *buffer, size_t length, int flags);
+static int test_connect(int fd, const struct sockaddr *address, socklen_t length);
 
 #define socket test_socket
 #define sendto test_sendto
 #define select test_select
 #define recvfrom test_recvfrom
 #define recv test_recv
-#include "../../ping.c"
+#define connect test_connect
+#include "../../src/poller/availability.c"
+#include "../../src/ping/icmp_shared.c"
+#include "../../src/ping/icmp4.c"
+#include "../../src/ping/icmp6.c"
+#include "../../src/ping/udp.c"
+#include "../../src/ping/tcp.c"
+#include "../../src/ping/address.c"
+
 #undef socket
 #undef sendto
 #undef select
 #undef recvfrom
 #undef recv
+#undef connect
 
 static int test_socket(int domain, int type, int protocol) {
 	if (use_controlled_socket && type != SOCK_STREAM && protocol != IPPROTO_UDP) {
@@ -154,6 +172,15 @@ static ssize_t test_recv(int fd, void *buffer, size_t length, int flags) {
 	return received;
 }
 
+static int test_connect(int fd, const struct sockaddr *address, socklen_t length) {
+	if (fail_connect) {
+		fail_connect = 0;
+		errno = ENETUNREACH;
+		return -1;
+	}
+	return connect(fd, address, length);
+}
+
 static void make_host(host_t *host, const char *address, int method) {
 	memset(host, 0, sizeof(*host));
 	host->id = 1;
@@ -182,6 +209,7 @@ static int timing_setup(void **state) {
 	recv_errno = 0;
 	recv_errno_limit = 0;
 	recv_calls = 0;
+	fail_connect = 0;
 	return 0;
 }
 
@@ -426,6 +454,39 @@ static void test_udp_port_unreachable_is_alive(void **state) {
 	assert_string_equal(ping.ping_response, "UDP: Device is Alive");
 }
 
+/* Any other receive error is a failed probe, not a reason to keep waiting. */
+static void test_udp_unexpected_receive_error_is_down(void **state) {
+	ping_t ping;
+
+	(void) state;
+	assert_int_equal(run_udp_probe(EIO, 1, &ping), HOST_DOWN);
+	assert_string_equal(ping.ping_response, "UDP: Device is Down");
+}
+
+/* An interrupted receive has consumed the datagram, so the probe is spent. */
+static void test_udp_interrupted_receive_keeps_waiting(void **state) {
+	ping_t ping;
+
+	(void) state;
+	recv_errno_limit = 1;
+	assert_int_equal(run_udp_probe(EINTR, 1, &ping), HOST_DOWN);
+	assert_string_equal(ping.ping_response, "UDP: Ping timed out");
+}
+
+static void test_udp_connect_failure_is_down(void **state) {
+	host_t host;
+	ping_t ping;
+
+	(void) state;
+	make_host(&host, "127.0.0.1", PING_UDP);
+	host.availability.port = 33439;
+	fail_connect = 1;
+	memset(&ping, 0, sizeof(ping));
+
+	assert_int_equal(ping_udp(&host, &ping), HOST_DOWN);
+	assert_string_equal(ping.ping_response, "UDP: Cannot connect to host");
+}
+
 static void test_udp_data_reply_is_alive(void **state) {
 	ping_t ping;
 
@@ -512,23 +573,26 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_icmp_retry_after_one_lost_probe_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_wait_left_converts_without_rounding_up, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmp_wait_matches_the_device_timeout, timing_setup, timing_teardown),
-		#ifdef SPINE_HAVE_ICMPV6
+#ifdef SPINE_HAVE_ICMPV6
 		cmocka_unit_test_setup_teardown(test_icmpv6_retry_after_one_lost_probe_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmpv6_wait_matches_the_device_timeout, timing_setup, timing_teardown),
-		#endif
+#endif
 		cmocka_unit_test_setup_teardown(test_udp_host_unreachable_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_network_unreachable_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_unreachable_then_reply_is_alive, timing_setup, timing_teardown),
-		#ifdef EHOSTDOWN
+#ifdef EHOSTDOWN
 		cmocka_unit_test_setup_teardown(test_udp_host_down_is_down, timing_setup, timing_teardown),
-		#endif
+#endif
 		cmocka_unit_test_setup_teardown(test_udp_port_unreachable_is_alive, timing_setup, timing_teardown),
+		cmocka_unit_test_setup_teardown(test_udp_unexpected_receive_error_is_down, timing_setup, timing_teardown),
+		cmocka_unit_test_setup_teardown(test_udp_interrupted_receive_keeps_waiting, timing_setup, timing_teardown),
+		cmocka_unit_test_setup_teardown(test_udp_connect_failure_is_down, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_udp_data_reply_is_alive, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_namebyhost_table, timing_setup, timing_teardown),
-		#ifdef SPINE_HAVE_ICMPV6
+#ifdef SPINE_HAVE_ICMPV6
 		cmocka_unit_test_setup_teardown(test_icmpv6_resolves_transport_qualified_names, timing_setup, timing_teardown),
 		cmocka_unit_test_setup_teardown(test_icmpv6_pings_a_transport_qualified_name, timing_setup, timing_teardown),
-		#endif
+#endif
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

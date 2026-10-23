@@ -1,10 +1,17 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
 /* Unit tests that exercise the shipped objects.
  *
  * The other test binaries in this directory inline the function under test, or
  * replicate its predicate, so they compile standalone.  That keeps them cheap
  * but means a fix can land in util.c while the test still passes against the
  * old copy.  This binary links the real translation units instead, with
- * tests/fuzz/stubs.c supplying the globals that spine.c would otherwise define,
+ * tests/support/spine_runtime.c supplying the globals that spine.c would otherwise define,
  * so what runs here is what ships.
  */
 #include <stdarg.h>
@@ -21,13 +28,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "common.h"
-#include "spine.h"
-#include "util.h"
-#include "ping.h"
-#include "poller.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "internal/util.h"
+#include "ping/ping.h"
+#include "poller/poller.h"
 
-#include "nft_popen.h"
+#include "process/nft_popen.h"
+#include "process/process_internal.h"
+#include "config/settings_internal.h"
+#include "tests/support/child_run.h"
+#include "app/signals.h"
 
 #include <fcntl.h>
 
@@ -35,7 +46,7 @@
 #define ICMP_DEST_UNREACH ICMP_UNREACH
 #endif
 
-/* provided by tests/fuzz/stubs.c, as spine.c would */
+/* provided by tests/support/spine_runtime.c, as spine.c would */
 extern int *debug_devices;
 
 #ifdef SPINE_TEST_WRAP_WAITPID
@@ -143,6 +154,23 @@ static void test_spine_appendf_reports_truncation_and_guards(void **state) {
 	assert_false(spine_appendf(&cursor, &zero, "%s", "x"));
 }
 
+/* A wide string that cannot be converted in the C locale is an encoding
+ * error: vsnprintf fails, and the buffer must still be a valid empty string. */
+static void test_spine_appendf_terminates_after_an_encoding_error(void **state) {
+	char buffer[8] = "junk";
+	char probe[8];
+	char *cursor = buffer;
+	size_t remaining = sizeof(buffer);
+	(void) state;
+
+	/* whether the C locale rejects this wide character is a libc property */
+	if (snprintf(probe, sizeof(probe), "%ls", L"\x00e9") >= 0) skip();
+	assert_false(spine_appendf(&cursor, &remaining, "%ls", L"\x00e9"));
+	assert_int_equal(buffer[0], '\0');
+	assert_ptr_equal(cursor, buffer);
+	assert_int_equal(remaining, sizeof(buffer));
+}
+
 static void test_bounded_formatters(void **state) {
 	char capabilities[BUFSIZE];
 	char row[DBL_BUFSIZE + SMALL_BUFSIZE];
@@ -187,10 +215,154 @@ static void test_bounded_formatters(void **state) {
 		"traffic_in", "1700000000); DROP TABLE host", long_value));
 	assert_false(format_poller_output_row(NULL, 0, 17,
 		"traffic_in", "1700000000.25", long_value));
+	/* a timestamp has one fractional part and at least one digit */
+	assert_false(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", "1700000000.25.5", long_value));
+	assert_false(format_poller_output_row(row, sizeof(row), 17,
+		"traffic_in", ".", long_value));
 }
 
 
+/* A value the parser does not recognise falls back to the caller's default,
+ * and a command-line override answers for the poller and global lookups too. */
+static void test_settings_overrides_and_unrecognised_booleans(void **state) {
+	MYSQL mysql;
+	char *value;
+	(void) state;
+
+	memset(&mysql, 0, sizeof(mysql));
+	set_option("spine_test_flag", "maybe");
+	assert_true(getboolsetting(&mysql, LOCAL, "spine_test_flag", TRUE));
+	assert_false(getboolsetting(&mysql, LOCAL, "spine_test_flag", FALSE));
+
+	set_option("spine_test_poller_setting", "from-the-command-line");
+	value = getpsetting(&mysql, LOCAL, "spine_test_poller_setting");
+	assert_non_null(value);
+	assert_string_equal(value, "from-the-command-line");
+	free(value);
+
+	set_option("spine_test_global", "overridden");
+	value = getglobalvariable(&mysql, LOCAL, "spine_test_global");
+	assert_non_null(value);
+	assert_string_equal(value, "overridden");
+	free(value);
+}
+
+static void test_ltrim_of_only_trim_characters_is_empty(void **state) {
+	char text[] = " \"\t\n\r";
+	(void) state;
+	assert_string_equal(ltrim(text), "");
+	assert_null(ltrim(NULL));
+}
+
+static int handled_signal;
+static const char *handler_capture;
+
+/* A fatal-signal handler ends by raising its signal again, which would take
+ * the process down before its coverage counters are written. Blocking the
+ * signal leaves the re-raise pending, so the handler returns and the process
+ * exits normally. The handler is fetched after install, then called with the
+ * termination coordinator stopped, which is the state it reports from. */
+static void call_the_fatal_signal_handler(void) {
+	static const int fatal[] = {SIGINT, SIGTERM, SIGSEGV, SIGBUS, SIGFPE, SIGQUIT, SIGSYS, SIGABRT};
+	struct sigaction action;
+	sigset_t blocked;
+	void (*handler)(int);
+	size_t index;
+
+	for (index = 0; index < sizeof(fatal) / sizeof(fatal[0]); index++) signal(fatal[index], SIG_DFL);
+	if (freopen(handler_capture, "w", stderr) == NULL) _exit(120);
+	install_spine_signal_handler();
+	if (sigaction(handled_signal, NULL, &action) != 0) _exit(121);
+	handler = action.sa_handler;
+	uninstall_spine_signal_handler();
+	sigemptyset(&blocked);
+	sigaddset(&blocked, handled_signal);
+	if (pthread_sigmask(SIG_BLOCK, &blocked, NULL) != 0) _exit(122);
+	handler(handled_signal);
+	fflush(stderr);
+	_exit(0);
+}
+
+static void test_fatal_signal_handler_reports_each_signal(void **state) {
+	static const struct {
+		int signal_number;
+		const char *message;
+		int status;
+	} cases[] = {
+		{SIGABRT, "FATAL: Spine Interrupted by Abort Signal", 0},
+		{SIGINT, "FATAL: Spine Interrupted by Console Operator", 0},
+		{SIGTERM, "FATAL: Spine Interrupted by Termination Signal", 0},
+		{SIGBUS, "FATAL: Spine Encountered a Bus Error", 0},
+		{SIGFPE, "FATAL: Spine Encountered a Floating Point Exception", 0},
+		{SIGQUIT, "FATAL: Spine Encountered a Keyboard Quit Command", 0},
+		{SIGSYS, "FATAL: Spine Encountered An Unhandled Exception Signal Number: ", 0},
+		/* a segmentation fault exits at once instead of re-raising */
+		{SIGSEGV, "FATAL: Spine Encountered a Segmentation Fault", 1},
+	};
+	char capture[] = "spine-signal-XXXXXX";
+	char output[512];
+	size_t index;
+	ssize_t length;
+	int fd = mkstemp(capture);
+
+	(void) state;
+	assert_true(fd >= 0);
+	handler_capture = capture;
+	for (index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
+		handled_signal = cases[index].signal_number;
+		print_message("signal %d\n", handled_signal);
+		assert_int_equal(spine_test_run_child(call_the_fatal_signal_handler), cases[index].status);
+		assert_true(lseek(fd, 0, SEEK_SET) == 0);
+		length = read(fd, output, sizeof(output) - 1);
+		assert_true(length > 0);
+		output[length] = '\0';
+		assert_non_null(strstr(output, cases[index].message));
+		if (handled_signal == SIGSYS) {
+			char number[16];
+
+			snprintf(number, sizeof(number), "'%d'", SIGSYS);
+			assert_non_null(strstr(output, number));
+		}
+	}
+	close(fd);
+	unlink(capture);
+}
+
 /* --- predicates ----------------------------------------------------------- */
+
+static void test_statement_label_names_the_verb_and_table_only(void **state) {
+	char label[SMALL_BUFSIZE];
+
+	(void) state;
+	db_statement_label("INSERT INTO poller_output (a) VALUES ('fixture_secret')", label, sizeof(label));
+	assert_string_equal(label, "INSERT poller_output");
+	db_statement_label("insert ignore into `host_errors`(x) values (1)", label, sizeof(label));
+	assert_string_equal(label, "INSERT `host_errors`");
+	db_statement_label("REPLACE INTO settings (name,value) VALUES ('password','fixture_secret')", label, sizeof(label));
+	assert_string_equal(label, "REPLACE settings");
+	db_statement_label("UPDATE host SET snmp_password='fixture_secret' WHERE id=1", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("UPDATE LOW_PRIORITY host SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("UPDATE IGNORE `host` SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE `host`");
+	db_statement_label("UPDATE LOW_PRIORITY IGNORE host SET snmp_password='fixture_secret'", label, sizeof(label));
+	assert_string_equal(label, "UPDATE host");
+	db_statement_label("SELECT value FROM settings WHERE name='from poller'", label, sizeof(label));
+	assert_string_equal(label, "SELECT settings");
+	db_statement_label("SELECT 'a from b'", label, sizeof(label));
+	assert_string_equal(label, "SELECT");
+	db_statement_label("DELETE FROM poller_output", label, sizeof(label));
+	assert_string_equal(label, "DELETE poller_output");
+	db_statement_label("SET SESSION sql_mode = ''", label, sizeof(label));
+	assert_string_equal(label, "SET");
+	db_statement_label("  nonsense fixture_secret", label, sizeof(label));
+	assert_string_equal(label, "SQL");
+	db_statement_label("INSERT INTO a_very_long_table_name_that_does_not_fit", label, 12);
+	assert_string_equal(label, "INSERT a_ve");
+	assert_null(strstr(label, "fixture_secret"));
+}
 
 static void test_all_digits(void **state) {
 	(void) state;
@@ -310,6 +482,178 @@ static void test_get_time_as_double_advances(void **state) {
 	assert_true(t2 >= t1);
 }
 
+static void test_get_checksum_accepts_unaligned_bytes(void **state) {
+	_Alignas(uint16_t) unsigned char bytes[34];
+	_Alignas(uint16_t) unsigned char aligned[32];
+	size_t offset;
+	size_t length;
+	size_t index;
+	(void) state;
+
+	for (index = 0; index < sizeof(bytes); index++) bytes[index] = (unsigned char) (index * 17);
+	for (offset = 0; offset < _Alignof(uint16_t); offset++) {
+		for (length = 0; length <= sizeof(aligned); length++) {
+			memcpy(aligned, bytes + offset, length);
+			assert_int_equal(get_checksum(bytes + offset, (int) length), get_checksum(aligned, (int) length));
+		}
+	}
+}
+
+static void test_local_and_remote_database_lease_adapters(void **state) {
+	pool_t local[1] = {0};
+	pool_t remote[1] = {0};
+	pool_t *previous_local = db_pool_local;
+	pool_t *previous_remote = db_pool_remote;
+	int previous_exit = set.exit.exit_code;
+	db_lease_t local_lease = {0};
+	db_lease_t remote_lease = {0};
+	db_lease_t stale;
+	(void) state;
+	assert_int_equal(db_pool_ownership_init(local, 1), 0);
+	assert_int_equal(db_pool_ownership_init(remote, 1), 0);
+	local[0].free = remote[0].free = TRUE;
+	db_pool_local = local;
+	db_pool_remote = remote;
+	assert_false(db_acquire_lease(99, &local_lease));
+	assert_false(db_acquire_lease(LOCAL, NULL));
+	assert_false(db_release_lease(NULL));
+	assert_true(db_acquire_lease(LOCAL, &local_lease));
+	assert_true(db_acquire_lease(REMOTE, &remote_lease));
+	assert_ptr_equal(local_lease.connection, &local[0]);
+	assert_ptr_equal(remote_lease.connection, &remote[0]);
+	assert_false(db_acquire_lease(LOCAL, &local_lease));
+	stale = local_lease;
+	stale.type = REMOTE;
+	assert_false(db_release_lease(&stale));
+	assert_false(local[0].free);
+	assert_false(remote[0].free);
+	assert_true(db_release_lease(&local_lease));
+	stale = remote_lease;
+	assert_true(db_release_lease(&remote_lease));
+	assert_true(db_acquire_lease(REMOTE, &remote_lease));
+	assert_false(db_release_lease(&stale));
+	assert_false(remote[0].free);
+	assert_true(db_release_lease(&remote_lease));
+	assert_int_equal(db_pool_ownership_destroy(local), 0);
+	assert_int_equal(db_pool_ownership_destroy(remote), 0);
+	db_pool_local = previous_local;
+	db_pool_remote = previous_remote;
+	set.exit.exit_code = previous_exit;
+}
+
+#if HAVE_DECL_MYSQL_OPT_TLS_VERSION
+static void assert_tls_version_readback(MYSQL *mysql, const char *expected) {
+	const char *value = NULL;
+#if defined(MARIADB_PACKAGE_VERSION_ID) && MARIADB_PACKAGE_VERSION_ID < 30300
+	/* Connector/C 3.2 accepts TLS_VERSION in mysql_optionsv(), but its
+  * mysql_get_optionv() has no corresponding case. Assert that documented
+  * API boundary rather than assuming a setter implies a getter. The
+  * TLS option-injection suite separately checks exact setter values. */
+	(void) expected;
+	assert_int_equal(mysql_get_option(mysql, MYSQL_OPT_TLS_VERSION, &value), 1);
+	assert_null(value);
+#else
+	assert_int_equal(mysql_get_option(mysql, MYSQL_OPT_TLS_VERSION, &value), 0);
+	assert_string_equal(value, expected);
+#endif
+}
+#endif
+
+static void test_database_tls_policy(void **state) {
+	MYSQL mysql;
+	spine_database_config_t configuration = {0};
+	int mode;
+	bool verify_full_supported = FALSE;
+	const char *version = NULL;
+	(void) state;
+
+	assert_non_null(mysql_init(&mysql));
+	assert_false(db_apply_tls_policy(NULL, &configuration));
+	assert_false(db_apply_tls_policy(&mysql, NULL));
+	assert_true(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_min_version = 12;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_PREFERRED;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_REQUIRED;
+	configuration.tls_min_version = 11;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_min_version = 0;
+	configuration.tls_mode = (spine_tls_mode_t) 99;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+	STRNCOPY(configuration.ssl_ca, "/fixture/ca.pem");
+	for (mode = SPINE_TLS_DISABLED; mode <= SPINE_TLS_VERIFY_FULL; mode++) {
+		bool supported;
+		configuration.tls_mode = (spine_tls_mode_t) mode;
+#if HAVE_DECL_MYSQL_OPT_SSL_MODE
+		supported = TRUE;
+#elif HAVE_DECL_MYSQL_OPT_SSL_ENFORCE && HAVE_DECL_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+#ifdef HAVE_MARIADB_TLS_VERIFICATION_CALLBACK
+		supported = mode != SPINE_TLS_DISABLED;
+#elif HAVE_DECL_MARIADB_OPT_TLS_VERIFICATION_CALLBACK
+		supported = mode == SPINE_TLS_PREFERRED;
+#else
+		supported = mode == SPINE_TLS_PREFERRED || mode == SPINE_TLS_VERIFY_FULL;
+#endif
+#else
+		supported = FALSE;
+#endif
+		assert_int_equal(db_apply_tls_policy(&mysql, &configuration), supported);
+		if (mode == SPINE_TLS_VERIFY_FULL) verify_full_supported = supported;
+	}
+	configuration.tls_mode = SPINE_TLS_VERIFY_FULL;
+	configuration.tls_min_version = 12;
+#if HAVE_DECL_MYSQL_OPT_TLS_VERSION && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_tls_version_readback(&mysql, "TLSv1.2,TLSv1.3");
+	}
+	configuration.tls_min_version = 13;
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_tls_version_readback(&mysql, "TLSv1.3");
+	}
+#else
+	(void) version;
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	configuration.tls_min_version = 0;
+	STRNCOPY(configuration.tls_cipher, "ECDHE-RSA-AES128-GCM-SHA256");
+#if HAVE_DECL_MYSQL_OPT_SSL_CIPHER && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+	if (verify_full_supported) {
+		assert_int_equal(mysql_get_option(&mysql, MYSQL_OPT_SSL_CIPHER, &version), 0);
+		assert_string_equal(version, configuration.tls_cipher);
+	}
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	configuration.tls_cipher[0] = '\0';
+	STRNCOPY(configuration.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+#if HAVE_DECL_MYSQL_OPT_TLS_CIPHERSUITES && (HAVE_DECL_MYSQL_OPT_SSL_MODE || HAVE_DECL_MYSQL_OPT_SSL_ENFORCE)
+	assert_int_equal(db_apply_tls_policy(&mysql, &configuration), verify_full_supported);
+#else
+	assert_false(db_apply_tls_policy(&mysql, &configuration));
+#endif
+	mysql_close(&mysql);
+}
+
+static void test_rtrim_empty_and_fully_trimmed(void **state) {
+	char empty[] = "";
+	char trimmed[] = " \t\r\n\\\"'";
+	char value[] = "42 \t\n";
+	(void) state;
+
+	assert_ptr_equal(rtrim(empty), empty);
+	assert_string_equal(empty, "");
+	assert_ptr_equal(rtrim(trimmed), trimmed);
+	assert_string_equal(trimmed, "");
+	assert_ptr_equal(rtrim(value), value);
+	assert_string_equal(value, "42");
+}
+
 static void test_get_checksum_is_stable(void **state) {
 	unsigned char buf[16];
 	unsigned short a, b;
@@ -405,6 +749,39 @@ static void test_icmp_classify_rejects_a_null_buffer(void **state) {
 	assert_int_equal(spine_icmp_classify_reply(NULL, ICMP_TEST_BUFSIZE, 1, 1, &out), SPINE_ICMP_REPLY_TOO_SHORT);
 }
 
+static void test_icmp_dgram_classify_accepts_our_reply(void **state) {
+	unsigned char reply[ICMP_HDR_SIZE] = {ICMP_ECHOREPLY, 0, 0, 0, 0, 0, 0, 0};
+	const struct icmp *out = NULL;
+	uint16_t seq = 0x0107;
+	(void) state;
+
+	memcpy(reply + 6, &seq, sizeof(seq));
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, seq, &out), SPINE_ICMP_REPLY_OK);
+	assert_ptr_equal(out, (const struct icmp *) reply);
+}
+
+static void test_icmp_dgram_classify_rejects_what_is_not_our_reply(void **state) {
+	unsigned char reply[ICMP_HDR_SIZE] = {ICMP_ECHOREPLY, 0, 0, 0, 0, 0, 0, 0};
+	const struct icmp *out = (const struct icmp *) 1;
+	uint16_t seq = 0x0107;
+	(void) state;
+
+	memcpy(reply + 6, &seq, sizeof(seq));
+	assert_int_equal(spine_icmp_classify_dgram_reply(NULL, sizeof reply, seq, &out), SPINE_ICMP_REPLY_TOO_SHORT);
+	assert_null(out);
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply - 1, seq, &out), SPINE_ICMP_REPLY_TOO_SHORT);
+
+	/* a destination unreachable, and an echo reply with a nonzero code */
+	reply[0] = 3;
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, seq, &out), SPINE_ICMP_REPLY_NOT_ECHO);
+	reply[0] = ICMP_ECHOREPLY;
+	reply[1] = 1;
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, seq, &out), SPINE_ICMP_REPLY_NOT_ECHO);
+	reply[1] = 0;
+	assert_int_equal(spine_icmp_classify_dgram_reply(reply, sizeof reply, (uint16_t) (seq + 1), &out), SPINE_ICMP_REPLY_NOT_OURS);
+	assert_null(out);
+}
+
 /* --- get_namebyhost(): the real parser ------------------------------------ */
 
 static void test_namebyhost_plain_hostname(void **state) {
@@ -469,11 +846,19 @@ static void test_read_spine_config_rejects_a_missing_file(void **state) {
 }
 
 static void test_read_spine_config_reads_settings(void **state) {
-	const char *path = "/tmp/spine_test.conf";
+	char path[] = "spine-linked-config-XXXXXX";
+	int descriptor;
+	int read_status;
 	FILE *fp;
 	(void) state;
 
-	fp = fopen(path, "wb");
+	descriptor = mkstemp(path);
+	assert_true(descriptor >= 0);
+	fp = fdopen(descriptor, "wb");
+	if (fp == NULL) {
+		close(descriptor);
+		unlink(path);
+	}
 	assert_non_null(fp);
 	fputs("DB_Host           testhost\n", fp);
 	fputs("DB_Database       testdb\n", fp);
@@ -485,14 +870,14 @@ static void test_read_spine_config_reads_settings(void **state) {
 	fclose(fp);
 
 	config_defaults();
-	assert_int_equal(read_spine_config(path), 0);
+	read_status = read_spine_config(path);
+	assert_int_equal(unlink(path), 0);
+	assert_int_equal(read_status, 0);
 
 	assert_string_equal(set.database.host, "testhost");
 	assert_string_equal(set.database.database,   "testdb");
 	assert_string_equal(set.database.user, "testuser");
 	assert_int_equal(set.database.port, 3399);
-
-	remove(path);
 }
 
 /* --- get_date_format(): cached storage, rebuilt by set_date_format() ------ */
@@ -597,6 +982,8 @@ static void test_nft_pclose_has_one_owner_per_registry_entry(void **state) {
 	int reap_error;
 	int reap_result;
 	pid_t child;
+	siginfo_t child_info = {0};
+	int wait_status;
 	int i;
 	(void) state;
 
@@ -604,6 +991,19 @@ static void test_nft_pclose_has_one_owner_per_registry_entry(void **state) {
 	assert_true(fd >= 0);
 	child = nft_pchild(fd);
 	assert_true(child > 0);
+
+	/* Observe exit without reaping: this tests competing close ownership,
+	 * not whether the runner schedules the child within the close budget. */
+	do {
+		wait_status = waitid(P_PID, (id_t) child, &child_info, WEXITED | WNOWAIT);
+	} while (wait_status < 0 && errno == EINTR);
+	if (wait_status < 0) {
+		(void) nft_pclose(fd);
+	}
+	assert_int_equal(wait_status, 0);
+	assert_int_equal(child_info.si_pid, child);
+	assert_int_equal(child_info.si_code, CLD_EXITED);
+	assert_int_equal(child_info.si_status, 7);
 
 	for (i = 0; i < 2; i++) {
 		results[i].fd = fd;
@@ -867,8 +1267,15 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	int i;
 	int created = 0;
 	int status;
+	int closing_fd;
+	pid_t closing_pid;
+	char ready;
 
 	(void) state;
+	closing_fd = nft_popen("printf x; exec sleep 300", "r");
+	assert_true(closing_fd >= 0);
+	closing_pid = nft_pchild(closing_fd);
+	assert_int_equal(read(closing_fd, &ready, 1), 1);
 	for (i = 0; i < NFT_ABANDONED_MAX + 1; i++) {
 		pids[i] = fork();
 		if (pids[i] < 0)
@@ -882,6 +1289,8 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	}
 
 	if (created != NFT_ABANDONED_MAX + 1) {
+		(void) nft_pclose(closing_fd);
+		(void) waitpid(closing_pid, &status, 0);
 		for (i = 0; i < created; i++) {
 			(void)kill(pids[i], SIGKILL);
 			(void)waitpid(pids[i], &status, 0);
@@ -891,6 +1300,9 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
 	}
 
 	assert_int_equal(nft_abandoned_pending(), NFT_ABANDONED_MAX);
+	assert_int_equal(nft_pclose(closing_fd), -1);
+	assert_int_equal(waitpid(closing_pid, &status, 0), closing_pid);
+	assert_true(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL);
 	for (i = 0; i < created; i++) {
 		assert_int_equal(kill(pids[i], SIGKILL), 0);
 		assert_int_equal(waitpid(pids[i], &status, 0), pids[i]);
@@ -903,6 +1315,7 @@ static void test_abandoned_children_are_swept_and_capacity_is_bounded(void **sta
  * real call with WNOHANG) must still kill the child before parking it,
  * rather than leaving a still-running process outside the sweep's reach. */
 static void test_nft_pclose_kills_child_when_waitpid_errors(void **state) {
+	char ready;
 	int fd;
 	int status;
 	pid_t child;
@@ -915,6 +1328,11 @@ static void test_nft_pclose_kills_child_when_waitpid_errors(void **state) {
 	assert_true(fd >= 0);
 	child = nft_pchild(fd);
 	assert_true(child > 0);
+	/* posix_spawn may return before the child applies its process-group
+	 * attributes on BSD. Confirm the script is running before injecting the
+	 * wait failure; this test checks that failure path, not spawn scheduling. */
+	assert_int_equal(read(fd, &ready, 1), 1);
+	assert_int_equal(ready, 'x');
 
 	forced_waitpid_error_pid = child;
 	forced_waitpid_error_errno = EINVAL;
@@ -1000,6 +1418,36 @@ static void test_reap_returns_still_running_rather_than_blocking(void **state) {
 	assert_int_equal(waitpid(pid, &status, 0), pid);
 }
 
+static void test_reap_requires_a_status_buffer(void **state) {
+	(void) state;
+	assert_int_equal(spine_reap_child_bounded(getpid(), NULL, 2), -1);
+}
+
+/* Past the spin attempts the wait settles into the long interval; the child
+ * is still running when the attempts run out. The spare attempts keep the
+ * elapsed-time bound from ending the wait while the spin phase is still
+ * running on a host with coarse sleep granularity. */
+static void test_reap_settles_into_the_long_interval_for_a_running_child(void **state) {
+	int pstat = 0;
+	int status;
+	pid_t pid;
+
+	(void) state;
+
+	pid = fork();
+	assert_true(pid >= 0);
+
+	if (pid == 0) {
+		pause();
+		_exit(0);
+	}
+
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 8), 1);
+
+	assert_int_equal(kill(pid, SIGKILL), 0);
+	assert_int_equal(waitpid(pid, &status, 0), pid);
+}
+
 static void test_reap_collects_an_exited_child(void **state) {
 	int pstat = 0;
 	pid_t pid;
@@ -1013,7 +1461,9 @@ static void test_reap_collects_an_exited_child(void **state) {
 		_exit(3);
 	}
 
-	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 20), 0);
+	/* an instrumented child writes its coverage counters before it exits, which
+	 * can take longer than 20 short sleeps; the call returns once it is reaped */
+	assert_int_equal(spine_reap_child_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 20), 0);
 	assert_true(WIFEXITED(pstat));
 	assert_int_equal(WEXITSTATUS(pstat), 3);
 }
@@ -1078,8 +1528,13 @@ int main(void) {
 		cmocka_unit_test(test_regex_replace_returns_the_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_no_match),
 		cmocka_unit_test(test_regex_replace_passes_through_on_bad_pattern),
+		cmocka_unit_test(test_spine_appendf_terminates_after_an_encoding_error),
 		cmocka_unit_test(test_bounded_formatters),
+		cmocka_unit_test(test_settings_overrides_and_unrecognised_booleans),
+		cmocka_unit_test(test_ltrim_of_only_trim_characters_is_empty),
+		cmocka_unit_test(test_fatal_signal_handler_reports_each_signal),
 		cmocka_unit_test(test_spine_appendf_reports_truncation_and_guards),
+		cmocka_unit_test(test_statement_label_names_the_verb_and_table_only),
 		cmocka_unit_test(test_all_digits),
 		cmocka_unit_test(test_is_ipaddress),
 		cmocka_unit_test(test_trim_family),
@@ -1090,15 +1545,21 @@ int main(void) {
 		cmocka_unit_test(test_add_slashes_doubles_a_backslash),
 		cmocka_unit_test(test_add_slashes_passes_plain_text_through),
 		cmocka_unit_test(test_row_alias_upsert_version_gate),
+		cmocka_unit_test(test_database_tls_policy),
+		cmocka_unit_test(test_local_and_remote_database_lease_adapters),
 		cmocka_unit_test(test_file_exists),
 		cmocka_unit_test(test_get_time_as_double_advances),
 		cmocka_unit_test(test_get_checksum_is_stable),
+		cmocka_unit_test(test_get_checksum_accepts_unaligned_bytes),
+		cmocka_unit_test(test_rtrim_empty_and_fully_trimmed),
 		cmocka_unit_test(test_icmp_classify_accepts_our_reply),
 		cmocka_unit_test(test_icmp_classify_rejects_a_runt),
 		cmocka_unit_test(test_icmp_classify_rejects_a_bad_ihl),
 		cmocka_unit_test(test_icmp_classify_rejects_a_non_echo),
 		cmocka_unit_test(test_icmp_classify_rejects_another_hosts_reply),
 		cmocka_unit_test(test_icmp_classify_rejects_a_null_buffer),
+		cmocka_unit_test(test_icmp_dgram_classify_accepts_our_reply),
+		cmocka_unit_test(test_icmp_dgram_classify_rejects_what_is_not_our_reply),
 		cmocka_unit_test(test_namebyhost_plain_hostname),
 		cmocka_unit_test(test_namebyhost_is_reentrant_across_calls),
 		cmocka_unit_test(test_namebyhost_tcpv6_method_keeps_the_full_hostname),
@@ -1118,6 +1579,8 @@ int main(void) {
 		cmocka_unit_test(test_existing_pipe_on_stdout_does_not_close_a_new_child_redirect),
 		cmocka_unit_test(test_pipe_is_not_inherited_across_exec),
 		cmocka_unit_test(test_reap_returns_still_running_rather_than_blocking),
+		cmocka_unit_test(test_reap_requires_a_status_buffer),
+		cmocka_unit_test(test_reap_settles_into_the_long_interval_for_a_running_child),
 		cmocka_unit_test(test_reap_collects_an_exited_child),
 		cmocka_unit_test(test_reap_reports_an_already_reaped_child),
 		cmocka_unit_test(test_nft_pclose_does_not_block_on_a_lingering_child),

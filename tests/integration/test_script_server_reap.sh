@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Integration test for the PHP script-server reap fix in php_close().
 #
 # Bug: php_close() sent SIGTERM but never waitpid()'d the child, so each
@@ -15,6 +19,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+export COMPOSE_PROJECT_NAME=${SPINE_TEST_PROJECT:-spine-script-server-reap-$$}
 COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")
 PASS=0
 FAIL=0
@@ -52,15 +57,19 @@ trap cleanup EXIT
 # Wait for seed data.
 elapsed=0
 while [[ $elapsed -lt 120 ]]; do
-	count=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti \
+	count=$("${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti \
 		-N -e "SELECT COUNT(*) FROM host;" 2>/dev/null || echo "0")
-	[[ "$count" -gt 0 ]] && break
+	if [[ "$count" -gt 0 ]] && "${COMPOSE[@]}" exec -T snmpd \
+		snmpget -v3 -u testuser -l authPriv -a SHA-256 -A authpass1234 \
+		-x AES -X privpass1234 localhost:1161 .1.3.6.1.2.1.1.3.0 >/dev/null 2>&1; then
+		break
+	fi
 	sleep 3; elapsed=$((elapsed + 3))
 done
-[[ "$count" -gt 0 ]] || { fail "database did not start"; exit 1; }
+[[ $elapsed -lt 120 ]] || { fail "database and SNMP agent did not become ready"; exit 1; }
 pass "infrastructure ready"
 
-"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+"${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti -e "
 INSERT INTO settings (name, value) VALUES
   ('path_webroot', '/opt/cacti'),
   ('path_php_binary', '/usr/bin/php')
@@ -73,7 +82,7 @@ pass "PHP script-server settings seeded"
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Seed script-server poller_item (action=2) ==="
-"${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -e "
+"${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti -e "
 INSERT IGNORE INTO poller_item (
   local_data_id, host_id, action, hostname,
   rrd_name, rrd_path, rrd_num, rrd_step, arg1, deleted, poller_id
@@ -91,11 +100,14 @@ echo ""
 echo "=== Poll and check for zombie php children ==="
 
 set +e
-poll_out=$("${COMPOSE[@]}" run --rm --entrypoint sh spine -c '
+poll_out=$("${COMPOSE[@]}" run --rm -T --entrypoint sh spine -s 2>&1 <<'SPINE_TEST_POLL'
 	/usr/local/bin/spine --conf=/etc/spine/spine.conf -f 1 -l 1 -S
+	poller_status=$?
 	echo "---PROCTABLE---"
 	ps -eo pid,ppid,stat,comm 2>/dev/null || true
-' 2>&1)
+	exit "$poller_status"
+SPINE_TEST_POLL
+)
 poll_status=$?
 set -e
 echo "$poll_out"
@@ -116,7 +128,7 @@ else
 	pass "no zombie php child after poll"
 fi
 
-value=$("${COMPOSE[@]}" exec -T db mariadb -uspine -pspine cacti -N -B \
+value=$("${COMPOSE[@]}" exec -T db mariadb --protocol=TCP -h127.0.0.1 -uspine -pspine cacti -N -B \
 	-e "SELECT output FROM poller_output WHERE local_data_id = 900 LIMIT 1;" 2>/dev/null)
 if [[ $value == 42 ]]; then
 	pass "script-server command returned and stored 42"

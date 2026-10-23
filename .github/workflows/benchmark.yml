@@ -1,0 +1,72 @@
+name: Paired build benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Baseline Git revision
+        required: true
+      candidate:
+        description: Candidate Git revision
+        required: true
+      pairs:
+        description: Measured pairs after two warmup pairs (2 to 200)
+        default: '20'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      database:
+        image: mirror.gcr.io/library/mariadb:10.11@sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install shared toolchain and fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool help2man gcc libmariadb-dev mariadb-client libsnmp-dev snmp snmpd libssl-dev libcmocka-dev
+          sudo systemctl stop snmpd
+      - name: Verify benchmark evidence checks
+        run: python3 tests/tools/test_benchmark_record.py
+      - name: Build both exact revisions with identical settings
+        env:
+          BASELINE: ${{ inputs.baseline }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: bash tests/tools/build_benchmark_pair.sh "$BASELINE" "$CANDIDATE" benchmark-builds
+      - name: Measure alternating polling cycles and process CPU
+        env:
+          PAIRS: ${{ inputs.pairs }}
+        run: |
+          python3 tests/tools/benchmark_builds.py benchmark-builds/baseline/spine benchmark-builds/candidate/spine --pairs "$PAIRS"
+          python3 tests/tools/verify_benchmark_record.py benchmark-results
+      - name: Preserve measurements and build provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: paired-benchmark-${{ github.run_id }}
+          path: |
+            benchmark-results/
+            benchmark-builds/*-revision.txt
+            benchmark-builds/*-build.log
+            benchmark-builds/*-binary.sha256
+            benchmark-builds/compiler.txt
+            benchmark-builds/dependencies.txt
+            benchmark-builds/build-settings.txt
+          if-no-files-found: error

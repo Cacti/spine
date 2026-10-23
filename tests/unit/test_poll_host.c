@@ -1,3 +1,9 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-only
+ *
+ * Fork maintenance: Thomas Vincent.
+ * Project contributor history: CONTRIBUTORS.md.
+ */
 /* Drives the shipped poll_host() without a database or an SNMP agent.
  *
  * GNU ld --wrap replaces the database and SNMP calls that poller.o makes into
@@ -13,8 +19,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
-#include "spine.h"
+#include "internal/common.h"
+#include "app/spine.h"
+#include "tests/support/child_run.h"
+#include "config/settings_internal.h"
 
 #define HOST_COLUMNS 37
 #define REINDEX_COLUMNS 5
@@ -47,6 +55,21 @@ static struct {
 	int query_count;
 	int completion_queries;
 	int completion_queries_locked;
+	int session_fail_at;
+	bool multi_ignores_host;
+	bool drop_leases;
+	db_lease_t *leases[2];
+	int lease_releases;
+	int fail_poll_allocation;
+	int poll_allocations_seen;
+	bool poll_allocations_armed;
+	size_t fail_calloc_size;
+	const char *settings[2][2];
+	int setting_count;
+	size_t fail_calloc_rows;
+	const char *fail_strdup_text;
+	int fail_strdup_skip;
+	const char *host_time;
 } fake;
 
 static pool_t fake_pool;
@@ -101,6 +124,10 @@ static const char *item_cell(int row, int column) {
 	return fake.items[row][column];
 }
 
+static const char *setting_cell(int row, int column) {
+	return fake.settings[row][column];
+}
+
 /* Persist the one write the next cycle reads back: the reindex baseline. */
 static void apply_reindex_update(const char *query) {
 	const char *prefix = "UPDATE poller_reindex SET assert_value='";
@@ -123,9 +150,20 @@ static void observe_completion(const char *query) {
 	}
 }
 
+/* A lease can be lost while a device is polled; the cleanup then finds
+ * nothing to release. */
+static void lose_leases(void) {
+	for (int i = 0; i < 2; i++) {
+		if (fake.leases[i] != NULL) fake.leases[i]->connection = NULL;
+	}
+}
+
 MYSQL_RES *__wrap_db_query(MYSQL *mysql, int type, const char *query) {
 	(void) mysql;
 	(void) type;
+	if (strstr(query, "FROM settings") != NULL) {
+		return (MYSQL_RES *) make_result(fake.setting_count, 2, setting_cell);
+	}
 	if (strstr(query, "FROM host WHERE id") != NULL) {
 		return (MYSQL_RES *) make_result(1, HOST_COLUMNS, host_cell);
 	}
@@ -133,6 +171,7 @@ MYSQL_RES *__wrap_db_query(MYSQL *mysql, int type, const char *query) {
 		return (MYSQL_RES *) make_result(fake.reindex_count, REINDEX_COLUMNS, reindex_cell);
 	}
 	if (strstr(query, "SELECT SQL_NO_CACHE action") != NULL) {
+		if (fake.drop_leases) lose_leases();
 		return (MYSQL_RES *) make_result(fake.item_count, ITEM_COLUMNS, item_cell);
 	}
 	capture(query);
@@ -155,14 +194,62 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 	snprintf(output, (size_t) max_size, "%s", input);
 }
 
-pool_t *__wrap_db_get_connection(int type) {
-	(void) type;
-	return &fake_pool;
+bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
+	lease->type = type;
+	lease->connection = &fake_pool;
+	if (fake.fail_poll_allocation != 0) fake.poll_allocations_armed = TRUE;
+	if (type == LOCAL || type == REMOTE) fake.leases[type == LOCAL ? 0 : 1] = lease;
+	return TRUE;
 }
 
-void __wrap_db_release_connection(int type, int id) {
-	(void) type;
-	(void) id;
+bool __wrap_db_release_lease(db_lease_t *lease) {
+	fake.lease_releases++;
+	lease->connection = NULL;
+	return TRUE;
+}
+
+/* poll_host() allocates its host, ping and reindex records in that order.
+ * An optimizing compiler turns malloc plus memset into calloc(1, size), so
+ * both entry points count them, in either argument order, and only after the database lease is taken. */
+static bool fail_this_poll_allocation(size_t size) {
+	if (!fake.poll_allocations_armed) return FALSE;
+	if (size != sizeof(host_t) && size != sizeof(ping_t) && size != sizeof(reindex_t)) return FALSE;
+	return ++fake.poll_allocations_seen == fake.fail_poll_allocation;
+}
+
+extern void *__real_malloc(size_t size);
+void *__wrap_malloc(size_t size) {
+	if (fail_this_poll_allocation(size)) return NULL;
+	return __real_malloc(size);
+}
+
+extern void *__real_calloc(size_t count, size_t size);
+void *__wrap_calloc(size_t count, size_t size) {
+	/* the optimizer emits calloc(size, 1) as often as calloc(1, size) */
+	size_t bytes = count == 1 ? size : (size == 1 ? count : 0);
+
+	if (bytes != 0 && fail_this_poll_allocation(bytes)) return NULL;
+	if (fake.fail_calloc_size != 0 && size == fake.fail_calloc_size) {
+		fake.fail_calloc_size = 0;
+		return NULL;
+	}
+	/* the settings cache allocates one name/value pair per row */
+	if (fake.fail_calloc_rows != 0 && count == fake.fail_calloc_rows && size == 2 * sizeof(char *)) {
+		fake.fail_calloc_rows = 0;
+		return NULL;
+	}
+	return __real_calloc(count, size);
+}
+
+extern char *__real_strdup(const char *text);
+char *__wrap_strdup(const char *text) {
+	if (fake.fail_strdup_text != NULL && strcmp(text, fake.fail_strdup_text) == 0) {
+		/* the fake result set copies the same text before the code under test does */
+		if (fake.fail_strdup_skip-- > 0) return __real_strdup(text);
+		fake.fail_strdup_text = NULL;
+		return NULL;
+	}
+	return __real_strdup(text);
 }
 
 void __wrap_db_free_result(MYSQL_RES *opaque) {
@@ -187,6 +274,10 @@ MYSQL_ROW __wrap_mysql_fetch_row(MYSQL_RES *opaque) {
 
 void *__wrap_snmp_host_init(const snmp_connection_t *options) {
 	assert_true(fake.session_opens < MAX_QUERIES);
+	if (fake.session_fail_at == fake.session_opens + 1) {
+		fake.session_opens++;
+		return NULL;
+	}
 	fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
 	snprintf(fake.session_hostnames[fake.session_opens], BUFSIZE, "%s", options->hostname);
 	fake.session_opens++;
@@ -226,8 +317,8 @@ char *__wrap_snmp_get_allow_fail(host_t *host, char *oid) {
 }
 
 void __wrap_snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int count) {
-	(void) host;
 	(void) items;
+	if (fake.multi_ignores_host) host->ignore_host = TRUE;
 	for (int i = 0; i < count; i++) {
 		snprintf(oids[i].result, sizeof(oids[i].result), "%s", fake.multi_value);
 	}
@@ -295,7 +386,7 @@ static int run_poll(void) {
 	work.host_threads = 1;
 	work.host_data_ids = 0;
 	work.host_time_double = get_time_as_double();
-	STRNCOPY(work.host_time, "1791158400");
+	STRNCOPY(work.host_time, fake.host_time != NULL ? fake.host_time : "1791158400");
 	details = &device;
 	poll_host(&work, &errors);
 	details = NULL;
@@ -471,7 +562,11 @@ static void test_script_reindex_and_completion(void **state) {
 /* sysUpTimeInstance takes the engine time in ticks when both OIDs read, and
  * ignores an uptime that is not a whole non-negative number. */
 static void test_system_uptime(void **state) {
-	static const struct { const char *legacy; const char *engine; const char *stored; } cases[] = {
+	static const struct {
+		const char *legacy;
+		const char *engine;
+		const char *stored;
+	} cases[] = {
 		{"4200", "42", "snmp_sysUpTimeInstance='4200'"},
 		{"4200", "-1", "snmp_sysUpTimeInstance='4200'"},
 		{"-5", "42", "snmp_sysUpTimeInstance='0'"},
@@ -494,6 +589,176 @@ static void test_system_uptime(void **state) {
 	}
 }
 
+static void add_action_item(const char *action, const char *local_data_id, const char *rrd_name, const char *command) {
+	const char **row = fake.items[fake.item_count++];
+	row[0] = action;
+	row[6] = rrd_name;
+	row[8] = command;
+	row[11] = local_data_id;
+}
+
+static int count_unknown_results(void) {
+	return captured("'U')");
+}
+
+/* At the detailed log level an invalid SNMP value is reported with the
+ * device, data source and OID, and is still counted and stored as unknown. */
+static void test_invalid_snmp_value_is_reported_and_discarded(void **state) {
+	(void) state;
+	set.logging.spine_log_level = 2;
+	set_host("regression", "5", AVAIL_NONE);
+	add_snmp_item("651", "a", "regression", "2", NULL);
+	fake.multi_value = "not a number";
+
+	assert_int_equal(run_poll(), 1);
+	assert_int_equal(captured("(651, 'a', FROM_UNIXTIME(1791158400), 'U')"), 1);
+}
+
+/* A batch that times out marks the device ignored; its values are unknown
+ * whatever the agent state was before. */
+static void test_values_of_an_ignored_device_are_unknown(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_snmp_item("661", "a", "regression", "2", NULL);
+	add_snmp_item("662", "b", "regression", "2", NULL);
+	fake.multi_value = "42";
+	fake.multi_ignores_host = TRUE;
+
+	run_poll();
+	assert_int_equal(captured("(661, 'a', FROM_UNIXTIME(1791158400), 'U')"), 1);
+	assert_int_equal(captured("(662, 'b', FROM_UNIXTIME(1791158400), 'U')"), 1);
+}
+
+static void test_empty_script_commands_are_skipped(void **state) {
+	(void) state;
+	set_host("", "5", AVAIL_NONE);
+	add_action_item("1", "671", "a", "");
+	add_action_item("2", "672", "b", "");
+
+	assert_int_equal(run_poll(), 0);
+	assert_int_equal(count_unknown_results(), 1);
+	assert_int_equal(captured("(671, 'a', FROM_UNIXTIME(1791158400), 'U')"), 1);
+	assert_int_equal(captured("(672, 'b', FROM_UNIXTIME(1791158400), 'U')"), 1);
+}
+
+static void test_unknown_poller_action_is_recorded_as_unknown(void **state) {
+	(void) state;
+	set_host("", "5", AVAIL_NONE);
+	add_action_item("9", "681", "a", "unsupported-action-argument");
+
+	assert_int_equal(run_poll(), 0);
+	assert_int_equal(captured("(681, 'a', FROM_UNIXTIME(1791158400), 'U')"), 1);
+}
+
+static void test_failed_item_session_ignores_the_device(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_snmp_item("691", "a", "regression", "2", NULL);
+	add_snmp_item("692", "b", "regression", "2", NULL);
+	fake.multi_value = "42";
+	/* the first open is the device check, the second is the item batch */
+	fake.session_fail_at = 2;
+
+	run_poll();
+	assert_int_equal(fake.session_opens, 2);
+	assert_int_equal(captured("'42')"), 0);
+}
+
+static void test_lost_leases_are_not_released_twice(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_snmp_item("701", "a", "regression", "2", NULL);
+	fake.multi_value = "42";
+	fake.drop_leases = TRUE;
+
+	run_poll();
+	assert_int_equal(fake.lease_releases, 0);
+
+	reset_fake();
+	set_host("regression", "5", AVAIL_NONE);
+	set.poller.poller_id = 2;
+	set.poller.mode = REMOTE_ONLINE;
+	add_snmp_item("702", "a", "regression", "2", NULL);
+	fake.multi_value = "42";
+	fake.drop_leases = TRUE;
+
+	run_poll();
+	assert_int_equal(fake.lease_releases, 0);
+}
+
+static void poll_without_memory(void) {
+	run_poll();
+}
+
+static void test_poll_structure_allocation_failures_are_fatal(void **state) {
+	int record;
+
+	(void) state;
+	for (record = 1; record <= 3; record++) {
+		setup(NULL);
+		set_host("regression", "5", AVAIL_NONE);
+		fake.fail_poll_allocation = record;
+		print_message("record %d of 3\n", record);
+		assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
+	}
+}
+
+static void test_oid_table_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_snmp_item("711", "a", "regression", "2", NULL);
+	fake.fail_calloc_size = sizeof(snmp_oids_t);
+
+	assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
+}
+
+/* The bulk settings load gives up quietly when memory runs out, and a
+ * setting it could not copy reads as absent, not as a stale value. */
+static void test_settings_cache_survives_allocation_failures(void **state) {
+	MYSQL mysql;
+	char *value;
+
+	(void) state;
+	memset(&mysql, 0, sizeof(mysql));
+	fake.settings[0][0] = "alpha";
+	fake.settings[0][1] = "1";
+	fake.settings[1][0] = "beta";
+	fake.settings[1][1] = "2";
+	fake.setting_count = 2;
+
+	fake.fail_calloc_rows = 2;
+	settings_cache_load(&mysql, LOCAL);
+	assert_int_equal(fake.fail_calloc_rows, 0);
+
+	fake.fail_strdup_text = "alpha";
+	fake.fail_strdup_skip = 1;
+	settings_cache_load(&mysql, LOCAL);
+	assert_null(fake.fail_strdup_text);
+	assert_null(getsetting(&mysql, LOCAL, "alpha"));
+	assert_null(getsetting(&mysql, LOCAL, "beta"));
+
+	settings_cache_load(&mysql, LOCAL);
+	value = getsetting(&mysql, LOCAL, "beta");
+	assert_non_null(value);
+	assert_string_equal(value, "2");
+	free(value);
+	settings_cache_free();
+}
+
+/* A cycle timestamp that is not a number cannot be written into the output
+ * statement; the sample is skipped rather than the statement corrupted. */
+static void test_output_with_a_malformed_timestamp_is_skipped(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_snmp_item("721", "a", "regression", "2", NULL);
+	fake.multi_value = "42";
+	fake.host_time = "1791158400); DROP TABLE host";
+
+	assert_int_equal(run_poll(), 0);
+	assert_int_equal(captured("(721,"), 0);
+	assert_int_equal(captured("DROP TABLE"), 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_flush_paths_agree, setup),
@@ -504,6 +769,16 @@ int main(void) {
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
+		cmocka_unit_test_setup(test_invalid_snmp_value_is_reported_and_discarded, setup),
+		cmocka_unit_test_setup(test_values_of_an_ignored_device_are_unknown, setup),
+		cmocka_unit_test_setup(test_empty_script_commands_are_skipped, setup),
+		cmocka_unit_test_setup(test_unknown_poller_action_is_recorded_as_unknown, setup),
+		cmocka_unit_test_setup(test_failed_item_session_ignores_the_device, setup),
+		cmocka_unit_test_setup(test_lost_leases_are_not_released_twice, setup),
+		cmocka_unit_test_setup(test_poll_structure_allocation_failures_are_fatal, setup),
+		cmocka_unit_test_setup(test_oid_table_allocation_failure_is_fatal, setup),
+		cmocka_unit_test_setup(test_settings_cache_survives_allocation_failures, setup),
+		cmocka_unit_test_setup(test_output_with_a_malformed_timestamp_is_skipped, setup),
 	};
 	int failures;
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # SNMPv3 regression test suite.
 #
 # Tests USM notInTimeWindow recovery, snmp_count off-by-one, and host state
@@ -185,7 +189,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # 6. ICMP availability — drives the ping path so the new ICMP reply-length
-#    guard (ping.c) runs against a live reply.  Host 1 is repointed to ICMP
+#    guard (src/poller/availability.c) runs against a live reply.  Host 1 is repointed to ICMP
 #    ping for one run; spine must not crash on the reply and the host must
 #    stay UP (AVAIL_SNMP_OR_PING falls back to SNMP if raw sockets are denied).
 #

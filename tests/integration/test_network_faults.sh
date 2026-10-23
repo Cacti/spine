@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-only
+#
+# Fork maintenance: Thomas Vincent.
+# Project contributor history: CONTRIBUTORS.md.
 # Verify that complete SNMP packet loss is bounded and polling recovers after
 # connectivity returns. This is a lifecycle contract for both the current
 # synchronous implementation and the future libuv reactor.
@@ -23,8 +27,8 @@ export COMPOSE_PROJECT_NAME=$PROJECT
 COMPOSE=(docker compose -f "$REPO_ROOT/tests/snmpv3/docker-compose.yml")
 mkdir -p "$ARTIFACT_ROOT"
 export SPINE_TEST_ARTIFACT_DIR=$ARTIFACT_ROOT
-# shellcheck source=tests/test-harness.sh
-source "$REPO_ROOT/tests/test-harness.sh"
+# shellcheck source=tests/support/test-harness.sh
+source "$REPO_ROOT/tests/support/test-harness.sh"
 harness_init "Spine SNMP network-fault integration"
 
 cleanup() {
@@ -42,7 +46,7 @@ trap cleanup EXIT
 
 db_query() {
 	"${COMPOSE[@]}" exec -T -e MYSQL_PWD=spine db \
-		mariadb -uspine cacti -N -B -e "$1"
+		mariadb --protocol=TCP -h127.0.0.1 -uspine cacti -N -B -e "$1"
 }
 
 wait_for_fixture() {
