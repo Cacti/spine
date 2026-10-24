@@ -53,3 +53,5 @@ extern int append_hostrange(char *obuf, const char *colname);
 	}\
 }\
 
+
+extern bool db_row_alias(MYSQL *destination);

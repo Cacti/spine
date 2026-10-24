@@ -129,6 +129,13 @@ static void log_redacted_sql_query(const char *query_frag) {
 	free(redacted_query);
 }
 
+/* MariaDB can advertise a MySQL compatibility prefix. Test the vendor first. */
+bool db_row_alias(MYSQL *destination) {
+	const char *server = mysql_get_server_info(destination);
+	return server != NULL && strstr(server, "MariaDB") == NULL &&
+		mysql_get_server_version(destination) >= 80019;
+}
+
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
@@ -159,14 +166,12 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 				error = mysql_errno(mysql);
 
 				if (error == 2013 || error == 2006) {
+					if (++error_count > 30) {
+						die("FATAL: Too many Reconnect Attempts!");
+					}
 					if (errno != EINTR) {
 						db_reconnect(mysql, error, "db_insert");
 
-						error_count++;
-
-						if (error_count > 30) {
-							die("FATAL: Too many Reconnect Attempts!");
-						}
 
 						continue;
 					} else {
@@ -180,13 +185,13 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 					error_count++;
 
 					if (error_count > 30) {
-						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!, SQL Fragment:'%s'", query_frag));
+						SPINE_LOG(("ERROR: Too many Lock/Deadlock errors occurred!"));
 						return FALSE;
 					}
 
 					continue;
 				} else {
-					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s', SQL Fragment:'%s'", error, mysql_error(mysql), query_frag));
+					SPINE_LOG(("ERROR: SQL Failed! Error:'%i', Message:'%s'", error, mysql_error(mysql)));
 					return FALSE;
 				}
 			} else {
@@ -255,14 +260,11 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			error = mysql_errno(mysql);
 
 			if (error == 2013 || error == 2006) {
+				if (++error_count > 30) {
+					die("FATAL: Too many Reconnect Attempts!");
+				}
 				if (errno != EINTR) {
 					db_reconnect(mysql, error, "db_query");
-
-					error_count++;
-
-					if (error_count > 30) {
-						die("FATAL: Too many Reconnect Attempts!");
-					}
 
 					continue;
 				} else {
@@ -276,14 +278,14 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 				error_count++;
 
 				if (error_count > 30) {
-					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occured!, SQL Fragment:'%s'", query_frag));
+					SPINE_LOG(("FATAL: Too many Lock/Deadlock errors occurred!"));
 					exit(1);
 				}
 
 				continue;
 			} else {
 				SPINE_LOG(("FATAL: Database Error:'%i', Message:'%s'", error, mysql_error(mysql)));
-				SPINE_LOG(("ERROR: The Query Was:'%s'", query));
+				log_redacted_sql_query(query);
 				exit(1);
 			}
 		} else {

@@ -137,7 +137,7 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 	assert(mysetting != 0);
 	assert(myvalue   != 0);
 
-	if (set.dbonupdate == 0) {
+	if (!db_row_alias(psql)) {
 		sprintf(qstring, "INSERT INTO settings (name, value) "
 			"VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE value = VALUES(value)", mysetting, myvalue);
@@ -362,14 +362,6 @@ void read_config_options() {
 	if ((res = getglobalvariable(&mysql, LOCAL, "version")) != 0) {
 		snprintf(set.dbversion, BUFSIZE, "%s", res);
 		free((char *)res);
-	}
-
-	if (STRIMATCH(set.dbversion, "mariadb")) {
-		set.dbonupdate = 0;
-	} else if (strpos(set.dbversion, "8.") == 0) {
-		set.dbonupdate = 1;
-	} else {
-		set.dbonupdate = 0;
 	}
 
 	/* get the cacti version from the database */
@@ -814,7 +806,8 @@ void read_config_options() {
 	}
 }
 
-void poller_push_data_to_main() {
+bool poller_push_data_to_main() {
+	bool       pushed = TRUE;
 	MYSQL      mysql;
 	MYSQL      mysqlr;
 	MYSQL_RES  *result;
@@ -865,7 +858,7 @@ void poller_push_data_to_main() {
 		"status_last_error, min_time, max_time, cur_time, avg_time, polling_time, "
 		"total_polls, failed_polls, availability, last_updated) VALUES ");
 
-	if (set.dbonupdate == 0) {
+	if (!db_row_alias(&mysqlr)) {
 		snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
 			"snmp_sysDescr=VALUES(snmp_sysDescr), "
 			"snmp_sysObjectID=VALUES(snmp_sysObjectID), "
@@ -969,7 +962,7 @@ void poller_push_data_to_main() {
 					rows++;
 				} else {
 					sqlp += sprintf(sqlp, "%s", suffix);
-					db_insert(&mysqlr, REMOTE, sqlbuf);
+					if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
 					rows = 0;
 				}
@@ -978,7 +971,7 @@ void poller_push_data_to_main() {
 
 		if (rows > 0) {
 			sqlp += sprintf(sqlp, "%s", suffix);
-			db_insert(&mysqlr, REMOTE, sqlbuf);
+			if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 		}
 	}
 
@@ -1000,7 +993,7 @@ void poller_push_data_to_main() {
 
 	snprintf(prefix, BUFSIZE, "INSERT INTO poller_item (local_data_id, host_id, rrd_name, rrd_step, rrd_next_step) VALUES ");
 
-	if (set.dbonupdate == 0) {
+	if (!db_row_alias(&mysqlr)) {
 		snprintf(suffix, BUFSIZE, " ON DUPLICATE KEY UPDATE "
 			"rrd_next_step=VALUES(rrd_next_step)");
 	} else {
@@ -1037,7 +1030,7 @@ void poller_push_data_to_main() {
 					rows++;
 				} else {
 					sqlp += sprintf(sqlp, "%s", suffix);
-					db_insert(&mysqlr, REMOTE, sqlbuf);
+					if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
 					rows = 0;
 				}
@@ -1046,7 +1039,7 @@ void poller_push_data_to_main() {
 
 		if (rows > 0) {
 			sqlp += sprintf(sqlp, "%s", suffix);
-			db_insert(&mysqlr, REMOTE, sqlbuf);
+			if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
 			rows = 0;
 		}
@@ -1056,6 +1049,8 @@ void poller_push_data_to_main() {
 
 	db_disconnect(&mysql);
 	db_disconnect(&mysqlr);
+
+	return pushed;
 }
 
 /*! \fn int read_spine_config(char *file)
