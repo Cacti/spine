@@ -1,5 +1,11 @@
 # Spine regression tests
 
+`make check` runs the production script-process implementation against real
+children. It covers deferred reaping, concurrent commands, cancellation, PID
+ownership, interrupted/failed waits, tracking saturation, and bounded shutdown.
+Only system-call failures are injected; the process-management code is linked
+directly from `nft_popen.c`.
+
 `make integration-check` runs real Spine executables against a disposable schema
 on an **isolated MariaDB or MySQL test server**. The runner creates a random
 database and user and removes them on completion. It temporarily enables the

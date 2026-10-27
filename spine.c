@@ -1146,6 +1146,8 @@ int main(int argc, char *argv[]) {
 
 	SPINE_LOG_DEBUG(("DEBUG: Thread Cleanup Complete"));
 
+	if (nft_popen_cleanup() != 0) set.exit_code = EXIT_FAILURE;
+
 	/* close the php script server */
 	if (set.php_required && !set.ping_only) {
 		php_close(PHP_INIT);
