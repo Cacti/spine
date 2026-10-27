@@ -119,7 +119,7 @@ poller_thread_t** details = NULL;
 
 static char *getarg(char *opt, char ***pargv);
 static void display_help(int only_version);
-void poller_push_data_to_main();
+bool poller_push_data_to_main();
 
 #ifdef HAVE_LCAP
 /* This patch is adapted (copied) patch for ntpd from Jarno Huuskonen and
@@ -241,6 +241,31 @@ static bool parse_cli_int(const char *text, long minimum, long maximum, int *val
 	if (errno != 0 || *end != '\0' || parsed < minimum || parsed > maximum) return FALSE;
 	*value = (int)parsed;
 	return TRUE;
+}
+
+static void parse_host_list(const char *input) {
+	size_t used = 0;
+	const char *cursor = input;
+	char *end;
+	unsigned long id;
+
+	if (strlen(input) >= sizeof(set.host_id_list)) {
+		die("ERROR: invalid or oversized host list");
+	}
+	for (;;) {
+		while (isspace((unsigned char) *cursor)) cursor++;
+		if (*cursor < '0' || *cursor > '9') die("ERROR: invalid or oversized host list");
+		errno = 0;
+		id = strtoul(cursor, &end, 10);
+		if (errno == ERANGE || id > INT_MAX) die("ERROR: invalid or oversized host list");
+		while (isspace((unsigned char) *end)) end++;
+		if (*end != '\0' && *end != ',') die("ERROR: invalid or oversized host list");
+		/* SQL receives only converted integer values and owned separators. */
+		used += (size_t) snprintf(set.host_id_list + used,
+			sizeof(set.host_id_list) - used, "%s%lu", used == 0 ? "" : ",", id);
+		if (*end == '\0') return;
+		cursor = end + 1;
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -451,7 +476,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
-			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+			parse_host_list(getarg(opt, &argv));
 		}
 
 		else if (STRMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {
@@ -733,7 +758,7 @@ int main(int argc, char *argv[]) {
 		die("ERROR: Fatal malloc error: spine.c threads!");
 	}
 
-	if (!(details = (poller_thread_t **)malloc(num_rows * sizeof(poller_thread_t*)))) {
+	if (!(details = (poller_thread_t **)calloc(num_rows, sizeof(poller_thread_t*)))) {
 		die("ERROR: Fatal malloc error: spine.c details!");
 	}
 
@@ -909,9 +934,10 @@ int main(int argc, char *argv[]) {
 		poller_details->thread_init_sem  = &thread_init_sem;
 		poller_details->complete         = FALSE;
 		poller_details->threads_complete = 0;
+		poller_details->output_failed    = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
-		details[device_counter] = poller_details;
+		if (current_thread == 1) details[device_counter] = poller_details;
 		thread_mutex_unlock(LOCK_THDET);
 
 		/* dev note - errno was never primed at this point in previous version of code */
@@ -1003,6 +1029,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (!spine_timeout) {
+			/* child_cleanup frees every partition after the first as soon as
+			 * its poll ends, which can precede the logging below. */
+			int created_host_id       = poller_details->host_id;
+			int created_host_thread   = poller_details->host_thread;
+			int created_host_threads  = poller_details->host_threads;
+			int created_host_data_ids = poller_details->host_data_ids;
+			int created_complete      = poller_details->complete;
+
 			/* create child process */
 			thread_retry:
 
@@ -1011,25 +1045,25 @@ int main(int argc, char *argv[]) {
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
 			if (thread_status == 0) {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", poller_details->host_id, (unsigned long int)threads[device_counter]));
+				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Valid Thread to be Created (%ld)", created_host_id, (unsigned long int)threads[device_counter]));
 
 				if (change_host) {
 					device_counter++;
 				}
 
 				sem_getvalue(&available_threads, &a_threads_value);
-				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", poller_details->host_id, a_threads_value, set.threads - a_threads_value));
+				SPINE_LOG_HIGH(("DEBUG: Device[%i] Available Threads is %i (%i outstanding)", created_host_id, a_threads_value, set.threads - a_threads_value));
 
 				sem_post(&thread_init_sem);
 
 				SPINE_LOG_DEVDBG(("DEBUG: DTS: device = %d, host_id = %d, host_thread = %d,"
 					" host_threads = %d, host_data_ids = %d, complete = %d",
 					device_counter-1,
-					poller_details->host_id,
-					poller_details->host_thread,
-					poller_details->host_threads,
-					poller_details->host_data_ids,
-					poller_details->complete));
+					created_host_id,
+					created_host_thread,
+					created_host_threads,
+					created_host_data_ids,
+					created_complete));
 			} else if (thread_status == EAGAIN) {
 				usleep(10000);
 				goto thread_retry;
@@ -1054,6 +1088,8 @@ int main(int argc, char *argv[]) {
 
 		if (cur_time - begin_time > set.poller_interval) {
 			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.threads - a_threads_value));
+			/* Unfinished threads have not written their output. */
+			set.exit_code = EXIT_FAILURE;
 			break;
 		}
 
@@ -1106,7 +1142,7 @@ int main(int argc, char *argv[]) {
 
 	/* push data back to the main server */
 	if (set.poller_id > 1 && set.mode == REMOTE_ONLINE && !set.SQL_readonly) {
-		poller_push_data_to_main();
+		if (!poller_push_data_to_main()) set.exit_code = EXIT_FAILURE;
 	}
 
 	/* update the db for |data_time| on graphs */
@@ -1116,10 +1152,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		snprintf(querybuf, BIG_BUFSIZE, "UPDATE poller_time SET end_time=NOW() WHERE poller_id=%i AND pid=%i", set.poller_id, getpid());
-		if (mode == REMOTE) {
-			db_insert(&mysqlr, REMOTE, querybuf);
-		} else {
-			db_insert(&mysql, LOCAL, querybuf);
+		if (!db_insert(mode == REMOTE ? &mysqlr : &mysql, mode, querybuf)) {
+			set.exit_code = EXIT_FAILURE;
 		}
 	}
 
@@ -1193,7 +1227,8 @@ int main(int argc, char *argv[]) {
 	/* clueanup winsock library on Windows */
 	SOCK_CLEANUP;
 
-	exit(EXIT_SUCCESS);
+	/* poller.c records a failed output write in set.exit_code */
+	exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /*! \fn static void display_help()
