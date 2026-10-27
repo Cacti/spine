@@ -243,6 +243,31 @@ static bool parse_cli_int(const char *text, long minimum, long maximum, int *val
 	return TRUE;
 }
 
+static void parse_host_list(const char *input) {
+	size_t used = 0;
+	const char *cursor = input;
+	char *end;
+	unsigned long id;
+
+	if (strlen(input) >= sizeof(set.host_id_list)) {
+		die("ERROR: invalid or oversized host list");
+	}
+	for (;;) {
+		while (isspace((unsigned char) *cursor)) cursor++;
+		if (*cursor < '0' || *cursor > '9') die("ERROR: invalid or oversized host list");
+		errno = 0;
+		id = strtoul(cursor, &end, 10);
+		if (errno == ERANGE || id > INT_MAX) die("ERROR: invalid or oversized host list");
+		while (isspace((unsigned char) *end)) end++;
+		if (*end != '\0' && *end != ',') die("ERROR: invalid or oversized host list");
+		/* SQL receives only converted integer values and owned separators. */
+		used += (size_t) snprintf(set.host_id_list + used,
+			sizeof(set.host_id_list) - used, "%s%lu", used == 0 ? "" : ",", id);
+		if (*end == '\0') return;
+		cursor = end + 1;
+	}
+}
+
 int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
@@ -451,7 +476,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRMATCH(arg, "-H") || STRIMATCH(arg, "--hostlist")) {
-			snprintf(set.host_id_list, BIG_BUFSIZE, "%s", getarg(opt, &argv));
+			parse_host_list(getarg(opt, &argv));
 		}
 
 		else if (STRMATCH(arg, "-M") || STRMATCH(arg, "--mibs")) {

@@ -33,6 +33,7 @@
 
 #include "common.h"
 #include "spine.h"
+#include <stdint.h>
 
 static int nopts = 0;
 
@@ -59,6 +60,9 @@ static struct {
  *
  */
 void set_option(const char *option, const char *value) {
+	if (option == NULL || value == NULL || nopts >= (int)(sizeof(opttable) / sizeof(opttable[0]))) {
+		die("ERROR: Invalid or excessive option overrides");
+	}
 	opttable[nopts  ].opt = option;
 	opttable[nopts++].val = value;
 }
@@ -149,11 +153,7 @@ int putsetting(MYSQL *psql, int mode, const char *mysetting, const char *myvalue
 
 	result = db_insert(psql, mode, qstring);
 
-	if (result == 0) {
-		return TRUE;
-	} else {
-		return FALSE;
-	}
+	return result;
 }
 
 /*! \fn static const char *getpsetting(MYSQL *psql, const char *setting)
@@ -1271,6 +1271,33 @@ char * get_date_format() {
  *  \param *logmessage a pointer to the pre-formated log message.
  *
  */
+typedef struct {
+	char prefix[LOGSIZE];
+	char message[LOGSIZE];
+	char formatted[LOGSIZE];
+	char console[LOGSIZE + 20];
+} log_buffers_t;
+static pthread_key_t log_buffers_key;
+static pthread_once_t log_buffers_once = PTHREAD_ONCE_INIT;
+static bool log_buffers_keyed = FALSE;
+static void log_buffers_create_key(void) {
+	log_buffers_keyed = pthread_key_create(&log_buffers_key, free) == 0;
+}
+static log_buffers_t *log_buffers_get(void) {
+	log_buffers_t *buffers;
+	pthread_once(&log_buffers_once, log_buffers_create_key);
+	if (!log_buffers_keyed) return NULL;
+	buffers = pthread_getspecific(log_buffers_key);
+	if (buffers == NULL) {
+		buffers = malloc(sizeof(*buffers));
+		if (buffers != NULL && pthread_setspecific(log_buffers_key, buffers) != 0) {
+			free(buffers);
+			buffers = NULL;
+		}
+	}
+	return buffers;
+}
+
 int spine_log(const char *format, ...) {
 	va_list	args;
 
@@ -1286,10 +1313,20 @@ int spine_log(const char *format, ...) {
 	static int log_error = FALSE;
 
 	int  of = 20;
-	char logprefix[LOGSIZE];        /* Formatted Log Prefix */
-	char ulogmessage[LOGSIZE];      /* Un-Formatted Log Message */
-	char flogmessage[LOGSIZE];      /* Formatted Log Message */
-	char stdoutmessage[LOGSIZE+of]; /* Message for stdout */
+	log_buffers_t *buffers = log_buffers_get();
+	char *logprefix;
+	char *ulogmessage;
+	char *flogmessage;
+	char *stdoutmessage;
+
+	if (buffers == NULL) {
+		fputs("ERROR: Unable to allocate log buffers\n", stderr);
+		return FALSE;
+	}
+	logprefix = buffers->prefix;
+	ulogmessage = buffers->message;
+	flogmessage = buffers->formatted;
+	stdoutmessage = buffers->console;
 
 	double cur_time;
 
@@ -1365,8 +1402,12 @@ int spine_log(const char *format, ...) {
 		ulog_len = LOGSIZE - flog_len - prefix_len - 1;
 	}
 
-	strncat(flogmessage, logprefix,   prefix_len);
-	strncat(flogmessage, ulogmessage, ulog_len);
+	/* both lengths were clamped above so the three pieces fit in LOGSIZE */
+	flog_len = (int) strlen(flogmessage);
+	memcpy(flogmessage + flog_len, logprefix, (size_t) prefix_len);
+	flog_len += prefix_len;
+	memcpy(flogmessage + flog_len, ulogmessage, (size_t) ulog_len);
+	flogmessage[flog_len + ulog_len] = '\0';
 
 	/* output to syslog/eventlog */
 	if (IS_LOGGING_TO_SYSLOG()) {
@@ -1630,7 +1671,7 @@ char *strip_alpha(char *string) {
 
 	/* trim trailing characters */
 	while (i >= 0) {
-		if (isdigit((int)string[i])) {
+		if (isdigit((unsigned char)string[i])) {
 			break;
 		} else {
 			string[i] = '\0';
@@ -1640,7 +1681,7 @@ char *strip_alpha(char *string) {
 
 	/* trim leading characters */
 	while (j < i) {
-		if (isdigit((int)string[j])) {
+		if (isdigit((unsigned char)string[j])) {
 			break;
 		} else if (string[j] == '-') {
 			break;
@@ -2107,4 +2148,201 @@ int get_cacti_version(MYSQL *psql, int mode) {
 	}else{
 		return 0;
 	}
+}
+
+/* Cacti's prepare_validate_result() trims quotes and line ends; Spine has
+ * always trimmed blanks, tabs and backslashes as well. */
+static const char result_padding[] = " \"'\\\t\n\r";
+
+/* PHP is_numeric() grammar: no hex, no "0x", no inf or nan, which strtod()
+ * would all accept. */
+static bool decimal_syntax(const char *text, bool *integral) {
+	const char *cursor = text;
+	size_t digits = 0;
+
+	*integral = TRUE;
+	if (*cursor == '+' || *cursor == '-') cursor++;
+	while (isdigit((unsigned char) *cursor)) {
+		cursor++;
+		digits++;
+	}
+	if (*cursor == '.') {
+		*integral = FALSE;
+		cursor++;
+		while (isdigit((unsigned char) *cursor)) {
+			cursor++;
+			digits++;
+		}
+	}
+	if (digits == 0) return FALSE;
+	if (*cursor == 'e' || *cursor == 'E') {
+		*integral = FALSE;
+		cursor++;
+		if (*cursor == '+' || *cursor == '-') cursor++;
+		if (!isdigit((unsigned char) *cursor)) return FALSE;
+		while (isdigit((unsigned char) *cursor)) cursor++;
+	}
+	return *cursor == '\0';
+}
+
+static bool parse_decimal(const char *text, classified_result_t *out) {
+	bool integral;
+	char *end;
+	double real;
+
+	if (!decimal_syntax(text, &integral)) return FALSE;
+
+	if (integral) {
+		errno = 0;
+		if (text[0] == '-') {
+			long long value = strtoll(text, &end, 10);
+			if (errno == 0 && *end == '\0') {
+				out->kind = RESULT_SIGNED;
+				out->value.integer = (int64_t) value;
+				return TRUE;
+			}
+		} else {
+			unsigned long long value = strtoull(text, &end, 10);
+			if (errno == 0 && *end == '\0') {
+				out->kind = RESULT_COUNTER;
+				out->value.counter = (uint64_t) value;
+				return TRUE;
+			}
+		}
+		/* Wider than 64 bits is still a number; the text is stored as is. */
+	}
+
+	errno = 0;
+	real = strtod(text, &end);
+	if (*end != '\0' || !isfinite(real) || (errno == ERANGE && fabs(real) == HUGE_VAL)) {
+		return FALSE;
+	}
+	out->kind = RESULT_FLOAT;
+	out->value.real = real;
+	return TRUE;
+}
+
+/* Cacti's "name:value name:value" form: one ':' or '!' per field, fields
+ * separated by single spaces. */
+static bool multipart_syntax(const char *text) {
+	size_t spaces = 0;
+	size_t delimiters = 0;
+
+	if (strchr(text, ':') == NULL && strchr(text, '!') == NULL) return FALSE;
+	for (const char *cursor = text; *cursor != '\0'; cursor++) {
+		if (*cursor == ':' || *cursor == '!') delimiters++;
+		else if (*cursor == ' ') spaces++;
+	}
+	return spaces == 0 || spaces + 1 == delimiters;
+}
+
+static int hex_digit(int c) {
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+	return -1;
+}
+
+typedef enum {
+	OCTETS_NONE,
+	OCTETS_VALUE,
+	OCTETS_OVERFLOW
+} octets_t;
+
+/* An OctetString such as a Hex-STRING Counter64: two-digit octets separated
+ * by one space, '-' or ':', as Cacti's is_hexadecimal() requires. Like Cacti,
+ * a lone octet such as "FF" counts; "42" never gets here as it is decimal. */
+static octets_t parse_octets(const char *text, uint64_t *value) {
+	const char *cursor = text;
+	uint64_t number = 0;
+	bool overflow = FALSE;
+
+	for (;;) {
+		int high = hex_digit((unsigned char) cursor[0]);
+		int low = high < 0 ? -1 : hex_digit((unsigned char) cursor[1]);
+
+		if (low < 0) return OCTETS_NONE;
+		if (number > (UINT64_MAX >> 8)) overflow = TRUE;
+		number = (number << 8) | (uint64_t) (high * 16 + low);
+		cursor += 2;
+		if (*cursor == '\0') break;
+		if (*cursor != ' ' && *cursor != ':' && *cursor != '-') {
+			return OCTETS_NONE;
+		}
+		cursor++;
+	}
+
+	if (overflow) return OCTETS_OVERFLOW;
+	*value = number;
+	return OCTETS_VALUE;
+}
+
+/*! \fn result_kind_t classify_result(const char *raw, classified_result_t *out)
+ *  \brief decide what a script or SNMP agent returned and what to store
+ *  \param raw the output as received; it is not modified
+ *  \param out receives the kind, the parsed value and the text to store
+ *
+ *  The order is the one Spine has always used: a decimal number, Cacti's
+ *  multipart output, a hex octet string, then a decimal number wrapped in
+ *  text such as "4096 Bytes". Anything else, including output too long to
+ *  store whole, is unknown and stored as U rather than as a guess.
+ *
+ *  \return the kind, also stored in out->kind
+ */
+result_kind_t classify_result(const char *raw, classified_result_t *out) {
+	const char *start;
+	const char *end;
+	const char *core;
+	size_t length;
+	uint64_t octets;
+
+	assert(out != NULL);
+	out->kind = RESULT_UNKNOWN;
+	out->value.counter = 0;
+	SET_UNDEFINED(out->text);
+
+	if (raw == NULL) return RESULT_UNKNOWN;
+
+	start = raw + strspn(raw, result_padding);
+	if (*start == '\0') return RESULT_UNKNOWN;
+	/* start[0] is not padding, so this stops with at least one byte left */
+	end = start + strlen(start);
+	while (strchr(result_padding, end[-1]) != NULL) end--;
+
+	length = (size_t) (end - start);
+	if (length >= sizeof(out->text)) return RESULT_UNKNOWN;
+	memcpy(out->text, start, length);
+	out->text[length] = '\0';
+
+	if (parse_decimal(out->text, out)) return out->kind;
+
+	if (multipart_syntax(out->text)) {
+		out->kind = RESULT_MULTIPART;
+		return out->kind;
+	}
+
+	switch (parse_octets(out->text, &octets)) {
+		case OCTETS_VALUE:
+			out->kind = RESULT_HEX_COUNTER;
+			out->value.counter = octets;
+			snprintf(out->text, sizeof(out->text), "%llu", (unsigned long long) octets);
+			return out->kind;
+		case OCTETS_OVERFLOW:
+			/* Stripping letters from a counter wider than 64 bits would leave
+		 * its leading octet looking like a small decimal sample. */
+			break;
+		case OCTETS_NONE:
+			/* strip_alpha() points into out->text, so move the number to the front. */
+			core = strip_alpha(out->text);
+			if (parse_decimal(core, out)) {
+				memmove(out->text, core, strlen(core) + 1);
+				return out->kind;
+			}
+			break;
+	}
+
+	out->kind = RESULT_UNKNOWN;
+	out->value.counter = 0;
+	SET_UNDEFINED(out->text);
+	return RESULT_UNKNOWN;
 }

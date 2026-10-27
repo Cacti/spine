@@ -100,3 +100,26 @@ extern double start_time;
 
 /* the version of Cacti as a decimal */
 int get_cacti_version(MYSQL *psql, int mode);
+
+#include <stdint.h>
+/* what a poll returned; text is what poller_output stores, U if unknown */
+typedef enum {
+	RESULT_UNKNOWN = 0,
+	RESULT_COUNTER,
+	RESULT_SIGNED,
+	RESULT_FLOAT,
+	RESULT_HEX_COUNTER,
+	RESULT_MULTIPART
+} result_kind_t;
+
+typedef struct {
+	result_kind_t kind;
+	union {
+		uint64_t counter;
+		int64_t integer;
+		double real;
+	} value;
+	char text[RESULTS_BUFFER];
+} classified_result_t;
+
+extern result_kind_t classify_result(const char *raw, classified_result_t *out);
