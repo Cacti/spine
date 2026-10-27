@@ -1,5 +1,11 @@
 # Spine regression tests
 
+`make check` runs the production script-process implementation against real
+children. It covers deferred reaping, concurrent commands, cancellation, PID
+ownership, interrupted/failed waits, tracking saturation, and bounded shutdown.
+Only system-call failures are injected; the process-management code is linked
+directly from `nft_popen.c`.
+
 `make integration-check` runs real Spine executables against a disposable schema
 on an **isolated MariaDB or MySQL test server**. The runner creates a random
 database and user and removes them on completion. It temporarily enables the
@@ -18,9 +24,10 @@ and a GNU-compatible linker for the allocation-failure executable. Production
 Spine contains no allocation-failure hook. The tests cover one and ten device
 threads, uneven/empty partitions, multiple devices, device zero, poller filters,
 active profiles, multiple rows per source, mixed eligibility, completion order,
+ties between SNMP ports across partitions, the default polling interval,
 failed output writes, both worker allocations failing, one failed worker, and
 successful retry. Every successful cycle checks output identities and values,
-duplicate writes, schedule ordering,.
+duplicate writes, schedule ordering, and the query budget.
 
 Set `SPINE_TEST_CACTI_ROOT` to a complete upstream Cacti maintenance source
 tree to also exercise the real Script Server bootstrap at pool sizes 1, 10,

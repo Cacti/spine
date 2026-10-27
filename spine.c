@@ -846,76 +846,52 @@ int main(int argc, char *argv[]) {
 			current_thread++;
 		}
 
-		/* adjust device threads in cases where the host does not have sufficient data sources */
-		if (!set.ping_only) {
-			if (set.active_profiles != 1) {
-				snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
+		/* Determine the eligible partition once, before launching its workers.
+		 * Recounts can see a different set and needlessly scan it per worker. */
+		if (current_thread == 1) {
+			if (set.ping_only) {
+				device_threads = 1;
+				items_per_thread = 0;
 			} else {
-				snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i", host_id);
-			}
+				char poller_filter[64] = "";
+				const char *item_filter = "";
+				char *count_end;
+				unsigned long count;
 
-			tresult   = db_query(&mysql, LOCAL, querybuf);
-			mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
-
-			if (mysql_row == NULL || mysql_row[0] == NULL) {
-				if (tresult != NULL) db_free_result(tresult);
-				die("ERROR: Device[%i] unable to determine the poller item count", host_id);
-			}
-
-			total_items = atoi(mysql_row[0]);
-			if (tresult != NULL) db_free_result(tresult);
-
-			if (total_items && total_items < device_threads) {
-				device_threads = total_items;
-			}
-		} else {
-			device_threads = 1;
-		}
-
-		change_host = (current_thread >= device_threads) ? TRUE : FALSE;
-
-		/* determine how many items will be polled per thread */
-		if (device_threads > 1) {
-			if (current_thread == 1) {
-				if (set.active_profiles != 1) {
-					snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", device_threads, host_id);
-				} else {
-					snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i", device_threads, host_id);
+				if (set.poller_id != 0) {
+					snprintf(poller_filter, sizeof(poller_filter), " AND poller_id=%i", set.poller_id);
 				}
-
-				tresult   = db_query(&mysql, LOCAL, querybuf);
+				if (set.poller_interval == 0) {
+					if (set.poller_id == 0) item_filter = " AND deleted=''";
+				} else if (set.active_profiles != 1) {
+					item_filter = " AND rrd_next_step<=0";
+				}
+				snprintf(querybuf, BIG_BUFSIZE,
+					"SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i%s%s",
+					host_id, poller_filter, item_filter);
+				tresult = db_query(&mysql, LOCAL, querybuf);
 				mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
-
 				if (mysql_row == NULL || mysql_row[0] == NULL) {
 					if (tresult != NULL) db_free_result(tresult);
-					die("ERROR: Device[%i] unable to determine the per-thread poller item count", host_id);
+					die("ERROR: Device[%i] unable to determine the poller item count", host_id);
 				}
-
-				items_per_thread = atoi(mysql_row[0]);
-				if (tresult != NULL) db_free_result(tresult);
-
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
-				host_time_double = get_time_as_double();
-			} else if (host_time_double == 0 || host_time == 0 || host_time == NULL) {
-				sprintf(host_time, "%lu", (unsigned long) time(NULL));
-				host_time_double = get_time_as_double();
+				errno = 0;
+				count = strtoul(mysql_row[0], &count_end, 10);
+				if (errno || *count_end != '\0' || count > INT_MAX) {
+					db_free_result(tresult);
+					die("ERROR: Device[%i] poller item count exceeds supported range", host_id);
+				}
+				total_items = (int)count;
+				db_free_result(tresult);
+				if (total_items < device_threads) {
+					device_threads = total_items > 0 ? total_items : 1;
+				}
+				items_per_thread = total_items / device_threads + (total_items % device_threads != 0);
 			}
-		} else {
-			snprintf(querybuf, BIG_BUFSIZE, "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND rrd_next_step <=0", host_id);
-			tresult   = db_query(&mysql, LOCAL, querybuf);
-			mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
-
-			if (mysql_row == NULL || mysql_row[0] == NULL) {
-				if (tresult != NULL) db_free_result(tresult);
-				die("ERROR: Device[%i] unable to determine the poller item count", host_id);
-			}
-
-			items_per_thread = atoi(mysql_row[0]);
-			if (tresult != NULL) db_free_result(tresult);
-
-			sprintf(host_time, "%lu", (unsigned long) time(NULL));
+			sprintf(host_time, "%lu", (unsigned long)time(NULL));
 			host_time_double = get_time_as_double();
 		}
+		change_host = (current_thread >= device_threads) ? TRUE : FALSE;
 
 		/* populate the thread structure */
 		if (!(poller_details = (poller_thread_t *)malloc(sizeof(poller_thread_t)))) {
@@ -1169,6 +1145,8 @@ int main(int argc, char *argv[]) {
 	pthread_attr_destroy(&attr);
 
 	SPINE_LOG_DEBUG(("DEBUG: Thread Cleanup Complete"));
+
+	if (nft_popen_cleanup() != 0) set.exit_code = EXIT_FAILURE;
 
 	/* close the php script server */
 	if (set.php_required && !set.ping_only) {
