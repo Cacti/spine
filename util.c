@@ -541,7 +541,7 @@ void read_config_options() {
 	SPINE_LOG_DEBUG(("DEBUG: The log_pwarn variable is %i", set.log_pwarn));
 
 	/* set option to increase insert performance */
-	set.boost_redirect = getboolsetting(&mysql, LOCAL, "boost_redirect", FALSE);
+	set.boost_redirect = TRUE;
 
 	/* log the boost_redirect variable */
 	SPINE_LOG_DEBUG(("DEBUG: The boost_redirect variable is %i", set.boost_redirect));
