@@ -337,9 +337,13 @@ static int snmp_get_response(host_t *host, const char *text_oid, const snmp_repl
 		if (reply->response->errstat == SNMP_ERR_NOERROR && reply->response->variables != NULL && reply->response->variables->name != NULL) {
 			return snmp_get_variable(host, text_oid, reply->response->variables, output);
 		}
-		/* Preserve the legacy transport-success outcome for an agent error:
-		 * availability observes host->snmp_status, while data remains empty. */
+		/* An agent error (noSuchName, genErr, ...) or a reply without a usable
+		 * varbind still proves the agent is reachable, so availability keeps
+		 * the transport-success status. The value is unknown: an empty string
+		 * would be stored as data, and a reindex assertion would take it as
+		 * a new baseline (=) or as 0 (<) and reindex again. */
 		SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%i] with Response[%ld]", text_oid, host->id, reply->response->errstat));
+		SET_UNDEFINED(output);
 		return STAT_SUCCESS;
 	}
 	if (reply->response != NULL && reply->response->variables != NULL) {
@@ -422,6 +426,9 @@ char *snmp_getnext(host_t *host, char *text_oid) {
 			} else {
 				status = variable == NULL ? STAT_ERROR : snmp_format_scalar(output, variable, TRUE);
 			}
+		} else {
+			/* As in snmp_get_base(): reachable agent, unknown value. */
+			SET_UNDEFINED(output);
 		}
 	} else if (status == STAT_TIMEOUT) {
 		SPINE_LOG_HIGH(("ERROR: Timeout getting oid '%s' for Device[%i] with Status[%d]", text_oid, host->id, status));
