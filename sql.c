@@ -147,6 +147,35 @@ bool db_row_alias(MYSQL *destination) {
 		mysql_get_server_version(destination) >= 80019;
 }
 
+/*! \fn static void db_retry_disconnected(MYSQL *mysql, int type, int error, char *function, int *reconnects, int *interrupts)
+ *  \brief prepares a lost-connection query for another attempt.
+ *  \param mysql      the database connection object
+ *  \param type       the database to connect to local or remote
+ *  \param error      the client error number (2006 or 2013)
+ *  \param function   the calling function, for the reconnect log line
+ *  \param reconnects the caller's reconnect counter
+ *  \param interrupts the caller's in-place signal retry counter
+ *
+ *	A signal that interrupted the call gets up to three in-place retries
+ *	that do not count toward the reconnect limit, so a burst of signals
+ *	against a healthy database cannot reach it. The client library does not
+ *	reset errno, so a stale EINTR must not skip the reconnect forever: after
+ *	the in-place retries every attempt reconnects and counts.
+ *
+ */
+static void db_retry_disconnected(MYSQL *mysql, int type, int error, char *function, int *reconnects, int *interrupts) {
+	if (errno == EINTR && ++*interrupts <= 3) {
+		usleep(50000);
+		return;
+	}
+
+	if (++*reconnects > 30) {
+		die("FATAL: Too many Reconnect Attempts!");
+	}
+
+	db_reconnect(mysql, type, error, function);
+}
+
 /*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
  *  \brief inserts a row or rows in a database table.
  *  \param mysql the database connection object
@@ -162,6 +191,7 @@ bool db_row_alias(MYSQL *destination) {
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int    error;
 	int    error_count = 0;
+	int    interrupts  = 0;
 
 	/* show the sql query */
 	log_sql_statement(query);
@@ -172,18 +202,8 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 				error = mysql_errno(mysql);
 
 				if (error == 2013 || error == 2006) {
-					if (++error_count > 30) {
-						die("FATAL: Too many Reconnect Attempts!");
-					}
-					if (errno != EINTR) {
-						db_reconnect(mysql, type, error, "db_insert");
-
-
-						continue;
-					} else {
-						usleep(50000);
-						continue;
-					}
+					db_retry_disconnected(mysql, type, error, "db_insert", &error_count, &interrupts);
+					continue;
 				}
 
 				if ((error == 1213) || (error == 1205)) {
@@ -214,11 +234,13 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
-/* The legacy SSL flag must not silently fall back to plaintext. A Unix socket
- * never leaves the host and the client library does not negotiate TLS on it,
- * so requiring TLS there would fail every connection. */
+/* DB_UseSSL alone keeps the 1.2.31 behavior: the client library prefers TLS
+ * and falls back to plaintext. DB_SSL_Required opts in to refusing that
+ * fallback. A Unix socket never leaves the host and the client library does
+ * not negotiate TLS on it, so requiring TLS there would fail every
+ * connection. */
 static int db_tls_required(int type, const char *hostname) {
-	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return FALSE;
+	if (!(type == REMOTE ? set.rdb_ssl && set.rdb_ssl_required : set.db_ssl && set.db_ssl_required)) return FALSE;
 	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
 }
 
@@ -292,7 +314,7 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 
 	int    error       = 0;
 	int    error_count = 0;
-
+	int    interrupts  = 0;
 
 	/* show the sql query */
 	log_sql_statement(query);
@@ -302,17 +324,8 @@ MYSQL_RES *db_query(MYSQL *mysql, int type, const char *query) {
 			error = mysql_errno(mysql);
 
 			if (error == 2013 || error == 2006) {
-				if (++error_count > 30) {
-					die("FATAL: Too many Reconnect Attempts!");
-				}
-				if (errno != EINTR) {
-					db_reconnect(mysql, type, error, "db_query");
-
-					continue;
-				} else {
-					usleep(50000);
-					continue;
-				}
+				db_retry_disconnected(mysql, type, error, "db_query", &error_count, &interrupts);
+				continue;
 			}
 
 			if (error == 1213 || error == 1205) {
@@ -518,7 +531,7 @@ void db_connect(int type, MYSQL *mysql) {
 				printf("Database: Connection Failed: Attempt:'%u', Error:'%u', Message:'%s'\n", attempts, error, last_error);
 				sleep(1);
 				success = FALSE;
-			} else if (error == 2026) {
+			} else if (error == 2026 && db_tls_required(type, hostname)) {
 				/* The TLS handshake failed; another attempt cannot succeed
 				 * and must not be allowed to fall back to a plain session. */
 				printf("Database: Connection Failed: Error:'%u', Message:'%s'\n", error, last_error);
