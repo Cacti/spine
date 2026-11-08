@@ -15,6 +15,8 @@ import unittest
 ROOT = Path(__file__).resolve().parent
 BINARY = Path(os.environ.get('SPINE_TEST_BINARY', ROOT.parent / 'spine')).resolve()
 FAULT_BINARY = Path(os.environ.get('SPINE_TEST_FAULT_BINARY', ROOT / 'spine_alloc_fault')).resolve()
+# Linking the fault binary needs a linker with --wrap; see configure.ac.
+HAVE_FAULT_BINARY = FAULT_BINARY.is_file()
 CLIENT = shutil.which('mariadb') or shutil.which('mysql')
 
 
@@ -78,6 +80,10 @@ class Polling(unittest.TestCase):
         conf.write_text(f'DB_Host {cls.host}\nDB_Port {cls.port}\nDB_Database {cls.database}\n'
                         f'DB_User {cls.user}\nDB_Pass {cls.password}\n')
         cls.conf = conf
+        # Strict_Mode only adds the non-zero exit status after a failed write.
+        cls.strict_conf = cls.directory / 'spine-strict.conf'
+        cls.strict_conf.touch(mode=0o600)
+        cls.strict_conf.write_text(conf.read_text() + 'Strict_Mode 1\n')
         cls.script = cls.directory / 'respond.sh'
         cls.script.write_text('#!/bin/sh\nif [ "${2:-0}" != 0 ]; then sleep "$2"; fi\nprintf "%s\\n" "$1"\n')
         cls.script.chmod(0o755)
@@ -153,9 +159,10 @@ class Polling(unittest.TestCase):
         self.sql('INSERT IGNORE INTO audit_first SELECT host_id,local_data_id,rrd_name FROM audit_expected '
                  'ORDER BY local_data_id,rrd_name;')
 
-    def run_spine(self, failure=None, ping=False):
+    def run_spine(self, failure=None, ping=False, strict=False):
         self.sql("SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log=ON;", False)
-        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(self.conf), '-p', '1', '-t', '16', '-S', '-V', '1']
+        conf = self.strict_conf if strict else self.conf
+        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', '1', '-t', '16', '-S', '-V', '1']
         if ping:
             args.append('-P')
         env = os.environ.copy()
@@ -261,17 +268,23 @@ class Polling(unittest.TestCase):
         self.check_complete(devices=2)
 
     def test_output_write_failure(self):
-        self.seed(37, 10)
-        self.sql("DELIMITER //\nCREATE TRIGGER injected_write_failure BEFORE INSERT ON poller_output "
-                 "FOR EACH ROW BEGIN IF NEW.local_data_id=10037 THEN SIGNAL SQLSTATE '45000' "
-                 "SET MESSAGE_TEXT='injected output failure'; END IF; END//\nDELIMITER ;\n")
-        self.run_spine()
-        self.assertEqual(self.result.returncode, 1)
-        self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule;'), '0')
-        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_item WHERE rrd_next_step<>0;'), '0')
-        count = int(self.sql('SELECT COUNT(*) FROM poller_output;'))
-        self.assertGreater(count, 0)
-        self.assertLess(count, 37)
+        # A failed write still advances the countdown, as in 1.2.31, so a
+        # persistent failure cannot freeze the schedule; only Strict_Mode
+        # turns it into a non-zero exit status.
+        for strict in (False, True):
+            with self.subTest(strict=strict):
+                self.setUp()
+                self.seed(37, 10)
+                self.sql("DELIMITER //\nCREATE TRIGGER injected_write_failure BEFORE INSERT ON poller_output "
+                         "FOR EACH ROW BEGIN IF NEW.local_data_id=10037 THEN SIGNAL SQLSTATE '45000' "
+                         "SET MESSAGE_TEXT='injected output failure'; END IF; END//\nDELIMITER ;\n")
+                self.run_spine(strict=strict)
+                self.assertEqual(self.result.returncode, 1 if strict else 0, self.result.stdout[-3000:])
+                self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule;'), '1')
+                self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_item WHERE rrd_next_step=0;'), '0')
+                count = int(self.sql('SELECT COUNT(*) FROM poller_output;'))
+                self.assertGreater(count, 0)
+                self.assertLess(count, 37)
 
     def test_ping_only_skips_item_count(self):
         self.seed(37, 10)
@@ -281,12 +294,13 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
                                   "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False), '0')
 
+    @unittest.skipUnless(HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
     def test_allocation_failures_and_retry(self):
         for failure in ('target', 'target-once', 'snmp', 'snmp-once'):
             with self.subTest(failure=failure):
                 self.setUp()
                 self.seed(100, 10)
-                self.run_spine(failure=failure)
+                self.run_spine(failure=failure, strict=True)
                 self.assertEqual(self.result.returncode, 1, self.result.stdout[-3000:])
                 self.assertIn('Unable to allocate', self.result.stdout)
                 self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule;'), '0')

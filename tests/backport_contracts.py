@@ -104,16 +104,19 @@ int db_insert(MYSQL *mysql,int mode,const char *query){(void)mysql;(void)mode;as
 static void complete(bool output_failed) {
  int device_counter=0,host_id=1;double poll_time=0,host_time_double=0;
  MYSQL *mysql=NULL;char query1[BUFSIZE];const char *query6="schedule";
- bool last_partition,failed;
+ bool last_partition,failed,poll_failed=FALSE;
 '''+block+'''
 }
 static void reset(void){memset(&record,0,sizeof(record));record.host_threads=2;set.exit_code=0;set.active_profiles=0;schedules=times=fail_time=fail_schedule=0;}
 int main(void){
  reset();complete(false);assert(!schedules&&!times&&!record.complete);complete(false);assert(schedules==1&&times==1&&record.complete);
- reset();complete(true);complete(false);assert(schedules==0&&!record.complete&&set.exit_code==EXIT_FAILURE);
- reset();complete(false);fail_time=1;complete(false);assert(!schedules&&!record.complete&&set.exit_code==EXIT_FAILURE);
+ /* A failed output write must not freeze the rrd_next_step countdown. */
+ reset();complete(true);complete(false);assert(schedules==1&&times==1&&!record.complete&&set.exit_code==EXIT_FAILURE);
+ reset();complete(false);fail_time=1;complete(false);assert(schedules==1&&!record.complete&&set.exit_code==EXIT_FAILURE);
  reset();complete(false);fail_schedule=1;complete(false);assert(schedules==1&&!record.complete&&set.exit_code==EXIT_FAILURE);
- reset();set.active_profiles=1;complete(false);complete(false);assert(!schedules&&record.complete);return 0;
+ reset();set.active_profiles=1;complete(false);complete(false);assert(!schedules&&record.complete);
+ /* a partition that never polled its items holds the countdown */
+ reset();record.poll_failed=1;complete(true);complete(false);assert(!schedules&&times==1&&!record.complete&&set.exit_code==EXIT_FAILURE);return 0;
 }
 ''')
 s=(root/'sql.c').read_text();a=s.index('bool db_row_alias(');b=s.index('\n}',a)+2;helper=s[a:b]
@@ -132,24 +135,30 @@ int main(void){MYSQL mysql;
  vendor="9.4.0";version=90400;assert(db_row_alias(&mysql));vendor=NULL;assert(!db_row_alias(&mysql));return 0;
 }
 ''')
-a=s.index('\nint db_insert(')+1;b=s.index('\n}',a)+2;insert=s[a:b]
+a=s.index('\nint db_insert(')+1;b=s.index('\n}',a)+2;insert=function(s,'static void db_retry_disconnected(')+'\n'+s[a:b]
 run('maintenance-retry-contract','''#include "common.h"
 #include "spine.h"
 #include <setjmp.h>
 config_t set;
-static jmp_buf stopped;static int calls,error_code;
+static jmp_buf stopped;static int calls,error_code,reconnects,interrupted_calls;
 #undef SPINE_LOG
 #define SPINE_LOG(...) ((void)0)
 static void log_sql_statement(const char *query){(void)query;}
 static void sql_statement_label(const char *query,char *label,size_t capacity){(void)query;snprintf(label,capacity,"fixture");}
-int mysql_query(MYSQL *mysql,const char *query){(void)mysql;(void)query;calls++;errno=EINTR;return 1;}
+int mysql_query(MYSQL *mysql,const char *query){(void)mysql;(void)query;calls++;if(interrupted_calls&&calls>interrupted_calls)return 0;errno=EINTR;return 1;}
 unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return error_code;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
-int db_reconnect(MYSQL *mysql,int type,int error,char *function){(void)mysql;(void)type;(void)error;(void)function;assert(0);return 0;}
+int db_reconnect(MYSQL *mysql,int type,int error,char *function){(void)mysql;(void)type;(void)error;(void)function;reconnects++;return TRUE;}
 int usleep(useconds_t usec){(void)usec;return 0;}
 void die(const char *format,...){(void)format;longjmp(stopped,1);}
 '''+insert+'''
-int main(void){MYSQL mysql;error_code=2013;if(setjmp(stopped)==0){db_insert(&mysql,LOCAL,"fixture");assert(0);}assert(calls==31);
+int main(void){MYSQL mysql;
+ /* a short burst of signals against a healthy database neither reconnects
+  * nor counts toward the reconnect limit */
+ error_code=2013;interrupted_calls=3;assert(db_insert(&mysql,LOCAL,"fixture")&&calls==4&&reconnects==0);
+ /* a stale EINTR still reconnects and is bounded: three in-place retries,
+  * then thirty counted reconnects before the limit */
+ calls=reconnects=interrupted_calls=0;if(setjmp(stopped)==0){db_insert(&mysql,LOCAL,"fixture");assert(0);}assert(calls==34&&reconnects==30);
  calls=0;error_code=1213;assert(!db_insert(&mysql,LOCAL,"fixture")&&calls==31);return 0;}
 ''')
 
@@ -239,8 +248,12 @@ run('maintenance-session-key-contract', '#include "common.h"\n#include "spine.h"
 ''')
 
 util = (root / 'util.c').read_text()
-run('maintenance-result-contract', '#include "common.h"\n#include "spine.h"\n' + function(util, 'char *strip_alpha(') + '\n' + util[util.index("/* Cacti's prepare_validate_result"): ] + '''
-int main(void){classified_result_t out;
+poller = (root / 'poller.c').read_text()
+run('maintenance-result-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\n' + function(util, 'char *strncopy(') + '\n' + function(util, 'char *strip_alpha(') + '\n' + util[util.index("/* Cacti's prepare_validate_result"): ] + '\n' + function(poller, 'static void normalize_poll_result(') + '''
+int main(void){classified_result_t out;char stored[RESULTS_BUFFER];
+ /* 1.2.31 values are stored unless Strict_Mode is set */
+ set.strict_mode=0;strcpy(stored,"FF");normalize_poll_result(stored,sizeof(stored));assert(strcmp(stored,"FF")==0);
+ set.strict_mode=1;normalize_poll_result(stored,sizeof(stored));assert(strcmp(stored,"255")==0);
  assert(classify_result("ff ff ff ff ff ff ff ff",&out)==RESULT_HEX_COUNTER);
  assert(strcmp(out.text,"18446744073709551615")==0);
  assert(classify_result("ff ff ff ff ff ff ff ff ff",&out)==RESULT_UNKNOWN);
@@ -310,8 +323,12 @@ run('maintenance-required-tls-contract', '#include "common.h"\n#include "spine.h
 config_t set;static int options,fail_option;static jmp_buf failed;
 int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;assert(value);options++;return fail_option;}
 void die(const char *format,...){(void)format;longjmp(failed,1);}
-''' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
-int main(void){MYSQL mysql;set.db_ssl=0;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0);
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
+int main(void){MYSQL mysql;set.db_ssl=0;set.db_ssl_required=1;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0);
+ /* DB_UseSSL alone keeps the 1.2.31 plaintext fallback */
+ set.db_ssl=1;set.db_ssl_required=0;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0&&!db_tls_required(LOCAL,"db.example"));
+ set.rdb_ssl=1;db_require_tls(&mysql,REMOTE,"db.example","");assert(options==0);
+ set.db_ssl_required=set.rdb_ssl_required=1;set.rdb_ssl=0;
  set.db_ssl=1;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==1);
  set.db_ssl=1;db_require_tls(&mysql,LOCAL,"db.example","/etc/ca.pem");assert(options==2);
  set.rdb_ssl=1;db_require_tls(&mysql,REMOTE,"db.example","");assert(options==3);
@@ -351,13 +368,22 @@ const char *mysql_get_ssl_cipher(MYSQL *mysql){(void)mysql;return have_cipher?"A
 void die(const char *format,...){(void)format;longjmp(failed,1);}
 int usleep(useconds_t usec){(void)usec;return 0;}
 unsigned int sleep(unsigned int seconds){(void)seconds;return 0;}
-int spine_log(const char *format,...){(void)format;return TRUE;}
+static int warnings;
+int spine_log(const char *format,...){if(strstr(format,"fell back to plaintext"))warnings++;return TRUE;}
 static void fixture_exit(int status){(void)status;longjmp(failed,1);}
 #define exit fixture_exit
-''' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
-static void reset(int error){inits=tls_options=connects=closes=0;first_error=error;have_cipher=0;}
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+static void reset(int error){inits=tls_options=connects=closes=warnings=0;first_error=error;have_cipher=0;}
 int main(void){MYSQL mysql;
  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example");set.poller_id=1;set.db_ssl=1;
+ /* without DB_SSL_Required a plaintext session is accepted, as in 1.2.31,
+  * and a handshake failure is retried */
+ reset(2013);db_connect(LOCAL,&mysql);assert(connects==2&&inits==2&&tls_options==0);
+ /* the plaintext fallback is logged once for the connection */
+ assert(warnings==1);
+ reset(2026);db_connect(LOCAL,&mysql);assert(connects==2&&warnings==1);
+ reset(2013);have_cipher=1;db_connect(LOCAL,&mysql);assert(warnings==0);
+ set.db_ssl_required=1;
  /* a transient failure, then a plaintext session: the retry must have the TLS
   * policy applied again and the session must be refused */
  reset(2013);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);assert(0);}
@@ -392,7 +418,7 @@ int usleep(useconds_t usec){(void)usec;return 0;}
 void die(const char *format,...){(void)format;longjmp(stopped,1);}
 static void fixture_exit(int status){assert(status==1);longjmp(stopped,1);}
 #define exit fixture_exit
-''' + function(sql, 'static const char *sql_skip_space(') + '\n' + function(sql, 'static int sql_word_is(') + '\n' + function(sql, 'static const char *sql_target_table(') + '\n' + function(sql, 'static void sql_statement_label(') + '\n' + function(sql, 'static void log_sql_statement(') + '\n' + function(sql, 'int db_insert(') + '\n' + function(sql, 'MYSQL_RES *db_query(') + '''
+''' + function(sql, 'static const char *sql_skip_space(') + '\n' + function(sql, 'static int sql_word_is(') + '\n' + function(sql, 'static const char *sql_target_table(') + '\n' + function(sql, 'static void sql_statement_label(') + '\n' + function(sql, 'static void log_sql_statement(') + '\n' + function(sql, 'static void db_retry_disconnected(') + '\n' + function(sql, 'int db_insert(') + '\n' + function(sql, 'MYSQL_RES *db_query(') + '''
 int main(void){MYSQL mysql;set.log_level=POLLER_VERBOSITY_DEVDBG;
  assert(!db_insert(&mysql,LOCAL,"INSERT INTO settings(name,value) VALUES('password','fixture_sql_secret')"));
  if(setjmp(stopped)==0){db_query(&mysql,LOCAL,"SELECT fixture_sql_secret");assert(0);}

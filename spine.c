@@ -911,6 +911,7 @@ int main(int argc, char *argv[]) {
 		poller_details->complete         = FALSE;
 		poller_details->threads_complete = 0;
 		poller_details->output_failed    = FALSE;
+		poller_details->poll_failed      = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
 		if (current_thread == 1) details[device_counter] = poller_details;
@@ -1051,6 +1052,12 @@ int main(int argc, char *argv[]) {
 			if (thread_status) {
 				sem_post(&thread_init_sem);
 			}
+		}
+
+		/* A partition that never started has no child_cleanup() to free it,
+		 * and only the first partition is reachable through details[]. */
+		if ((spine_timeout || thread_status != 0) && current_thread > 1) {
+			SPINE_FREE(poller_details);
 		}
 	}
 
@@ -1205,8 +1212,10 @@ int main(int argc, char *argv[]) {
 	/* clueanup winsock library on Windows */
 	SOCK_CLEANUP;
 
-	/* poller.c records a failed output write in set.exit_code */
-	exit(set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);
+	/* poller.c records a failed output write in set.exit_code. 1.2.31 exited
+	 * zero after a completed run, and wrappers may treat any other status as
+	 * a crash, so a non-zero status is opt-in. */
+	exit(set.strict_mode && set.exit_code != 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /*! \fn static void display_help()

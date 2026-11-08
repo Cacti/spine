@@ -61,7 +61,10 @@ static bool parse_uptime(const char *text, unsigned long long *ticks) {
  * the copy back is bounded by the caller's buffer, not the input length. */
 static void normalize_poll_result(char *text, size_t capacity) {
 	classified_result_t normalized;
-	if (text == NULL) return;
+	/* Normalization changes stored values ("12 abc" becomes 12, "FF" becomes
+	 * 255), so a 1.2.x point release keeps the 1.2.31 values unless the
+	 * operator opts in. */
+	if (text == NULL || !set.strict_mode) return;
 	classify_result(text, &normalized);
 	strncopy(text, normalized.text, capacity);
 }
@@ -203,6 +206,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	char script[SMALL_BUFSIZE];
 	int  errors = 0;
 	bool output_failed = FALSE;
+	bool poll_failed = FALSE;
 	bool queue_succeeded = TRUE;
 	bool last_partition;
 	bool failed;
@@ -632,7 +636,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				SPINE_FREE(buf_errors);
 
 				/* A missing or duplicated device row means this partition never
-				 * polled; keep the schedule from advancing and report it. */
+				 * polled; report it. threads_complete is deliberately not
+				 * incremented, so no partition of this device reaches
+				 * last_partition: rrd_next_step does not advance and
+				 * polling_time stays stale for the surviving partitions, as
+				 * in 1.2.31. */
 				thread_mutex_lock(LOCK_THDET);
 				details[device_counter]->output_failed = TRUE;
 				set.exit_code = EXIT_FAILURE;
@@ -1364,6 +1372,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		if (poller_items == NULL) {
 			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to allocate %i polling items of %zu bytes", host_id, host_thread, num_rows, sizeof(target_t)));
 			output_failed = TRUE;
+			poll_failed = TRUE;
 			db_free_result(result);
 			goto poll_items_cleanup;
 		}
@@ -1443,6 +1452,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		if (snmp_oids == NULL) {
 			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to allocate %i SNMP items of %zu bytes", host_id, host_thread, host->max_oids, sizeof(snmp_oids_t)));
 			output_failed = TRUE;
+			poll_failed = TRUE;
 			goto poll_items_cleanup;
 		}
 
@@ -2064,23 +2074,32 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		SPINE_LOG_MEDIUM(("Device[%i] HT[%i] Total Time: %0.2g Seconds", host_id, host_thread, poll_time));
 	}
 
-	/* Only the final completed partition advances the schedule, after all
-	 * output writes succeed. Never hold the shared lock across database I/O. */
+	/* Only the final completed partition advances the schedule. The
+	 * rrd_next_step countdown always advances, as in 1.2.31: freezing it on a
+	 * persistent write error (for example a full poller_output MEMORY table)
+	 * would stop polling items that are not yet due and re-poll due items
+	 * every cycle. Only the completion flag depends on the output writes.
+	 * A partition that could not allocate its items never polled them, so
+	 * the countdown holds and those items are polled on the next cycle.
+	 * Never hold the shared lock across database I/O. */
 	thread_mutex_lock(LOCK_THDET);
 	if (output_failed) details[device_counter]->output_failed = TRUE;
+	if (poll_failed) details[device_counter]->poll_failed = TRUE;
 	details[device_counter]->threads_complete++;
 	last_partition = details[device_counter]->threads_complete == details[device_counter]->host_threads;
 	failed = details[device_counter]->output_failed;
+	poll_failed = details[device_counter]->poll_failed;
 	if (failed) set.exit_code = EXIT_FAILURE;
 	thread_mutex_unlock(LOCK_THDET);
 
 	if (last_partition) {
+		if (set.active_profiles != 1 && !poll_failed) {
+			if (!db_insert(mysql, LOCAL, query6)) failed = TRUE;
+		}
+
 		poll_time = get_time_as_double();
 		snprintf(query1, BUFSIZE, "UPDATE host SET polling_time = %.3f - %.3f WHERE id = %i", poll_time, host_time_double, host_id);
 		if (!db_insert(mysql, LOCAL, query1)) failed = TRUE;
-		if (!failed && set.active_profiles != 1) {
-			if (!db_insert(mysql, LOCAL, query6)) failed = TRUE;
-		}
 		thread_mutex_lock(LOCK_THDET);
 		details[device_counter]->complete = !failed;
 		if (failed) set.exit_code = EXIT_FAILURE;
