@@ -87,7 +87,8 @@ extern int	nft_pchild(int fd);
  *  allows a short exit grace, then kills children that are still running.
  *
  *  Return the exit status if immediately available, or zero when cleanup
- *  is deferred. Deferred status is not available to the caller.
+ *  is deferred. Deferred status is not available to the caller, so a zero
+ *  return does not tell "exited with status 0" from "still running".
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *     EBADF	The fd is not an active popen() file descriptor.

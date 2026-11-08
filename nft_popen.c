@@ -383,11 +383,10 @@ int nft_popen(const char * command, const char * type) {
 	PidList   = cur;
 	ActiveCount++;
 
-	/* Unlock the mutex, and restore caller's cancellation state. */
+	/* Unlock the mutex, and restore caller's cancellation state. The list
+	 * owns cur from here, so no cleanup handler is needed. */
 	pthread_mutex_unlock(&ListMutex);
-	pthread_cleanup_push(close_cleanup, cur);
 	pthread_setcancelstate(cancel_state, NULL);
-	pthread_cleanup_pop(0);
 
 	return fd;
 }
@@ -435,6 +434,7 @@ int nft_pchild(int fd) {
  *  that cannot immediately be reaped for a later sweep, with an exit grace.
  *
  *  Return an immediately available exit status, or zero for deferred cleanup.
+ *  Zero therefore does not distinguish a clean exit from a running child.
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *    EBADF	The fd is not an active popen() file descriptor.
