@@ -505,5 +505,22 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   ],[AC_MSG_RESULT(no)
 ])
 
+AC_MSG_CHECKING([for a client SSL mode option])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include "$MYSQL_INC_DIR/mysql.h"
+]], [[ enum mysql_ssl_mode mode = SSL_MODE_REQUIRED;
+       enum mysql_option option = MYSQL_OPT_SSL_MODE;
+       (void)mode; (void)option; ]])],
+ [AC_MSG_RESULT([yes])
+  AC_DEFINE([HAS_MYSQL_OPT_SSL_MODE], [1], [Client supports required TLS mode])],
+ [AC_MSG_RESULT([no])])
+AC_MSG_CHECKING([for a client SSL enforcement option])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include "$MYSQL_INC_DIR/mysql.h"
+]], [[ enum mysql_option option = MYSQL_OPT_SSL_ENFORCE; (void)option; ]])],
+ [AC_MSG_RESULT([yes])
+  AC_DEFINE([HAS_MYSQL_OPT_SSL_ENFORCE], [1], [Client supports TLS enforcement])],
+ [AC_MSG_RESULT([no])])
+
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

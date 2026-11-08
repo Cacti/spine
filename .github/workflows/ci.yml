@@ -44,6 +44,10 @@ jobs:
           set -euo pipefail
           make -j"$(nproc)"
 
+      - name: Run backport contracts
+        run: |
+          python3 tests/backport_contracts.py
+
   flawfinder:
     runs-on: ubuntu-latest
     timeout-minutes: 10

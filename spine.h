@@ -372,13 +372,13 @@ typedef struct config_struct {
 	char   db_user[BUFSIZE];
 	char   db_pass[BUFSIZE];
 	int    db_ssl;
+	int    db_ssl_required;
 	char   db_ssl_key[BIG_BUFSIZE];
 	char   db_ssl_cert[BIG_BUFSIZE];
 	char   db_ssl_ca[BIG_BUFSIZE];
 	int    d_b;
 	unsigned int db_port;
 	char   dbversion[BUFSIZE];
-	int    dbonupdate;
 	int    cacti_version;
 	/* path information */
 	char   path_logfile[DBL_BUFSIZE];
@@ -415,6 +415,7 @@ typedef struct config_struct {
 	int    php_current_server;
 	/* Exit code if we need it */
 	int    exit_code;
+	int    strict_mode;
 	size_t exit_size;
 	void*  exit_stack[10];
 
@@ -426,6 +427,7 @@ typedef struct config_struct {
 	char   rdb_user[BUFSIZE];
 	char   rdb_pass[BUFSIZE];
 	int    rdb_ssl;
+	int    rdb_ssl_required;
 	char   rdb_ssl_key[BIG_BUFSIZE];
 	char   rdb_ssl_cert[BIG_BUFSIZE];
 	char   rdb_ssl_ca[BIG_BUFSIZE];
@@ -494,6 +496,7 @@ typedef struct poller_thread {
 	int host_threads;
 	int host_data_ids;
 	int threads_complete;
+	int output_failed;
 	int complete;
 	char host_time[40];
 	double host_time_double;
