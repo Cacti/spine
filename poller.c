@@ -206,6 +206,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	char script[SMALL_BUFSIZE];
 	int  errors = 0;
 	bool output_failed = FALSE;
+	bool poll_failed = FALSE;
 	bool queue_succeeded = TRUE;
 	bool last_partition;
 	bool failed;
@@ -1371,6 +1372,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		if (poller_items == NULL) {
 			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to allocate %i polling items of %zu bytes", host_id, host_thread, num_rows, sizeof(target_t)));
 			output_failed = TRUE;
+			poll_failed = TRUE;
 			db_free_result(result);
 			goto poll_items_cleanup;
 		}
@@ -1450,6 +1452,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		if (snmp_oids == NULL) {
 			SPINE_LOG(("Device[%i] HT[%i] ERROR: Unable to allocate %i SNMP items of %zu bytes", host_id, host_thread, host->max_oids, sizeof(snmp_oids_t)));
 			output_failed = TRUE;
+			poll_failed = TRUE;
 			goto poll_items_cleanup;
 		}
 
@@ -2076,17 +2079,21 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	 * persistent write error (for example a full poller_output MEMORY table)
 	 * would stop polling items that are not yet due and re-poll due items
 	 * every cycle. Only the completion flag depends on the output writes.
+	 * A partition that could not allocate its items never polled them, so
+	 * the countdown holds and those items are polled on the next cycle.
 	 * Never hold the shared lock across database I/O. */
 	thread_mutex_lock(LOCK_THDET);
 	if (output_failed) details[device_counter]->output_failed = TRUE;
+	if (poll_failed) details[device_counter]->poll_failed = TRUE;
 	details[device_counter]->threads_complete++;
 	last_partition = details[device_counter]->threads_complete == details[device_counter]->host_threads;
 	failed = details[device_counter]->output_failed;
+	poll_failed = details[device_counter]->poll_failed;
 	if (failed) set.exit_code = EXIT_FAILURE;
 	thread_mutex_unlock(LOCK_THDET);
 
 	if (last_partition) {
-		if (set.active_profiles != 1) {
+		if (set.active_profiles != 1 && !poll_failed) {
 			if (!db_insert(mysql, LOCAL, query6)) failed = TRUE;
 		}
 

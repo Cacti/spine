@@ -14,7 +14,9 @@ in that file and temporary mode-0600 Spine configs; they are not command-line
 arguments.
 
 The integration target requires Python 3, a `mariadb` or `mysql` CLI client,
-and a GNU-compatible linker for the allocation-failure executable. Production
+and a GNU-compatible linker for the allocation-failure executable. Without a
+linker that accepts `--wrap`, configure leaves that executable out and the
+allocation-failure cases are reported as skipped. Production
 Spine contains no allocation-failure hook. The tests cover one and ten device
 threads, uneven/empty partitions, multiple devices, device zero, poller filters,
 active profiles, multiple rows per source, mixed eligibility, completion order,
