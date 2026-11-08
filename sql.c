@@ -234,14 +234,20 @@ int db_insert(MYSQL *mysql, int type, const char *query) {
 	}
 }
 
+/* Whether DB_UseSSL/RDB_UseSSL asks for TLS on this connection. A Unix
+ * socket never leaves the host and the client library does not negotiate
+ * TLS on it, so it is exempt. */
+static int db_tls_requested(int type, const char *hostname) {
+	if (!(type == REMOTE ? set.rdb_ssl : set.db_ssl)) return FALSE;
+	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
+}
+
 /* DB_UseSSL alone keeps the 1.2.31 behavior: the client library prefers TLS
  * and falls back to plaintext. DB_SSL_Required opts in to refusing that
- * fallback. A Unix socket never leaves the host and the client library does
- * not negotiate TLS on it, so requiring TLS there would fail every
- * connection. */
+ * fallback. */
 static int db_tls_required(int type, const char *hostname) {
-	if (!(type == REMOTE ? set.rdb_ssl && set.rdb_ssl_required : set.db_ssl && set.db_ssl_required)) return FALSE;
-	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
+	return db_tls_requested(type, hostname) &&
+		(type == REMOTE ? set.rdb_ssl_required : set.db_ssl_required);
 }
 
 /* Whether a connection of this type is expected to be encrypted: TLS was
@@ -555,6 +561,11 @@ void db_connect(int type, MYSQL *mysql) {
 			if (db_tls_required(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL) {
 				mysql_close(mysql);
 				die("ERROR: Required database TLS was not negotiated");
+			} else if (db_tls_requested(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL) {
+				/* The fallback is kept for compatibility, but must not be silent. */
+				SPINE_LOG(("WARNING: %s is set but the database connection to '%s' fell back to plaintext; set %s 1 to refuse it",
+					type == REMOTE ? "RDB_UseSSL" : "DB_UseSSL", hostname,
+					type == REMOTE ? "RDB_SSL_Required" : "DB_SSL_Required"));
 			}
 			success = TRUE;
 			break;
