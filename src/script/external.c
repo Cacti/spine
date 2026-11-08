@@ -239,6 +239,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				script_read_owner_t owner = {cmd_fd, NULL, FALSE, NULL};
 				int child_status;
 				int cancel_state;
+				const bool limited = set.php.script_max_output != 0 || set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0;
 				pthread_cleanup_push(cancel_script_read, &owner);
 				(void) read_script_result(&context, cmd_fd, deadline, result_string);
 
@@ -246,10 +247,15 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				/* Resolve child ownership before delivering a pending cancellation. */
 				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 				owner.fd = -1;
-				child_status = nft_pclose_deadline(cmd_fd, deadline);
+				/* Only a resource policy makes the exit status part of the
+				 * result, so only then is the script waited for until its
+				 * deadline. Otherwise the value has been read: a script that
+				 * keeps running gets the short close grace and is killed, so
+				 * it cannot hold this thread and a script permit until
+				 * script_timeout. */
+				child_status = nft_pclose_deadline(cmd_fd, limited ? deadline : 0);
 				pthread_setcancelstate(cancel_state, NULL);
-				if ((set.php.script_max_output != 0 || set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0) &&
-					(child_status < 0 || !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0)) {
+				if (limited && (child_status < 0 || !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0)) {
 					SPINE_LOG(("Device[%i] %s[%i] ERROR: Limited script failed or exceeded its resource policy", current_host->id, type, id));
 					SET_UNDEFINED(result_string);
 				}

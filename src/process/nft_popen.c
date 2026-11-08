@@ -139,13 +139,16 @@ static __attribute__((noinline)) struct pid *pid_list_close_and_take(int fd) {
 /* nft_pclose() must not block a poller thread: a script that writes its
    value and then lingers, or that ignores signals, would otherwise pin the
    thread across polling cycles while holding its available_scripts token.
-   It gets a brief (~20ms), non-escalating WNOHANG allowance via
-   spine_reap_child_bounded() below - just enough to absorb ordinary
-   fork/exec/exit scheduling latency (measured flaky under virtualized/loaded
-   CI at the original 2ms budget), not to wait out a script that is actually
-   still working. Anything still running past that is killed outright and
-   handed to nft_abandon_child() so nft_sweep_abandoned() reaps it on a
-   later, unrelated nft_popen() call instead of this thread waiting for it. */
+   Without a deadline it gets a brief (~20ms), non-escalating WNOHANG
+   allowance - just enough to absorb ordinary fork/exec/exit scheduling
+   latency (measured flaky under virtualized/loaded CI at the original 2ms
+   budget), not to wait out a script that is actually still working.
+   nft_pclose_deadline() with a deadline instead waits until that deadline;
+   exec_poll() asks for that only when a resource policy makes the exit
+   status part of the result. Anything still running at the end is killed
+   outright and handed to nft_abandon_child() so nft_sweep_abandoned() reaps
+   it on a later, unrelated nft_popen() call instead of this thread waiting
+   for it. */
 
 /*! ------------------------------------------------------------------------------
  *
@@ -494,9 +497,11 @@ int nft_pchild(int fd) {
 }
 
 /* A script may write its value, close its output and keep working, for
- * example to save state. With a deadline, wait for it while that deadline
- * allows, polling with WNOHANG so the thread never blocks past it, then ask
- * it to stop with SIGTERM before nft_pclose_deadline() escalates. */
+ * example to save state. Without a deadline it gets only the short grace.
+ * With one, wait for it while that deadline allows, polling with WNOHANG so
+ * the thread never blocks past it, then ask it to stop with SIGTERM before
+ * nft_pclose_deadline() escalates. Callers pass a deadline only when they
+ * need the exit status, because the wait holds the calling thread. */
 static int nft_reap_closed_child(pid_t *pid, int *pstat, double deadline) {
 	const double term_grace = (double) NFT_PCLOSE_SPIN_ATTEMPTS * NFT_PCLOSE_SPIN_USEC / 1000000.0;
 	double remaining;
@@ -526,7 +531,8 @@ static int nft_reap_closed_child(pid_t *pid, int *pstat, double deadline) {
  *
  *  A deadline greater than zero, on the spine_monotonic_time() clock, extends
  *  that check until the deadline and sends SIGTERM before SIGKILL. The caller
- *  is then held at most ~20ms past the deadline. nft_pclose() passes none.
+ *  is then held until the child exits or at most ~20ms past the deadline, so
+ *  pass one only when the exit status matters. nft_pclose() passes none.
  *
  *  On success, the exit status of the child process is returned.
  *  On failure, nft_pclose() returns -1, with errno set to:
@@ -566,12 +572,13 @@ int nft_pclose_deadline(int fd, double deadline) {
 	pthread_setcancelstate(cancel_state, NULL);
 
 	/* The script already had its one chance to write and its pipe is now
-	 * closed. Give it a brief (~20ms), non-escalating allowance to catch the
-	 * common case where it has already exited or is about to on seeing EOF -
-	 * without it, ordinary fork/exec/exit scheduling latency would flag a
-	 * script that is not actually misbehaving. Anything still running past
-	 * that is killed and handed to the abandoned-pid sweep instead of this
-	 * thread waiting for it. */
+	 * closed. Without a deadline, give it a brief (~20ms), non-escalating
+	 * allowance to catch the common case where it has already exited or is
+	 * about to on seeing EOF - without it, ordinary fork/exec/exit scheduling
+	 * latency would flag a script that is not actually misbehaving. With a
+	 * deadline, wait until it. Anything still running at the end is killed
+	 * and handed to the abandoned-pid sweep instead of this thread waiting
+	 * for it. */
 	pid = cur->pid;
 	switch (nft_reap_closed_child(&cur->pid, &pstat, deadline)) {
 		case 0:

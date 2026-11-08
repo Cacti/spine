@@ -318,9 +318,39 @@ static void test_lingering_script_is_bounded_by_its_deadline(void **state) {
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
+/* Without a resource policy the exit status is unused, so a script that
+ * prints, closes stdout and keeps running is killed shortly after its value
+ * is read. Waiting for it to script_timeout held the thread and a script
+ * permit: this case took 1.98 s instead of 0.06 s. */
+static void test_unlimited_lingering_script_is_not_waited_for(void **state) {
+	host_t host = {.id = 1};
+	double start;
+	double elapsed;
+	char *result;
+	int attempts;
+	(void) state;
+	scenario = calls = 0;
+	set.php.script_timeout = 2;
+	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+
+	start = spine_monotonic_time();
+	result = exec_poll(&host, "/bin/echo 5; exec 1>&-; sleep 3", 1, "DS");
+	elapsed = spine_monotonic_time() - start;
+	print_message("lingering unlimited script took %.3f s\n", elapsed);
+	assert_true(elapsed < 0.5);
+	assert_string_equal(result, "42");
+	free(result);
+	assert_int_equal(spine_permits_available(&available_scripts), 1);
+	for (attempts = 0; attempts < 100 && nft_abandoned_pending() != 0; attempts++) usleep(20000);
+	assert_int_equal(nft_abandoned_pending(), 0);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_unlimited_read_reports_wait_failures), cmocka_unit_test(test_timeout_without_a_registered_child_is_undefined), cmocka_unit_test(test_script_permit_errors_are_retried), cmocka_unit_test(test_result_allocation_failure_is_fatal),
 		cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item),
-		cmocka_unit_test(test_script_finishes_after_closing_its_output), cmocka_unit_test(test_lingering_script_is_bounded_by_its_deadline)};
+		cmocka_unit_test(test_script_finishes_after_closing_its_output), cmocka_unit_test(test_lingering_script_is_bounded_by_its_deadline),
+		cmocka_unit_test(test_unlimited_lingering_script_is_not_waited_for)};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }
