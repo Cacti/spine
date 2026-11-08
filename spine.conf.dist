@@ -30,6 +30,12 @@
 # | SNMP_Clientaddr Bind SNMP to a specific address for sites that use      |
 # |                 higher security levels                                  |
 # | Cacti_Log       Optional path to the Cacti log file                     |
+# | DB_SSL_Required With DB_UseSSL 1, refuse a TCP connection that does not |
+# |                 negotiate TLS instead of falling back to plaintext.     |
+# |                 Unix sockets and localhost are exempt.                  |
+# | Strict_Mode     Normalize poll results before storage and exit non-zero |
+# |                 after a failed output write, final push, poller_time    |
+# |                 update or poll timeout. Off by default.                 |
 # +-------------------------------------------------------------------------+
 # | Settings for Remote Polling                                             |
 # +-------------------------------------------------------------------------+
@@ -38,6 +44,7 @@
 # | RDB_Port        The remote database port to use                         |
 # | RDB_User        The remote database user, typically 'cactiuser'         |
 # | RDB_Pass        The remote database password.                           |
+# | RDB_SSL_Required Same as DB_SSL_Required for the remote connection.     |
 # +-------------------------------------------------------------------------+
 
 DB_Host       localhost
@@ -49,6 +56,8 @@ DB_Port       3306
 #DB_SSL_Key
 #DB_SSL_Cert
 #DB_SSL_CA
+#DB_SSL_Required 0
+#Strict_Mode   0
 #Cacti_Log     /var/www/html/cacti/log/cacti.log
 
 #RDB_Host      localhost
@@ -60,4 +69,5 @@ DB_Port       3306
 #RDB_SSL_Key
 #RDB_SSL_Cert
 #RDB_SSL_CA
+#RDB_SSL_Required 0
 

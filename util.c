@@ -1106,6 +1106,7 @@ int read_spine_config(char *file) {
 				else if (STRIMATCH(p1, "RDB_Pass"))         STRNCOPY(set.rdb_pass, p2);
 				else if (STRIMATCH(p1, "RDB_Port"))         set.rdb_port    = atoi(p2);
 				else if (STRIMATCH(p1, "RDB_UseSSL"))       set.rdb_ssl     = atoi(p2);
+				else if (STRIMATCH(p1, "RDB_SSL_Required")) set.rdb_ssl_required = atoi(p2);
 				else if (STRIMATCH(p1, "RDB_SSL_Key"))      STRNCOPY(set.rdb_ssl_key, p2);
 				else if (STRIMATCH(p1, "RDB_SSL_Cert"))     STRNCOPY(set.rdb_ssl_cert, p2);
 				else if (STRIMATCH(p1, "RDB_SSL_CA"))       STRNCOPY(set.rdb_ssl_ca, p2);
@@ -1115,10 +1116,12 @@ int read_spine_config(char *file) {
 				else if (STRIMATCH(p1, "DB_Pass"))          STRNCOPY(set.db_pass, p2);
 				else if (STRIMATCH(p1, "DB_Port"))          set.db_port    = atoi(p2);
 				else if (STRIMATCH(p1, "DB_UseSSL"))        set.db_ssl     = atoi(p2);
+				else if (STRIMATCH(p1, "DB_SSL_Required"))  set.db_ssl_required = atoi(p2);
 				else if (STRIMATCH(p1, "DB_SSL_Key"))       STRNCOPY(set.db_ssl_key, p2);
 				else if (STRIMATCH(p1, "DB_SSL_Cert"))      STRNCOPY(set.db_ssl_cert, p2);
 				else if (STRIMATCH(p1, "DB_SSL_CA"))        STRNCOPY(set.db_ssl_ca, p2);
 				else if (STRIMATCH(p1, "Poller"))           set.poller_id = atoi(p2);
+				else if (STRIMATCH(p1, "Strict_Mode"))      set.strict_mode = atoi(p2);
 				else if (STRIMATCH(p1, "DB_PreG")) {
 					if (!set.stderr_notty) {
 						fprintf(stderr,"WARNING: DB_PreG is no longer supported\n");
