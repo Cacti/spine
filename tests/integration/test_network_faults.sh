@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LGPL-2.1-only
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 # Verify that complete SNMP packet loss is bounded and polling recovers after
 # connectivity returns. This is a lifecycle contract for both the current

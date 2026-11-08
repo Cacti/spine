@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LGPL-2.1-only
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 # Exercise Spine against many independent hosts while sweeping worker counts.
 # This is deliberately backend-neutral so the same contract can exercise the

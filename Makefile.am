@@ -4,7 +4,6 @@
 # This code is designed, written, and maintained by the Cacti Group. See
 # CONTRIBUTORS.md for developer information.
 #
-# Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 
 AUTOMAKE_OPTIONS = foreign
@@ -110,7 +109,7 @@ noinst_HEADERS += src/database/lease.h src/platform/worker_set.h
 
 EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist \
 	CONTRIBUTORS.md docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt LICENSES/LicenseRef-Xenadyne-Header.txt \
-	LICENSES/BSD-1-Clause.txt LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
+	LICENSES/BSD-1-Clause.txt LICENSES/GPL-2.0-or-later.txt LICENSES/LGPL-2.1-or-later.txt \
 	tests/README.md \
 	tests/support/test-harness.sh \
 	tests/integration/test_concurrency.sh \

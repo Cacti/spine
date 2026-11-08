@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 The Cacti Group
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """Real Git fixtures for squash/restack, conflict detection and isolation."""
 from pathlib import Path
 import tempfile

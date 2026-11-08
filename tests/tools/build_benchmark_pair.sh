@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2026 The Cacti Group
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 [[ $# -eq 3 ]] || { printf 'Usage: %s BASE_REF CANDIDATE_REF OUTPUT_DIRECTORY\n' "$0" >&2; exit 2; }
 baseline=$(git rev-parse --verify --end-of-options "$1^{commit}")

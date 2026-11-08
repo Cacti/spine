@@ -1,6 +1,6 @@
 <!--
 SPDX-FileCopyrightText: 2026 The Cacti Group
-SPDX-License-Identifier: GPL-2.0-or-later
+SPDX-License-Identifier: LGPL-2.1-or-later
 -->
 
 # Platforms
@@ -101,10 +101,9 @@ the slot never becomes ready and that closing it releases its resources.
 The packaging helper uses portable tar arguments and removes obsolete
 metadata from the staged copy, supporting native OpenBSD tar.
 
-[Native validation of commit 0514e936](https://github.com/somethingwithproof/spine/actions/runs/37860340116)
-passed on both FreeBSD releases, both NetBSD releases and OpenBSD 7.9.
-Each NetBSD/OpenBSD lane reported 16 passed, two skipped and zero failed
-suites. The existing skips cover allocation-fault injection and setuid
+Native validation of commit 0514e936 passed on both FreeBSD releases, both
+NetBSD releases and OpenBSD 7.9. Each NetBSD/OpenBSD lane reported 16 passed,
+two skipped and zero failed suites. The existing skips cover allocation-fault injection and setuid
 testing; the previously failing process, PHP and helper suites all passed.
 
 ## Running the Linux lanes locally

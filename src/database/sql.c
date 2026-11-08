@@ -2,7 +2,6 @@
  * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  *
  * Original credits:
@@ -118,18 +117,6 @@ void db_statement_label(const char *query, char *label, size_t capacity) {
 	label[used] = '\0';
 }
 
-/*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
- *  \brief inserts a row or rows in a database table.
- *  \param mysql the database connection object
- *  \param type  the database to connect to local or remote
- *  \param query the database query to execute
- *
- *	Unless the SQL_readonly boolean is set to TRUE, the function will execute
- *	the SQL statement specified in the query variable.
- *
- *  \return TRUE if successful, or FALSE if not.
- *
- */
 /* Returns FALSE when the statement should not be retried. A failed reconnect
  * ends the attempt at once: db_connect() has already spent its own tries, and
  * repeating it here only multiplies the wait while a worker holds its device. */
@@ -148,6 +135,18 @@ static bool retry_disconnected_query(MYSQL *mysql, int type, int error, const ch
 	return db_reconnect(mysql, type, error, function) >= 0;
 }
 
+/*! \fn int db_insert(MYSQL *mysql, int type, const char *query)
+ *  \brief inserts a row or rows in a database table.
+ *  \param mysql the database connection object
+ *  \param type  the database to connect to local or remote
+ *  \param query the database query to execute
+ *
+ *	Unless the SQL_readonly boolean is set to TRUE, the function will execute
+ *	the SQL statement specified in the query variable.
+ *
+ *  \return TRUE if successful, or FALSE if not.
+ *
+ */
 int db_insert(MYSQL *mysql, int type, const char *query) {
 	int error_count = 0;
 	char label[SMALL_BUFSIZE];

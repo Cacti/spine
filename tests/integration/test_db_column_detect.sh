@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LGPL-2.1-only
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 # Integration tests for db_column_exists() runtime detection in spine.
 #

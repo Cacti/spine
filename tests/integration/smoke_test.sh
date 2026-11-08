@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LGPL-2.1-only
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 # Spine build smoke test — validates that the binary compiles, links,
 # and exercises the SNMP/SQL code paths that were broken on develop.

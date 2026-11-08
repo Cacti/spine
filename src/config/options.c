@@ -2,7 +2,6 @@
  * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  *
  * Original credits:
@@ -449,7 +448,7 @@ int db_row_alias_upsert_supported(const char *version, unsigned long version_num
 	return version_number >= 80020 && version_number < 100000;
 }
 
-void read_config_options() {
+void read_config_options(void) {
 	MYSQL mysql;
 	MYSQL mysqlr;
 	int mode;

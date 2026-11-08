@@ -4,7 +4,6 @@
 # This code is designed, written, and maintained by the Cacti Group. See
 # CONTRIBUTORS.md for developer information.
 #
-# Fork maintenance: Thomas Vincent.
 # Project contributor history: CONTRIBUTORS.md.
 
 AC_PREREQ([2.69])

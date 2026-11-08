@@ -2,7 +2,6 @@
  * SPDX-FileCopyrightText: 2026 The Cacti Group
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  */
 #ifndef SPINE_PROCESS_INTERNAL_H

@@ -2,7 +2,6 @@
  * SPDX-FileCopyrightText: 2004-2026 The Cacti Group
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  *
  * Original credits:
@@ -210,7 +209,7 @@ int read_spine_config(const char *file) {
  *  \param *set global runtime parameters
  *
  */
-void config_defaults() {
+void config_defaults(void) {
 	set.php.script_max_output = 0;
 	set.php.script_cpu_seconds = 0;
 	set.php.script_memory_mb = 0;

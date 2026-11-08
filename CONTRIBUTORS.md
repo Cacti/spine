@@ -15,8 +15,8 @@ include Ian Berry, Jimmy Conner (`cigamit`), Tony Roman, Mark Brugnoli-Vinten
 (`netniV`), `eriksejr`, Reinhard Scheck and Jeff Pasnak (`Linegod`).
 Larry Adams also appears as `TheWitness` in that history.
 
-Thomas Vincent maintains this fork and contributed its C17 modernization,
-module boundaries, regression coverage, CI and security tooling.
+Thomas Vincent contributed the C17 modernization, module boundaries,
+regression coverage, CI and security tooling.
 
 This list records project contributions, not copyright assignments or authorship
 of every file. It is not exhaustive; Git history and preserved source notices

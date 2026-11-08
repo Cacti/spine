@@ -1683,7 +1683,7 @@ EXTRA_DIST = docs/man/spine.1 etc/spine.conf.dist CONTRIBUTORS.md \
 	docs/licensing.md LICENSES/LicenseRef-Xenadyne.txt \
 	LICENSES/LicenseRef-Xenadyne-Header.txt \
 	LICENSES/BSD-1-Clause.txt LICENSES/GPL-2.0-or-later.txt \
-	LICENSES/LGPL-2.1-or-later.txt LICENSES/LGPL-2.1-only.txt \
+	LICENSES/LGPL-2.1-or-later.txt \
 	tests/README.md tests/support/test-harness.sh \
 	tests/integration/test_concurrency.sh \
 	tests/integration/test_network_faults.sh \

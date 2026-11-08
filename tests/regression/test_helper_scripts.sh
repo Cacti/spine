@@ -1,7 +1,6 @@
 #!/bin/sh
 # SPDX-FileCopyrightText: 2026 The Cacti Group
-# SPDX-License-Identifier: GPL-2.0-or-later
-# Fork maintenance: Thomas Vincent.
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # Project contributor history: CONTRIBUTORS.md.
 # Test helper entry points with fake make/gdb, never a running poller.
 set -eu

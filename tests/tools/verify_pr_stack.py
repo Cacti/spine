@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 The Cacti Group
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """Verify PR deltas under squash-and-restack without modifying source refs."""
 import argparse
 from datetime import datetime, timezone

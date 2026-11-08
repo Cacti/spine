@@ -1,7 +1,6 @@
 /*
- * SPDX-License-Identifier: LGPL-2.1-only
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  *
- * Fork maintenance: Thomas Vincent.
  * Project contributor history: CONTRIBUTORS.md.
  */
 /* Drives the shipped poll_host() without a database or an SNMP agent.
