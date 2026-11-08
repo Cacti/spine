@@ -89,6 +89,35 @@ int spine_snmpv3_security_level(const char *auth_protocol, const char *auth_pass
 	return SNMP_SEC_LEVEL_NOAUTH;
 }
 
+/*! \fn static void snmp_spine_output_defaults(void)
+ *  \brief sets the Net-SNMP storage defaults spine's value parsing relies on.
+ *
+ *  snmp_spine_init() applies these again after init_snmp(), which can load
+ *  snmp.conf settings over them. Sessions used to reapply them on every open;
+ *  doing it once here, before any poller thread starts, keeps worker threads
+ *  from writing the library's global default store concurrently.
+ */
+static void snmp_spine_output_defaults(void) {
+/* Prevent update of the snmpapp.conf file */
+#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
+#endif
+
+/* Prevent update of the snmpapp.conf file */
+#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
+#endif
+
+#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
+#endif
+
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
+	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
+}
+
 /*! \fn void snmp_spine_init()
  *  \brief wrapper function for init_snmp
  *
@@ -132,6 +161,7 @@ void snmp_spine_init(void) {
 
 	if (STRMATCH(PACKAGE_VERSION, netsnmp_get_version())) {
 		init_snmp("spine");
+		snmp_spine_output_defaults();
 	} else {
 		/* report the error and quit spine */
 		die("ERROR: SNMP Library Version Mismatch (%s vs %s)", PACKAGE_VERSION, netsnmp_get_version());
@@ -139,6 +169,7 @@ void snmp_spine_init(void) {
 #else
 	SPINE_LOG_DEBUG(("DEBUG: Issues with SNMP Header Version information, assuming old version of Net-SNMP."));
 	init_snmp("spine");
+	snmp_spine_output_defaults();
 #endif
 }
 
@@ -367,7 +398,7 @@ static bool snmp_set_security_protocols(struct snmp_session *session, const snmp
 /*! \fn void *snmp_host_init(const snmp_connection_t *options)
  *  \brief initializes an owned Net-SNMP session from borrowed connection inputs.
  */
-static void *snmp_host_init_unlocked(const snmp_connection_t *options) {
+void *snmp_host_init(const snmp_connection_t *options) {
 	if (options->snmp_timeout <= 0) {
 		SPINE_LOG(("SNMP: Device[%i] Invalid nonpositive timeout.", options->host_id));
 		return NULL;
@@ -397,25 +428,6 @@ static void *snmp_host_init_unlocked(const snmp_connection_t *options) {
 		session.localname = strdup(set.snmp.snmp_clientaddr);
 #endif
 	}
-
-/* Prevent update of the snmpapp.conf file */
-#ifdef NETSNMP_DS_LIB_DONT_PERSIST_STATE
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PERSIST_STATE, 1);
-#endif
-
-/* Prevent update of the snmpapp.conf file */
-#ifdef NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DISABLE_PERSISTENT_LOAD, 1);
-#endif
-
-#ifdef NETSNMP_DS_LIB_DONT_PRINT_UNITS
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DONT_PRINT_UNITS, 1);
-#endif
-
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_PRINT_BARE_VALUE, 1);
-	netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_NUMERIC_TIMETICKS, 1);
 
 	session.securityEngineID = NULL;
 	session.securityEngineIDLen = 0;
@@ -483,8 +495,21 @@ static void *snmp_host_init_unlocked(const snmp_connection_t *options) {
 		SPINE_LOG_MEDIUM(("Device[%i] SNMPv3 Using AuthProto: %s, PrivProto: %s", options->host_id, options->snmp_auth_protocol, options->snmp_priv_protocol));
 	}
 
-	/* open SNMP Session */
-	sessp = snmp_sess_open(&session);
+	/* open SNMP Session. A v3 open adds this session's user to USM's global
+	 * user list and probes the engine ID, so it is exclusive with other v3
+	 * USM work (see snmp_v3_response()). Keys were derived above, unlocked:
+	 * generate_Ku() only uses this session's buffers. */
+	if (session.version == SNMP_VERSION_3) {
+		int cancellation_state;
+
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+		thread_mutex_lock(LOCK_SNMP);
+		sessp = snmp_sess_open(&session);
+		thread_mutex_unlock(LOCK_SNMP);
+		pthread_setcancelstate(cancellation_state, NULL);
+	} else {
+		sessp = snmp_sess_open(&session);
+	}
 
 	if (!sessp) {
 		SPINE_LOG_DEVICE(options->host_id, POLLER_VERBOSITY_MEDIUM, ("ERROR: Device[%i] Problem initializing SNMP session '%s'", options->host_id, options->hostname));
@@ -492,21 +517,6 @@ static void *snmp_host_init_unlocked(const snmp_connection_t *options) {
 
 	snmp_host_init_release(&session, Apsz, Xpsz);
 	return sessp;
-}
-
-/* Session construction mutates Net-SNMP global USM state. Keep it exclusive
- * with authenticated requests, not only with other session opens.
- * Net-SNMP documents this limitation in docs/README.thread.html. */
-void *snmp_host_init(const snmp_connection_t *options) {
-	void *session;
-	int cancellation_state;
-
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
-	thread_mutex_lock(LOCK_SNMP);
-	session = snmp_host_init_unlocked(options);
-	thread_mutex_unlock(LOCK_SNMP);
-	pthread_setcancelstate(cancellation_state, NULL);
-	return session;
 }
 
 /*! \fn void snmp_host_cleanup(void *snmp_session)
@@ -518,7 +528,15 @@ void *snmp_host_init(const snmp_connection_t *options) {
  */
 void snmp_host_cleanup(void *snmp_session) {
 	if (snmp_session != NULL) {
+		const struct snmp_session *session = snmp_sess_session(snmp_session);
 		int cancellation_state;
+
+		/* Closing a v3 session releases its USM state; v1/v2c sessions share
+		 * nothing with other sessions. */
+		if (session == NULL || session->version != SNMP_VERSION_3) {
+			snmp_sess_close(snmp_session);
+			return;
+		}
 
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
 		thread_mutex_lock(LOCK_SNMP);

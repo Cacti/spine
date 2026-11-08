@@ -16,27 +16,177 @@
 #include "app/spine.h"
 #include "snmp/response.h"
 #include <limits.h>
+#include <net-snmp/library/large_fd_set.h>
 
-/* USM users and engine state are shared by otherwise independent sessions.
- * V1/v2c retain the single-session API's parallel requests. A v3 transaction
- * is exclusive with session construction/cleanup and other v3 transactions.
- * Disable cancellation while owning the shared lock. */
+/* Net-SNMP's README.thread makes the single-session API (snmp_sess_*) safe
+ * when one thread drives each session, which is how spine uses it, but warns
+ * that SNMPv3 was never made thread-safe. USM keeps its user list and the
+ * per-engine boots/time cache in process globals, and every v3 message build
+ * (send, retransmit) and parse (read) uses them. v1/v2c messages never reach
+ * USM, so they run without LOCK_SNMP.
+ *
+ * A v3 request holds the lock only while Net-SNMP is inside USM, and waits
+ * for the reply in select() without it. Holding it across the wait made every
+ * v3 request in the process single-threaded, and let one slow or dead device
+ * stall every other thread for timeout x (retries + 1). */
+typedef struct {
+	int reqid;
+	int status;
+	bool waiting;
+	struct snmp_pdu *pdu;
+} snmp_wait_t;
+
+/*! \fn static int snmp_wait_input(int op, netsnmp_session *session, int reqid, netsnmp_pdu *pdu, void *magic)
+ *  \brief records the outcome of the request a v3 wait is waiting for.
+ *
+ *  This follows Net-SNMP's internal snmp_synch_input() so that a v3 request
+ *  returns what snmp_sess_synch_response() would. It runs inside
+ *  snmp_sess_read2() or snmp_sess_timeout(), so the caller holds LOCK_SNMP.
+ *
+ *  \return 1 when the PDU was consumed, 0 when it belongs to another request
+ */
+static int snmp_wait_input(int op, netsnmp_session *session, int reqid, netsnmp_pdu *pdu, void *magic) {
+	snmp_wait_t *wait = (snmp_wait_t *) magic;
+
+	if (reqid != wait->reqid && pdu != NULL && pdu->command != SNMP_MSG_REPORT) return 0;
+	wait->waiting = FALSE;
+
+	if (op == NETSNMP_CALLBACK_OP_RECEIVED_MESSAGE && pdu != NULL) {
+		if (pdu->command == SNMP_MSG_REPORT) {
+			int report = snmpv3_get_report_type(pdu);
+
+			/* Net-SNMP resends after an engine time resync, so keep waiting. */
+#if defined(SNMPERR_NOT_IN_TIME_WINDOW)
+			if (SNMPV3_IGNORE_UNAUTH_REPORTS || report == SNMPERR_NOT_IN_TIME_WINDOW) wait->waiting = TRUE;
+#elif defined(SNMPERR_USM_NOTINTIMEWINDOW)
+			if (report == SNMPERR_USM_NOTINTIMEWINDOW) wait->waiting = TRUE;
+#endif
+			wait->pdu = NULL;
+			wait->status = STAT_ERROR;
+			session->s_snmp_errno = report;
+		} else if (pdu->command == SNMP_MSG_RESPONSE) {
+			wait->pdu = snmp_clone_pdu(pdu);
+			wait->status = STAT_SUCCESS;
+			session->s_snmp_errno = SNMPERR_SUCCESS;
+		} else {
+			wait->status = STAT_ERROR;
+			session->s_snmp_errno = SNMPERR_PROTOCOL;
+			return 0;
+		}
+	} else if (op == NETSNMP_CALLBACK_OP_TIMED_OUT) {
+		wait->pdu = NULL;
+		wait->status = STAT_TIMEOUT;
+		session->s_snmp_errno = SNMPERR_TIMEOUT;
+	} else if (op == NETSNMP_CALLBACK_OP_SEC_ERROR) {
+		wait->pdu = NULL;
+		/* Keep an error that is already recorded. */
+		if (wait->status == STAT_SUCCESS) {
+			wait->status = STAT_ERROR;
+			session->s_snmp_errno = SNMPERR_GENERR;
+		}
+	} else if (op == NETSNMP_CALLBACK_OP_DISCONNECT) {
+		wait->pdu = NULL;
+		wait->status = STAT_ERROR;
+		session->s_snmp_errno = SNMPERR_ABORT;
+	}
+	return 1;
+}
+
+/*! \fn static int snmp_v3_response(void *sessp, netsnmp_session *session, struct snmp_pdu *request, struct snmp_pdu **response)
+ *  \brief sends one v3 request and waits for its reply, locking only USM work.
+ *
+ *  This is snmp_sess_synch_response() with LOCK_SNMP around the send, read and
+ *  timeout calls. snmp_sess_select_info2_flags() and select() only read this
+ *  session's own pending-request list, which no other thread uses.
+ *
+ *  \return STAT_SUCCESS, STAT_TIMEOUT or STAT_ERROR, as Net-SNMP reports them
+ */
+static int snmp_v3_response(void *sessp, netsnmp_session *session, struct snmp_pdu *request,
+	struct snmp_pdu **response) {
+	snmp_wait_t wait = {0, STAT_SUCCESS, FALSE, NULL};
+	snmp_callback saved_callback = session->callback;
+	void *saved_magic = session->callback_magic;
+	netsnmp_large_fd_set fdset;
+	struct timeval timeout;
+	struct timeval *wait_timeout;
+	int numfds;
+	int block;
+	int count;
+	int select_errno;
+
+	session->callback = snmp_wait_input;
+	session->callback_magic = &wait;
+
+	thread_mutex_lock(LOCK_SNMP);
+	if (snmp_sess_send(sessp, request) == 0) {
+		snmp_free_pdu(request);
+		wait.status = STAT_ERROR;
+	} else {
+		/* The session now owns request until its reply or timeout, and only
+		 * this thread can complete it. */
+		wait.reqid = request->reqid;
+		wait.waiting = TRUE;
+	}
+	thread_mutex_unlock(LOCK_SNMP);
+
+	while (wait.waiting) {
+		/* A fresh set starts empty. NETSNMP_LARGE_FD_ZERO() needs fds_bits,
+		 * which glibc hides without _XOPEN_SOURCE. */
+		netsnmp_large_fd_set_init(&fdset, FD_SETSIZE);
+		numfds = 0;
+		block = NETSNMP_SNMPBLOCK;
+		timerclear(&timeout);
+		wait_timeout = &timeout;
+		snmp_sess_select_info2_flags(sessp, &numfds, &fdset, &timeout, &block, NETSNMP_SELECT_NOALARMS);
+		if (block == 1) wait_timeout = NULL;
+
+		count = netsnmp_large_fd_set_select(numfds, &fdset, NULL, NULL, wait_timeout);
+		select_errno = errno;
+		if (count > 0) {
+			thread_mutex_lock(LOCK_SNMP);
+			snmp_sess_read2(sessp, &fdset);
+			thread_mutex_unlock(LOCK_SNMP);
+		} else if (count == 0) {
+			thread_mutex_lock(LOCK_SNMP);
+			snmp_sess_timeout(sessp);
+			thread_mutex_unlock(LOCK_SNMP);
+		} else if (select_errno != EINTR) {
+			session->s_snmp_errno = SNMPERR_GENERR;
+			session->s_errno = select_errno;
+			wait.status = STAT_ERROR;
+			wait.waiting = FALSE;
+		}
+		netsnmp_large_fd_set_cleanup(&fdset);
+	}
+
+	*response = wait.pdu;
+	session->callback = saved_callback;
+	session->callback_magic = saved_magic;
+	return wait.status;
+}
+
+/*! \fn static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *request, struct snmp_pdu **response)
+ *  \brief sends one request on the host's session and waits for the reply.
+ *
+ *  Net-SNMP owns and frees request in every case. Cancellation is disabled
+ *  for a v3 request, which owns LOCK_SNMP between waits and points the
+ *  session's callback at this stack frame.
+ *
+ *  \return the Net-SNMP transaction status
+ */
 static int snmp_synchronized_response(const host_t *host, struct snmp_pdu *request,
 	struct snmp_pdu **response) {
 	int status;
 	int cancellation_state;
-	const struct snmp_session *session = snmp_sess_session(host->snmp.session);
-	bool serialized = session == NULL || session->version == SNMP_VERSION_3;
+	netsnmp_session *session = snmp_sess_session(host->snmp.session);
 
-	if (serialized) {
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
-		thread_mutex_lock(LOCK_SNMP);
+	if (session == NULL || session->version != SNMP_VERSION_3) {
+		return snmp_sess_synch_response(host->snmp.session, request, response);
 	}
-	status = snmp_sess_synch_response(host->snmp.session, request, response);
-	if (serialized) {
-		thread_mutex_unlock(LOCK_SNMP);
-		pthread_setcancelstate(cancellation_state, NULL);
-	}
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	status = snmp_v3_response(host->snmp.session, session, request, response);
+	pthread_setcancelstate(cancellation_state, NULL);
 	return status;
 }
 

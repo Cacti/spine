@@ -118,6 +118,7 @@ check_PROGRAMS = test_spine_regressions$(EXEEXT) $(am__EXEEXT_1) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_classify_result \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_util_paths \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_parallel_wait \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_timing \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_log_config \
@@ -177,6 +178,7 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_classify_result$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_util_paths$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_session$(EXEEXT) \
+@HAVE_CMOCKA_TRUE@	tests/unit/test_snmpv3_parallel_wait$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_icmp$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_ping_timing$(EXEEXT) \
 @HAVE_CMOCKA_TRUE@	tests/unit/test_log_config$(EXEEXT) \
@@ -744,6 +746,17 @@ tests_unit_test_snmp_faults_OBJECTS =  \
 	$(am_tests_unit_test_snmp_faults_OBJECTS)
 tests_unit_test_snmp_faults_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
+am_tests_unit_test_snmpv3_parallel_wait_OBJECTS =  \
+	tests/unit/test_snmpv3_parallel_wait.$(OBJEXT) \
+	tests/support/spine_runtime.$(OBJEXT) $(am__objects_1) \
+	$(am__objects_2) $(am__objects_3) src/platform/locks.$(OBJEXT) \
+	$(am__objects_4) $(am__objects_5) $(am__objects_6) \
+	$(am__objects_7) src/config/keywords.$(OBJEXT) \
+	src/app/signals.$(OBJEXT)
+tests_unit_test_snmpv3_parallel_wait_OBJECTS =  \
+	$(am_tests_unit_test_snmpv3_parallel_wait_OBJECTS)
+tests_unit_test_snmpv3_parallel_wait_DEPENDENCIES =  \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am_tests_unit_test_snmpv3_session_OBJECTS =  \
 	tests/unit/test_snmpv3_session.$(OBJEXT) \
 	tests/support/spine_runtime.$(OBJEXT) $(am__objects_1) \
@@ -1091,6 +1104,7 @@ am__depfiles_remade = src/app/$(DEPDIR)/buffer.Po \
 	tests/unit/$(DEPDIR)/test_safety_fixes.Po \
 	tests/unit/$(DEPDIR)/test_script_read.Po \
 	tests/unit/$(DEPDIR)/test_snmp_faults.Po \
+	tests/unit/$(DEPDIR)/test_snmpv3_parallel_wait.Po \
 	tests/unit/$(DEPDIR)/test_snmpv3_session.Po \
 	tests/unit/$(DEPDIR)/test_tls_policy.Po \
 	tests/unit/$(DEPDIR)/test_util_paths.Po \
@@ -1138,6 +1152,7 @@ SOURCES = $(spine_SOURCES) $(test_spine_faults_SOURCES) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_script_read_SOURCES) \
 	$(tests_unit_test_snmp_faults_SOURCES) \
+	$(tests_unit_test_snmpv3_parallel_wait_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_tls_policy_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
@@ -1166,6 +1181,7 @@ DIST_SOURCES = $(spine_SOURCES) $(am__test_spine_faults_SOURCES_DIST) \
 	$(tests_unit_test_safety_fixes_SOURCES) \
 	$(tests_unit_test_script_read_SOURCES) \
 	$(tests_unit_test_snmp_faults_SOURCES) \
+	$(tests_unit_test_snmpv3_parallel_wait_SOURCES) \
 	$(tests_unit_test_snmpv3_session_SOURCES) \
 	$(tests_unit_test_tls_policy_SOURCES) \
 	$(tests_unit_test_util_paths_SOURCES) \
@@ -1827,6 +1843,14 @@ tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/
 	src/config/keywords.c src/app/signals.c
 
 tests_unit_test_snmpv3_session_LDADD = $(CMOCKA_LIBS) $(LIBS)
+
+# Real Net-SNMP v3 sessions against a silent UDP peer: v3 waits on separate
+# sessions must overlap instead of serializing on LOCK_SNMP.
+tests_unit_test_snmpv3_parallel_wait_SOURCES = tests/unit/test_snmpv3_parallel_wait.c tests/support/spine_runtime.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+
+tests_unit_test_snmpv3_parallel_wait_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) \
 	src/config/keywords.c src/app/signals.c
@@ -3020,6 +3044,13 @@ tests/unit/test_snmp_faults.$(OBJEXT): tests/unit/$(am__dirstamp) \
 tests/unit/test_snmp_faults$(EXEEXT): $(tests_unit_test_snmp_faults_OBJECTS) $(tests_unit_test_snmp_faults_DEPENDENCIES) $(EXTRA_tests_unit_test_snmp_faults_DEPENDENCIES) tests/unit/$(am__dirstamp)
 	@rm -f tests/unit/test_snmp_faults$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_unit_test_snmp_faults_OBJECTS) $(tests_unit_test_snmp_faults_LDADD) $(LIBS)
+tests/unit/test_snmpv3_parallel_wait.$(OBJEXT):  \
+	tests/unit/$(am__dirstamp) \
+	tests/unit/$(DEPDIR)/$(am__dirstamp)
+
+tests/unit/test_snmpv3_parallel_wait$(EXEEXT): $(tests_unit_test_snmpv3_parallel_wait_OBJECTS) $(tests_unit_test_snmpv3_parallel_wait_DEPENDENCIES) $(EXTRA_tests_unit_test_snmpv3_parallel_wait_DEPENDENCIES) tests/unit/$(am__dirstamp)
+	@rm -f tests/unit/test_snmpv3_parallel_wait$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_unit_test_snmpv3_parallel_wait_OBJECTS) $(tests_unit_test_snmpv3_parallel_wait_LDADD) $(LIBS)
 tests/unit/test_snmpv3_session.$(OBJEXT): tests/unit/$(am__dirstamp) \
 	tests/unit/$(DEPDIR)/$(am__dirstamp)
 
@@ -3384,6 +3415,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_safety_fixes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_script_read.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmp_faults.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_parallel_wait.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_snmpv3_session.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_tls_policy.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/unit/$(DEPDIR)/test_util_paths.Po@am__quote@ # am--include-marker
@@ -6892,6 +6924,13 @@ tests/unit/test_snmpv3_session.log: tests/unit/test_snmpv3_session$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/unit/test_snmpv3_parallel_wait.log: tests/unit/test_snmpv3_parallel_wait$(EXEEXT)
+	@p='tests/unit/test_snmpv3_parallel_wait$(EXEEXT)'; \
+	b='tests/unit/test_snmpv3_parallel_wait'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 tests/unit/test_ping_icmp.log: tests/unit/test_ping_icmp$(EXEEXT)
 	@p='tests/unit/test_ping_icmp$(EXEEXT)'; \
 	b='tests/unit/test_ping_icmp'; \
@@ -7628,6 +7667,7 @@ distclean: distclean-am
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_script_read.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmp_faults.Po
+	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_parallel_wait.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_tls_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po
@@ -7990,6 +8030,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f tests/unit/$(DEPDIR)/test_safety_fixes.Po
 	-rm -f tests/unit/$(DEPDIR)/test_script_read.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmp_faults.Po
+	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_parallel_wait.Po
 	-rm -f tests/unit/$(DEPDIR)/test_snmpv3_session.Po
 	-rm -f tests/unit/$(DEPDIR)/test_tls_policy.Po
 	-rm -f tests/unit/$(DEPDIR)/test_util_paths.Po

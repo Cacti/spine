@@ -64,18 +64,46 @@ static bool expect_serialized_request;
 static int captured_request_status;
 static struct snmp_session captured_request_session;
 static struct snmp_session *capture_snmp_sess_session(void *session);
+static int capture_snmp_sess_send(void *session, struct snmp_pdu *request);
+static int v3_send_calls;
 
 #define snmp_sess_close capture_snmp_sess_close
 #define snmp_sess_open capture_snmp_sess_open
 #define snmp_sess_synch_response capture_snmp_sess_synch_response
 #define snmp_sess_session capture_snmp_sess_session
+#define snmp_sess_send capture_snmp_sess_send
 #include "../../src/snmp/session.c"
 #include "../../src/snmp/requests.c"
 #include "../../src/snmp/response.c"
+#undef snmp_sess_send
 #undef snmp_sess_close
 #undef snmp_sess_open
 #undef snmp_sess_synch_response
 #undef snmp_sess_session
+
+/* Only v3 sessions enter USM, so only they may hold LOCK_SNMP. */
+static void assert_snmp_lock_for_version(long version) {
+	int lock_status = thread_mutex_trylock(LOCK_SNMP);
+	int cancellation_state;
+
+	if (lock_status == 0) thread_mutex_unlock(LOCK_SNMP);
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
+	pthread_setcancelstate(cancellation_state, NULL);
+	assert_int_equal(lock_status, version == SNMP_VERSION_3 ? EBUSY : 0);
+	if (version == SNMP_VERSION_3) assert_int_equal(cancellation_state, PTHREAD_CANCEL_DISABLE);
+}
+
+/* A v3 send runs under LOCK_SNMP. Failing it ends the request before any
+ * wait, which is all the lock contract needs; the wait itself is covered by
+ * test_snmpv3_parallel_wait against real sessions. */
+static int capture_snmp_sess_send(void *session, struct snmp_pdu *request) {
+	(void) session;
+	(void) request;
+	v3_send_calls++;
+	assert_snmp_lock_for_version(SNMP_VERSION_3);
+	assert_ptr_equal(captured_request_session.callback, snmp_wait_input);
+	return 0;
+}
 
 static struct snmp_session *capture_snmp_sess_session(void *session) {
 	return session == NULL ? NULL : &captured_request_session;
@@ -125,12 +153,7 @@ static int capture_synch_response(void *session, netsnmp_pdu *request, netsnmp_p
 }
 
 static void *capture_snmp_sess_open(struct snmp_session *session) {
-	int cancellation_state;
-
-	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), EBUSY);
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
-	pthread_setcancelstate(cancellation_state, NULL);
-	assert_int_equal(cancellation_state, PTHREAD_CANCEL_DISABLE);
+	assert_snmp_lock_for_version(session->version);
 	captured_security_level = session->securityLevel;
 	captured_auth_key_len = session->securityAuthKeyLen;
 	captured_priv_key_len = session->securityPrivKeyLen;
@@ -183,6 +206,8 @@ static int capture_snmp_sess_synch_response(void *session, struct snmp_pdu *requ
 static int session_reset(void **state) {
 	(void) state;
 	check_request_lock = FALSE;
+	memset(&captured_request_session, 0, sizeof(captured_request_session));
+	v3_send_calls = 0;
 	config_defaults();
 	init_mutexes();
 	set.snmp.snmp_retries = 1;
@@ -206,7 +231,7 @@ static int capture_snmp_sess_close(void *session) {
 	int cancellation_state;
 
 	assert_non_null(session);
-	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), EBUSY);
+	assert_snmp_lock_for_version(captured_request_session.version);
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
 	pthread_setcancelstate(cancellation_state, NULL);
 	cleanup_cancellation_state = cancellation_state;
@@ -214,18 +239,23 @@ static int capture_snmp_sess_close(void *session) {
 }
 
 static void test_cleanup_restores_cancellation_and_unlocks(void **state) {
+	const long versions[] = {SNMP_VERSION_3, SNMP_VERSION_2c, SNMP_VERSION_1};
 	int original_state;
 	int restored_state;
 	int session = 0;
 
 	(void) state;
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &original_state);
-	snmp_host_cleanup(&session);
-	pthread_setcancelstate(original_state, &restored_state);
-	assert_int_equal(restored_state, PTHREAD_CANCEL_ENABLE);
-	assert_int_equal(cleanup_cancellation_state, PTHREAD_CANCEL_DISABLE);
-	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
-	thread_mutex_unlock(LOCK_SNMP);
+	for (size_t index = 0; index < sizeof(versions) / sizeof(versions[0]); index++) {
+		captured_request_session.version = versions[index];
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &original_state);
+		snmp_host_cleanup(&session);
+		pthread_setcancelstate(original_state, &restored_state);
+		assert_int_equal(restored_state, PTHREAD_CANCEL_ENABLE);
+		assert_int_equal(cleanup_cancellation_state,
+			versions[index] == SNMP_VERSION_3 ? PTHREAD_CANCEL_DISABLE : PTHREAD_CANCEL_ENABLE);
+		assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
+		thread_mutex_unlock(LOCK_SNMP);
+	}
 }
 
 static int contains_nonzero(const unsigned char *value, size_t length) {
@@ -760,8 +790,17 @@ static void test_request_lock_and_cancellation_contract(void **state) {
 			captured_request_session.version = session_versions[session_index];
 			expect_serialized_request = captured_request_session.version == SNMP_VERSION_3;
 			for (index = 0; index < sizeof(statuses) / sizeof(statuses[0]); index++) {
+				int sends = v3_send_calls;
+
 				captured_request_status = statuses[index];
-				assert_int_equal(snmp_synchronized_response(&host, NULL, &response), statuses[index]);
+				/* v1/v2c use Net-SNMP's own synchronous call without the lock.
+				 * v3 sends under the lock; a failed send is STAT_ERROR. */
+				assert_int_equal(snmp_synchronized_response(&host, NULL, &response),
+					expect_serialized_request ? STAT_ERROR : statuses[index]);
+				assert_int_equal(v3_send_calls - sends, expect_serialized_request ? 1 : 0);
+				assert_null(response);
+				assert_null(captured_request_session.callback);
+				assert_null(captured_request_session.callback_magic);
 				assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
 				thread_mutex_unlock(LOCK_SNMP);
 				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancellation_state);
@@ -784,6 +823,14 @@ static void test_failed_session_restores_lock_and_cancellation(void **state) {
 	assert_int_equal(restored_state, PTHREAD_CANCEL_DISABLE);
 	assert_int_equal(thread_mutex_trylock(LOCK_SNMP), 0);
 	thread_mutex_unlock(LOCK_SNMP);
+}
+
+/* Value formatting depends on the Net-SNMP output defaults the daemon sets
+ * once at startup; sessions no longer reapply them on every open. */
+static int snmp_group_setup(void **state) {
+	(void) state;
+	snmp_spine_init();
+	return 0;
 }
 
 int main(void) {
@@ -818,5 +865,5 @@ int main(void) {
 		cmocka_unit_test_setup(test_failed_system_read_keeps_stored_values, session_reset),
 	};
 
-	return cmocka_run_group_tests(tests, NULL, NULL);
+	return cmocka_run_group_tests(tests, snmp_group_setup, NULL);
 }

@@ -182,6 +182,7 @@ check_PROGRAMS += \
 	tests/unit/test_classify_result \
 	tests/unit/test_util_paths \
 	tests/unit/test_snmpv3_session \
+	tests/unit/test_snmpv3_parallel_wait \
 	tests/unit/test_ping_icmp \
 	tests/unit/test_ping_timing \
 	tests/unit/test_log_config \
@@ -273,6 +274,13 @@ tests_unit_test_snmpv3_session_SOURCES = tests/unit/test_snmpv3_session.c tests/
 	$(spine_database_sources) $(spine_support_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
 	src/config/keywords.c src/app/signals.c
 tests_unit_test_snmpv3_session_LDADD   = $(CMOCKA_LIBS) $(LIBS)
+
+# Real Net-SNMP v3 sessions against a silent UDP peer: v3 waits on separate
+# sessions must overlap instead of serializing on LOCK_SNMP.
+tests_unit_test_snmpv3_parallel_wait_SOURCES = tests/unit/test_snmpv3_parallel_wait.c tests/support/spine_runtime.c \
+	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) $(spine_ping_sources) \
+	src/config/keywords.c src/app/signals.c
+tests_unit_test_snmpv3_parallel_wait_LDADD = $(CMOCKA_LIBS) $(LIBS)
 
 tests_unit_test_ping_icmp_SOURCES = tests/unit/test_ping_icmp.c tests/support/spine_runtime.c \
 	$(spine_database_sources) $(spine_support_sources) $(spine_snmp_sources) src/platform/locks.c $(spine_poller_sources) $(spine_process_sources) $(spine_php_sources) \
