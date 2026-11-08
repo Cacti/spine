@@ -1580,6 +1580,47 @@ static void test_empty_script_server_response_is_unknown(void **state) {
 	assert_false(empty_script_response);
 }
 
+/* A function that prints a line before its value leaves that value in the
+ * pipe. It must not be read as the next request's answer. */
+static void test_late_extra_line_does_not_shift_the_next_answer(void **state) {
+	char *result;
+
+	(void) state;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "echo-first");
+	assert_int_equal(php_init(0), TRUE);
+
+	result = php_cmd("poll 8", 0);
+	assert_non_null(result);
+	free(result);
+	/* Let the stray "8" arrive before the next request is written. */
+	usleep(300000);
+
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "42\n");
+	free(result);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+}
+
+/* Two lines in one answer are a desynchronized server, not a value. */
+static void test_extra_line_in_the_same_answer_is_unknown(void **state) {
+	char *result;
+
+	(void) state;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "echo-first");
+	assert_int_equal(php_init(0), TRUE);
+
+	result = php_cmd("poll 9", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "42\n");
+	free(result);
+}
+
 #ifdef SPINE_PHP_TRYLOCK_WRAP
 static void test_recovery_scan_yields_when_the_failed_slot_is_taken(void **state) {
 	(void) state;
@@ -1670,6 +1711,8 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_undefined_result_allocation_failure_is_fatal, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_is_resent_after_a_successful_restart, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_empty_script_server_response_is_unknown, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_late_extra_line_does_not_shift_the_next_answer, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_extra_line_in_the_same_answer_is_unknown, php_setup, php_teardown),
 #ifdef SPINE_PHP_TRYLOCK_WRAP
 		cmocka_unit_test_setup_teardown(test_recovery_scan_yields_when_the_failed_slot_is_taken, php_setup, php_teardown),
 #endif

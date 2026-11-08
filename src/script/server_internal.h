@@ -24,6 +24,7 @@ extern char **environ;
 char *php_read_response(int php_process, const char *command, int allow_restart, int response_timeout);
 char *php_read_result(int php_process, const char *command, int allow_restart);
 void php_fail_read(int php_process, int allow_restart);
+int php_output_pending(int fd);
 ssize_t php_write_no_sigpipe(int fd, const void *buffer, size_t length);
 #ifdef SPINE_PHP_RUNTIME_TESTING
 /* Test seam avoids libc symbol aliases defeating linker interposition. */

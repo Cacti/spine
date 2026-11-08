@@ -171,6 +171,20 @@ retry:
 		return php_undefined_result();
 	}
 
+	/* Output left over from an earlier request would be read as this
+	 * request's answer, and every later answer would shift by one. */
+	if (php_output_pending(php_processes[php_process].php_read_fd)) {
+		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent output nobody asked for.  Restarting PHP Script Server", php_process));
+		php_close(php_process);
+		retries++;
+		if (retries < 3 && php_init(php_process) == TRUE &&
+			php_processes[php_process].php_state == PHP_READY) {
+			goto retry;
+		}
+		php_process_unlock(php_process);
+		return php_undefined_result();
+	}
+
 	/* send command to the script server */
 	bytes = php_write_no_sigpipe(php_processes[php_process].php_write_fd, command, strlen(command));
 

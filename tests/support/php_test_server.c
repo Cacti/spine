@@ -42,7 +42,18 @@ int main(int argc, char **argv) {
 			break;
 		}
 
-		puts(strcmp(command, "poll 7\r\n") == 0 ? "42" : "unexpected command");
+		/* echo-first: a function that prints before returning its value, the
+		 * extra line arriving after the first (poll 8) or with it (poll 9). */
+		if (strstr(mode, "echo-first") != NULL && strcmp(command, "poll 8\r\n") == 0) {
+			puts("noise");
+			fflush(stdout);
+			usleep(100000);
+			puts("8");
+		} else if (strstr(mode, "echo-first") != NULL && strcmp(command, "poll 9\r\n") == 0) {
+			fputs("noise\n9\n", stdout);
+		} else {
+			puts(strcmp(command, "poll 7\r\n") == 0 ? "42" : "unexpected command");
+		}
 		fflush(stdout);
 	}
 

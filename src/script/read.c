@@ -16,8 +16,38 @@
 #include "app/spine.h"
 #include "script/server_internal.h"
 #include <limits.h>
+#include <poll.h>
+#include <sys/ioctl.h>
 #include <spawn.h>
 #include <sys/wait.h>
+
+/*! \fn int php_output_pending(int fd)
+ *  \brief reports whether the script server has output nobody asked for.
+ *
+ *  The protocol is one request, one response line. Bytes that are already
+ *  readable before a request is written, or right after a response line was
+ *  read, belong to no request: a function that echoes, or a multi-line
+ *  result. Reading them as the next response shifts every later value onto
+ *  the wrong item. End of file is not output; the write or read that follows
+ *  reports a server that has gone away.
+ *
+ *  \return TRUE when unread bytes are waiting on fd
+ */
+int php_output_pending(int fd) {
+	struct pollfd pending = {fd, POLLIN, 0};
+	int available = 0;
+	int status;
+
+	do {
+		status = poll(&pending, 1, 0);
+	} while (status < 0 && errno == EINTR);
+	if (status <= 0 || (pending.revents & POLLIN) == 0) return FALSE;
+	/* Readable may only mean end of file. Pipes report their unread byte
+	 * count; a descriptor that cannot is left to the normal read and write
+	 * error handling. */
+	if (ioctl(fd, FIONREAD, &available) != 0) return FALSE;
+	return available > 0;
+}
 
 /*! \fn char *php_read_response(int php_process, const char *command, int allow_restart, int response_timeout)
  *  \brief reads one script server response within response_timeout seconds.
@@ -189,6 +219,15 @@ retry:
 					*bptr = '\0'; /* make what we've got into a string */
 
 					if ((cp = strstr(result_string, "\n")) != 0) {
+						/* Anything past the first line, in this read or already
+						 * waiting, is not this request's answer. */
+						if (cp + 1 < bptr || php_output_pending(php_processes[php_process].php_read_fd)) {
+							SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent more than one response line and will be restarted", php_process));
+							php_command_script(command, script, sizeof(script));
+							SPINE_LOG_DEBUG(("DEBUG: SS[%i] Desynchronized command for script '%s'", php_process, script));
+							SET_UNDEFINED(result_string);
+							read_ok = FALSE;
+						}
 						break;
 					}
 
