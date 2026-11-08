@@ -10,12 +10,14 @@ questions please consult the forums and/or online documentation.
 
 ### SNMPv3 concurrency
 
-Spine synchronizes SNMPv3 request/response transactions with Net-SNMP session
-construction and cleanup because those operations share USM user and engine
-state. SNMPv1/v2c requests continue to use independent sessions concurrently.
-SNMPv3 requests therefore serialize while inside the library, including their
-configured network timeout; this can limit throughput for slow or unreachable
-SNMPv3 devices. This follows the library
+Net-SNMP's USM user list and engine time cache are shared by every SNMPv3
+session and are not thread-safe. Spine therefore holds one lock while
+Net-SNMP builds or parses an SNMPv3 message (send, retransmit, read) and while
+it opens or closes an SNMPv3 session. Waiting for a reply happens outside the
+lock, so slow or unreachable SNMPv3 devices do not stall each other. Opening
+an SNMPv3 session also discovers the device's engine ID, and that discovery
+still runs under the lock, up to the device's timeout. SNMPv1/v2c sessions
+take no lock. This follows the library
 [threading limitations](https://www.net-snmp.org/docs/README.thread.html).
 
 -----------------------------------------------------------------------------
