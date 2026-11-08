@@ -14,7 +14,6 @@
 
 @SET_MAKE@
 
-#
 # +-------------------------------------------------------------------------+
 # | Copyright (C) 2004-2024 The Cacti Group                                 |
 # |                                                                         |
@@ -35,6 +34,7 @@
 # +-------------------------------------------------------------------------+
 # | http://www.cacti.net/                                                   |
 # +-------------------------------------------------------------------------+
+
 
 
 VPATH = @srcdir@
@@ -102,11 +102,13 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = spine$(EXEEXT)
+EXTRA_PROGRAMS = tests/spine_alloc_fault$(EXEEXT)
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) \
 	$(top_srcdir)/config/config.h.in $(top_srcdir)/config/depcomp \
-	INSTALL config/config.guess config/config.sub config/depcomp \
+	$(dist_config_DATA) $(noinst_HEADERS) INSTALL \
+	config/config.guess config/config.sub config/depcomp \
 	config/install-sh config/missing config/ltmain.sh \
 	$(top_srcdir)/config/config.guess \
 	$(top_srcdir)/config/config.sub \
@@ -138,6 +140,20 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__objects_1 = sql.$(OBJEXT) spine.$(OBJEXT) util.$(OBJEXT) \
+	snmp.$(OBJEXT) locks.$(OBJEXT) poller.$(OBJEXT) \
+	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
+	keywords.$(OBJEXT) error.$(OBJEXT)
+am_tests_spine_alloc_fault_OBJECTS = $(am__objects_1) \
+	alloc_fault.$(OBJEXT)
+tests_spine_alloc_fault_OBJECTS =  \
+	$(am_tests_spine_alloc_fault_OBJECTS)
+tests_spine_alloc_fault_LDADD = $(LDADD)
+tests_spine_alloc_fault_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(tests_spine_alloc_fault_LDFLAGS) \
+	$(LDFLAGS) -o $@
+am__dirstamp = $(am__leading_dot)dirstamp
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -172,8 +188,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(spine_SOURCES)
-DIST_SOURCES = $(spine_SOURCES)
+SOURCES = $(spine_SOURCES) $(tests_spine_alloc_fault_SOURCES)
+DIST_SOURCES = $(spine_SOURCES) $(tests_spine_alloc_fault_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -209,7 +225,8 @@ am__uninstall_files_from_dir = { \
 man1dir = $(mandir)/man1
 NROFF = nroff
 MANS = $(man_MANS)
-DATA = $(config_DATA)
+DATA = $(dist_config_DATA)
+HEADERS = $(noinst_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -273,6 +290,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FILECMD = @FILECMD@
 GREP = @GREP@
 HELP2MAN = @HELP2MAN@
 INSTALL = @INSTALL@
@@ -288,6 +306,7 @@ LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
 MKDIR_P = @MKDIR_P@
@@ -356,6 +375,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -367,10 +387,19 @@ top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+noinst_HEADERS = common.h error.h keywords.h locks.h nft_popen.h php.h ping.h poller.h snmp.h spine.h sql.h util.h
 configdir = $(sysconfdir)
-config_DATA = spine.conf.dist
-EXTRA_DIST = tests/backport_contracts.py
+dist_config_DATA = spine.conf.dist
+tests_spine_alloc_fault_SOURCES = $(spine_SOURCES) tests/alloc_fault.c
+tests_spine_alloc_fault_LDFLAGS = -Wl,--wrap=calloc
+EXTRA_DIST = tests/backport_contracts.py tests/integration.py tests/schema.sql tests/README.md
+
+# Without --wrap the allocation-failure cases are skipped, not failed.
+@HAVE_LD_WRAP_TRUE@SPINE_FAULT_PROGRAM = tests/spine_alloc_fault
+@HAVE_LD_WRAP_TRUE@SPINE_FAULT_ENV = SPINE_TEST_FAULT_BINARY="$(abs_builddir)/tests/spine_alloc_fault"
 man_MANS = spine.1
+# spine.1 is generated from the built binary, so clean removes it.
+CLEANFILES = spine.1
 all: all-am
 
 .SUFFIXES:
@@ -477,6 +506,13 @@ clean-binPROGRAMS:
 spine$(EXEEXT): $(spine_OBJECTS) $(spine_DEPENDENCIES) $(EXTRA_spine_DEPENDENCIES) 
 	@rm -f spine$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(spine_OBJECTS) $(spine_LDADD) $(LIBS)
+tests/$(am__dirstamp):
+	@$(MKDIR_P) tests
+	@: > tests/$(am__dirstamp)
+
+tests/spine_alloc_fault$(EXEEXT): $(tests_spine_alloc_fault_OBJECTS) $(tests_spine_alloc_fault_DEPENDENCIES) $(EXTRA_tests_spine_alloc_fault_DEPENDENCIES) tests/$(am__dirstamp)
+	@rm -f tests/spine_alloc_fault$(EXEEXT)
+	$(AM_V_CCLD)$(tests_spine_alloc_fault_LINK) $(tests_spine_alloc_fault_OBJECTS) $(tests_spine_alloc_fault_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -484,6 +520,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/alloc_fault.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/error.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/keywords.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/locks.Po@am__quote@
@@ -517,11 +554,26 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
+alloc_fault.o: tests/alloc_fault.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT alloc_fault.o -MD -MP -MF $(DEPDIR)/alloc_fault.Tpo -c -o alloc_fault.o `test -f 'tests/alloc_fault.c' || echo '$(srcdir)/'`tests/alloc_fault.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/alloc_fault.Tpo $(DEPDIR)/alloc_fault.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/alloc_fault.c' object='alloc_fault.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o alloc_fault.o `test -f 'tests/alloc_fault.c' || echo '$(srcdir)/'`tests/alloc_fault.c
+
+alloc_fault.obj: tests/alloc_fault.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT alloc_fault.obj -MD -MP -MF $(DEPDIR)/alloc_fault.Tpo -c -o alloc_fault.obj `if test -f 'tests/alloc_fault.c'; then $(CYGPATH_W) 'tests/alloc_fault.c'; else $(CYGPATH_W) '$(srcdir)/tests/alloc_fault.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/alloc_fault.Tpo $(DEPDIR)/alloc_fault.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/alloc_fault.c' object='alloc_fault.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o alloc_fault.obj `if test -f 'tests/alloc_fault.c'; then $(CYGPATH_W) 'tests/alloc_fault.c'; else $(CYGPATH_W) '$(srcdir)/tests/alloc_fault.c'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf tests/.libs tests/_libs
 
 distclean-libtool:
 	-rm -f libtool config.lt
@@ -568,9 +620,9 @@ uninstall-man1:
 	} | sed -e 's,.*/,,;h;s,.*\.,,;s,^[^1][0-9a-z]*$$,1,;x' \
 	      -e 's,\.[0-9a-z]*$$,,;$(transform);G;s,\n,.,'`; \
 	dir='$(DESTDIR)$(man1dir)'; $(am__uninstall_files_from_dir)
-install-configDATA: $(config_DATA)
+install-dist_configDATA: $(dist_config_DATA)
 	@$(NORMAL_INSTALL)
-	@list='$(config_DATA)'; test -n "$(configdir)" || list=; \
+	@list='$(dist_config_DATA)'; test -n "$(configdir)" || list=; \
 	if test -n "$$list"; then \
 	  echo " $(MKDIR_P) '$(DESTDIR)$(configdir)'"; \
 	  $(MKDIR_P) "$(DESTDIR)$(configdir)" || exit 1; \
@@ -584,9 +636,9 @@ install-configDATA: $(config_DATA)
 	  $(INSTALL_DATA) $$files "$(DESTDIR)$(configdir)" || exit $$?; \
 	done
 
-uninstall-configDATA:
+uninstall-dist_configDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(config_DATA)'; test -n "$(configdir)" || list=; \
+	@list='$(dist_config_DATA)'; test -n "$(configdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(configdir)'; $(am__uninstall_files_from_dir)
 
@@ -807,7 +859,7 @@ distcleancheck: distclean
 	       exit 1; } >&2
 check-am: all-am
 check: check-am
-all-am: Makefile $(PROGRAMS) $(MANS) $(DATA)
+all-am: Makefile $(PROGRAMS) $(MANS) $(DATA) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(configdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -834,10 +886,12 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f tests/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -865,8 +919,9 @@ info: info-am
 
 info-am:
 
-install-data-am: install-configDATA install-man
-
+install-data-am: install-dist_configDATA install-man
+	@$(NORMAL_INSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) install-data-hook
 install-dvi: install-dvi-am
 
 install-dvi-am:
@@ -913,11 +968,13 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-binPROGRAMS uninstall-configDATA uninstall-man
-
+uninstall-am: uninstall-binPROGRAMS uninstall-dist_configDATA \
+	uninstall-man
+	@$(NORMAL_INSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) uninstall-hook
 uninstall-man: uninstall-man1
 
-.MAKE: install-am install-strip
+.MAKE: install-am install-data-am install-strip uninstall-am
 
 .PHONY: CTAGS GTAGS TAGS all all-am am--refresh check check-am clean \
 	clean-binPROGRAMS clean-cscope clean-generic clean-libtool \
@@ -926,18 +983,37 @@ uninstall-man: uninstall-man1
 	distcheck distclean distclean-compile distclean-generic \
 	distclean-hdr distclean-libtool distclean-tags distcleancheck \
 	distdir distuninstallcheck dvi dvi-am html html-am info \
-	info-am install install-am install-binPROGRAMS \
-	install-configDATA install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-man1 install-pdf install-pdf-am install-ps \
+	info-am install install-am install-binPROGRAMS install-data \
+	install-data-am install-data-hook install-dist_configDATA \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-info install-info-am \
+	install-man install-man1 install-pdf install-pdf-am install-ps \
 	install-ps-am install-strip installcheck installcheck-am \
 	installdirs maintainer-clean maintainer-clean-generic \
 	mostlyclean mostlyclean-compile mostlyclean-generic \
 	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-binPROGRAMS uninstall-configDATA \
-	uninstall-man uninstall-man1
+	uninstall-am uninstall-binPROGRAMS uninstall-dist_configDATA \
+	uninstall-hook uninstall-man uninstall-man1
 
+
+# Seed a live config on first install without ever overwriting an existing one.
+install-data-hook:
+	if [ ! -f "$(DESTDIR)$(configdir)/spine.conf" ]; then \
+		$(INSTALL_DATA) "$(srcdir)/spine.conf.dist" "$(DESTDIR)$(configdir)/spine.conf"; \
+	fi
+
+# Mirror image of the hook above: only remove spine.conf if it was never
+# customized (still identical to the .dist it was seeded from), so a real
+# uninstall never discards a live config, while distcheck's install/uninstall
+# symmetry check still passes against its untouched sandbox copy.
+uninstall-hook:
+	if cmp -s "$(DESTDIR)$(configdir)/spine.conf" "$(srcdir)/spine.conf.dist" 2>/dev/null; then \
+		rm -f "$(DESTDIR)$(configdir)/spine.conf"; \
+	fi
+
+.PHONY: integration-check
+integration-check: spine $(SPINE_FAULT_PROGRAM)
+	SPINE_TEST_BINARY="$(abs_builddir)/spine" $(SPINE_FAULT_ENV) python3 "$(srcdir)/tests/integration.py"
 
 spine.1: $(bin_PROGRAMS)
 	$(HELP2MAN) --output=$@ --name='Data Collector for Cacti' --no-info --version-option='--version' ./spine

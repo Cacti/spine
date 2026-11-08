@@ -104,7 +104,7 @@ int db_insert(MYSQL *mysql,int mode,const char *query){(void)mysql;(void)mode;as
 static void complete(bool output_failed) {
  int device_counter=0,host_id=1;double poll_time=0,host_time_double=0;
  MYSQL *mysql=NULL;char query1[BUFSIZE];const char *query6="schedule";
- bool last_partition,failed;
+ bool last_partition,failed,poll_failed=FALSE;
 '''+block+'''
 }
 static void reset(void){memset(&record,0,sizeof(record));record.host_threads=2;set.exit_code=0;set.active_profiles=0;schedules=times=fail_time=fail_schedule=0;}
@@ -114,7 +114,9 @@ int main(void){
  reset();complete(true);complete(false);assert(schedules==1&&times==1&&!record.complete&&set.exit_code==EXIT_FAILURE);
  reset();complete(false);fail_time=1;complete(false);assert(schedules==1&&!record.complete&&set.exit_code==EXIT_FAILURE);
  reset();complete(false);fail_schedule=1;complete(false);assert(schedules==1&&!record.complete&&set.exit_code==EXIT_FAILURE);
- reset();set.active_profiles=1;complete(false);complete(false);assert(!schedules&&record.complete);return 0;
+ reset();set.active_profiles=1;complete(false);complete(false);assert(!schedules&&record.complete);
+ /* a partition that never polled its items holds the countdown */
+ reset();record.poll_failed=1;complete(true);complete(false);assert(!schedules&&times==1&&!record.complete&&set.exit_code==EXIT_FAILURE);return 0;
 }
 ''')
 s=(root/'sql.c').read_text();a=s.index('bool db_row_alias(');b=s.index('\n}',a)+2;helper=s[a:b]

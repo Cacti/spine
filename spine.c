@@ -935,6 +935,7 @@ int main(int argc, char *argv[]) {
 		poller_details->complete         = FALSE;
 		poller_details->threads_complete = 0;
 		poller_details->output_failed    = FALSE;
+		poller_details->poll_failed      = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
 		if (current_thread == 1) details[device_counter] = poller_details;
