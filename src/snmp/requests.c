@@ -590,10 +590,44 @@ static bool snmp_multi_error_index(snmp_oids_t *oids, int count, long error_inde
  */
 
 
-static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, const struct variable_list *variable) {
+/*! \fn static const struct variable_list *snmp_multi_match(const struct variable_list *positional, const struct variable_list *variables, const char *text_oid)
+ *  \brief finds the reply varbind that names a requested OID.
+ *
+ *  Agents normally answer in request order, so the varbind at the request's
+ *  position is tried first. An agent that reorders or drops varbinds would
+ *  otherwise have one OID's value stored against another data source.
+ *
+ *  \return the matching varbind, or NULL when the reply does not name it
+ */
+static const struct variable_list *snmp_multi_match(const struct variable_list *positional,
+	const struct variable_list *variables, const char *text_oid) {
+	oid name[MAX_OID_LEN];
+	size_t length = MAX_OID_LEN;
+
+	if (!snmp_parse_oid(text_oid, name, &length)) return NULL;
+	if (positional != NULL && positional->name != NULL &&
+		snmp_oid_compare(positional->name, positional->name_length, name, length) == 0) {
+		return positional;
+	}
+	for (const struct variable_list *variable = variables; variable != NULL; variable = variable->next_variable) {
+		if (variable->name != NULL && snmp_oid_compare(variable->name, variable->name_length, name, length) == 0) {
+			return variable;
+		}
+	}
+	return NULL;
+}
+
+static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, const struct variable_list *variables) {
+	const struct variable_list *positional = variables;
+
 	for (int index = 0; index < count; index++) {
+		const struct variable_list *variable;
+
 		if (IS_UNDEFINED(oids[index].result)) continue;
+		variable = snmp_multi_match(positional, variables, oids[index].oid);
+		if (positional != NULL) positional = positional->next_variable;
 		if (variable == NULL) {
+			SPINE_LOG_HIGH(("Device[%i] WARNING: SNMP reply does not name OID '%s'", host->id, oids[index].oid));
 			SET_UNDEFINED(oids[index].result);
 			continue;
 		}
@@ -603,7 +637,6 @@ static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, 
 		} else {
 			snmp_format_scalar(oids[index].result, variable, FALSE);
 		}
-		variable = variable->next_variable;
 	}
 }
 

@@ -44,6 +44,8 @@ static long response_errstat;
 static long response_errindex;
 static bool response_nameless;
 static bool response_long_name;
+static bool response_reversed;
+static bool response_foreign_name;
 static unsigned char captured_engine_id[64];
 static size_t captured_engine_id_len;
 
@@ -138,8 +140,19 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 	long value = 42;
 	int index;
 
+	oid names[4][MAX_OID_LEN];
+	size_t lengths[4] = {0};
+	int requested = 0;
+
 	(void) session;
 	scripted_calls++;
+	/* An agent answers with the OIDs it was asked for, in order unless the
+	 * test reverses them. */
+	for (const netsnmp_variable_list *asked = request != NULL ? request->variables : NULL;
+		asked != NULL && requested < 4; asked = asked->next_variable, requested++) {
+		memcpy(names[requested], asked->name, asked->name_length * sizeof(oid));
+		lengths[requested] = asked->name_length;
+	}
 	/* Net-SNMP consumes the request even when the send fails. */
 	snmp_free_pdu(request);
 	*response = NULL;
@@ -149,12 +162,20 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 	(*response)->errstat = response_errstat;
 	(*response)->errindex = response_errindex;
 	for (index = 0; index < response_variables; index++) {
-		oid name[sizeof(base) / sizeof(base[0])];
+		int source = response_reversed ? response_variables - 1 - index : index;
+		long reply_value = value + source;
 
-		memcpy(name, base, sizeof(name));
-		name[sizeof(name) / sizeof(name[0]) - 2] += (oid) index;
-		assert_non_null(snmp_pdu_add_variable(*response, name, sizeof(name) / sizeof(name[0]),
-			ASN_INTEGER, (const u_char *) &value, sizeof(value)));
+		if (source < requested && !response_foreign_name) {
+			assert_non_null(snmp_pdu_add_variable(*response, names[source], lengths[source],
+				ASN_INTEGER, (const u_char *) &reply_value, sizeof(reply_value)));
+		} else {
+			oid name[sizeof(base) / sizeof(base[0])];
+
+			memcpy(name, base, sizeof(name));
+			name[sizeof(name) / sizeof(name[0]) - 2] += (oid) (10 + source);
+			assert_non_null(snmp_pdu_add_variable(*response, name, sizeof(name) / sizeof(name[0]),
+				ASN_INTEGER, (const u_char *) &reply_value, sizeof(reply_value)));
+		}
 	}
 	if (response_nameless && (*response)->variables != NULL) {
 		netsnmp_variable_list *variable = (*response)->variables;
@@ -231,6 +252,8 @@ static int snmp_reset(void **state) {
 	response_errindex = 0;
 	response_nameless = FALSE;
 	response_long_name = FALSE;
+	response_reversed = FALSE;
+	response_foreign_name = FALSE;
 	captured_engine_id_len = 0;
 	return 0;
 }
@@ -543,6 +566,43 @@ static void test_multi_retry_budget_is_bounded_by_the_oid_count(void **state) {
 	assert_int_equal(scripted_calls, 1);
 }
 
+/* An agent that answers in a different order must not have one OID's value
+ * stored against another data source. */
+static void test_multi_values_follow_their_oid_not_their_position(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+	scripted_response = TRUE;
+	response_variables = 2;
+	response_reversed = TRUE;
+
+	snmp_get_multi(&host, items, oids, 2);
+	assert_string_equal(oids[0].result, "42");
+	assert_string_equal(oids[1].result, "43");
+}
+
+/* A varbind that names an OID nobody asked for carries no requested value. */
+static void test_multi_reply_for_another_oid_is_unknown(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+	scripted_response = TRUE;
+	response_variables = 2;
+	response_foreign_name = TRUE;
+
+	snmp_get_multi(&host, items, oids, 2);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+}
+
 static void make_variable(netsnmp_variable_list *variable, u_char type, const oid *name, size_t length) {
 	memset(variable, 0, sizeof(*variable));
 	variable->type = type;
@@ -739,6 +799,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_multi_success_without_a_reply_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_multi_pdu_error_without_a_failing_oid_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_multi_retry_budget_is_bounded_by_the_oid_count, snmp_reset),
+		cmocka_unit_test_setup(test_multi_values_follow_their_oid_not_their_position, snmp_reset),
+		cmocka_unit_test_setup(test_multi_reply_for_another_oid_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_missing_objects_are_unknown_unless_they_are_system_oids, snmp_reset),
 		cmocka_unit_test_setup(test_missing_instances_are_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_exception_check_tolerates_a_missing_varbind, snmp_reset),
