@@ -88,6 +88,14 @@ typedef struct snmp_oids {
 /* Process-local permits use a mutex and condition variable because Darwin
  * does not implement unnamed POSIX semaphores. */
 
+/* A device's first partition pings it and runs its reindex checks; the later
+ * partitions of the same device wait for that verdict on the shared record
+ * in details[]. NONE means the first partition produced no verdict and each
+ * later partition checks the device itself. */
+#define DEVICE_VERDICT_PENDING 0
+#define DEVICE_VERDICT_READY 1
+#define DEVICE_VERDICT_NONE 2
+
 typedef struct poller_thread {
 	int device_counter;
 	int host_id;
@@ -98,6 +106,10 @@ typedef struct poller_thread {
 	int complete;
 	int output_failed;
 	int poll_failed;
+	/* verdict fields are published under LOCK_THDET on the shared record */
+	int verdict;
+	int verdict_ignore_host;
+	int verdict_spike_kill;
 	char host_time[40];
 	double host_time_double;
 	spine_permits_t *thread_init_sem;

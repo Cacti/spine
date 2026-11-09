@@ -70,7 +70,14 @@ static struct {
 	const char *fail_strdup_text;
 	int fail_strdup_skip;
 	const char *host_time;
+	int ping_calls;
+	int reindex_queries;
+	int uptime_gets;
 } fake;
+
+/* Partitions of one device run on their own threads; the fake's counters
+ * and query log are shared, so updates go through this lock. */
+static pthread_mutex_t fake_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static pool_t fake_pool;
 static int fake_session;
@@ -81,10 +88,12 @@ static void reset_fake(void) {
 }
 
 static void capture(const char *query) {
+	pthread_mutex_lock(&fake_lock);
 	assert_true(fake.query_count < MAX_QUERIES);
 	fake.queries[fake.query_count] = strdup(query);
 	assert_non_null(fake.queries[fake.query_count]);
 	fake.query_count++;
+	pthread_mutex_unlock(&fake_lock);
 }
 
 static int captured(const char *needle) {
@@ -144,9 +153,12 @@ static void observe_completion(const char *query) {
 	if (strncmp(query, "UPDATE poller_item SET rrd_next_step", 36) == 0 ||
 		strncmp(query, "UPDATE host SET polling_time", 28) == 0 ||
 		strncmp(query, "INSERT INTO host_errors", 23) == 0) {
+		bool locked = thread_mutex_trylock(LOCK_THDET) != 0;
+		if (!locked) thread_mutex_unlock(LOCK_THDET);
+		pthread_mutex_lock(&fake_lock);
 		fake.completion_queries++;
-		if (thread_mutex_trylock(LOCK_THDET) == 0) thread_mutex_unlock(LOCK_THDET);
-		else fake.completion_queries_locked++;
+		if (locked) fake.completion_queries_locked++;
+		pthread_mutex_unlock(&fake_lock);
 	}
 }
 
@@ -168,6 +180,9 @@ MYSQL_RES *__wrap_db_query(MYSQL *mysql, int type, const char *query) {
 		return (MYSQL_RES *) make_result(1, HOST_COLUMNS, host_cell);
 	}
 	if (strstr(query, "FROM poller_reindex") != NULL) {
+		pthread_mutex_lock(&fake_lock);
+		fake.reindex_queries++;
+		pthread_mutex_unlock(&fake_lock);
 		return (MYSQL_RES *) make_result(fake.reindex_count, REINDEX_COLUMNS, reindex_cell);
 	}
 	if (strstr(query, "SELECT SQL_NO_CACHE action") != NULL) {
@@ -197,13 +212,17 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
 	lease->type = type;
 	lease->connection = &fake_pool;
+	pthread_mutex_lock(&fake_lock);
 	if (fake.fail_poll_allocation != 0) fake.poll_allocations_armed = TRUE;
 	if (type == LOCAL || type == REMOTE) fake.leases[type == LOCAL ? 0 : 1] = lease;
+	pthread_mutex_unlock(&fake_lock);
 	return TRUE;
 }
 
 bool __wrap_db_release_lease(db_lease_t *lease) {
+	pthread_mutex_lock(&fake_lock);
 	fake.lease_releases++;
+	pthread_mutex_unlock(&fake_lock);
 	lease->connection = NULL;
 	return TRUE;
 }
@@ -273,15 +292,18 @@ MYSQL_ROW __wrap_mysql_fetch_row(MYSQL_RES *opaque) {
 }
 
 void *__wrap_snmp_host_init(const snmp_connection_t *options) {
+	void *session = &fake_session;
+	pthread_mutex_lock(&fake_lock);
 	assert_true(fake.session_opens < MAX_QUERIES);
 	if (fake.session_fail_at == fake.session_opens + 1) {
-		fake.session_opens++;
-		return NULL;
+		session = NULL;
+	} else {
+		fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
+		snprintf(fake.session_hostnames[fake.session_opens], BUFSIZE, "%s", options->hostname);
 	}
-	fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
-	snprintf(fake.session_hostnames[fake.session_opens], BUFSIZE, "%s", options->hostname);
 	fake.session_opens++;
-	return &fake_session;
+	pthread_mutex_unlock(&fake_lock);
+	return session;
 }
 
 void __wrap_snmp_host_cleanup(void *session) {
@@ -291,9 +313,15 @@ void __wrap_snmp_host_cleanup(void *session) {
 /* Mirrors snmp_get_base(): a failure is "" when allowed and U otherwise. */
 static char *fake_get(host_t *host, const char *oid, bool should_fail) {
 	const char *value = NULL;
+	bool uptime = strcmp(oid, ".1.3.6.1.6.3.10.2.1.3.0") == 0 || strcmp(oid, ".1.3.6.1.2.1.1.3.0") == 0;
 	if (strcmp(oid, ".1.3.6.1.6.3.10.2.1.3.0") == 0) value = fake.engine_uptime;
 	else if (strcmp(oid, ".1.3.6.1.2.1.1.3.0") == 0) value = fake.legacy_uptime;
 	else value = "fake-system-field";
+	if (uptime) {
+		pthread_mutex_lock(&fake_lock);
+		fake.uptime_gets++;
+		pthread_mutex_unlock(&fake_lock);
+	}
 	if (value == NULL) {
 		if (should_fail) host->ignore_host = TRUE;
 		value = should_fail ? "U" : "";
@@ -327,6 +355,9 @@ void __wrap_snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oid
 int __wrap_ping_host(host_t *host, ping_t *ping) {
 	(void) host;
 	(void) ping;
+	pthread_mutex_lock(&fake_lock);
+	fake.ping_calls++;
+	pthread_mutex_unlock(&fake_lock);
 	return HOST_UP;
 }
 
@@ -592,6 +623,103 @@ static void test_uptime_wrap_window(void **state) {
 	assert_false(uptime_wrapped("4294967295", "U", 300));
 }
 
+typedef struct {
+	poller_thread_t work;
+	int errors;
+} partition_run_t;
+
+static void *run_partition(void *argument) {
+	partition_run_t *run = argument;
+	poll_host(&run->work, &run->errors);
+	return NULL;
+}
+
+static void prepare_partitions(poller_thread_t *device, partition_run_t *runs, int partitions) {
+	memset(device, 0, sizeof(*device));
+	device->host_id = 47;
+	device->host_threads = partitions;
+	device->host_data_ids = 1;
+	device->host_time_double = get_time_as_double();
+	STRNCOPY(device->host_time, "1791158400");
+	for (int i = 0; i < partitions; i++) {
+		memset(&runs[i], 0, sizeof(runs[i]));
+		runs[i].work = *device;
+		runs[i].work.host_thread = i + 1;
+	}
+}
+
+/* With device_threads > 1 only the first partition pings the device and
+ * runs its reindex checks; the others wait for its verdict, here a reboot
+ * whose spike kill they must apply to their own items. The host status is
+ * written once and the reindex is queued once. */
+static void test_partitions_share_one_availability_and_reindex_check(void **state) {
+	enum { PARTITIONS = 3 };
+	poller_thread_t device;
+	poller_thread_t *table[1] = {&device};
+	partition_run_t runs[PARTITIONS];
+	pthread_t threads[PARTITIONS];
+	(void) state;
+	set_host("regression", "5", AVAIL_PING);
+	set.poller.poller_interval = 300;
+	start_time = get_time_as_double();
+	add_reindex(POLLER_ACTION_SNMP, "<", "50000", ".1.3.6.1.2.1.1.3.0");
+	add_snmp_item("671", "a", "regression", "2", NULL);
+	fake.legacy_uptime = "100";
+	fake.multi_value = "42";
+	prepare_partitions(&device, runs, PARTITIONS);
+	details = table;
+
+	/* the later partitions start first and must wait for the first */
+	for (int i = PARTITIONS - 1; i >= 0; i--) {
+		assert_int_equal(pthread_create(&threads[i], NULL, run_partition, &runs[i]), 0);
+		if (i > 0) spine_sleep_usec(20000);
+	}
+	for (int i = 0; i < PARTITIONS; i++) assert_int_equal(pthread_join(threads[i], NULL), 0);
+	details = NULL;
+
+	assert_int_equal(fake.ping_calls, 1);
+	assert_int_equal(fake.reindex_queries, 1);
+	assert_int_equal(fake.uptime_gets, 2);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 1);
+	assert_int_equal(captured("UPDATE host SET status"), 1);
+	assert_int_equal(captured("(671, 'a', FROM_UNIXTIME(1791158400), 'U')"), PARTITIONS);
+	assert_int_equal(captured("'42')"), 0);
+	assert_int_equal(device.verdict, DEVICE_VERDICT_READY);
+	assert_int_equal(device.threads_complete, PARTITIONS);
+	assert_true(device.complete);
+}
+
+/* A later partition whose first partition never answers stops waiting at
+ * the polling deadline and checks the device itself, without writing the
+ * device's status or reindex state. */
+static void test_partition_checks_the_device_after_the_deadline(void **state) {
+	poller_thread_t device;
+	poller_thread_t *table[1] = {&device};
+	partition_run_t runs[2];
+	double begin;
+	(void) state;
+	set_host("regression", "5", AVAIL_PING);
+	set.poller.poller_interval = 300;
+	start_time = get_time_as_double() - 300;
+	add_reindex(POLLER_ACTION_SNMP, "<", "50000", ".1.3.6.1.2.1.1.3.0");
+	add_snmp_item("672", "a", "regression", "2", NULL);
+	fake.legacy_uptime = "100";
+	fake.multi_value = "42";
+	prepare_partitions(&device, runs, 2);
+	details = table;
+
+	begin = spine_monotonic_time();
+	run_partition(&runs[1]);
+	details = NULL;
+	assert_true(spine_monotonic_time() - begin < 5);
+	assert_int_equal(fake.ping_calls, 1);
+	assert_int_equal(fake.reindex_queries, 1);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 0);
+	assert_int_equal(captured("UPDATE host SET status"), 0);
+	assert_int_equal(captured("(672, 'a', FROM_UNIXTIME(1791158400), 'U')"), 1);
+	assert_int_equal(device.verdict, DEVICE_VERDICT_PENDING);
+}
+
 /* Padded script output is trimmed, then freed through its own pointer; the
  * device's error list starts empty, and completion writes run unlocked. */
 static void test_script_reindex_and_completion(void **state) {
@@ -820,6 +948,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
 		cmocka_unit_test_setup(test_legacy_uptime_wrap_is_not_a_reboot, setup),
 		cmocka_unit_test_setup(test_uptime_wrap_window, setup),
+		cmocka_unit_test_setup(test_partitions_share_one_availability_and_reindex_check, setup),
+		cmocka_unit_test_setup(test_partition_checks_the_device_after_the_deadline, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
 		cmocka_unit_test_setup(test_invalid_snmp_value_is_reported_and_discarded, setup),

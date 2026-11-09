@@ -334,6 +334,9 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 			poller_details->threads_complete = 0;
 			poller_details->output_failed = FALSE;
 			poller_details->poll_failed = FALSE;
+			poller_details->verdict = DEVICE_VERDICT_PENDING;
+			poller_details->verdict_ignore_host = FALSE;
+			poller_details->verdict_spike_kill = FALSE;
 
 			thread_mutex_lock(LOCK_THDET);
 			details[device_counter] = poller_details;
