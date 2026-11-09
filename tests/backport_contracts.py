@@ -713,3 +713,37 @@ subprocess.run([*compiler, *flags, str(path), str(spine_object), *objects,
                 *make_variable("LDFLAGS"), *make_variable("LIBS"), "-o", str(executable)], check=True)
 subprocess.run([str(executable)], check=True, timeout=20)
 print("maintenance-php-stale-output-contract: passed")
+
+# The bulk poller_output statements: every row once, in order, split at the
+# buffer limit, with the same rows in the boost statements.
+poller = (root / 'poller.c').read_text()
+a = poller.index('\t\tbuf_length = MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER;')
+b = poller.index('\t\tpoll_items_cleanup:', a)
+writes = poller[a:b]
+run('maintenance-output-batch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
+config_t set;static int statements[2],rows_seen[2],next_row[2];static size_t longest;
+static const char suffix[]=" AS rs ON DUPLICATE KEY UPDATE output=rs.output";
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void die(const char *format,...){(void)format;abort();}
+bool db_row_alias(MYSQL *mysql){(void)mysql;return TRUE;}
+int db_insert(MYSQL *mysql,int mode,const char *query){const char *cursor;size_t length=strlen(query);int kind=strstr(query,"poller_output_boost")!=NULL;
+ (void)mysql;(void)mode;statements[kind]++;if(length>longest)longest=length;
+ assert(length>strlen(suffix)&&strcmp(query+length-strlen(suffix),suffix)==0);
+ for(cursor=strstr(query,"VALUES");(cursor=strchr(cursor,'('))!=NULL;cursor++){int id;if(cursor[-1]!=' '&&cursor[-1]!=',')continue;id=atoi(cursor+1);assert(id==next_row[kind]+1);next_row[kind]=id;rows_seen[kind]++;}
+ return TRUE;}
+''' + function(poller, 'static size_t query_append(') + '''
+static void write_rows(target_t *poller_items,int rows_processed){
+ char *query3=NULL,*query12=NULL,query8[BUFSIZE],query11[BUFSIZE],posuffix[BUFSIZE],result_string[RESULTS_BUFFER+SMALL_BUFSIZE],host_time[]="1731100000";
+ int query8_len,query11_len,posuffix_len,result_length,i,new_buffer=TRUE,buf_length=0;size_t out_buffer,boost_buffer=0;bool output_failed=FALSE;
+ MYSQL fixture;MYSQL *mysql=&fixture,*mysqlr=&fixture,*mysqlt;
+ snprintf(query8,sizeof(query8),"INSERT INTO poller_output (local_data_id, rrd_name, time, output) VALUES");
+ snprintf(query11,sizeof(query11),"INSERT INTO poller_output_boost (local_data_id, rrd_name, time, output) VALUES");
+ query8_len=strlen(query8);query11_len=strlen(query11);
+''' + writes + '''
+ assert(!output_failed);free(query3);free(query12);(void)mysqlr;(void)boost_buffer;(void)mysqlt;}
+int main(void){static target_t items[5000];int i;
+ for(i=0;i<5000;i++){items[i].local_data_id=i+1;strcpy(items[i].rrd_name,"traffic_in");strcpy(items[i].result,"1234567890");}
+ set.boost_redirect=set.boost_enabled=TRUE;write_rows(items,5000);
+ assert(statements[0]>1&&statements[0]==statements[1]&&rows_seen[0]==5000&&rows_seen[1]==5000);
+ assert(longest<MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);return 0;}
+''')

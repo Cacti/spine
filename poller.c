@@ -85,6 +85,20 @@ static void spike_kill_result(char *result, int spike_kill) {
 	}
 }
 
+/* Append at a tracked length: strncat() rescanned the whole statement, up
+ * to MAX_MYSQL_BUF_SIZE, for every row.  Callers flush before a row could
+ * overflow, so the bound only guards against a broken caller. */
+static size_t query_append(char *query, size_t capacity, size_t used, const char *text, size_t length) {
+	if (used >= capacity || length >= capacity - used) {
+		return used;
+	}
+
+	memcpy(query + used, text, length);
+	query[used + length] = '\0';
+
+	return used + length;
+}
+
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
@@ -231,6 +245,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	int    num_oids = 0;
 	int    snmp_poller_items = 0;
 	size_t out_buffer;
+	size_t boost_buffer = 0;
 	int    php_process;
 
 	char *poll_result = NULL;
@@ -1920,9 +1935,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		memset(query3, 0, buf_length);
 
 		/* append data */
-		strncat(query3, query8, query8_len);
-
-		out_buffer = strlen(query3);
+		out_buffer = query_append(query3, buf_length, 0, query8, query8_len);
 
 		if (set.boost_redirect && set.boost_enabled) {
 			/* insert the query results into the database */
@@ -1934,7 +1947,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			memset(query12, 0, buf_length);
 
 			/* append data */
-			strncat(query12, query11, query11_len);
+			boost_buffer = query_append(query12, buf_length, 0, query11, query11_len);
 		}
 
 		int mode;
@@ -1966,7 +1979,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			/* if the next element to the buffer will overflow it, write to the database */
 			if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
 				/* append the suffix */
-				strncat(query3, posuffix, posuffix_len);
+				query_append(query3, buf_length, out_buffer, posuffix, posuffix_len);
 
 				/* insert the record */
 				if (!db_insert(mysqlt, mode, query3)) output_failed = TRUE;
@@ -1974,22 +1987,19 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				/* re-initialize the query buffer */
 				memset(query3, 0, MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);
 
-				strncat(query3, query8, query8_len);
+				out_buffer = query_append(query3, buf_length, 0, query8, query8_len);
 
 				/* insert the record for boost */
 				if (set.boost_redirect && set.boost_enabled) {
 					/* append the suffix */
-					strncat(query12, posuffix, posuffix_len);
+					query_append(query12, buf_length, boost_buffer, posuffix, posuffix_len);
 
 					if (!db_insert(mysqlt, mode, query12)) output_failed = TRUE;
 
 					memset(query12, 0, MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);
 
-					strncat(query12, query11, query11_len);
+					boost_buffer = query_append(query12, buf_length, 0, query11, query11_len);
 				}
-
-				/* reset the output buffer length */
-				out_buffer = strlen(query3);
 
 				/* set binary, let the system know we are a new buffer */
 				new_buffer = TRUE;
@@ -2002,13 +2012,12 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				result_string[0] = ',';
 			}
 
-			strncat(query3, result_string, result_length);
+			out_buffer = query_append(query3, buf_length, out_buffer, result_string, result_length);
 
 			if (set.boost_redirect && set.boost_enabled) {
-				strncat(query12, result_string, result_length);
+				boost_buffer = query_append(query12, buf_length, boost_buffer, result_string, result_length);
 			}
 
-			out_buffer = out_buffer + strlen(result_string);
 			new_buffer = FALSE;
 			i++;
 		}
@@ -2016,7 +2025,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 		/* perform the last insert if there is data to process */
 		if (out_buffer > strlen(query8)) {
 			/* append the suffix */
-			strncat(query3, posuffix, posuffix_len);
+			query_append(query3, buf_length, out_buffer, posuffix, posuffix_len);
 
 			/* insert records into database */
 			if (!db_insert(mysqlt, mode, query3)) output_failed = TRUE;
@@ -2024,7 +2033,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			/* insert the record for boost */
 			if (set.boost_redirect && set.boost_enabled) {
 				/* append the suffix */
-				strncat(query12, posuffix, posuffix_len);
+				query_append(query12, buf_length, boost_buffer, posuffix, posuffix_len);
 
 				if (!db_insert(mysqlt, mode, query12)) output_failed = TRUE;
 			}
