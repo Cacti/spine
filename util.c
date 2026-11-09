@@ -1618,6 +1618,34 @@ int is_numeric(char *string) {
 	return FALSE;
 }
 
+static int hex_digit(int c);
+
+/* Accumulate exactly: the former pow() doubles lost precision above 2^53.
+ * Quotes and blanks are skipped; any other character, or a value wider than
+ * 64 bits, has no conversion. */
+static bool hex_value(const char *str, unsigned long long *value) {
+	uint64_t number = 0;
+	int digit;
+
+	if (!str) return FALSE;
+
+	for (; *str; str++) {
+		if (*str == '"' || *str == ' ' || *str == '\t') {
+			continue;
+		}
+
+		digit = hex_digit((unsigned char) *str);
+		if (digit < 0 || number > (UINT64_MAX >> 4)) {
+			return FALSE;
+		}
+
+		number = (number << 4) | (uint64_t) digit;
+	}
+
+	*value = number;
+	return TRUE;
+}
+
 /*! \fn int is_hexadecimal(const char *str, const short ignore_space)
  *  \brief test whether a string represents a hex number.
  *  \param str string to test
@@ -1625,13 +1653,17 @@ int is_numeric(char *string) {
  *
  *  \return TRUE if the string is valid hex, FALSE otherwise
  *
- *  The function is modified where the string needs to include
- *  at least one of the following string ' ', '-', or ':'
+ *  The string must include at least one ' ' delimiter.  The callers convert
+ *  an accepted string with hex2dec(), so this accepts only what hex2dec()
+ *  can convert exactly: a '-' or ':' delimited value such as a date or a
+ *  MAC address would otherwise be stored as 0.
  *
  */
 int is_hexadecimal(const char * str, const short ignore_special) {
 	int i = 0;
 	int delim_found = FALSE;
+	const char *start = str;
+	unsigned long long value;
 
 	if (!str) return FALSE;
 
@@ -1645,7 +1677,7 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 			case 'e': case 'E': case 'f': case 'F':
 			case '"':
 				break;
-			case '-': case ':': case ' ':
+			case ' ':
 				delim_found = TRUE;
 				break;
 			case '\t':
@@ -1664,7 +1696,8 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 		return FALSE;
 	}
 
-	return TRUE;
+	/* a value wider than 64 bits has no exact conversion */
+	return hex_value(start, &value);
 }
 
 /*! \fn char *strip_alpha(char *string)
@@ -1861,27 +1894,6 @@ char *ltrim(char *str) {
 	return str;
 }
 
-/*! \fn reverse()
- *  \brief reverses a string in place.
- *
- *  \return the reversed string.
- */
-char *reverse(char* str) {
-	int end   = strlen(str)-1;
-	int start = 0;
-
-	while (start < end) {
-		str[start] ^= str[end];
-		str[end]   ^= str[start];
-		str[start] ^= str[end];
-
-		++start;
-		--end;
-	}
-
-	return str;
-}
-
 /*! \fn strpos()
  *  \brief looks for the position of needle in haystack
  *
@@ -1918,89 +1930,9 @@ int char_count(const char *str, int chr) {
 }
 
 unsigned long long hex2dec(char *str) {
-	int i = 0;
-	unsigned long long number = 0;
+	unsigned long long number;
 
-	if (!str) return 0;
-
-	/* first revers the string */
-	reverse(str);
-
-	while (*str) {
-		switch (*str) {
-		case '0':
-			i++;
-			break;
-		case '1':
-			number += pow(16, i) * 1;
-			i++;
-			break;
-		case '2':
-			number += pow(16, i) * 2;
-			i++;
-			break;
-		case '3':
-			number += pow(16, i) * 3;
-			i++;
-			break;
-		case '4':
-			number += pow(16, i) * 4;
-			i++;
-			break;
-		case '5':
-			number += pow(16, i) * 5;
-			i++;
-			break;
-		case '6':
-			number += pow(16, i) * 6;
-			i++;
-			break;
-		case '7':
-			number += pow(16, i) * 7;
-			i++;
-			break;
-		case '8':
-			number += pow(16, i) * 8;
-			i++;
-			break;
-		case '9':
-			number += pow(16, i) * 9;
-			i++;
-			break;
-		case 'a': case 'A':
-			number += pow(16, i) * 10;
-			i++;
-			break;
-		case 'b': case 'B':
-			number += pow(16, i) * 11;
-			i++;
-			break;
-		case 'c': case 'C':
-			number += pow(16, i) * 12;
-			i++;
-			break;
-		case 'd': case 'D':
-			number += pow(16, i) * 13;
-			i++;
-			break;
-		case 'e': case 'E':
-			number += pow(16, i) * 14;
-			i++;
-			break;
-		case 'f': case 'F':
-			number += pow(16, i) * 15;
-			i++;
-			break;
-		case '"': case ' ': case '\t':
-			break;
-		default:
-			return 0;
-		}
-
-		str++;
-	}
-
-	return number;
+	return hex_value(str, &number) ? number : 0;
 }
 
 int hasCaps() {

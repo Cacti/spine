@@ -64,7 +64,6 @@ extern char *strncopy(char *dst, const char *src, size_t n);
 extern char *trim(char *str);
 extern char *rtrim(char *str);
 extern char *ltrim(char *str);
-extern char *reverse(char *str);
 extern int strpos(char *haystack, char *needle) ;
 extern int char_count(const char *str, int chr);
 
