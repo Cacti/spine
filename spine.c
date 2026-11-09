@@ -944,16 +944,21 @@ int main(int argc, char *argv[]) {
 		/* dev note - errno was never primed at this point in previous version of code */
 		int loop_count = 0;
 		double progress_time = 0;
-		unsigned int sem_err = 0;
+		int sem_err = 0;
 		int spine_timeout = FALSE;
+		int have_permit = FALSE;
 
 		while (TRUE) {
-			sem_err = sem_trywait(&available_threads);
-
-			if (sem_err == 0) {
+			/* sem_trywait() returns -1 and reports the reason in errno */
+			if (sem_trywait(&available_threads) == 0) {
 				// Acquired a thread
+				have_permit = TRUE;
 				break;
-			} else if (sem_err == EINTR) {
+			}
+
+			sem_err = errno;
+
+			if (sem_err == EINTR) {
 				// Interrupted by signal handler
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
@@ -969,6 +974,7 @@ int main(int argc, char *argv[]) {
 				if (progress_time + 1 > set.poller_interval) {
 					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
 					spine_timeout = TRUE;
+					canexit = TRUE;
 					break;
 				}
 
@@ -990,12 +996,14 @@ int main(int argc, char *argv[]) {
 		loop_count = 0;
 
 		while (!spine_timeout) {
-			sem_err = sem_trywait(&thread_init_sem);
-
-			if (sem_err == 0) {
+			if (sem_trywait(&thread_init_sem) == 0) {
 				// Acquired a thread
 				break;
-			} else if (sem_err == EINTR) {
+			}
+
+			sem_err = errno;
+
+			if (sem_err == EINTR) {
 				// Interrupted by signal handler
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
@@ -1005,12 +1013,15 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			}
 
+			loop_count++;
+
 			if (loop_count == 10) {
 				progress_time = get_time_as_double() - start_time;
 
 				if (progress_time + 1 > set.poller_interval) {
 					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
 					spine_timeout = TRUE;
+					canexit = TRUE;
 					break;
 				}
 
@@ -1027,6 +1038,11 @@ int main(int argc, char *argv[]) {
 				canexit = TRUE;
 				break;
 			}
+		}
+
+		/* no worker will run to return the permit */
+		if (spine_timeout && have_permit) {
+			sem_post(&available_threads);
 		}
 
 		if (!spine_timeout) {
