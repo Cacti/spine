@@ -324,11 +324,11 @@ int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 
 		if (waiting) {
 			/* Socket options would change every other thread's socket too. */
-			double attempt_begin = get_time_as_double();
+			double attempt_begin = spine_monotonic_time();
 
 			if (sendto(icmp_socket, packet, packet_len, 0, (struct sockaddr *) &fromname, sizeof(fromname)) >= 0 &&
 				icmp_shared_await(&waiter, attempt_begin + host_timeout / one_thousand)) {
-				total_time = (get_time_as_double() - attempt_begin) * one_thousand;
+				total_time = (spine_monotonic_time() - attempt_begin) * one_thousand;
 
 				if (is_debug_device(host->id)) {
 					SPINE_LOG(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
