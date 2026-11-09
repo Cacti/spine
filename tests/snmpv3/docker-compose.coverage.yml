@@ -2,5 +2,5 @@ services:
   spine:
     build:
       context: ../..
-      dockerfile: Dockerfile.coverage
+      dockerfile: docker/coverage.Dockerfile
     entrypoint: ["/src/spine", "--conf=/etc/spine/spine.conf"]

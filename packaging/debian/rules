@@ -14,5 +14,5 @@ override_dh_auto_configure:
 
 override_dh_auto_install:
 	dh_auto_install
-	install -D -m 0644 spine.conf.dist \
+	install -D -m 0644 etc/spine.conf.dist \
 		debian/cacti-spine/etc/spine.conf.dist

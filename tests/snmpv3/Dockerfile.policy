@@ -1,0 +1,14 @@
+FROM mirror.gcr.io/library/debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+RUN apt-get update && apt-get install -y --no-install-recommends gcc make autoconf automake libtool pkg-config libmariadb-dev libsnmp-dev libssl-dev libcmocka-dev lcov gcovr time php-cli python3 valgrind snmpd snmp mariadb-client libcap2-bin && rm -rf /var/lib/apt/lists/*
+RUN useradd --create-home spine
+WORKDIR /src
+RUN chown spine:spine /src
+COPY --chown=spine:spine configure.ac Makefile.am ./
+COPY --chown=spine:spine docs/man/ docs/man/
+COPY --chown=spine:spine etc/ etc/
+COPY --chown=spine:spine src/ src/
+COPY --chown=spine:spine tests/ tests/
+COPY --chown=spine:spine vendor/ vendor/
+USER spine
+RUN autoreconf -fi && ./configure && make -j4 all test_spine_regressions test_spine_faults tests/unit/test_resource_policy tests/unit/test_util_paths
+ENTRYPOINT ["./tests/contracts/test_database_destinations"]

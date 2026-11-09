@@ -47,3 +47,32 @@ Useful controls:
 
 Keep CI workloads bounded. Larger host counts and repeat counts belong in a
 scheduled soak workflow rather than the pull-request critical path.
+
+Mixed healthy/faulty SNMPv3 devices and destination-aware SQL:
+
+```sh
+SPINE_TEST_SNMP_FAULT=delay SPINE_TEST_HOSTS=8 tests/integration/test_concurrency.sh
+SPINE_TEST_SNMP_FAULT=loss SPINE_TEST_HOSTS=8 tests/integration/test_concurrency.sh
+bash tests/integration/test_destination_upserts.sh
+```
+
+The mixed-device cases fault only one independent agent, preserve exact healthy
+host/result accounting, bound completion, and verify recovery. `timings.tsv`
+records wall-clock run duration; per-host files retain measured polling times.
+These are fixture measurements, not production throughput benchmarks.
+The SQL matrix uses four distinct disposable MySQL/MariaDB destinations and
+checks inserts, duplicate updates, escaped values, Boost output, and status
+transfers through the production functions.
+
+`make check` exercises opt-in external-script limits with real child processes
+and syscall-controlled unit tests. Cases cover disabled policies, exact and
+excessive output, delayed output, lingering producers, cancellation cleanup,
+CPU exhaustion, Linux address-space exhaustion, inherited stricter limits,
+invalid configuration, and helper/setup failures. Persistent PHP-server policy
+and aggregate process-group resource accounting are outside this policy.
+
+Apply the `runtime-validation` PR label to run the existing nightly matrix and
+full concurrency/60-minute memory soaks on an unmerged revision. Normal PRs do
+not pay that runtime cost. Scheduled and manual workflow behavior is preserved.
+Removing the label prevents later pushes from requesting these long runs;
+already-running jobs retain their configured timeout and artifact behavior.

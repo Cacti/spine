@@ -5,7 +5,7 @@ inputs:
   mysql-client-package:
     description: MySQL-compatible client development package to install.
     required: false
-    default: libmysqlclient-dev
+    default: libmariadb-dev
   extra-packages:
     description: Additional apt packages, beyond the set every Spine build needs.
     required: false
@@ -29,18 +29,12 @@ runs:
     # mysql-server is deliberately absent: configure only needs the selected
     # client headers and library, and no job starts or connects to a server.
     - name: Install build dependencies
-      shell: bash
-      env:
-        MYSQL_CLIENT_PACKAGE: ${{ inputs.mysql-client-package }}
-        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
-      run: |
-        set -euo pipefail
-        sudo apt-get update
-        # shellcheck disable=SC2086
-        sudo apt-get install -y \
-          autoconf automake libtool build-essential help2man dos2unix \
-          "$MYSQL_CLIENT_PACKAGE" libsnmp-dev libssl-dev libcmocka-dev \
-          $EXTRA_PACKAGES
+      uses: ./.github/actions/install-apt-deps
+      with:
+        packages: >-
+          autoconf automake libtool build-essential help2man dos2unix
+          ${{ inputs.mysql-client-package }} libsnmp-dev libssl-dev libcmocka-dev
+          ${{ inputs.extra-packages }}
 
     - name: Bootstrap and configure
       shell: bash

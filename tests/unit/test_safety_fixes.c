@@ -1,4 +1,10 @@
 /*
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
+/*
  * Unit tests for the spine safety fixes on fix/spine-c-bugfixes.
  *
  * Each test is a regression guard for a specific commit on this branch:

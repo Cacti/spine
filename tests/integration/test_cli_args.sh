@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Integration tests for spine command-line argument handling.
 #
 # Regression guard for the -O/--option NULL-deref fix: "spine -O foo" (no

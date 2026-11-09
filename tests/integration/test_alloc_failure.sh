@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Integration test for the startup allocation guards (issue#564).
 #
 # php_processes and debug_devices are dereferenced on the line after their
@@ -16,6 +19,17 @@
 # suite stays green on platforms where this technique does not apply.
 #
 # Usage: ./tests/integration/test_alloc_failure.sh
+
+# make check runs this through $(SHELL), which is not bash on Alpine or the
+# BSDs, and the rest of the file needs bash.
+if [ -z "${BASH_VERSION:-}" ]; then
+	if command -v bash >/dev/null 2>&1; then
+		exec bash "$0" "$@"
+	fi
+	echo "bash is not installed; skipping"
+	exit 77
+fi
+
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Linux" ]]; then

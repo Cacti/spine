@@ -1,0 +1,16 @@
+# Helgrind does not see the ordering pthread_once() gives between
+# pthread_key_create() in the once routine and later reads of the key.
+{
+   regex_result_key read after pthread_once
+   Helgrind:Race
+   fun:regex_result_buffer
+}
+
+# Under Valgrind posix_spawn() becomes fork() and exec, so a child that fails
+# to exec calls _exit() still owning the locks its parent held while
+# spawning. A real posix_spawn() child shares no lock state with the parent.
+{
+   spawned child exits through _exit before exec
+   Helgrind:Misc
+   fun:_Exit
+}

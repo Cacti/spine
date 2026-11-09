@@ -1,0 +1,25 @@
+{
+  "status": "complete",
+  "timestamp_utc": "2026-10-11T07:40:54Z",
+  "platform": "Linux-7.0.14-orbstack-00380-ga7e0a2dc9535-aarch64-with-glibc2.39",
+  "machine": "aarch64",
+  "cpu_count": 14,
+  "threads": 4,
+  "devices": 64,
+  "items_per_device": 16,
+  "pairs": 20,
+  "warmup_pairs": 2,
+  "tls": "disabled on both builds and the loopback disposable server",
+  "server_tls": "have_ssl\tDISABLED",
+  "order": "alternating AB/BA",
+  "fixture_sha256": "2f76368129cfc0203c138eb4373d912c2d1b8c9f28931a742d9b1acbf7651078",
+  "config_sha256": "582c05ea67a7d9cbed391214b590c6a523b69177a8e59ccf31c9e841434bfb98",
+  "agent_config_sha256": "84b6c01407a1f72e727b0e97f2761164c27cff7ffc9eafd99852269753a22209",
+  "binary_sha256": {
+    "baseline": "e38ab215ecfe3dcf4a49ee488c2bbd4d73e2675e79c24a8775a89c7e3bcb022b",
+    "candidate": "31c83db2c47f0403fe90596e3161ce492bed0c8b148120856fffc8b3747d5836"
+  },
+  "database_version": "10.11.14-MariaDB-0ubuntu0.24.04.1",
+  "snmpd_version": "NET-SNMP version:  5.9.4.pre2\nWeb:               http://www.net-snmp.org/\nEmail:             net-snmp-coders@lists.sourceforge.net",
+  "cpu_scope": "Spine process and its children; server and SNMP agent CPU excluded"
+}

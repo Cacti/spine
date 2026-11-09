@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Drives the SNMPv3 fixture.
 #
 # --abort-on-container-exit cannot be used: it tears the database down the

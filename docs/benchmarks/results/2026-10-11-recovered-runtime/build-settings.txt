@@ -1,0 +1,4 @@
+CC=gcc
+CFLAGS=-O2 -g0
+LDFLAGS=
+configure=--with-mysql-client=mariadb

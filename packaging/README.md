@@ -10,4 +10,4 @@ This directory contains the files and instructions necessary to build native pac
 
 ## Alternative: Docker
 
-For containerized environments or consistent builds regardless of the host OS, refer to the `Dockerfile` and `Dockerfile.dev` in the project root.
+For containerized environments or consistent builds regardless of the host OS, refer to the `Dockerfile` and `docker/dev.Dockerfile` in the project root.

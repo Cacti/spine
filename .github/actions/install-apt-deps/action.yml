@@ -1,0 +1,30 @@
+name: Install apt dependencies
+description: Update apt cache and install a whitespace-delimited package list.
+inputs:
+  packages:
+    description: Whitespace-delimited package names to install.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install packages
+      shell: bash
+      env:
+        INSTALL_APT_DEPS_PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -euo pipefail
+        # Pass validated package names as arguments, never apt options or
+        # shell syntax. Whitespace is only a separator, including newlines.
+        read -ra packages <<< "${INSTALL_APT_DEPS_PACKAGES//$'\n'/ }"
+        if [ "${#packages[@]}" -eq 0 ]; then
+          echo 'install-apt-deps: package list is empty' >&2
+          exit 2
+        fi
+        for package in "${packages[@]}"; do
+          if [[ ! "$package" =~ ^[a-z0-9][a-z0-9+.-]*(:[a-z0-9][a-z0-9-]*)?$ ]]; then
+            echo 'install-apt-deps: invalid package name' >&2
+            exit 2
+          fi
+        done
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends -- "${packages[@]}"

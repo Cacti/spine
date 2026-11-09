@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Integration tests for unprivileged ICMP availability (issue #250).
 #
 # Linux grants SOCK_DGRAM ICMP sockets to the groups in

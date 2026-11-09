@@ -33,3 +33,5 @@ libtool
 *.m4
 tests/unit/bin/
 test-artifacts/
+__pycache__/
+*.pyc

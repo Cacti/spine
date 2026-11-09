@@ -1,22 +1,58 @@
 version: 2
+
+# The default branch is develop. Omitting target-branch lets these settings
+# apply to default-branch security updates as well as scheduled version PRs.
+# Keep major upgrades separate; all PRs use the normal tests and manual merge.
 updates:
   - package-ecosystem: github-actions
     directory: /
-    target-branch: develop
-    schedule: {interval: weekly, day: friday}
+    schedule: {interval: weekly, day: friday, time: "05:00", timezone: Etc/UTC}
     open-pull-requests-limit: 5
     cooldown: {default-days: 7}
     groups:
-      github-actions: {patterns: ["*"]}
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
     labels: [dependencies, github-actions]
     commit-message: {prefix: ci, include: scope}
+
   - package-ecosystem: docker
-    directories: ["/", "/tests/snmpv3/snmpd"]
-    target-branch: develop
-    schedule: {interval: weekly, day: friday}
+    # Track root, development/coverage and SNMP fixture image contexts.
+    directories: ["/", "/docker", "/tests/snmpv3", "/tests/snmpv3/snmpd"]
+    schedule: {interval: weekly, day: friday, time: "05:10", timezone: Etc/UTC}
     open-pull-requests-limit: 5
     cooldown: {default-days: 7}
     groups:
-      docker: {patterns: ["*"]}
+      container-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
     labels: [dependencies, docker]
     commit-message: {prefix: build, include: scope}
+
+  - package-ecosystem: pip
+    # Both requirements-*.in inputs and hash-pinned requirements-*.txt locks.
+    directory: /.github
+    schedule: {interval: weekly, day: friday, time: "05:20", timezone: Etc/UTC}
+    open-pull-requests-limit: 5
+    cooldown: {default-days: 7}
+    groups:
+      python-tools-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      python-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    labels: [dependencies, python]
+    commit-message: {prefix: ci, include: scope}
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule: {interval: weekly, day: friday, time: "05:30", timezone: Etc/UTC}
+    open-pull-requests-limit: 5
+    cooldown: {default-days: 7}
+    groups:
+      hooks-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    labels: [dependencies, pre-commit]
+    commit-message: {prefix: ci, include: scope}

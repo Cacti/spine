@@ -1,0 +1,3 @@
+# net-snmp's snmp_shutdown() does not free the MIB tree buckets that
+# init_snmp() allocates; see memcheck.supp.
+leak:netsnmp_init_mib_internals
