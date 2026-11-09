@@ -64,7 +64,7 @@ char *php_read_response(int php_process, const char *command, int allow_restart,
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
-	double remaining_usec = 0;
+	double remaining = 0;
 	char *result_string;
 	double read_deadline;
 	char script[SMALL_BUFSIZE];
@@ -134,17 +134,13 @@ retry:
 					/* record end time */
 					end_time = get_time_as_double();
 
-					/* re-establish new timeout value */
-					timeout.tv_sec = rint(floor(response_timeout - (end_time - begin_time)));
-					remaining_usec = response_timeout - timeout.tv_sec - (end_time - begin_time);
+					/* re-establish new timeout value. A spent timeout is a
+					 * timeout: a negative tv_sec makes select() fail with EINVAL. */
+					remaining = response_timeout - (end_time - begin_time);
 
-					if (remaining_usec > 0) {
-						timeout.tv_usec = rint(remaining_usec * 1000000);
-					} else {
-						timeout.tv_usec = 0;
-					}
-
-					if (timeout.tv_sec + timeout.tv_usec > 0) {
+					if (remaining > 0) {
+						timeout.tv_sec = (time_t) remaining;
+						timeout.tv_usec = (suseconds_t) ((remaining - (double) timeout.tv_sec) * 1000000);
 						goto retry;
 					} else {
 						SPINE_LOG(("WARNING: SS[%i] The Script Server script timed out while processing EINTR's.", php_process));

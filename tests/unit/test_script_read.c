@@ -27,6 +27,7 @@
 #include "tests/support/child_run.h"
 
 static int select_errors;
+static int select_calls;
 static int select_error_number;
 static int select_hides_descriptor;
 static int read_interruptions;
@@ -36,6 +37,7 @@ static int scripted_time_count;
 
 static int controlled_select(int count, fd_set *readable, fd_set *writable, fd_set *failed,
 	struct timeval *timeout) {
+	select_calls++;
 	if (select_errors > 0) {
 		select_errors--;
 		errno = select_error_number;
@@ -92,6 +94,7 @@ static int read_setup(void **state) {
 	set.logging.log_destination = LOGDEST_STDOUT;
 	set.php.php_servers = 1;
 	select_errors = 0;
+	select_calls = 0;
 	select_error_number = 0;
 	select_hides_descriptor = FALSE;
 	read_interruptions = 0;
@@ -175,6 +178,27 @@ static void test_interrupted_select_gives_up_when_the_timeout_is_spent(void **st
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
 
+/* Half a second past the timeout, floor() gave tv_sec -1 with a positive
+ * tv_usec. The sum looked like time left, and the retried select() failed
+ * with EINVAL, which was logged as a fatal error instead of a timeout. */
+static void test_interrupted_select_past_the_timeout_does_not_retry(void **state) {
+	char *result;
+
+	(void) state;
+	scripted_times[0] = 1000.0;
+	scripted_times[1] = 1001.5;
+	scripted_time_count = 2;
+	select_errors = 1;
+	select_error_number = EINTR;
+
+	result = php_read_response(0, "poll 1", FALSE, 1);
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+	assert_int_equal(select_calls, 1);
+	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
+}
+
 static void test_interrupted_read_is_retried(void **state) {
 	char *result;
 
@@ -219,6 +243,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_select_failures_leave_the_slot_busy, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_interrupted_select_resumes_with_the_remaining_timeout, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_interrupted_select_gives_up_when_the_timeout_is_spent, read_setup, read_teardown),
+		cmocka_unit_test_setup_teardown(test_interrupted_select_past_the_timeout_does_not_retry, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_interrupted_read_is_retried, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_descriptor_missing_from_the_ready_set_is_a_failure, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_result_allocation_failure_is_fatal, read_setup, read_teardown),
