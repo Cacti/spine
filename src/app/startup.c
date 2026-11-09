@@ -169,8 +169,9 @@ bool device_0_in_scope(void) {
 			cursor = end + 1;
 		}
 	}
+	/* Defined ids are never negative, so a range covers 0 only from 0. */
 	if (HOSTID_DEFINED(set.hosts.start_host_id) && HOSTID_DEFINED(set.hosts.end_host_id)) {
-		return set.hosts.start_host_id <= 0 && set.hosts.end_host_id >= 0;
+		return set.hosts.start_host_id == 0;
 	}
 	return TRUE;
 }
