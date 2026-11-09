@@ -34,6 +34,7 @@
 #include "common.h"
 #include "spine.h"
 #include <stdint.h>
+#include <fcntl.h>
 
 static int nopts = 0;
 
@@ -1458,10 +1459,14 @@ int spine_log(const char *format, ...) {
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
-			if (!file_exists(set.path_logfile)) {
-				log_file = fopen(set.path_logfile, "w");
-			} else {
-				log_file = fopen(set.path_logfile, "a");
+			/* Append mode creates a missing log without the window between an
+			 * existence check and a truncating open, in which a log another
+			 * process had just created would be emptied. */
+			int log_fd = open(set.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0666);
+
+			log_file = NULL;
+			if (log_fd >= 0 && (log_file = fdopen(log_fd, "a")) == NULL) {
+				close(log_fd);
 			}
 
 			if (log_file) {

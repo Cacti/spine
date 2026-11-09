@@ -759,3 +759,23 @@ int main(void){static target_t items[5000];int i;
  assert(statements[0]>1&&statements[0]==statements[1]&&rows_seen[0]==5000&&rows_seen[1]==5000);
  assert(longest<MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);return 0;}
 ''')
+
+# A log another process creates between the existence check and the open is
+# appended to, never truncated, and a missing log is still created.
+util = (root / 'util.c').read_text()
+block = braced(util, util.index('\t\tif (set.logfile_processed) {'))
+log_path = str(out / 'shared.log')
+run('maintenance-log-append-contract', '#include "common.h"\n#include "spine.h"\n#include <fcntl.h>\nconfig_t set;\n' + '''
+int file_exists(const char *filename){(void)filename;return FALSE;}
+static void write_log(const char *flogmessage){FILE *log_file=NULL;static int log_error;
+''' + block + '''
+ (void)log_file;}
+static void expect(const char *first,const char *second){FILE *f=fopen(set.path_logfile,"r");char line[64];assert(f);
+ assert(fgets(line,sizeof(line),f)&&strcmp(line,first)==0);
+ if(second){assert(fgets(line,sizeof(line),f)&&strcmp(line,second)==0);}
+ assert(!fgets(line,sizeof(line),f));fclose(f);}
+int main(void){FILE *f;snprintf(set.path_logfile,sizeof(set.path_logfile),"%s","''' + log_path + '''");set.logfile_processed=TRUE;
+ f=fopen(set.path_logfile,"w");assert(f&&fputs("other process\\n",f)>=0);fclose(f);
+ write_log("spine\\n");expect("other process\\n","spine\\n");
+ unlink(set.path_logfile);write_log("first\\n");expect("first\\n",NULL);unlink(set.path_logfile);return 0;}
+''')
