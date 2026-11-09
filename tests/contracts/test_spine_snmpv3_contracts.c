@@ -105,8 +105,8 @@ static void assert_v3_response(const snmp_connection_t *options, bool admitted, 
 			assert(!host.ignore_host);
 		} else if (access_denied) {
 			/* Authenticated VACM refusal is a transport-success agent error.
-			 * Preserve the existing empty-data availability contract. */
-			assert(response[0] == '\0');
+			 * Availability stays up; the value is unknown, not empty data. */
+			assert(IS_UNDEFINED(response));
 			assert(host.snmp.status == STAT_SUCCESS && !host.ignore_host);
 		} else {
 			assert(IS_UNDEFINED(response));
