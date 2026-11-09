@@ -57,6 +57,18 @@ static bool parse_uptime(const char *text, unsigned long long *ticks) {
 }
 
 
+/* Without the engine time OID, sysUpTime is 32 bit TimeTicks that wrap
+ * after about 497 days.  A decrease from within two polling intervals of
+ * 2^32 to no more than the rest of that span is the wrap, not a restart. */
+static bool uptime_wrapped(unsigned long long previous, unsigned long long current, int poller_interval) {
+	const unsigned long long wrap = 4294967296ULL;
+	unsigned long long span = 2ULL * (unsigned long long) (poller_interval > 0 ? poller_interval : 300) * 100;
+
+	if (previous >= wrap || current >= previous) return FALSE;
+
+	return wrap - previous + current <= span;
+}
+
 /* The normalized form can be longer than the input ("FF" becomes "255"), so
  * the copy back is bounded by the caller's buffer, not the input length. */
 static void normalize_poll_result(char *text, size_t capacity) {
@@ -1303,7 +1315,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 								/* if uptime is set to '0' don't fail out */
 								if (strcmp(reindex->assert_value, "0")) {
-									if (!IS_UNDEFINED(poll_result) && (!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime)) {
+									if (!IS_UNDEFINED(poll_result) && (!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime) &&
+										(uptime_use_engine_oid || !uptime_wrapped(previous_uptime, curr_uptime, set.poller_interval))) {
 										if (is_debug_device(host->id) || set.spine_log_level == 2) {
 											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 										} else {

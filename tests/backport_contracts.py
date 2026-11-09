@@ -779,3 +779,36 @@ int main(void){FILE *f;snprintf(set.path_logfile,sizeof(set.path_logfile),"%s","
  write_log("spine\\n");expect("other process\\n","spine\\n");
  unlink(set.path_logfile);write_log("first\\n");expect("first\\n",NULL);unlink(set.path_logfile);return 0;}
 ''')
+
+# Legacy 32 bit sysUpTime wraps after about 497 days; that wrap is not an
+# agent restart.  The seconds based engine OID keeps the plain comparison.
+poller = (root / 'poller.c').read_text()
+block = braced(poller, poller.index("/* if uptime is set to '0' don't fail out */"))
+run('maintenance-uptime-wrap-contract', '#include "common.h"\n#include "spine.h"\n#include <limits.h>\nconfig_t set;\n' + '''
+static int queued;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+int is_debug_device(int device_id){(void)device_id;return FALSE;}
+int db_insert(MYSQL *mysql,int mode,const char *query){(void)mysql;(void)mode;assert(strstr(query,"poller_command"));queued++;return TRUE;}
+''' + function(poller, 'static bool parse_uptime(') + function(poller, 'static bool uptime_wrapped(') + '''
+static int restarted(const char *assert_value,unsigned long long curr_uptime,int uptime_use_engine_oid){
+ reindex_t r={0},*reindex=&r;host_t h={0},*host=&h;char poll_result[32],query3[LRG_BUFSIZE];
+ MYSQL *mysql=NULL,*mysqlr=NULL;int host_thread=1,errors=0,assert_fail=FALSE,previous_assert_failure=FALSE,queue_succeeded=TRUE;
+ unsigned long long previous_uptime=0;
+ snprintf(r.op,sizeof(r.op),"<");snprintf(r.assert_value,sizeof(r.assert_value),"%s",assert_value);
+ snprintf(poll_result,sizeof(poll_result),"%llu",curr_uptime);parse_uptime(assert_value,&previous_uptime);
+''' + block + '''
+ (void)mysql;(void)mysqlr;(void)errors;(void)previous_assert_failure;(void)queue_succeeded;(void)host_thread;
+ return assert_fail;}
+int main(void){set.poller_interval=300;
+ /* 2^32 - 296 ticks to 100 ticks: four seconds across the wrap */
+ assert(!restarted("4294967000",100,FALSE)&&!queued);
+ assert(!restarted("4294967295",0,FALSE)&&!queued);
+ /* the same values from the engine OID are a restart */
+ assert(restarted("4294967000",100,TRUE)&&queued==1);
+ /* a small uptime after a counter far from 2^32, or past two intervals, is a restart */
+ assert(restarted("1000000",100,FALSE)&&queued==2);
+ assert(restarted("4294967000",59705,FALSE)&&queued==3);
+ assert(!restarted("4294967000",59704,FALSE)&&queued==3);
+ assert(!restarted("100",200,FALSE)&&queued==3);
+ return 0;}
+''')
