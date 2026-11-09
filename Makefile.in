@@ -102,16 +102,17 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = spine$(EXEEXT)
-check_PROGRAMS = tests/test_nft_popen$(EXEEXT)
+check_PROGRAMS = tests/test_nft_popen$(EXEEXT) \
+	tests/boundary_test$(EXEEXT)
 EXTRA_PROGRAMS = tests/spine_alloc_fault$(EXEEXT)
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) \
 	$(top_srcdir)/config/config.h.in $(top_srcdir)/config/depcomp \
 	$(dist_config_DATA) $(noinst_HEADERS) \
-	$(top_srcdir)/config/test-driver INSTALL config/config.guess \
-	config/config.sub config/depcomp config/install-sh \
-	config/missing config/ltmain.sh \
+	$(top_srcdir)/config/test-driver INSTALL config/compile \
+	config/config.guess config/config.sub config/depcomp \
+	config/install-sh config/missing config/ltmain.sh \
 	$(top_srcdir)/config/config.guess \
 	$(top_srcdir)/config/config.sub \
 	$(top_srcdir)/config/install-sh $(top_srcdir)/config/ltmain.sh \
@@ -142,11 +143,17 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__dirstamp = $(am__leading_dot)dirstamp
+am_tests_boundary_test_OBJECTS = tests/boundary_test.$(OBJEXT) \
+	sql.$(OBJEXT) util.$(OBJEXT) snmp.$(OBJEXT) locks.$(OBJEXT) \
+	poller.$(OBJEXT) nft_popen.$(OBJEXT) php.$(OBJEXT) \
+	ping.$(OBJEXT) keywords.$(OBJEXT) error.$(OBJEXT)
+tests_boundary_test_OBJECTS = $(am_tests_boundary_test_OBJECTS)
+tests_boundary_test_LDADD = $(LDADD)
 am__objects_1 = sql.$(OBJEXT) spine.$(OBJEXT) util.$(OBJEXT) \
 	snmp.$(OBJEXT) locks.$(OBJEXT) poller.$(OBJEXT) \
 	nft_popen.$(OBJEXT) php.$(OBJEXT) ping.$(OBJEXT) \
 	keywords.$(OBJEXT) error.$(OBJEXT)
-am__dirstamp = $(am__leading_dot)dirstamp
 am_tests_spine_alloc_fault_OBJECTS = $(am__objects_1) \
 	tests/alloc_fault.$(OBJEXT)
 tests_spine_alloc_fault_OBJECTS =  \
@@ -195,9 +202,11 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(spine_SOURCES) $(tests_spine_alloc_fault_SOURCES) \
+SOURCES = $(spine_SOURCES) $(tests_boundary_test_SOURCES) \
+	$(tests_spine_alloc_fault_SOURCES) \
 	$(tests_test_nft_popen_SOURCES)
-DIST_SOURCES = $(spine_SOURCES) $(tests_spine_alloc_fault_SOURCES) \
+DIST_SOURCES = $(spine_SOURCES) $(tests_boundary_test_SOURCES) \
+	$(tests_spine_alloc_fault_SOURCES) \
 	$(tests_test_nft_popen_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
@@ -576,6 +585,8 @@ noinst_HEADERS = common.h error.h keywords.h locks.h nft_popen.h php.h ping.h po
 configdir = $(sysconfdir)
 dist_config_DATA = spine.conf.dist
 TESTS = $(check_PROGRAMS)
+# Boundary tests link every object except spine.c, whose globals the test defines.
+tests_boundary_test_SOURCES = tests/boundary_test.c sql.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
 tests_test_nft_popen_SOURCES = tests/test_nft_popen.c nft_popen.c
 tests_test_nft_popen_CPPFLAGS = $(AM_CPPFLAGS) -Dwaitpid=nft_test_waitpid -Dclock_gettime=nft_test_clock_gettime -Dpthread_create=nft_test_pthread_create
 tests_spine_alloc_fault_SOURCES = $(spine_SOURCES) tests/alloc_fault.c
@@ -709,6 +720,12 @@ tests/$(am__dirstamp):
 tests/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) tests/$(DEPDIR)
 	@: > tests/$(DEPDIR)/$(am__dirstamp)
+tests/boundary_test.$(OBJEXT): tests/$(am__dirstamp) \
+	tests/$(DEPDIR)/$(am__dirstamp)
+
+tests/boundary_test$(EXEEXT): $(tests_boundary_test_OBJECTS) $(tests_boundary_test_DEPENDENCIES) $(EXTRA_tests_boundary_test_DEPENDENCIES) tests/$(am__dirstamp)
+	@rm -f tests/boundary_test$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(tests_boundary_test_OBJECTS) $(tests_boundary_test_LDADD) $(LIBS)
 tests/alloc_fault.$(OBJEXT): tests/$(am__dirstamp) \
 	tests/$(DEPDIR)/$(am__dirstamp)
 
@@ -742,6 +759,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tests_test_nft_popen-nft_popen.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/alloc_fault.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/boundary_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/tests_test_nft_popen-test_nft_popen.Po@am__quote@
 
 .c.o:
@@ -1073,6 +1091,13 @@ recheck: all $(check_PROGRAMS)
 tests/test_nft_popen.log: tests/test_nft_popen$(EXEEXT)
 	@p='tests/test_nft_popen$(EXEEXT)'; \
 	b='tests/test_nft_popen'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/boundary_test.log: tests/boundary_test$(EXEEXT)
+	@p='tests/boundary_test$(EXEEXT)'; \
+	b='tests/boundary_test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
