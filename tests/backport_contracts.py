@@ -789,7 +789,10 @@ static void expect(const char *first,const char *second){FILE *f=fopen(set.path_
 int main(void){FILE *f;snprintf(set.path_logfile,sizeof(set.path_logfile),"%s","''' + log_path + '''");set.logfile_processed=TRUE;
  f=fopen(set.path_logfile,"w");assert(f&&fputs("other process\\n",f)>=0);fclose(f);
  write_log("spine\\n");expect("other process\\n","spine\\n");
- unlink(set.path_logfile);write_log("first\\n");expect("first\\n",NULL);unlink(set.path_logfile);return 0;}
+ unlink(set.path_logfile);umask(0);write_log("first\\n");expect("first\\n",NULL);
+ /* a created log is readable by its group and by no other account */
+ {struct stat st;assert(stat(set.path_logfile,&st)==0&&(st.st_mode&0777)==0640);}
+ unlink(set.path_logfile);return 0;}
 ''')
 
 # Legacy 32 bit sysUpTime wraps after about 497 days; that wrap is not an

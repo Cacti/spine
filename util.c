@@ -1461,12 +1461,18 @@ int spine_log(const char *format, ...) {
 		if (set.logfile_processed) {
 			/* Append mode creates a missing log without the window between an
 			 * existence check and a truncating open, in which a log another
-			 * process had just created would be emptied. */
-			int log_fd = open(set.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0666);
+			 * process had just created would be emptied.  A log Spine creates
+			 * is readable by its group, which the web server shares to show
+			 * the log, and not by every other account. */
+			int log_fd = open(set.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0640);
 
 			log_file = NULL;
-			if (log_fd >= 0 && (log_file = fdopen(log_fd, "a")) == NULL) {
-				close(log_fd);
+			if (log_fd >= 0) {
+				log_file = fdopen(log_fd, "a");
+
+				if (log_file == NULL) {
+					close(log_fd);
+				}
 			}
 
 			if (log_file) {
