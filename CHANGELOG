@@ -35,6 +35,8 @@ The Cacti Group | spine
 -issue#676: Size the add_slashes() result for doubled backslashes
 -issue#676: Terminate SNMP values that do not fit the result buffer and store them as U
 -issue#676: Escape the data source name and result in poller_output and boost inserts
+-issue#676: Free the copied DB_Host setting when it names a socket file instead of leaking it on every database connection
+-issue#676: Treat only a socket file at the DB_Host path as a socket, so a regular file is used as the host name and is not exempted from DB_SSL_Required
 -issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
 -issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
 -issue: Disable persisted CI credentials, hash-lock flawfinder and propagate scanner failures
