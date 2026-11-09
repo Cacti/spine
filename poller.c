@@ -1386,7 +1386,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							 * once and the U stored below matches on later cycles. */
 							if (poll_result == NULL || (!assert_read && (IS_UNDEFINED(poll_result) || STRIMATCH(poll_result, "No Such Instance")))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result != NULL ? poll_result : "U"));
 								}
 
 								assert_fail = FALSE;
