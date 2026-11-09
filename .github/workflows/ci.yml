@@ -350,6 +350,7 @@ jobs:
         env:
           SPINE_TEST_DB_HOST: 127.0.0.1
           SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_TEST_REQUIRE: snmp-agent
           SPINE_SNMPV3_EVIDENCE_DIR: snmpv3-evidence
         run: |
           set -euo pipefail
