@@ -606,7 +606,9 @@ static const struct variable_list *snmp_multi_match(const struct variable_list *
 	return NULL;
 }
 
-static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, const struct variable_list *variables) {
+/* failed, when given, receives for each OID whether snmp_get() would have
+ * failed it; such a varbind is then decoded exactly as snmp_get() does. */
+static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, const struct variable_list *variables, bool *failed) {
 	const struct variable_list *positional = variables;
 
 	for (int index = 0; index < count; index++) {
@@ -620,7 +622,10 @@ static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, 
 			SET_UNDEFINED(oids[index].result);
 			continue;
 		}
-		if (snmp_varbind_is_exception(variable)) {
+		if (failed != NULL) {
+			failed[index] = snmp_get_variable(host, oids[index].oid, variable, oids[index].result) != STAT_SUCCESS;
+			if (failed[index]) SET_UNDEFINED(oids[index].result);
+		} else if (snmp_varbind_is_exception(variable)) {
 			SPINE_LOG_HIGH(("Device[%i] WARNING: No SNMP data returned for OID '%s'", host->id, oids[index].oid));
 			SET_UNDEFINED(oids[index].result);
 		} else {
@@ -637,18 +642,26 @@ static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, 
  *  the snmp_oids array with the results from the snmp api call.
  *
  */
-void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int count) {
+/* failed, when given, receives snmp_get()'s verdict for each OID. A request
+ * that fails as a whole fails every OID, except where the agent answered
+ * with an error, which snmp_get() also treats as reachable. */
+static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oids_t *oids, int count, bool *failed) {
+	bool agent_answered = FALSE;
 	if (count <= 0) return;
 	if (host == NULL || items == NULL || oids == NULL) die("ERROR: Invalid multi-SNMP request storage");
+	if (failed != NULL) memset(failed, 0, sizeof(*failed) * (size_t) count);
 	if (host->snmp.session == NULL) {
 		/* A failed mid-loop session rebuild fails the group as one host error. */
 		host->ignore_host = TRUE;
 		snmp_multi_undefined(oids, count);
 		host->snmp.status = STAT_DESCRIP_ERROR;
+		if (failed != NULL) memset(failed, TRUE, sizeof(*failed) * (size_t) count);
 		return;
 	}
 	struct snmp_pdu *request = snmp_multi_request(host, items, oids, count);
 	if (request == NULL) {
+		/* Only OIDs that do not parse leave nothing to send; snmp_get()
+		 * reads each of those as U without failing the host. */
 		snmp_multi_undefined(oids, count);
 		host->snmp.status = STAT_ERROR;
 		return;
@@ -669,10 +682,11 @@ void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int 
 				status = STAT_ERROR;
 				snmp_multi_undefined(oids, count);
 			} else if (response->errstat == SNMP_ERR_NOERROR) {
-				snmp_multi_values(host, oids, count, response->variables);
+				snmp_multi_values(host, oids, count, response->variables, failed);
 			} else if (snmp_multi_error_index(oids, count, response->errindex)) {
 				request = snmp_fix_pdu(response, SNMP_MSG_GET);
 			} else {
+				agent_answered = TRUE;
 				if (response->errindex == 0) {
 					/* RFC 3416 4.2: a PDU-level error names no failing OID. */
 					SPINE_LOG_HIGH(("Device[%i] WARNING: snmp_get_multi PDU error (errstat=%ld, errindex=0), all OIDs set undefined",
@@ -688,9 +702,36 @@ void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int 
 		snmp_free_pdu(request);
 		status = STAT_ERROR;
 		snmp_multi_undefined(oids, count);
+		agent_answered = TRUE;
 	}
 	if (status == STAT_TIMEOUT) {
 		host->ignore_host = TRUE;
 		snmp_multi_undefined(oids, count);
 	}
+	if (failed != NULL && status != STAT_SUCCESS && !agent_answered) {
+		memset(failed, TRUE, sizeof(*failed) * (size_t) count);
+	}
+}
+
+void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int count) {
+	snmp_get_multi_checked(host, items, oids, count, NULL);
+}
+
+/*! \fn void snmp_get_checked(host_t *host, snmp_oids_t *oids, int count, bool *failed)
+ *  \brief gets several OIDs in one request, each as snmp_get() would read it alone
+ *
+ *  Each result is the value, or U, that snmp_get() would return for that OID,
+ *  and failed[] records whether snmp_get() would have failed it and marked
+ *  the host ignored. The host is marked here only when the whole request
+ *  timed out; the caller applies the other failures in its own order.
+ *  Results go to oids[].result; array_position is not used.
+ */
+void snmp_get_checked(host_t *host, snmp_oids_t *oids, int count, bool *failed) {
+	static const target_t no_item;
+
+	for (int index = 0; index < count; index++) {
+		oids[index].array_position = 0;
+		oids[index].result[0] = '\0';
+	}
+	snmp_get_multi_checked(host, &no_item, oids, count, failed);
 }

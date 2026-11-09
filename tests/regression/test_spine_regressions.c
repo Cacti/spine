@@ -2521,6 +2521,19 @@ static void test_snmp_multi_responses(host_t *host) {
 	 * exception varbind; neither is data, so both store U. */
 	assert(strcmp(oids[2].result, "U") == 0);
 	assert(strstr(oids[3].result, "regression") != NULL);
+	/* A checked batch gives each OID the value and verdict of its own get. */
+	bool failed[4];
+	snmp_get_checked(host, oids, 4, failed);
+	assert(!host->ignore_host);
+	for (int index = 0; index < 4; index++) {
+		host_t single = *host;
+		char *expected = snmp_get(&single, oids[index].oid);
+		if (strcmp(oids[index].result, expected) != 0 || failed[index] != (bool) single.ignore_host) {
+			fprintf(stderr, "checked batch: oid=%s batch=%s/%d single=%s/%d\n", oids[index].oid, oids[index].result, failed[index], expected, single.ignore_host);
+			assert(0);
+		}
+		free(expected);
+	}
 	snmp_get_multi(NULL, NULL, NULL, 0);
 	host_t missing_session = {0};
 	snmp_oids_t undefined[2] = {0};

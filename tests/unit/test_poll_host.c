@@ -73,6 +73,10 @@ static struct {
 	int ping_calls;
 	int reindex_queries;
 	int uptime_gets;
+	int index_gets;
+	int batch_requests;
+	int batch_oids;
+	const char *failing_index_oid;
 } fake;
 
 /* Partitions of one device run on their own threads; the fake's counters
@@ -310,13 +314,32 @@ void __wrap_snmp_host_cleanup(void *session) {
 	assert_ptr_equal(session, &fake_session);
 }
 
+#define INDEX_OID ".1.3.6.1.2.1.2.2.1.1."
+
+/* An index column answers index-<n> for row n; the failing OID is one the
+ * agent has no instance for, which a single get treats as a failure. */
+static const char *fake_index_value(const char *oid, char *buffer, size_t size, bool *failed) {
+	*failed = fake.failing_index_oid != NULL && strcmp(oid, fake.failing_index_oid) == 0;
+	if (*failed) return NULL;
+	snprintf(buffer, size, "index-%s", oid + strlen(INDEX_OID));
+	return buffer;
+}
+
 /* Mirrors snmp_get_base(): a failure is "" when allowed and U otherwise. */
 static char *fake_get(host_t *host, const char *oid, bool should_fail) {
 	const char *value = NULL;
+	char index_value[64];
+	bool index_failed = FALSE;
 	bool uptime = strcmp(oid, ".1.3.6.1.6.3.10.2.1.3.0") == 0 || strcmp(oid, ".1.3.6.1.2.1.1.3.0") == 0;
 	if (strcmp(oid, ".1.3.6.1.6.3.10.2.1.3.0") == 0) value = fake.engine_uptime;
 	else if (strcmp(oid, ".1.3.6.1.2.1.1.3.0") == 0) value = fake.legacy_uptime;
-	else value = "fake-system-field";
+	else if (strncmp(oid, INDEX_OID, strlen(INDEX_OID)) == 0) {
+		value = fake_index_value(oid, index_value, sizeof(index_value), &index_failed);
+		pthread_mutex_lock(&fake_lock);
+		fake.index_gets++;
+		pthread_mutex_unlock(&fake_lock);
+	} else value = "fake-system-field";
+	if (host->ignore_host && strncmp(oid, INDEX_OID, strlen(INDEX_OID)) == 0) value = NULL;
 	if (uptime) {
 		pthread_mutex_lock(&fake_lock);
 		fake.uptime_gets++;
@@ -342,6 +365,19 @@ char *__wrap_snmp_get(host_t *host, char *oid) {
 
 char *__wrap_snmp_get_allow_fail(host_t *host, char *oid) {
 	return fake_get(host, oid, FALSE);
+}
+
+void __wrap_snmp_get_checked(host_t *host, snmp_oids_t *oids, int count, bool *failed) {
+	(void) host;
+	pthread_mutex_lock(&fake_lock);
+	fake.batch_requests++;
+	fake.batch_oids += count;
+	pthread_mutex_unlock(&fake_lock);
+	for (int i = 0; i < count; i++) {
+		char value[64];
+		if (fake_index_value(oids[i].oid, value, sizeof(value), &failed[i]) == NULL) SET_UNDEFINED(oids[i].result);
+		else snprintf(oids[i].result, sizeof(oids[i].result), "%s", value);
+	}
 }
 
 void __wrap_snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int count) {
@@ -720,6 +756,56 @@ static void test_partition_checks_the_device_after_the_deadline(void **state) {
 	assert_int_equal(device.verdict, DEVICE_VERDICT_PENDING);
 }
 
+static void add_index_reindex(int data_query_id, const char *op, const char *assert_value, int index) {
+	char oid[64];
+	snprintf(oid, sizeof(oid), INDEX_OID "%d", index);
+	add_reindex(POLLER_ACTION_SNMP, op, assert_value, oid);
+	snprintf(fake.reindex[fake.reindex_count - 1][0], BUFSIZE, "%d", data_query_id);
+}
+
+/* "Verify All Fields" stores one SNMP assertion per index. They go out
+ * max_oids at a time, and each row is still judged on its own value: the
+ * first mismatch queues the reindex and stores the value it saw, and the
+ * rest of that data query is skipped. */
+static void test_reindex_gets_share_a_request(void **state) {
+	(void) state;
+	set_host("regression", "3", AVAIL_NONE);
+	add_index_reindex(7, "=", "index-1", 1);
+	add_index_reindex(7, "=", "stale", 2);
+	add_index_reindex(7, "=", "stale", 3);
+	add_index_reindex(8, "=", "index-4", 4);
+	run_poll();
+	/* rows 1-3 in one request, then row 4 alone through a single get */
+	assert_int_equal(fake.batch_requests, 1);
+	assert_int_equal(fake.batch_oids, 3);
+	assert_int_equal(fake.index_gets, 1);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 1);
+	assert_int_equal(captured("'47:7'"), 1);
+	assert_int_equal(captured("SET assert_value='index-2'"), 1);
+	assert_int_equal(captured("SET assert_value='index-3'"), 0);
+	assert_int_equal(captured("SET assert_value"), 1);
+}
+
+/* An index the agent lacks fails a single get and marks the device
+ * ignored; in a batch that applies at the same row, and later rows read U
+ * instead of their batched values. */
+static void test_failed_reindex_get_in_a_batch_ignores_the_device(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_index_reindex(7, "=", "index-1", 1);
+	add_index_reindex(8, "=", "stale", 2);
+	add_index_reindex(9, "=", "stale", 3);
+	add_snmp_item("681", "a", "regression", "2", NULL);
+	fake.failing_index_oid = INDEX_OID "2";
+	fake.multi_value = "42";
+	run_poll();
+	assert_int_equal(fake.batch_requests, 1);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 0);
+	assert_int_equal(captured("SET assert_value"), 0);
+	/* the ignored device collects nothing */
+	assert_int_equal(captured("'42')"), 0);
+}
+
 /* Padded script output is trimmed, then freed through its own pointer; the
  * device's error list starts empty, and completion writes run unlocked. */
 static void test_script_reindex_and_completion(void **state) {
@@ -950,6 +1036,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_uptime_wrap_window, setup),
 		cmocka_unit_test_setup(test_partitions_share_one_availability_and_reindex_check, setup),
 		cmocka_unit_test_setup(test_partition_checks_the_device_after_the_deadline, setup),
+		cmocka_unit_test_setup(test_reindex_gets_share_a_request, setup),
+		cmocka_unit_test_setup(test_failed_reindex_get_in_a_batch_ignores_the_device, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
 		cmocka_unit_test_setup(test_invalid_snmp_value_is_reported_and_discarded, setup),

@@ -332,6 +332,59 @@ static void load_reindex_item(reindex_t *reindex, MYSQL_ROW row) {
 	if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 }
 
+/* Plain SNMP gets can share a request; Cacti's "Verify All Fields" reindex
+ * method stores one per index. The uptime OIDs keep their own engine and
+ * legacy selection. */
+static bool reindex_row_batchable(MYSQL_ROW row) {
+	return row[1] != NULL && atoi(row[1]) == POLLER_ACTION_SNMP && row[4] != NULL && !is_uptime_oid(row[4]);
+}
+
+typedef struct {
+	snmp_oids_t *oids;
+	bool failed[100];
+	int first;
+	int count;
+} reindex_batch_t;
+
+/* Up to max_oids gets for the contiguous plain-SNMP rows from first on, in
+ * one request. A lone row keeps the single get. Rows that a failed
+ * assertion later skips are fetched but never read. */
+static void fetch_reindex_batch(host_t *host, MYSQL_ROW *rows, int first, int total, reindex_batch_t *batch) {
+	int count = 0;
+	int limit = host->snmp.max_oids < (int) (sizeof(batch->failed) / sizeof(batch->failed[0])) ? host->snmp.max_oids : (int) (sizeof(batch->failed) / sizeof(batch->failed[0]));
+
+	batch->first = first;
+	batch->count = 0;
+	if (host->ignore_host || host->snmp.session == NULL || limit < 2) return;
+	while (first + count < total && count < limit && reindex_row_batchable(rows[first + count])) count++;
+	if (count < 2) return;
+	if (batch->oids == NULL && (batch->oids = calloc((size_t) limit, sizeof(*batch->oids))) == NULL) {
+		die("ERROR: Fatal malloc error: reindex.c batch");
+	}
+	for (int index = 0; index < count; index++) {
+		snprintf(batch->oids[index].oid, sizeof(batch->oids[index].oid), "%s", rows[first + index][4]);
+	}
+	snmp_get_checked(host, batch->oids, count, batch->failed);
+	batch->count = count;
+}
+
+/* The batched value of row position, read in row order as snmp_get() would:
+ * once a failed get has marked the host ignored, later rows read U. */
+static char *take_reindex_batch_value(host_t *host, const reindex_t *reindex, int host_thread, const reindex_batch_t *batch, int position) {
+	int index = position - batch->first;
+	char *value = malloc(RESULTS_BUFFER);
+
+	if (value == NULL) die("ERROR: Fatal malloc error: reindex.c batch value");
+	if (host->ignore_host || batch->failed[index]) {
+		host->ignore_host = TRUE;
+		SET_UNDEFINED(value);
+	} else {
+		snprintf(value, RESULTS_BUFFER, "%s", batch->oids[index].result);
+	}
+	SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, value));
+	return value;
+}
+
 bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 	const reindex_evaluation_t *evaluation) {
 	if (host->ignore_host || evaluation->work->host_id == 0) return TRUE;
@@ -350,20 +403,35 @@ bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 		bool legacy_uptime = FALSE;
 		int last_data_query_id = 0;
 		bool previous_assert_failure = FALSE;
-		MYSQL_ROW row;
-		while ((row = mysql_fetch_row(result))) {
-			load_reindex_item(reindex, row);
+		reindex_batch_t batch = {.oids = NULL, .first = 0, .count = 0};
+		/* The stored result keeps every row until it is freed. */
+		MYSQL_ROW *rows = count > 0 ? malloc(sizeof(*rows) * (size_t) count) : NULL;
+		int fetched = 0;
+		if (count > 0 && rows == NULL) die("ERROR: Fatal malloc error: reindex.c rows");
+		while (fetched < count && (rows[fetched] = mysql_fetch_row(result)) != NULL) fetched++;
+		for (int position = 0; position < fetched; position++) {
+			bool unavailable = FALSE;
+			char *value;
+			load_reindex_item(reindex, rows[position]);
 			if (last_data_query_id != reindex->data_query_id) {
 				last_data_query_id = reindex->data_query_id;
 				previous_assert_failure = FALSE;
 			}
 			if (previous_assert_failure) continue;
-			bool unavailable = FALSE;
-			char *value = poll_reindex_action(host, reindex, thread, sysUptime, &legacy_uptime, &unavailable);
+			if (position >= batch.first + batch.count && reindex_row_batchable(rows[position])) {
+				fetch_reindex_batch(host, rows, position, fetched, &batch);
+			}
+			if (position >= batch.first && position < batch.first + batch.count) {
+				value = take_reindex_batch_value(host, reindex, thread, &batch, position);
+			} else {
+				value = poll_reindex_action(host, reindex, thread, sysUptime, &legacy_uptime, &unavailable);
+			}
 			if (unavailable) continue;
 			if (evaluate_reindex_assertion(evaluation, reindex, value, reindex->action == POLLER_ACTION_SNMP && legacy_uptime)) previous_assert_failure = TRUE;
 			SPINE_FREE(value);
 		}
+		SPINE_FREE(batch.oids);
+		SPINE_FREE(rows);
 		db_free_result(result);
 	}
 	/* Item polling opens a new session after reindex work has finished. */
