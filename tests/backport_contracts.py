@@ -454,7 +454,7 @@ void die(const char *format,...){(void)format;abort();}
 int spine_log(const char *format,...){(void)format;return TRUE;}
 #define strdup fixture_strdup
 #define free fixture_free
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static int db_tls_expected(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
 int main(void){MYSQL mysql;struct sockaddr_un address;int listener;int poller;
  memset(&address,0,sizeof(address));address.sun_family=AF_UNIX;
  snprintf(address.sun_path,sizeof(address.sun_path),"%s","''' + str(out / 'db.sock') + '''");
@@ -464,6 +464,14 @@ int main(void){MYSQL mysql;struct sockaddr_un address;int listener;int poller;
   db_connect(LOCAL,&mysql);assert(used_host==NULL&&strcmp(used_socket,address.sun_path)==0&&outstanding==0);
   snprintf(set.db_host,sizeof(set.db_host),"%s","db.example:/run/mysqld.sock");
   db_connect(LOCAL,&mysql);assert(strcmp(used_socket,"/run/mysqld.sock")==0&&outstanding==0);}
+ /* a regular file at the DB_Host path is a host name, not a socket, and
+  * does not exempt the connection from DB_SSL_Required */
+ {const char *regular="''' + str(out / 'db.file') + '''";FILE *f=fopen(regular,"w");assert(f);fclose(f);
+  set.poller_id=1;snprintf(set.db_host,sizeof(set.db_host),"%s",regular);
+  db_connect(LOCAL,&mysql);assert(used_host!=NULL&&used_socket[0]=='\\0'&&outstanding==0);
+  set.db_ssl=1;set.db_ssl_required=1;assert(db_tls_expected(LOCAL));
+  snprintf(set.db_host,sizeof(set.db_host),"%s",address.sun_path);assert(!db_tls_expected(LOCAL));
+  set.db_ssl=0;set.db_ssl_required=0;unlink(regular);}
  close(listener);unlink(address.sun_path);return 0;}
 ''')
 

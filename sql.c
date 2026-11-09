@@ -258,7 +258,7 @@ static int db_tls_expected(int type) {
 	char *colon;
 	struct stat socket_stat;
 
-	if (stat(host, &socket_stat) == 0 && (socket_stat.st_mode & S_IFSOCK)) {
+	if (stat(host, &socket_stat) == 0 && S_ISSOCK(socket_stat.st_mode)) {
 		return FALSE;
 	}
 
@@ -489,7 +489,7 @@ void db_connect(int type, MYSQL *mysql) {
 			STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 			if (stat(hostname, &socket_stat) == 0) {
-				if (socket_stat.st_mode & S_IFSOCK) {
+				if (S_ISSOCK(socket_stat.st_mode)) {
 					socket   = hostname;
 					hostname = NULL;
 				}
@@ -503,7 +503,7 @@ void db_connect(int type, MYSQL *mysql) {
 		STRDUP_OR_DIE(hostname, set.db_host, "db_host")
 
 		if (stat(hostname, &socket_stat) == 0) {
-			if (socket_stat.st_mode & S_IFSOCK) {
+			if (S_ISSOCK(socket_stat.st_mode)) {
 				socket   = hostname;
 				hostname = NULL;
 			}
