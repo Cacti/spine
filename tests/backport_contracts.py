@@ -439,3 +439,14 @@ int main(void){host_t host;const char *ipv4[]={"127.0.0.2","tcp:127.0.0.2","tcp:
  for(i=0;i<sizeof(ipv4)/sizeof(ipv4[0]);i++){snprintf(host.hostname,sizeof(host.hostname),"%s",ipv4[i]);assert(get_address_type(&host)==SPINE_IPV4);}
  snprintf(host.hostname,sizeof(host.hostname),"%s","[::1]");assert(get_address_type(&host)!=SPINE_IPV4);return 0;}
 ''')
+
+util = (root / 'util.c').read_text()
+trims = '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim('))
+run('maintenance-numeric-contract', '#include "common.h"\n#include "spine.h"\n' + trims + '\n' + function(util, 'int is_numeric(') + '''
+static int numeric(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return is_numeric(buffer);}
+int main(void){
+ /* the length and the parse must start at the same character */
+ assert(numeric(" 12")&&numeric("\\t 12 \\n")&&numeric(" -1.5")&&numeric("12 "));
+ /* a leading quote keeps the strip_alpha() path that stores 12 */
+ assert(!numeric("\\"12\\"")&&!numeric(" ")&&!numeric("")&&!numeric(" 12 abc")&&!numeric("00 1A"));return 0;}
+''')
