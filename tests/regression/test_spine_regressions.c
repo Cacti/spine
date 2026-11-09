@@ -2529,28 +2529,6 @@ static void test_snmp_multi_responses(host_t *host) {
 	snmp_get_multi(&missing_session, items, undefined, 2);
 	assert(missing_session.snmp.status == STAT_DESCRIP_ERROR);
 	assert(IS_UNDEFINED(undefined[0].result) && IS_UNDEFINED(undefined[1].result));
-	struct variable_list value = {0};
-	u_char text[] = "regression";
-	value.type = ASN_OCTET_STR;
-	value.val.string = text;
-	value.val_len = sizeof(text) - 1;
-	char formatted[128];
-	snmp_snprint_value(formatted, sizeof(formatted), NULL, 0, &value);
-	assert(strstr(formatted, "regression") != NULL);
-	struct {
-		char before;
-		char value;
-		char after;
-	} bounded = {'a', 'x', 'z'};
-	snmp_snprint_value(&bounded.value, 0, NULL, 0, &value);
-	assert(bounded.before == 'a' && bounded.value == 'x' && bounded.after == 'z');
-	snmp_snprint_value(&bounded.value, 1, NULL, 0, &value);
-	assert(bounded.before == 'a' && bounded.value == '\0' && bounded.after == 'z');
-	snmp_snprint_value(NULL, 0, NULL, 0, &value);
-	snmp_snprint_value(NULL, 1, NULL, 0, &value);
-	char insufficient[3] = "xx";
-	snmp_snprint_value(insufficient, 2, NULL, 0, &value);
-	assert(strcmp(insufficient, "U") == 0 && insufficient[2] == '\0');
 }
 
 static void test_snmp_scalar_responses(host_t *host) {

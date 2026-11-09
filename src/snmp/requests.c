@@ -530,17 +530,6 @@ int snmp_count(host_t *host, char *text_oid) {
 	return walk.failed ? -1 : walk.count;
 }
 
-/*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, const struct variable_list *variable)
- *
- *  \brief replacement for the buggy net-snmp.org snprint_value function
- *
- *	This function format an output buffer with the correct string representation
- *  of an snmp OID result fetched with snmp_get_multi.  The buffer pointed to by
- *  the function is modified.
- *
- */
-
-
 static void snmp_multi_undefined(snmp_oids_t *oids, int count) {
 	for (int index = 0; index < count; index++) SET_UNDEFINED(oids[index].result);
 }

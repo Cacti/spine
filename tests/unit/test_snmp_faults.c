@@ -30,7 +30,6 @@ static int fail_pdu_create;
 static int fail_add_null_var;
 static int session_liberr;
 static int fail_ascii_string;
-static size_t failing_calloc;
 static int null_default_protocols;
 static int fail_auth_oid;
 static int fail_priv_oid;
@@ -75,14 +74,6 @@ static void controlled_sess_error(void *session, int *liberr, int *syserr, char 
 static int controlled_ascii_string(char *buffer, size_t capacity, const u_char *input, size_t length) {
 	if (fail_ascii_string) return -1;
 	return snprint_asciistring(buffer, capacity, input, length);
-}
-
-static void *controlled_calloc(size_t count, size_t size) {
-	if (count == failing_calloc && failing_calloc != 0) {
-		failing_calloc = 0;
-		return NULL;
-	}
-	return calloc(count, size);
 }
 
 static const oid *controlled_default_authtype(size_t *length) {
@@ -203,7 +194,6 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 #define snmp_sess_session controlled_sess_session
 #define snmp_sess_synch_response controlled_synch_response
 #define snprint_asciistring controlled_ascii_string
-#define calloc controlled_calloc
 #define get_default_authtype controlled_default_authtype
 #define get_default_privtype controlled_default_privtype
 #define sc_get_auth_oid controlled_auth_oid
@@ -217,7 +207,6 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 #undef sc_get_auth_oid
 #undef get_default_privtype
 #undef get_default_authtype
-#undef calloc
 #undef snprint_asciistring
 #undef snmp_sess_synch_response
 #undef snmp_sess_session
@@ -238,7 +227,6 @@ static int snmp_reset(void **state) {
 	fail_add_null_var = FALSE;
 	session_liberr = 0;
 	fail_ascii_string = FALSE;
-	failing_calloc = 0;
 	null_default_protocols = FALSE;
 	fail_auth_oid = FALSE;
 	fail_priv_oid = FALSE;
@@ -666,18 +654,6 @@ static void test_unprintable_ascii_value_is_an_error(void **state) {
 	assert_string_equal(output, "42");
 }
 
-static void test_value_formatting_without_scratch_memory_is_unknown(void **state) {
-	netsnmp_variable_list variable;
-	char output[77] = "unchanged";
-
-	(void) state;
-	memset(&variable, 0, sizeof(variable));
-	failing_calloc = sizeof(output);
-
-	snmp_snprint_value(output, sizeof(output), NULL, 0, &variable);
-	assert_string_equal(output, "U");
-}
-
 static void init_v3_options(snmp_connection_t *options, char *auth, const char *auth_password,
 	char *priv, const char *priv_passphrase) {
 	static char host[] = "127.0.0.1";
@@ -805,7 +781,6 @@ int main(void) {
 		cmocka_unit_test_setup(test_missing_instances_are_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_exception_check_tolerates_a_missing_varbind, snmp_reset),
 		cmocka_unit_test_setup(test_unprintable_ascii_value_is_an_error, snmp_reset),
-		cmocka_unit_test_setup(test_value_formatting_without_scratch_memory_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_security_keys_fall_back_to_the_library_defaults, snmp_reset),
 		cmocka_unit_test_setup(test_session_refused_when_a_protocol_oid_is_unavailable, snmp_reset),
 		cmocka_unit_test_setup(test_engine_id_is_passed_to_the_session, snmp_reset),

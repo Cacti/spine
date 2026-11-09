@@ -66,25 +66,6 @@ int snmp_get_variable(const host_t *host, const char *text_oid, const struct var
 	return STAT_ERROR;
 }
 
-void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, const struct variable_list *variable) {
-	(void) objid;
-	(void) objidlen;
-	if (obuf == NULL || buf_len == 0) return;
-	u_char *buf = calloc(buf_len, sizeof(*buf));
-	if (buf == NULL) {
-		snprintf(obuf, buf_len, "%s", "U");
-		return;
-	}
-	size_t scratch_capacity = buf_len;
-	size_t out_len = 0;
-	if (sprint_realloc_by_type(&buf, &scratch_capacity, &out_len, 0, variable, NULL, NULL, NULL)) {
-		snprintf(obuf, buf_len, "%s", buf);
-	} else {
-		snprintf(obuf, buf_len, "%s", "U");
-	}
-	free(buf);
-}
-
 int snmp_varbind_is_exception(const struct variable_list *vars) {
 	if (vars == NULL) {
 		return FALSE;
