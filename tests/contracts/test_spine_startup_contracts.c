@@ -12,6 +12,7 @@
 #include "app/spine.h"
 #include "app/startup_internal.h"
 #include "tests/support/child_run.h"
+#include "tests/support/fixtures.h"
 #include <fcntl.h>
 
 #define SCRIPT_SERVER "./tests/support/php_test_server"
@@ -89,7 +90,7 @@ static void test_startup_remote_session(void) {
 	pool_t *previous_local = db_pool_local;
 	pool_t *previous_remote = db_pool_remote;
 	config_t previous = set;
-	const char *remote_host = getenv("SPINE_TEST_REMOTE_DB_HOST");
+	const char *remote_host = spine_test_fixture("remote-db", "SPINE_TEST_REMOTE_DB_HOST");
 	char query[BUFSIZE];
 
 	set.poller.threads = 1;
@@ -99,7 +100,7 @@ static void test_startup_remote_session(void) {
 	set.remote_database = set.database;
 	set.remote_database.ssl = FALSE;
 	/* The regression lane's second server is MySQL 8.4 at its default sql_mode. */
-	if (remote_host != NULL && remote_host[0] != '\0') {
+	if (remote_host != NULL) {
 		snprintf(set.remote_database.host, sizeof(set.remote_database.host), "%s", remote_host);
 		set.remote_database.port = 3307;
 	}
