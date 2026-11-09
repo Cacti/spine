@@ -569,3 +569,13 @@ int main(void){int actions[]={POLLER_ACTION_SCRIPT,POLLER_ACTION_PHP_SCRIPT_SERV
   assert(strcmp(poll(actions[n],"42",FALSE),"42")==0);}
  return 0;}
 ''')
+
+# Device 0 belongs only to the process whose host range or list includes 0.
+spine = (root / 'spine.c').read_text()
+run('maintenance-device-zero-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\n' + function(spine, 'static bool device_0_selected(') + '''
+static int selected(int first,const char *list){set.start_host_id=first;snprintf(set.host_id_list,sizeof(set.host_id_list),"%s",list);return device_0_selected();}
+int main(void){
+ assert(selected(-1,"")&&selected(0,"")&&!selected(1,"")&&!selected(25,""));
+ assert(selected(-1,"0")&&selected(-1,"5,0")&&selected(-1,"0,5")&&selected(-1,"1,0,2"));
+ assert(!selected(-1,"10")&&!selected(-1,"5,10,20")&&!selected(0,"1,2"));return 0;}
+''')

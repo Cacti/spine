@@ -268,6 +268,28 @@ static void parse_host_list(const char *input) {
 	}
 }
 
+/* cmd.php polls device 0 only when 0 lies within --first and --last.
+ * Without this check every concurrent process polled the device 0 items.
+ * parse_host_list() leaves only decimal ids and commas in the list. */
+static bool device_0_selected(void) {
+	const char *cursor = set.host_id_list;
+
+	if (cursor[0] != '\0') {
+		while (cursor != NULL) {
+			if (cursor[0] == '0' && (cursor[1] == ',' || cursor[1] == '\0')) {
+				return TRUE;
+			}
+
+			cursor = strchr(cursor, ',');
+			if (cursor != NULL) cursor++;
+		}
+
+		return FALSE;
+	}
+
+	return !HOSTID_DEFINED(set.start_host_id) || set.start_host_id == 0;
+}
+
 int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
@@ -657,11 +679,13 @@ int main(int argc, char *argv[]) {
 
 
 	/* check for device 0 items */
-	result = db_query(&mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
-	if (mysql_num_rows(result)) {
-		set.has_device_0 = TRUE;
+	if (device_0_selected()) {
+		result = db_query(&mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
+		if (mysql_num_rows(result)) {
+			set.has_device_0 = TRUE;
+		}
+		db_free_result(result);
 	}
-	db_free_result(result);
 
 	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");

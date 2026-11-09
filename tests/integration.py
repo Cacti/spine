@@ -159,12 +159,13 @@ class Polling(unittest.TestCase):
         self.sql('INSERT IGNORE INTO audit_first SELECT host_id,local_data_id,rrd_name FROM audit_expected '
                  'ORDER BY local_data_id,rrd_name;')
 
-    def run_spine(self, failure=None, ping=False, strict=False):
+    def run_spine(self, failure=None, ping=False, strict=False, hosts=()):
         self.sql("SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log=ON;", False)
         conf = self.strict_conf if strict else self.conf
         args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', '1', '-t', '16', '-S', '-V', '1']
         if ping:
             args.append('-P')
+        args.extend(hosts)
         env = os.environ.copy()
         if failure:
             env['SPINE_TEST_ALLOC_FAILURE'] = failure
@@ -266,6 +267,21 @@ class Polling(unittest.TestCase):
         self.seed(37, 10, host=1)
         self.run_spine()
         self.check_complete(devices=2)
+
+    def test_device_zero_only_in_its_range(self):
+        # poller.php gives device 0 to the process whose range starts at 0;
+        # every other concurrent process must leave its items alone.
+        for hosts, polled in ((('--first=1', '--last=2'), False), (('--first=0', '--last=1'), True),
+                              (('-H', '1,2'), False), (('-H', '2,0,1'), True)):
+            with self.subTest(hosts=hosts):
+                self.setUp()
+                self.seed(13, 10, host=0)
+                self.seed(37, 10, host=1)
+                self.run_spine(hosts=hosts)
+                self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+                device_0 = int(self.sql('SELECT COUNT(*) FROM poller_output WHERE local_data_id<10000;'))
+                self.assertEqual(device_0, 13 if polled else 0, self.result.stdout[-3000:])
+                self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output WHERE local_data_id>10000;'), '37')
 
     def test_output_write_failure(self):
         # A failed write still advances the countdown, as in 1.2.31, so a
