@@ -436,6 +436,37 @@ int main(void){MYSQL mysql;pid_t child;int status;
  return 0;}
 ''')
 
+# A DB_Host that names a socket file connects through it, and the copy of
+# the setting is freed whether it ends up as the host or the socket.
+run('maintenance-connect-socket-contract', '#include "common.h"\n#include "spine.h"\n#include <sys/socket.h>\n#include <sys/un.h>\n' + connect_stubs + '''
+config_t set;static int outstanding;static char used_socket[256];static const char *used_host;
+static char *fixture_strdup(const char *value){char *copy=strdup(value);if(copy)outstanding++;return copy;}
+static void fixture_free(void *pointer){if(pointer)outstanding--;free(pointer);}
+MYSQL *mysql_init(MYSQL *mysql){return mysql;}
+int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;(void)value;return 0;}
+MYSQL *mysql_real_connect(MYSQL *mysql,const char *host,const char *user,const char *pass,const char *db,unsigned int port,const char *sock,unsigned long flags){
+ (void)user;(void)pass;(void)db;(void)port;(void)flags;used_host=host;snprintf(used_socket,sizeof(used_socket),"%s",sock?sock:"");return mysql;}
+void mysql_close(MYSQL *mysql){(void)mysql;}
+unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return 0;}
+const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
+const char *mysql_get_ssl_cipher(MYSQL *mysql){(void)mysql;return NULL;}
+void die(const char *format,...){(void)format;abort();}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+#define strdup fixture_strdup
+#define free fixture_free
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+int main(void){MYSQL mysql;struct sockaddr_un address;int listener;int poller;
+ memset(&address,0,sizeof(address));address.sun_family=AF_UNIX;
+ snprintf(address.sun_path,sizeof(address.sun_path),"%s","''' + str(out / 'db.sock') + '''");
+ listener=socket(AF_UNIX,SOCK_STREAM,0);assert(listener>=0&&bind(listener,(struct sockaddr *)&address,sizeof(address))==0);
+ for(poller=1;poller<=2;poller++){
+  set.poller_id=poller;snprintf(set.db_host,sizeof(set.db_host),"%s",address.sun_path);
+  db_connect(LOCAL,&mysql);assert(used_host==NULL&&strcmp(used_socket,address.sun_path)==0&&outstanding==0);
+  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example:/run/mysqld.sock");
+  db_connect(LOCAL,&mysql);assert(strcmp(used_socket,"/run/mysqld.sock")==0&&outstanding==0);}
+ close(listener);unlink(address.sun_path);return 0;}
+''')
+
 util = (root / 'util.c').read_text()
 a = util.index('static struct {')
 b = util.index('} opttable[256];', a) + len('} opttable[256];')
