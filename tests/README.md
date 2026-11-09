@@ -38,6 +38,13 @@ temporary directory, loads its complete schema, and writes fixture credentials
 only into the copy. Without this option those two compatibility tests are
 reported as skipped. The ordinary polling regressions still execute.
 
+Set `SPINE_TEST_SNMPD` to a net-snmp `snmpd` executable to also poll a real
+agent over SNMPv1, SNMPv2c, and SNMPv3 authNoPriv and authPriv, covering the
+batched item gets and reindex assertion gets. The runner starts its own agent
+on a free loopback port with a temporary configuration and fixed fixture
+credentials, and stops it afterwards. Without this option that test is
+reported as skipped.
+
 `schema.sql` contains the actual table definitions from Cacti maintenance
 revision `8d5f404ea5beed56d50c4533bae01e5d5f0db026`, with its upstream notice.
 The small fixtures test behavior; capacity measurements use the separate

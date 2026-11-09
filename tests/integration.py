@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parent
@@ -21,6 +22,8 @@ FAULT_BINARY = Path(os.environ.get('SPINE_TEST_FAULT_BINARY', ROOT / 'spine_allo
 # Linking the fault binary needs a linker with --wrap; see configure.ac.
 HAVE_FAULT_BINARY = FAULT_BINARY.is_file()
 CLIENT = shutil.which('mariadb') or shutil.which('mysql')
+# A net-snmp snmpd executable; the tests start their own agent with it.
+SNMPD = os.environ.get('SPINE_TEST_SNMPD')
 
 
 def icmp_datagram_available():
@@ -131,6 +134,76 @@ class SnmpAgent:
 
     def gets(self, oid):
         return sum(request.count(oid) for request in self.requests)
+
+
+def oid_bytes(text):
+    parts = [int(part) for part in text.strip('.').split('.')]
+    data = bytes([parts[0] * 40 + parts[1]])
+    for part in parts[2:]:
+        chunk = [part & 0x7f]
+        part >>= 7
+        while part:
+            chunk.append(0x80 | (part & 0x7f))
+            part >>= 7
+        data += bytes(reversed(chunk))
+    return data
+
+
+class NetSnmpAgent:
+    """Run a real net-snmp snmpd on a loopback port with fixed SNMPv1/v2c and
+    SNMPv3 credentials and an integer value under BASE for each given index."""
+
+    BASE = '.1.3.6.1.4.1.8072.9999.9999.7'
+    COMMUNITY = 'spine-regression'
+    AUTH_USER = 'spineauth'
+    PRIV_USER = 'spinepriv'
+    AUTH_PASS = 'spine-auth-pass'
+    PRIV_PASS = 'spine-priv-pass'
+
+    def __init__(self, directory, indexes):
+        self.directory = Path(tempfile.mkdtemp(prefix='snmpd-', dir=directory))
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.bind(('127.0.0.1', 0))
+            self.port = probe.getsockname()[1]
+        conf = self.directory / 'snmpd.conf'
+        conf.write_text(f'agentAddress udp:127.0.0.1:{self.port}\n'
+                        f'rocommunity {self.COMMUNITY} 127.0.0.1\n'
+                        f'createUser {self.AUTH_USER} SHA "{self.AUTH_PASS}"\n'
+                        f'createUser {self.PRIV_USER} SHA "{self.AUTH_PASS}" AES "{self.PRIV_PASS}"\n'
+                        f'rouser {self.AUTH_USER} auth\nrouser {self.PRIV_USER} priv\n' +
+                        ''.join(f'override {self.BASE}.{i} integer {i}\n' for i in indexes))
+        env = dict(os.environ, SNMP_PERSISTENT_DIR=str(self.directory))
+        self.process = subprocess.Popen([SNMPD, '-f', '-C', '-c', str(conf), '-Lf', str(self.directory / 'snmpd.log')],
+                                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.wait_ready(indexes[0])
+
+    def wait_ready(self, index):
+        oid = ber(0x06, oid_bytes(self.BASE + '.' + str(index)))
+        request = ber(0x30, ber_int(1) + ber(0x04, self.COMMUNITY.encode()) +
+                      ber(0xa0, ber_int(1) + ber_int(0) + ber_int(0) + ber(0x30, ber(0x30, oid + ber(0x05, b'')))))
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.settimeout(0.2)
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                if self.process.poll() is not None:
+                    break
+                client.sendto(request, ('127.0.0.1', self.port))
+                try:
+                    client.recvfrom(65535)
+                    return
+                except OSError:
+                    pass
+        self.close()
+        raise RuntimeError('snmpd did not start: ' + (self.directory / 'snmpd.log').read_text(errors='replace')[-2000:])
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
 
 
 class Polling(unittest.TestCase):
@@ -434,6 +507,54 @@ class Polling(unittest.TestCase):
                 self.check_complete()
                 self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:1,1:3')
                 self.assertEqual([len(r) for r in agent.requests], [3, 1, 1, 1], agent.requests)
+
+    @unittest.skipUnless(SNMPD, 'set SPINE_TEST_SNMPD to a net-snmp snmpd executable')
+    def test_net_snmp_versions_and_security_levels(self):
+        # Items are fetched max_oids at a time by snmp_get_multi() and the
+        # reindex assertions by the batched gets, over each SNMP version and
+        # SNMPv3 security level, from a real agent.
+        cases = {
+            'v1': (1, {}),
+            'v2c': (2, {}),
+            'v3 authNoPriv': (3, {'snmp_username': NetSnmpAgent.AUTH_USER, 'snmp_password': NetSnmpAgent.AUTH_PASS,
+                                  'snmp_auth_protocol': 'SHA', 'snmp_priv_protocol': '[None]'}),
+            'v3 authPriv': (3, {'snmp_username': NetSnmpAgent.PRIV_USER, 'snmp_password': NetSnmpAgent.AUTH_PASS,
+                                'snmp_auth_protocol': 'SHA', 'snmp_priv_passphrase': NetSnmpAgent.PRIV_PASS,
+                                'snmp_priv_protocol': 'AES'}),
+        }
+        sources = [10000 + i + 1 for i in range(37)]
+        agent = NetSnmpAgent(self.directory, sources)
+        self.addCleanup(agent.close)
+        base = NetSnmpAgent.BASE
+        for name, (version, fields) in cases.items():
+            with self.subTest(snmp=name):
+                self.setUp()
+                self.seed(37, 4)
+                settings = {'snmp_version': version, 'snmp_community': NetSnmpAgent.COMMUNITY,
+                            'snmp_port': agent.port, 'snmp_timeout': 1000, 'snmp_username': '',
+                            'snmp_password': '', 'snmp_auth_protocol': '', 'snmp_priv_passphrase': '',
+                            'snmp_priv_protocol': '', **fields}
+                # Fixed fixture values; none contain a quote.
+                assignments = ','.join(f"{column}='{value}'" for column, value in settings.items())
+                self.sql('UPDATE host SET ' + assignments + ',availability_method=2,ping_retries=1,max_oids=10;'
+                         'UPDATE poller_item SET ' + assignments +
+                         f",action=0,hostname='127.0.0.1',arg1=CONCAT('{base}.',local_data_id);")
+                # 25 matching assertions, one that has changed and one whose
+                # OID the agent does not have
+                rows = [f"(1,1,0,'=','{i}','{base}.{i}')" for i in sources[:25]]
+                rows += [f"(1,2,0,'=','0','{base}.{sources[30]}')", f"(1,3,0,'=','7','{base}.99999')"]
+                self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' +
+                         ','.join(rows) + ';')
+                self.run_spine()
+                self.check_complete()
+                self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
+                # SNMPv1 reports the missing OID with a noSuchName error status,
+                # which reads as empty; later versions return noSuchObject,
+                # which reads as U and is assumed to match.
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'),
+                                 '1:2,1:3' if version == 1 else '1:2')
+                self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=2;'),
+                                 str(sources[30]))
 
     def test_single_and_ten_workers(self):
         for threads in (1, 10):
