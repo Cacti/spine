@@ -2568,8 +2568,9 @@ static void test_snmp_scalar_responses(host_t *host) {
 	}
 	result = snmp_get_base(host, ".1.3.6.1.2.1.1.1.999", FALSE);
 	assert(!host->ignore_host);
-	if (host->snmp.profile.version == 2) assert(strcmp(result, "U") == 0);
-	else assert(strcmp(result, "") == 0);
+	/* v1 reports the missing instance as a PDU error and v2c as an inline
+	 * exception varbind; neither is data, so both store U. */
+	assert(strcmp(result, "U") == 0);
 	free(result);
 	result = snmp_get(host, ".1.3.6.1.2.1.1.6.0");
 	assert(strstr(result, "isolated-regression-agent") != NULL && !host->ignore_host);

@@ -30,7 +30,7 @@
  * v3 request in the process single-threaded, and let one slow or dead device
  * stall every other thread for timeout x (retries + 1). */
 typedef struct {
-	int reqid;
+	long reqid;
 	int status;
 	bool waiting;
 	struct snmp_pdu *pdu;

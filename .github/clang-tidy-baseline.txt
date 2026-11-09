@@ -9,8 +9,7 @@ src/app/signals.c: standard function '__errno_location' may not be asynchronous-
 src/process/nft_popen.c: Value stored to 'inherit_fd' is never read [clang-analyzer-deadcode.DeadStores]
 src/process/nft_popen.c: Value stored to 'inherit_fd' is never read [clang-analyzer-deadcode.DeadStores]
 # PHP read/process modules: the narrowing conversions split a sub-second timeout into
-# struct timeval fields and keep a short write count; cp is only tested.
-src/script/read.c: Although the value stored to 'cp' is used in the enclosing expression, the value is never actually read from 'cp' [clang-analyzer-deadcode.DeadStores]
+# struct timeval fields and keep a short write count.
 src/script/read.c: narrowing conversion from '__time_t' (aka 'long') to 'double' [bugprone-narrowing-conversions]
 src/script/read.c: narrowing conversion from 'double' to '__suseconds_t' (aka 'long') [bugprone-narrowing-conversions]
 src/script/read.c: narrowing conversion from 'double' to '__time_t' (aka 'long') [bugprone-narrowing-conversions]

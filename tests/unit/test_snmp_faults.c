@@ -149,7 +149,7 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 	/* An agent answers with the OIDs it was asked for, in order unless the
 	 * test reverses them. */
 	for (const netsnmp_variable_list *asked = request != NULL ? request->variables : NULL;
-		asked != NULL && requested < 4; asked = asked->next_variable, requested++) {
+		 asked != NULL && requested < 4; asked = asked->next_variable, requested++) {
 		memcpy(names[requested], asked->name, asked->name_length * sizeof(oid));
 		lengths[requested] = asked->name_length;
 	}
