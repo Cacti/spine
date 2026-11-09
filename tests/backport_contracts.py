@@ -643,3 +643,14 @@ int main(void){MYSQL mysql;static pool_t pool[1];db_pool_local=pool;set.threads=
  db_create_connection_pool(LOCAL);assert(db_reconnect(&mysql,LOCAL,2013,"fixture")==TRUE);
  assert(strstr(reconnected,"'STRICT_TRANS_TABLES'")!=NULL);assert(strcmp(pooled,reconnected)==0);return 0;}
 ''')
+
+util = (root / 'util.c').read_text()
+run('maintenance-date-format-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\nvoid die(const char *format,...){(void)format;abort();}\n' + function(util, 'char * get_date_format(') + '''
+static int formats(int format,int separator,const char *expected){char *text;int same;set.log_datetime_format=format;set.log_datetime_separator=separator;text=get_date_format();same=strcmp(text,expected)==0;free(text);return same;}
+int main(void){
+ assert(formats(GD_MO_D_Y,GDC_SLASH,"%m/%d/%Y %H:%M:%S - ")&&formats(GD_MN_D_Y,GDC_DOT,"%b.%d.%Y %H:%M:%S - "));
+ assert(formats(GD_D_MO_Y,GDC_HYPHEN,"%d-%m-%Y %H:%M:%S - ")&&formats(GD_D_MN_Y,GDC_SLASH,"%d/%b/%Y %H:%M:%S - "));
+ assert(formats(GD_Y_MO_D,GDC_SLASH,"%Y/%m/%d %H:%M:%S - ")&&formats(GD_Y_MN_D,GDC_SLASH,"%Y/%b/%d %H:%M:%S - "));
+ /* the default timestamp is the one every 1.2.31 format produced */
+ assert(formats(GD_DEFAULT,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - ")&&formats(99,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - "));return 0;}
+''')
