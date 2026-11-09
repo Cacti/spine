@@ -22,6 +22,7 @@
 #include "app/spine.h"
 #include "tests/support/child_run.h"
 #include "config/settings_internal.h"
+#include "poller/poller_internal.h"
 
 #define HOST_COLUMNS 37
 #define REINDEX_COLUMNS 5
@@ -540,6 +541,57 @@ static void test_uptime_baseline_survives_unknown(void **state) {
 	}
 }
 
+/* A legacy agent's 32-bit sysUpTime wraps after about 497 days. A drop from
+ * near 2^32 to a value that fits the elapsed time is a wrap, not a reboot:
+ * no reindex, no spike kill, and the new value becomes the baseline. A drop
+ * that does not fit, or one reported by the engine time OID, still fires. */
+static void test_legacy_uptime_wrap_is_not_a_reboot(void **state) {
+	static const struct {
+		const char *engine;
+		const char *legacy;
+		int commands;
+		const char *stored;
+		const char *output;
+	} cycles[] = {
+		{NULL, "4294960000", 0, "4294960000", "'123')"},
+		{NULL, "10000", 0, "10000", "'123')"},
+		{NULL, "500", 1, "500", "'U')"},
+		{NULL, "4000000000", 0, "4000000000", "'123')"},
+		{NULL, "100", 1, "100", "'U')"},
+		{"42949600", NULL, 0, "4294960000", "'123')"},
+		{"5", NULL, 1, "500", "'U')"},
+	};
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	set.poller.poller_interval = 300;
+	add_reindex(POLLER_ACTION_SNMP, "<", "0", ".1.3.6.1.2.1.1.3.0");
+	add_script_item("661", "a", "/usr/bin/printf 123");
+	for (size_t i = 0; i < sizeof(cycles) / sizeof(cycles[0]); i++) {
+		for (int q = 0; q < fake.query_count; q++) free(fake.queries[q]);
+		fake.query_count = 0;
+		fake.engine_uptime = cycles[i].engine;
+		fake.legacy_uptime = cycles[i].legacy;
+		run_poll();
+		print_message("cycle %zu stored=%s\n", i, fake.reindex[0][3]);
+		assert_int_equal(captured("REPLACE INTO poller_command"), cycles[i].commands);
+		assert_string_equal(fake.reindex[0][3], cycles[i].stored);
+		assert_int_equal(captured(cycles[i].output), 1);
+	}
+}
+
+/* The wrap window is two polling intervals, and never under ten minutes. */
+static void test_uptime_wrap_window(void **state) {
+	(void) state;
+	assert_true(uptime_wrapped("4294967295", "0", 0));
+	assert_true(uptime_wrapped("4294907296", "0", 300));
+	assert_false(uptime_wrapped("4294907296", "1", 300));
+	assert_true(uptime_wrapped("4294847296", "0", 600));
+	assert_false(uptime_wrapped("4294967296", "0", 300));
+	assert_false(uptime_wrapped("4294967295", "4294967295", 300));
+	assert_false(uptime_wrapped("U", "0", 300));
+	assert_false(uptime_wrapped("4294967295", "U", 300));
+}
+
 /* Padded script output is trimmed, then freed through its own pointer; the
  * device's error list starts empty, and completion writes run unlocked. */
 static void test_script_reindex_and_completion(void **state) {
@@ -766,6 +818,8 @@ int main(void) {
 		cmocka_unit_test_setup(test_snmpv3_batches_on_profile, setup),
 		cmocka_unit_test_setup(test_snmp_batches_on_timeout, setup),
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
+		cmocka_unit_test_setup(test_legacy_uptime_wrap_is_not_a_reboot, setup),
+		cmocka_unit_test_setup(test_uptime_wrap_window, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
 		cmocka_unit_test_setup(test_invalid_snmp_value_is_reported_and_discarded, setup),
