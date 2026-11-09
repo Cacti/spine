@@ -267,7 +267,14 @@ run('maintenance-session-key-contract', '#include "common.h"\n#include "spine.h"
  poller_items[0].snmp_timeout=500;poller_items[1].snmp_timeout=1000;
 ''' + snapshot + '\ni=1;assert(' + condition + ''');
  poller_items[1].snmp_timeout=500;strcpy(poller_items[1].hostname,"127.0.0.2");
- assert(''' + condition + ''');return 0;}
+ assert(''' + condition + ''');
+ /* a community the target holds must compare equal, or every item flushes
+  * the batch and max_oids never applies */
+ strcpy(poller_items[1].hostname,"127.0.0.1");poller_items[0].snmp_version=poller_items[1].snmp_version=2;
+ memset(poller_items[0].snmp_community,'c',sizeof(poller_items[0].snmp_community)-1);
+ memcpy(poller_items[1].snmp_community,poller_items[0].snmp_community,sizeof(poller_items[1].snmp_community));
+ i=0;
+''' + snapshot + '\ni=1;assert(!(' + condition + '''));return 0;}
 ''')
 
 util = (root / 'util.c').read_text()

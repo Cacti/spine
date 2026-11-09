@@ -246,7 +246,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	int  last_snmp_port    = 0;
 	int  last_snmp_timeout = 0;
 	char last_snmp_hostname[sizeof(((target_t *)0)->hostname)];
-	char last_snmp_community[50];
+	char last_snmp_community[sizeof(((target_t *)0)->snmp_community)];
 	char last_snmp_username[50];
 	char last_snmp_password[50];
 	char last_snmp_auth_protocol[7];
