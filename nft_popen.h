@@ -97,3 +97,4 @@ extern int	nft_pclose(int fd);
 
 /* Drain deferred child cleanup after polling workers have finished. */
 extern int nft_popen_cleanup(void);
+extern void nft_kill_group(pid_t pid);

@@ -151,6 +151,17 @@ static double nft_now(void) {
 	return now.tv_sec + now.tv_nsec / 1000000000.0;
 }
 
+/* Each child leads its own process group (see nft_popen()), so a kill also
+ * reaches the processes a script started.  Fall back to the child alone if
+ * it never became a group leader. */
+void nft_kill_group(pid_t pid) {
+	if (pid <= 0) return;
+
+	if (kill(-pid, SIGKILL) < 0) {
+		(void)kill(pid, SIGKILL);
+	}
+}
+
 /* ListMutex is held. Polling threads only make nonblocking reap attempts;
  * expired children are signalled without waiting for the signal to take effect. */
 static void nft_sweep_pending(int force) {
@@ -168,7 +179,7 @@ static void nft_sweep_pending(int force) {
 			free(cur);
 		} else {
 			if (!cur->killed && (force || now == 0 || cur->deadline == 0 || now >= cur->deadline)) {
-				(void)kill(cur->pid, SIGKILL);
+				nft_kill_group(cur->pid);
 				cur->killed = TRUE;
 			}
 			link = &cur->next;
@@ -352,6 +363,9 @@ int nft_popen(const char * command, const char * type) {
 			(void)close(p->fd);
 		(void)fcntl(STDIN_FILENO, F_SETFD, 0);
 		(void)fcntl(STDOUT_FILENO, F_SETFD, 0);
+
+		/* Lead a new process group so a timeout kill reaches grandchildren. */
+		(void)setpgid(0, 0);
 
 		/* Execute the command. */
 		#if defined(__CYGWIN__)
