@@ -11,49 +11,113 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: ${{ matrix.variant }} ${{ matrix.compiler }} ${{ matrix.client }} ${{ matrix.database }}
+    # Ubuntu 24.04 for the php8.3 packages the Script Server tests install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     services:
       database:
-        image: mariadb:10.11
+        image: ${{ matrix.image }}
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MYSQL_ALLOW_EMPTY_PASSWORD: '1'
         ports:
           - 3306/tcp
         options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=5s --health-timeout=5s --health-retries=20
+          --health-cmd="${{ matrix.health }}"
+          --health-interval=5s --health-timeout=5s --health-retries=30
     strategy:
       fail-fast: false
       matrix:
+        variant: [release]
         compiler: [gcc, clang]
+        client: [libmysqlclient, libmariadb]
+        database: [mariadb-10.11, mysql-5.7, mysql-8.0]
+        exclude:
+          - compiler: clang
+            database: mysql-5.7
+          - compiler: clang
+            database: mysql-8.0
+        include:
+          - database: mariadb-10.11
+            image: mariadb:10.11
+            health: healthcheck.sh --connect --innodb_initialized
+          - database: mysql-5.7
+            image: mysql:5.7
+            health: mysqladmin ping -h 127.0.0.1 --silent
+          - database: mysql-8.0
+            image: mysql:8.0
+            health: mysqladmin ping -h 127.0.0.1 --silent
+          # AddressSanitizer, LeakSanitizer and UBSan over every suite
+          - variant: sanitize
+            compiler: gcc
+            client: libmariadb
+            database: mariadb-10.11
+            image: mariadb:10.11
+            health: healthcheck.sh --connect --innodb_initialized
+            sanitize: -fsanitize=address,undefined -fno-sanitize-recover=undefined
     env:
       CC: ${{ matrix.compiler }}
+      CLIENT_LIBRARY: ${{ matrix.client }}
+      SANITIZE: ${{ matrix.sanitize }}
+      ASAN_OPTIONS: detect_leaks=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
 
+      # The real Script Server tests bootstrap a complete Cacti maintenance tree.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Cacti/cacti
+          ref: 1.2.x
+          path: cacti-1.2
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Install build dependencies
         run: |
           set -euo pipefail
+          case "$CLIENT_LIBRARY" in
+            libmysqlclient) client=libmysqlclient-dev; other=libmariadb-dev ;;
+            libmariadb) client=libmariadb-dev; other=libmysqlclient-dev ;;
+            *) echo "unknown client library $CLIENT_LIBRARY"; exit 1 ;;
+          esac
           sudo apt-get update
+          # only one client library's headers may be found by configure
+          sudo apt-get purge -y "$other"
           sudo apt-get install -y \
-          libmysqlclient-dev \
+          "$client" \
           default-mysql-client \
           libsnmp-dev libssl-dev build-essential \
-          help2man autoconf automake libtool dos2unix
+          help2man autoconf automake libtool dos2unix \
+          php8.3-cli php8.3-mysql
+          sudo update-alternatives --set php /usr/bin/php8.3
+          php -m | grep -qx pdo_mysql
 
       - name: Prepare for Spine Build
         run: |
           set -euo pipefail
           ./bootstrap
+          if [ -n "$SANITIZE" ]; then
+            export CFLAGS="-g -O1 -fno-omit-frame-pointer $SANITIZE" LDFLAGS="$SANITIZE"
+          fi
           ./configure --enable-warnings
 
       - name: Build Spine
         run: |
           set -euo pipefail
           make -j"$(nproc)"
+          case "$CLIENT_LIBRARY" in
+            libmysqlclient) library=libmysqlclient ;;
+            libmariadb) library=libmariadb ;;
+          esac
+          if ! ldd ./spine | grep -q "$library"; then
+            ldd ./spine
+            echo "spine is not linked against $library"
+            exit 1
+          fi
 
       - name: Run backport contracts
         run: |
@@ -65,6 +129,9 @@ jobs:
       - name: Test polling failures, partitions, and query budget
         env:
           TEST_DATABASE_PORT: ${{ job.services.database.ports['3306'] }}
+          SPINE_TEST_CACTI_ROOT: ${{ github.workspace }}/cacti-1.2
+          # fail rather than skip the cases this job provides for
+          SPINE_TEST_REQUIRE: cacti,fault
         run: |
           config="$RUNNER_TEMP/spine-test-client.cnf"
           umask 077
