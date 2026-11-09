@@ -524,3 +524,34 @@ int main(void){flush_t flush[]={flush0,flush1,flush2};size_t n;
   strcpy(oids[0].result,"42");flush[n](&host,items,oids,1,FALSE);assert(strcmp(items[0].result,"42")==0);}
  return 0;}
 ''')
+
+# The script and Script Server actions apply the same restart check as SNMP.
+a = poller.index('\t\t\tcase POLLER_ACTION_SCRIPT: /* execute script file */')
+b = poller.index('\t\t\tdefault: /* unknown action, generate error */', a)
+actions = poller[a:b]
+run('maintenance-script-spike-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\nstatic const char *reply;\n' + '''
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void die(const char *format,...){(void)format;abort();}
+int is_debug_device(int id){(void)id;return FALSE;}
+double get_time_as_double(void){return 0;}
+void buffer_output_errors(char *e,int *s,int *b,int d,int t,int l,bool f){(void)e;(void)s;(void)b;(void)d;(void)t;(void)l;(void)f;}
+static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)capacity;}
+int php_get_process(void){return 0;}
+char *php_cmd(const char *command,int process){(void)command;(void)process;return strdup(reply);}
+char *exec_poll(host_t *host,char *command,int id,char *type){(void)host;(void)command;(void)id;(void)type;return strdup(reply);}
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static const char *script_log_name(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '''
+static const char *poll(int action,const char *output,int spike_kill){static target_t poller_items[1];host_t h={0};host_t *host=&h;
+ int i=0,host_id=1,host_thread=1,errors=0,php_process;int *buf_size=NULL,*buf_errors=NULL;char *error_string=NULL;
+ char temp_result[RESULTS_BUFFER];char script[SMALL_BUFSIZE];char *poll_result;double thread_start=0,thread_end=0;
+ reply=output;memset(poller_items,0,sizeof(poller_items));strcpy(poller_items[0].arg1,"/bin/true");
+ switch(action){
+''' + actions + '''
+ }
+ (void)host;(void)errors;(void)php_process;(void)thread_end;return poller_items[0].result;}
+int main(void){int actions[]={POLLER_ACTION_SCRIPT,POLLER_ACTION_PHP_SCRIPT_SERVER};size_t n;
+ for(n=0;n<2;n++){
+  assert(strcmp(poll(actions[n],"42\\n",TRUE),"U")==0);
+  assert(strcmp(poll(actions[n],"a:1 b:2",TRUE),"a:1 b:2")==0);
+  assert(strcmp(poll(actions[n],"42",FALSE),"42")==0);}
+ return 0;}
+''')
