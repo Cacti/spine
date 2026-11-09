@@ -1757,17 +1757,23 @@ char *strip_alpha(char *string) {
  *
  */
 char *add_slashes(char *string) {
-	int length;
-	int position;
-	int new_position;
+	size_t length;
+	size_t position;
+	size_t new_position;
 	char *return_str;
 
-	if (!(return_str = (char *) malloc(BUFSIZE))) {
+	length = strlen(string);
+
+	/* every backslash may be doubled, so size for twice the input plus the terminator */
+	if (length > (SIZE_MAX - 1) / 2) {
+		die("ERROR: Fatal malloc error: util.c add_slashes!");
+	}
+
+	if (!(return_str = (char *) malloc(length * 2 + 1))) {
 		die("ERROR: Fatal malloc error: util.c add_slashes!");
 	}
 	return_str[0] = '\0';
 
-	length       = strlen(string);
 	position     = 0;
 	new_position = 0;
 
