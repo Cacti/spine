@@ -100,8 +100,41 @@ static void test_add_slashes(void) {
 	free(output);
 }
 
+static void test_snmp_format_value(void) {
+	netsnmp_variable_list vars;
+	oid    name[] = { 1, 3, 6, 1, 2, 1, 1, 1, 0 };
+	char   *output;
+	u_char *value;
+	size_t value_len = RESULTS_BUFFER * 2;
+
+	/* an exactly sized heap buffer full of garbage, like an uninitialized stack buffer */
+	output = malloc(RESULTS_BUFFER);
+	value  = malloc(value_len);
+	memset(value, 'x', value_len);
+
+	memset(&vars, 0, sizeof(vars));
+	snmp_set_var_objid(&vars, name, sizeof(name) / sizeof(oid));
+	snmp_set_var_typed_value(&vars, ASN_OCTET_STR, value, value_len);
+
+	memset(output, 'G', RESULTS_BUFFER);
+	CHECK(!snmp_format_value(output, RESULTS_BUFFER, &vars), "snmp_format_value reports a value that does not fit");
+	CHECK(memchr(output, '\0', RESULTS_BUFFER) != NULL, "snmp_format_value terminates an oversized value");
+	CHECK(IS_UNDEFINED(output), "snmp_format_value records an oversized value as U");
+
+	snmp_set_var_typed_value(&vars, ASN_OCTET_STR, (const u_char *) "short", 5);
+
+	memset(output, 'G', RESULTS_BUFFER);
+	CHECK(snmp_format_value(output, RESULTS_BUFFER, &vars), "snmp_format_value accepts a value that fits");
+	CHECK(memchr(output, '\0', RESULTS_BUFFER) != NULL && strstr(output, "short") != NULL, "snmp_format_value terminates a value that fits");
+
+	snmp_reset_var_buffers(&vars);
+	free(value);
+	free(output);
+}
+
 int main(void) {
 	test_add_slashes();
+	test_snmp_format_value();
 
 	if (failures) {
 		printf("%d check(s) failed\n", failures);
