@@ -579,3 +579,42 @@ int main(void){
  assert(selected(-1,"0")&&selected(-1,"5,0")&&selected(-1,"0,5")&&selected(-1,"1,0,2"));
  assert(!selected(-1,"10")&&!selected(-1,"5,10,20")&&!selected(0,"1,2"));return 0;}
 ''')
+
+# The worker launch sequence of main(), with only the semaphore, thread,
+# clock and lock primitives substituted.
+spine = (root / 'spine.c').read_text()
+a = spine.index('\t\t/* dev note - errno was never primed')
+b = spine.index('\n\t}\n\n\tsem_getvalue(&available_threads', a)
+launch = spine[a:b]
+run('maintenance-thread-launch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
+config_t set;sem_t available_threads;double start_time,total_time;
+static double now;static int held,creates,eagain,create_error,available_posts,init_posts,available_ok,init_ok,errored;
+static int fixture_trywait(sem_t *s){if(s==&available_threads?available_ok:init_ok)return 0;errno=EAGAIN;return -1;}
+static int fixture_post(sem_t *s){if(s==&available_threads)available_posts++;else init_posts++;return 0;}
+static int fixture_getvalue(sem_t *s,int *v){(void)s;*v=0;return 0;}
+static int fixture_create(pthread_t *t,const pthread_attr_t *a,void *(*f)(void *),void *arg){(void)t;(void)a;(void)f;(void)arg;creates++;if(eagain){eagain--;return EAGAIN;}return create_error;}
+static int fixture_usleep(useconds_t usec){now+=usec/1000000.0;return 0;}
+double get_time_as_double(void){return now;}
+/* a non-recursive mutex: locking it twice from one thread deadlocks */
+void thread_mutex_lock(int id){(void)id;assert(!held);held=1;}
+void thread_mutex_unlock(int id){(void)id;assert(held);held=0;}
+int spine_log(const char *format,...){if(strstr(format,"errored with"))errored++;return TRUE;}
+void *child(void *arg){return arg;}
+#define sem_trywait fixture_trywait
+#define sem_post fixture_post
+#define sem_getvalue fixture_getvalue
+#define pthread_create fixture_create
+#define usleep fixture_usleep
+static int canexit_result;
+static int launch(int current_thread){int host_id=1,canexit=FALSE,change_host=TRUE,device_counter=0,thread_status=0,a_threads_value=0;
+ pthread_t threads[1];pthread_attr_t attr;sem_t thread_init_sem;poller_thread_t *poller_details=calloc(1,sizeof(*poller_details));assert(poller_details);memset(&attr,0,sizeof(attr));
+''' + launch + '''
+ (void)a_threads_value;(void)device_counter;canexit_result=canexit;if(current_thread==1)free(poller_details);return thread_status;}
+static void reset(void){now=start_time=total_time=0;held=creates=eagain=create_error=available_posts=init_posts=errored=0;available_ok=init_ok=1;set.poller_interval=10;set.threads=4;}
+int main(void){
+ /* EAGAIN retries the create without taking a lock again */
+ reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0);
+ /* a failed create releases the init slot and the worker permit */
+ reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1);
+ return 0;}
+''')
