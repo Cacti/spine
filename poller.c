@@ -1216,8 +1216,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 										assert_next++;
 									}
 
-									/* a fetched value stands for snmp_get() unless an earlier
-									 * check has given the host up since */
+									/* a fetched value stands for snmp_get_assert() unless an
+									 * earlier check has given the host up since */
 									if (assert_next < assert_count && assert_oids[assert_next].array_position == reindex_row &&
 										assert_state[assert_next] != SNMP_ASSERT_PENDING && !host->ignore_host) {
 										if (!(poll_result = (char *) malloc(RESULTS_BUFFER))) {
@@ -1229,7 +1229,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 											host->ignore_host = TRUE;
 										}
 									} else {
-										poll_result = snmp_get(host, reindex->arg1);
+										poll_result = snmp_get_assert(host, reindex->arg1);
 									}
 								}
 

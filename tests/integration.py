@@ -77,7 +77,8 @@ def oid_text(data):
 class SnmpAgent:
     """Answer SNMPv2c GET requests from a table and record each request's OIDs.
 
-    Values are ('int', n), ('ticks', n) or ('str', text); any other OID is
+    Values are ('int', n), ('ticks', n), ('str', text) or the exception
+    values ('noSuchObject',) and ('endOfMibView',); any other OID is
     noSuchInstance.  A request for an OID in errors gets a noSuchName error
     status instead."""
 
@@ -95,7 +96,11 @@ class SnmpAgent:
         self.sock.close()
 
     def encode(self, oid):
-        kind, value = self.values.get(oid, (None, None))
+        kind, value = (self.values.get(oid, (None,)) + (None,))[:2]
+        if kind == 'noSuchObject':
+            return ber(0x80, b'')
+        if kind == 'endOfMibView':
+            return ber(0x82, b'')
         if kind == 'int':
             return ber_int(value)
         if kind == 'ticks':
@@ -388,20 +393,47 @@ class Polling(unittest.TestCase):
         self.assertEqual([len(r) for r in agent.requests if len(r) > 1], [5], agent.requests)
         self.assertEqual(sorted(sum((r for r in agent.requests if len(r) == 1), [])), sorted(values))
 
-    def test_rejected_reindex_get_still_ends_the_checks(self):
-        # snmp_get() gives the device up on noSuchInstance; later checks get
-        # U and the device is not polled this cycle, as before batching.
-        self.seed(37, 1)
-        values = {'.1.3.6.1.2.1.2.2.1.1.1': ('int', 1), '.1.3.6.1.2.1.2.2.1.1.3': ('int', 9)}
-        agent = self.snmp_agent(values, availability=0, max_oids=10)
-        self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
-                 "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,1,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
-                 "(1,1,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
-        self.run_spine()
-        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
-        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
-        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
-        self.assertLessEqual(len(agent.requests), 2, agent.requests)
+    # Cacti's cmd.php reads an assertion OID with an exception value as U and
+    # goes on with the later checks and the device's polling.
+    EXCEPTIONS = {'noSuchInstance': None, 'noSuchObject': ('noSuchObject',), 'endOfMibView': ('endOfMibView',)}
+
+    def test_missing_reindex_value_keeps_the_device_polled(self):
+        for name, value in self.EXCEPTIONS.items():
+            with self.subTest(exception=name):
+                self.setUp()
+                self.seed(37, 1)
+                values = {'.1.3.6.1.2.1.2.2.1.1.1': ('int', 1), '.1.3.6.1.2.1.2.2.1.1.3': ('int', 9)}
+                if value:
+                    values['.1.3.6.1.2.1.2.2.1.1.2'] = value
+                agent = self.snmp_agent(values, availability=0, max_oids=10)
+                self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
+                         "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,1,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
+                         "(1,1,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
+                self.run_spine()
+                self.check_complete()
+                # the third check still reads 9 and queues the reindex
+                self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:1')
+                self.assertEqual(self.sql("SELECT assert_value FROM poller_reindex WHERE arg1 LIKE '%.3';"), '9')
+                self.assertEqual([len(r) for r in agent.requests], [3], agent.requests)
+
+    def test_missing_reindex_value_fetched_alone_keeps_the_device_polled(self):
+        # An error status sends every check to its own get; the exception
+        # value read that way must not give the device up either.
+        for name, value in self.EXCEPTIONS.items():
+            with self.subTest(exception=name):
+                self.setUp()
+                self.seed(37, 1)
+                values = {'.1.3.6.1.2.1.2.2.1.1.3': ('int', 9)}
+                if value:
+                    values['.1.3.6.1.2.1.2.2.1.1.2'] = value
+                agent = self.snmp_agent(values, availability=0, max_oids=10, errors=('.1.3.6.1.2.1.2.2.1.1.1',))
+                self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
+                         "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,2,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
+                         "(1,3,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
+                self.run_spine()
+                self.check_complete()
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:1,1:3')
+                self.assertEqual([len(r) for r in agent.requests], [3, 1, 1, 1], agent.requests)
 
     def test_single_and_ten_workers(self):
         for threads in (1, 10):

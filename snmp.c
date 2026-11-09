@@ -645,23 +645,27 @@ int snmp_format_value(char *output, size_t output_len, struct variable_list *var
 	return TRUE;
 }
 
-/*! \fn char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail)
+/*! \fn static char *snmp_get_value(host_t *current_host, char *snmp_oid, bool should_fail, bool exception_fails)
  *  \brief performs a single snmp_get for a specific snmp OID
  *
  *	This function will poll a specific snmp OID for a host.  The host snmp
- *  session must already be established.
+ *  session must already be established.  With should_fail, a failed get
+ *  gives the host up for the cycle; without exception_fails, a response
+ *  that carries a noSuchObject, noSuchInstance or endOfMibView value for
+ *  the OID reads as "U" without doing so.
  *
  *  \return returns the character representaton of the snmp OID, or "U" if
  *  unsuccessful.
  *
  */
-char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
+static char *snmp_get_value(host_t *current_host, char *snmp_oid, bool should_fail, bool exception_fails) {
 	struct snmp_pdu *pdu       = NULL;
 	struct snmp_pdu *response  = NULL;
 	struct variable_list *vars = NULL;
 	size_t anOID_len           = MAX_OID_LEN;
 	oid    anOID[MAX_OID_LEN];
 	int    status;
+	bool   exception           = FALSE;
 	char   *result_string;
 	char   temp_result[RESULTS_BUFFER];
 
@@ -731,7 +735,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 				if (vars->type == SNMP_NOSUCHOBJECT) {
 					if (!strstr(snmp_oid, ".1.3.6.1.2.1.1.1.0") && !strstr(snmp_oid, ".1.3.6.1.2.1.1.3.0")) {
 						SET_UNDEFINED(result_string);
-						status = STAT_ERROR;
+						status    = STAT_ERROR;
+						exception = TRUE;
 						SPINE_LOG_DEBUG(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id));
 					} else {
 						SPINE_LOG_HIGH(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id));
@@ -740,7 +745,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					}
 				} else if (vars->type == SNMP_NOSUCHINSTANCE) {
 					SET_UNDEFINED(result_string);
-					status = STAT_ERROR;
+					status    = STAT_ERROR;
+					exception = TRUE;
 
 					// We will ignore the new OID error
 					if (!strstr(snmp_oid, ".1.3.6.1.6.3.10.2.1.3.0")) {
@@ -750,7 +756,8 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					}
 				} else if (vars->type == SNMP_ENDOFMIBVIEW) {
 					SET_UNDEFINED(result_string);
-					status = STAT_ERROR;
+					status    = STAT_ERROR;
+					exception = TRUE;
 					SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else {
 					snmp_format_value(temp_result, sizeof(temp_result), vars);
@@ -798,7 +805,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 		}
 	}
 
-	if (status != STAT_SUCCESS && should_fail) {
+	if (status != STAT_SUCCESS && should_fail && (exception_fails || !exception)) {
 		current_host->ignore_host = TRUE;
 
 		SET_UNDEFINED(result_string);
@@ -807,8 +814,25 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 	return result_string;
 }
 
+char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
+	return snmp_get_value(current_host, snmp_oid, should_fail, should_fail);
+}
+
 char *snmp_get(host_t *current_host, char *snmp_oid) {
-	return snmp_get_base(current_host, snmp_oid, true);
+	return snmp_get_value(current_host, snmp_oid, true, true);
+}
+
+/*! \fn char *snmp_get_assert(host_t *current_host, char *snmp_oid)
+ *  \brief gets a reindex assertion value
+ *
+ *	As snmp_get(), except that a noSuchObject, noSuchInstance or
+ *  endOfMibView value reads as "U" and leaves the host polled, as Cacti's
+ *  cmd.php does for the same assertion.  A failed request still gives the
+ *  host up.
+ *
+ */
+char *snmp_get_assert(host_t *current_host, char *snmp_oid) {
+	return snmp_get_value(current_host, snmp_oid, true, false);
 }
 
 /*! \fn char *snmp_getnext(host_t *current_host, char *snmp_oid)
@@ -1037,11 +1061,13 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 /*! \fn void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *state, int num_oids)
  *  \brief fetches reindex assertion values in a single request
  *
- *	Each OID ends in the state snmp_get() of it alone would have produced:
- *  SNMP_ASSERT_VALUE with the same text, or SNMP_ASSERT_FAILED with U where
- *  snmp_get() would give the host up.  A response that cannot be matched
- *  that way, such as an error status, leaves every OID SNMP_ASSERT_PENDING
- *  for the caller to get one at a time as before.
+ *	Each OID ends in the state snmp_get_assert() of it alone would have
+ *  produced: SNMP_ASSERT_VALUE with the same text, which is U for a
+ *  noSuchObject, noSuchInstance or endOfMibView value, or
+ *  SNMP_ASSERT_FAILED with U where the request would give the host up.  A
+ *  response that cannot be matched that way, such as an error status,
+ *  leaves every OID SNMP_ASSERT_PENDING for the caller to get one at a
+ *  time as before.
  *
  */
 void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *state, int num_oids) {
@@ -1072,7 +1098,7 @@ void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *s
 		return;
 	}
 
-	/* an OID that does not parse is left to snmp_get(), which reports it */
+	/* an OID that does not parse is left to snmp_get_assert(), which reports it */
 	for (i = 0; i < num_oids; i++) {
 		name_len = MAX_OID_LEN;
 		if (snmp_parse_oid(snmp_oids[i].oid, name, &name_len)) {
@@ -1091,7 +1117,7 @@ void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *s
 	current_host->snmp_status = status;
 
 	if (status == STAT_TIMEOUT) {
-		/* snmp_get() would time out on the first and give the host up */
+		/* snmp_get_assert() would time out on the first and give the host up */
 		for (i = 0; i < count; i++) {
 			SET_UNDEFINED(snmp_oids[requested[i]].result);
 			state[requested[i]] = SNMP_ASSERT_FAILED;
@@ -1107,7 +1133,7 @@ void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *s
 				!strstr(snmp_oids[requested[i]].oid, ".1.3.6.1.2.1.1.1.0") &&
 				!strstr(snmp_oids[requested[i]].oid, ".1.3.6.1.2.1.1.3.0"))) {
 				SET_UNDEFINED(result);
-				state[requested[i]] = SNMP_ASSERT_FAILED;
+				state[requested[i]] = SNMP_ASSERT_VALUE;
 			} else {
 				snmp_format_value(temp_result, sizeof(temp_result), vars);
 				snprintf(result, RESULTS_BUFFER, "%s", trim(temp_result));
