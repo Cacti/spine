@@ -616,5 +616,10 @@ int main(void){
  reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0);
  /* a failed create releases the init slot and the worker permit */
  reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1);
+ /* the soft deadline, one second early, stops launching like the hard one */
+ reset();available_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==0);
+ /* the init wait counts its polls, so the soft deadline fires there too,
+  * the taken worker permit is returned, and EAGAIN is not an error */
+ reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored);
  return 0;}
 ''')
