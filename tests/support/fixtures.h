@@ -16,17 +16,22 @@ static inline const char *spine_test_fixture(const char *name, const char *varia
 	const char *value = getenv(variable);
 	const char *required = getenv("SPINE_TEST_REQUIRE");
 	size_t length = strlen(name);
+	size_t total;
+	size_t start = 0;
 
 	if (value != NULL && value[0] != '\0') return value;
-	while (required != NULL && *required != '\0') {
-		size_t token = strcspn(required, " ,");
+	if (required == NULL) return NULL;
+	total = strlen(required);
+	/* Walk the list by index, so every access stays below its length. */
+	while (start < total) {
+		size_t end = start;
 
-		if (token == length && strncmp(required, name, length) == 0) {
+		while (end < total && required[end] != ' ' && required[end] != ',') end++;
+		if (end - start == length && memcmp(required + start, name, length) == 0) {
 			fprintf(stderr, "required test fixture %s is missing: set %s\n", name, variable);
 			abort();
 		}
-		required += token;
-		required += strspn(required, " ,");
+		start = end + 1;
 	}
 	return NULL;
 }
