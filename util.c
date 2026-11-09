@@ -410,13 +410,13 @@ void read_config_options() {
 		}
 	}
 
-	/* get log separator */
-	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
-		set.log_datetime_separator = atoi(res);
+	/* get log date format */
+	if ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0) {
+		set.log_datetime_format = atoi(res);
 		free((char *)res);
 
-		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
-			set.log_datetime_separator = GDC_DEFAULT;
+		if (set.log_datetime_format < GD_MIN || set.log_datetime_format > GD_MAX) {
+			set.log_datetime_format = GD_DEFAULT;
 		}
 	}
 

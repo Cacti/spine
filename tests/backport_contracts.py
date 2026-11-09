@@ -655,6 +655,17 @@ int main(void){
  assert(formats(GD_DEFAULT,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - ")&&formats(99,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - "));return 0;}
 ''')
 
+# read_config_options() reads the configured log date format, not the separator twice.
+settings = braced(util, util.index('\tif ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0)'))
+run('maintenance-date-setting-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\nstatic const char *stored;\n'
+    'static char *getsetting(MYSQL *mysql,int type,const char *name){(void)mysql;(void)type;assert(strcmp(name,"default_date_format")==0);return stored?strdup(stored):NULL;}\n'
+    'static void apply(MYSQL mysql){char *res;\n' + settings + '\n}\n' + '''
+int main(void){MYSQL mysql;memset(&mysql,0,sizeof(mysql));
+ set.log_datetime_format=GD_DEFAULT;stored="2";apply(mysql);assert(set.log_datetime_format==GD_D_MO_Y);
+ stored="9";apply(mysql);assert(set.log_datetime_format==GD_DEFAULT);
+ set.log_datetime_format=GD_MO_D_Y;stored=NULL;apply(mysql);assert(set.log_datetime_format==GD_MO_D_Y);return 0;}
+''')
+
 # Command-line options and the selective debug list, as main() parses them.
 spine = (root / 'spine.c').read_text()
 options = braced(spine, spine.index('\tfor (argv++; *argv; argv++) {'))
