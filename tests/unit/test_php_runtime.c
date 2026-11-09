@@ -1580,6 +1580,34 @@ static void test_empty_script_server_response_is_unknown(void **state) {
 	assert_false(empty_script_response);
 }
 
+/* Unsolicited bytes before a request restart the server. If that restart
+ * cannot spawn, the command stops with U instead of reading the leftover. */
+static void test_pending_output_stops_when_restart_spawn_fails(void **state) {
+	char *result;
+	int pdes[2];
+
+	(void) state;
+	assert_int_equal(pipe(pdes), 0);
+	assert_int_equal(write(pdes[1], "leftover\n", 9), 9);
+	php_processes[0].php_pid = fork();
+	assert_true(php_processes[0].php_pid >= 0);
+	if (php_processes[0].php_pid == 0) {
+		pause();
+		_exit(0);
+	}
+	php_processes[0].php_state = PHP_READY;
+	php_processes[0].php_read_fd = pdes[0];
+	php_processes[0].php_write_fd = pdes[1];
+	fail_php_spawn_call = 1;
+
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+	assert_int_equal(php_spawn_calls, 1);
+	assert_int_equal(php_processes[0].php_pid, -1);
+}
+
 /* A function that prints a line before its value leaves that value in the
  * pipe. It must not be read as the next request's answer. */
 static void test_late_extra_line_does_not_shift_the_next_answer(void **state) {
@@ -1711,6 +1739,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_undefined_result_allocation_failure_is_fatal, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_is_resent_after_a_successful_restart, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_empty_script_server_response_is_unknown, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_pending_output_stops_when_restart_spawn_fails, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_late_extra_line_does_not_shift_the_next_answer, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_extra_line_in_the_same_answer_is_unknown, php_setup, php_teardown),
 #ifdef SPINE_PHP_TRYLOCK_WRAP

@@ -21,12 +21,14 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
+#include <errno.h>
 #include <string.h>
 #include <stdlib.h>
 
 #include "internal/common.h"
 #include "app/spine.h"
 #include "poller/poller.h"
+#include <net-snmp/library/large_fd_set.h>
 
 static int captured_security_level;
 static size_t captured_auth_key_len;
@@ -66,15 +68,57 @@ static struct snmp_session captured_request_session;
 static struct snmp_session *capture_snmp_sess_session(void *session);
 static int capture_snmp_sess_send(void *session, struct snmp_pdu *request);
 static int v3_send_calls;
+static int v3_send_result;
+static int v3_select_count;
+static int v3_select_errno;
+
+static int capture_select_info2_flags(void *sessp, int *numfds, netsnmp_large_fd_set *fdset,
+	struct timeval *timeout, int *block, int flags) {
+	(void) sessp;
+	(void) fdset;
+	(void) timeout;
+	(void) flags;
+	if (numfds != NULL) *numfds = 0;
+	if (block != NULL) *block = 0;
+	return 1;
+}
+
+static int capture_large_fd_select(int numfds, netsnmp_large_fd_set *readfds,
+	netsnmp_large_fd_set *writefds, netsnmp_large_fd_set *exceptfds, struct timeval *timeout) {
+	(void) numfds;
+	(void) readfds;
+	(void) writefds;
+	(void) exceptfds;
+	(void) timeout;
+	errno = v3_select_errno;
+	return v3_select_count;
+}
+
+static void capture_fdset_init(netsnmp_large_fd_set *fdset, int size) {
+	(void) fdset;
+	(void) size;
+}
+
+static void capture_fdset_cleanup(netsnmp_large_fd_set *fdset) {
+	(void) fdset;
+}
 
 #define snmp_sess_close capture_snmp_sess_close
 #define snmp_sess_open capture_snmp_sess_open
 #define snmp_sess_synch_response capture_snmp_sess_synch_response
 #define snmp_sess_session capture_snmp_sess_session
 #define snmp_sess_send capture_snmp_sess_send
+#define snmp_sess_select_info2_flags capture_select_info2_flags
+#define netsnmp_large_fd_set_select capture_large_fd_select
+#define netsnmp_large_fd_set_init capture_fdset_init
+#define netsnmp_large_fd_set_cleanup capture_fdset_cleanup
 #include "../../src/snmp/session.c"
 #include "../../src/snmp/requests.c"
 #include "../../src/snmp/response.c"
+#undef netsnmp_large_fd_set_cleanup
+#undef netsnmp_large_fd_set_init
+#undef netsnmp_large_fd_set_select
+#undef snmp_sess_select_info2_flags
 #undef snmp_sess_send
 #undef snmp_sess_close
 #undef snmp_sess_open
@@ -98,11 +142,11 @@ static void assert_snmp_lock_for_version(long version) {
  * test_snmpv3_parallel_wait against real sessions. */
 static int capture_snmp_sess_send(void *session, struct snmp_pdu *request) {
 	(void) session;
-	(void) request;
 	v3_send_calls++;
 	assert_snmp_lock_for_version(SNMP_VERSION_3);
 	assert_ptr_equal(captured_request_session.callback, snmp_wait_input);
-	return 0;
+	if (v3_send_result != 0 && request != NULL) request->reqid = 46;
+	return v3_send_result;
 }
 
 static struct snmp_session *capture_snmp_sess_session(void *session) {
@@ -208,6 +252,9 @@ static int session_reset(void **state) {
 	check_request_lock = FALSE;
 	memset(&captured_request_session, 0, sizeof(captured_request_session));
 	v3_send_calls = 0;
+	v3_send_result = 0;
+	v3_select_count = 0;
+	v3_select_errno = 0;
 	config_defaults();
 	init_mutexes();
 	set.snmp.snmp_retries = 1;
@@ -812,6 +859,50 @@ static void test_request_lock_and_cancellation_contract(void **state) {
 	}
 }
 
+static void test_v3_wait_rejects_a_non_response_pdu(void **state) {
+	snmp_wait_t wait = {1, STAT_SUCCESS, TRUE, NULL};
+	struct snmp_session session = {0};
+	struct snmp_pdu pdu = {0};
+
+	(void) state;
+	pdu.command = SNMP_MSG_GET;
+	assert_int_equal(snmp_wait_input(NETSNMP_CALLBACK_OP_RECEIVED_MESSAGE, &session, 1, &pdu, &wait), 0);
+	assert_int_equal(wait.status, STAT_ERROR);
+	assert_int_equal(session.s_snmp_errno, SNMPERR_PROTOCOL);
+	assert_false(wait.waiting);
+}
+
+static void test_v3_wait_records_a_disconnect(void **state) {
+	snmp_wait_t wait = {1, STAT_SUCCESS, TRUE, NULL};
+	struct snmp_session session = {0};
+
+	(void) state;
+	assert_int_equal(snmp_wait_input(NETSNMP_CALLBACK_OP_DISCONNECT, &session, 1, NULL, &wait), 1);
+	assert_int_equal(wait.status, STAT_ERROR);
+	assert_int_equal(session.s_snmp_errno, SNMPERR_ABORT);
+	assert_null(wait.pdu);
+	assert_false(wait.waiting);
+}
+
+static void test_v3_wait_gives_up_on_a_hard_select_error(void **state) {
+	host_t host = {0};
+	struct snmp_pdu *response = NULL;
+	struct snmp_pdu *request = snmp_pdu_create(SNMP_MSG_GET);
+
+	(void) state;
+	assert_non_null(request);
+	captured_request_session.version = SNMP_VERSION_3;
+	host.snmp.session = &captured_request_session;
+	v3_send_result = 1;
+	v3_select_count = -1;
+	v3_select_errno = EIO;
+	assert_int_equal(snmp_synchronized_response(&host, request, &response), STAT_ERROR);
+	assert_int_equal(captured_request_session.s_snmp_errno, SNMPERR_GENERR);
+	assert_int_equal(captured_request_session.s_errno, EIO);
+	assert_null(response);
+	snmp_free_pdu(request);
+}
+
 static void test_failed_session_restores_lock_and_cancellation(void **state) {
 	const snmp_connection_t options = {.snmp_timeout = 0};
 	int original_state;
@@ -860,6 +951,9 @@ int main(void) {
 		cmocka_unit_test_setup(test_authnopriv_does_not_modify_caller_password, session_reset),
 		cmocka_unit_test_setup(test_multi_get_refuses_a_missing_session, session_reset),
 		cmocka_unit_test_setup(test_request_lock_and_cancellation_contract, session_reset),
+		cmocka_unit_test_setup(test_v3_wait_rejects_a_non_response_pdu, session_reset),
+		cmocka_unit_test_setup(test_v3_wait_records_a_disconnect, session_reset),
+		cmocka_unit_test_setup(test_v3_wait_gives_up_on_a_hard_select_error, session_reset),
 		cmocka_unit_test_setup(test_failed_session_restores_lock_and_cancellation, session_reset),
 		cmocka_unit_test_setup(test_single_request_transport_and_response_contracts, session_reset),
 		cmocka_unit_test_setup(test_count_ignores_host_only_for_transport_failures, session_reset),
