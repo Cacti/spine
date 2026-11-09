@@ -244,6 +244,38 @@ static void available_status(void) {
 	Cases++;
 }
 
+static void grandchildren(void) {
+	fd_set fds;
+	struct timeval timeout = {2, 0};
+	char output[16];
+	int guard[2], fd;
+	pid_t pid;
+	/* Every process holding the guard's write end must exit before its read
+	 * end reports EOF, including the background sleep the script starts. */
+	CHECK(pipe(guard) == 0);
+	fd = nft_popen("sleep 30 & printf '42\\n'; wait", "r");
+	CHECK(fd >= 0);
+	CHECK(close(guard[1]) == 0);
+	pid = nft_pchild(fd);
+	CHECK(pid > 0);
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+	CHECK(select(fd + 1, &fds, NULL, NULL, &timeout) == 1);
+	CHECK(read(fd, output, sizeof(output)) == 3);
+	CHECK(nft_pclose(fd) == 0);
+	CHECK(nft_popen_cleanup() == 0);
+	reaped(pid);
+	FD_ZERO(&fds);
+	FD_SET(guard[0], &fds);
+	timeout.tv_sec = 2;
+	timeout.tv_usec = 0;
+	CHECK(select(guard[0] + 1, &fds, NULL, NULL, &timeout) == 1);
+	CHECK(read(guard[0], output, sizeof(output)) == 0);
+	CHECK(close(guard[0]) == 0);
+	printf("ok a timed out command's process group is killed with it\n");
+	Cases++;
+}
+
 static void reaper_start_failure(void) {
 	int before = descriptors();
 	pthread_mutex_lock(&FaultMutex);
@@ -283,6 +315,7 @@ int main(void) {
 	concurrency();
 	already_reaped();
 	available_status();
+	grandchildren();
 	CHECK(nft_popen_cleanup() == 0);
 	printf("PASS: %i cases, %i assertions\n", Cases, Assertions);
 	return 0;
