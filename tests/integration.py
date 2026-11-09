@@ -181,7 +181,7 @@ class Polling(unittest.TestCase):
                          self.result.stdout[-3000:] + self.result.stderr[-1000:])
         self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_expected ex LEFT JOIN poller_output po '
                                  'ON po.local_data_id=ex.local_data_id AND po.rrd_name=ex.rrd_name '
-                                 'WHERE po.local_data_id IS NULL OR po.output<>CAST(ex.local_data_id AS CHAR);'), '0')
+                                 'WHERE po.local_data_id IS NULL OR CAST(po.output AS BINARY)<>CAST(ex.local_data_id AS BINARY);'), '0')
         self.assertEqual(self.sql('SELECT attempts FROM audit_duplicates;'), '0')
         counts = self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
                           "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False)
