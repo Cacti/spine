@@ -385,7 +385,7 @@ connect_stubs = '''
 #define mysql_error fixture_mysql_error
 #define mysql_get_ssl_cipher fixture_mysql_get_ssl_cipher
 '''
-run('maintenance-connect-retry-tls-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n' + connect_stubs + '''
+run('maintenance-connect-retry-tls-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n#include <sys/wait.h>\n' + connect_stubs + '''
 config_t set;static jmp_buf failed;
 static int inits,tls_options,connects,closes,first_error,have_cipher;
 MYSQL *mysql_init(MYSQL *mysql){inits++;return mysql;}
@@ -402,7 +402,9 @@ void mysql_close(MYSQL *mysql){(void)mysql;closes++;}
 unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return first_error;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
 const char *mysql_get_ssl_cipher(MYSQL *mysql){(void)mysql;return have_cipher?"AES":NULL;}
-void die(const char *format,...){(void)format;longjmp(failed,1);}
+/* die() ends the process, as in production; the exit status carries the
+ * retry checks out of the child that runs the refused connection. */
+void die(const char *format,...){(void)format;exit(inits==2&&tls_options==2&&closes>=2?3:4);}
 int usleep(useconds_t usec){(void)usec;return 0;}
 unsigned int sleep(unsigned int seconds){(void)seconds;return 0;}
 static int warnings;
@@ -411,7 +413,7 @@ static void fixture_exit(int status){(void)status;longjmp(failed,1);}
 #define exit fixture_exit
 ''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
 static void reset(int error){inits=tls_options=connects=closes=warnings=0;first_error=error;have_cipher=0;}
-int main(void){MYSQL mysql;
+int main(void){MYSQL mysql;pid_t child;int status;
  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example");set.poller_id=1;set.db_ssl=1;
  /* without DB_SSL_Required a plaintext session is accepted, as in 1.2.31,
   * and a handshake failure is retried */
@@ -422,9 +424,12 @@ int main(void){MYSQL mysql;
  reset(2013);have_cipher=1;db_connect(LOCAL,&mysql);assert(warnings==0);
  set.db_ssl_required=1;
  /* a transient failure, then a plaintext session: the retry must have the TLS
-  * policy applied again and the session must be refused */
- reset(2013);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);assert(0);}
- assert(inits==2&&tls_options==2&&closes>=2);
+  * policy applied again and the session must be refused.  Unwinding out of
+  * die() with longjmp would abandon db_connect()'s allocations, so the
+  * refusal runs in a child that exits there instead. */
+ reset(2013);fflush(stdout);child=fork();assert(child>=0);
+ if(child==0){db_connect(LOCAL,&mysql);_exit(5);}
+ assert(waitpid(child,&status,0)==child&&WIFEXITED(status)&&WEXITSTATUS(status)==3);
  /* a TLS handshake failure is final */
  reset(2026);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);}
  assert(connects==1&&inits==1);
