@@ -16,23 +16,38 @@
 #include "app/spine.h"
 #include "database/persistence.h"
 
-static char *allocate_output_query(const char *prefix, const char *failure_message) {
-	char *query = malloc(MAX_MYSQL_BUF_SIZE + RESULTS_BUFFER);
+#define OUTPUT_QUERY_CAPACITY ((size_t) MAX_MYSQL_BUF_SIZE + RESULTS_BUFFER)
+
+/* Rows are appended at the tracked length. strncat() rescanned the whole
+ * buffer for every row, which made building one batch quadratic. The caller
+ * flushes before a row would reach MAX_MYSQL_BUF_SIZE, and the RESULTS_BUFFER
+ * beyond it holds the suffix. */
+static void append_output_query(char *query, size_t *used, const char *text, size_t length) {
+	assert(*used < OUTPUT_QUERY_CAPACITY && length < OUTPUT_QUERY_CAPACITY - *used);
+	memcpy(query + *used, text, length);
+	*used += length;
+	query[*used] = '\0';
+}
+
+static void reset_output_query(char *query, size_t *used, const char *prefix) {
+	memset(query, 0, OUTPUT_QUERY_CAPACITY);
+	*used = 0;
+	append_output_query(query, used, prefix, strlen(prefix));
+}
+
+static char *allocate_output_query(const char *prefix, size_t *used, const char *failure_message) {
+	char *query = malloc(OUTPUT_QUERY_CAPACITY);
 	if (query == NULL) die("%s", failure_message);
-	memset(query, 0, MAX_MYSQL_BUF_SIZE + RESULTS_BUFFER);
-	strncat(query, prefix, spine_count_to_int(strlen(prefix)));
+	reset_output_query(query, used, prefix);
 	return query;
 }
 
-static bool flush_output_query(MYSQL *mysql, int mode, char *query,
+static bool flush_output_query(MYSQL *mysql, int mode, char *query, size_t *used,
 	const char *suffix, const char *prefix) {
 	if (query == NULL) return TRUE;
-	strncat(query, suffix, spine_count_to_int(strlen(suffix)));
+	append_output_query(query, used, suffix, strlen(suffix));
 	bool success = db_insert(mysql, mode, query);
-	if (prefix != NULL) {
-		memset(query, 0, MAX_MYSQL_BUF_SIZE + RESULTS_BUFFER);
-		strncat(query, prefix, spine_count_to_int(strlen(prefix)));
-	}
+	if (prefix != NULL) reset_output_query(query, used, prefix);
 	return success;
 }
 
@@ -44,9 +59,10 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	bool failed = FALSE;
 	/* Escaping can double the result and the data source name. */
 	char result_string[RESULTS_BUFFER * 2 + DBL_BUFSIZE + SMALL_BUFSIZE];
-	int result_length;
+	size_t result_length;
 	int new_buffer = TRUE;
-	size_t out_buffer;
+	size_t output_used = 0;
+	size_t boost_used = 0;
 	MYSQL *mysqlt;
 	int i;
 	char suffix[BUFSIZE];
@@ -57,12 +73,10 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 	if (nft_abort_requested()) return (poll_output_buffers_t){.failed = TRUE};
 
 	/* insert the query results into the database */
-	query3 = allocate_output_query(queries->output, "ERROR: Fatal malloc error: poller.c query3 output buffer!");
-
-	out_buffer = strlen(query3);
+	query3 = allocate_output_query(queries->output, &output_used, "ERROR: Fatal malloc error: poller.c query3 output buffer!");
 
 	if (set.boost.boost_redirect && set.boost.boost_enabled) {
-		query12 = allocate_output_query(queries->boost_output, "ERROR: Fatal malloc error: poller.c query12 boost output buffer!");
+		query12 = allocate_output_query(queries->boost_output, &boost_used, "ERROR: Fatal malloc error: poller.c query12 boost output buffer!");
 	}
 
 	int mode;
@@ -98,15 +112,12 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 			continue;
 		}
 
-		result_length = spine_count_to_int(strlen(result_string));
+		result_length = strlen(result_string);
 
 		/* if the next element to the buffer will overflow it, write to the database */
-		if ((out_buffer + result_length) >= MAX_MYSQL_BUF_SIZE) {
-			if (!flush_output_query(mysqlt, mode, query3, suffix, queries->output)) failed = TRUE;
-			if (!flush_output_query(mysqlt, mode, query12, suffix, queries->boost_output)) failed = TRUE;
-
-			/* reset the output buffer length */
-			out_buffer = strlen(query3);
+		if ((output_used + result_length) >= MAX_MYSQL_BUF_SIZE) {
+			if (!flush_output_query(mysqlt, mode, query3, &output_used, suffix, queries->output)) failed = TRUE;
+			if (!flush_output_query(mysqlt, mode, query12, &boost_used, suffix, queries->boost_output)) failed = TRUE;
 
 			/* set binary, let the system know we are a new buffer */
 			new_buffer = TRUE;
@@ -115,21 +126,20 @@ poll_output_buffers_t write_poll_results(MYSQL *mysql, MYSQL *mysqlr,
 		/* if this is our first pass, or we just outputted to the database, need to change the delimiter */
 		result_string[0] = new_buffer ? ' ' : ',';
 
-		strncat(query3, result_string, result_length);
+		append_output_query(query3, &output_used, result_string, result_length);
 
 		if (query12 != NULL) {
-			strncat(query12, result_string, result_length);
+			append_output_query(query12, &boost_used, result_string, result_length);
 		}
 
-		out_buffer = out_buffer + strlen(result_string);
 		new_buffer = FALSE;
 		i++;
 	}
 
 	/* perform the last insert if there is data to process */
-	if (out_buffer > strlen(queries->output)) {
-		if (!flush_output_query(mysqlt, mode, query3, suffix, NULL)) failed = TRUE;
-		if (!flush_output_query(mysqlt, mode, query12, suffix, NULL)) failed = TRUE;
+	if (output_used > strlen(queries->output)) {
+		if (!flush_output_query(mysqlt, mode, query3, &output_used, suffix, NULL)) failed = TRUE;
+		if (!flush_output_query(mysqlt, mode, query12, &boost_used, suffix, NULL)) failed = TRUE;
 	}
 	/* MEMORY output tables can retain earlier rows after a rejected write.
 	 * Confirmed partial output remains; keep due items eligible for recollection. */
