@@ -78,10 +78,12 @@ class SnmpAgent:
     """Answer SNMPv2c GET requests from a table and record each request's OIDs.
 
     Values are ('int', n), ('ticks', n) or ('str', text); any other OID is
-    noSuchInstance."""
+    noSuchInstance.  A request for an OID in errors gets a noSuchName error
+    status instead."""
 
-    def __init__(self, values):
+    def __init__(self, values, errors=()):
         self.values = values
+        self.errors = errors
         self.requests = []
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('127.0.0.1', 0))
@@ -115,7 +117,8 @@ class SnmpAgent:
             self.requests.append(oids)
             response = ber(0x30, b''.join(ber(0x30, ber(0x06, list(ber_items(binding))[0][1]) + self.encode(oid))
                                           for (_, binding), oid in zip(ber_items(bindings), oids)))
-            pdu = ber(0x02, request_id[1]) + ber_int(0) + ber_int(0) + response
+            failed = [i + 1 for i, oid in enumerate(oids) if oid in self.errors]
+            pdu = ber(0x02, request_id[1]) + ber_int(2 if failed else 0) + ber_int(failed[0] if failed else 0) + response
             try:
                 self.sock.sendto(ber(0x30, ber(*version) + ber(*community) + ber(0xa2, pdu)), peer)
             except OSError:
@@ -297,8 +300,8 @@ class Polling(unittest.TestCase):
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
                                      'SELECT COUNT(*) FROM audit_expected ex WHERE ex.host_id=s.host_id);'), '0')
 
-    def snmp_agent(self, values, availability=2, max_oids=10):
-        agent = SnmpAgent(values)
+    def snmp_agent(self, values, availability=2, max_oids=10, errors=()):
+        agent = SnmpAgent(values, errors)
         self.addCleanup(agent.close)
         self.sql("UPDATE host SET snmp_version=2,snmp_community='public',snmp_port=" + str(agent.port) +
                  ',snmp_timeout=1000,availability_method=' + str(availability) + ',max_oids=' + str(max_oids) + ';')
@@ -345,6 +348,60 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
         self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
         self.assertEqual(self.sql('SELECT CONCAT(total_polls,":",failed_polls) FROM host;'), '1:1')
+
+    def test_reindex_gets_are_batched(self):
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.1.3.0': ('ticks', 500000)}
+        rows = []
+        for i in range(1, 26):
+            values['.1.3.6.1.2.1.2.2.1.1.' + str(i)] = ('int', i)
+            rows.append(f"(1,1,0,'=','{i}','.1.3.6.1.2.1.2.2.1.1.{i}')")
+        # the first mismatch queues a reindex and skips the rest of its data query
+        values['.1.3.6.1.2.1.31.1.1.1.1.1'] = ('str', 'eth1')
+        rows += ["(1,2,0,'=','eth0','.1.3.6.1.2.1.31.1.1.1.1.1')", "(1,2,0,'=','x','.1.3.6.1.2.1.31.1.1.1.1.2')",
+                 "(1,3,0,'<','400000','.1.3.6.1.2.1.1.3.0')"]
+        agent = self.snmp_agent(values, availability=0, max_oids=10)
+        self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' + ','.join(rows) + ';')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:2')
+        self.assertEqual(self.sql("SELECT GROUP_CONCAT(assert_value ORDER BY data_query_id) FROM poller_reindex "
+                                  "WHERE data_query_id>1 AND arg1 LIKE '%.1';"), 'eth1')
+        self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=3;'), '500000')
+        uptime = ('.1.3.6.1.2.1.1.3.0', '.1.3.6.1.6.3.10.2.1.3.0')
+        batched = [r for r in agent.requests if not set(r) & set(uptime)]
+        # 27 assertion OIDs in max_oids sized requests, where each took one
+        self.assertEqual([len(r) for r in batched], [10, 10, 7], agent.requests)
+        self.assertEqual(agent.gets('.1.3.6.1.2.1.1.3.0'), 1, agent.requests)
+
+    def test_reindex_error_status_gets_each_value_alone(self):
+        # An error status names one OID; the batch falls back to one get per
+        # check, where that OID reads as empty and fails its assertion.
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.2.2.1.1.' + str(i): ('int', i) for i in range(1, 6)}
+        agent = self.snmp_agent(values, availability=0, max_oids=10, errors=('.1.3.6.1.2.1.2.2.1.1.3',))
+        self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' +
+                 ','.join(f"(1,{i},0,'=','{i}','.1.3.6.1.2.1.2.2.1.1.{i}')" for i in range(1, 6)) + ';')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:3')
+        self.assertEqual([len(r) for r in agent.requests if len(r) > 1], [5], agent.requests)
+        self.assertEqual(sorted(sum((r for r in agent.requests if len(r) == 1), [])), sorted(values))
+
+    def test_rejected_reindex_get_still_ends_the_checks(self):
+        # snmp_get() gives the device up on noSuchInstance; later checks get
+        # U and the device is not polled this cycle, as before batching.
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.2.2.1.1.1': ('int', 1), '.1.3.6.1.2.1.2.2.1.1.3': ('int', 9)}
+        agent = self.snmp_agent(values, availability=0, max_oids=10)
+        self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
+                 "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,1,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
+                 "(1,1,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
+        self.run_spine()
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
+        self.assertLessEqual(len(agent.requests), 2, agent.requests)
 
     def test_single_and_ten_workers(self):
         for threads in (1, 10):

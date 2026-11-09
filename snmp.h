@@ -41,3 +41,4 @@ extern char *snmp_getnext(host_t *current_host, char *snmp_oid);
 extern int snmp_count(host_t *current_host, char *snmp_oid);
 extern void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids);
 extern int snmp_format_value(char *output, size_t output_len, struct variable_list *vars);
+extern void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *state, int num_oids);

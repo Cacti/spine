@@ -1034,6 +1034,100 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 	return error_occurred ? -1 : count;
 }
 
+/*! \fn void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *state, int num_oids)
+ *  \brief fetches reindex assertion values in a single request
+ *
+ *	Each OID ends in the state snmp_get() of it alone would have produced:
+ *  SNMP_ASSERT_VALUE with the same text, or SNMP_ASSERT_FAILED with U where
+ *  snmp_get() would give the host up.  A response that cannot be matched
+ *  that way, such as an error status, leaves every OID SNMP_ASSERT_PENDING
+ *  for the caller to get one at a time as before.
+ *
+ */
+void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *state, int num_oids) {
+	struct snmp_pdu *pdu       = NULL;
+	struct snmp_pdu *response  = NULL;
+	struct variable_list *vars = NULL;
+	oid    name[MAX_OID_LEN];
+	size_t name_len;
+	int    *requested;
+	int    count = 0;
+	int    status;
+	int    i;
+	char   *result;
+	char   temp_result[RESULTS_BUFFER];
+
+	for (i = 0; i < num_oids; i++) state[i] = SNMP_ASSERT_PENDING;
+
+	if (num_oids <= 0 || current_host->ignore_host || current_host->snmp_session == NULL) {
+		return;
+	}
+
+	if ((requested = (int *) calloc(num_oids, sizeof(int))) == NULL) {
+		return;
+	}
+
+	if ((pdu = snmp_pdu_create(SNMP_MSG_GET)) == NULL) {
+		free(requested);
+		return;
+	}
+
+	/* an OID that does not parse is left to snmp_get(), which reports it */
+	for (i = 0; i < num_oids; i++) {
+		name_len = MAX_OID_LEN;
+		if (snmp_parse_oid(snmp_oids[i].oid, name, &name_len)) {
+			snmp_add_null_var(pdu, name, name_len);
+			requested[count++] = i;
+		}
+	}
+
+	if (count == 0) {
+		snmp_free_pdu(pdu);
+		free(requested);
+		return;
+	}
+
+	status = snmp_synchronized_response(current_host, pdu, &response);
+	current_host->snmp_status = status;
+
+	if (status == STAT_TIMEOUT) {
+		/* snmp_get() would time out on the first and give the host up */
+		for (i = 0; i < count; i++) {
+			SET_UNDEFINED(snmp_oids[requested[i]].result);
+			state[requested[i]] = SNMP_ASSERT_FAILED;
+		}
+	} else if (status == STAT_SUCCESS && response != NULL && response->errstat == SNMP_ERR_NOERROR) {
+		vars = response->variables;
+
+		for (i = 0; i < count && vars != NULL && vars->name != NULL; i++, vars = vars->next_variable) {
+			result = snmp_oids[requested[i]].result;
+
+			if (vars->type == SNMP_NOSUCHINSTANCE || vars->type == SNMP_ENDOFMIBVIEW ||
+				(vars->type == SNMP_NOSUCHOBJECT &&
+				!strstr(snmp_oids[requested[i]].oid, ".1.3.6.1.2.1.1.1.0") &&
+				!strstr(snmp_oids[requested[i]].oid, ".1.3.6.1.2.1.1.3.0"))) {
+				SET_UNDEFINED(result);
+				state[requested[i]] = SNMP_ASSERT_FAILED;
+			} else {
+				snmp_format_value(temp_result, sizeof(temp_result), vars);
+				snprintf(result, RESULTS_BUFFER, "%s", trim(temp_result));
+				state[requested[i]] = SNMP_ASSERT_VALUE;
+			}
+		}
+
+		/* a short response is not matched by position */
+		if (i < count) {
+			for (i = 0; i < num_oids; i++) state[i] = SNMP_ASSERT_PENDING;
+		}
+	}
+
+	if (response != NULL) {
+		snmp_free_pdu(response);
+	}
+
+	free(requested);
+}
+
 /*! \fn char *snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids)
  *  \brief performs multiple OID snmp_get's in a single network call
  *

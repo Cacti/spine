@@ -367,6 +367,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	unsigned long long previous_uptime = 0;
 	unsigned long long curr_uptime     = 0;
 
+	/* reindex assertion values fetched max_oids at a time */
+	snmp_oids_t *assert_oids  = NULL;
+	int         *assert_state = NULL;
+	int         assert_count  = 0;
+	int         assert_next   = 0;
+	int         reindex_row   = 0;
+
 	extern poller_thread_t** details;
 
 	pool_t *local_cnn = NULL;
@@ -1064,9 +1071,32 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				}
 
+				/* Fetch the plain SNMP assertion values up front, max_oids per
+				 * request.  The uptime OIDs keep their engine OID handling
+				 * below, and any value that could not be fetched this way is
+				 * still fetched alone when its row is checked. */
+				if (host->snmp_session != NULL &&
+					(assert_oids = (snmp_oids_t *) calloc(num_rows, sizeof(snmp_oids_t))) != NULL &&
+					(assert_state = (int *) calloc(num_rows, sizeof(int))) != NULL) {
+					for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
+						if (row[1] != NULL && atoi(row[1]) == POLLER_ACTION_SNMP && row[4] != NULL &&
+							!strstr(row[4], ".1.3.6.1.2.1.1.3.0") && !strstr(row[4], ".1.3.6.1.6.3.10.2.1.3.0")) {
+							snprintf(assert_oids[assert_count].oid, sizeof(assert_oids[assert_count].oid), "%s", row[4]);
+							assert_oids[assert_count].array_position = reindex_row;
+							assert_count++;
+						}
+					}
+					mysql_data_seek(result, 0);
+
+					for (i = 0; i < assert_count; i += host->max_oids) {
+						snmp_get_assert_values(host, assert_oids + i, assert_state + i,
+							assert_count - i < host->max_oids ? assert_count - i : host->max_oids);
+					}
+				}
+
 				// Cache uptime in case we need it again
 				sysUptime[0] = '\0';
-				while ((row = mysql_fetch_row(result))) {
+				for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
 					assert_fail = FALSE;
 					reindex_err = FALSE;
 
@@ -1178,7 +1208,25 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
 									}
 								} else {
-									poll_result = snmp_get(host, reindex->arg1);
+									while (assert_next < assert_count && assert_oids[assert_next].array_position < reindex_row) {
+										assert_next++;
+									}
+
+									/* a fetched value stands for snmp_get() unless an earlier
+									 * check has given the host up since */
+									if (assert_next < assert_count && assert_oids[assert_next].array_position == reindex_row &&
+										assert_state[assert_next] != SNMP_ASSERT_PENDING && !host->ignore_host) {
+										if (!(poll_result = (char *) malloc(RESULTS_BUFFER))) {
+											die("ERROR: Fatal malloc error: poller.c poll_result");
+										}
+										snprintf(poll_result, RESULTS_BUFFER, "%s", assert_oids[assert_next].result);
+
+										if (assert_state[assert_next] == SNMP_ASSERT_FAILED) {
+											host->ignore_host = TRUE;
+										}
+									} else {
+										poll_result = snmp_get(host, reindex->arg1);
+									}
 								}
 
 								if (is_debug_device(host->id)) {
@@ -1447,6 +1495,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					SPINE_LOG_HIGH(("Device[%i] HT[%i] Device has no information for recache.", host->id, host_thread));
 				}
 			}
+
+			SPINE_FREE(assert_oids);
+			SPINE_FREE(assert_state);
 
 			/* free the host result */
 			db_free_result(result);
