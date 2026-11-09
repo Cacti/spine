@@ -450,3 +450,20 @@ int main(void){
  /* a leading quote keeps the strip_alpha() path that stores 12 */
  assert(!numeric("\\"12\\"")&&!numeric(" ")&&!numeric("")&&!numeric(" 12 abc")&&!numeric("00 1A"));return 0;}
 ''')
+
+# Every caller prints hex2dec() unsigned; "%lld" printed an all-FF counter as -1.
+assert '"%lld", hex2dec(' not in (root / 'poller.c').read_text()
+util = (root / 'util.c').read_text()
+hexes = 'static int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(util, 'static int hex_digit(int c) {')
+run('maintenance-hex-contract', '#include "common.h"\n#include "spine.h"\n' + hexes + '''
+static unsigned long long convert(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return hex2dec(buffer);}
+int main(void){char out[32];
+ snprintf(out,sizeof(out),"%llu",convert("ff ff ff ff ff ff ff ff"));assert(strcmp(out,"18446744073709551615")==0);
+ /* above 2^53 a double cannot hold the exact value */
+ assert(convert("20 00 00 00 00 00 00 01")==0x2000000000000001ULL);
+ assert(convert("\\"00 1A\\"")==0x1A&&convert("0x10")==0);
+ assert(is_hexadecimal("00 1A 2B",TRUE)&&is_hexadecimal("\\"00 1A\\"",TRUE)&&is_hexadecimal("ff ff ff ff ff ff ff ff",TRUE));
+ /* hex2dec() would turn these into 0, so they take the non-hex path */
+ assert(!is_hexadecimal("2024-01-05",TRUE)&&!is_hexadecimal("00-1A-2B",TRUE)&&!is_hexadecimal("00:1A 2B",TRUE));
+ assert(!is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
+''')
