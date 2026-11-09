@@ -251,6 +251,84 @@ retry:
 	return result_string;
 }
 
+/*! \fn char *php_read_banner(int php_process, int response_timeout)
+ *  \brief reads the startup banner of a script server just spawned.
+ *
+ *  PHP can print notices or warnings from the script server's includes
+ *  ahead of the banner. As in 1.2.x, up to PHP_STARTUP_LINES lines are read
+ *  within response_timeout and the first that announces the server is taken;
+ *  the others are skipped. A request/response read would treat the extra
+ *  lines as a desynchronized server and leave the slot BUSY.
+ *
+ *  \return the banner line, or the last line read (U when none) on failure
+ */
+char *php_read_banner(int php_process, int response_timeout) {
+	char pending[RESULTS_BUFFER];
+	size_t used = 0;
+	int lines = 0;
+	int fd;
+	double deadline;
+	char *line;
+
+	if (!(line = (char *) malloc(RESULTS_BUFFER))) {
+		die("ERROR: Fatal malloc error: php.c php_read_banner!");
+	}
+	SET_UNDEFINED(line);
+
+	if (php_processes == NULL || php_process < 0 ||
+		php_process >= set.php.php_servers || php_process >= MAX_PHP_SERVERS) {
+		return line;
+	}
+
+	fd = php_processes[php_process].php_read_fd;
+	if (fd < 0 || fd >= FD_SETSIZE) {
+		SPINE_LOG(("ERROR: SS[%i] Script server descriptor %d exceeds FD_SETSIZE %d", php_process, fd, FD_SETSIZE));
+		php_fail_read(php_process, FALSE);
+		return line;
+	}
+
+	deadline = spine_monotonic_time() + response_timeout;
+
+	while (lines < PHP_STARTUP_LINES) {
+		char *newline = memchr(pending, '\n', used);
+		size_t consumed;
+
+		if (newline == NULL) {
+			ssize_t received;
+			int ready;
+
+			if (used == sizeof(pending) - 1) {
+				SPINE_LOG(("ERROR: SS[%i] The Script Server startup line was longer than the acceptable range", php_process));
+				break;
+			}
+
+			ready = spine_wait_readable(fd, deadline);
+			if (ready <= 0) {
+				SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not start within Timeout[%i]", php_process, response_timeout));
+				break;
+			}
+
+			received = read(fd, pending + used, sizeof(pending) - 1 - used);
+			if (received < 0 && errno == EINTR) continue;
+			if (received <= 0) break;
+			used += (size_t) received;
+			continue;
+		}
+
+		*newline = '\0';
+		consumed = (size_t) (newline - pending) + 1;
+		lines++;
+		snprintf(line, RESULTS_BUFFER, "%s", pending);
+		if (strstr(line, "Started") != NULL) return line;
+
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Skipped script server startup output: '%s'", php_process, line));
+		used -= consumed;
+		memmove(pending, pending + consumed, used);
+	}
+
+	return line;
+}
+
 /* Selection-path recovery runs the restart handshake while holding the slot
  * lock. Bound it independently so a bad PHP configuration cannot pin every
  * selector for the full per-command timeout. */

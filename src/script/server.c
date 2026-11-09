@@ -79,12 +79,6 @@ int php_init(int php_process) {
 	int slot = -1;
 	int i;
 	int rc = FALSE;
-	char *command = strdup("INIT");
-
-	if (command == NULL) {
-		SPINE_LOG(("ERROR: Fatal malloc error: php.c php_init!"));
-		return FALSE;
-	}
 
 	/* An out-of-range slot would index past php_processes. */
 	if (php_processes == NULL || set.php.php_servers < 0 || set.php.php_servers > MAX_PHP_SERVERS ||
@@ -282,8 +276,7 @@ int php_init(int php_process) {
 		/* check pipe to insure startup took place. Initial startup holds no
 		 * slot lock, so a slow PHP start gets the full script_timeout; a
 		 * single-slot restart is recovery and keeps the short cap. */
-		result_string = php_process == PHP_INIT ? php_read_response(slot, command, FALSE, set.php.script_timeout)
-												: php_read_result(slot, command, FALSE);
+		result_string = php_read_banner(slot, php_process == PHP_INIT || set.php.script_timeout < 2 ? set.php.script_timeout : 2);
 
 		if (strstr(result_string, "Started")) {
 			SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", slot, php_processes[slot].php_read_fd, php_processes[slot].php_write_fd));
@@ -330,7 +323,6 @@ cleanup:
 	}
 
 	SPINE_FREE(result_string);
-	free(command);
 
 	return rc;
 }
