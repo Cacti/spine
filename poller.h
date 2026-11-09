@@ -32,6 +32,7 @@
 */
 
 extern void *child(void *arg);
+extern int format_poller_output_row(MYSQL *mysql, char *output, size_t output_size, int local_data_id, const char *rrd_name, const char *host_time, const char *result);
 extern void child_cleanup(void *arg);
 extern void child_cleanup_thread(void *arg);
 extern void child_cleanup_script(void *arg);
