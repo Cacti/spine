@@ -11,8 +11,8 @@ name: Distro matrix
 # scripts/test-distros.sh and in .github/scripts/check-distro-eol.py in step.
 
 on:
+  # Every base branch, so stacked pull requests are covered too.
   pull_request:
-    branches: [develop, 'refactor/c17-series-*']
     paths: &build_paths
       - "configure.ac"
       - "Makefile.am"

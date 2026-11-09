@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [develop, '1.2.x']
+  # Every base branch: a stacked pull request needs the same gates as one
+  # opened against develop.
   pull_request:
-    branches: [develop, '1.2.x', 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
   workflow_dispatch:
 
 permissions:
@@ -349,6 +350,7 @@ jobs:
         env:
           SPINE_TEST_DB_HOST: 127.0.0.1
           SPINE_TEST_SNMP_HOST: 127.0.0.1
+          SPINE_TEST_REQUIRE: snmp-agent
           SPINE_SNMPV3_EVIDENCE_DIR: snmpv3-evidence
         run: |
           set -euo pipefail

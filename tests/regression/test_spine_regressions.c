@@ -11,6 +11,7 @@
 #include <limits.h>
 
 #include "app/runtime.h"
+#include "tests/support/fixtures.h"
 extern void test_output_write_contracts(MYSQL *mysql);
 extern void test_database_tls_contracts(void);
 extern void test_additional_contracts(void);
@@ -2244,10 +2245,10 @@ static void test_poll_pipeline(MYSQL *mysql) {
 	set.snmp.mibs = FALSE;
 	set.availability.ping_recovery_count = 1;
 	set.availability.ping_failure_count = 1;
-	const char *agent = getenv("SPINE_TEST_SNMP_HOST");
+	const char *agent = spine_test_fixture("snmp-agent", "SPINE_TEST_SNMP_HOST");
 	const int hosts[] = {0, 42, 43, 44};
 	size_t host_count = sizeof(hosts) / sizeof(hosts[0]);
-	if (agent == NULL || agent[0] == '\0') host_count--;
+	if (agent == NULL) host_count--;
 	else snmp_spine_init();
 	for (size_t index = 0; index < host_count; index++) {
 		int host_id = hosts[index];
@@ -2503,8 +2504,7 @@ static void test_database_configuration(void) {
 	test_poll_pipeline(&mysql);
 	test_output_write_contracts(&mysql);
 	test_reindex_result_contracts(&mysql);
-	const char *reindex_agent = getenv("SPINE_TEST_SNMP_HOST");
-	if (reindex_agent != NULL && reindex_agent[0] != '\0') test_additional_reindex_contracts(&mysql);
+	if (spine_test_fixture("snmp-agent", "SPINE_TEST_SNMP_HOST") != NULL) test_additional_reindex_contracts(&mysql);
 	test_cli_transfer_exit(&mysql);
 	db_disconnect(&mysql);
 }
