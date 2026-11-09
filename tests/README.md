@@ -38,6 +38,11 @@ temporary directory, loads its complete schema, and writes fixture credentials
 only into the copy. Without this option those two compatibility tests are
 reported as skipped. The ordinary polling regressions still execute.
 
+Set `SPINE_TEST_REQUIRE` to a comma separated list of `cacti` (the Script
+Server cases) and `fault` (the allocation-failure cases) to make those cases
+fail instead of being skipped when their prerequisite is missing. CI sets it
+so that a missing package or tree cannot pass unnoticed.
+
 `schema.sql` contains the actual table definitions from Cacti maintenance
 revision `8d5f404ea5beed56d50c4533bae01e5d5f0db026`, with its upstream notice.
 The small fixtures test behavior; capacity measurements use the separate
