@@ -27,6 +27,29 @@ def function(source, name):
     end = source.index("\n}", start) + 2
     return source[start:end]
 
+def braced(source, start):
+    """Return the braced statement that begins at or after start."""
+    begin = source.index('{', start)
+    depth = 0
+    quote = None
+    i = begin
+    while True:
+        c = source[i]
+        if quote:
+            if c == '\\':
+                i += 1
+            elif c == quote:
+                quote = None
+        elif c in '"\'':
+            quote = c
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return source[start:i + 1]
+        i += 1
+
 def run(name, source):
     path = out / (name + ".c")
     path.write_text(source)
@@ -466,4 +489,38 @@ int main(void){char out[32];
  /* hex2dec() would turn these into 0, so they take the non-hex path */
  assert(!is_hexadecimal("2024-01-05",TRUE)&&!is_hexadecimal("00-1A-2B",TRUE)&&!is_hexadecimal("00:1A 2B",TRUE));
  assert(!is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
+''')
+
+# Every SNMP batch flush, including the one forced by a change of SNMP
+# settings, must store U for a counter after an agent restart.
+poller = (root / 'poller.c').read_text()
+util = (root / 'util.c').read_text()
+loops = []
+cursor = 0
+while True:
+    cursor = poller.find('for (j = 0; j < num_oids; j++) {', cursor)
+    if cursor < 0:
+        break
+    loops.append(braced(poller, cursor))
+    cursor += 1
+assert len(loops) == 3
+flushes = ''.join('static void flush%d(host_t *host,target_t *poller_items,snmp_oids_t *snmp_oids,int num_oids,int spike_kill){int j,errors=0,host_id=1,host_thread=1;int *buf_size=NULL,*buf_errors=NULL;char *error_string=NULL;char temp_result[RESULTS_BUFFER];double thread_start=0,thread_end=0;\n%s\n(void)errors;(void)thread_end;}\n' % (n, loop) for n, loop in enumerate(loops))
+run('maintenance-snmp-flush-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\n' + '''
+int spine_log(const char *format,...){(void)format;return TRUE;}
+int is_debug_device(int id){(void)id;return FALSE;}
+double get_time_as_double(void){return 0;}
+void buffer_output_errors(char *e,int *s,int *b,int d,int t,int l,bool f){(void)e;(void)s;(void)b;(void)d;(void)t;(void)l;(void)f;}
+static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)capacity;}
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '\n' + flushes + '''
+typedef void (*flush_t)(host_t*,target_t*,snmp_oids_t*,int,int);
+int main(void){flush_t flush[]={flush0,flush1,flush2};size_t n;
+ for(n=0;n<3;n++){host_t host={0};target_t items[3]={0};snmp_oids_t oids[3]={0};int i;
+  const char *values[]={"42","a:1 b:2","2024-01-05"};
+  for(i=0;i<3;i++){oids[i].array_position=i;strcpy(oids[i].result,values[i]);}
+  flush[n](&host,items,oids,3,TRUE);
+  assert(strcmp(items[0].result,"U")==0);assert(strcmp(items[1].result,"a:1 b:2")==0);
+  /* a date is not hex: it is stored as U, never as 0 */
+  assert(strcmp(items[2].result,"U")==0);
+  strcpy(oids[0].result,"42");flush[n](&host,items,oids,1,FALSE);assert(strcmp(items[0].result,"42")==0);}
+ return 0;}
 ''')
