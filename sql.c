@@ -490,7 +490,7 @@ void db_connect(int type, MYSQL *mysql) {
 
 			if (stat(hostname, &socket_stat) == 0) {
 				if (socket_stat.st_mode & S_IFSOCK) {
-					socket = strdup (set.db_host);
+					socket   = hostname;
 					hostname = NULL;
 				}
 			} else if ((socket = strstr(hostname,":"))) {
@@ -504,7 +504,7 @@ void db_connect(int type, MYSQL *mysql) {
 
 		if (stat(hostname, &socket_stat) == 0) {
 			if (socket_stat.st_mode & S_IFSOCK) {
-				socket = strdup (set.db_host);
+				socket   = hostname;
 				hostname = NULL;
 			}
 		} else if ((socket = strstr(hostname,":"))) {
@@ -592,8 +592,12 @@ void db_connect(int type, MYSQL *mysql) {
 		attempts++;
 	}
 
+	/* The copied setting is the host, which a host:port socket points
+	 * into, or for a socket file the socket itself. */
 	if (hostname != NULL) {
 		free(hostname);
+	} else {
+		free(socket);
 	}
 
 	free(ssl_key);
