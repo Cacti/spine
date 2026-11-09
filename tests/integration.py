@@ -26,7 +26,7 @@ CLIENT = shutil.which('mariadb') or shutil.which('mysql')
 SNMPD = os.environ.get('SPINE_TEST_SNMPD')
 # Optional cases that must run instead of being skipped, as a comma separated
 # list, for a CI job that provides their prerequisites.
-OPTIONAL = {'cacti', 'fault'}
+OPTIONAL = {'cacti', 'fault', 'snmpd'}
 REQUIRED = {name.strip() for name in os.environ.get('SPINE_TEST_REQUIRE', '').split(',') if name.strip()}
 if REQUIRED - OPTIONAL:
     raise SystemExit('Unknown SPINE_TEST_REQUIRE entries: ' + ', '.join(sorted(REQUIRED - OPTIONAL)))
@@ -543,7 +543,7 @@ class Polling(unittest.TestCase):
                 self.assertEqual([len(r) for r in agent.requests], [3, 1, 1, 1], agent.requests)
                 self.poll_again()
 
-    @unittest.skipUnless(SNMPD, 'set SPINE_TEST_SNMPD to a net-snmp snmpd executable')
+    @optional('snmpd', SNMPD, 'set SPINE_TEST_SNMPD to a net-snmp snmpd executable')
     def test_net_snmp_versions_and_security_levels(self):
         # Items are fetched max_oids at a time by snmp_get_multi() and the
         # reindex assertions by the batched gets, over each SNMP version and

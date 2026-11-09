@@ -46,8 +46,9 @@ credentials, and stops it afterwards. Without this option that test is
 reported as skipped.
 
 Set `SPINE_TEST_REQUIRE` to a comma separated list of `cacti` (the Script
-Server cases) and `fault` (the allocation-failure cases) to make those cases
-fail instead of being skipped when their prerequisite is missing. CI sets it
+Server cases), `fault` (the allocation-failure cases) and `snmpd` (the real
+agent case) to make those cases fail instead of being skipped when their
+prerequisite is missing. CI sets it
 so that a missing package or tree cannot pass unnoticed.
 
 `schema.sql` contains the actual table definitions from Cacti maintenance
