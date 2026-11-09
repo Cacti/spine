@@ -405,7 +405,7 @@ bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 		bool previous_assert_failure = FALSE;
 		reindex_batch_t batch = {.oids = NULL, .first = 0, .count = 0};
 		/* The stored result keeps every row until it is freed. */
-		MYSQL_ROW *rows = count > 0 ? malloc(sizeof(*rows) * (size_t) count) : NULL;
+		MYSQL_ROW *rows = count > 0 ? (MYSQL_ROW *) malloc(sizeof(*rows) * (size_t) count) : NULL;
 		int fetched = 0;
 		if (count > 0 && rows == NULL) die("ERROR: Fatal malloc error: reindex.c rows");
 		while (fetched < count && (rows[fetched] = mysql_fetch_row(result)) != NULL) fetched++;
