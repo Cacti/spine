@@ -35,6 +35,12 @@ The Cacti Group | spine
 -issue#676: Size the add_slashes() result for doubled backslashes
 -issue#676: Terminate SNMP values that do not fit the result buffer and store them as U
 -issue#676: Escape the data source name and result in poller_output and boost inserts
+-issue#680: Treat the 32 bit sysUpTime wrap after about 497 days as elapsed time instead of an agent restart that queued a reindex and stored U
+-issue#680: Open the log file in append mode so a log that another process has just created is not truncated
+-issue#680: Launch the next device as soon as a polling thread finishes instead of checking for a free thread every 10 ms
+-issue#680: Use an ICMP datagram socket on Linux when net.ipv4.ping_group_range allows it, instead of running every thread as root while the raw socket is opened
+-issue#680: Check device availability and reindex assertions once per device instead of once per device thread, so that all device threads agree on whether the device is up
+-issue#680: Fetch the SNMP reindex assertion values max_oids at a time instead of one per request
 -issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
 -issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
 -issue: Disable persisted CI credentials, hash-lock flawfinder and propagate scanner failures
