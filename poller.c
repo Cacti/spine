@@ -1766,12 +1766,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SCRIPT: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), script_log_name(poller_items[i].arg1, script, sizeof(script)), poller_items[i].result));
 				}
 
-				if (!IS_UNDEFINED(poller_items[i].result)) {
-					/* insert a NaN in place of the actual value if the snmp agent restarts */
-					if ((spike_kill) && (!strstr(poller_items[i].result,":"))) {
-						SET_UNDEFINED(poller_items[i].result);
-					}
-				}
+				spike_kill_result(poller_items[i].result, spike_kill);
 
 				break;
 			case POLLER_ACTION_PHP_SCRIPT_SERVER: /* execute script server */
@@ -1829,12 +1824,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SS[%i] SERVER: %s, output: %s", host_id, host_thread, poller_items[i].local_data_id, (float) ((thread_end - thread_start) * 1000), php_process, script_log_name(poller_items[i].arg1, script, sizeof(script)), poller_items[i].result));
 				}
 
-				if (IS_UNDEFINED(poller_items[i].result)) {
-					/* insert a NaN in place of the actual value if the snmp agent restarts */
-					if ((spike_kill) && (!STRIMATCH(poller_items[i].result,":"))) {
-						SET_UNDEFINED(poller_items[i].result);
-					}
-				}
+				spike_kill_result(poller_items[i].result, spike_kill);
 
 				break;
 			default: /* unknown action, generate error */
