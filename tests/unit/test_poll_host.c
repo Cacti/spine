@@ -694,6 +694,7 @@ static void test_partitions_share_one_availability_and_reindex_check(void **stat
 	poller_thread_t *table[1] = {&device};
 	partition_run_t runs[PARTITIONS];
 	pthread_t threads[PARTITIONS];
+	pthread_attr_t attributes;
 	(void) state;
 	set_host("regression", "5", AVAIL_PING);
 	set.poller.poller_interval = 300;
@@ -705,11 +706,15 @@ static void test_partitions_share_one_availability_and_reindex_check(void **stat
 	prepare_partitions(&device, runs, PARTITIONS);
 	details = table;
 
-	/* the later partitions start first and must wait for the first */
+	/* Production runs poll_host() on worker threads sized by
+	 * spine_thread_attr_init(); musl's 128 KiB default stack is too small.
+	 * The later partitions start first and must wait for the first. */
+	assert_int_equal(spine_thread_attr_init(&attributes), 0);
 	for (int i = PARTITIONS - 1; i >= 0; i--) {
-		assert_int_equal(pthread_create(&threads[i], NULL, run_partition, &runs[i]), 0);
+		assert_int_equal(pthread_create(&threads[i], &attributes, run_partition, &runs[i]), 0);
 		if (i > 0) spine_sleep_usec(20000);
 	}
+	pthread_attr_destroy(&attributes);
 	for (int i = 0; i < PARTITIONS; i++) assert_int_equal(pthread_join(threads[i], NULL), 0);
 	details = NULL;
 
