@@ -271,6 +271,29 @@ static int db_tls_expected(int type) {
 	return db_tls_required(type, name);
 }
 
+/* Cacti's maintenance schema relies on zero dates and non-strict inserts.
+ * A reconnect starts a new session, so it needs the same adjustments as a
+ * pooled connection.  The reconnect path cannot use db_insert(), whose
+ * failure handling would reconnect again. */
+static void db_session_mode(MYSQL *mysql, int type, int reconnecting) {
+	static const char *const modes[] = {
+		"NO_ZERO_DATE", "NO_ZERO_IN_DATE", "ONLY_FULL_GROUP_BY", "NO_AUTO_VALUE_ON_ZERO",
+		"TRADITIONAL", "STRICT_ALL_TABLES", "STRICT_TRANS_TABLES"
+	};
+	char query[100];
+	size_t i;
+
+	for (i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+		snprintf(query, sizeof(query), "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'%s', ''))", modes[i]);
+
+		if (reconnecting) {
+			mysql_query(mysql, query);
+		} else {
+			db_insert(mysql, type, query);
+		}
+	}
+}
+
 int db_reconnect(MYSQL *mysql, int type, int error, char *function) {
 	unsigned long  mysql_thread = 0;
 	char   query[100];
@@ -289,12 +312,7 @@ int db_reconnect(MYSQL *mysql, int type, int error, char *function) {
 		SPINE_LOG(("WARNING: Connection Broken in Function %s with Error %i.  Reconnect successful.", function, error));
 		snprintf(query, 100, "KILL %lu;", mysql_thread);
 		mysql_query(mysql, query);
-		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-		mysql_query(mysql, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
+		db_session_mode(mysql, type, TRUE);
 
 		sleep(1);
 
@@ -621,13 +639,7 @@ void db_create_connection_pool(int type) {
 
 			db_connect(type, &db_pool_local[id].mysql);
 
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-			db_insert(&db_pool_local[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+			db_session_mode(&db_pool_local[id].mysql, LOCAL, FALSE);
 
 			db_pool_local[id].free = TRUE;
 			db_pool_local[id].id   = id;
@@ -640,13 +652,7 @@ void db_create_connection_pool(int type) {
 
 			db_connect(type, &db_pool_remote[id].mysql);
 
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_IN_DATE', ''))");
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_AUTO_VALUE_ON_ZERO', ''))");
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'TRADITIONAL', ''))");
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_ALL_TABLES', ''))");
-			db_insert(&db_pool_remote[id].mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'STRICT_TRANS_TABLES', ''))");
+			db_session_mode(&db_pool_remote[id].mysql, LOCAL, FALSE);
 
 			db_pool_remote[id].free = TRUE;
 			db_pool_remote[id].id   = id;
