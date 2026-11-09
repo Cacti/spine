@@ -785,18 +785,28 @@ int append_hostrange(char *obuf, const char *colname) {
  *
  */
 void db_escape(MYSQL *mysql, char *output, int max_size, const char *input) {
-	if (input == NULL) return;
+	size_t input_len;
+	size_t max_input;
 
-	char input_trimmed[DBL_BUFSIZE];
-	int  max_escaped_input_size = (strlen(input) * 2) + 1;
+	if (input == NULL || output == NULL) return;
 
-	if (max_escaped_input_size > max_size) {
-		snprintf(input_trimmed, (max_size / 2) - 1, "%s", input);
-	} else {
-		snprintf(input_trimmed, max_size, "%s", input);
+	if (max_size <= 1) {
+		if (max_size == 1) {
+			output[0] = '\0';
+		}
+		return;
 	}
 
-	mysql_real_escape_string(mysql, output, input_trimmed, strlen(input_trimmed));
+	/* Escaping can double every byte and adds a terminator. Limit the input
+	 * to what the destination can hold once escaped, so the output is never
+	 * truncated part way through an escape sequence. */
+	max_input = ((size_t) max_size - 1) / 2;
+	input_len = strlen(input);
+	if (input_len > max_input) {
+		input_len = max_input;
+	}
+
+	mysql_real_escape_string(mysql, output, input, (unsigned long) input_len);
 }
 
 void db_free_result(MYSQL_RES *result) {

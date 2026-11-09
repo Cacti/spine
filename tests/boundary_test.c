@@ -132,9 +132,74 @@ static void test_snmp_format_value(void) {
 	free(output);
 }
 
+/* Collect the single quoted SQL string literals of a row, undoing backslash escapes. */
+static int quoted_fields(const char *row, char fields[][RESULTS_BUFFER], int max_fields) {
+	int    count = 0;
+	size_t used;
+
+	while (*row != '\0') {
+		if (*row++ != '\'') continue;
+		if (count == max_fields) return -1;
+
+		used = 0;
+		while (*row != '\0' && *row != '\'') {
+			if (*row == '\\' && row[1] != '\0') row++;
+			if (used + 1 >= RESULTS_BUFFER) return -1;
+			fields[count][used++] = *row++;
+		}
+		if (*row != '\'') return -1;
+		row++;
+
+		fields[count++][used] = '\0';
+	}
+
+	return count;
+}
+
+static void test_poller_output_row(void) {
+	MYSQL  *mysql = mysql_init(NULL);
+	char   rrd_name[sizeof(((target_t *) 0)->rrd_name)];
+	char   result[RESULTS_BUFFER];
+	char   row[RESULTS_BUFFER * 2 + DBL_BUFSIZE + SMALL_BUFSIZE];
+	char   escaped[8];
+	char   (*fields)[RESULTS_BUFFER] = calloc(3, RESULTS_BUFFER);
+	size_t i;
+	size_t trailing;
+
+	CHECK(mysql != NULL && fields != NULL, "poller output test setup");
+	if (mysql == NULL || fields == NULL) return;
+
+	/* values at their maximum length made only of characters that need escaping */
+	for (i = 0; i < sizeof(rrd_name) - 1; i++) rrd_name[i] = (i % 2) ? '\'' : '\\';
+	rrd_name[sizeof(rrd_name) - 1] = '\0';
+	for (i = 0; i < sizeof(result) - 1; i++) result[i] = (i % 3 == 0) ? '\'' : ((i % 3 == 1) ? '\\' : '"');
+	result[sizeof(result) - 1] = '\0';
+
+	CHECK(format_poller_output_row(mysql, row, sizeof(row), 42, rrd_name, "1700000000", result), "poller output row fits at maximum value lengths");
+	CHECK(quoted_fields(row, fields, 3) == 2, "poller output row keeps exactly two string literals");
+	CHECK(strcmp(fields[0], rrd_name) == 0, "poller output row round trips rrd_name");
+	CHECK(strcmp(fields[1], result) == 0, "poller output row round trips result");
+
+	CHECK(format_poller_output_row(mysql, row, sizeof(row), 7, "ds:name", "1700000000", "in:1 out:2") &&
+		strcmp(row, " (7, 'ds:name', FROM_UNIXTIME(1700000000), 'in:1 out:2')") == 0, "poller output row leaves plain values unchanged");
+
+	CHECK(!format_poller_output_row(mysql, row, 16, 7, "ds", "1700000000", "1"), "poller output row reports a row that does not fit");
+
+	/* a destination too small for the input keeps only whole escape sequences */
+	memset(escaped, 'G', sizeof(escaped));
+	db_escape(mysql, escaped, sizeof(escaped), "\\\\\\\\\\\\\\\\\\\\");
+	CHECK(memchr(escaped, '\0', sizeof(escaped)) != NULL, "db_escape terminates a truncated value");
+	for (trailing = 0, i = strlen(escaped); i > 0 && escaped[i - 1] == '\\'; i--) trailing++;
+	CHECK(strlen(escaped) > 0 && trailing % 2 == 0, "db_escape does not split an escape sequence");
+
+	free(fields);
+	mysql_close(mysql);
+}
+
 int main(void) {
 	test_add_slashes();
 	test_snmp_format_value();
+	test_poller_output_row();
 
 	if (failures) {
 		printf("%d check(s) failed\n", failures);
