@@ -1075,9 +1075,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				 * request.  The uptime OIDs keep their engine OID handling
 				 * below, and any value that could not be fetched this way is
 				 * still fetched alone when its row is checked. */
-				if (host->snmp_session != NULL &&
-					(assert_oids = (snmp_oids_t *) calloc(num_rows, sizeof(snmp_oids_t))) != NULL &&
-					(assert_state = (int *) calloc(num_rows, sizeof(int))) != NULL) {
+				if (host->snmp_session != NULL) {
+					assert_oids  = (snmp_oids_t *) calloc(num_rows, sizeof(snmp_oids_t));
+					assert_state = (int *) calloc(num_rows, sizeof(int));
+				}
+
+				/* without both arrays every value is fetched alone */
+				if (assert_oids != NULL && assert_state != NULL) {
 					for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
 						if (row[1] != NULL && atoi(row[1]) == POLLER_ACTION_SNMP && row[4] != NULL &&
 							!strstr(row[4], ".1.3.6.1.2.1.1.3.0") && !strstr(row[4], ".1.3.6.1.6.3.10.2.1.3.0")) {
