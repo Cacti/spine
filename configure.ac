@@ -253,6 +253,8 @@ AC_TYPE_SIZE_T
 
 # Checks for library functions.
 AC_CHECK_FUNCS(malloc calloc gettimeofday strerror strtoll getifaddrs if_nametoindex)
+# Shared ICMP waits use a monotonic condition variable where it exists.
+AC_CHECK_FUNCS([pthread_condattr_setclock])
 
 # ****************** Solaris Privileges Check ***********************
 

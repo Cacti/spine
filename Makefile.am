@@ -417,7 +417,7 @@ noinst_HEADERS += src/config/settings_internal.h src/ping/ping_internal.h src/ap
 
 noinst_HEADERS += src/poller/poller_internal.h src/app/startup_internal.h
 
-noinst_HEADERS += src/script/server_internal.h tests/support/child_run.h
+noinst_HEADERS += src/script/server_internal.h tests/support/child_run.h tests/support/fixtures.h
 
 noinst_HEADERS += src/process/process_internal.h
 

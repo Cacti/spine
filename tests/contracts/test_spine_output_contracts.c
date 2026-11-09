@@ -7,6 +7,7 @@
 #include "internal/common.h"
 #include "app/spine.h"
 #include "database/persistence.h"
+#include "tests/support/fixtures.h"
 #include <fcntl.h>
 
 extern poller_thread_t **details;
@@ -127,7 +128,7 @@ static void test_destination_upserts(MYSQL *local) {
 	config_t previous = set;
 	MYSQL remote_storage;
 	MYSQL *remote = local;
-	const char *remote_host = getenv("SPINE_TEST_REMOTE_DB_HOST");
+	const char *remote_host = spine_test_fixture("remote-db", "SPINE_TEST_REMOTE_DB_HOST");
 	poller_queries_t queries;
 	target_t item = {0};
 	int mode;
@@ -137,7 +138,7 @@ static void test_destination_upserts(MYSQL *local) {
 	const char *sources[] = {"poller_output", "poller_output_boost"};
 	char query[BUFSIZE];
 
-	if (remote_host != NULL && remote_host[0] != '\0') {
+	if (remote_host != NULL) {
 		assert(mysql_init(&remote_storage) != NULL);
 		assert(mysql_real_connect(&remote_storage, remote_host, "root", "",
 				   "spine_regressions", 3307, NULL, 0) != NULL);
@@ -145,9 +146,10 @@ static void test_destination_upserts(MYSQL *local) {
 		/* Match db_connect's Cacti-compatible session before cloning the
 		 * legacy fixture tables with zero-date column defaults. */
 		assert(mysql_query(remote, "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'") == 0);
-		/* This lane must really cover different server families. */
-		assert(strstr(mysql_get_server_info(local), "MariaDB") != NULL);
-		assert(strstr(mysql_get_server_info(remote), "MariaDB") == NULL);
+		/* This lane must really cover different server families, with
+		 * either one as the main server. */
+		assert((strstr(mysql_get_server_info(local), "MariaDB") != NULL) !=
+			(strstr(mysql_get_server_info(remote), "MariaDB") != NULL));
 	}
 	set.poller.poller_id = 2;
 	set.poller.SQL_readonly = FALSE;

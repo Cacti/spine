@@ -11,6 +11,7 @@
 #include <limits.h>
 
 #include "app/runtime.h"
+#include "tests/support/fixtures.h"
 extern void test_output_write_contracts(MYSQL *mysql);
 extern void test_database_tls_contracts(void);
 extern void test_additional_contracts(void);
@@ -1819,6 +1820,9 @@ static void test_collector_transfer(MYSQL *source) {
 	assert(db_insert(source, LOCAL, query));
 	MYSQL destination;
 	db_connect(LOCAL, &destination);
+	/* Clone the zero-date fixture tables under the Cacti session mode, which
+	 * a MySQL 5.7+ server's default mode does not allow. */
+	assert(db_set_session_mode(&destination));
 	assert(mysql_select_db(&destination, database) == 0);
 	assert(mysql_set_character_set(source, "utf8mb4") == 0 && mysql_set_character_set(&destination, "utf8mb4") == 0);
 	assert(db_insert(&destination, REMOTE, "CREATE TABLE host LIKE spine_regressions.host"));
@@ -2241,10 +2245,10 @@ static void test_poll_pipeline(MYSQL *mysql) {
 	set.snmp.mibs = FALSE;
 	set.availability.ping_recovery_count = 1;
 	set.availability.ping_failure_count = 1;
-	const char *agent = getenv("SPINE_TEST_SNMP_HOST");
+	const char *agent = spine_test_fixture("snmp-agent", "SPINE_TEST_SNMP_HOST");
 	const int hosts[] = {0, 42, 43, 44};
 	size_t host_count = sizeof(hosts) / sizeof(hosts[0]);
-	if (agent == NULL || agent[0] == '\0') host_count--;
+	if (agent == NULL) host_count--;
 	else snmp_spine_init();
 	for (size_t index = 0; index < host_count; index++) {
 		int host_id = hosts[index];
@@ -2399,6 +2403,7 @@ static void test_cli_transfer_exit(MYSQL *source) {
 	assert(db_insert(source, LOCAL, query));
 	MYSQL destination;
 	db_connect(LOCAL, &destination);
+	assert(db_set_session_mode(&destination));
 	assert(mysql_select_db(&destination, database) == 0);
 	const char *const tables[] = {"settings", "poller", "poller_item", "version", "host", "poller_time"};
 	for (size_t index = 0; index < sizeof(tables) / sizeof(tables[0]); index++) {
@@ -2489,6 +2494,7 @@ static void test_database_configuration(void) {
 	read_config_options();
 	assert(set.availability.ping_timeout == 777);
 	db_connect(LOCAL, &mysql);
+	assert(db_set_session_mode(&mysql));
 	test_config_option_boundaries(&mysql);
 	test_startup_contracts(&mysql);
 	test_settings_write_contracts(&mysql);
@@ -2498,8 +2504,7 @@ static void test_database_configuration(void) {
 	test_poll_pipeline(&mysql);
 	test_output_write_contracts(&mysql);
 	test_reindex_result_contracts(&mysql);
-	const char *reindex_agent = getenv("SPINE_TEST_SNMP_HOST");
-	if (reindex_agent != NULL && reindex_agent[0] != '\0') test_additional_reindex_contracts(&mysql);
+	if (spine_test_fixture("snmp-agent", "SPINE_TEST_SNMP_HOST") != NULL) test_additional_reindex_contracts(&mysql);
 	test_cli_transfer_exit(&mysql);
 	db_disconnect(&mysql);
 }

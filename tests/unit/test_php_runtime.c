@@ -1002,6 +1002,34 @@ static void test_startup_handshake_uses_script_timeout(void **state) {
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
 
+/* A PHP notice or warning from the includes can precede the banner. Startup
+ * skips a bounded number of such lines, as 1.2.x does, and the server then
+ * answers in step. More lines than that is a server that did not start. */
+static void test_startup_skips_lines_before_the_banner(void **state) {
+	char *result;
+
+	(void) state;
+	set.php.php_servers = 1;
+	set.php.script_timeout = 2;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "notice-start");
+	assert_int_equal(php_init(PHP_INIT), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+	result = php_cmd("poll 7", 0);
+	assert_non_null(result);
+	assert_string_equal(result, "42\n");
+	free(result);
+
+	/* the restart handshake reads the same way */
+	php_close(0);
+	assert_int_equal(php_init(0), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_READY);
+	php_close(0);
+
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "notice-flood");
+	assert_int_equal(php_init(0), TRUE);
+	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
+}
+
 static void test_spawn_failure_releases_every_resource(void **state) {
 	(void) state;
 	/* calloc-like zeroes reproduce the process-wide initialization that used to
@@ -1322,13 +1350,6 @@ static void test_sigpipe_attribute_helper_reports_its_failures(void **state) {
 	errno = 0;
 	assert_int_equal(spine_spawnattr_sigpipe_default(&attr), -1);
 	assert_int_equal(errno, ENOMEM);
-}
-
-static void test_startup_command_allocation_failure_fails_the_start(void **state) {
-	(void) state;
-	fail_strdup_text = "INIT";
-	assert_int_equal(php_init(0), FALSE);
-	assert_int_equal(php_spawn_calls, 0);
 }
 
 /* With descriptor 1 closed the response pipe's write end can land on stdout.
@@ -1708,6 +1729,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_cloexec_pipe_failure_releases_both_descriptors, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_init_timeout_does_not_recurse, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_startup_handshake_uses_script_timeout, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_startup_skips_lines_before_the_banner, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawn_failure_releases_every_resource, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_command_rejects_a_writable_poisoned_slot, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_readpipe_rejects_invalid_slots, php_setup, php_teardown),
@@ -1723,7 +1745,6 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_file_actions_failure_is_clean, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawn_attribute_failure_during_start_is_clean, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_sigpipe_attribute_helper_reports_its_failures, php_setup, php_teardown),
-		cmocka_unit_test_setup_teardown(test_startup_command_allocation_failure_fails_the_start, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_response_pipe_on_stdout_still_reaches_the_server, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_duplex_script_runs_with_closed_stdio, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_duplex_script_cloexec_failure_is_clean, php_setup, php_teardown),

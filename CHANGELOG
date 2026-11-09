@@ -46,6 +46,14 @@ The Cacti Group | spine
 -issue#597: Restore SNMPv3 noAuthNoPriv and authNoPriv sessions, validate privacy/authentication combinations, refuse passwords paired with blank protocol fields, and wipe local passphrase copies
 -issue#605: Guard php_readpipe() against an FD_SET() write past FD_SETSIZE
 -issue#607: Re-arm the signal handler for SIGPIPE so a second one does not kill the poller
+-issue#677: Launch every partition of a split device even when a recount of its due items shrinks, so its schedule still advances
+-issue#677: Poll device 0 only when the device range or host list selects it, as cmd.php does
+-issue#677: Report U instead of a zero line count when a reindex count script fails, so a failed script no longer queues a false reindex
+-issue#677: Treat an interrupted script server read that outlasts its timeout as a timeout instead of a select() error
+-issue#677: Skip up to ten lines of PHP notices ahead of the script server banner instead of leaving the server busy
+-issue#677: Time shared ICMP socket waits on the monotonic clock
+-issue#677: Append poller output rows at a tracked length instead of rescanning the INSERT batch for every row
+-issue#677: Apply the Cacti session sql_mode to a remote collector's main-server connection, so its poller_time start row no longer fails on a MySQL 5.7 or later main server
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
 -issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
 -issue: Restore the twelve headers and spine.conf.dist missing from the dist tarball so a release tarball can be compiled from

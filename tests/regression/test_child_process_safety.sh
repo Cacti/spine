@@ -86,8 +86,9 @@ awk '/^int spine_open_pipe_cloexec/,/^}/' src/process/fd.c |
 # every one of them leaked the command buffer.
 php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/script/server.c)
 
-printf '%s\n' "$php_init_body" | grep -cE '^[[:space:]]+return FALSE;' | grep -qx '1' ||
+if printf '%s\n' "$php_init_body" | grep -qE '^[[:space:]]+return FALSE;'; then
 	fail "php_init() must reach its teardown by goto, not by a return that skips it"
+fi
 
 printf '%s\n' "$php_init_body" | grep -q '^[[:space:]]*cleanup:' ||
 	fail "php_init() must have a single cleanup label"
@@ -96,16 +97,16 @@ printf '%s\n' "$php_init_body" | grep -q '^[[:space:]]*cleanup:' ||
 # used to restart from inside itself, and php_init() confirms startup by
 # reading, so a server that spawned but never answered recursed without bound,
 # spawning another server at every level. The handshake read must stay on the
-# non-restarting entry point.
+# banner reader, which never restarts.
 php_init_body=$(awk '/^int php_init\(int php_process\) \{/{f=1} f{print} f&&/^\}/{exit}' src/script/server.c)
 
-printf '%s\n' "$php_init_body" | grep -q 'php_read_result(slot, command, FALSE)' ||
+printf '%s\n' "$php_init_body" | grep -q 'php_read_banner(slot, ' ||
 	fail "php_init() must read the startup handshake with restarts disabled"
 
-# The initial PHP_INIT handshake uses the full script timeout through
-# php_read_response(); it must still pass allow_restart as FALSE.
-printf '%s\n' "$php_init_body" | grep -q 'php_read_response(slot, command, FALSE, ' ||
-	fail "php_init() must read the initial handshake with restarts disabled"
+php_banner_body=$(awk '/^char \*php_read_banner/,/^\}/' src/script/read.c)
+if printf '%s\n' "$php_banner_body" | grep -qE 'php_(init|readpipe|read_result|read_response)\(|php_fail_read\([^)]*TRUE'; then
+	fail "php_read_banner() must not restart the server it is reading"
+fi
 
 printf '%s\n' "$php_init_body" | grep -q 'php_readpipe(' &&
 	fail "php_init() must not call php_readpipe(), which may restart the server"

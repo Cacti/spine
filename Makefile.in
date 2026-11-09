@@ -1683,7 +1683,8 @@ noinst_HEADERS = src/internal/common.h src/app/signals.h \
 	src/config/settings_internal.h src/ping/ping_internal.h \
 	src/app/cli_internal.h src/poller/poller_internal.h \
 	src/app/startup_internal.h src/script/server_internal.h \
-	tests/support/child_run.h src/process/process_internal.h \
+	tests/support/child_run.h tests/support/fixtures.h \
+	src/process/process_internal.h \
 	src/app/buffer.h src/app/runtime.h src/config/model.h \
 	src/config/state.h src/config/text.h src/config/validate.h \
 	src/internal/constants.h src/log/debug.h src/log/log.h \

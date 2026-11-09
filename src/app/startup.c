@@ -151,6 +151,31 @@ double initialize_process_defaults(void) {
 	return begin_time;
 }
 
+/* Concurrent processes split the devices with --first/--last or a host list.
+ * As in cmd.php, device 0 belongs only to a run whose selection covers it:
+ * no selection, a range that includes 0, or a host list that names 0. A host
+ * list replaces the range, as it does in select_poll_hosts(). */
+bool device_0_in_scope(void) {
+	const char *cursor = set.hosts.host_id_list;
+
+	if (cursor[0] != '\0') {
+		/* parse_host_list() stored only decimal ids and commas */
+		for (;;) {
+			char *end;
+			unsigned long id = strtoul(cursor, &end, 10);
+
+			if (end != cursor && id == 0) return TRUE;
+			if (*end != ',') return FALSE;
+			cursor = end + 1;
+		}
+	}
+	/* Defined ids are never negative, so a range covers 0 only from 0. */
+	if (HOSTID_DEFINED(set.hosts.start_host_id) && HOSTID_DEFINED(set.hosts.end_host_id)) {
+		return set.hosts.start_host_id == 0;
+	}
+	return TRUE;
+}
+
 int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 	MYSQL_RES *result;
 	int mode;
@@ -168,6 +193,9 @@ int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 
 	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
 		if (!db_connect(REMOTE, mysqlr)) die("FATAL: Unable to connect to the remote database");
+		/* The poller_time start and end rows go through this handle; a
+		 * MySQL 5.7+ main server rejects their zero dates by default. */
+		if (!db_set_session_mode(mysqlr)) die("FATAL: Unable to configure the remote database session");
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */
@@ -179,13 +207,15 @@ int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 	}
 
 
-	/* check for device 0 items */
-	result = db_query(mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
-	if (result == NULL) die("FATAL: Unable to check for Device 0 poller items");
-	if (mysql_num_rows(result)) {
-		set.hosts.has_device_0 = TRUE;
+	/* check for device 0 items, which only a run selecting device 0 polls */
+	if (device_0_in_scope()) {
+		result = db_query(mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
+		if (result == NULL) die("FATAL: Unable to check for Device 0 poller items");
+		if (mysql_num_rows(result)) {
+			set.hosts.has_device_0 = TRUE;
+		}
+		db_free_result(result);
 	}
-	db_free_result(result);
 
 	/* check if poller_item has the output_regex column (added in Cacti 1.3.1) */
 	has_output_regex = db_column_exists(mysql, LOCAL, "poller_item", "output_regex");

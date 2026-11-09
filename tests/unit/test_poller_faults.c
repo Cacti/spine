@@ -67,9 +67,44 @@ static int controlled_setspecific(pthread_key_t key, const void *value) {
 	return pthread_setspecific(key, value);
 }
 
+/* While armed, the script and script server calls reindex.c makes answer
+ * with script_answer, which may be NULL. Otherwise they run as built. */
+static int script_answer_armed;
+static const char *script_answer;
+
+static char *scripted_answer(void) {
+	char *answer;
+
+	if (script_answer == NULL) return NULL;
+	answer = strdup(script_answer);
+	assert_non_null(answer);
+	return answer;
+}
+
+static char *controlled_exec_poll(host_t *host, char *command, int id, const char *type) {
+	if (script_answer_armed) return scripted_answer();
+	return exec_poll(host, command, id, type);
+}
+
+static char *controlled_php_cmd(const char *command, int process) {
+	if (script_answer_armed) return scripted_answer();
+	return php_cmd(command, process);
+}
+
+static int controlled_php_get_process(void) {
+	if (script_answer_armed) return 0;
+	return php_get_process();
+}
+
 #define malloc controlled_malloc
 #define strdup controlled_strdup
+#define exec_poll controlled_exec_poll
+#define php_cmd controlled_php_cmd
+#define php_get_process controlled_php_get_process
 #include "../../src/poller/reindex.c"
+#undef php_get_process
+#undef php_cmd
+#undef exec_poll
 #undef strdup
 #undef malloc
 
@@ -94,6 +129,8 @@ static int faults_setup(void **state) {
 	fail_key_create = FALSE;
 	fail_setspecific = FALSE;
 	setspecific_calls = 0;
+	script_answer_armed = FALSE;
+	script_answer = NULL;
 	return 0;
 }
 
@@ -139,6 +176,42 @@ static void test_snmp_count_without_a_session_is_unknown(void **state) {
 	assert_string_equal(result, "U");
 	free(result);
 	assert_true(host.ignore_host);
+}
+
+static void assert_line_count(int action, const char *answer, const char *expected) {
+	host_t host = {.id = 1};
+	reindex_t reindex;
+	char uptime[BUFSIZE] = "";
+	bool unavailable = FALSE;
+	char *result;
+
+	memset(&reindex, 0, sizeof(reindex));
+	reindex.action = action;
+	snprintf(reindex.arg1, sizeof(reindex.arg1), "%s", "/usr/bin/count-items");
+	script_answer_armed = TRUE;
+	script_answer = answer;
+
+	result = poll_reindex_action(&host, &reindex, 1, uptime, &unavailable);
+	assert_non_null(result);
+	assert_string_equal(result, expected);
+	free(result);
+	assert_false(unavailable);
+}
+
+/* A count script that fails answers U, or nothing at all. Counting its lines
+ * gave 0, which differs from the stored count and queues a false reindex
+ * that also overwrites assert_value. 1.2.x reports U, which never fails. */
+static void test_failed_count_script_is_unknown(void **state) {
+	static const int actions[] = {POLLER_ACTION_SCRIPT_COUNT, POLLER_ACTION_PHP_SCRIPT_SERVER_COUNT};
+	size_t index;
+
+	(void) state;
+	for (index = 0; index < sizeof(actions) / sizeof(actions[0]); index++) {
+		print_message("action=%d\n", actions[index]);
+		assert_line_count(actions[index], "U", "U");
+		assert_line_count(actions[index], NULL, "U");
+		assert_line_count(actions[index], "1\n2\n3\n", "3");
+	}
 }
 
 static host_t allocation_host;
@@ -239,6 +312,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_unknown_assertion_operator_never_fails, faults_setup),
 		cmocka_unit_test_setup(test_empty_script_command_yields_no_result, faults_setup),
 		cmocka_unit_test_setup(test_snmp_count_without_a_session_is_unknown, faults_setup),
+		cmocka_unit_test_setup(test_failed_count_script_is_unknown, faults_setup),
 		cmocka_unit_test_setup(test_reindex_result_allocation_failures_are_fatal, faults_setup),
 		cmocka_unit_test_setup(test_uptime_result_allocation_failure_is_fatal, faults_setup),
 		cmocka_unit_test_setup(test_regex_storage_failures_are_fatal, faults_setup),

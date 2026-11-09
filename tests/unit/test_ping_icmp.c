@@ -783,7 +783,7 @@ static void test_shared_reply_for_another_waiter_is_handed_over(void **state) {
 	icmp_shared_register(&theirs);
 	icmp_shared_register(&mine);
 
-	assert_false(icmp_shared_await(&mine, get_time_as_double() + 0.05));
+	assert_false(icmp_shared_await(&mine, spine_monotonic_time() + 0.05));
 	assert_true(theirs.answered);
 	assert_false(mine.answered);
 	assert_true(recvfrom_calls > 0);
@@ -820,7 +820,7 @@ static void test_shared_waiter_does_not_read_while_another_thread_does(void **st
 	icmp_shared.reading = TRUE;
 
 	assert_int_equal(pthread_create(&reader, NULL, answer_waiter, &mine), 0);
-	assert_true(icmp_shared_await(&mine, get_time_as_double() + 2.0));
+	assert_true(icmp_shared_await(&mine, spine_monotonic_time() + 2.0));
 	assert_int_equal(pthread_join(reader, NULL), 0);
 	assert_int_equal(recvfrom_calls, 0);
 
@@ -849,7 +849,7 @@ static void test_shared_reader_drains_the_queue(void **state) {
 	make_waiter(&mine, 9);
 	icmp_shared_register(&mine);
 
-	assert_true(icmp_shared_await(&mine, get_time_as_double() + 1.0));
+	assert_true(icmp_shared_await(&mine, spine_monotonic_time() + 1.0));
 	for (int i = 0; i < 3; i++) {
 		assert_true(others[i].answered);
 		icmp_shared_unregister(&others[i]);
@@ -871,6 +871,39 @@ static void *release_reader(void *argument) {
 	return NULL;
 }
 
+/* The deadline is on the monotonic clock, as every other probe deadline is.
+   A wait measured on the wall clock took it as long past and returned at
+   once, and a wall-clock step could cut the wait short or stretch it. */
+static void test_shared_wait_uses_the_monotonic_clock(void **state) {
+	icmp_waiter_t mine;
+	pthread_t reader;
+	double begin;
+
+	(void) state;
+	use_owned_controlled_socket();
+	icmp_shared.fd = controlled_pair[0];
+	controlled_reply = 1;
+	make_waiter(&mine, 9);
+	icmp_shared_register(&mine);
+	icmp_shared.reading = TRUE;
+
+	/* asleep while another thread reads, the waiter waits out its deadline */
+	begin = spine_monotonic_time();
+	assert_false(icmp_shared_await(&mine, begin + 0.2));
+	assert_true(spine_monotonic_time() - begin >= 0.19);
+
+	/* and is woken early when its reply is handed over */
+	assert_int_equal(pthread_create(&reader, NULL, answer_waiter, &mine), 0);
+	begin = spine_monotonic_time();
+	assert_true(icmp_shared_await(&mine, begin + 5.0));
+	assert_int_equal(pthread_join(reader, NULL), 0);
+	assert_true(spine_monotonic_time() - begin < 2.0);
+	assert_int_equal(recvfrom_calls, 0);
+
+	icmp_shared.reading = FALSE;
+	icmp_shared_unregister(&mine);
+}
+
 /* With per-waiter wakeups, a reader that leaves must hand the socket to a
    sleeping waiter, or that waiter sleeps through its own reply. */
 static void test_shared_reader_hands_over_on_leaving(void **state) {
@@ -889,11 +922,11 @@ static void test_shared_reader_hands_over_on_leaving(void **state) {
 	icmp_shared_register(&mine);
 	icmp_shared.reading = TRUE;
 
-	begin = get_time_as_double();
+	begin = spine_monotonic_time();
 	assert_int_equal(pthread_create(&reader, NULL, release_reader, &icmp_shared), 0);
 	assert_true(icmp_shared_await(&mine, begin + 5.0));
 	assert_int_equal(pthread_join(reader, NULL), 0);
-	assert_true(get_time_as_double() - begin < 2.0);
+	assert_true(spine_monotonic_time() - begin < 2.0);
 	assert_false(icmp_shared.reading);
 	icmp_shared_unregister(&mine);
 }
@@ -1065,7 +1098,7 @@ static void test_shared_drain_retries_after_eintr(void **state) {
 	make_waiter(&mine, 21);
 	icmp_shared_register(&mine);
 
-	assert_true(icmp_shared_await(&mine, get_time_as_double() + 1.0));
+	assert_true(icmp_shared_await(&mine, spine_monotonic_time() + 1.0));
 	/* interrupted, the reply, then the empty queue */
 	assert_int_equal(recvfrom_calls, 3);
 	icmp_shared_unregister(&mine);
@@ -1785,6 +1818,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_shared_reply_for_another_waiter_is_handed_over, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_shared_waiter_does_not_read_while_another_thread_does, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_shared_reader_drains_the_queue, ping_reset, ping_teardown),
+		cmocka_unit_test_setup_teardown(test_shared_wait_uses_the_monotonic_clock, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_shared_reader_hands_over_on_leaving, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_per_ping_sockets_are_close_on_exec, ping_reset, ping_teardown),
 		cmocka_unit_test_setup_teardown(test_icmp6_reply_matching, ping_reset, ping_teardown),
