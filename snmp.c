@@ -1034,33 +1034,6 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 	return error_occurred ? -1 : count;
 }
 
-/*! \fn void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable)
- *
- *  \brief replacement for the buggy net-snmp.org snprint_value function
- *
- *	This function format an output buffer with the correct string representation
- *  of an snmp OID result fetched with snmp_get_multi.  The buffer pointed to by
- *  the function is modified.
- *
- */
-void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, struct variable_list *variable) {
-	u_char *buf    = NULL;
-	size_t out_len = 0;
-
-	if (buf_len > 0) {
-		if ((buf = (u_char *) calloc(buf_len, 1)) != 0) {
-			sprint_realloc_by_type(&buf, &buf_len, &out_len, 0, variable, NULL, NULL, NULL);
-			snprintf(obuf, buf_len, "%s", buf);
-		} else {
-			SET_UNDEFINED(obuf);
-		}
-
-		free(buf);
-	} else {
-		SET_UNDEFINED(obuf);
-	}
-}
-
 /*! \fn char *snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids)
  *  \brief performs multiple OID snmp_get's in a single network call
  *
