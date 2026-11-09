@@ -11,7 +11,7 @@
 static int scenario;
 static int calls;
 static int wait_errno;
-static int permit_failures;
+static int sleeps;
 static size_t failing_allocation;
 static int controlled_wait(int fd, double deadline) {
 	(void) fd;
@@ -22,12 +22,10 @@ static int controlled_wait(int fd, double deadline) {
 	}
 	return scenario == 2 ? 0 : 1;
 }
-static int controlled_acquire(spine_permits_t *permits) {
-	if (permit_failures > 0) {
-		permit_failures--;
-		return EIO;
-	}
-	return spine_permits_try_acquire(permits);
+/* Counts any retry sleep external.c makes; a blocking permit wait makes none. */
+__attribute__((unused)) static void counted_sleep(unsigned int microseconds) {
+	sleeps++;
+	spine_sleep_usec(microseconds);
 }
 static void *controlled_malloc(size_t size) {
 	if (size == failing_allocation) {
@@ -82,11 +80,11 @@ static int controlled_pclose(int fd, double deadline) {
 #define nft_pclose_deadline controlled_pclose
 #define spine_wait_readable controlled_wait
 #define read controlled_read
-#define spine_permits_try_acquire controlled_acquire
+#define spine_sleep_usec counted_sleep
 #define malloc controlled_malloc
 #include "../../src/script/external.c"
 #undef malloc
-#undef spine_permits_try_acquire
+#undef spine_sleep_usec
 #undef read
 #undef spine_wait_readable
 #undef nft_popen
@@ -158,21 +156,43 @@ static void test_timeout_without_a_registered_child_is_undefined(void **state) {
 	scenario = 0;
 }
 
-static void test_script_permit_errors_are_retried(void **state) {
+static void *return_script_permit(void *unused) {
+	(void) unused;
+	spine_sleep_usec(50000);
+	assert_int_equal(spine_permits_release(&available_scripts), 0);
+	return NULL;
+}
+
+/* A script waiting for a permit sleeps on it and runs once another script
+ * returns one; with none returned it gives up within its budget. */
+static void test_script_waits_for_a_returned_permit(void **state) {
 	host_t host = {.id = 1};
+	pthread_t releaser;
 	char *result;
+	double begin;
 	(void) state;
-	scenario = calls = 0;
+	scenario = calls = sleeps = 0;
 	set.php.script_timeout = 5;
 	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
-	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
-	permit_failures = 2;
+	assert_int_equal(spine_permits_init(&available_scripts, 0), 0);
+	assert_int_equal(pthread_create(&releaser, NULL, return_script_permit, NULL), 0);
 
 	result = exec_poll(&host, "/bin/echo 42", 1, "DS");
-	assert_int_equal(permit_failures, 0);
 	assert_string_equal(result, "42");
 	free(result);
+	assert_int_equal(sleeps, 0);
+	assert_int_equal(pthread_join(releaser, NULL), 0);
 	assert_int_equal(spine_permits_available(&available_scripts), 1);
+
+	/* 15 tries 10 ms apart per second of timeout, less the first sleep */
+	assert_int_equal(spine_permits_try_acquire(&available_scripts), 0);
+	set.php.script_timeout = 1;
+	begin = spine_monotonic_time();
+	result = exec_poll(&host, "/bin/echo 42", 1, "DS");
+	assert_string_equal(result, "U");
+	free(result);
+	assert_true(spine_monotonic_time() - begin >= 0.13);
+	assert_int_equal(spine_permits_available(&available_scripts), 0);
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
@@ -348,7 +368,7 @@ static void test_unlimited_lingering_script_is_not_waited_for(void **state) {
 }
 
 int main(void) {
-	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_unlimited_read_reports_wait_failures), cmocka_unit_test(test_timeout_without_a_registered_child_is_undefined), cmocka_unit_test(test_script_permit_errors_are_retried), cmocka_unit_test(test_result_allocation_failure_is_fatal),
+	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_unlimited_read_reports_wait_failures), cmocka_unit_test(test_timeout_without_a_registered_child_is_undefined), cmocka_unit_test(test_script_waits_for_a_returned_permit), cmocka_unit_test(test_result_allocation_failure_is_fatal),
 		cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item),
 		cmocka_unit_test(test_script_finishes_after_closing_its_output), cmocka_unit_test(test_lingering_script_is_bounded_by_its_deadline),
 		cmocka_unit_test(test_unlimited_lingering_script_is_not_waited_for)};

@@ -200,7 +200,7 @@ static void *exercise_permit(void *unused) {
 	(void) unused;
 	for (int iteration = 0; iteration < 100; iteration++) {
 		int status;
-		while ((status = spine_permits_try_acquire(&test_permits)) == EAGAIN) spine_sleep_usec(100);
+		status = spine_permits_acquire_until(&test_permits, spine_monotonic_time() + 30);
 		assert(status == 0);
 		assert(pthread_mutex_lock(&permit_test_mutex) == 0);
 		assert(active_permit_workers == 0);

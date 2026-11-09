@@ -23,7 +23,6 @@ extern int *debug_devices;
 extern int entries;
 extern int num_hosts;
 extern double start_time;
-extern double total_time;
 extern poller_thread_t **details;
 
 

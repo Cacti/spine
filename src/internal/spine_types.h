@@ -85,8 +85,8 @@ typedef struct snmp_oids {
  * This structure holds thread polling instructions.
  *
  */
-/* Process-local permits use a mutex because Darwin does not implement
- * unnamed POSIX semaphores. No caller needs a blocking semaphore wait. */
+/* Process-local permits use a mutex and condition variable because Darwin
+ * does not implement unnamed POSIX semaphores. */
 
 typedef struct poller_thread {
 	int device_counter;
