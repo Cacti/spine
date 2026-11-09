@@ -16,6 +16,29 @@
 
 #define SCRIPT_SERVER "./tests/support/php_test_server"
 
+/* Concurrent processes split the devices with --first/--last or a host list.
+ * Device 0 belongs only to a run whose selection covers it, as in cmd.php;
+ * otherwise every process polled its items and advanced their schedule. */
+static void assert_device_0_scope(int first, int last, const char *host_list, int expected) {
+	MYSQL local;
+	MYSQL remote;
+	pool_t *previous_pool = db_pool_local;
+
+	set.hosts.start_host_id = first;
+	set.hosts.end_host_id = last;
+	snprintf(set.hosts.host_id_list, sizeof(set.hosts.host_id_list), "%s", host_list);
+	set.hosts.has_device_0 = FALSE;
+	(void) initialize_main_database(&local, &remote);
+	assert(set.hosts.has_device_0 == expected);
+	db_close_connection_pool(LOCAL);
+	free(db_pool_local);
+	db_pool_local = previous_pool;
+	db_disconnect(&local);
+	set.hosts.start_host_id = -1;
+	set.hosts.end_host_id = -1;
+	set.hosts.host_id_list[0] = '\0';
+}
+
 /* Device 0 data sources and the output_regex column change how the poller
  * selects and stores work, so startup has to notice both. */
 static void test_startup_database_detection(MYSQL *mysql) {
@@ -32,6 +55,8 @@ static void test_startup_database_detection(MYSQL *mysql) {
 	set.poller.mode = REMOTE_OFFLINE;
 	set.hosts.has_device_0 = FALSE;
 	set.hosts.has_output_regex = FALSE;
+	/* the configuration test left a host list that excludes device 0 */
+	set.hosts.host_id_list[0] = '\0';
 
 	mode = initialize_main_database(&local, &remote);
 	assert(mode == LOCAL);
@@ -41,6 +66,13 @@ static void test_startup_database_detection(MYSQL *mysql) {
 	free(db_pool_local);
 	db_pool_local = previous_pool;
 	db_disconnect(&local);
+
+	assert_device_0_scope(1, 10, "", FALSE);
+	assert_device_0_scope(0, 10, "", TRUE);
+	assert_device_0_scope(-1, -1, "4,10", FALSE);
+	assert_device_0_scope(-1, -1, "4,0", TRUE);
+	/* a host list replaces the range, as it does in the device query */
+	assert_device_0_scope(1, 10, "0", TRUE);
 	assert(db_insert(mysql, LOCAL, "ALTER TABLE poller_item DROP COLUMN output_regex"));
 	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_item WHERE local_data_id=951"));
 	set = previous;

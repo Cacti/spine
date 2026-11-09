@@ -40,6 +40,7 @@ void free_worker_storage(int num_rows, int *ids,
 char *load_startup_configuration(char *conf_file);
 void report_startup(int mode);
 double initialize_process_defaults(void);
+bool device_0_in_scope(void);
 int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr);
 void initialize_main_php(void);
 void close_main_php(void);
