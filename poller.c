@@ -77,6 +77,14 @@ static const char *script_log_name(const char *command, char *buffer, size_t cap
 	return buffer;
 }
 
+/* After an agent restart, store U in place of a counter that would graph as
+ * a spike.  Multipart output is kept. */
+static void spike_kill_result(char *result, int spike_kill) {
+	if (spike_kill && !IS_UNDEFINED(result) && !strstr(result, ":")) {
+		SET_UNDEFINED(result);
+	}
+}
+
 void child_cleanup(void *arg) {
 	poller_thread_t poller_details = *(poller_thread_t*) arg;
 
@@ -1586,6 +1594,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							} else {
 								SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 							}
+
+							spike_kill_result(poller_items[snmp_oids[j].array_position].result, spike_kill);
 						}
 
 						/* reset num_snmps */
@@ -1692,12 +1702,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 						}
 
-						if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
-							/* insert a NaN in place of the actual value if the snmp agent restarts */
-							if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
-								SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
-							}
-						}
+						spike_kill_result(poller_items[snmp_oids[j].array_position].result, spike_kill);
 					}
 
 					/* reset num_snmps */
@@ -1912,12 +1917,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DS[%i] TT[%.2f] SNMP: v%i: %s, dsname: %s, oid: %s, value: %s", host_id, host_thread, poller_items[snmp_oids[j].array_position].local_data_id, (float) ((thread_end - thread_start) * 1000), host->snmp_version, host->hostname, poller_items[snmp_oids[j].array_position].rrd_name, poller_items[snmp_oids[j].array_position].arg1, poller_items[snmp_oids[j].array_position].result));
 				}
 
-				if (!IS_UNDEFINED(poller_items[snmp_oids[j].array_position].result)) {
-					/* insert a NaN in place of the actual value if the snmp agent restarts */
-					if ((spike_kill) && (!strstr(poller_items[snmp_oids[j].array_position].result,":"))) {
-						SET_UNDEFINED(poller_items[snmp_oids[j].array_position].result);
-					}
-				}
+				spike_kill_result(poller_items[snmp_oids[j].array_position].result, spike_kill);
 			}
 		}
 
