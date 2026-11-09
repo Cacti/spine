@@ -106,6 +106,14 @@ static void update_partition_time(poller_partition_t *partition) {
 }
 
 static void prepare_device_partition(MYSQL *mysql, int host_id, int current_thread, poller_partition_t *partition) {
+	/* Later threads keep the split the first thread stored in host_threads.
+	 * By now the first worker may have advanced rrd_next_step, so a recount
+	 * of due items can shrink, end the device early and leave the last
+	 * partition, the one that advances the schedule, unlaunched. */
+	if (current_thread > 1) {
+		if (partition->time == 0 || partition->timestamp == NULL) update_partition_time(partition);
+		return;
+	}
 	if (set.availability.ping_only) {
 		partition->threads = 1;
 	} else {
@@ -113,12 +121,8 @@ static void prepare_device_partition(MYSQL *mysql, int host_id, int current_thre
 		if (total_items && total_items < partition->threads) partition->threads = total_items;
 	}
 	if (partition->threads > 1) {
-		if (current_thread == 1) {
-			partition->items = count_partition_items(mysql, host_id, partition->threads, set.poller.active_profiles != 1);
-			update_partition_time(partition);
-		} else if (partition->time == 0 || partition->timestamp == NULL) {
-			update_partition_time(partition);
-		}
+		partition->items = count_partition_items(mysql, host_id, partition->threads, set.poller.active_profiles != 1);
+		update_partition_time(partition);
 	} else {
 		partition->items = count_partition_items(mysql, host_id, 1, TRUE);
 		update_partition_time(partition);
@@ -312,6 +316,8 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 			}
 		} else {
 			current_thread++;
+			/* the loop bound is the split stored by the device's first thread */
+			if (current_thread > 1) partition.threads = poller_details->host_threads;
 		}
 
 		prepare_device_partition(mysql, host_id, current_thread, &partition);
