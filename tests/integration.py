@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 ROOT = Path(__file__).resolve().parent
@@ -32,6 +33,96 @@ def icmp_datagram_available():
     except OSError:
         return False
     return True
+
+
+def ber_length(data, i):
+    length = data[i]
+    if length < 0x80:
+        return length, i + 1
+    count = length & 0x7f
+    return int.from_bytes(data[i + 1:i + 1 + count], 'big'), i + 1 + count
+
+
+def ber_items(data):
+    i = 0
+    while i < len(data):
+        tag = data[i]
+        length, i = ber_length(data, i + 1)
+        yield tag, data[i:i + length]
+        i += length
+
+
+def ber(tag, value):
+    if len(value) < 0x80:
+        return bytes([tag, len(value)]) + value
+    size = len(value).to_bytes((len(value).bit_length() + 7) // 8, 'big')
+    return bytes([tag, 0x80 | len(size)]) + size + value
+
+
+def ber_int(value):
+    return ber(0x02, value.to_bytes(max(1, (value.bit_length() + 8) // 8), 'big', signed=True))
+
+
+def oid_text(data):
+    parts = [data[0] // 40, data[0] % 40]
+    value = 0
+    for byte in data[1:]:
+        value = (value << 7) | (byte & 0x7f)
+        if not byte & 0x80:
+            parts.append(value)
+            value = 0
+    return '.' + '.'.join(map(str, parts))
+
+
+class SnmpAgent:
+    """Answer SNMPv2c GET requests from a table and record each request's OIDs.
+
+    Values are ('int', n), ('ticks', n) or ('str', text); any other OID is
+    noSuchInstance."""
+
+    def __init__(self, values):
+        self.values = values
+        self.requests = []
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('127.0.0.1', 0))
+        self.port = self.sock.getsockname()[1]
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.sock.close()
+
+    def encode(self, oid):
+        kind, value = self.values.get(oid, (None, None))
+        if kind == 'int':
+            return ber_int(value)
+        if kind == 'ticks':
+            return ber(0x43, value.to_bytes(max(1, (value.bit_length() + 8) // 8), 'big'))
+        if kind == 'str':
+            return ber(0x04, value.encode())
+        return ber(0x81, b'')
+
+    def serve(self):
+        while True:
+            try:
+                data, peer = self.sock.recvfrom(65535)
+            except OSError:
+                return
+            (_, message), = ber_items(data)
+            version, community, (pdu_tag, pdu) = list(ber_items(message))
+            request_id, _, _, (_, bindings) = list(ber_items(pdu))
+            oids = [oid_text(list(ber_items(binding))[0][1]) for _, binding in ber_items(bindings)]
+            self.requests.append(oids)
+            response = ber(0x30, b''.join(ber(0x30, ber(0x06, list(ber_items(binding))[0][1]) + self.encode(oid))
+                                          for (_, binding), oid in zip(ber_items(bindings), oids)))
+            pdu = ber(0x02, request_id[1]) + ber_int(0) + ber_int(0) + response
+            try:
+                self.sock.sendto(ber(0x30, ber(*version) + ber(*community) + ber(0xa2, pdu)), peer)
+            except OSError:
+                return
+
+    def gets(self, oid):
+        return sum(request.count(oid) for request in self.requests)
 
 
 class Polling(unittest.TestCase):
@@ -144,6 +235,7 @@ class Polling(unittest.TestCase):
         self.sql('SET GLOBAL general_log=OFF;', False)
         self.sql('DROP TRIGGER IF EXISTS injected_write_failure; TRUNCATE poller_item; TRUNCATE host; '
                  'TRUNCATE poller_output; TRUNCATE poller_time; TRUNCATE audit_schedule; '
+                 'TRUNCATE poller_reindex; TRUNCATE poller_command; '
                  'TRUNCATE audit_expected; TRUNCATE audit_first; UPDATE audit_duplicates SET attempts=0; '
                  "UPDATE settings SET value='0' WHERE name='active_profiles';"
                  "UPDATE settings SET value='1' WHERE name='total_snmp_ports';"
@@ -204,6 +296,55 @@ class Polling(unittest.TestCase):
             self.assertEqual(int(self.sql('SELECT COUNT(*) FROM audit_schedule;')), devices)
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
                                      'SELECT COUNT(*) FROM audit_expected ex WHERE ex.host_id=s.host_id);'), '0')
+
+    def snmp_agent(self, values, availability=2, max_oids=10):
+        agent = SnmpAgent(values)
+        self.addCleanup(agent.close)
+        self.sql("UPDATE host SET snmp_version=2,snmp_community='public',snmp_port=" + str(agent.port) +
+                 ',snmp_timeout=1000,availability_method=' + str(availability) + ',max_oids=' + str(max_oids) + ';')
+        return agent
+
+    def general_log_count(self, pattern):
+        return int(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
+                            "argument LIKE '" + pattern + "';", False))
+
+    def test_first_partition_owns_availability_and_reindex(self):
+        self.seed(37, 10)
+        agent = self.snmp_agent({'.1.3.6.1.2.1.1.3.0': ('ticks', 500000), '.1.3.6.1.2.1.2.1.0': ('int', 4)})
+        self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) "
+                 "VALUES(1,1,0,'=','4','.1.3.6.1.2.1.2.1.0');")
+        self.run_spine()
+        self.check_complete()
+        # one SNMP availability get and one reindex check for ten partitions
+        self.assertEqual(agent.gets('.1.3.6.1.2.1.1.3.0'), 1, agent.requests)
+        self.assertEqual(agent.gets('.1.3.6.1.2.1.2.1.0'), 1, agent.requests)
+        self.assertEqual(self.general_log_count('%FROM poller_reindex%'), 1)
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+        self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
+
+    def test_partitions_share_the_restart_verdict(self):
+        # an uptime that went backwards stores U in every partition
+        self.seed(37, 10)
+        agent = self.snmp_agent({'.1.3.6.1.2.1.1.3.0': ('ticks', 500000)})
+        self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) "
+                 "VALUES(1,1,0,'<','90000000','.1.3.6.1.2.1.1.3.0');")
+        self.run_spine()
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM poller_output WHERE output='U';"), '37')
+        self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:1')
+        self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex;'), '500000')
+        self.assertEqual(self.general_log_count('%FROM poller_reindex%'), 1)
+        self.assertLessEqual(len(agent.requests), 3, agent.requests)
+
+    def test_down_device_skips_every_partition(self):
+        self.seed(37, 10)
+        agent = self.snmp_agent({})
+        agent.close()
+        self.sql('UPDATE host SET snmp_timeout=200,ping_retries=0;')
+        self.run_spine()
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
+        self.assertEqual(self.sql('SELECT CONCAT(total_polls,":",failed_polls) FROM host;'), '1:1')
 
     def test_single_and_ten_workers(self):
         for threads in (1, 10):

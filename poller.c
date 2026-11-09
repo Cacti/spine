@@ -36,6 +36,7 @@
 #include <limits.h>
 
 extern poller_thread_t **details;
+extern double start_time;
 
 /* Uptime is a whole nonnegative counter, not a floating point result. */
 static bool parse_uptime(const char *text, unsigned long long *ticks) {
@@ -67,6 +68,46 @@ static bool uptime_wrapped(unsigned long long previous, unsigned long long curre
 	if (previous >= wrap || current >= previous) return FALSE;
 
 	return wrap - previous + current <= span;
+}
+
+/* The first partition of a device checks its availability and reindex
+ * assertions; the others wait for that verdict instead of repeating every
+ * check, so that a device with N partitions is probed once and all of its
+ * partitions agree on whether it is up.  The wait ends with the polling
+ * interval, after which the partition is treated as down. */
+static void publish_device_verdict(int device_counter, int ignore_host, int spike_kill) {
+	thread_mutex_lock(LOCK_THDET);
+	details[device_counter]->ignore_host   = ignore_host;
+	details[device_counter]->spike_kill    = spike_kill;
+	details[device_counter]->verdict_ready = TRUE;
+	pthread_cond_broadcast(get_cond(LOCK_THDET));
+	thread_mutex_unlock(LOCK_THDET);
+}
+
+static bool wait_device_verdict(int device_counter, int *ignore_host, int *spike_kill) {
+	double deadline = start_time + set.poller_interval;
+	struct timespec until;
+	int cancel_state;
+	bool ready;
+
+	until.tv_sec  = (time_t) deadline;
+	until.tv_nsec = (long) ((deadline - (double) until.tv_sec) * 1000000000.0);
+	if (until.tv_nsec < 0) until.tv_nsec = 0;
+	if (until.tv_nsec > 999999999L) until.tv_nsec = 999999999L;
+
+	/* a cancelled wait would return holding the lock */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
+	thread_mutex_lock(LOCK_THDET);
+	while (!details[device_counter]->verdict_ready) {
+		if (pthread_cond_timedwait(get_cond(LOCK_THDET), get_lock(LOCK_THDET), &until) == ETIMEDOUT) break;
+	}
+	ready = details[device_counter]->verdict_ready;
+	*ignore_host = ready ? details[device_counter]->ignore_host : TRUE;
+	*spike_kill  = ready ? details[device_counter]->spike_kill : FALSE;
+	thread_mutex_unlock(LOCK_THDET);
+	pthread_setcancelstate(cancel_state, NULL);
+
+	return ready;
 }
 
 /* The normalized form can be longer than the input ("FF" becomes "255"), so
@@ -710,6 +751,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				set.exit_code = EXIT_FAILURE;
 				thread_mutex_unlock(LOCK_THDET);
 
+				if (host_thread == 1) {
+					publish_device_verdict(device_counter, TRUE, FALSE);
+				}
+
 				mysql_thread_end();
 
 				return;
@@ -825,9 +870,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				/* free the host result */
 				db_free_result(result);
 
-				if (((host->snmp_version >= 1) && (host->snmp_version <= 2) &&
+				/* this session serves the availability and reindex checks only */
+				if (host_thread == 1 &&
+					(((host->snmp_version >= 1) && (host->snmp_version <= 2) &&
 					(strlen(host->snmp_community) > 0)) ||
-					(host->snmp_version == 3)) {
+					(host->snmp_version == 3))) {
 					host->snmp_session = snmp_host_init(host->id,
 						host->hostname,
 						host->snmp_version,
@@ -848,7 +895,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
 				 * function sets the ignore_host bit */
-				if ((host->availability_method == AVAIL_SNMP) &&
+				if (host_thread > 1) {
+					if (!wait_device_verdict(device_counter, &host->ignore_host, &spike_kill)) {
+						SPINE_LOG(("WARNING: Device[%i] HT[%i] polling timed out waiting for the availability check", host->id, host_thread));
+					}
+				} else if ((host->availability_method == AVAIL_SNMP) &&
 					(strlen(host->snmp_community) == 0) &&
 					(host->snmp_version < 3)) {
 					host->ignore_host = FALSE;
@@ -1002,7 +1053,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	}
 
 	/* do the reindex check for this host if not script based */
-	if ((!host->ignore_host) && (host_id)) {
+	if ((!host->ignore_host) && (host_id) && (host_thread == 1)) {
 		if ((result = db_query(mysql, LOCAL, query4)) != 0) {
 			num_rows = mysql_num_rows(result);
 
@@ -1409,6 +1460,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			snmp_host_cleanup(host->snmp_session);
 			host->snmp_session = NULL;
 		}
+	}
+
+	if (host_id && host_thread == 1) {
+		publish_device_verdict(device_counter, host->ignore_host, spike_kill);
 	}
 
 	/* calculate the number of poller items to poll this cycle */

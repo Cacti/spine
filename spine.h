@@ -501,6 +501,10 @@ typedef struct poller_thread {
 	int output_failed;
 	int poll_failed;
 	int complete;
+	/* set by the first partition for the others: see poll_host() */
+	int verdict_ready;
+	int ignore_host;
+	int spike_kill;
 	char host_time[40];
 	double host_time_double;
 	sem_t *thread_init_sem;

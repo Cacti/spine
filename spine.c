@@ -968,6 +968,9 @@ int main(int argc, char *argv[]) {
 		poller_details->threads_complete = 0;
 		poller_details->output_failed    = FALSE;
 		poller_details->poll_failed      = FALSE;
+		poller_details->verdict_ready    = FALSE;
+		poller_details->ignore_host      = FALSE;
+		poller_details->spike_kill       = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
 		if (current_thread == 1) details[device_counter] = poller_details;
@@ -1044,6 +1047,14 @@ int main(int argc, char *argv[]) {
 			if (thread_status) {
 				sem_post(&thread_init_sem);
 				sem_post(&available_threads);
+
+				/* the later partitions must not wait for a first one that never ran */
+				if (current_thread == 1) {
+					thread_mutex_lock(LOCK_THDET);
+					poller_details->ignore_host   = TRUE;
+					poller_details->verdict_ready = TRUE;
+					thread_mutex_unlock(LOCK_THDET);
+				}
 			}
 		}
 
