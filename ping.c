@@ -379,6 +379,7 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    elevate_euid;
 	int    fork_locked;
 	int    socket_type = SOCK_RAW;
+	int    datagram = FALSE;
 	int    ihl;
 	char   *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
@@ -405,7 +406,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	retry_count = 0;
-	while (TRUE) {
+	#if defined(__linux__) && defined(HAVE_DECL_SOCK_CLOEXEC) && HAVE_DECL_SOCK_CLOEXEC
+	/* Linux grants an ICMP datagram socket to the groups in
+	 * net.ipv4.ping_group_range.  It needs no seteuid(0), which would run
+	 * every other thread as root until the raw socket is open. */
+	icmp_socket = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_ICMP);
+	datagram = icmp_socket != -1;
+	#endif
+	while (!datagram) {
 		fd_error = 0;
 		elevate_euid = FALSE;
 		fork_locked = FALSE;
@@ -592,14 +600,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
-						if (return_code < (ssize_t) sizeof(struct ip)) {
+						if (!datagram && return_code < (ssize_t) sizeof(struct ip)) {
 							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
 
+						/* A datagram socket delivers the ICMP message without its IP header. */
 						ip  = (struct ip *) socket_reply;
-						ihl = ip->ip_hl << 2;
-						if (ihl < (int) sizeof(struct ip) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
+						ihl = datagram ? 0 : ip->ip_hl << 2;
+						if ((!datagram && ihl < (int) sizeof(struct ip)) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
 							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
@@ -615,8 +624,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						if (pkt->icmp_type == ICMP_ECHOREPLY) {
 							/* Only echo replies carry our identifier and sequence in
 							 * the outer ICMP header.  Error responses carry the
-							 * triggering packet there instead. */
-							if (pkt->icmp_id != icmp->icmp_id || pkt->icmp_seq != icmp->icmp_seq) {
+							 * triggering packet there instead.  The kernel gives a
+							 * datagram socket's request its own identifier and
+							 * delivers only the replies that carry it. */
+							if ((!datagram && pkt->icmp_id != icmp->icmp_id) || pkt->icmp_seq != icmp->icmp_seq) {
 								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 								goto keep_listening;
 							}

@@ -824,3 +824,65 @@ int main(void){set.poller_interval=300;
  assert(!restarted("100",200,FALSE)&&queued==3);
  return 0;}
 ''')
+
+# ICMP tries an unprivileged datagram socket before raising the effective
+# UID for a raw one, and matches datagram replies without an IP header.
+ping = (root / 'ping.c').read_text()
+run('maintenance-icmp-datagram-contract', '#include "common.h"\n#include "spine.h"\n#include "ping.h"\n#include <fcntl.h>\n' + '''
+config_t set;
+static int dgram_ok,raw_ok,raw_requests,elevations,datagram_reply,wrong_seq,replies;static double now;
+static unsigned short sent_seq;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+int is_debug_device(int device_id){(void)device_id;return FALSE;}
+void die(const char *format,...){(void)format;abort();}
+void thread_mutex_lock(int id){(void)id;}
+void thread_mutex_unlock(int id){(void)id;}
+int hasCaps(){return FALSE;}
+unsigned short int get_checksum(void *buf,int len){(void)buf;(void)len;return 0;}
+int init_sockaddr(struct sockaddr_in *name,const char *hostname,unsigned short int port){(void)hostname;memset(name,0,sizeof(*name));name->sin_family=AF_INET;name->sin_port=htons(port);name->sin_addr.s_addr=htonl(INADDR_LOOPBACK);return TRUE;}
+double get_time_as_double(void){return now;}
+static double ping_monotonic_time(void){return now;}
+static void ping_wait_left(double deadline,struct timeval *t){double left=deadline-now;if(left<0)left=0;t->tv_sec=(time_t)left;t->tv_usec=(suseconds_t)((left-t->tv_sec)*1e6);}
+static int fixture_socket(int family,int type,int protocol){assert(family==AF_INET&&protocol==IPPROTO_ICMP);
+ if((type&SOCK_DGRAM)==SOCK_DGRAM&&(type&SOCK_RAW)!=SOCK_RAW){if(dgram_ok)return 100;errno=EACCES;return -1;}
+ raw_requests++;if(raw_ok)return 100;errno=EPERM;return -1;}
+static int fixture_seteuid(uid_t uid){if(uid==0)elevations++;return 0;}
+static uid_t fixture_getuid(void){return 1000;}
+static int fixture_close(int fd){assert(fd==100);return 0;}
+static int fixture_fcntl(int fd,int cmd,...){(void)fd;(void)cmd;return 0;}
+static int fixture_usleep(useconds_t usec){(void)usec;return 0;}
+static int fixture_setsockopt(int fd,int level,int name,const void *value,socklen_t len){(void)fd;(void)level;(void)name;(void)value;(void)len;return 0;}
+static ssize_t fixture_sendto(int fd,const void *buf,size_t len,int flags,const struct sockaddr *to,socklen_t tolen){(void)fd;(void)len;(void)flags;(void)to;(void)tolen;sent_seq=((const struct icmp *)buf)->icmp_seq;return (ssize_t)len;}
+static int fixture_select(int n,fd_set *r,fd_set *w,fd_set *e,struct timeval *t){(void)n;(void)r;(void)w;(void)e;(void)t;if(replies>=3){now+=1;return 0;}return 1;}
+static ssize_t fixture_recvfrom(int fd,void *buf,size_t len,int flags,struct sockaddr *from,socklen_t *fromlen){
+ struct sockaddr_in *source=(struct sockaddr_in *)from;size_t ihl=datagram_reply?0:sizeof(struct ip);struct icmp *reply=(struct icmp *)((char *)buf+ihl);
+ (void)fd;(void)flags;(void)fromlen;assert(len>=ihl+ICMP_HDR_SIZE);replies++;memset(buf,0,ihl+ICMP_HDR_SIZE);
+ if(!datagram_reply)((struct ip *)buf)->ip_hl=sizeof(struct ip)>>2;
+ memset(source,0,sizeof(*source));source->sin_family=AF_INET;source->sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+ reply->icmp_type=ICMP_ECHOREPLY;reply->icmp_id=datagram_reply?0x4242:(getpid()&0xFFFF);reply->icmp_seq=wrong_seq?sent_seq+1:sent_seq;
+ return (ssize_t)(ihl+ICMP_HDR_SIZE);}
+#define socket fixture_socket
+#define seteuid fixture_seteuid
+#define getuid fixture_getuid
+#define close fixture_close
+#define fcntl fixture_fcntl
+#define usleep fixture_usleep
+#define setsockopt fixture_setsockopt
+#define sendto fixture_sendto
+#define select fixture_select
+#define recvfrom fixture_recvfrom
+#define ICMP_DISCARD_PEEKED(sock, buf) ((void)0)
+''' + function(ping, 'int ping_icmp(') + '''
+static int probe(void){host_t host={0};ping_t result={{0}};host.ping_timeout=500;host.ping_retries=0;snprintf(host.hostname,sizeof(host.hostname),"127.0.0.1");
+ raw_requests=elevations=replies=0;now=0;return ping_icmp(&host,&result);}
+int main(void){
+#if defined(__linux__) && HAVE_DECL_SOCK_CLOEXEC
+ /* a datagram socket needs no raw socket or root, and its reply has no IP header and a kernel identifier */
+ dgram_ok=1;raw_ok=0;datagram_reply=1;assert(probe()==HOST_UP&&!raw_requests&&!elevations);
+ /* the sequence still has to match */
+ wrong_seq=1;assert(probe()==HOST_DOWN&&!raw_requests);wrong_seq=0;
+#endif
+ /* without a datagram socket the raw socket is opened as before */
+ dgram_ok=0;raw_ok=1;datagram_reply=0;assert(probe()==HOST_UP&&raw_requests==1&&elevations==1);
+ wrong_seq=1;assert(probe()==HOST_DOWN);return 0;}
+''')

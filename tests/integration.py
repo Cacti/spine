@@ -8,7 +8,9 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -18,6 +20,18 @@ FAULT_BINARY = Path(os.environ.get('SPINE_TEST_FAULT_BINARY', ROOT / 'spine_allo
 # Linking the fault binary needs a linker with --wrap; see configure.ac.
 HAVE_FAULT_BINARY = FAULT_BINARY.is_file()
 CLIENT = shutil.which('mariadb') or shutil.which('mysql')
+
+
+def icmp_datagram_available():
+    # Spine only uses ICMP with root or CAP_NET_RAW; it then tries the
+    # datagram socket that net.ipv4.ping_group_range grants first.
+    if not sys.platform.startswith('linux') or os.geteuid() != 0:
+        return False
+    try:
+        socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP).close()
+    except OSError:
+        return False
+    return True
 
 
 class Polling(unittest.TestCase):
@@ -309,6 +323,15 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
         self.assertEqual(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
                                   "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False), '0')
+
+    @unittest.skipUnless(icmp_datagram_available(), 'needs root and an ICMP datagram socket on Linux')
+    def test_icmp_datagram_ping(self):
+        # Passes without CAP_NET_RAW only when the datagram socket is used.
+        self.seed(3, 1)
+        self.sql('UPDATE host SET availability_method=3,ping_method=1,ping_timeout=1000,ping_retries=1;')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
 
     @unittest.skipUnless(HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
     def test_allocation_failures_and_retry(self):
