@@ -1038,10 +1038,9 @@ int main(int argc, char *argv[]) {
 			int created_host_data_ids = poller_details->host_data_ids;
 			int created_complete      = poller_details->complete;
 
-			/* create child process */
+			/* create child process.  The child reads only its own
+			 * poller_details copy, so no lock is handed to it. */
 			thread_retry:
-
-			thread_mutex_lock(LOCK_HOST_TIME);
 
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
@@ -1072,9 +1071,11 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 			}
 
-			/* Restore thread initialization semaphore if thread creation failed */
+			/* Restore thread initialization semaphore if thread creation failed,
+			 * and return the worker permit child_cleanup() would have released */
 			if (thread_status) {
 				sem_post(&thread_init_sem);
+				sem_post(&available_threads);
 			}
 		}
 
