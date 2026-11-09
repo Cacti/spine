@@ -1570,7 +1570,16 @@ int is_numeric(char *string) {
 	int conv_base=10;
 	int length;
 
-	length = strlen(trim(string));
+	/* rtrim() strips the tail in place.  The length must be measured from
+	 * the same pointer that strtol() and strtod() parse, so skip only the
+	 * leading whitespace they would skip anyway: " 12" is numeric, while a
+	 * leading quote still takes the callers' strip_alpha() path. */
+	rtrim(string);
+	while (isspace((unsigned char) *string)) {
+		string++;
+	}
+
+	length = strlen(string);
 
 	if (!length) {
 		return FALSE;
