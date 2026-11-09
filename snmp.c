@@ -652,7 +652,7 @@ int snmp_format_value(char *output, size_t output_len, struct variable_list *var
  *  session must already be established.  With should_fail, a failed get
  *  gives the host up for the cycle; without exception_fails, a response
  *  that carries a noSuchObject, noSuchInstance or endOfMibView value for
- *  the OID reads as "U" without doing so.
+ *  the OID, or an error status, reads as "U" without doing so.
  *
  *  \return returns the character representaton of the snmp OID, or "U" if
  *  unsuccessful.
@@ -766,6 +766,11 @@ static char *snmp_get_value(host_t *current_host, char *snmp_oid, bool should_fa
 				}
 			} else {
 				SPINE_LOG_HIGH(("ERROR: Failed to get oid '%s' for Device[%i] with Response[%ld]",  snmp_oid, current_host->id, response->errstat));
+
+				/* PHP's get reports an error status as a failure too */
+				if (!exception_fails) {
+					SET_UNDEFINED(result_string);
+				}
 			}
 		} else if (response != NULL && response->variables != NULL) {
 			vars = response->variables;
@@ -826,9 +831,9 @@ char *snmp_get(host_t *current_host, char *snmp_oid) {
  *  \brief gets a reindex assertion value
  *
  *	As snmp_get(), except that a noSuchObject, noSuchInstance or
- *  endOfMibView value reads as "U" and leaves the host polled, as Cacti's
- *  cmd.php does for the same assertion.  A failed request still gives the
- *  host up.
+ *  endOfMibView value or an error status reads as "U" and leaves the host
+ *  polled, as Cacti's cmd.php does for the same assertion.  A request that
+ *  gets no response still gives the host up.
  *
  */
 char *snmp_get_assert(host_t *current_host, char *snmp_oid) {

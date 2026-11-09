@@ -320,6 +320,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 	int    num_rows;
 	int    assert_fail = FALSE;
+	int    assert_read = FALSE;
 	int    reindex_err = FALSE;
 	int    spike_kill = FALSE;
 	int    rows_processed = 0;
@@ -1102,6 +1103,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				sysUptime[0] = '\0';
 				for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
 					assert_fail = FALSE;
+					assert_read = FALSE;
 					reindex_err = FALSE;
 
 					/* initialize the reindex struction */
@@ -1231,6 +1233,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 									} else {
 										poll_result = snmp_get_assert(host, reindex->arg1);
 									}
+
+									/* the agent answered, so even U is the value to compare */
+									assert_read = !host->ignore_host;
 								}
 
 								if (is_debug_device(host->id)) {
@@ -1375,8 +1380,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							query3[0] = '\0';
 							queue_succeeded = TRUE;
 
-							/* assume ok if host is up and result wasn't obtained */
-							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+							/* Assume ok if host is up and result wasn't obtained.  A plain
+							 * SNMP assertion the agent answered is compared even when it
+							 * reads U, as cmd.php does, so a missing OID queues a reindex
+							 * once and the U stored below matches on later cycles. */
+							if (poll_result == NULL || (!assert_read && (IS_UNDEFINED(poll_result) || STRIMATCH(poll_result, "No Such Instance")))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
 									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
 								}
@@ -1457,7 +1465,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							 * 2) the OP code is < for uptime goes backward where we have to track the previous uptime
 							 */
 							if (!queue_succeeded) output_failed = TRUE;
-							if (queue_succeeded && poll_result != NULL && !IS_UNDEFINED(poll_result) &&
+							if (queue_succeeded && poll_result != NULL && (assert_read || !IS_UNDEFINED(poll_result)) &&
 								(assert_fail || !strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
 									db_escape(mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);

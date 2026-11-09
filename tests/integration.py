@@ -466,11 +466,20 @@ class Polling(unittest.TestCase):
         self.assertEqual([len(r) for r in agent.requests if len(r) > 1], [5], agent.requests)
         self.assertEqual(sorted(sum((r for r in agent.requests if len(r) == 1), [])), sorted(values))
 
-    # Cacti's cmd.php reads an assertion OID with an exception value as U and
-    # goes on with the later checks and the device's polling.
+    # Cacti's cmd.php reads an assertion OID with an exception value or an
+    # error status as U, compares that U with the stored value, queues the
+    # reindex when they differ and stores the U, and goes on with the later
+    # checks and the device's polling.
     EXCEPTIONS = {'noSuchInstance': None, 'noSuchObject': ('noSuchObject',), 'endOfMibView': ('endOfMibView',)}
 
-    def test_missing_reindex_value_keeps_the_device_polled(self):
+    def poll_again(self):
+        # the stored U matches on the next cycle, so nothing is queued again
+        self.sql('TRUNCATE poller_command; TRUNCATE poller_output; UPDATE poller_item SET rrd_next_step=0;')
+        self.run_spine()
+        self.check_complete(schedule=False)
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+
+    def test_missing_reindex_value_queues_one_reindex(self):
         for name, value in self.EXCEPTIONS.items():
             with self.subTest(exception=name):
                 self.setUp()
@@ -480,18 +489,20 @@ class Polling(unittest.TestCase):
                     values['.1.3.6.1.2.1.2.2.1.1.2'] = value
                 agent = self.snmp_agent(values, availability=0, max_oids=10)
                 self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
-                         "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,1,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
-                         "(1,1,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
+                         "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,2,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
+                         "(1,3,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
                 self.run_spine()
                 self.check_complete()
-                # the third check still reads 9 and queues the reindex
-                self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:1')
-                self.assertEqual(self.sql("SELECT assert_value FROM poller_reindex WHERE arg1 LIKE '%.3';"), '9')
+                # the missing value queues its reindex and the later check still reads 9
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:2,1:3')
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(assert_value ORDER BY data_query_id) FROM poller_reindex;'),
+                                 '1,U,9')
                 self.assertEqual([len(r) for r in agent.requests], [3], agent.requests)
+                self.poll_again()
 
-    def test_missing_reindex_value_fetched_alone_keeps_the_device_polled(self):
-        # An error status sends every check to its own get; the exception
-        # value read that way must not give the device up either.
+    def test_missing_reindex_value_fetched_alone_queues_one_reindex(self):
+        # An error status sends every check to its own get, where that OID
+        # and the exception value both read as U.
         for name, value in self.EXCEPTIONS.items():
             with self.subTest(exception=name):
                 self.setUp()
@@ -505,8 +516,12 @@ class Polling(unittest.TestCase):
                          "(1,3,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
                 self.run_spine()
                 self.check_complete()
-                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:1,1:3')
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'),
+                                 '1:1,1:2,1:3')
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(assert_value ORDER BY data_query_id) FROM poller_reindex;'),
+                                 'U,U,9')
                 self.assertEqual([len(r) for r in agent.requests], [3, 1, 1, 1], agent.requests)
+                self.poll_again()
 
     @unittest.skipUnless(SNMPD, 'set SPINE_TEST_SNMPD to a net-snmp snmpd executable')
     def test_net_snmp_versions_and_security_levels(self):
@@ -548,11 +563,11 @@ class Polling(unittest.TestCase):
                 self.run_spine()
                 self.check_complete()
                 self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
-                # SNMPv1 reports the missing OID with a noSuchName error status,
-                # which reads as empty; later versions return noSuchObject,
-                # which reads as U and is assumed to match.
-                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'),
-                                 '1:2,1:3' if version == 1 else '1:2')
+                # SNMPv1 reports the missing OID with a noSuchName error status
+                # and later versions with noSuchObject; both read as U, which
+                # queues the reindex and is stored.
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:2,1:3')
+                self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=3;'), 'U')
                 self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=2;'),
                                  str(sources[30]))
 
