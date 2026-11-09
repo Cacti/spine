@@ -37,6 +37,7 @@ The Cacti Group | spine
 -issue#676: Escape the data source name and result in poller_output and boost inserts
 -issue#676: Free the copied DB_Host setting when it names a socket file instead of leaking it on every database connection
 -issue#676: Treat only a socket file at the DB_Host path as a socket, so a regular file is used as the host name and is not exempted from DB_SSL_Required
+-issue#676: Relax the session sql_mode of an online remote collector's main server connection so its poller_time row is recorded on MySQL 5.7 and later instead of failing with error 1292
 -issue#680: Treat the 32 bit sysUpTime wrap after about 497 days as elapsed time instead of an agent restart that queued a reindex and stored U
 -issue#680: Open the log file in append mode so a log that another process has just created is not truncated
 -issue#680: Launch the next device as soon as a polling thread finishes instead of checking for a free thread every 10 ms

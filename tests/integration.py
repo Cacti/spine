@@ -346,10 +346,10 @@ class Polling(unittest.TestCase):
         self.sql('INSERT IGNORE INTO audit_first SELECT host_id,local_data_id,rrd_name FROM audit_expected '
                  'ORDER BY local_data_id,rrd_name;')
 
-    def run_spine(self, failure=None, ping=False, strict=False, hosts=()):
+    def run_spine(self, failure=None, ping=False, strict=False, hosts=(), conf=None, poller=1):
         self.sql("SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log=ON;", False)
-        conf = self.strict_conf if strict else self.conf
-        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', '1', '-t', '16', '-S', '-V', '1']
+        conf = conf or (self.strict_conf if strict else self.conf)
+        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', str(poller), '-t', '16', '-S', '-V', '1']
         if ping:
             args.append('-P')
         args.extend(hosts)
@@ -570,6 +570,25 @@ class Polling(unittest.TestCase):
                 self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=3;'), 'U')
                 self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=2;'),
                                  str(sources[30]))
+
+    def test_remote_collector_records_its_start_on_the_main_server(self):
+        # An online remote collector writes its poller_time row, with a zero
+        # end_time, through its main server connection, which needs the same
+        # sql_mode relaxation as the local one.  MySQL 5.7 and later reject
+        # the zero date by default; require that here on any server.
+        self.seed(3, 1)
+        self.sql('UPDATE host SET poller_id=2; UPDATE poller_item SET poller_id=2;'
+                 'INSERT INTO poller(id,threads) VALUES(2,16) ON DUPLICATE KEY UPDATE threads=VALUES(threads);')
+        conf = self.directory / 'spine-remote.conf'
+        conf.touch(mode=0o600)
+        conf.write_text(self.conf.read_text() + f'RDB_Host {self.host}\nRDB_Port {self.port}\nRDB_Database {self.database}\n'
+                        f'RDB_User {self.user}\nRDB_Pass {self.password}\n')
+        mode = self.sql('SELECT @@GLOBAL.sql_mode;', False)
+        self.addCleanup(self.sql, "SET GLOBAL sql_mode='" + mode + "';", False)
+        self.sql("SET GLOBAL sql_mode=CONCAT(@@GLOBAL.sql_mode,',STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE');", False)
+        self.run_spine(conf=conf, poller=2)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM poller_time WHERE poller_id=2 AND end_time<>'0000-00-00 00:00:00';"),
+                         '1', self.result.stdout[-3000:])
 
     def test_single_and_ten_workers(self):
         for threads in (1, 10):
