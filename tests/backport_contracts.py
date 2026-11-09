@@ -311,7 +311,13 @@ static unsigned char auth_key[USM_AUTH_KU_LEN];
 static int replies,reply_phase;
 static struct snmp_session active_request_session;
 static struct snmp_session *capture_session(void *session){(void)session;active_request_session.version=SNMP_VERSION_3;return &active_request_session;}
-static int capture_response(void *session,struct snmp_pdu *request,struct snmp_pdu **response){oid name[]={1,3,6,1,2,1,1,3,0};long value=42;(void)session;replies++;snmp_free_pdu(request);*response=snmp_pdu_create(SNMP_MSG_RESPONSE);assert(*response);(*response)->errstat=SNMP_ERR_GENERR;(*response)->errindex=reply_phase;snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));return STAT_SUCCESS;}
+static int capture_response(void *session,struct snmp_pdu *request,struct snmp_pdu **response){oid name[]={1,3,6,1,2,1,1,3,0};long value=42;(void)session;replies++;snmp_free_pdu(request);
+ if(reply_phase==2){oid row[]={1,3,6,1,2,1,2,2,1,1,1};*response=snmp_pdu_create(SNMP_MSG_RESPONSE);assert(*response);(*response)->errstat=SNMP_ERR_NOERROR;(*response)->errindex=0;
+  /* one row, then the agent reports endOfMibView for the next OID */
+  if(replies==1)snmp_pdu_add_variable(*response,row,11,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));
+  else snmp_pdu_add_variable(*response,row,11,SNMP_ENDOFMIBVIEW,NULL,0);
+  return STAT_SUCCESS;}
+*response=snmp_pdu_create(SNMP_MSG_RESPONSE);assert(*response);(*response)->errstat=SNMP_ERR_GENERR;(*response)->errindex=reply_phase;snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));return STAT_SUCCESS;}
 static void *capture_open(struct snmp_session *session){level=session->securityLevel;auth_length=session->securityAuthKeyLen;priv_length=session->securityPrivKeyLen;memcpy(auth_key,session->securityAuthKey,sizeof(auth_key));opens++;return (void*)1;}
 #define snmp_sess_session capture_session
 #define snmp_sess_synch_response capture_response
@@ -335,6 +341,7 @@ int main(void){static int devices[100];char password[]="authpass123";int count;d
  {host_t host={0};target_t items[2]={0};snmp_oids_t oids[2]={0};host.snmp_session=(void*)1;strcpy(oids[0].oid,".1.3.6.1.2.1.1.3.0");strcpy(oids[1].oid,".1.3.6.1.2.1.1.3.0");
  snmp_get_multi(&host,items,oids,2);assert(host.snmp_status==STAT_ERROR&&strcmp(oids[0].result,"U")==0&&strcmp(oids[1].result,"U")==0);
  reply_phase=1;replies=0;memset(oids[0].result,0,sizeof(oids[0].result));memset(oids[1].result,0,sizeof(oids[1].result));snmp_get_multi(&host,items,oids,2);assert(replies<=2&&strcmp(oids[0].result,"U")==0&&strcmp(oids[1].result,"U")==0);
+ reply_phase=2;replies=0;assert(snmp_count(&host,".1.3.6.1.2.1.2.2.1.1")==1&&replies==2);
  }return 0;}
 '''
 path = out / "snmp-security-contract.c"
