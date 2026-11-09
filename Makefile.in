@@ -1962,7 +1962,8 @@ tests_unit_test_platform_faults_LDADD = $(CMOCKA_LIBS) $(LIBS)
 tests_unit_test_platform_faults_CPPFLAGS = $(AM_CPPFLAGS) \
 	$(am__append_11)
 @HAVE_LINKER_WRAP_TRUE@tests_unit_test_platform_faults_LDFLAGS = -Wl,--wrap=nanosleep -Wl,--wrap=clock_gettime \
-@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init \
+@HAVE_LINKER_WRAP_TRUE@	-Wl,--wrap=pthread_cond_init
 
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)

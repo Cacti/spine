@@ -397,7 +397,8 @@ tests_unit_test_platform_faults_CPPFLAGS = $(AM_CPPFLAGS)
 if HAVE_LINKER_WRAP
 tests_unit_test_platform_faults_CPPFLAGS += -DSPINE_PLATFORM_FAULT_WRAPS
 tests_unit_test_platform_faults_LDFLAGS = -Wl,--wrap=nanosleep -Wl,--wrap=clock_gettime \
-	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init
+	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init \
+	-Wl,--wrap=pthread_cond_init
 endif
 
 TEST_EXTENSIONS = .sh

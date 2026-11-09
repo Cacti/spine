@@ -494,6 +494,26 @@ static void test_multi_values_missing_from_the_reply_are_unknown(void **state) {
 	assert_string_equal(oids[1].result, "U");
 }
 
+/* A checked batch that times out marks the device ignored and records every
+ * OID as failed, as a single get of each would have. */
+static void test_checked_batch_timeout_fails_every_oid(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+	scripted_status = STAT_TIMEOUT;
+
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_true(host.ignore_host);
+	assert_true(failed[0] && failed[1]);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+}
+
 static void test_multi_success_without_a_reply_is_unknown(void **state) {
 	host_t host = {0};
 	target_t items[2];
@@ -773,6 +793,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_multi_request_drops_an_oid_it_cannot_add, snmp_reset),
 		cmocka_unit_test_setup(test_multi_values_missing_from_the_reply_are_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_multi_success_without_a_reply_is_unknown, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_timeout_fails_every_oid, snmp_reset),
 		cmocka_unit_test_setup(test_multi_pdu_error_without_a_failing_oid_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_multi_retry_budget_is_bounded_by_the_oid_count, snmp_reset),
 		cmocka_unit_test_setup(test_multi_values_follow_their_oid_not_their_position, snmp_reset),

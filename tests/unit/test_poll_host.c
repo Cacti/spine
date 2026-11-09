@@ -977,6 +977,18 @@ static void test_oid_table_allocation_failure_is_fatal(void **state) {
 	assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
 }
 
+/* Batched reindex gets allocate their OID table on first use; running out
+ * of memory there is fatal, as for the item OID table. */
+static void test_reindex_batch_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	set_host("regression", "3", AVAIL_NONE);
+	add_index_reindex(7, "=", "index-1", 1);
+	add_index_reindex(7, "=", "index-2", 2);
+	fake.fail_calloc_size = sizeof(snmp_oids_t);
+
+	assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
+}
+
 /* The bulk settings load gives up quietly when memory runs out, and a
  * setting it could not copy reads as absent, not as a stale value. */
 static void test_settings_cache_survives_allocation_failures(void **state) {
@@ -1038,6 +1050,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_partition_checks_the_device_after_the_deadline, setup),
 		cmocka_unit_test_setup(test_reindex_gets_share_a_request, setup),
 		cmocka_unit_test_setup(test_failed_reindex_get_in_a_batch_ignores_the_device, setup),
+		cmocka_unit_test_setup(test_reindex_batch_allocation_failure_is_fatal, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
 		cmocka_unit_test_setup(test_invalid_snmp_value_is_reported_and_discarded, setup),
