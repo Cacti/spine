@@ -691,9 +691,16 @@ int main(int argc, char *argv[]) {
 		db_free_result(result);
 	}
 
-	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti.  An
+	 * online remote collector writes its poller_time row through the main
+	 * server connection, so that session needs the same relaxation. */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+
+	if (mode == REMOTE) {
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	}
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("DEBUG: Version %s starting", VERSION));
