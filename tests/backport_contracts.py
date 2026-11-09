@@ -654,3 +654,36 @@ int main(void){
  /* the default timestamp is the one every 1.2.31 format produced */
  assert(formats(GD_DEFAULT,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - ")&&formats(99,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - "));return 0;}
 ''')
+
+# Command-line options and the selective debug list, as main() parses them.
+spine = (root / 'spine.c').read_text()
+options = braced(spine, spine.index('\tfor (argv++; *argv; argv++) {'))
+debug_list = braced(spine, spine.index('\tif (strlen(set.selective_device_debug)) {'))
+run('maintenance-options-contract', '#include "common.h"\n#include "spine.h"\n#include <limits.h>\n#include <setjmp.h>\n' + '''
+config_t set;int *debug_devices;static jmp_buf rejected;static char option_name[64],option_value[64];
+void die(const char *format,...){(void)format;longjmp(rejected,1);}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void set_option(const char *name,const char *value){snprintf(option_name,sizeof(option_name),"%s",name);snprintf(option_value,sizeof(option_value),"%s",value);}
+int all_digits(const char *text){(void)text;return FALSE;}
+static void display_help(int only_version){(void)only_version;}
+static char *getarg(char *opt, char ***pargv);
+''' + function(spine, 'static bool parse_cli_int(') + '\n' + function(spine, 'static void parse_host_list(') + '\n' + function(spine, 'static char *getarg(char *opt, char ***pargv) {') + '''
+static int parse(const char *first,const char *second){char a[64],b[64];char *args[]={"spine",a,b,NULL};char **argv=args;char *conf_file=NULL;
+ snprintf(a,sizeof(a),"%s",first);snprintf(b,sizeof(b),"%s",second?second:"");if(!second)args[2]=NULL;
+ if(setjmp(rejected)!=0)return FALSE;
+''' + options + '''
+ free(conf_file);return TRUE;}
+static void debug_ids(void){
+''' + debug_list + '''
+}
+int main(void){int storage[110];int i;char *cursor;
+ set.mode=REMOTE_ONLINE;assert(parse("--mode","offline")&&set.mode==REMOTE_OFFLINE);
+ assert(parse("-N=recovery",NULL)&&set.mode==REMOTE_RECOVERY);assert(!parse("--mode","bogus"));
+ assert(parse("-O","log_verbosity:5")&&strcmp(option_name,"log_verbosity")==0&&strcmp(option_value,"5")==0);
+ /* a setting without a value is rejected instead of dereferencing NULL */
+ assert(!parse("-O","log_verbosity"));
+ for(i=0;i<110;i++)storage[i]=-7;debug_devices=storage;
+ cursor=set.selective_device_debug;for(i=1;i<=150;i++)cursor+=sprintf(cursor,"%s%d",i>1?",":"",i);
+ debug_ids();assert(storage[0]==1&&storage[98]==99&&storage[99]==0);
+ for(i=100;i<110;i++)assert(storage[i]==-7);return 0;}
+''')

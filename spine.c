@@ -486,11 +486,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
-			if (STRIMATCH(getarg(opt, &argv), "online")) {
+			/* getarg() consumes the next argv entry for "--mode offline" */
+			opt = getarg(opt, &argv);
+
+			if (STRIMATCH(opt, "online")) {
 				set.mode = REMOTE_ONLINE;
-			} else if (STRIMATCH(getarg(opt, &argv), "offline")) {
+			} else if (STRIMATCH(opt, "offline")) {
 				set.mode = REMOTE_OFFLINE;
-			} else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
+			} else if (STRIMATCH(opt, "recovery")) {
 				set.mode = REMOTE_RECOVERY;
 			} else {
 				die("ERROR: invalid polling mode '%s' specified", opt);
@@ -521,7 +524,7 @@ int main(int argc, char *argv[]) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
-			if (*value) {
+			if (value != NULL) {
 				*value++ = '\0';
 			} else {
 				die("ERROR: -O requires setting:value");
@@ -640,7 +643,8 @@ int main(int argc, char *argv[]) {
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		int i = 0;
 		char *token = strtok(set.selective_device_debug, ",");
-		while(token) {
+		/* debug_devices holds 100 ids, the last one the terminator */
+		while (token && i < 99) {
 			debug_devices[i]   = atoi(token);
 			debug_devices[i+1] = '\0';
 			token = strtok(NULL, ",");
