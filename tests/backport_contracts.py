@@ -687,3 +687,29 @@ int main(void){int storage[110];int i;char *cursor;
  debug_ids();assert(storage[0]==1&&storage[98]==99&&storage[99]==0);
  for(i=100;i<110;i++)assert(storage[i]==-7);return 0;}
 ''')
+
+# A line a script printed before its result must not become the next
+# command's result. php.c runs unchanged against a pipe-backed server.
+source = r'''#include "php.c"
+static int request[2],response[2];
+static void *responder(void *unused){char c;(void)unused;
+ while(read(request[0],&c,1)==1)if(c=='\n'&&write(response[1],"42\n",3)!=3)break;return NULL;}
+int main(void){pthread_t thread;char *result;init_mutexes();set.stdout_notty=set.stderr_notty=TRUE;
+ set.php_servers=1;set.script_timeout=5;php_processes=calloc(MAX_PHP_SERVERS,sizeof(php_t));assert(php_processes);
+ assert(pipe(request)==0&&pipe(response)==0);
+ php_processes[0].php_write_fd=request[1];php_processes[0].php_read_fd=response[0];php_processes[0].php_pid=-1;php_processes[0].php_state=PHP_BUSY;
+ assert(pthread_create(&thread,NULL,responder,NULL)==0);
+ /* the previous script wrote a stray line after its result was read */
+ assert(write(response[1],"stray output\n",13)==13);
+ result=php_cmd("fixture.php fixture 1",0);assert(strncmp(result,"42",2)==0);free(result);
+ result=php_cmd("fixture.php fixture 2",0);assert(strncmp(result,"42",2)==0);free(result);return 0;}
+'''
+path = out / "php-stale-output-contract.c"
+path.write_text(source)
+executable = out / "php-stale-output-contract"
+spine_object = out / "spine-fixture.o"
+objects = [str(root / (name + ".o")) for name in ["sql", "util", "locks", "nft_popen", "snmp", "ping", "keywords", "error", "poller"]]
+subprocess.run([*compiler, *flags, str(path), str(spine_object), *objects,
+                *make_variable("LDFLAGS"), *make_variable("LIBS"), "-o", str(executable)], check=True)
+subprocess.run([str(executable)], check=True, timeout=20)
+print("maintenance-php-stale-output-contract: passed")

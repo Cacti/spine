@@ -35,6 +35,7 @@
 #include "common.h"
 #include "spine.h"
 #include <fcntl.h>
+#include <poll.h>
 
 static pid_t php_orphan_pids[MAX_PHP_SERVERS];
 static time_t php_retry_after[MAX_PHP_SERVERS];
@@ -120,6 +121,45 @@ static int php_pipe_cloexec(int pipe_fds[2]) {
 	#endif
 }
 
+/* A script that wrote output before its result leaves a line that the next
+ * command would read as its own result, shifting every later response by
+ * one.  Discard whatever is already waiting before a command is sent; the
+ * read is bounded so a server that keeps writing cannot hold the worker. */
+static void php_discard_stale_output(int php_process, int read_fd) {
+	struct pollfd readable;
+	char discard[BUFSIZE];
+	size_t total = 0;
+	ssize_t bytes;
+	int reads;
+
+	if (read_fd < 0) return;
+
+	readable.fd     = read_fd;
+	readable.events = POLLIN;
+
+	for (reads = 0; reads < 64; reads++) {
+		readable.revents = 0;
+		if (poll(&readable, 1, 0) <= 0 || !(readable.revents & POLLIN)) {
+			break;
+		}
+
+		bytes = read(read_fd, discard, sizeof(discard));
+		if (bytes < 0 && errno == EINTR) {
+			continue;
+		}
+
+		if (bytes <= 0) {
+			break;
+		}
+
+		total += (size_t) bytes;
+	}
+
+	if (total > 0) {
+		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Discarded %lu bytes of stale PHP Script Server output", php_process, (unsigned long) total));
+	}
+}
+
 static void php_set_state(int php_process, int state) {
 	thread_mutex_lock(LOCK_PHP);
 	php_processes[php_process].php_state = state;
@@ -163,6 +203,7 @@ char *php_cmd(const char *php_command, int php_process) {
 	char command[BUFSIZE];
 	ssize_t bytes;
 	int write_fd;
+	int read_fd;
 	int retries = 0;
 
 
@@ -198,7 +239,9 @@ char *php_cmd(const char *php_command, int php_process) {
 	retry:
 	thread_mutex_lock(LOCK_PHP);
 	write_fd = php_processes[php_process].php_write_fd;
+	read_fd  = php_processes[php_process].php_read_fd;
 	thread_mutex_unlock(LOCK_PHP);
+	php_discard_stale_output(php_process, read_fd);
 	bytes = php_write_no_sigpipe(write_fd, command, strlen(command));
 
 	/* if write status is <= 0 then the script server may be hung */
