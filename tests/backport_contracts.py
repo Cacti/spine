@@ -623,3 +623,23 @@ int main(void){
  reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored);
  return 0;}
 ''')
+
+# A reconnected session gets the same sql_mode adjustments as a pooled one.
+sql = (root / 'sql.c').read_text()
+run('maintenance-session-mode-contract', '#include "common.h"\n#include "spine.h"\n' + '''
+config_t set;pool_t *db_pool_local,*db_pool_remote;
+static char pooled[LRG_BUFSIZE],reconnected[LRG_BUFSIZE];static unsigned long thread_id=1;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void die(const char *format,...){(void)format;abort();}
+unsigned int sleep(unsigned int seconds){(void)seconds;return 0;}
+unsigned long mysql_thread_id(MYSQL *mysql){(void)mysql;return thread_id;}
+int mysql_ping(MYSQL *mysql){(void)mysql;thread_id++;return 0;}
+static int db_tls_expected(int type){(void)type;return FALSE;}
+int mysql_query(MYSQL *mysql,const char *query){(void)mysql;if(strstr(query,"sql_mode")){strcat(reconnected,query);strcat(reconnected,"\\n");}return 0;}
+int db_insert(MYSQL *mysql,int type,const char *query){(void)mysql;(void)type;strcat(pooled,query);strcat(pooled,"\\n");return TRUE;}
+void db_connect(int type,MYSQL *mysql){(void)type;(void)mysql;}
+''' + function(sql, 'static void db_session_mode(') + '\n' + function(sql, 'int db_reconnect(') + '\n' + function(sql, 'void db_create_connection_pool(') + '''
+int main(void){MYSQL mysql;static pool_t pool[1];db_pool_local=pool;set.threads=1;
+ db_create_connection_pool(LOCAL);assert(db_reconnect(&mysql,LOCAL,2013,"fixture")==TRUE);
+ assert(strstr(reconnected,"'STRICT_TRANS_TABLES'")!=NULL);assert(strcmp(pooled,reconnected)==0);return 0;}
+''')
