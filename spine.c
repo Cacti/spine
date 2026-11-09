@@ -290,6 +290,34 @@ static bool device_0_selected(void) {
 	return !HOSTID_DEFINED(set.start_host_id) || set.start_host_id == 0;
 }
 
+/* Take a semaphore by the deadline, a get_time_as_double() value.
+ * sem_timedwait() returns as soon as a permit is posted; where it is
+ * missing, or reports an unexpected error, poll at the former 10 ms. */
+static int spine_sem_wait(sem_t *sem, double deadline) {
+	int sem_err;
+
+	while (TRUE) {
+#if defined(_POSIX_TIMEOUTS) && _POSIX_TIMEOUTS > 0
+		struct timespec until;
+
+		until.tv_sec  = (time_t) deadline;
+		until.tv_nsec = (long) ((deadline - (double) until.tv_sec) * 1000000000.0);
+		if (until.tv_nsec < 0) until.tv_nsec = 0;
+		if (until.tv_nsec > 999999999L) until.tv_nsec = 999999999L;
+
+		if (sem_timedwait(sem, &until) == 0) return 0;
+#else
+		if (sem_trywait(sem) == 0) return 0;
+#endif
+		sem_err = errno;
+
+		if (sem_err == EINTR) continue;
+		if (sem_err == ETIMEDOUT || get_time_as_double() >= deadline) return ETIMEDOUT;
+
+		usleep(10000);
+	}
+}
+
 int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
@@ -945,103 +973,23 @@ int main(int argc, char *argv[]) {
 		if (current_thread == 1) details[device_counter] = poller_details;
 		thread_mutex_unlock(LOCK_THDET);
 
-		/* dev note - errno was never primed at this point in previous version of code */
-		int loop_count = 0;
-		double progress_time = 0;
-		int sem_err = 0;
+		/* Launching stops one second before the polling interval ends. */
+		double launch_deadline = start_time + set.poller_interval - 1;
 		int spine_timeout = FALSE;
 		int have_permit = FALSE;
 
-		while (TRUE) {
-			/* sem_trywait() returns -1 and reports the reason in errno */
-			if (sem_trywait(&available_threads) == 0) {
-				// Acquired a thread
-				have_permit = TRUE;
-				break;
-			}
-
-			sem_err = errno;
-
-			if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
-			}
-
-			loop_count++;
-
-			if (loop_count == 10) {
-				progress_time = get_time_as_double() - start_time;
-
-				if (progress_time + 1 > set.poller_interval) {
-					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
-					spine_timeout = TRUE;
-					canexit = TRUE;
-					break;
-				}
-
-				loop_count = 0;
-			}
-
-			usleep(10000);
-
-			total_time = get_time_as_double();
-
-			if (total_time - start_time > set.poller_interval) {
-				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices External", host_id, current_thread));
-				spine_timeout = TRUE;
-				canexit = TRUE;
-				break;
-			}
+		if (spine_sem_wait(&available_threads, launch_deadline) == 0) {
+			have_permit = TRUE;
+		} else {
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
+			spine_timeout = TRUE;
+			canexit = TRUE;
 		}
 
-		loop_count = 0;
-
-		while (!spine_timeout) {
-			if (sem_trywait(&thread_init_sem) == 0) {
-				// Acquired a thread
-				break;
-			}
-
-			sem_err = errno;
-
-			if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
-			}
-
-			loop_count++;
-
-			if (loop_count == 10) {
-				progress_time = get_time_as_double() - start_time;
-
-				if (progress_time + 1 > set.poller_interval) {
-					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
-					spine_timeout = TRUE;
-					canexit = TRUE;
-					break;
-				}
-
-				loop_count = 0;
-			}
-
-			usleep(10000);
-
-			total_time = get_time_as_double();
-
-			if (total_time - start_time > set.poller_interval) {
-				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices Internal", host_id, current_thread));
-				spine_timeout = TRUE;
-				canexit = TRUE;
-				break;
-			}
+		if (!spine_timeout && spine_sem_wait(&thread_init_sem, launch_deadline) != 0) {
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
+			spine_timeout = TRUE;
+			canexit = TRUE;
 		}
 
 		/* no worker will run to return the permit */
