@@ -145,9 +145,10 @@ static void test_destination_upserts(MYSQL *local) {
 		/* Match db_connect's Cacti-compatible session before cloning the
 		 * legacy fixture tables with zero-date column defaults. */
 		assert(mysql_query(remote, "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION'") == 0);
-		/* This lane must really cover different server families. */
-		assert(strstr(mysql_get_server_info(local), "MariaDB") != NULL);
-		assert(strstr(mysql_get_server_info(remote), "MariaDB") == NULL);
+		/* This lane must really cover different server families, with
+		 * either one as the main server. */
+		assert((strstr(mysql_get_server_info(local), "MariaDB") != NULL) !=
+			(strstr(mysql_get_server_info(remote), "MariaDB") != NULL));
 	}
 	set.poller.poller_id = 2;
 	set.poller.SQL_readonly = FALSE;

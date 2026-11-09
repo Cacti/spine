@@ -263,7 +263,7 @@ retry:
  *  \return the banner line, or the last line read (U when none) on failure
  */
 char *php_read_banner(int php_process, int response_timeout) {
-	char pending[RESULTS_BUFFER];
+	char pending[RESULTS_BUFFER] = {0};
 	size_t used = 0;
 	int lines = 0;
 	int fd;

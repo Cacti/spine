@@ -53,6 +53,7 @@ The Cacti Group | spine
 -issue#677: Skip up to ten lines of PHP notices ahead of the script server banner instead of leaving the server busy
 -issue#677: Time shared ICMP socket waits on the monotonic clock
 -issue#677: Append poller output rows at a tracked length instead of rescanning the INSERT batch for every row
+-issue#677: Apply the Cacti session sql_mode to a remote collector's main-server connection, so its poller_time start row no longer fails on a MySQL 5.7 or later main server
 -issue#681: Treat a 32-bit sysUpTime wrap on agents without the engine time OID as elapsed time instead of a reboot, so it no longer queues a reindex and discards the cycle as a spike
 -issue#681: Remove the uncalled snmp_snprint_value()
 -issue#681: Block on worker and script permits with a monotonic deadline instead of retrying every 10 ms

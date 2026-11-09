@@ -78,6 +78,55 @@ static void test_startup_database_detection(MYSQL *mysql) {
 	set = previous;
 }
 
+/* An online collector writes its poller_time start row through the remote
+ * handle. The main server can be MySQL 5.7 or later, whose default sql_mode
+ * rejects Cacti's zero dates, so that handle needs the local session policy. */
+static void test_startup_remote_session(void) {
+	MYSQL local;
+	MYSQL remote;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	pool_t *previous_local = db_pool_local;
+	pool_t *previous_remote = db_pool_remote;
+	config_t previous = set;
+	const char *remote_host = getenv("SPINE_TEST_REMOTE_DB_HOST");
+	char query[BUFSIZE];
+
+	set.poller.threads = 1;
+	set.poller.poller_id = 2;
+	set.poller.mode = REMOTE_ONLINE;
+	set.hosts.host_id_list[0] = '\0';
+	set.remote_database = set.database;
+	set.remote_database.ssl = FALSE;
+	/* The regression lane's second server is MySQL 8.4 at its default sql_mode. */
+	if (remote_host != NULL && remote_host[0] != '\0') {
+		snprintf(set.remote_database.host, sizeof(set.remote_database.host), "%s", remote_host);
+		set.remote_database.port = 3307;
+	}
+
+	assert(initialize_main_database(&local, &remote) == REMOTE);
+	result = db_query(&remote, REMOTE, "SELECT @@SESSION.sql_mode");
+	assert(result != NULL);
+	row = mysql_fetch_row(result);
+	assert(row != NULL && row[0] != NULL);
+	assert(strstr(row[0], "NO_ZERO_DATE") == NULL && strstr(row[0], "STRICT_TRANS_TABLES") == NULL);
+	db_free_result(result);
+	snprintf(query, sizeof(query), "INSERT INTO poller_time (poller_id, pid, start_time, end_time) VALUES (2, %i, NOW(), '0000-00-00 00:00:00')", getpid());
+	assert(db_insert(&remote, REMOTE, query));
+	snprintf(query, sizeof(query), "DELETE FROM poller_time WHERE poller_id=2 AND pid=%i", getpid());
+	assert(db_insert(&remote, REMOTE, query));
+
+	db_close_connection_pool(REMOTE);
+	free(db_pool_remote);
+	db_pool_remote = previous_remote;
+	db_close_connection_pool(LOCAL);
+	free(db_pool_local);
+	db_pool_local = previous_local;
+	db_disconnect(&remote);
+	db_disconnect(&local);
+	set = previous;
+}
+
 static void prepare_script_server_pool(const char *mode) {
 	php_processes = calloc(MAX_PHP_SERVERS, sizeof(*php_processes));
 	assert(php_processes != NULL);
@@ -206,6 +255,7 @@ static void test_startup_console_detection(void) {
 
 void test_startup_contracts(MYSQL *mysql) {
 	test_startup_database_detection(mysql);
+	test_startup_remote_session();
 	test_startup_script_servers();
 	test_startup_configuration_search();
 	test_startup_console_detection();

@@ -169,8 +169,9 @@ bool device_0_in_scope(void) {
 			cursor = end + 1;
 		}
 	}
+	/* Defined ids are never negative, so a range covers 0 only from 0. */
 	if (HOSTID_DEFINED(set.hosts.start_host_id) && HOSTID_DEFINED(set.hosts.end_host_id)) {
-		return set.hosts.start_host_id <= 0 && set.hosts.end_host_id >= 0;
+		return set.hosts.start_host_id == 0;
 	}
 	return TRUE;
 }
@@ -192,6 +193,9 @@ int initialize_main_database(MYSQL *mysql, MYSQL *mysqlr) {
 
 	if (set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
 		if (!db_connect(REMOTE, mysqlr)) die("FATAL: Unable to connect to the remote database");
+		/* The poller_time start and end rows go through this handle; a
+		 * MySQL 5.7+ main server rejects their zero dates by default. */
+		if (!db_set_session_mode(mysqlr)) die("FATAL: Unable to configure the remote database session");
 		mode = REMOTE;
 
 		/* setup remote connection pool for hosts */

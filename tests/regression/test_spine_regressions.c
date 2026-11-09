@@ -1819,6 +1819,9 @@ static void test_collector_transfer(MYSQL *source) {
 	assert(db_insert(source, LOCAL, query));
 	MYSQL destination;
 	db_connect(LOCAL, &destination);
+	/* Clone the zero-date fixture tables under the Cacti session mode, which
+	 * a MySQL 5.7+ server's default mode does not allow. */
+	assert(db_set_session_mode(&destination));
 	assert(mysql_select_db(&destination, database) == 0);
 	assert(mysql_set_character_set(source, "utf8mb4") == 0 && mysql_set_character_set(&destination, "utf8mb4") == 0);
 	assert(db_insert(&destination, REMOTE, "CREATE TABLE host LIKE spine_regressions.host"));
@@ -2399,6 +2402,7 @@ static void test_cli_transfer_exit(MYSQL *source) {
 	assert(db_insert(source, LOCAL, query));
 	MYSQL destination;
 	db_connect(LOCAL, &destination);
+	assert(db_set_session_mode(&destination));
 	assert(mysql_select_db(&destination, database) == 0);
 	const char *const tables[] = {"settings", "poller", "poller_item", "version", "host", "poller_time"};
 	for (size_t index = 0; index < sizeof(tables) / sizeof(tables[0]); index++) {
@@ -2489,6 +2493,7 @@ static void test_database_configuration(void) {
 	read_config_options();
 	assert(set.availability.ping_timeout == 777);
 	db_connect(LOCAL, &mysql);
+	assert(db_set_session_mode(&mysql));
 	test_config_option_boundaries(&mysql);
 	test_startup_contracts(&mysql);
 	test_settings_write_contracts(&mysql);
