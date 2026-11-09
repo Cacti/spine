@@ -3,8 +3,8 @@ name: Static analysis
 on:
   push:
     branches: [develop]
+  # Every base branch, so stacked pull requests are analysed too.
   pull_request:
-    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
   workflow_dispatch:
 
 permissions:

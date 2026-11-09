@@ -1,8 +1,8 @@
 name: Integration
 
 on:
+  # Every base branch, so stacked pull requests are covered too.
   pull_request:
-    branches: [develop, 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
     paths:
       - '**.c'
       - '**.h'

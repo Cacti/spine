@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [develop, '1.2.x']
+  # Every base branch: a stacked pull request needs the same gates as one
+  # opened against develop.
   pull_request:
-    branches: [develop, '1.2.x', 'refactor/c17-series-*', 'fix/post-c17-execution-hardening', 'docs/runtime-benchmark-records']
   workflow_dispatch:
 
 permissions:
