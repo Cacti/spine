@@ -24,6 +24,26 @@ HAVE_FAULT_BINARY = FAULT_BINARY.is_file()
 CLIENT = shutil.which('mariadb') or shutil.which('mysql')
 # A net-snmp snmpd executable; the tests start their own agent with it.
 SNMPD = os.environ.get('SPINE_TEST_SNMPD')
+# Optional cases that must run instead of being skipped, as a comma separated
+# list, for a CI job that provides their prerequisites.
+OPTIONAL = {'cacti', 'fault'}
+REQUIRED = {name.strip() for name in os.environ.get('SPINE_TEST_REQUIRE', '').split(',') if name.strip()}
+if REQUIRED - OPTIONAL:
+    raise SystemExit('Unknown SPINE_TEST_REQUIRE entries: ' + ', '.join(sorted(REQUIRED - OPTIONAL)))
+
+
+def optional(name, available, reason):
+    """Skip a case whose prerequisite is missing, unless SPINE_TEST_REQUIRE
+    names it, in which case the case fails instead."""
+    if available or name not in REQUIRED:
+        return unittest.skipUnless(available, reason)
+
+    def missing(test):
+        def run(self):
+            self.fail(reason + ', and SPINE_TEST_REQUIRE requires this case')
+        run.__name__ = test.__name__
+        return run
+    return missing
 
 
 def icmp_datagram_available():
@@ -368,7 +388,7 @@ class Polling(unittest.TestCase):
                          self.result.stdout[-3000:] + self.result.stderr[-1000:])
         self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_expected ex LEFT JOIN poller_output po '
                                  'ON po.local_data_id=ex.local_data_id AND po.rrd_name=ex.rrd_name '
-                                 'WHERE po.local_data_id IS NULL OR po.output<>CAST(ex.local_data_id AS CHAR);'), '0')
+                                 'WHERE po.local_data_id IS NULL OR CAST(po.output AS BINARY)<>CAST(ex.local_data_id AS BINARY);'), '0')
         self.assertEqual(self.sql('SELECT attempts FROM audit_duplicates;'), '0')
         counts = self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
                           "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False)
@@ -718,7 +738,7 @@ class Polling(unittest.TestCase):
         self.check_complete()
         self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
 
-    @unittest.skipUnless(HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
+    @optional('fault', HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
     def test_allocation_failures_and_retry(self):
         for failure in ('target', 'target-once', 'snmp', 'snmp-once'):
             with self.subTest(failure=failure):
@@ -739,7 +759,7 @@ class Polling(unittest.TestCase):
                 self.run_spine()
                 self.check_complete()
 
-    @unittest.skipUnless(os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
+    @optional('cacti', os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
     def test_real_script_server_pool(self):
         for pool in (1, 10, 15):
             with self.subTest(pool=pool):
@@ -751,7 +771,7 @@ class Polling(unittest.TestCase):
                 self.run_spine()
                 self.check_complete()
 
-    @unittest.skipUnless(os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
+    @optional('cacti', os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
     def test_real_script_server_mixed_with_shell(self):
         self.seed(103, 10, multi=True)
         command = str(self.cacti / 'scripts/ss_spine_regression.php') + ' ss_spine_regression '
