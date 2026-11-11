@@ -1091,6 +1091,12 @@ int main(int argc, char *argv[]) {
 				/* the device's items are not polled this cycle */
 				set.exit_code = EXIT_FAILURE;
 
+				/* the device row is consumed either way; the next device must
+				 * not take over this one's details[] record */
+				if (change_host) {
+					device_counter++;
+				}
+
 				/* the later partitions must not wait for a first one that never ran */
 				if (current_thread == 1) {
 					thread_mutex_lock(LOCK_THDET);
@@ -1215,11 +1221,15 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (db_pool_local) {
+	/* After a polling timeout some workers are still running.  They use the
+	 * connection pools, the Script Servers, SNMP, details[], debug_devices
+	 * and php_processes until they finish, so none of it is torn down here;
+	 * the process exit releases it. */
+	if (db_pool_local && threads_final == 0) {
 		db_close_connection_pool(LOCAL);
 	}
 
-	if (db_pool_remote) {
+	if (db_pool_remote && threads_final == 0) {
 		db_close_connection_pool(REMOTE);
 	}
 
@@ -1231,15 +1241,13 @@ int main(int argc, char *argv[]) {
 	if (nft_popen_cleanup() != 0) set.exit_code = EXIT_FAILURE;
 
 	/* close the php script server */
-	if (set.php_required && !set.ping_only) {
+	if (set.php_required && !set.ping_only && threads_final == 0) {
 		php_close(PHP_INIT);
 	}
 
 	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
-	/* free malloc'd variables.  After a polling timeout some workers are
-	 * still running and read details[] as they finish, so the records stay
-	 * allocated until the process exits. */
+	/* free malloc'd variables, except those running workers still use */
 	if (threads_final == 0) {
 		for (i = 0; i < num_rows; i++) {
 			if (details[i] != NULL) {
@@ -1248,14 +1256,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		SPINE_FREE(details);
+		SPINE_FREE(debug_devices);
+		SPINE_FREE(php_processes);
 	}
 
 	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);
-	SPINE_FREE(debug_devices);
 	SPINE_FREE(host_time);
-	SPINE_FREE(php_processes);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
@@ -1270,7 +1278,9 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
 
 	/* close snmp */
-	snmp_spine_close();
+	if (threads_final == 0) {
+		snmp_spine_close();
+	}
 
 	SPINE_LOG_DEBUG(("DEBUG: Net-SNMP Close Completed"));
 
