@@ -1093,7 +1093,10 @@ int main(void) {
  set.stdout_notty = set.stderr_notty = TRUE;
  snmp_spine_init();
  response_mode = 1;
- probe(1000, 10, 1); /* A timeout must not send the other 99 batches. */
+ /* A batch timeout leaves its OIDs to single gets; the first of those
+  * times out too and gives the host up, so the other 99 batches and the
+  * remaining single gets are never sent. */
+ probe(1000, 10, 2);
  response_mode = 0;
  probe(100000, 100, 1000); /* One reusable allocation, bounded by max_oids. */
  probe(1000, 1000, 10); /* The state array also bounds oversized limits. */

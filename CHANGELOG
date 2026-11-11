@@ -43,7 +43,7 @@ The Cacti Group | spine
 -issue#680: Launch the next device as soon as a polling thread finishes instead of checking for a free thread every 10 ms
 -issue#680: Use an ICMP datagram socket on Linux when net.ipv4.ping_group_range allows it, instead of running every thread as root while the raw socket is opened
 -issue#680: Check device availability and reindex assertions once per device instead of once per device thread, so that all device threads agree on whether the device is up
--issue#680: Fetch the SNMP reindex assertion values max_oids at a time instead of one per request
+-issue#680: Fetch the SNMP reindex assertion values max_oids at a time instead of one per request, falling back to one per request when a batch times out
 -issue#680: Keep polling a device when a reindex assertion OID returns noSuchObject, noSuchInstance, endOfMibView or an error status, and read the value as U as cmd.php does, queuing the reindex once and storing U, instead of skipping the device for the cycle
 -issue#680: Wait for script, Script Server and ping replies with poll() so a descriptor at or above FD_SETSIZE no longer aborts Spine, stores U or reports the device down
 -issue#680: End the poll cycle when the last device thread finishes instead of on the next 500 ms check

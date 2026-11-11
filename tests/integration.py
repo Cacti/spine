@@ -105,9 +105,10 @@ class SnmpAgent:
     noSuchInstance.  A request for an OID in errors gets a noSuchName error
     status instead."""
 
-    def __init__(self, values, errors=()):
+    def __init__(self, values, errors=(), drop_multi=False):
         self.values = values
         self.errors = errors
+        self.drop_multi = drop_multi
         self.requests = []
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('127.0.0.1', 0))
@@ -143,6 +144,8 @@ class SnmpAgent:
             request_id, _, _, (_, bindings) = list(ber_items(pdu))
             oids = [oid_text(list(ber_items(binding))[0][1]) for _, binding in ber_items(bindings)]
             self.requests.append(oids)
+            if self.drop_multi and len(oids) > 1:
+                continue
             response = ber(0x30, b''.join(ber(0x30, ber(0x06, list(ber_items(binding))[0][1]) + self.encode(oid))
                                           for (_, binding), oid in zip(ber_items(bindings), oids)))
             failed = [i + 1 for i, oid in enumerate(oids) if oid in self.errors]
@@ -400,8 +403,8 @@ class Polling(unittest.TestCase):
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
                                      'SELECT COUNT(*) FROM audit_expected ex WHERE ex.host_id=s.host_id);'), '0')
 
-    def snmp_agent(self, values, availability=2, max_oids=10, errors=()):
-        agent = SnmpAgent(values, errors)
+    def snmp_agent(self, values, availability=2, max_oids=10, errors=(), drop_multi=False):
+        agent = SnmpAgent(values, errors, drop_multi)
         self.addCleanup(agent.close)
         self.sql("UPDATE host SET snmp_version=2,snmp_community='public',snmp_port=" + str(agent.port) +
                  ',snmp_timeout=1000,availability_method=' + str(availability) + ',max_oids=' + str(max_oids) + ';')
@@ -476,6 +479,24 @@ class Polling(unittest.TestCase):
         # 27 assertion OIDs in max_oids sized requests, where each took one
         self.assertEqual([len(r) for r in batched], [10, 10, 7], agent.requests)
         self.assertEqual(agent.gets('.1.3.6.1.2.1.1.3.0'), 1, agent.requests)
+
+    def test_reindex_batch_timeout_gets_each_value_alone(self):
+        # An agent that drops a request with many OIDs but answers each one
+        # alone: the batch times out, the single gets decide, and the device
+        # is polled.
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.1.3.0': ('ticks', 500000)}
+        rows = []
+        for i in range(1, 6):
+            values['.1.3.6.1.2.1.2.2.1.1.' + str(i)] = ('int', i)
+            rows.append(f"(1,1,0,'=','{i}','.1.3.6.1.2.1.2.2.1.1.{i}')")
+        agent = self.snmp_agent(values, availability=0, max_oids=10, drop_multi=True)
+        self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' + ','.join(rows) + ';')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+        for i in range(1, 6):
+            self.assertGreaterEqual(agent.requests.count(['.1.3.6.1.2.1.2.2.1.1.' + str(i)]), 1, agent.requests)
 
     def test_reindex_error_status_gets_each_value_alone(self):
         # An error status names one OID; the batch falls back to one get per

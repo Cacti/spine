@@ -1121,12 +1121,15 @@ void snmp_get_assert_values(host_t *current_host, snmp_oids_t *snmp_oids, int *s
 	status = snmp_synchronized_response(current_host, pdu, &response);
 	current_host->snmp_status = status;
 
-	if (status == STAT_TIMEOUT) {
-		/* snmp_get_assert() would time out on the first and give the host up */
-		for (i = 0; i < count; i++) {
-			SET_UNDEFINED(snmp_oids[requested[i]].result);
-			state[requested[i]] = SNMP_ASSERT_FAILED;
-		}
+	if (status == STAT_TIMEOUT && count == 1) {
+		/* snmp_get_assert() would time out the same way and give the host up */
+		SET_UNDEFINED(snmp_oids[requested[0]].result);
+		state[requested[0]] = SNMP_ASSERT_FAILED;
+	} else if (status == STAT_TIMEOUT) {
+		/* Some agents drop a request with many OIDs and answer each OID on
+		 * its own, so a batch timeout leaves the OIDs pending for
+		 * snmp_get_assert(), which gives the host up if the first single get
+		 * times out as well: at most one timeout more than before. */
 	} else if (status == STAT_SUCCESS && response != NULL && response->errstat == SNMP_ERR_NOERROR) {
 		vars = response->variables;
 
