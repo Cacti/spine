@@ -1022,12 +1022,15 @@ int main(int argc, char *argv[]) {
 			SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
 			spine_timeout = TRUE;
 			canexit = TRUE;
+			/* this device and the rest are not polled */
+			set.exit_code = EXIT_FAILURE;
 		}
 
 		if (!spine_timeout && spine_sem_wait(&thread_init_sem, launch_deadline) != 0) {
 			SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
 			spine_timeout = TRUE;
 			canexit = TRUE;
+			set.exit_code = EXIT_FAILURE;
 		}
 
 		/* no worker will run to return the permit */
@@ -1070,9 +1073,12 @@ int main(int argc, char *argv[]) {
 					created_host_threads,
 					created_host_data_ids,
 					created_complete));
-			} else if (thread_status == EAGAIN) {
+			} else if (thread_status == EAGAIN && get_time_as_double() < launch_deadline) {
 				usleep(10000);
 				goto thread_retry;
+			} else if (thread_status == EAGAIN) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while the system could not create a thread", created_host_id, created_host_thread));
+				canexit = TRUE;
 			} else if (thread_status == EINVAL) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 			}
@@ -1082,6 +1088,8 @@ int main(int argc, char *argv[]) {
 			if (thread_status) {
 				sem_post(&thread_init_sem);
 				sem_post(&available_threads);
+				/* the device's items are not polled this cycle */
+				set.exit_code = EXIT_FAILURE;
 
 				/* the later partitions must not wait for a first one that never ran */
 				if (current_thread == 1) {
@@ -1094,8 +1102,17 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* A partition that never started has no child_cleanup() to free it,
-		 * and only the first partition is reachable through details[]. */
+		 * and only the first partition is reachable through details[].  A
+		 * first partition skipped at the deadline started none of its device's
+		 * partitions, so its record is dropped and the device is reported as
+		 * not run; one whose create failed stays, as the verdict for the
+		 * later partitions. */
 		if ((spine_timeout || thread_status != 0) && current_thread > 1) {
+			SPINE_FREE(poller_details);
+		} else if (spine_timeout && current_thread == 1) {
+			thread_mutex_lock(LOCK_THDET);
+			details[device_counter] = NULL;
+			thread_mutex_unlock(LOCK_THDET);
 			SPINE_FREE(poller_details);
 		}
 	}
@@ -1220,14 +1237,19 @@ int main(int argc, char *argv[]) {
 
 	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
-	/* free malloc'd variables */
-	for (i = 0; i < num_rows; i++) {
-		if (details[i] != NULL) {
-			SPINE_FREE(details[i]);
+	/* free malloc'd variables.  After a polling timeout some workers are
+	 * still running and read details[] as they finish, so the records stay
+	 * allocated until the process exits. */
+	if (threads_final == 0) {
+		for (i = 0; i < num_rows; i++) {
+			if (details[i] != NULL) {
+				SPINE_FREE(details[i]);
+			}
 		}
+
+		SPINE_FREE(details);
 	}
 
-	SPINE_FREE(details);
 	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);

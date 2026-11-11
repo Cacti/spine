@@ -56,10 +56,10 @@ The Cacti Group | spine
 -issue: Force boost_redirect to be true always
 -issue: Backport polling fixes from develop #641 and #660: separate SNMP endpoints and timeouts, check whole uptime conversions, reject truncated script output, and preserve one-shot reads (#661)
 -issue: Backport worker stack sizing, SNMP synchronization (SNMPv3 requests are now serialized process-wide; v1 and v2c stay parallel), PHP slot validation, and CLI/config boundaries from develop #644, #646 and #660 (#662)
--issue: Backport connection ownership, destination upserts, retry limits, and failure-aware completion from develop #641, #655 and #660; signal interruptions no longer count toward the reconnect limit (#663)
+-issue: Backport connection ownership, destination upserts, retry limits, and failure-aware completion from develop #641, #655 and #660; interrupted queries and connection attempts get 3 retries in place, then count toward the retry limit, instead of retrying without limit (#663)
 -issue: Backport SNMPv3 key handling, probe deadlines, opt-in result normalization, safe signal/logging paths, input limits, and opt-in required TLS; collect offline regression contracts (#664)
--issue: New DB_SSL_Required and RDB_SSL_Required settings refuse a TCP connection that does not negotiate TLS; without them DB_UseSSL keeps the plaintext fallback and logs a warning when it is used. The session is encrypted but the server is not authenticated unless DB_SSL_CA is set with a MySQL client library, and Unix sockets and localhost are exempt (#664)
--issue: New Strict_Mode setting normalizes poll results before storage ("12 abc" is stored as 12, "FF" as 255 and "0x10" as U) and exits non-zero after a failed output write, final push, poller_time update or poll timeout; the default keeps the 1.2.31 values and exit status (#664)
+-issue: New DB_SSL_Required and RDB_SSL_Required settings refuse a TCP connection that does not negotiate TLS; without them DB_UseSSL keeps the plaintext fallback and logs a warning the first time it is used for each connection type. The session is encrypted but the server is not authenticated unless DB_SSL_CA is set with a MySQL client library, and Unix sockets and localhost are exempt (#664)
+-issue: New Strict_Mode setting normalizes poll results before storage ("12 abc" is stored as 12, "FF" as 255 and "0x10" as U) and exits non-zero after a failed output write, final push, poller_time update, poll timeout or a device thread that could not start; the default keeps the 1.2.31 values and exit status (#664)
 -issue: SIGINT, SIGQUIT and SIGBUS now terminate the poller (#664)
 -issue: SQL errors are logged with the error number, SQLSTATE and a statement label (verb and table), never the server's message or the statement text (#664)
 

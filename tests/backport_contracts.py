@@ -634,7 +634,7 @@ a = spine.index('\t\t/* Launching stops one second before')
 b = spine.index('\n\t}\n\n\t/* wait for all threads to', a)
 launch = spine[a:b]
 run('maintenance-thread-launch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
-config_t set;sem_t available_threads;double start_time,total_time;
+config_t set;sem_t available_threads;double start_time,total_time;static poller_thread_t *slots[1];poller_thread_t **details=slots;
 static double now;static int held,creates,eagain,create_error,available_posts,init_posts,available_ok,init_ok,errored;
 static int sleeps,released_after;
 /* released_after counts the waits a permit takes to be posted; a blocking
@@ -662,19 +662,28 @@ void *child(void *arg){return arg;}
 static int canexit_result;
 static int launch(int current_thread){int host_id=1,canexit=FALSE,change_host=TRUE,device_counter=0,thread_status=0,a_threads_value=0;
  pthread_t threads[1];pthread_attr_t attr;sem_t thread_init_sem;poller_thread_t *poller_details=calloc(1,sizeof(*poller_details));assert(poller_details);memset(&attr,0,sizeof(attr));
+ if(current_thread==1)details[0]=poller_details;
 ''' + launch + '''
- (void)a_threads_value;(void)device_counter;canexit_result=canexit;if(current_thread==1)free(poller_details);return thread_status;}
-static void reset(void){now=start_time=total_time=0;held=creates=eagain=create_error=available_posts=init_posts=errored=sleeps=released_after=0;available_ok=init_ok=1;set.poller_interval=10;set.threads=4;}
+ (void)a_threads_value;(void)device_counter;canexit_result=canexit;
+ /* a first partition skipped at the deadline is dropped from details[] and freed by the launch code */
+ if(current_thread==1&&details[0]!=NULL){assert(details[0]==poller_details);free(poller_details);details[0]=NULL;}
+ return thread_status;}
+static void reset(void){now=start_time=total_time=0;held=creates=eagain=create_error=available_posts=init_posts=errored=sleeps=released_after=0;available_ok=init_ok=1;set.poller_interval=10;set.threads=4;set.exit_code=0;details[0]=NULL;}
 int main(void){
  /* EAGAIN retries the create without taking a lock again */
- reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0);
+ reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0&&set.exit_code==0);
+ /* EAGAIN retries end at the launch deadline, returning the permits */
+ reset();eagain=100000;assert(launch(1)==EAGAIN&&canexit_result&&now>=set.poller_interval-1&&creates<100000&&init_posts==1&&available_posts==1&&set.exit_code==EXIT_FAILURE);
  /* a failed create releases the init slot and the worker permit */
- reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1);
+ reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1&&set.exit_code==EXIT_FAILURE);
  /* the soft deadline, one second early, stops launching like the hard one */
  reset();available_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==0);
+ /* the skipped device is not polled: Strict_Mode exits non-zero, and the
+  * device is reported as a thread that did not run */
+ assert(set.exit_code==EXIT_FAILURE&&details[0]==NULL);
  /* the init wait counts its polls, so the soft deadline fires there too,
   * the taken worker permit is returned, and EAGAIN is not an error */
- reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored);
+ reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored&&set.exit_code==EXIT_FAILURE);
  /* a permit released during the wait starts the launch without a sleep */
  reset();available_ok=0;released_after=3;assert(launch(1)==0&&creates==1&&!canexit_result);
 #if defined(_POSIX_TIMEOUTS) && _POSIX_TIMEOUTS > 0
