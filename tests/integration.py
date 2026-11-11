@@ -382,7 +382,7 @@ class Polling(unittest.TestCase):
         self.result = result
         return result
 
-    def check_complete(self, devices=1, schedule=True):
+    def check_complete(self, devices=1, schedule=True, device_zero=False):
         self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
         self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), self.sql('SELECT COUNT(*) FROM audit_expected;'),
                          self.result.stdout[-3000:] + self.result.stderr[-1000:])
@@ -390,9 +390,11 @@ class Polling(unittest.TestCase):
                                  'ON po.local_data_id=ex.local_data_id AND po.rrd_name=ex.rrd_name '
                                  'WHERE po.local_data_id IS NULL OR CAST(po.output AS BINARY)<>CAST(ex.local_data_id AS BINARY);'), '0')
         self.assertEqual(self.sql('SELECT attempts FROM audit_duplicates;'), '0')
-        counts = self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
-                          "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False)
-        self.assertEqual(int(counts), devices)
+        # The device list carries each device's item count; only device 0,
+        # which is not in that list, is counted on its own.
+        self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE id, device_threads,%'), 1)
+        self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%'),
+                         1 if device_zero else 0)
         if schedule:
             self.assertEqual(int(self.sql('SELECT COUNT(*) FROM audit_schedule;')), devices)
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
@@ -681,11 +683,23 @@ class Polling(unittest.TestCase):
         self.run_spine()
         self.check_complete()
 
+    def test_partition_counts_per_device(self):
+        # Three devices with different due sets and partition counts, all
+        # counted by the one device list query.
+        self.seed(37, 10, host=1)
+        self.seed(5, 3, host=2)
+        self.seed(23, 4, host=3)
+        self.sql('UPDATE poller_item SET rrd_next_step=1800 WHERE host_id=3 AND MOD(local_data_id,3)=0; '
+                 'DELETE ex FROM audit_expected ex JOIN poller_item pi '
+                 'ON pi.local_data_id=ex.local_data_id AND pi.rrd_name=ex.rrd_name WHERE pi.rrd_next_step>0;')
+        self.run_spine()
+        self.check_complete(devices=3)
+
     def test_device_zero(self):
         self.seed(13, 10, host=0)
         self.seed(37, 10, host=1)
         self.run_spine()
-        self.check_complete(devices=2)
+        self.check_complete(devices=2, device_zero=True)
 
     def test_device_zero_only_in_its_range(self):
         # poller.php gives device 0 to the process whose range starts at 0;

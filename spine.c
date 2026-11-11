@@ -290,6 +290,41 @@ static bool device_0_selected(void) {
 	return !HOSTID_DEFINED(set.start_host_id) || set.start_host_id == 0;
 }
 
+/* The poller_item condition for the items a device polls this cycle,
+ * matching the worker item queries in poller.c: the poller, and either the
+ * undeleted items of a full run or the items that are due. */
+static void eligible_item_filter(char *filter, size_t size) {
+	char poller_filter[64] = "";
+	const char *item_filter = "";
+
+	if (set.poller_id != 0) {
+		snprintf(poller_filter, sizeof(poller_filter), " AND poller_id=%i", set.poller_id);
+	}
+	if (set.poller_interval == 0) {
+		if (set.poller_id == 0) item_filter = " AND deleted=''";
+	} else if (set.active_profiles != 1) {
+		item_filter = " AND rrd_next_step<=0";
+	}
+
+	snprintf(filter, size, "1%s%s", poller_filter, item_filter);
+}
+
+/* A device without poller items has no row in the grouped count. */
+static int parse_item_count(const char *text, int host_id) {
+	char *count_end;
+	unsigned long count;
+
+	if (text == NULL) return 0;
+
+	errno = 0;
+	count = strtoul(text, &count_end, 10);
+	if (errno || count_end == text || *count_end != '\0' || count > INT_MAX) {
+		die("ERROR: Device[%i] poller item count exceeds supported range", host_id);
+	}
+
+	return (int) count;
+}
+
 /* Take a semaphore by the deadline, a get_time_as_double() value.
  * sem_timedwait() returns as soon as a permit is posted; where it is
  * missing, or reports an unexpected error, poll at the former 10 ms. */
@@ -325,6 +360,8 @@ int main(int argc, char *argv[]) {
 	int device_counter = 0;
 	int valid_conf_file = FALSE;
 	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
+	char eligible_filter[BUFSIZE];
+	int host_eligible = 0;
 	char *host_time = NULL;
 	double host_time_double = 0;
 	int items_per_thread = 0;
@@ -791,8 +828,11 @@ int main(int argc, char *argv[]) {
 		set.php_current_server = 0;
 	}
 
-	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
+	/* obtain the list of hosts to poll.  The grouped scan that orders the
+	 * devices also counts the items each one polls this cycle, so the
+	 * launch loop does not query the count once per device. */
+	eligible_item_filter(eligible_filter, sizeof(eligible_filter));
+	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi, eligible FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount, SUM(%s) AS eligible FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id", eligible_filter);
 	qp += sprintf(qp, " WHERE disabled = ''");
 
 	if (!strlen(set.host_id_list)) {
@@ -900,6 +940,7 @@ int main(int argc, char *argv[]) {
 			}
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
+			host_eligible   = parse_item_count(mysql_row[4], host_id);
 			current_thread  = 1;
 
 			if (device_threads < 1) {
@@ -916,36 +957,23 @@ int main(int argc, char *argv[]) {
 				device_threads = 1;
 				items_per_thread = 0;
 			} else {
-				char poller_filter[64] = "";
-				const char *item_filter = "";
-				char *count_end;
-				unsigned long count;
-
-				if (set.poller_id != 0) {
-					snprintf(poller_filter, sizeof(poller_filter), " AND poller_id=%i", set.poller_id);
-				}
-				if (set.poller_interval == 0) {
-					if (set.poller_id == 0) item_filter = " AND deleted=''";
-				} else if (set.active_profiles != 1) {
-					item_filter = " AND rrd_next_step<=0";
-				}
-				snprintf(querybuf, BIG_BUFSIZE,
-					"SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i%s%s",
-					host_id, poller_filter, item_filter);
-				tresult = db_query(&mysql, LOCAL, querybuf);
-				mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
-				if (mysql_row == NULL || mysql_row[0] == NULL) {
-					if (tresult != NULL) db_free_result(tresult);
-					die("ERROR: Device[%i] unable to determine the poller item count", host_id);
-				}
-				errno = 0;
-				count = strtoul(mysql_row[0], &count_end, 10);
-				if (errno || *count_end != '\0' || count > INT_MAX) {
+				if (host_id == 0) {
+					/* device 0 is not in the device list */
+					eligible_item_filter(eligible_filter, sizeof(eligible_filter));
+					snprintf(querybuf, BIG_BUFSIZE,
+						"SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=0 AND %s",
+						eligible_filter);
+					tresult = db_query(&mysql, LOCAL, querybuf);
+					mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
+					if (mysql_row == NULL || mysql_row[0] == NULL) {
+						if (tresult != NULL) db_free_result(tresult);
+						die("ERROR: Device[%i] unable to determine the poller item count", host_id);
+					}
+					total_items = parse_item_count(mysql_row[0], host_id);
 					db_free_result(tresult);
-					die("ERROR: Device[%i] poller item count exceeds supported range", host_id);
+				} else {
+					total_items = host_eligible;
 				}
-				total_items = (int)count;
-				db_free_result(tresult);
 				if (total_items < device_threads) {
 					device_threads = total_items > 0 ? total_items : 1;
 				}
