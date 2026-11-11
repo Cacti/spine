@@ -48,7 +48,7 @@ bin_PROGRAMS = spine
 check_PROGRAMS = tests/test_nft_popen
 TESTS = $(check_PROGRAMS)
 tests_test_nft_popen_SOURCES = tests/test_nft_popen.c nft_popen.c
-tests_test_nft_popen_CPPFLAGS = $(AM_CPPFLAGS) -Dwaitpid=nft_test_waitpid -Dclock_gettime=nft_test_clock_gettime
+tests_test_nft_popen_CPPFLAGS = $(AM_CPPFLAGS) -Dwaitpid=nft_test_waitpid -Dclock_gettime=nft_test_clock_gettime -Dpthread_create=nft_test_pthread_create
 
 EXTRA_PROGRAMS = tests/spine_alloc_fault
 tests_spine_alloc_fault_SOURCES = $(spine_SOURCES) tests/alloc_fault.c

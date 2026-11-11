@@ -83,8 +83,8 @@ extern int	nft_pchild(int fd);
  *  nft_pclose
  *
  *  Close the pipe and attempt one non-blocking waitpid(). A child that
- *  cannot immediately be reaped is retained for a later sweep. The sweep
- *  allows a short exit grace, then kills children that are still running.
+ *  cannot immediately be reaped is retained for the timed reaper. It allows
+ *  a short exit grace, then kills children even if no more scripts start.
  *
  *  Return the exit status if immediately available, or zero when cleanup
  *  is deferred. Deferred status is not available to the caller, so a zero

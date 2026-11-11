@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 The Cacti Group
  * Exercise the production process implementation with real children. Only
- * waitpid/clock failures are injected at the system-call boundary. */
+ * waitpid/clock and thread-start failures are injected at their API boundaries. */
 #include "common.h"
 #include "spine.h"
 #include <stdarg.h>
@@ -9,13 +9,17 @@
 #include <sys/wait.h>
 #undef waitpid
 #undef clock_gettime
+#undef pthread_create
 extern pid_t waitpid(pid_t, int *, int);
 extern int clock_gettime(clockid_t, struct timespec *);
+extern int pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *);
 
 config_t set;
 static pthread_mutex_t ForkMutex = PTHREAD_MUTEX_INITIALIZER;
 static int WaitFault;
 static int ClockFault;
+static int CreateFault;
+static pthread_mutex_t FaultMutex = PTHREAD_MUTEX_INITIALIZER;
 static int Assertions;
 static int Cases;
 static pthread_mutex_t AssertionMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -29,21 +33,45 @@ void thread_mutex_lock(int mutex) { (void)mutex; pthread_mutex_lock(&ForkMutex);
 void thread_mutex_unlock(int mutex) { (void)mutex; pthread_mutex_unlock(&ForkMutex); }
 int spine_log(const char *format, ...) { (void)format; return 0; }
 
+static void set_faults(int wait_fault, int clock_fault) {
+	pthread_mutex_lock(&FaultMutex);
+	WaitFault = wait_fault;
+	ClockFault = clock_fault;
+	pthread_mutex_unlock(&FaultMutex);
+}
+
 pid_t nft_test_waitpid(pid_t pid, int *status, int options) {
+	int fault;
 	CHECK(pid > 0); /* Never reap another subsystem's children. */
 	CHECK(options == WNOHANG);
-	if (WaitFault == 3) return 0;
-	if (WaitFault) {
-		errno = WaitFault == 1 ? EINTR : EINVAL;
-		WaitFault = 0;
+	pthread_mutex_lock(&FaultMutex);
+	fault = WaitFault;
+	if (fault != 3) WaitFault = 0;
+	pthread_mutex_unlock(&FaultMutex);
+	if (fault == 3) return 0;
+	if (fault) {
+		errno = fault == 1 ? EINTR : EINVAL;
 		return -1;
 	}
 	return waitpid(pid, status, options);
 }
 
 int nft_test_clock_gettime(clockid_t clock, struct timespec *time) {
-	if (ClockFault) { errno = EINVAL; return -1; }
+	int fault;
+	pthread_mutex_lock(&FaultMutex);
+	fault = ClockFault;
+	pthread_mutex_unlock(&FaultMutex);
+	if (fault) { errno = EINVAL; return -1; }
 	return clock_gettime(clock, time);
+}
+
+int nft_test_pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start)(void *), void *arg) {
+	int fault;
+	pthread_mutex_lock(&FaultMutex);
+	fault = CreateFault;
+	CreateFault = 0;
+	pthread_mutex_unlock(&FaultMutex);
+	return fault ? fault : pthread_create(thread, attr, start, arg);
 }
 
 static double now(void) {
@@ -107,16 +135,16 @@ static void faults_and_ownership(void) {
 	if (!foreign) _exit(42);
 	for (fault = 1; fault <= 2; fault++) {
 		fd = command("printf '42\\n'; exec sleep 5", &pid);
-		WaitFault = fault;
+		set_faults(fault, 0);
 		CHECK(nft_pclose(fd) == 0);
 		CHECK(nft_popen_cleanup() == 0);
 		reaped(pid);
 	}
 	fd = command("printf '42\\n'; exec sleep 5", &pid);
-	ClockFault = 1;
+	set_faults(0, 1);
 	CHECK(nft_pclose(fd) == 0);
 	CHECK(nft_popen_cleanup() == 0);
-	ClockFault = 0;
+	set_faults(0, 0);
 	reaped(pid);
 	CHECK(waitpid(foreign, &status, 0) == foreign);
 	CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 42);
@@ -129,7 +157,7 @@ static void faults_and_ownership(void) {
 static void saturation(void) {
 	pid_t pids[512];
 	int i, fd, count = 0, before = descriptors();
-	WaitFault = 3;
+	set_faults(3, 0);
 	while (count < 512) {
 		fd = nft_popen("exec sleep 5", "r");
 		if (fd < 0) { CHECK(errno == EAGAIN); break; }
@@ -138,7 +166,7 @@ static void saturation(void) {
 	}
 	CHECK(count > 0 && count < 512);
 	CHECK(nft_popen_cleanup() == -1); /* Bounded even when reaping cannot progress. */
-	WaitFault = 0;
+	set_faults(0, 0);
 	CHECK(nft_popen_cleanup() == 0);
 	for (i = 0; i < count; i++) reaped(pids[i]);
 	CHECK(descriptors() == before);
@@ -216,8 +244,38 @@ static void available_status(void) {
 	Cases++;
 }
 
+static void reaper_start_failure(void) {
+	int before = descriptors();
+	pthread_mutex_lock(&FaultMutex);
+	CreateFault = EAGAIN;
+	pthread_mutex_unlock(&FaultMutex);
+	CHECK(nft_popen("exec sleep 30", "r") == -1 && errno == EAGAIN);
+	CHECK(descriptors() == before);
+	CHECK(nft_popen_cleanup() == 0);
+	printf("ok failed reaper startup refuses the command without leaking pipes\n");
+	Cases++;
+}
+
+static void idle_cleanup(void) {
+	pid_t pid;
+	int fd = command("printf '42\\n'; exec sleep 30", &pid);
+	double deadline = now() + 1.0;
+
+	CHECK(nft_pclose(fd) == 0);
+	/* Do not start another command or invoke shutdown cleanup. The reaper
+	 * must kill and reap the last command while polling continues. */
+	while (kill(pid, 0) == 0 && now() < deadline) usleep(1000);
+	CHECK(kill(pid, 0) == -1 && errno == ESRCH);
+	reaped(pid);
+	CHECK(nft_popen_cleanup() == 0);
+	printf("ok idle child deadline is serviced without another command\n");
+	Cases++;
+}
+
 int main(void) {
 	alarm(30);
+	reaper_start_failure();
+	idle_cleanup();
 	normal_and_delayed();
 	faults_and_ownership();
 	saturation();
