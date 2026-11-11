@@ -79,6 +79,7 @@ The Cacti Group | spine
 -issue: An SNMP exception reply such as noSuchObject no longer marks the device down
 -issue: SQL error logs name the statement verb and table with the error number and SQLSTATE, and never include the statement text or the server's message
 -issue: Start the PHP Script Servers within one shared script_timeout, plus 2 seconds for each further server that does not answer, instead of waiting script_timeout for each
+-issue: A misspelled or empty DB_SSL_ or RDB_SSL_ policy directive in spine.conf now stops Spine instead of being skipped with a warning
 -feature#362: Report the number of data collection errors during data collection in host table
 -feature#439: Add idiomatic RPM spec for cacti-spine (%autosetup, %config(noreplace), man1)
 -feature#440: Add idiomatic Debian packaging
