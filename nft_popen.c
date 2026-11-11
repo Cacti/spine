@@ -142,6 +142,12 @@ static pthread_mutex_t ListMutex = PTHREAD_MUTEX_INITIALIZER;
 static struct pid *PendingPids;
 static int ActiveCount;
 static int PendingCount;
+static struct {
+	pthread_t thread;
+	pthread_cond_t wake;
+	int running;
+	int stop;
+} Reaper = {.wake = PTHREAD_COND_INITIALIZER};
 
 static void close_cleanup(void *);
 
@@ -187,6 +193,26 @@ static void nft_sweep_pending(int force) {
 	}
 }
 
+/* A deadline must progress even when no more scripts are launched. Use a
+ * relative sleep while children are pending so wall-clock changes cannot
+ * postpone a monotonic exit deadline on platforms without monotonic condvars. */
+static void *nft_reap_children(void *unused) {
+	(void)unused;
+	pthread_mutex_lock(&ListMutex);
+	while (!Reaper.stop) {
+		if (PendingCount == 0) {
+			pthread_cond_wait(&Reaper.wake, &ListMutex);
+		} else {
+			nft_sweep_pending(FALSE);
+			pthread_mutex_unlock(&ListMutex);
+			usleep(10000);
+			pthread_mutex_lock(&ListMutex);
+		}
+	}
+	pthread_mutex_unlock(&ListMutex);
+	return NULL;
+}
+
 /* Called only after polling workers finish. The last command also gets a
  * sweep, and shutdown has a bounded drain even if a child cannot be reaped. */
 int nft_popen_cleanup(void) {
@@ -196,6 +222,14 @@ int nft_popen_cleanup(void) {
 		pthread_mutex_lock(&ListMutex);
 		nft_sweep_pending(attempt >= 20);
 		remaining = ActiveCount + PendingCount;
+		if (remaining == 0 && Reaper.running) {
+			Reaper.stop = TRUE;
+			pthread_cond_signal(&Reaper.wake);
+			pthread_mutex_unlock(&ListMutex);
+			pthread_join(Reaper.thread, NULL);
+			pthread_mutex_lock(&ListMutex);
+			Reaper.running = FALSE;
+		}
 		pthread_mutex_unlock(&ListMutex);
 		if (remaining == 0) return 0;
 		usleep(1000);
@@ -235,6 +269,7 @@ int nft_popen(const char * command, const char * type) {
 	int    cancel_state;
 	extern char **environ;
 	int    retry_count = 0;
+	int    reaper_error = 0;
 
 	/* On platforms where pipe() is bidirectional,
 	 * "r+" gives two-way communication.
@@ -274,14 +309,21 @@ int nft_popen(const char * command, const char * type) {
 	pthread_mutex_lock(&ListMutex);
 
 	nft_sweep_pending(FALSE);
-	if (ActiveCount + PendingCount >= NFT_CHILD_MAX) {
+	/* Start before fork: refusing a command is preferable to owning a child
+	 * whose exit deadline cannot be serviced. ListMutex serializes startup. */
+	if (!Reaper.running) {
+		Reaper.stop = FALSE;
+		reaper_error = pthread_create(&Reaper.thread, NULL, nft_reap_children, NULL);
+		if (reaper_error == 0) Reaper.running = TRUE;
+	}
+	if (reaper_error != 0 || ActiveCount + PendingCount >= NFT_CHILD_MAX) {
 		pthread_mutex_unlock(&ListMutex);
 		close(pdes[0]);
 		close(pdes[1]);
 		free(cur);
 		pthread_setcancelstate(cancel_state, NULL);
-		SPINE_LOG(("ERROR: SCRIPT: Child cleanup capacity exhausted; refusing another command"));
-		errno = EAGAIN;
+		SPINE_LOG(("ERROR: SCRIPT: Child cleanup unavailable; refusing another command"));
+		errno = reaper_error != 0 ? reaper_error : EAGAIN;
 		return -1;
 	}
 
@@ -529,6 +571,7 @@ close_cleanup(void * arg)
 		cur->next = PendingPids;
 		PendingPids = cur;
 		PendingCount++;
+		pthread_cond_signal(&Reaper.wake);
 	} else {
 		free(cur);
 	}

@@ -932,3 +932,63 @@ int main(void){
  dgram_ok=0;raw_ok=1;datagram_reply=0;assert(probe()==HOST_UP&&raw_requests==1&&elevations==1);
  wrong_seq=1;assert(probe()==HOST_DOWN);return 0;}
 ''')
+
+ping = (root / 'ping.c').read_text()
+run('maintenance-resolver-failure-contract', r'''#include "common.h"
+#include "spine.h"
+config_t set;
+static int result_code, calls, releases, sleeps, recover, empty;
+static struct addrinfo answer;
+static struct sockaddr_in address;
+int spine_log(const char *format, ...) { (void)format; return 0; }
+static int fixture_getaddrinfo(const char *node, const char *service,
+                              const struct addrinfo *hints, struct addrinfo **result) {
+ (void)node; (void)service;
+ assert(hints->ai_family == AF_INET);
+ calls++;
+ if (recover && calls == 3) result_code = 0;
+ if (result_code != 0) {
+  /* The result is not owned or usable on failure. */
+  *result = (struct addrinfo *)1;
+  return result_code;
+ }
+ answer.ai_family = AF_INET;
+ answer.ai_addr = (struct sockaddr *)&address;
+ address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+ *result = empty ? NULL : &answer;
+ return 0;
+}
+static void fixture_freeaddrinfo(struct addrinfo *result) {
+ assert(result == &answer);
+ releases++;
+}
+static int fixture_usleep(useconds_t duration) { assert(duration == 50000); sleeps++; return 0; }
+#define getaddrinfo fixture_getaddrinfo
+#define freeaddrinfo fixture_freeaddrinfo
+#define usleep fixture_usleep
+''' + function((root / 'util.c').read_text(), 'int char_count(') + '\n' + function(ping, 'static int split_host_spec(') + '\n' + function(ping, 'static const char *ping_address(') + '\n' + function(ping, 'int init_sockaddr(') + r'''
+int main(void) {
+ struct sockaddr_in output;
+ int codes[] = {EAI_FAIL, EAI_MEMORY, EAI_NONAME, EAI_AGAIN};
+ size_t index;
+ for (index = 0; index < sizeof(codes) / sizeof(codes[0]); index++) {
+  calls = releases = sleeps = 0;
+  result_code = codes[index];
+  assert(init_sockaddr(&output, "fixture.invalid", 161) == FALSE);
+  assert(calls == (result_code == EAI_AGAIN ? 4 : 1));
+  assert(sleeps == (result_code == EAI_AGAIN ? 3 : 0));
+  assert(releases == 0);
+ }
+ calls = sleeps = 0;
+ recover = 1;
+ assert(init_sockaddr(&output, "fixture.invalid", 161) == TRUE);
+ assert(calls == 3 && releases == 1 && sleeps == 2);
+ assert(output.sin_family == AF_INET && ntohs(output.sin_port) == 161);
+ assert(output.sin_addr.s_addr == htonl(INADDR_LOOPBACK));
+ recover = 0;
+ empty = 1;
+ assert(init_sockaddr(&output, "fixture.invalid", 161) == FALSE);
+ assert(releases == 1);
+ return 0;
+}
+''')

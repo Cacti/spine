@@ -350,6 +350,7 @@ int main(void) {
 	test_poller_output_row();
 	test_wait_fd_readable();
 	test_descriptors_above_fd_setsize();
+	CHECK(nft_popen_cleanup() == 0, "script children and reaper are drained");
 
 	if (failures) {
 		printf("%d check(s) failed\n", failures);
