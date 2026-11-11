@@ -1072,25 +1072,44 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	/* wait for all threads to 'complete'.  child_cleanup_thread() posts
+	 * the semaphore and then broadcasts the LOCK_THDET condition, so the
+	 * wait ends when the last worker finishes instead of on the next half
+	 * second.  The half second remains as the longest single wait, for the
+	 * log line and the polling interval check. */
+	thread_mutex_lock(LOCK_THDET);
 	sem_getvalue(&available_threads, &a_threads_value);
-
-	/* wait for all threads to 'complete'
- 	 * using the mutex here as the semaphore will
-     * show zero before the children are done */
 	while (a_threads_value < set.threads) {
+		struct timespec until;
+		double wake;
+		int waiting = set.threads - a_threads_value;
+
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.threads - a_threads_value));
+			thread_mutex_unlock(LOCK_THDET);
+			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", waiting));
 			/* Unfinished threads have not written their output. */
 			set.exit_code = EXIT_FAILURE;
+			thread_mutex_lock(LOCK_THDET);
 			break;
 		}
 
-		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
-		usleep(500000);
+		wake = cur_time + 0.5;
+		until.tv_sec  = (time_t) wake;
+		until.tv_nsec = (long) ((wake - (double) until.tv_sec) * 1000000000.0);
+		if (until.tv_nsec < 0) until.tv_nsec = 0;
+		if (until.tv_nsec > 999999999L) until.tv_nsec = 999999999L;
+
+		if (pthread_cond_timedwait(get_cond(LOCK_THDET), get_lock(LOCK_THDET), &until) == ETIMEDOUT) {
+			thread_mutex_unlock(LOCK_THDET);
+			SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", waiting));
+			thread_mutex_lock(LOCK_THDET);
+		}
+
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
+	thread_mutex_unlock(LOCK_THDET);
 
 	threads_final = set.threads - a_threads_value;
 

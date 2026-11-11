@@ -248,6 +248,13 @@ void child_cleanup(void *arg) {
 void child_cleanup_thread(void *arg) {
 	sem_post(&available_threads);
 
+	/* wake the main thread waiting in spine.c for the workers to finish;
+	 * posting before taking the lock means a waiter that rechecks the
+	 * semaphore under the lock cannot miss this permit */
+	thread_mutex_lock(LOCK_THDET);
+	pthread_cond_broadcast(get_cond(LOCK_THDET));
+	thread_mutex_unlock(LOCK_THDET);
+
 	int a_threads_value;
 	sem_getvalue(&available_threads, &a_threads_value);
 

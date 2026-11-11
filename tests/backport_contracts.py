@@ -628,7 +628,7 @@ int main(void){
 # clock and lock primitives substituted.
 spine = (root / 'spine.c').read_text()
 a = spine.index('\t\t/* Launching stops one second before')
-b = spine.index('\n\t}\n\n\tsem_getvalue(&available_threads', a)
+b = spine.index('\n\t}\n\n\t/* wait for all threads to', a)
 launch = spine[a:b]
 run('maintenance-thread-launch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
 config_t set;sem_t available_threads;double start_time,total_time;
@@ -679,6 +679,45 @@ int main(void){
 #endif
  return 0;}
 ''')
+
+# The completion wait of main() ends when the last worker posts its permit
+# and signals LOCK_THDET, not on the next half-second poll; the polling
+# interval still bounds it.
+a = spine.index('\tthread_mutex_lock(LOCK_THDET);\n\tsem_getvalue(&available_threads, &a_threads_value);\n\twhile')
+b = spine.index('\tthread_mutex_unlock(LOCK_THDET);\n', spine.index('\n\t}\n', a)) + len('\tthread_mutex_unlock(LOCK_THDET);\n')
+wait = spine[a:b]
+run('maintenance-completion-wait-contract', '#include "common.h"\n#include "spine.h"\n' + """
+config_t set;
+static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;static pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t count_lock=PTHREAD_MUTEX_INITIALIZER;static int permits;
+static int fixture_getvalue(sem_t *s,int *v){(void)s;pthread_mutex_lock(&count_lock);*v=permits;pthread_mutex_unlock(&count_lock);return 0;}
+static int fixture_post(sem_t *s){(void)s;pthread_mutex_lock(&count_lock);permits++;pthread_mutex_unlock(&count_lock);return 0;}
+#define sem_getvalue fixture_getvalue
+#define sem_post fixture_post
+double get_time_as_double(void){struct timeval now;gettimeofday(&now,NULL);return now.tv_sec+now.tv_usec/1e6;}
+void thread_mutex_lock(int id){(void)id;pthread_mutex_lock(&lock);}
+void thread_mutex_unlock(int id){(void)id;pthread_mutex_unlock(&lock);}
+pthread_mutex_t *get_lock(int id){(void)id;return &lock;}
+pthread_cond_t *get_cond(int id){(void)id;return &cond;}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+sem_t available_threads;
+""" + function((root / 'poller.c').read_text(), 'void child_cleanup_thread(') + """
+static void *worker(void *arg){usleep(*(int *)arg);child_cleanup_thread(NULL);return NULL;}
+static double wait_for(int workers,int finish_us){int a_threads_value,i;double begin_time=get_time_as_double(),cur_time;pthread_t t[8];
+ set.threads=workers;permits=0;set.exit_code=0;
+ for(i=0;i<workers;i++)assert(pthread_create(&t[i],NULL,worker,&finish_us)==0);
+""" + wait + """
+ for(i=0;i<workers;i++)pthread_join(t[i],NULL);(void)cur_time;return get_time_as_double()-begin_time;}
+int main(void){double took;
+ set.poller_interval=60;
+ /* the wait ends with the workers, well inside the former 500 ms step */
+ took=wait_for(4,50000);assert(took<0.3&&set.exit_code==0);
+ /* nothing to wait for */
+ took=wait_for(0,0);assert(took<0.1);
+ /* the polling interval still ends the wait for a worker that does not finish */
+ set.poller_interval=0;took=wait_for(1,1200000);assert(set.exit_code==EXIT_FAILURE);
+ return 0;}
+""")
 
 # A reconnected session gets the same sql_mode adjustments as a pooled one.
 sql = (root / 'sql.c').read_text()
