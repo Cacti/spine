@@ -900,7 +900,7 @@ static int fixture_fcntl(int fd,int cmd,...){(void)fd;(void)cmd;return 0;}
 static int fixture_usleep(useconds_t usec){(void)usec;return 0;}
 static int fixture_setsockopt(int fd,int level,int name,const void *value,socklen_t len){(void)fd;(void)level;(void)name;(void)value;(void)len;return 0;}
 static ssize_t fixture_sendto(int fd,const void *buf,size_t len,int flags,const struct sockaddr *to,socklen_t tolen){(void)fd;(void)len;(void)flags;(void)to;(void)tolen;sent_seq=((const struct icmp *)buf)->icmp_seq;return (ssize_t)len;}
-static int fixture_select(int n,fd_set *r,fd_set *w,fd_set *e,struct timeval *t){(void)n;(void)r;(void)w;(void)e;(void)t;if(replies>=3){now+=1;return 0;}return 1;}
+int wait_fd_readable(int fd,const struct timeval *t){(void)fd;(void)t;if(replies>=3){now+=1;return 0;}return 1;}
 static ssize_t fixture_recvfrom(int fd,void *buf,size_t len,int flags,struct sockaddr *from,socklen_t *fromlen){
  struct sockaddr_in *source=(struct sockaddr_in *)from;size_t ihl=datagram_reply?0:sizeof(struct ip);struct icmp *reply=(struct icmp *)((char *)buf+ihl);
  (void)fd;(void)flags;(void)fromlen;assert(len>=ihl+ICMP_HDR_SIZE);replies++;memset(buf,0,ihl+ICMP_HDR_SIZE);
@@ -916,7 +916,6 @@ static ssize_t fixture_recvfrom(int fd,void *buf,size_t len,int flags,struct soc
 #define usleep fixture_usleep
 #define setsockopt fixture_setsockopt
 #define sendto fixture_sendto
-#define select fixture_select
 #define recvfrom fixture_recvfrom
 #define ICMP_DISCARD_PEEKED(sock, buf) ((void)0)
 ''' + function(ping, 'int ping_icmp(') + '''

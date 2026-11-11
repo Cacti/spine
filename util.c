@@ -35,6 +35,8 @@
 #include "spine.h"
 #include <stdint.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <poll.h>
 
 static int nopts = 0;
 
@@ -1863,6 +1865,45 @@ double get_time_as_double(void) {
 	gettimeofday(&now, NULL);
 
 	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
+}
+
+/*! \fn int wait_fd_readable(int fd, const struct timeval *timeout)
+ *  \brief waits for one descriptor the way select() does, without the
+ *         FD_SETSIZE limit that FD_SET() does not range check.
+ *
+ *  End of file and a pending socket error count as readable, as they do for
+ *  select(), so the caller's read() reports them.
+ *
+ *  \return 1 when readable, 0 on timeout, -1 with errno set on failure
+ */
+int wait_fd_readable(int fd, const struct timeval *timeout) {
+	struct pollfd readable;
+	double wait_ms;
+	int ready;
+
+	if (timeout->tv_sec < 0 || timeout->tv_usec < 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* round up so a sub-millisecond remainder waits rather than returning early */
+	wait_ms = ceil((double) timeout->tv_sec * 1000 + (double) timeout->tv_usec / 1000);
+
+	readable.fd      = fd;
+	readable.events  = POLLIN;
+	readable.revents = 0;
+
+	ready = poll(&readable, 1, wait_ms >= INT_MAX ? INT_MAX : (int) wait_ms);
+	if (ready <= 0) {
+		return ready;
+	}
+
+	if (readable.revents & POLLNVAL) {
+		errno = EBADF;
+		return -1;
+	}
+
+	return 1;
 }
 
 /*! \fn trim()

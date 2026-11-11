@@ -83,6 +83,7 @@ unsigned long long hex2dec(char *str);
 
 /* get highres time as double */
 extern double get_time_as_double(void);
+extern int wait_fd_readable(int fd, const struct timeval *timeout);
 
 /* function to check to see if program has capability to use raw socket with
    out uid = 0 */

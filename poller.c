@@ -2533,7 +2533,6 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int pid;
 
 	int bytes_read;
-	fd_set fds;
 	double begin_time = 0;
 	double end_time = 0;
 	double script_timeout;
@@ -2634,12 +2633,8 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 			if (cmd_fd > 0) {
 				retry:
 
-				/* Initialize File Descriptors to Review for Input/Output */
-				FD_ZERO(&fds);
-				FD_SET(cmd_fd, &fds);
-
 				/* wait x seconds for pipe response */
-				switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+				switch (wait_fd_readable(cmd_fd, &timeout)) {
 					case -1:
 						switch (errno) {
 							case EBADF:
@@ -2676,12 +2671,12 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 								}
 								break;
 							case EINVAL:
-								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
+								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in poll() statement.", current_host->id));
 								SET_UNDEFINED(result_string);
 
 								break;
 							default:
-								SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
+								SPINE_LOG(("Device[%i] ERROR: The script/command poll() failed", current_host->id));
 								SET_UNDEFINED(result_string);
 
 								break;
