@@ -138,6 +138,59 @@ static void spike_kill_result(char *result, int spike_kill) {
 	}
 }
 
+typedef struct {
+	snmp_oids_t *oids;
+	int state[100];
+	int count;
+	int next;
+} reindex_batch_t;
+
+static char *poll_reindex_assert(host_t *host, MYSQL_RES *result, int position, char *oid_text, reindex_batch_t *batch) {
+	int limit = host->max_oids < 100 ? host->max_oids : 100;
+	MYSQL_ROW row;
+	char *value;
+
+	while (batch->next < batch->count && batch->oids[batch->next].array_position < position) {
+		batch->next++;
+	}
+
+	/* Fetch only the next contiguous batch when its first row is needed.
+	 * Consuming a transport failure then suppresses all later requests, and
+	 * scratch storage stays bounded even for large reindex tables. */
+	if (batch->next == batch->count && !host->ignore_host && limit > 1) {
+		if (batch->oids == NULL) batch->oids = calloc((size_t) limit, sizeof(*batch->oids));
+		batch->next = batch->count = 0;
+		if (batch->oids != NULL) {
+			mysql_data_seek(result, position);
+			while (batch->count < limit && (row = mysql_fetch_row(result)) != NULL) {
+				if (row[1] == NULL || atoi(row[1]) != POLLER_ACTION_SNMP || row[4] == NULL ||
+					strstr(row[4], ".1.3.6.1.2.1.1.3.0") || strstr(row[4], ".1.3.6.1.6.3.10.2.1.3.0")) break;
+				snprintf(batch->oids[batch->count].oid, sizeof(batch->oids[batch->count].oid), "%s", row[4]);
+				batch->oids[batch->count].array_position = position + batch->count;
+				batch->count++;
+			}
+			/* The caller has already fetched the current row. */
+			mysql_data_seek(result, position + 1);
+			if (batch->count > 1) {
+				snmp_get_assert_values(host, batch->oids, batch->state, batch->count);
+			} else {
+				batch->count = 0;
+			}
+		}
+	}
+
+	if (batch->next < batch->count && batch->oids[batch->next].array_position == position &&
+		batch->state[batch->next] != SNMP_ASSERT_PENDING && !host->ignore_host) {
+		value = malloc(RESULTS_BUFFER);
+		if (value == NULL) die("ERROR: Fatal malloc error: poller.c reindex result");
+		snprintf(value, RESULTS_BUFFER, "%s", batch->oids[batch->next].result);
+		if (batch->state[batch->next] == SNMP_ASSERT_FAILED) host->ignore_host = TRUE;
+		return value;
+	}
+
+	return snmp_get_assert(host, oid_text);
+}
+
 /* Append at a tracked length: strncat() rescanned the whole statement, up
  * to MAX_MYSQL_BUF_SIZE, for every row.  Callers flush before a row could
  * overflow, so the bound only guards against a broken caller. */
@@ -368,12 +421,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	unsigned long long previous_uptime = 0;
 	unsigned long long curr_uptime     = 0;
 
-	/* reindex assertion values fetched max_oids at a time */
-	snmp_oids_t *assert_oids  = NULL;
-	int         *assert_state = NULL;
-	int         assert_count  = 0;
-	int         assert_next   = 0;
-	int         reindex_row   = 0;
+	reindex_batch_t assert_batch = {0};
+	int reindex_row = 0;
 
 	extern poller_thread_t** details;
 
@@ -1072,33 +1121,6 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 					SPINE_LOG_DEBUG(("DEBUG: Device[%i] HT[%i] RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, host_thread, num_rows, host->hostname));
 				}
 
-				/* Fetch the plain SNMP assertion values up front, max_oids per
-				 * request.  The uptime OIDs keep their engine OID handling
-				 * below, and any value that could not be fetched this way is
-				 * still fetched alone when its row is checked. */
-				if (host->snmp_session != NULL) {
-					assert_oids  = (snmp_oids_t *) calloc(num_rows, sizeof(snmp_oids_t));
-					assert_state = (int *) calloc(num_rows, sizeof(int));
-				}
-
-				/* without both arrays every value is fetched alone */
-				if (assert_oids != NULL && assert_state != NULL) {
-					for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
-						if (row[1] != NULL && atoi(row[1]) == POLLER_ACTION_SNMP && row[4] != NULL &&
-							!strstr(row[4], ".1.3.6.1.2.1.1.3.0") && !strstr(row[4], ".1.3.6.1.6.3.10.2.1.3.0")) {
-							snprintf(assert_oids[assert_count].oid, sizeof(assert_oids[assert_count].oid), "%s", row[4]);
-							assert_oids[assert_count].array_position = reindex_row;
-							assert_count++;
-						}
-					}
-					mysql_data_seek(result, 0);
-
-					for (i = 0; i < assert_count; i += host->max_oids) {
-						snmp_get_assert_values(host, assert_oids + i, assert_state + i,
-							assert_count - i < host->max_oids ? assert_count - i : host->max_oids);
-					}
-				}
-
 				// Cache uptime in case we need it again
 				sysUptime[0] = '\0';
 				for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
@@ -1214,25 +1236,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
 									}
 								} else {
-									while (assert_next < assert_count && assert_oids[assert_next].array_position < reindex_row) {
-										assert_next++;
-									}
-
-									/* a fetched value stands for snmp_get_assert() unless an
-									 * earlier check has given the host up since */
-									if (assert_next < assert_count && assert_oids[assert_next].array_position == reindex_row &&
-										assert_state[assert_next] != SNMP_ASSERT_PENDING && !host->ignore_host) {
-										if (!(poll_result = (char *) malloc(RESULTS_BUFFER))) {
-											die("ERROR: Fatal malloc error: poller.c poll_result");
-										}
-										snprintf(poll_result, RESULTS_BUFFER, "%s", assert_oids[assert_next].result);
-
-										if (assert_state[assert_next] == SNMP_ASSERT_FAILED) {
-											host->ignore_host = TRUE;
-										}
-									} else {
-										poll_result = snmp_get_assert(host, reindex->arg1);
-									}
+									poll_result = poll_reindex_assert(host, result, reindex_row, reindex->arg1, &assert_batch);
 
 									/* the agent answered, so even U is the value to compare */
 									assert_read = !host->ignore_host;
@@ -1508,8 +1512,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				}
 			}
 
-			SPINE_FREE(assert_oids);
-			SPINE_FREE(assert_state);
+			SPINE_FREE(assert_batch.oids);
 
 			/* free the host result */
 			db_free_result(result);

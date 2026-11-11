@@ -933,6 +933,140 @@ int main(void){
  wrong_seq=1;assert(probe()==HOST_DOWN);return 0;}
 ''')
 
+# Exercise the rolling reindex reader with production SNMP handling. Only
+# stored-result iteration, allocation failure, and the transport are controlled.
+poller = (root / 'poller.c').read_text()
+batch_type = poller[poller.index('typedef struct {\n\tsnmp_oids_t *oids;'):
+                    poller.index('static char *poll_reindex_assert(')]
+source = r'''#include "common.h"
+#include "spine.h"
+static int requests, response_mode;
+static struct snmp_session session;
+static struct snmp_session *fixture_session(void *handle) {
+ (void)handle; session.version = SNMP_VERSION_2c; return &session;
+}
+static int fixture_response(void *handle, struct snmp_pdu *request, struct snmp_pdu **response) {
+ netsnmp_variable_list *var;
+ long value = 42;
+ int count = 0;
+ (void)handle;
+ requests++;
+ *response = NULL;
+ if (response_mode == 1) { snmp_free_pdu(request); return STAT_TIMEOUT; }
+ *response = snmp_pdu_create(SNMP_MSG_RESPONSE);
+ assert(*response);
+ (*response)->errstat = SNMP_ERR_NOERROR;
+ (*response)->errindex = 0;
+ for (var = request->variables; var != NULL; var = var->next_variable) count++;
+ if (response_mode == 2 && count > 1) {
+  (*response)->errstat = SNMP_ERR_TOOBIG;
+ } else {
+  for (var = request->variables; var != NULL; var = var->next_variable) {
+   value = var->name[var->name_length - 1] == 2 ? 43 : 42;
+   assert(snmp_pdu_add_variable(*response, var->name, var->name_length,
+                               ASN_INTEGER, (const u_char *)&value, sizeof(value)));
+  }
+ }
+ snmp_free_pdu(request);
+ return STAT_SUCCESS;
+}
+#define snmp_sess_session fixture_session
+#define snmp_sess_synch_response fixture_response
+#include "snmp.c"
+#undef snmp_sess_synch_response
+#undef snmp_sess_session
+static int row_count, cursor, barrier = -1, allocation_failure;
+static size_t largest_allocation;
+static int allocation_attempts;
+static char *normal_rows[2][5] = {
+ {"1", "0", "=", "42", ".1.3.6.1.2.1.2.2.1.1.1"},
+ {"1", "0", "=", "43", ".1.3.6.1.2.1.2.2.1.1.2"}
+};
+static char *barrier_row[] = {"1", "1", "=", "42", "fixture-script"};
+static void fixture_seek(MYSQL_RES *result, my_ulonglong offset) {
+ assert(result == (MYSQL_RES *)1 && offset <= (my_ulonglong)row_count);
+ cursor = (int)offset;
+}
+static MYSQL_ROW fixture_row(MYSQL_RES *result) {
+ assert(result == (MYSQL_RES *)1);
+ if (cursor == row_count) return NULL;
+ cursor++;
+ return cursor - 1 == barrier ? barrier_row : normal_rows[(cursor - 1) % 2];
+}
+static void *fixture_calloc(size_t count, size_t size) {
+ allocation_attempts++;
+ if (count * size > largest_allocation) largest_allocation = count * size;
+ return allocation_failure ? NULL : calloc(count, size);
+}
+#define mysql_data_seek fixture_seek
+#define mysql_fetch_row fixture_row
+#define calloc fixture_calloc
+''' + batch_type + function(poller, 'static char *poll_reindex_assert(') + r'''
+#undef calloc
+static void probe(int rows, int limit, int expected_requests) {
+ host_t host = {0};
+ reindex_batch_t batch = {0};
+ int position;
+ host.snmp_session = (void *)1;
+ host.max_oids = limit;
+ row_count = rows;
+ cursor = requests = 0;
+ largest_allocation = 0;
+ allocation_attempts = 0;
+ for (position = 0; position < rows; position++) {
+  char *value;
+  MYSQL_ROW row = fixture_row((MYSQL_RES *)1);
+  assert(row != NULL);
+  if (position == barrier) continue;
+  value = poll_reindex_assert(&host, (MYSQL_RES *)1, position, row[4], &batch);
+  assert(strcmp(value, response_mode == 1 ? "U" : (position % 2 ? "43" : "42")) == 0);
+  assert(cursor == position + 1);
+  free(value);
+ }
+ assert(requests == expected_requests);
+ if (!allocation_failure) assert(allocation_attempts == (limit > 1 ? 1 : 0));
+ assert(largest_allocation <= 100 * sizeof(snmp_oids_t));
+ assert(host.ignore_host == (response_mode == 1));
+ free(batch.oids);
+}
+int main(void) {
+ init_mutexes();
+ set.stdout_notty = set.stderr_notty = TRUE;
+ snmp_spine_init();
+ response_mode = 1;
+ probe(1000, 10, 1); /* A timeout must not send the other 99 batches. */
+ response_mode = 0;
+ probe(100000, 100, 1000); /* One reusable allocation, bounded by max_oids. */
+ probe(1000, 1000, 10); /* The state array also bounds oversized limits. */
+ probe(21, 10, 3); /* The final lone row uses a single GET. */
+ probe(3, 1, 3);
+ assert(largest_allocation == 0);
+ barrier = 4;
+ probe(10, 10, 2); /* A script separates two independent SNMP batches. */
+ barrier_row[1] = "0";
+ barrier_row[4] = ".1.3.6.1.2.1.1.3.0";
+ probe(10, 10, 2); /* Uptime retains its separate handling. */
+ barrier = -1;
+ allocation_failure = 1;
+ probe(10, 10, 10); /* Allocation failure retains the single-GET path. */
+ allocation_failure = 0;
+ response_mode = 2;
+ probe(10, 10, 11); /* An oversized batch retries each row individually. */
+ return 0;
+}
+'''
+path = out / 'reindex-batch-contract.c'
+path.write_text(source)
+executable = out / 'reindex-batch-contract'
+objects = [str(root / (name + '.o')) for name in
+           ['sql', 'util', 'locks', 'nft_popen', 'php', 'ping', 'keywords',
+            'error', 'poller']]
+subprocess.run([*compiler, *flags, str(path), str(spine_object), *objects,
+                *make_variable('LDFLAGS'), *make_variable('LIBS'),
+                '-o', str(executable)], check=True)
+subprocess.run([str(executable)], check=True, timeout=20)
+print('maintenance-reindex-batch-contract: passed')
+
 ping = (root / 'ping.c').read_text()
 run('maintenance-resolver-failure-contract', r'''#include "common.h"
 #include "spine.h"
