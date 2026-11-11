@@ -282,13 +282,18 @@ static void test_descriptors_above_fd_setsize(void) {
 	}
 
 	debug_devices = no_debug_devices;
-	CHECK(sem_init(&available_scripts, 0, 1) == 0, "script permit is available");
-	memset(&host, 0, sizeof(host));
-	host.id = 1;
 	set.script_timeout = 5;
-	result = exec_poll(&host, "/bin/echo 42", 1, "DS");
-	CHECK(result != NULL && strncmp(result, "42", 2) == 0, "exec_poll reads a script pipe at or above FD_SETSIZE");
-	free(result);
+
+	/* macOS has no unnamed semaphores, so exec_poll() cannot take a script permit there */
+	if (sem_init(&available_scripts, 0, 1) == 0) {
+		memset(&host, 0, sizeof(host));
+		host.id = 1;
+		result = exec_poll(&host, "/bin/echo 42", 1, "DS");
+		CHECK(result != NULL && strncmp(result, "42", 2) == 0, "exec_poll reads a script pipe at or above FD_SETSIZE");
+		free(result);
+	} else {
+		printf("ok - # SKIP sem_init is unavailable for the exec_poll script permit\n");
+	}
 
 	memset(&host, 0, sizeof(host));
 	memset(&ping, 0, sizeof(ping));
