@@ -58,7 +58,7 @@ The Cacti Group | spine
 -issue#681: Remove the uncalled snmp_snprint_value()
 -issue#681: Block on worker and script permits with a monotonic deadline instead of retrying every 10 ms
 -issue#681: Ping and run the reindex checks of a split device once, in its first partition, and share the verdict with its other partitions
--issue#681: Send plain SNMP reindex assertions up to max_oids per request instead of one OID per request
+-issue#681: Send plain SNMP reindex assertions up to max_oids per request instead of one OID per request, and send them one per request when a batch times out or is refused as a whole, such as with tooBig
 -issue: Correct signed and unsigned printf format specifiers in poller.c, free session.localname on the unknown-version return in snmp.c, and quote shell variables in the build scripts
 -issue: Escape the SNMP result and RRD name before the poller_output INSERT, bound the buffer_output_errors write to the space left in error_string, and validate the --hostlist argument before it reaches SQL
 -issue: Restore the twelve headers and spine.conf.dist missing from the dist tarball so a release tarball can be compiled from

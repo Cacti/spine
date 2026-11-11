@@ -2526,15 +2526,22 @@ static void test_snmp_multi_responses(host_t *host) {
 	 * exception varbind; neither is data, so both store U. */
 	assert(strcmp(oids[2].result, "U") == 0);
 	assert(strstr(oids[3].result, "regression") != NULL);
-	/* A checked batch gives each OID the value and verdict of its own get. */
-	bool failed[4];
-	snmp_get_checked(host, oids, 4, failed);
+	/* A checked batch gives each OID the value and verdict of its own get,
+	 * including a missing object (v2c: an inline noSuchObject; v1: a
+	 * noSuchName error that drops the OID and resends the rest) and the
+	 * values on either side of it. */
+	snmp_oids_t checked[6] = {0};
+	static const char *const checked_names[] = {".1.3.6.1.2.1.1.6.0", "invalid-regression-oid", ".1.3.6.1.2.1.1.1.999",
+		".1.3.6.1.4.1.99999.1.0", ".1.3.6.1.2.1.1.4.0", ".1.3.6.1.2.1.1.5.0"};
+	bool failed[6];
+	for (int index = 0; index < 6; index++) strncopy(checked[index].oid, checked_names[index], sizeof(checked[index].oid));
+	snmp_get_checked(host, checked, 6, failed);
 	assert(!host->ignore_host);
-	for (int index = 0; index < 4; index++) {
+	for (int index = 0; index < 6; index++) {
 		host_t single = *host;
-		char *expected = snmp_get(&single, oids[index].oid);
-		if (strcmp(oids[index].result, expected) != 0 || failed[index] != (bool) single.ignore_host) {
-			fprintf(stderr, "checked batch: oid=%s batch=%s/%d single=%s/%d\n", oids[index].oid, oids[index].result, failed[index], expected, single.ignore_host);
+		char *expected = snmp_get(&single, checked[index].oid);
+		if (strcmp(checked[index].result, expected) != 0 || failed[index] != (bool) single.ignore_host) {
+			fprintf(stderr, "checked batch: oid=%s batch=%s/%d single=%s/%d\n", checked[index].oid, checked[index].result, failed[index], expected, single.ignore_host);
 			assert(0);
 		}
 		free(expected);

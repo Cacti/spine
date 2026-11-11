@@ -644,10 +644,15 @@ static void snmp_multi_values(const host_t *host, snmp_oids_t *oids, int count, 
  */
 /* failed, when given, receives snmp_get()'s verdict for each OID. A request
  * that fails as a whole fails every OID, except where the agent answered
- * with an error, which snmp_get() also treats as reachable. */
-static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oids_t *oids, int count, bool *failed) {
+ * with an error, which snmp_get() also treats as reachable.
+ *
+ * Returns FALSE when the reply gave no verdict for each OID on its own: the
+ * request timed out, or the agent answered with an error that names no OID
+ * (errindex 0, as tooBig does). */
+static bool snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oids_t *oids, int count, bool *failed) {
 	bool agent_answered = FALSE;
-	if (count <= 0) return;
+	bool decided = TRUE;
+	if (count <= 0) return TRUE;
 	if (host == NULL || items == NULL || oids == NULL) die("ERROR: Invalid multi-SNMP request storage");
 	if (failed != NULL) memset(failed, 0, sizeof(*failed) * (size_t) count);
 	if (host->snmp.session == NULL) {
@@ -656,7 +661,7 @@ static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oid
 		snmp_multi_undefined(oids, count);
 		host->snmp.status = STAT_DESCRIP_ERROR;
 		if (failed != NULL) memset(failed, TRUE, sizeof(*failed) * (size_t) count);
-		return;
+		return TRUE;
 	}
 	struct snmp_pdu *request = snmp_multi_request(host, items, oids, count);
 	if (request == NULL) {
@@ -664,7 +669,7 @@ static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oid
 		 * reads each of those as U without failing the host. */
 		snmp_multi_undefined(oids, count);
 		host->snmp.status = STAT_ERROR;
-		return;
+		return TRUE;
 	}
 	int status = STAT_DESCRIP_ERROR;
 	/* Every v1 retry removes one valid OID, so at most count requests are
@@ -683,21 +688,6 @@ static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oid
 				snmp_multi_undefined(oids, count);
 			} else if (response->errstat == SNMP_ERR_NOERROR) {
 				snmp_multi_values(host, oids, count, response->variables, failed);
-			} else if (response->errstat == SNMP_ERR_TOOBIG && failed != NULL && count > 1) {
-				int index;
-
-				/* Reindex batching must not hide values that fit individually.
-				 * Single-OID retries cannot recurse into this fallback. */
-				snmp_free_pdu(response);
-				for (index = 0; index < count; index++) {
-					if (host->ignore_host) {
-						snmp_multi_undefined(oids + index, count - index);
-						memset(failed + index, TRUE, sizeof(*failed) * (size_t) (count - index));
-						break;
-					}
-					snmp_get_multi_checked(host, items, oids + index, 1, failed + index);
-				}
-				return;
 			} else if (snmp_multi_error_index(oids, count, response->errindex)) {
 				request = snmp_fix_pdu(response, SNMP_MSG_GET);
 			} else {
@@ -707,6 +697,7 @@ static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oid
 					SPINE_LOG_HIGH(("Device[%i] WARNING: snmp_get_multi PDU error (errstat=%ld, errindex=0), all OIDs set undefined",
 						host->id, (long) response->errstat));
 				}
+				decided = FALSE;
 				status = STAT_ERROR;
 				snmp_multi_undefined(oids, count);
 			}
@@ -722,14 +713,16 @@ static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oid
 	if (status == STAT_TIMEOUT) {
 		host->ignore_host = TRUE;
 		snmp_multi_undefined(oids, count);
+		decided = FALSE;
 	}
 	if (failed != NULL && status != STAT_SUCCESS && !agent_answered) {
 		memset(failed, TRUE, sizeof(*failed) * (size_t) count);
 	}
+	return decided;
 }
 
 void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int count) {
-	snmp_get_multi_checked(host, items, oids, count, NULL);
+	(void) snmp_get_multi_checked(host, items, oids, count, NULL);
 }
 
 /*! \fn void snmp_get_checked(host_t *host, snmp_oids_t *oids, int count, bool *failed)
@@ -737,16 +730,42 @@ void snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int 
  *
  *  Each result is the value, or U, that snmp_get() would return for that OID,
  *  and failed[] records whether snmp_get() would have failed it and marked
- *  the host ignored. The host is marked here only when the whole request
- *  timed out; the caller applies the other failures in its own order.
- *  Results go to oids[].result; array_position is not used.
+ *  the host ignored; failed must hold count entries. The host is marked here
+ *  only when no OID could be sent, or when a call for a single OID timed
+ *  out; the caller applies the other failures in its own order. Results go
+ *  to oids[].result; array_position is not used.
+ *
+ *  Some agents drop or refuse a request with many OIDs (a timeout, or tooBig)
+ *  but answer each OID alone, so a batch that gives no verdict for each OID
+ *  is retried one OID at a time. The first single get that times out fails
+ *  that OID and the rest, as snmp_get() would give the host up there, so a
+ *  batch costs at most its own timeout plus one single-OID timeout.
  */
 void snmp_get_checked(host_t *host, snmp_oids_t *oids, int count, bool *failed) {
 	static const target_t no_item;
+	bool ignored;
+
+	if (host == NULL || oids == NULL || failed == NULL) die("ERROR: Invalid checked SNMP request storage");
+	ignored = host->ignore_host;
 
 	for (int index = 0; index < count; index++) {
 		oids[index].array_position = 0;
 		oids[index].result[0] = '\0';
 	}
-	snmp_get_multi_checked(host, &no_item, oids, count, failed);
+	if (snmp_get_multi_checked(host, &no_item, oids, count, failed) || count < 2) return;
+	/* a batch timeout says nothing yet about the OIDs before the first one
+	 * that times out alone */
+	host->ignore_host = ignored;
+	for (int index = 0; index < count; index++) {
+		oids[index].result[0] = '\0';
+		failed[index] = FALSE;
+		if (!snmp_get_multi_checked(host, &no_item, &oids[index], 1, &failed[index]) && host->ignore_host) {
+			host->ignore_host = ignored;
+			for (int rest = index; rest < count; rest++) {
+				failed[rest] = TRUE;
+				SET_UNDEFINED(oids[rest].result);
+			}
+			return;
+		}
+	}
 }
