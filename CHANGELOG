@@ -46,6 +46,10 @@ The Cacti Group | spine
 -issue#680: Fetch the SNMP reindex assertion values max_oids at a time instead of one per request
 -issue#680: Keep polling a device when a reindex assertion OID returns noSuchObject, noSuchInstance, endOfMibView or an error status, and read the value as U as cmd.php does, queuing the reindex once and storing U, instead of skipping the device for the cycle
 -issue#680: Wait for script, Script Server and ping replies with poll() so a descriptor at or above FD_SETSIZE no longer aborts Spine, stores U or reports the device down
+-issue#680: End the poll cycle when the last device thread finishes instead of on the next 500 ms check
+-issue#680: Take each device's poller item count from the device list query instead of one COUNT query per device
+-issue#680: Leave rrd_next_step unwritten for items polled every interval, whose value would not change
+-issue#680: Close a finished script's pipe only after its entry is claimed, so another thread reusing the descriptor number cannot reap the wrong child
 -issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
 -issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
 -issue: Disable persisted CI credentials, hash-lock flawfinder and propagate scanner failures
