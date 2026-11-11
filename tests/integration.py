@@ -369,10 +369,10 @@ class Polling(unittest.TestCase):
         self.sql('INSERT IGNORE INTO audit_first SELECT host_id,local_data_id,rrd_name FROM audit_expected '
                  'ORDER BY local_data_id,rrd_name;')
 
-    def run_spine(self, failure=None, ping=False, strict=False, hosts=(), conf=None, poller=1):
+    def run_spine(self, failure=None, ping=False, strict=False, hosts=(), conf=None, poller=1, prefix=()):
         self.sql("SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log=ON;", False)
         conf = conf or (self.strict_conf if strict else self.conf)
-        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', str(poller), '-t', '16', '-S', '-V', '1']
+        args = [*prefix, str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', str(poller), '-t', '16', '-S', '-V', '1']
         if ping:
             args.append('-P')
         args.extend(hosts)
@@ -782,11 +782,13 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%'), 0)
 
     @unittest.skipUnless(icmp_datagram_available(), 'needs root and an ICMP datagram socket on Linux')
+    @unittest.skipUnless(shutil.which('setpriv'), 'needs setpriv to drop CAP_NET_RAW')
     def test_icmp_datagram_ping(self):
-        # Passes without CAP_NET_RAW only when the datagram socket is used.
+        # Without CAP_NET_RAW in the bounding set, root cannot open the raw
+        # socket, so the ping succeeds only through the datagram socket.
         self.seed(3, 1)
         self.sql('UPDATE host SET availability_method=3,ping_method=1,ping_timeout=1000,ping_retries=1;')
-        self.run_spine()
+        self.run_spine(prefix=('setpriv', '--bounding-set=-net_raw'))
         self.check_complete()
         self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
 
