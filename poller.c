@@ -1739,7 +1739,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-								snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+								hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result);
 							} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 								if (set.spine_log_level == 2) {
@@ -1846,7 +1846,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-							snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+							hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result);
 						} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 							if (set.spine_log_level == 2) {
@@ -1924,7 +1924,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result);
 				} else {
 					/* remove double or single quotes from string */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
@@ -1982,7 +1982,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result);
 				} else {
 					/* remove double or single quotes from string */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
@@ -2051,7 +2051,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-					snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+					hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result);
 				} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 					if (set.spine_log_level == 2) {

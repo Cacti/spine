@@ -16,8 +16,8 @@ The Cacti Group | spine
 -issue#622: RECACHE Event and ASSERT FAILED
 -issue#632: Reap nft_pclose() with a single bounded non-blocking check, killing and parking anything still running for a later sweep instead of the previous unbounded blocking waitpid()
 -issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
--issue#676: Store a result with leading whitespace such as " 12" as a number instead of converting it as hex
--issue#676: Convert hex results exactly up to 64 bits, store an all-FF Counter64 as 18446744073709551615 instead of -1, and store '-' or ':' delimited strings such as dates as U instead of 0
+-issue#676: Store a result with leading whitespace such as " 12" as 12 instead of converting it as hex
+-issue#676: Convert hex results exactly up to 64 bits, store an all-FF Counter64 as 18446744073709551615 instead of -1, store a value wider than 64 bits as U, and store '-' or ':' delimited strings such as dates as U instead of 0
 -issue#676: Store U for a counter after an agent restart in Script Server results, as the other actions do
 -issue#676: Store U for a counter after an agent restart in the SNMP batch that is flushed when the SNMP settings change between items
 -issue#676: Keep max_oids batching for SNMP communities longer than 49 characters

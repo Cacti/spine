@@ -527,29 +527,37 @@ int main(void){host_t host;const char *ipv4[]={"127.0.0.2","tcp:127.0.0.2","tcp:
 util = (root / 'util.c').read_text()
 trims = '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim('))
 run('maintenance-numeric-contract', '#include "common.h"\n#include "spine.h"\n' + trims + '\n' + function(util, 'int is_numeric(') + '''
-static int numeric(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return is_numeric(buffer);}
+static char buffer[64];
+static int numeric(const char *text){snprintf(buffer,sizeof(buffer),"%s",text);return is_numeric(buffer);}
 int main(void){
- /* the length and the parse must start at the same character */
- assert(numeric(" 12")&&numeric("\\t 12 \\n")&&numeric(" -1.5")&&numeric("12 "));
+ /* padding is trimmed in place, so the stored value matches cmd.php's trim() */
+ assert(numeric(" 12")&&strcmp(buffer,"12")==0);assert(numeric("\\t 12 \\n")&&strcmp(buffer,"12")==0);
+ assert(numeric(" -1.5")&&strcmp(buffer,"-1.5")==0);assert(numeric("12 ")&&numeric("1e3")&&numeric(".5"));
+ /* a counter above the long range is still a value */
+ assert(numeric("18446744073709551615"));
  /* a leading quote keeps the strip_alpha() path that stores 12 */
  assert(!numeric("\\"12\\"")&&!numeric(" ")&&!numeric("")&&!numeric(" 12 abc")&&!numeric("00 1A"));return 0;}
 ''')
 
-# Every caller prints hex2dec() unsigned; "%lld" printed an all-FF counter as -1.
-assert '"%lld", hex2dec(' not in (root / 'poller.c').read_text()
+# Every caller stores hex through hex_result(), which prints unsigned; "%lld"
+# printed an all-FF counter as -1.
+assert 'hex2dec(' not in (root / 'poller.c').read_text()
 util = (root / 'util.c').read_text()
-hexes = 'static int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(util, 'static int hex_digit(int c) {')
+hexes = 'static int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'void hex_result(') + '\n' + function(util, 'static int hex_digit(int c) {')
 run('maintenance-hex-contract', '#include "common.h"\n#include "spine.h"\n' + hexes + '''
-static unsigned long long convert(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return hex2dec(buffer);}
-int main(void){char out[32];
- snprintf(out,sizeof(out),"%llu",convert("ff ff ff ff ff ff ff ff"));assert(strcmp(out,"18446744073709551615")==0);
+static char out[32];
+static const char *convert(const char *text){hex_result(out,sizeof(out),text);return out;}
+int main(void){
+ assert(strcmp(convert("ff ff ff ff ff ff ff ff"),"18446744073709551615")==0);
  /* above 2^53 a double cannot hold the exact value */
- assert(convert("20 00 00 00 00 00 00 01")==0x2000000000000001ULL);
- assert(convert("\\"00 1A\\"")==0x1A&&convert("0x10")==0);
+ assert(strcmp(convert("20 00 00 00 00 00 00 01"),"2305843009213693953")==0);
+ assert(strcmp(convert("\\"00 1A\\""),"26")==0);
+ /* wider than 64 bits: U, not a numeric prefix from the non-hex path */
+ assert(strcmp(convert("01 ff ff ff ff ff ff ff ff"),"U")==0);
  assert(is_hexadecimal("00 1A 2B",TRUE)&&is_hexadecimal("\\"00 1A\\"",TRUE)&&is_hexadecimal("ff ff ff ff ff ff ff ff",TRUE));
  /* hex2dec() would turn these into 0, so they take the non-hex path */
  assert(!is_hexadecimal("2024-01-05",TRUE)&&!is_hexadecimal("00-1A-2B",TRUE)&&!is_hexadecimal("00:1A 2B",TRUE));
- assert(!is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
+ assert(is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
 ''')
 
 # Every SNMP batch flush, including the one forced by a change of SNMP
@@ -572,7 +580,7 @@ int is_debug_device(int id){(void)id;return FALSE;}
 double get_time_as_double(void){return 0;}
 void buffer_output_errors(char *e,int *s,int *b,int d,int t,int l,bool f){(void)e;(void)s;(void)b;(void)d;(void)t;(void)l;(void)f;}
 static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)capacity;}
-''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '\n' + flushes + '''
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'void hex_result(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '\n' + flushes + '''
 typedef void (*flush_t)(host_t*,target_t*,snmp_oids_t*,int,int);
 int main(void){flush_t flush[]={flush0,flush1,flush2};size_t n;
  for(n=0;n<3;n++){host_t host={0};target_t items[3]={0};snmp_oids_t oids[3]={0};int i;
@@ -600,7 +608,7 @@ static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)c
 int php_get_process(void){return 0;}
 char *php_cmd(const char *command,int process){(void)command;(void)process;return strdup(reply);}
 char *exec_poll(host_t *host,char *command,int id,char *type){(void)host;(void)command;(void)id;(void)type;return strdup(reply);}
-''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static const char *script_log_name(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '''
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'void hex_result(') + '\n' + function(poller, 'static const char *script_log_name(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '''
 static const char *poll(int action,const char *output,int spike_kill){static target_t poller_items[1];host_t h={0};host_t *host=&h;
  int i=0,host_id=1,host_thread=1,errors=0,php_process;int *buf_size=NULL,*buf_errors=NULL;char *error_string=NULL;
  char temp_result[RESULTS_BUFFER];char script[SMALL_BUFSIZE];char *poll_result;double thread_start=0,thread_end=0;

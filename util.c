@@ -1589,14 +1589,15 @@ int is_numeric(char *string) {
 	char *end_ptr_long, *end_ptr_double;
 	int conv_base=10;
 	int length;
+	char *start;
 
-	/* rtrim() strips the tail in place.  The length must be measured from
-	 * the same pointer that strtol() and strtod() parse, so skip only the
-	 * leading whitespace they would skip anyway: " 12" is numeric, while a
-	 * leading quote still takes the callers' strip_alpha() path. */
+	/* Trim in place at both ends, as cmd.php trims a result before it
+	 * stores it, so a stored " 12" has no padding either.  A leading quote
+	 * still takes the callers' strip_alpha() path. */
 	rtrim(string);
-	while (isspace((unsigned char) *string)) {
-		string++;
+	for (start = string; isspace((unsigned char) *start); start++);
+	if (start != string) {
+		memmove(string, start, strlen(start) + 1);
 	}
 
 	length = strlen(string);
@@ -1673,17 +1674,15 @@ static bool hex_value(const char *str, unsigned long long *value) {
  *
  *  \return TRUE if the string is valid hex, FALSE otherwise
  *
- *  The string must include at least one ' ' delimiter.  The callers convert
- *  an accepted string with hex2dec(), so this accepts only what hex2dec()
- *  can convert exactly: a '-' or ':' delimited value such as a date or a
- *  MAC address would otherwise be stored as 0.
+ *  The string must include at least one ' ' delimiter.  The callers store
+ *  an accepted string with hex_result(), which converts only space delimited
+ *  octets: a '-' or ':' delimited value such as a date or a MAC address is
+ *  not accepted, as it would otherwise be stored as 0.
  *
  */
 int is_hexadecimal(const char * str, const short ignore_special) {
 	int i = 0;
 	int delim_found = FALSE;
-	const char *start = str;
-	unsigned long long value;
 
 	if (!str) return FALSE;
 
@@ -1716,8 +1715,23 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 		return FALSE;
 	}
 
-	/* a value wider than 64 bits has no exact conversion */
-	return hex_value(start, &value);
+	return TRUE;
+}
+
+/*! \fn void hex_result(char *result, size_t size, const char *str)
+ *  \brief store the decimal value of a string is_hexadecimal() accepted.
+ *
+ *  A value wider than 64 bits has no exact conversion and is stored as U,
+ *  rather than taking the non-hex path, which could keep a numeric prefix.
+ */
+void hex_result(char *result, size_t size, const char *str) {
+	unsigned long long value;
+
+	if (hex_value(str, &value)) {
+		snprintf(result, size, "%llu", value);
+	} else {
+		snprintf(result, size, "U");
+	}
 }
 
 /*! \fn char *strip_alpha(char *string)
@@ -1998,12 +2012,6 @@ int char_count(const char *str, int chr) {
 		}
 	}
 	return count;
-}
-
-unsigned long long hex2dec(char *str) {
-	unsigned long long number;
-
-	return hex_value(str, &number) ? number : 0;
 }
 
 int hasCaps() {
