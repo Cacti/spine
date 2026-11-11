@@ -512,6 +512,10 @@ nft_pclose(int fd)
 	pthread_mutex_lock(&ListMutex);
 	for (cur = PidList; cur; cur = cur->next)
 		if (cur->fd == fd) break;
+	/* Claim the entry before the descriptor is closed: once closed, its
+	 * number can be reused by another thread's nft_popen(), whose
+	 * nft_pclose() must not find this entry under the same number. */
+	if (cur != NULL) cur->fd = -1;
 	pthread_mutex_unlock(&ListMutex);
 	if (cur == NULL) {
 		pthread_setcancelstate(cancel_state, NULL);
@@ -520,7 +524,6 @@ nft_pclose(int fd)
 	}
 
 	(void)close(fd);
-	cur->fd = -1;
 	waited = waitpid(cur->pid, &pstat, WNOHANG);
 	if (waited == cur->pid || (waited < 0 && errno == ECHILD)) {
 		cur->pid = 0;
