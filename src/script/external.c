@@ -31,6 +31,10 @@ typedef struct {
 	const char *type;
 } script_result_context_t;
 
+/* Spine itself never cancels a thread: termination ends the process. The
+ * cleanup handlers here, in nft_popen.c and in the worker paths keep a
+ * thread cancelled by a future caller from leaking a script, a descriptor
+ * or a permit; they are not reached today. */
 typedef struct {
 	/* glibc cleanup unwinds with setjmp/longjmp. Preserve state changed after
 	 * pthread_cleanup_push even when the compiler keeps ordinary locals in registers. */

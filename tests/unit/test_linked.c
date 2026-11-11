@@ -1395,6 +1395,14 @@ static void test_pipe_is_not_inherited_across_exec(void **state) {
 	close(pdes[1]);
 }
 
+/* The reaper as nft_pclose() uses it, on a pid the test owns alone. */
+static int reap_bounded(pid_t pid, int *pstat, int attempts) {
+	static pthread_mutex_t owner = PTHREAD_MUTEX_INITIALIZER;
+	pid_t owned = pid;
+
+	return spine_reap_child_owned(&owned, pstat, attempts, &owner);
+}
+
 static void test_reap_returns_still_running_rather_than_blocking(void **state) {
 	int pstat = 0;
 	int status;
@@ -1411,7 +1419,7 @@ static void test_reap_returns_still_running_rather_than_blocking(void **state) {
 	}
 
 	/* the shipped code blocked here forever; two attempts must come back */
-	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 1);
+	assert_int_equal(reap_bounded(pid, &pstat, 2), 1);
 
 	assert_int_equal(kill(pid, SIGKILL), 0);
 	assert_int_equal(waitpid(pid, &status, 0), pid);
@@ -1419,7 +1427,7 @@ static void test_reap_returns_still_running_rather_than_blocking(void **state) {
 
 static void test_reap_requires_a_status_buffer(void **state) {
 	(void) state;
-	assert_int_equal(spine_reap_child_bounded(getpid(), NULL, 2), -1);
+	assert_int_equal(reap_bounded(getpid(), NULL, 2), -1);
 }
 
 /* Past the spin attempts the wait settles into the long interval; the child
@@ -1441,7 +1449,7 @@ static void test_reap_settles_into_the_long_interval_for_a_running_child(void **
 		_exit(0);
 	}
 
-	assert_int_equal(spine_reap_child_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 8), 1);
+	assert_int_equal(reap_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 8), 1);
 
 	assert_int_equal(kill(pid, SIGKILL), 0);
 	assert_int_equal(waitpid(pid, &status, 0), pid);
@@ -1462,7 +1470,7 @@ static void test_reap_collects_an_exited_child(void **state) {
 
 	/* an instrumented child writes its coverage counters before it exits, which
 	 * can take longer than 20 short sleeps; the call returns once it is reaped */
-	assert_int_equal(spine_reap_child_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 20), 0);
+	assert_int_equal(reap_bounded(pid, &pstat, NFT_PCLOSE_SPIN_ATTEMPTS + 20), 0);
 	assert_true(WIFEXITED(pstat));
 	assert_int_equal(WEXITSTATUS(pstat), 3);
 }
@@ -1484,7 +1492,7 @@ static void test_reap_reports_an_already_reaped_child(void **state) {
 	assert_int_equal(waitpid(pid, &status, 0), pid);
 
 	/* ECHILD: someone else took the status, which is success with none */
-	assert_int_equal(spine_reap_child_bounded(pid, &pstat, 2), 0);
+	assert_int_equal(reap_bounded(pid, &pstat, 2), 0);
 	assert_int_equal(pstat, 0);
 }
 
