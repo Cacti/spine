@@ -291,8 +291,10 @@ static bool device_0_selected(void) {
 }
 
 /* The poller_item condition for the items a device polls this cycle,
- * matching the worker item queries in poller.c: the poller, and either the
- * undeleted items of a full run or the items that are due. */
+ * matching the worker item query in poller.c: the poller and, without
+ * active profiles, the items that are due.  main() has already replaced a
+ * zero polling interval with 300, so the worker's full-run query, and its
+ * deleted column that Cacti's poller_item does not have, is never used. */
 static void eligible_item_filter(char *filter, size_t size) {
 	char poller_filter[64] = "";
 	const char *item_filter = "";
@@ -300,9 +302,7 @@ static void eligible_item_filter(char *filter, size_t size) {
 	if (set.poller_id != 0) {
 		snprintf(poller_filter, sizeof(poller_filter), " AND poller_id=%i", set.poller_id);
 	}
-	if (set.poller_interval == 0) {
-		if (set.poller_id == 0) item_filter = " AND deleted=''";
-	} else if (set.active_profiles != 1) {
+	if (set.active_profiles != 1) {
 		item_filter = " AND rrd_next_step<=0";
 	}
 
