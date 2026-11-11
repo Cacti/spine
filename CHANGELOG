@@ -39,7 +39,7 @@ The Cacti Group | spine
 -issue#676: Treat only a socket file at the DB_Host path as a socket, so a regular file is used as the host name and is not exempted from DB_SSL_Required
 -issue#676: Relax the session sql_mode of an online remote collector's main server connection so its poller_time row is recorded on MySQL 5.7 and later instead of failing with error 1292
 -issue#680: Treat the 32 bit sysUpTime wrap after about 497 days as elapsed time instead of an agent restart that queued a reindex and stored U
--issue#680: Open the log file in append mode so a log that another process has just created is not truncated
+-issue#680: Open the log file in append mode so a log that another process has just created is not truncated; a log Spine creates is now readable by its group only (0640) instead of 0666 less the umask, so a web server that shows the log must share the group of the poller
 -issue#680: Launch the next device as soon as a polling thread finishes instead of checking for a free thread every 10 ms
 -issue#680: Use an ICMP datagram socket on Linux when net.ipv4.ping_group_range allows it, instead of running every thread as root while the raw socket is opened
 -issue#680: Check device availability and reindex assertions once per device instead of once per device thread, so that all device threads agree on whether the device is up
