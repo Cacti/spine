@@ -230,7 +230,10 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				script_read_owner_t owner = {cmd_fd, NULL, FALSE, NULL};
 				int child_status;
 				int cancel_state;
-				const bool limited = set.php.script_max_output != 0 || set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0;
+				/* A resource limit can kill the script part way through its
+				 * output, so only then is the exit status part of the result.
+				 * An output cap alone is enforced by the read. */
+				const bool limited = set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0;
 				pthread_cleanup_push(cancel_script_read, &owner);
 				(void) read_script_result(&context, cmd_fd, deadline, result_string);
 
