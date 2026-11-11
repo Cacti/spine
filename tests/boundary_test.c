@@ -201,6 +201,8 @@ int main(void) {
 	test_snmp_format_value();
 	test_poller_output_row();
 
+	CHECK(nft_popen_cleanup() == 0, "script children and reaper are drained");
+
 	if (failures) {
 		printf("%d check(s) failed\n", failures);
 		return EXIT_FAILURE;
