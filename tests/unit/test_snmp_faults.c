@@ -45,6 +45,8 @@ static bool response_nameless;
 static bool response_long_name;
 static bool response_reversed;
 static bool response_foreign_name;
+static bool small_response_limit;
+static bool single_response_timeout;
 static unsigned char captured_engine_id[64];
 static size_t captured_engine_id_len;
 
@@ -148,10 +150,16 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 	snmp_free_pdu(request);
 	*response = NULL;
 	if (!scripted_response) return scripted_status;
+	if (single_response_timeout && requested == 1) return STAT_TIMEOUT;
 	*response = snmp_pdu_create(SNMP_MSG_RESPONSE);
 	assert_non_null(*response);
 	(*response)->errstat = response_errstat;
 	(*response)->errindex = response_errindex;
+	if (small_response_limit && requested > 1) {
+		(*response)->errstat = SNMP_ERR_TOOBIG;
+		(*response)->errindex = 0;
+		return scripted_status;
+	}
 	for (index = 0; index < response_variables; index++) {
 		int source = response_reversed ? response_variables - 1 - index : index;
 		long reply_value = value + source;
@@ -242,6 +250,8 @@ static int snmp_reset(void **state) {
 	response_long_name = FALSE;
 	response_reversed = FALSE;
 	response_foreign_name = FALSE;
+	small_response_limit = FALSE;
+	single_response_timeout = FALSE;
 	captured_engine_id_len = 0;
 	return 0;
 }
@@ -779,8 +789,77 @@ static int snmp_group_setup(void **state) {
 	return 0;
 }
 
+static void test_checked_batch_retries_too_big_individually(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+	char *single;
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.2.1.0", ".1.3.6.1.2.1.2.2.1.1.1");
+	scripted_response = TRUE;
+	response_variables = 1;
+	small_response_limit = TRUE;
+	single = snmp_get(&host, oids[0].oid);
+	assert_string_equal(single, "42");
+	free(single);
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_string_equal(oids[0].result, "42");
+	assert_string_equal(oids[1].result, "42");
+	assert_false(failed[0]);
+	assert_false(failed[1]);
+	assert_false(host.ignore_host);
+	assert_int_equal(scripted_calls, 4);
+}
+
+static void test_checked_batch_stops_fallback_after_timeout(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.2.1.0", ".1.3.6.1.2.1.2.2.1.1.1");
+	scripted_response = TRUE;
+	small_response_limit = TRUE;
+	single_response_timeout = TRUE;
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+	assert_true(failed[0]);
+	assert_true(failed[1]);
+	assert_true(host.ignore_host);
+	assert_int_equal(scripted_calls, 2);
+}
+
+static void test_checked_batch_bounds_persistent_too_big(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.2.1.0", ".1.3.6.1.2.1.2.2.1.1.1");
+	scripted_response = TRUE;
+	response_errstat = SNMP_ERR_TOOBIG;
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+	assert_false(failed[0]);
+	assert_false(failed[1]);
+	assert_false(host.ignore_host);
+	assert_int_equal(scripted_calls, 3);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup(test_checked_batch_stops_fallback_after_timeout, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_bounds_persistent_too_big, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_retries_too_big_individually, snmp_reset),
 		cmocka_unit_test_setup(test_pdu_allocation_failure_reads_as_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_varbind_allocation_failure_reads_as_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_unrecognised_transport_status_is_not_decoded, snmp_reset),

@@ -683,6 +683,21 @@ static void snmp_get_multi_checked(host_t *host, const target_t *items, snmp_oid
 				snmp_multi_undefined(oids, count);
 			} else if (response->errstat == SNMP_ERR_NOERROR) {
 				snmp_multi_values(host, oids, count, response->variables, failed);
+			} else if (response->errstat == SNMP_ERR_TOOBIG && failed != NULL && count > 1) {
+				int index;
+
+				/* Reindex batching must not hide values that fit individually.
+				 * Single-OID retries cannot recurse into this fallback. */
+				snmp_free_pdu(response);
+				for (index = 0; index < count; index++) {
+					if (host->ignore_host) {
+						snmp_multi_undefined(oids + index, count - index);
+						memset(failed + index, TRUE, sizeof(*failed) * (size_t) (count - index));
+						break;
+					}
+					snmp_get_multi_checked(host, items, oids + index, 1, failed + index);
+				}
+				return;
 			} else if (snmp_multi_error_index(oids, count, response->errindex)) {
 				request = snmp_fix_pdu(response, SNMP_MSG_GET);
 			} else {
