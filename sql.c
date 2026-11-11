@@ -242,6 +242,21 @@ static int db_tls_requested(int type, const char *hostname) {
 	return !(hostname == NULL || strcmp(hostname, "localhost") == 0);
 }
 
+/* TRUE for the first plaintext fallback of a connection type in this process. */
+static int db_tls_fallback_first(int type) {
+	/* its own lock: db_connect() can run with LOCK_POOL held */
+	static pthread_mutex_t warned_lock = PTHREAD_MUTEX_INITIALIZER;
+	static int warned[2];
+	int first;
+
+	pthread_mutex_lock(&warned_lock);
+	first = !warned[type == REMOTE];
+	warned[type == REMOTE] = TRUE;
+	pthread_mutex_unlock(&warned_lock);
+
+	return first;
+}
+
 /* DB_UseSSL alone keeps the 1.2.31 behavior: the client library prefers TLS
  * and falls back to plaintext. DB_SSL_Required opts in to refusing that
  * fallback. */
@@ -468,6 +483,7 @@ static void db_prepare_handle(MYSQL *mysql, int type, const char *hostname,
  */
 void db_connect(int type, MYSQL *mysql) {
 	int     tries;
+	int     interrupts;
 	int     attempts;
 	int     success;
 	int     error = 0;
@@ -516,6 +532,7 @@ void db_connect(int type, MYSQL *mysql) {
 	tries     = 2;
 	success   = FALSE;
 	attempts  = 1;
+	interrupts = 0;
 	last_error[0] = '\0';
 
 	if (type == REMOTE) {
@@ -547,7 +564,9 @@ void db_connect(int type, MYSQL *mysql) {
 			error = mysql_errno(mysql);
 			snprintf(last_error, sizeof(last_error), "%s", mysql_error(mysql));
 
-			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR) {
+			/* The client library does not reset errno, so only the first few
+			 * interrupted attempts are retried without counting. */
+			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR && ++interrupts <= 3) {
 				usleep(5000);
 				tries++;
 				success = FALSE;
@@ -579,8 +598,11 @@ void db_connect(int type, MYSQL *mysql) {
 			if (db_tls_required(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL) {
 				mysql_close(mysql);
 				die("ERROR: Required database TLS was not negotiated");
-			} else if (db_tls_requested(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL) {
-				/* The fallback is kept for compatibility, but must not be silent. */
+			} else if (db_tls_requested(type, hostname) && mysql_get_ssl_cipher(mysql) == NULL &&
+				db_tls_fallback_first(type)) {
+				/* The fallback is kept for compatibility, but must not be
+				 * silent; once per connection type keeps it out of every
+				 * pooled connection of every cycle. */
 				SPINE_LOG(("WARNING: %s is set but the database connection to '%s' fell back to plaintext; set %s 1 to refuse it",
 					type == REMOTE ? "RDB_UseSSL" : "DB_UseSSL", hostname,
 					type == REMOTE ? "RDB_SSL_Required" : "DB_SSL_Required"));

@@ -360,7 +360,7 @@ run('maintenance-required-tls-contract', '#include "common.h"\n#include "spine.h
 config_t set;static int options,fail_option;static jmp_buf failed;
 int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;assert(value);options++;return fail_option;}
 void die(const char *format,...){(void)format;longjmp(failed,1);}
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
+''' + function(sql, 'static int db_tls_fallback_first(') + '\n' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
 int main(void){MYSQL mysql;set.db_ssl=0;set.db_ssl_required=1;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0);
  /* DB_UseSSL alone keeps the 1.2.31 plaintext fallback */
  set.db_ssl=1;set.db_ssl_required=0;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0&&!db_tls_required(LOCAL,"db.example"));
@@ -411,16 +411,19 @@ static int warnings;
 int spine_log(const char *format,...){if(strstr(format,"fell back to plaintext"))warnings++;return TRUE;}
 static void fixture_exit(int status){(void)status;longjmp(failed,1);}
 #define exit fixture_exit
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+''' + function(sql, 'static int db_tls_fallback_first(') + '\n' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
 static void reset(int error){inits=tls_options=connects=closes=warnings=0;first_error=error;have_cipher=0;}
 int main(void){MYSQL mysql;pid_t child;int status;
  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example");set.poller_id=1;set.db_ssl=1;
  /* without DB_SSL_Required a plaintext session is accepted, as in 1.2.31,
   * and a handshake failure is retried */
  reset(2013);db_connect(LOCAL,&mysql);assert(connects==2&&inits==2&&tls_options==0);
- /* the plaintext fallback is logged once for the connection */
+ /* the plaintext fallback is logged once per process and connection type,
+  * not for every pooled connection of every cycle */
  assert(warnings==1);
- reset(2026);db_connect(LOCAL,&mysql);assert(connects==2&&warnings==1);
+ reset(2026);db_connect(LOCAL,&mysql);assert(connects==2&&warnings==0);
+ snprintf(set.rdb_host,sizeof(set.rdb_host),"%s","db.example");set.rdb_ssl=1;
+ reset(2013);db_connect(REMOTE,&mysql);assert(connects==2&&warnings==1);
  reset(2013);have_cipher=1;db_connect(LOCAL,&mysql);assert(warnings==0);
  set.db_ssl_required=1;
  /* a transient failure, then a plaintext session: the retry must have the TLS
@@ -454,7 +457,7 @@ void die(const char *format,...){(void)format;abort();}
 int spine_log(const char *format,...){(void)format;return TRUE;}
 #define strdup fixture_strdup
 #define free fixture_free
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static int db_tls_expected(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static int db_tls_expected(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'static int db_tls_fallback_first(') + '\n' + function(sql, 'void db_connect(') + '''
 int main(void){MYSQL mysql;struct sockaddr_un address;int listener;int poller;
  memset(&address,0,sizeof(address));address.sun_family=AF_UNIX;
  snprintf(address.sun_path,sizeof(address.sun_path),"%s","''' + str(out / 'db.sock') + '''");
