@@ -695,6 +695,21 @@ class Polling(unittest.TestCase):
         self.run_spine()
         self.check_complete(devices=3)
 
+    def test_schedule_skips_items_already_due_every_interval(self):
+        # An item stepped at the polling interval keeps rrd_next_step 0, so
+        # the countdown update leaves it untouched; the others still count down.
+        self.seed(37, 10)
+        self.sql('UPDATE poller_item SET rrd_step=1800 WHERE local_data_id>10001; '
+                 'CREATE TABLE audit_item_writes(local_data_id INT); '
+                 'CREATE TRIGGER audit_item_write BEFORE UPDATE ON poller_item FOR EACH ROW '
+                 'INSERT INTO audit_item_writes VALUES(OLD.local_data_id);')
+        self.addCleanup(self.sql, 'DROP TRIGGER IF EXISTS audit_item_write; DROP TABLE IF EXISTS audit_item_writes;')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT GROUP_CONCAT(local_data_id) FROM audit_item_writes;'), '10001')
+        self.assertEqual(self.sql('SELECT rrd_next_step FROM poller_item WHERE local_data_id=10001;'), '1800')
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_item WHERE local_data_id>10001 AND rrd_next_step<>0;'), '0')
+
     def test_device_zero(self):
         self.seed(13, 10, host=0)
         self.seed(37, 10, host=1)
