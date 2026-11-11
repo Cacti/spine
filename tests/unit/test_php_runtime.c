@@ -1002,6 +1002,25 @@ static void test_startup_handshake_uses_script_timeout(void **state) {
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
 
+/* The servers start one after another and share one script_timeout: a PHP
+ * that never answers delays startup by script_timeout plus the 2 second
+ * restart cap for each further server, not script_timeout for each. */
+static void test_startup_shares_one_script_timeout(void **state) {
+	double begin;
+	double took;
+
+	(void) state;
+	set.php.php_servers = 3;
+	set.php.script_timeout = 4;
+	snprintf(set.php.path_php_server, sizeof(set.php.path_php_server), "%s", "silent");
+	begin = spine_monotonic_time();
+	assert_int_equal(php_init(PHP_INIT), TRUE);
+	took = spine_monotonic_time() - begin;
+	for (int index = 0; index < 3; index++) assert_int_equal(php_processes[index].php_state, PHP_BUSY);
+	assert_true(took >= 4.0);
+	assert_true(took < 4.0 + 2 * 2 + 1.5);
+}
+
 /* A PHP notice or warning from the includes can precede the banner. Startup
  * skips a bounded number of such lines, as 1.2.x does, and the server then
  * answers in step. More lines than that is a server that did not start. */
@@ -1728,6 +1747,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_nft_write_collision_cloexec_failure_is_clean, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_cloexec_pipe_failure_releases_both_descriptors, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_init_timeout_does_not_recurse, php_setup, php_teardown),
+		cmocka_unit_test_setup_teardown(test_startup_shares_one_script_timeout, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_startup_handshake_uses_script_timeout, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_startup_skips_lines_before_the_banner, php_setup, php_teardown),
 		cmocka_unit_test_setup_teardown(test_spawn_failure_releases_every_resource, php_setup, php_teardown),
