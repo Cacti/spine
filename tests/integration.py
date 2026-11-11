@@ -408,7 +408,10 @@ class Polling(unittest.TestCase):
         return agent
 
     def general_log_count(self, pattern):
+        # Count only this run's Spine sessions: the general log is server-wide,
+        # and another client on the same server would shift the counts.
         return int(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
+                            "user_host LIKE '" + self.user + "[%' AND "
                             "argument LIKE '" + pattern + "';", False))
 
     def test_first_partition_owns_availability_and_reindex(self):
@@ -755,8 +758,7 @@ class Polling(unittest.TestCase):
         self.run_spine(ping=True)
         self.assertEqual(self.result.returncode, 0)
         self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
-        self.assertEqual(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
-                                  "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False), '0')
+        self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%'), 0)
 
     @unittest.skipUnless(icmp_datagram_available(), 'needs root and an ICMP datagram socket on Linux')
     def test_icmp_datagram_ping(self):

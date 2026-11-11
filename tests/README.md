@@ -10,7 +10,9 @@ directly from `nft_popen.c`.
 on an **isolated MariaDB or MySQL test server**. The runner creates a random
 database and user and removes them on completion. It temporarily enables the
 server's general query log to verify the number of native eligibility counts.
-Do not point it at a shared or production server.
+The counts include only the run's own user, but the log switch is
+server-wide, so run one suite at a time per server. Do not point it at a
+shared or production server.
 
 Provide a mode-0600 MySQL client file through `SPINE_TEST_DB_CONFIG`. Its
 `[client]` section must specify `host`, `port`, `user`, and, when required,
