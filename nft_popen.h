@@ -82,17 +82,18 @@ extern int	nft_pchild(int fd);
 /*!
  *  nft_pclose
  *
- *  Close the pipe and check the child's status with a brief, bounded,
- *  non-blocking waitpid(). A child still running past that point, or one
- *  whose waitpid() call itself failed, is killed and parked for later,
- *  asynchronous reaping rather than waited for here.
+ *  Close the pipe and attempt one non-blocking waitpid(). A child that
+ *  cannot immediately be reaped is retained for the timed reaper. It allows
+ *  a short exit grace, then kills children even if no more scripts start.
  *
- *  On success, the exit status of the child process is returned.
+ *  Return the exit status if immediately available, or zero when cleanup
+ *  is deferred. Deferred status is not available to the caller, so a zero
+ *  return does not tell "exited with status 0" from "still running".
  *  On failure, nft_pclose() returns -1, with errno set to:
  *
  *     EBADF	The fd is not an active popen() file descriptor.
- *     ECHILD	waitpid() failed.
- *     ETIMEDOUT	The child had not exited by the end of the bounded
- *     		check; it has been killed and parked for later reaping.
  */
 extern int	nft_pclose(int fd);
+
+/* Drain deferred child cleanup after polling workers have finished. */
+extern int nft_popen_cleanup(void);
