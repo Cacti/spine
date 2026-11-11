@@ -2671,12 +2671,12 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 								}
 								break;
 							case EINVAL:
-								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in poll() statement.", current_host->id));
+								SPINE_LOG(("Device[%i] ERROR: Possible invalid timeout specified in select() statement.", current_host->id));
 								SET_UNDEFINED(result_string);
 
 								break;
 							default:
-								SPINE_LOG(("Device[%i] ERROR: The script/command poll() failed", current_host->id));
+								SPINE_LOG(("Device[%i] ERROR: The script/command select() failed", current_host->id));
 								SET_UNDEFINED(result_string);
 
 								break;

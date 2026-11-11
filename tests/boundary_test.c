@@ -201,6 +201,7 @@ static void test_poller_output_row(void) {
 /* Descriptors held open so the next one allocated is FD_SETSIZE or above. */
 static int held_fds[FD_SETSIZE];
 static int held_count = 0;
+static struct rlimit saved_limit;
 
 static bool hold_low_descriptors(void) {
 	struct rlimit limit;
@@ -208,6 +209,7 @@ static bool hold_low_descriptors(void) {
 	int fd;
 
 	if (getrlimit(RLIMIT_NOFILE, &limit) != 0) return FALSE;
+	saved_limit = limit;
 	if (limit.rlim_max != RLIM_INFINITY && limit.rlim_max < wanted) return FALSE;
 	if (limit.rlim_cur == RLIM_INFINITY || limit.rlim_cur < wanted) {
 		limit.rlim_cur = wanted;
@@ -224,6 +226,7 @@ static bool hold_low_descriptors(void) {
 
 static void release_low_descriptors(void) {
 	while (held_count > 0) close(held_fds[--held_count]);
+	setrlimit(RLIMIT_NOFILE, &saved_limit);
 }
 
 static unsigned short closed_udp_port(void) {
@@ -247,6 +250,7 @@ static unsigned short closed_udp_port(void) {
 static void test_wait_fd_readable(void) {
 	struct timeval none = {0, 0};
 	struct timeval negative = {0, -1};
+	struct timeval oversized = {0, 1000000};
 	char byte;
 	int pdes[2];
 	int closed;
@@ -256,6 +260,12 @@ static void test_wait_fd_readable(void) {
 
 	errno = 0;
 	CHECK(wait_fd_readable(pdes[0], &negative) == -1 && errno == EINVAL, "wait_fd_readable rejects a negative timeout as select() does");
+
+	errno = 0;
+	CHECK(wait_fd_readable(pdes[0], &oversized) == -1 && errno == EINVAL, "wait_fd_readable rejects tv_usec of a second or more as select() does");
+
+	errno = 0;
+	CHECK(wait_fd_readable(-1, &none) == -1 && errno == EBADF, "wait_fd_readable reports a negative descriptor as EBADF");
 
 	close(pdes[1]);
 	CHECK(wait_fd_readable(pdes[0], &none) == 1 && read(pdes[0], &byte, 1) == 0, "wait_fd_readable reports end of file as readable");
@@ -272,6 +282,8 @@ static void test_descriptors_above_fd_setsize(void) {
 	php_t server;
 	int pdes[2];
 	int no_debug_devices[1] = {0};
+	int saved_script_timeout;
+	int saved_php_servers;
 	unsigned short port = closed_udp_port();
 	char *result;
 
@@ -282,6 +294,8 @@ static void test_descriptors_above_fd_setsize(void) {
 	}
 
 	debug_devices = no_debug_devices;
+	saved_script_timeout = set.script_timeout;
+	saved_php_servers = set.php_servers;
 	set.script_timeout = 5;
 
 	/* macOS has no unnamed semaphores, so exec_poll() cannot take a script permit there */
@@ -291,6 +305,7 @@ static void test_descriptors_above_fd_setsize(void) {
 		result = exec_poll(&host, "/bin/echo 42", 1, "DS");
 		CHECK(result != NULL && strncmp(result, "42", 2) == 0, "exec_poll reads a script pipe at or above FD_SETSIZE");
 		free(result);
+		sem_destroy(&available_scripts);
 	} else {
 		printf("ok - # SKIP sem_init is unavailable for the exec_poll script permit\n");
 	}
@@ -315,7 +330,8 @@ static void test_descriptors_above_fd_setsize(void) {
 	CHECK(result != NULL && strncmp(result, "42", 2) == 0, "php_readpipe reads a Script Server pipe at or above FD_SETSIZE");
 	free(result);
 	php_processes = NULL;
-	set.php_servers = 0;
+	set.php_servers = saved_php_servers;
+	set.script_timeout = saved_script_timeout;
 	close(pdes[0]);
 	close(pdes[1]);
 	debug_devices = NULL;

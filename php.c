@@ -439,10 +439,10 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 				SPINE_LOG(("ERROR: SS[%i] N is negative or the value contained within timeout is invalid.", php_process));
 				break;
 			case ENOMEM:
-				SPINE_LOG(("ERROR: SS[%i] poll() was unable to allocate memory for internal tables.", php_process));
+				SPINE_LOG(("ERROR: SS[%i] Select was unable to allocate memory for internal tables.", php_process));
 				break;
 			default:
-				SPINE_LOG(("ERROR: SS[%i] Unknown fatal poll() error", php_process));
+				SPINE_LOG(("ERROR: SS[%i] Unknown fatal select() error", php_process));
 				break;
 		}
 

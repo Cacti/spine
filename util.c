@@ -1881,7 +1881,13 @@ int wait_fd_readable(int fd, const struct timeval *timeout) {
 	double wait_ms;
 	int ready;
 
-	if (timeout->tv_sec < 0 || timeout->tv_usec < 0) {
+	/* poll() ignores a negative descriptor instead of failing as select() does */
+	if (fd < 0) {
+		errno = EBADF;
+		return -1;
+	}
+
+	if (timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
 		errno = EINVAL;
 		return -1;
 	}
