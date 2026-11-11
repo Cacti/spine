@@ -16,6 +16,28 @@ The Cacti Group | spine
 -issue#622: RECACHE Event and ASSERT FAILED
 -issue#632: Reap nft_pclose() with a single bounded non-blocking check, killing and parking anything still running for a later sweep instead of the previous unbounded blocking waitpid()
 -issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
+-issue#676: Store a result with leading whitespace such as " 12" as a number instead of converting it as hex
+-issue#676: Convert hex results exactly up to 64 bits, store an all-FF Counter64 as 18446744073709551615 instead of -1, and store '-' or ':' delimited strings such as dates as U instead of 0
+-issue#676: Store U for a counter after an agent restart in Script Server results, as the other actions do
+-issue#676: Store U for a counter after an agent restart in the SNMP batch that is flushed when the SNMP settings change between items
+-issue#676: Keep max_oids batching for SNMP communities longer than 49 characters
+-issue#676: Do not count the endOfMibView, noSuchObject or noSuchInstance value that ends a table walk
+-issue#676: Poll device 0 only in the process whose --first/--last range or host list includes it
+-issue#676: Avoid a deadlock and a lost worker slot when a polling thread cannot be created
+-issue#676: Stop launching devices at the early polling deadline instead of failing once the device list runs out
+-issue#676: Remove STRICT_TRANS_TABLES from the session sql_mode after a database reconnect, as for pooled connections
+-issue#676: Correct the log date format selection, which fell through to the default for every format
+-issue#676: Read the configured default_date_format setting instead of reading default_datechar twice
+-issue#676: Reject -O without a value instead of crashing, accept "--mode offline" as two arguments, and bound the selective debug device list
+-issue#676: Kill the whole process group of a timed out script so the processes it started do not keep running
+-issue#676: Discard stray PHP Script Server output before each command so it is not returned as the next result
+-issue#676: Build the poller_output statements in linear rather than quadratic time
+-issue#676: Size the add_slashes() result for doubled backslashes
+-issue#676: Terminate SNMP values that do not fit the result buffer and store them as U
+-issue#676: Escape the data source name and result in poller_output and boost inserts
+-issue#676: Free the copied DB_Host setting when it names a socket file instead of leaking it on every database connection
+-issue#676: Treat only a socket file at the DB_Host path as a socket, so a regular file is used as the host name and is not exempted from DB_SSL_Required
+-issue#676: Relax the session sql_mode of an online remote collector's main server connection so its poller_time row is recorded on MySQL 5.7 and later instead of failing with error 1292
 -issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
 -issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
 -issue: Disable persisted CI credentials, hash-lock flawfinder and propagate scanner failures

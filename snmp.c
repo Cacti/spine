@@ -618,6 +618,33 @@ void snmp_host_cleanup(void *snmp_session) {
 	}
 }
 
+/*! \fn int snmp_format_value(char *output, size_t output_len, struct variable_list *vars)
+ *  \brief render a varbind value into a terminated buffer
+ *  \param output the buffer to receive the value
+ *  \param output_len the size of output, at least 2 bytes
+ *  \param vars the varbind to render
+ *
+ *	snprint_value() returns -1 when the value does not fit and may leave the
+ *  buffer unterminated, so start from a cleared buffer, force a terminator
+ *  and record a value that cannot be rendered as undefined.
+ *
+ *  \return TRUE when output holds the value, FALSE when it holds 'U'
+ *
+ */
+int snmp_format_value(char *output, size_t output_len, struct variable_list *vars) {
+	memset(output, 0, output_len);
+
+	if (vars == NULL || vars->name == NULL ||
+		snprint_value(output, output_len, vars->name, vars->name_length, vars) < 0) {
+		SET_UNDEFINED(output);
+		return FALSE;
+	}
+
+	output[output_len - 1] = '\0';
+
+	return TRUE;
+}
+
 /*! \fn char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail)
  *  \brief performs a single snmp_get for a specific snmp OID
  *
@@ -708,7 +735,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 						SPINE_LOG_DEBUG(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT not sysDesc or sysUptime", snmp_oid, current_host->id));
 					} else {
 						SPINE_LOG_HIGH(("DEBUG: OID '%s' for Device[%i], SNMP_NOSUCHOBJECT for sysDesc or sysUptime", snmp_oid, current_host->id));
-						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snmp_format_value(temp_result, sizeof(temp_result), vars);
 						snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 					}
 				} else if (vars->type == SNMP_NOSUCHINSTANCE) {
@@ -726,7 +753,7 @@ char *snmp_get_base(host_t *current_host, char *snmp_oid, bool should_fail) {
 					status = STAT_ERROR;
 					SPINE_LOG_HIGH(("ERROR: End of Mib for oid '%s' for Device[%i] with Status[%d]",  snmp_oid, current_host->id, status));
 				} else {
-					snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+					snmp_format_value(temp_result, sizeof(temp_result), vars);
 
 					snprintf(result_string, RESULTS_BUFFER, "%s", trim(temp_result));
 				}
@@ -841,9 +868,11 @@ char *snmp_getnext(host_t *current_host, char *snmp_oid) {
 					vars = response->variables;
 
 					if (vars != NULL) {
-						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
-
-						snprint_asciistring(result_string, RESULTS_BUFFER, (unsigned char *)temp_result, strlen(temp_result));
+						if (snmp_format_value(temp_result, sizeof(temp_result), vars)) {
+							snprint_asciistring(result_string, RESULTS_BUFFER, (unsigned char *)temp_result, strlen(temp_result));
+						} else {
+							SET_UNDEFINED(result_string);
+						}
 					} else {
 						SET_UNDEFINED(result_string);
 						status = STAT_ERROR;
@@ -941,12 +970,14 @@ int snmp_count(host_t *current_host, char *snmp_oid) {
 							ok = 0;
 							continue;
 						}
-						count++;
 
 						/* END OF MIB or NO SUCH OBJECT or NO SUCH INSTANCE */
 						if ((vars->type != SNMP_ENDOFMIBVIEW) &&
 							(vars->type	!= SNMP_NOSUCHOBJECT) &&
 							(vars->type	!= SNMP_NOSUCHINSTANCE)) {
+							/* an exception marks the end of the walk, not a row */
+							count++;
+
 							/* valid data, so perform a compare  */
 							if (snmp_oid_compare(anOID, anOID_len, vars->name, vars->name_length) >= 0) {
 								SPINE_LOG(("ERROR: OID not increasing"));
@@ -1106,7 +1137,7 @@ void snmp_get_multi(host_t *current_host, target_t *poller_items, snmp_oids_t *s
 
 				for (i = 0; i < num_oids && vars; i++) {
 					if (!IS_UNDEFINED(snmp_oids[i].result)) {
-						snprint_value(temp_result, RESULTS_BUFFER, vars->name, vars->name_length, vars);
+						snmp_format_value(temp_result, sizeof(temp_result), vars);
 
 						snprintf(snmp_oids[i].result, RESULTS_BUFFER, "%s", trim(temp_result));
 

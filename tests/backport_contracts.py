@@ -27,6 +27,29 @@ def function(source, name):
     end = source.index("\n}", start) + 2
     return source[start:end]
 
+def braced(source, start):
+    """Return the braced statement that begins at or after start."""
+    begin = source.index('{', start)
+    depth = 0
+    quote = None
+    i = begin
+    while True:
+        c = source[i]
+        if quote:
+            if c == '\\':
+                i += 1
+            elif c == quote:
+                quote = None
+        elif c in '"\'':
+            quote = c
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return source[start:i + 1]
+        i += 1
+
 def run(name, source):
     path = out / (name + ".c")
     path.write_text(source)
@@ -244,7 +267,14 @@ run('maintenance-session-key-contract', '#include "common.h"\n#include "spine.h"
  poller_items[0].snmp_timeout=500;poller_items[1].snmp_timeout=1000;
 ''' + snapshot + '\ni=1;assert(' + condition + ''');
  poller_items[1].snmp_timeout=500;strcpy(poller_items[1].hostname,"127.0.0.2");
- assert(''' + condition + ''');return 0;}
+ assert(''' + condition + ''');
+ /* a community the target holds must compare equal, or every item flushes
+  * the batch and max_oids never applies */
+ strcpy(poller_items[1].hostname,"127.0.0.1");poller_items[0].snmp_version=poller_items[1].snmp_version=2;
+ memset(poller_items[0].snmp_community,'c',sizeof(poller_items[0].snmp_community)-1);
+ memcpy(poller_items[1].snmp_community,poller_items[0].snmp_community,sizeof(poller_items[1].snmp_community));
+ i=0;
+''' + snapshot + '\ni=1;assert(!(' + condition + '''));return 0;}
 ''')
 
 util = (root / 'util.c').read_text()
@@ -281,7 +311,13 @@ static unsigned char auth_key[USM_AUTH_KU_LEN];
 static int replies,reply_phase;
 static struct snmp_session active_request_session;
 static struct snmp_session *capture_session(void *session){(void)session;active_request_session.version=SNMP_VERSION_3;return &active_request_session;}
-static int capture_response(void *session,struct snmp_pdu *request,struct snmp_pdu **response){oid name[]={1,3,6,1,2,1,1,3,0};long value=42;(void)session;replies++;snmp_free_pdu(request);*response=snmp_pdu_create(SNMP_MSG_RESPONSE);assert(*response);(*response)->errstat=SNMP_ERR_GENERR;(*response)->errindex=reply_phase;snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));return STAT_SUCCESS;}
+static int capture_response(void *session,struct snmp_pdu *request,struct snmp_pdu **response){oid name[]={1,3,6,1,2,1,1,3,0};long value=42;(void)session;replies++;snmp_free_pdu(request);
+ if(reply_phase==2){oid row[]={1,3,6,1,2,1,2,2,1,1,1};*response=snmp_pdu_create(SNMP_MSG_RESPONSE);assert(*response);(*response)->errstat=SNMP_ERR_NOERROR;(*response)->errindex=0;
+  /* one row, then the agent reports endOfMibView for the next OID */
+  if(replies==1)snmp_pdu_add_variable(*response,row,11,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));
+  else snmp_pdu_add_variable(*response,row,11,SNMP_ENDOFMIBVIEW,NULL,0);
+  return STAT_SUCCESS;}
+*response=snmp_pdu_create(SNMP_MSG_RESPONSE);assert(*response);(*response)->errstat=SNMP_ERR_GENERR;(*response)->errindex=reply_phase;snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));snmp_pdu_add_variable(*response,name,9,ASN_INTEGER,(const unsigned char*)&value,sizeof(value));return STAT_SUCCESS;}
 static void *capture_open(struct snmp_session *session){level=session->securityLevel;auth_length=session->securityAuthKeyLen;priv_length=session->securityPrivKeyLen;memcpy(auth_key,session->securityAuthKey,sizeof(auth_key));opens++;return (void*)1;}
 #define snmp_sess_session capture_session
 #define snmp_sess_synch_response capture_response
@@ -305,6 +341,7 @@ int main(void){static int devices[100];char password[]="authpass123";int count;d
  {host_t host={0};target_t items[2]={0};snmp_oids_t oids[2]={0};host.snmp_session=(void*)1;strcpy(oids[0].oid,".1.3.6.1.2.1.1.3.0");strcpy(oids[1].oid,".1.3.6.1.2.1.1.3.0");
  snmp_get_multi(&host,items,oids,2);assert(host.snmp_status==STAT_ERROR&&strcmp(oids[0].result,"U")==0&&strcmp(oids[1].result,"U")==0);
  reply_phase=1;replies=0;memset(oids[0].result,0,sizeof(oids[0].result));memset(oids[1].result,0,sizeof(oids[1].result));snmp_get_multi(&host,items,oids,2);assert(replies<=2&&strcmp(oids[0].result,"U")==0&&strcmp(oids[1].result,"U")==0);
+ reply_phase=2;replies=0;assert(snmp_count(&host,".1.3.6.1.2.1.2.2.1.1")==1&&replies==2);
  }return 0;}
 '''
 path = out / "snmp-security-contract.c"
@@ -348,7 +385,7 @@ connect_stubs = '''
 #define mysql_error fixture_mysql_error
 #define mysql_get_ssl_cipher fixture_mysql_get_ssl_cipher
 '''
-run('maintenance-connect-retry-tls-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n' + connect_stubs + '''
+run('maintenance-connect-retry-tls-contract', '#include "common.h"\n#include "spine.h"\n#include <setjmp.h>\n#include <sys/wait.h>\n' + connect_stubs + '''
 config_t set;static jmp_buf failed;
 static int inits,tls_options,connects,closes,first_error,have_cipher;
 MYSQL *mysql_init(MYSQL *mysql){inits++;return mysql;}
@@ -365,7 +402,9 @@ void mysql_close(MYSQL *mysql){(void)mysql;closes++;}
 unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return first_error;}
 const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
 const char *mysql_get_ssl_cipher(MYSQL *mysql){(void)mysql;return have_cipher?"AES":NULL;}
-void die(const char *format,...){(void)format;longjmp(failed,1);}
+/* die() ends the process, as in production; the exit status carries the
+ * retry checks out of the child that runs the refused connection. */
+void die(const char *format,...){(void)format;exit(inits==2&&tls_options==2&&closes>=2?3:4);}
 int usleep(useconds_t usec){(void)usec;return 0;}
 unsigned int sleep(unsigned int seconds){(void)seconds;return 0;}
 static int warnings;
@@ -374,7 +413,7 @@ static void fixture_exit(int status){(void)status;longjmp(failed,1);}
 #define exit fixture_exit
 ''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
 static void reset(int error){inits=tls_options=connects=closes=warnings=0;first_error=error;have_cipher=0;}
-int main(void){MYSQL mysql;
+int main(void){MYSQL mysql;pid_t child;int status;
  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example");set.poller_id=1;set.db_ssl=1;
  /* without DB_SSL_Required a plaintext session is accepted, as in 1.2.31,
   * and a handshake failure is retried */
@@ -385,13 +424,55 @@ int main(void){MYSQL mysql;
  reset(2013);have_cipher=1;db_connect(LOCAL,&mysql);assert(warnings==0);
  set.db_ssl_required=1;
  /* a transient failure, then a plaintext session: the retry must have the TLS
-  * policy applied again and the session must be refused */
- reset(2013);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);assert(0);}
- assert(inits==2&&tls_options==2&&closes>=2);
+  * policy applied again and the session must be refused.  Unwinding out of
+  * die() with longjmp would abandon db_connect()'s allocations, so the
+  * refusal runs in a child that exits there instead. */
+ reset(2013);fflush(stdout);child=fork();assert(child>=0);
+ if(child==0){db_connect(LOCAL,&mysql);_exit(5);}
+ assert(waitpid(child,&status,0)==child&&WIFEXITED(status)&&WEXITSTATUS(status)==3);
  /* a TLS handshake failure is final */
  reset(2026);if(setjmp(failed)==0){db_connect(LOCAL,&mysql);}
  assert(connects==1&&inits==1);
  return 0;}
+''')
+
+# A DB_Host that names a socket file connects through it, and the copy of
+# the setting is freed whether it ends up as the host or the socket.
+run('maintenance-connect-socket-contract', '#include "common.h"\n#include "spine.h"\n#include <sys/socket.h>\n#include <sys/un.h>\n' + connect_stubs + '''
+config_t set;static int outstanding;static char used_socket[256];static const char *used_host;
+static char *fixture_strdup(const char *value){char *copy=strdup(value);if(copy)outstanding++;return copy;}
+static void fixture_free(void *pointer){if(pointer)outstanding--;free(pointer);}
+MYSQL *mysql_init(MYSQL *mysql){return mysql;}
+int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;(void)value;return 0;}
+MYSQL *mysql_real_connect(MYSQL *mysql,const char *host,const char *user,const char *pass,const char *db,unsigned int port,const char *sock,unsigned long flags){
+ (void)user;(void)pass;(void)db;(void)port;(void)flags;used_host=host;snprintf(used_socket,sizeof(used_socket),"%s",sock?sock:"");return mysql;}
+void mysql_close(MYSQL *mysql){(void)mysql;}
+unsigned int mysql_errno(MYSQL *mysql){(void)mysql;return 0;}
+const char *mysql_error(MYSQL *mysql){(void)mysql;return "fixture";}
+const char *mysql_get_ssl_cipher(MYSQL *mysql){(void)mysql;return NULL;}
+void die(const char *format,...){(void)format;abort();}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+#define strdup fixture_strdup
+#define free fixture_free
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static int db_tls_expected(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+int main(void){MYSQL mysql;struct sockaddr_un address;int listener;int poller;
+ memset(&address,0,sizeof(address));address.sun_family=AF_UNIX;
+ snprintf(address.sun_path,sizeof(address.sun_path),"%s","''' + str(out / 'db.sock') + '''");
+ listener=socket(AF_UNIX,SOCK_STREAM,0);assert(listener>=0&&bind(listener,(struct sockaddr *)&address,sizeof(address))==0);
+ for(poller=1;poller<=2;poller++){
+  set.poller_id=poller;snprintf(set.db_host,sizeof(set.db_host),"%s",address.sun_path);
+  db_connect(LOCAL,&mysql);assert(used_host==NULL&&strcmp(used_socket,address.sun_path)==0&&outstanding==0);
+  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example:/run/mysqld.sock");
+  db_connect(LOCAL,&mysql);assert(strcmp(used_socket,"/run/mysqld.sock")==0&&outstanding==0);}
+ /* a regular file at the DB_Host path is a host name, not a socket, and
+  * does not exempt the connection from DB_SSL_Required */
+ {const char *regular="''' + str(out / 'db.file') + '''";FILE *f=fopen(regular,"w");assert(f);fclose(f);
+  set.poller_id=1;snprintf(set.db_host,sizeof(set.db_host),"%s",regular);
+  db_connect(LOCAL,&mysql);assert(used_host!=NULL&&used_socket[0]=='\\0'&&outstanding==0);
+  set.db_ssl=1;set.db_ssl_required=1;assert(db_tls_expected(LOCAL));
+  snprintf(set.db_host,sizeof(set.db_host),"%s",address.sun_path);assert(!db_tls_expected(LOCAL));
+  set.db_ssl=0;set.db_ssl_required=0;unlink(regular);}
+ close(listener);unlink(address.sun_path);return 0;}
 ''')
 
 util = (root / 'util.c').read_text()
@@ -438,4 +519,347 @@ int main(void){host_t host;const char *ipv4[]={"127.0.0.2","tcp:127.0.0.2","tcp:
  memset(&host,0,sizeof(host));
  for(i=0;i<sizeof(ipv4)/sizeof(ipv4[0]);i++){snprintf(host.hostname,sizeof(host.hostname),"%s",ipv4[i]);assert(get_address_type(&host)==SPINE_IPV4);}
  snprintf(host.hostname,sizeof(host.hostname),"%s","[::1]");assert(get_address_type(&host)!=SPINE_IPV4);return 0;}
+''')
+
+util = (root / 'util.c').read_text()
+trims = '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim('))
+run('maintenance-numeric-contract', '#include "common.h"\n#include "spine.h"\n' + trims + '\n' + function(util, 'int is_numeric(') + '''
+static int numeric(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return is_numeric(buffer);}
+int main(void){
+ /* the length and the parse must start at the same character */
+ assert(numeric(" 12")&&numeric("\\t 12 \\n")&&numeric(" -1.5")&&numeric("12 "));
+ /* a leading quote keeps the strip_alpha() path that stores 12 */
+ assert(!numeric("\\"12\\"")&&!numeric(" ")&&!numeric("")&&!numeric(" 12 abc")&&!numeric("00 1A"));return 0;}
+''')
+
+# Every caller prints hex2dec() unsigned; "%lld" printed an all-FF counter as -1.
+assert '"%lld", hex2dec(' not in (root / 'poller.c').read_text()
+util = (root / 'util.c').read_text()
+hexes = 'static int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(util, 'static int hex_digit(int c) {')
+run('maintenance-hex-contract', '#include "common.h"\n#include "spine.h"\n' + hexes + '''
+static unsigned long long convert(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return hex2dec(buffer);}
+int main(void){char out[32];
+ snprintf(out,sizeof(out),"%llu",convert("ff ff ff ff ff ff ff ff"));assert(strcmp(out,"18446744073709551615")==0);
+ /* above 2^53 a double cannot hold the exact value */
+ assert(convert("20 00 00 00 00 00 00 01")==0x2000000000000001ULL);
+ assert(convert("\\"00 1A\\"")==0x1A&&convert("0x10")==0);
+ assert(is_hexadecimal("00 1A 2B",TRUE)&&is_hexadecimal("\\"00 1A\\"",TRUE)&&is_hexadecimal("ff ff ff ff ff ff ff ff",TRUE));
+ /* hex2dec() would turn these into 0, so they take the non-hex path */
+ assert(!is_hexadecimal("2024-01-05",TRUE)&&!is_hexadecimal("00-1A-2B",TRUE)&&!is_hexadecimal("00:1A 2B",TRUE));
+ assert(!is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
+''')
+
+# Every SNMP batch flush, including the one forced by a change of SNMP
+# settings, must store U for a counter after an agent restart.
+poller = (root / 'poller.c').read_text()
+util = (root / 'util.c').read_text()
+loops = []
+cursor = 0
+while True:
+    cursor = poller.find('for (j = 0; j < num_oids; j++) {', cursor)
+    if cursor < 0:
+        break
+    loops.append(braced(poller, cursor))
+    cursor += 1
+assert len(loops) == 3
+flushes = ''.join('static void flush%d(host_t *host,target_t *poller_items,snmp_oids_t *snmp_oids,int num_oids,int spike_kill){int j,errors=0,host_id=1,host_thread=1;int *buf_size=NULL,*buf_errors=NULL;char *error_string=NULL;char temp_result[RESULTS_BUFFER];double thread_start=0,thread_end=0;\n%s\n(void)errors;(void)thread_end;}\n' % (n, loop) for n, loop in enumerate(loops))
+run('maintenance-snmp-flush-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\n' + '''
+int spine_log(const char *format,...){(void)format;return TRUE;}
+int is_debug_device(int id){(void)id;return FALSE;}
+double get_time_as_double(void){return 0;}
+void buffer_output_errors(char *e,int *s,int *b,int d,int t,int l,bool f){(void)e;(void)s;(void)b;(void)d;(void)t;(void)l;(void)f;}
+static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)capacity;}
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '\n' + flushes + '''
+typedef void (*flush_t)(host_t*,target_t*,snmp_oids_t*,int,int);
+int main(void){flush_t flush[]={flush0,flush1,flush2};size_t n;
+ for(n=0;n<3;n++){host_t host={0};target_t items[3]={0};snmp_oids_t oids[3]={0};int i;
+  const char *values[]={"42","a:1 b:2","2024-01-05"};
+  for(i=0;i<3;i++){oids[i].array_position=i;strcpy(oids[i].result,values[i]);}
+  flush[n](&host,items,oids,3,TRUE);
+  assert(strcmp(items[0].result,"U")==0);assert(strcmp(items[1].result,"a:1 b:2")==0);
+  /* a date is not hex: it is stored as U, never as 0 */
+  assert(strcmp(items[2].result,"U")==0);
+  strcpy(oids[0].result,"42");flush[n](&host,items,oids,1,FALSE);assert(strcmp(items[0].result,"42")==0);}
+ return 0;}
+''')
+
+# The script and Script Server actions apply the same restart check as SNMP.
+a = poller.index('\t\t\tcase POLLER_ACTION_SCRIPT: /* execute script file */')
+b = poller.index('\t\t\tdefault: /* unknown action, generate error */', a)
+actions = poller[a:b]
+run('maintenance-script-spike-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\nstatic const char *reply;\n' + '''
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void die(const char *format,...){(void)format;abort();}
+int is_debug_device(int id){(void)id;return FALSE;}
+double get_time_as_double(void){return 0;}
+void buffer_output_errors(char *e,int *s,int *b,int d,int t,int l,bool f){(void)e;(void)s;(void)b;(void)d;(void)t;(void)l;(void)f;}
+static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)capacity;}
+int php_get_process(void){return 0;}
+char *php_cmd(const char *command,int process){(void)command;(void)process;return strdup(reply);}
+char *exec_poll(host_t *host,char *command,int id,char *type){(void)host;(void)command;(void)id;(void)type;return strdup(reply);}
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static const char *script_log_name(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '''
+static const char *poll(int action,const char *output,int spike_kill){static target_t poller_items[1];host_t h={0};host_t *host=&h;
+ int i=0,host_id=1,host_thread=1,errors=0,php_process;int *buf_size=NULL,*buf_errors=NULL;char *error_string=NULL;
+ char temp_result[RESULTS_BUFFER];char script[SMALL_BUFSIZE];char *poll_result;double thread_start=0,thread_end=0;
+ reply=output;memset(poller_items,0,sizeof(poller_items));strcpy(poller_items[0].arg1,"/bin/true");
+ switch(action){
+''' + actions + '''
+ }
+ (void)host;(void)errors;(void)php_process;(void)thread_end;return poller_items[0].result;}
+int main(void){int actions[]={POLLER_ACTION_SCRIPT,POLLER_ACTION_PHP_SCRIPT_SERVER};size_t n;
+ for(n=0;n<2;n++){
+  assert(strcmp(poll(actions[n],"42\\n",TRUE),"U")==0);
+  assert(strcmp(poll(actions[n],"a:1 b:2",TRUE),"a:1 b:2")==0);
+  assert(strcmp(poll(actions[n],"42",FALSE),"42")==0);}
+ return 0;}
+''')
+
+# Device 0 belongs only to the process whose host range or list includes 0.
+spine = (root / 'spine.c').read_text()
+run('maintenance-device-zero-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\n' + function(spine, 'static bool device_0_selected(') + '''
+static int selected(int first,const char *list){set.start_host_id=first;snprintf(set.host_id_list,sizeof(set.host_id_list),"%s",list);return device_0_selected();}
+int main(void){
+ assert(selected(-1,"")&&selected(0,"")&&!selected(1,"")&&!selected(25,""));
+ assert(selected(-1,"0")&&selected(-1,"5,0")&&selected(-1,"0,5")&&selected(-1,"1,0,2"));
+ assert(!selected(-1,"10")&&!selected(-1,"5,10,20")&&!selected(0,"1,2"));return 0;}
+''')
+
+# The worker launch sequence of main(), with only the semaphore, thread,
+# clock and lock primitives substituted.
+spine = (root / 'spine.c').read_text()
+a = spine.index('\t\t/* dev note - errno was never primed')
+b = spine.index('\n\t}\n\n\tsem_getvalue(&available_threads', a)
+launch = spine[a:b]
+run('maintenance-thread-launch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
+config_t set;sem_t available_threads;double start_time,total_time;
+static double now;static int held,creates,eagain,create_error,available_posts,init_posts,available_ok,init_ok,errored;
+static int fixture_trywait(sem_t *s){if(s==&available_threads?available_ok:init_ok)return 0;errno=EAGAIN;return -1;}
+static int fixture_post(sem_t *s){if(s==&available_threads)available_posts++;else init_posts++;return 0;}
+static int fixture_getvalue(sem_t *s,int *v){(void)s;*v=0;return 0;}
+static int fixture_create(pthread_t *t,const pthread_attr_t *a,void *(*f)(void *),void *arg){(void)t;(void)a;(void)f;(void)arg;creates++;if(eagain){eagain--;return EAGAIN;}return create_error;}
+static int fixture_usleep(useconds_t usec){now+=usec/1000000.0;return 0;}
+double get_time_as_double(void){return now;}
+/* a non-recursive mutex: locking it twice from one thread deadlocks */
+void thread_mutex_lock(int id){(void)id;assert(!held);held=1;}
+void thread_mutex_unlock(int id){(void)id;assert(held);held=0;}
+int spine_log(const char *format,...){if(strstr(format,"errored with"))errored++;return TRUE;}
+void *child(void *arg){return arg;}
+#define sem_trywait fixture_trywait
+#define sem_post fixture_post
+#define sem_getvalue fixture_getvalue
+#define pthread_create fixture_create
+#define usleep fixture_usleep
+static int canexit_result;
+static int launch(int current_thread){int host_id=1,canexit=FALSE,change_host=TRUE,device_counter=0,thread_status=0,a_threads_value=0;
+ pthread_t threads[1];pthread_attr_t attr;sem_t thread_init_sem;poller_thread_t *poller_details=calloc(1,sizeof(*poller_details));assert(poller_details);memset(&attr,0,sizeof(attr));
+''' + launch + '''
+ (void)a_threads_value;(void)device_counter;canexit_result=canexit;if(current_thread==1)free(poller_details);return thread_status;}
+static void reset(void){now=start_time=total_time=0;held=creates=eagain=create_error=available_posts=init_posts=errored=0;available_ok=init_ok=1;set.poller_interval=10;set.threads=4;}
+int main(void){
+ /* EAGAIN retries the create without taking a lock again */
+ reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0);
+ /* a failed create releases the init slot and the worker permit */
+ reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1);
+ /* the soft deadline, one second early, stops launching like the hard one */
+ reset();available_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==0);
+ /* the init wait counts its polls, so the soft deadline fires there too,
+  * the taken worker permit is returned, and EAGAIN is not an error */
+ reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored);
+ return 0;}
+''')
+
+# A reconnected session gets the same sql_mode adjustments as a pooled one.
+sql = (root / 'sql.c').read_text()
+run('maintenance-session-mode-contract', '#include "common.h"\n#include "spine.h"\n' + '''
+config_t set;pool_t *db_pool_local,*db_pool_remote;
+static char pooled[LRG_BUFSIZE],reconnected[LRG_BUFSIZE];static unsigned long thread_id=1;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void die(const char *format,...){(void)format;abort();}
+unsigned int sleep(unsigned int seconds){(void)seconds;return 0;}
+unsigned long mysql_thread_id(MYSQL *mysql){(void)mysql;return thread_id;}
+int mysql_ping(MYSQL *mysql){(void)mysql;thread_id++;return 0;}
+static int db_tls_expected(int type){(void)type;return FALSE;}
+int mysql_query(MYSQL *mysql,const char *query){(void)mysql;if(strstr(query,"sql_mode")){strcat(reconnected,query);strcat(reconnected,"\\n");}return 0;}
+int db_insert(MYSQL *mysql,int type,const char *query){(void)mysql;(void)type;strcat(pooled,query);strcat(pooled,"\\n");return TRUE;}
+void db_connect(int type,MYSQL *mysql){(void)type;(void)mysql;}
+''' + function(sql, 'static void db_session_mode(') + '\n' + function(sql, 'int db_reconnect(') + '\n' + function(sql, 'void db_create_connection_pool(') + '''
+int main(void){MYSQL mysql;static pool_t pool[1];db_pool_local=pool;set.threads=1;
+ db_create_connection_pool(LOCAL);assert(db_reconnect(&mysql,LOCAL,2013,"fixture")==TRUE);
+ assert(strstr(reconnected,"'STRICT_TRANS_TABLES'")!=NULL);assert(strcmp(pooled,reconnected)==0);return 0;}
+''')
+
+util = (root / 'util.c').read_text()
+run('maintenance-date-format-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\nvoid die(const char *format,...){(void)format;abort();}\n' + function(util, 'char * get_date_format(') + '''
+static int formats(int format,int separator,const char *expected){char *text;int same;set.log_datetime_format=format;set.log_datetime_separator=separator;text=get_date_format();same=strcmp(text,expected)==0;free(text);return same;}
+int main(void){
+ assert(formats(GD_MO_D_Y,GDC_SLASH,"%m/%d/%Y %H:%M:%S - ")&&formats(GD_MN_D_Y,GDC_DOT,"%b.%d.%Y %H:%M:%S - "));
+ assert(formats(GD_D_MO_Y,GDC_HYPHEN,"%d-%m-%Y %H:%M:%S - ")&&formats(GD_D_MN_Y,GDC_SLASH,"%d/%b/%Y %H:%M:%S - "));
+ assert(formats(GD_Y_MO_D,GDC_SLASH,"%Y/%m/%d %H:%M:%S - ")&&formats(GD_Y_MN_D,GDC_SLASH,"%Y/%b/%d %H:%M:%S - "));
+ /* the default timestamp is the one every 1.2.31 format produced */
+ assert(formats(GD_DEFAULT,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - ")&&formats(99,GDC_DEFAULT,"%Y/%m/%d %H:%M:%S - "));return 0;}
+''')
+
+# read_config_options() reads the configured log date format, not the separator twice.
+settings = braced(util, util.index('\tif ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0)'))
+run('maintenance-date-setting-contract', '#include "common.h"\n#include "spine.h"\nconfig_t set;\nstatic const char *stored;\n'
+    'static char *getsetting(MYSQL *mysql,int type,const char *name){(void)mysql;(void)type;assert(strcmp(name,"default_date_format")==0);return stored?strdup(stored):NULL;}\n'
+    'static void apply(MYSQL mysql){char *res;\n' + settings + '\n}\n' + '''
+int main(void){MYSQL mysql;memset(&mysql,0,sizeof(mysql));
+ set.log_datetime_format=GD_DEFAULT;stored="2";apply(mysql);assert(set.log_datetime_format==GD_D_MO_Y);
+ stored="9";apply(mysql);assert(set.log_datetime_format==GD_DEFAULT);
+ set.log_datetime_format=GD_MO_D_Y;stored=NULL;apply(mysql);assert(set.log_datetime_format==GD_MO_D_Y);return 0;}
+''')
+
+# Command-line options and the selective debug list, as main() parses them.
+spine = (root / 'spine.c').read_text()
+options = braced(spine, spine.index('\tfor (argv++; *argv; argv++) {'))
+debug_list = braced(spine, spine.index('\tif (strlen(set.selective_device_debug)) {'))
+run('maintenance-options-contract', '#include "common.h"\n#include "spine.h"\n#include <limits.h>\n#include <setjmp.h>\n' + '''
+config_t set;int *debug_devices;static jmp_buf rejected;static char option_name[64],option_value[64];
+void die(const char *format,...){(void)format;longjmp(rejected,1);}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void set_option(const char *name,const char *value){snprintf(option_name,sizeof(option_name),"%s",name);snprintf(option_value,sizeof(option_value),"%s",value);}
+int all_digits(const char *text){(void)text;return FALSE;}
+static void display_help(int only_version){(void)only_version;}
+static char *getarg(char *opt, char ***pargv);
+''' + function(spine, 'static bool parse_cli_int(') + '\n' + function(spine, 'static void parse_host_list(') + '\n' + function(spine, 'static char *getarg(char *opt, char ***pargv) {') + '''
+static int parse(const char *first,const char *second){char a[64],b[64];char *args[]={"spine",a,b,NULL};char **argv=args;char *conf_file=NULL;
+ snprintf(a,sizeof(a),"%s",first);snprintf(b,sizeof(b),"%s",second?second:"");if(!second)args[2]=NULL;
+ if(setjmp(rejected)!=0)return FALSE;
+''' + options + '''
+ free(conf_file);return TRUE;}
+static void debug_ids(void){
+''' + debug_list + '''
+}
+int main(void){int storage[110];int i;char *cursor;
+ set.mode=REMOTE_ONLINE;assert(parse("--mode","offline")&&set.mode==REMOTE_OFFLINE);
+ assert(parse("-N=recovery",NULL)&&set.mode==REMOTE_RECOVERY);assert(!parse("--mode","bogus"));
+ assert(parse("-O","log_verbosity:5")&&strcmp(option_name,"log_verbosity")==0&&strcmp(option_value,"5")==0);
+ /* a setting without a value is rejected instead of dereferencing NULL */
+ assert(!parse("-O","log_verbosity"));
+ for(i=0;i<110;i++)storage[i]=-7;debug_devices=storage;
+ cursor=set.selective_device_debug;for(i=1;i<=150;i++)cursor+=sprintf(cursor,"%s%d",i>1?",":"",i);
+ debug_ids();assert(storage[0]==1&&storage[98]==99&&storage[99]==0);
+ for(i=100;i<110;i++)assert(storage[i]==-7);return 0;}
+''')
+
+# A line a script printed before its result must not become the next
+# command's result. php.c runs unchanged against a pipe-backed server.
+source = r'''#include "php.c"
+static int request[2],response[2];
+static void *responder(void *unused){char c;(void)unused;
+ while(read(request[0],&c,1)==1)if(c=='\n'&&write(response[1],"42\n",3)!=3)break;return NULL;}
+int main(void){pthread_t thread;char *result;init_mutexes();set.stdout_notty=set.stderr_notty=TRUE;
+ set.php_servers=1;set.script_timeout=5;php_processes=calloc(MAX_PHP_SERVERS,sizeof(php_t));assert(php_processes);
+ assert(pipe(request)==0&&pipe(response)==0);
+ php_processes[0].php_write_fd=request[1];php_processes[0].php_read_fd=response[0];php_processes[0].php_pid=-1;php_processes[0].php_state=PHP_BUSY;
+ assert(pthread_create(&thread,NULL,responder,NULL)==0);
+ /* the previous script wrote a stray line after its result was read */
+ assert(write(response[1],"stray output\n",13)==13);
+ result=php_cmd("fixture.php fixture 1",0);assert(strncmp(result,"42",2)==0);free(result);
+ result=php_cmd("fixture.php fixture 2",0);assert(strncmp(result,"42",2)==0);free(result);return 0;}
+'''
+path = out / "php-stale-output-contract.c"
+path.write_text(source)
+executable = out / "php-stale-output-contract"
+spine_object = out / "spine-fixture.o"
+objects = [str(root / (name + ".o")) for name in ["sql", "util", "locks", "nft_popen", "snmp", "ping", "keywords", "error", "poller"]]
+subprocess.run([*compiler, *flags, str(path), str(spine_object), *objects,
+                *make_variable("LDFLAGS"), *make_variable("LIBS"), "-o", str(executable)], check=True)
+subprocess.run([str(executable)], check=True, timeout=20)
+print("maintenance-php-stale-output-contract: passed")
+
+# The bulk poller_output statements: every row once, in order, split at the
+# buffer limit, with the same rows in the boost statements.
+poller = (root / 'poller.c').read_text()
+a = poller.index('\t\tbuf_length = MAX_MYSQL_BUF_SIZE + sizeof(result_string) + sizeof(posuffix);')
+b = poller.index('\t\tpoll_items_cleanup:', a)
+writes = poller[a:b]
+run('maintenance-output-batch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
+config_t set;static int statements[2],rows_seen[2],next_row[2];static size_t longest;
+static const char suffix[]=" AS rs ON DUPLICATE KEY UPDATE output=rs.output";
+int spine_log(const char *format,...){(void)format;return TRUE;}
+void die(const char *format,...){(void)format;abort();}
+bool db_row_alias(MYSQL *mysql){(void)mysql;return TRUE;}
+void db_escape(MYSQL *mysql,char *output,int max_size,const char *input){(void)mysql;snprintf(output,max_size,"%s",input);}
+int db_insert(MYSQL *mysql,int mode,const char *query){const char *cursor;size_t length=strlen(query);int kind=strstr(query,"poller_output_boost")!=NULL;
+ (void)mysql;(void)mode;statements[kind]++;if(length>longest)longest=length;
+ assert(length>strlen(suffix)&&strcmp(query+length-strlen(suffix),suffix)==0);
+ for(cursor=strstr(query,"VALUES");(cursor=strchr(cursor,'('))!=NULL;cursor++){int id;if(cursor[-1]!=' '&&cursor[-1]!=',')continue;id=atoi(cursor+1);assert(id==next_row[kind]+1);next_row[kind]=id;rows_seen[kind]++;}
+ return TRUE;}
+''' + function(poller, 'static size_t query_append(') + '\n' + function(poller, 'int format_poller_output_row(') + '''
+static void write_rows(target_t *poller_items,int rows_processed){
+ char *query3=NULL,*query12=NULL,query8[BUFSIZE],query11[BUFSIZE],posuffix[BUFSIZE],result_string[RESULTS_BUFFER * 2 + DBL_BUFSIZE + SMALL_BUFSIZE],host_time[]="1731100000";
+ int query8_len,query11_len,posuffix_len,result_length,i,new_buffer=TRUE,buf_length=0,host_id=1,host_thread=1;size_t out_buffer,boost_buffer=0;bool output_failed=FALSE;
+ MYSQL fixture;MYSQL *mysql=&fixture,*mysqlr=&fixture,*mysqlt;
+ snprintf(query8,sizeof(query8),"INSERT INTO poller_output (local_data_id, rrd_name, time, output) VALUES");
+ snprintf(query11,sizeof(query11),"INSERT INTO poller_output_boost (local_data_id, rrd_name, time, output) VALUES");
+ query8_len=strlen(query8);query11_len=strlen(query11);
+''' + writes + '''
+ assert(!output_failed);free(query3);free(query12);(void)mysqlr;(void)boost_buffer;(void)mysqlt;}
+int main(void){static target_t items[5000];int i;
+ for(i=0;i<5000;i++){items[i].local_data_id=i+1;strcpy(items[i].rrd_name,"traffic_in");strcpy(items[i].result,"1234567890");}
+ set.boost_redirect=set.boost_enabled=TRUE;write_rows(items,5000);
+ assert(statements[0]>1&&statements[0]==statements[1]&&rows_seen[0]==5000&&rows_seen[1]==5000);
+ assert(longest<MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);return 0;}
+''')
+
+ping = (root / 'ping.c').read_text()
+run('maintenance-resolver-failure-contract', r'''#include "common.h"
+#include "spine.h"
+config_t set;
+static int result_code, calls, releases, sleeps, recover, empty;
+static struct addrinfo answer;
+static struct sockaddr_in address;
+int spine_log(const char *format, ...) { (void)format; return 0; }
+static int fixture_getaddrinfo(const char *node, const char *service,
+                              const struct addrinfo *hints, struct addrinfo **result) {
+ (void)node; (void)service;
+ assert(hints->ai_family == AF_INET);
+ calls++;
+ if (recover && calls == 3) result_code = 0;
+ if (result_code != 0) {
+  /* The result is not owned or usable on failure. */
+  *result = (struct addrinfo *)1;
+  return result_code;
+ }
+ answer.ai_family = AF_INET;
+ answer.ai_addr = (struct sockaddr *)&address;
+ address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+ *result = empty ? NULL : &answer;
+ return 0;
+}
+static void fixture_freeaddrinfo(struct addrinfo *result) {
+ assert(result == &answer);
+ releases++;
+}
+static int fixture_usleep(useconds_t duration) { assert(duration == 50000); sleeps++; return 0; }
+#define getaddrinfo fixture_getaddrinfo
+#define freeaddrinfo fixture_freeaddrinfo
+#define usleep fixture_usleep
+''' + function((root / 'util.c').read_text(), 'int char_count(') + '\n' + function(ping, 'static int split_host_spec(') + '\n' + function(ping, 'static const char *ping_address(') + '\n' + function(ping, 'int init_sockaddr(') + r'''
+int main(void) {
+ struct sockaddr_in output;
+ int codes[] = {EAI_FAIL, EAI_MEMORY, EAI_NONAME, EAI_AGAIN};
+ size_t index;
+ for (index = 0; index < sizeof(codes) / sizeof(codes[0]); index++) {
+  calls = releases = sleeps = 0;
+  result_code = codes[index];
+  assert(init_sockaddr(&output, "fixture.invalid", 161) == FALSE);
+  assert(calls == (result_code == EAI_AGAIN ? 4 : 1));
+  assert(sleeps == (result_code == EAI_AGAIN ? 3 : 0));
+  assert(releases == 0);
+ }
+ calls = sleeps = 0;
+ recover = 1;
+ assert(init_sockaddr(&output, "fixture.invalid", 161) == TRUE);
+ assert(calls == 3 && releases == 1 && sleeps == 2);
+ assert(output.sin_family == AF_INET && ntohs(output.sin_port) == 161);
+ assert(output.sin_addr.s_addr == htonl(INADDR_LOOPBACK));
+ recover = 0;
+ empty = 1;
+ assert(init_sockaddr(&output, "fixture.invalid", 161) == FALSE);
+ assert(releases == 1);
+ return 0;
+}
 ''')

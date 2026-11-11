@@ -410,13 +410,13 @@ void read_config_options() {
 		}
 	}
 
-	/* get log separator */
-	if ((res = getsetting(&mysql, LOCAL, "default_datechar")) != 0) {
-		set.log_datetime_separator = atoi(res);
+	/* get log date format */
+	if ((res = getsetting(&mysql, LOCAL, "default_date_format")) != 0) {
+		set.log_datetime_format = atoi(res);
 		free((char *)res);
 
-		if (set.log_datetime_separator < GDC_MIN || set.log_datetime_separator > GDC_MAX) {
-			set.log_datetime_separator = GDC_DEFAULT;
+		if (set.log_datetime_format < GD_MIN || set.log_datetime_format > GD_MAX) {
+			set.log_datetime_format = GD_DEFAULT;
 		}
 	}
 
@@ -1252,18 +1252,25 @@ char * get_date_format() {
 	switch (set.log_datetime_format) {
 		case GD_MO_D_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%m%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_MN_D_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%b%c%%d%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_D_MO_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%m%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_D_MN_Y:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%d%c%%b%c%%Y %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_Y_MO_D:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		case GD_Y_MN_D:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%b%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 		default:
 			snprintf(log_fmt, GD_FMT_SIZE, "%%Y%c%%m%c%%d %%H:%%M:%%S - ", log_sep, log_sep);
+			break;
 	}
 
 	return (log_fmt);
@@ -1570,7 +1577,16 @@ int is_numeric(char *string) {
 	int conv_base=10;
 	int length;
 
-	length = strlen(trim(string));
+	/* rtrim() strips the tail in place.  The length must be measured from
+	 * the same pointer that strtol() and strtod() parse, so skip only the
+	 * leading whitespace they would skip anyway: " 12" is numeric, while a
+	 * leading quote still takes the callers' strip_alpha() path. */
+	rtrim(string);
+	while (isspace((unsigned char) *string)) {
+		string++;
+	}
+
+	length = strlen(string);
 
 	if (!length) {
 		return FALSE;
@@ -1609,6 +1625,34 @@ int is_numeric(char *string) {
 	return FALSE;
 }
 
+static int hex_digit(int c);
+
+/* Accumulate exactly: the former pow() doubles lost precision above 2^53.
+ * Quotes and blanks are skipped; any other character, or a value wider than
+ * 64 bits, has no conversion. */
+static bool hex_value(const char *str, unsigned long long *value) {
+	uint64_t number = 0;
+	int digit;
+
+	if (!str) return FALSE;
+
+	for (; *str; str++) {
+		if (*str == '"' || *str == ' ' || *str == '\t') {
+			continue;
+		}
+
+		digit = hex_digit((unsigned char) *str);
+		if (digit < 0 || number > (UINT64_MAX >> 4)) {
+			return FALSE;
+		}
+
+		number = (number << 4) | (uint64_t) digit;
+	}
+
+	*value = number;
+	return TRUE;
+}
+
 /*! \fn int is_hexadecimal(const char *str, const short ignore_space)
  *  \brief test whether a string represents a hex number.
  *  \param str string to test
@@ -1616,13 +1660,17 @@ int is_numeric(char *string) {
  *
  *  \return TRUE if the string is valid hex, FALSE otherwise
  *
- *  The function is modified where the string needs to include
- *  at least one of the following string ' ', '-', or ':'
+ *  The string must include at least one ' ' delimiter.  The callers convert
+ *  an accepted string with hex2dec(), so this accepts only what hex2dec()
+ *  can convert exactly: a '-' or ':' delimited value such as a date or a
+ *  MAC address would otherwise be stored as 0.
  *
  */
 int is_hexadecimal(const char * str, const short ignore_special) {
 	int i = 0;
 	int delim_found = FALSE;
+	const char *start = str;
+	unsigned long long value;
 
 	if (!str) return FALSE;
 
@@ -1636,7 +1684,7 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 			case 'e': case 'E': case 'f': case 'F':
 			case '"':
 				break;
-			case '-': case ':': case ' ':
+			case ' ':
 				delim_found = TRUE;
 				break;
 			case '\t':
@@ -1655,7 +1703,8 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 		return FALSE;
 	}
 
-	return TRUE;
+	/* a value wider than 64 bits has no exact conversion */
+	return hex_value(start, &value);
 }
 
 /*! \fn char *strip_alpha(char *string)
@@ -1708,17 +1757,23 @@ char *strip_alpha(char *string) {
  *
  */
 char *add_slashes(char *string) {
-	int length;
-	int position;
-	int new_position;
+	size_t length;
+	size_t position;
+	size_t new_position;
 	char *return_str;
 
-	if (!(return_str = (char *) malloc(BUFSIZE))) {
+	length = strlen(string);
+
+	/* every backslash may be doubled, so size for twice the input plus the terminator */
+	if (length > (SIZE_MAX - 1) / 2) {
+		die("ERROR: Fatal malloc error: util.c add_slashes!");
+	}
+
+	if (!(return_str = (char *) malloc(length * 2 + 1))) {
 		die("ERROR: Fatal malloc error: util.c add_slashes!");
 	}
 	return_str[0] = '\0';
 
-	length       = strlen(string);
 	position     = 0;
 	new_position = 0;
 
@@ -1852,27 +1907,6 @@ char *ltrim(char *str) {
 	return str;
 }
 
-/*! \fn reverse()
- *  \brief reverses a string in place.
- *
- *  \return the reversed string.
- */
-char *reverse(char* str) {
-	int end   = strlen(str)-1;
-	int start = 0;
-
-	while (start < end) {
-		str[start] ^= str[end];
-		str[end]   ^= str[start];
-		str[start] ^= str[end];
-
-		++start;
-		--end;
-	}
-
-	return str;
-}
-
 /*! \fn strpos()
  *  \brief looks for the position of needle in haystack
  *
@@ -1909,89 +1943,9 @@ int char_count(const char *str, int chr) {
 }
 
 unsigned long long hex2dec(char *str) {
-	int i = 0;
-	unsigned long long number = 0;
+	unsigned long long number;
 
-	if (!str) return 0;
-
-	/* first revers the string */
-	reverse(str);
-
-	while (*str) {
-		switch (*str) {
-		case '0':
-			i++;
-			break;
-		case '1':
-			number += pow(16, i) * 1;
-			i++;
-			break;
-		case '2':
-			number += pow(16, i) * 2;
-			i++;
-			break;
-		case '3':
-			number += pow(16, i) * 3;
-			i++;
-			break;
-		case '4':
-			number += pow(16, i) * 4;
-			i++;
-			break;
-		case '5':
-			number += pow(16, i) * 5;
-			i++;
-			break;
-		case '6':
-			number += pow(16, i) * 6;
-			i++;
-			break;
-		case '7':
-			number += pow(16, i) * 7;
-			i++;
-			break;
-		case '8':
-			number += pow(16, i) * 8;
-			i++;
-			break;
-		case '9':
-			number += pow(16, i) * 9;
-			i++;
-			break;
-		case 'a': case 'A':
-			number += pow(16, i) * 10;
-			i++;
-			break;
-		case 'b': case 'B':
-			number += pow(16, i) * 11;
-			i++;
-			break;
-		case 'c': case 'C':
-			number += pow(16, i) * 12;
-			i++;
-			break;
-		case 'd': case 'D':
-			number += pow(16, i) * 13;
-			i++;
-			break;
-		case 'e': case 'E':
-			number += pow(16, i) * 14;
-			i++;
-			break;
-		case 'f': case 'F':
-			number += pow(16, i) * 15;
-			i++;
-			break;
-		case '"': case ' ': case '\t':
-			break;
-		default:
-			return 0;
-		}
-
-		str++;
-	}
-
-	return number;
+	return hex_value(str, &number) ? number : 0;
 }
 
 int hasCaps() {

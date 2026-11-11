@@ -268,6 +268,28 @@ static void parse_host_list(const char *input) {
 	}
 }
 
+/* cmd.php polls device 0 only when 0 lies within --first and --last.
+ * Without this check every concurrent process polled the device 0 items.
+ * parse_host_list() leaves only decimal ids and commas in the list. */
+static bool device_0_selected(void) {
+	const char *cursor = set.host_id_list;
+
+	if (cursor[0] != '\0') {
+		while (cursor != NULL) {
+			if (cursor[0] == '0' && (cursor[1] == ',' || cursor[1] == '\0')) {
+				return TRUE;
+			}
+
+			cursor = strchr(cursor, ',');
+			if (cursor != NULL) cursor++;
+		}
+
+		return FALSE;
+	}
+
+	return !HOSTID_DEFINED(set.start_host_id) || set.start_host_id == 0;
+}
+
 int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
@@ -464,11 +486,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		else if (STRMATCH(arg, "-N") || STRIMATCH(arg, "--mode")) {
-			if (STRIMATCH(getarg(opt, &argv), "online")) {
+			/* getarg() consumes the next argv entry for "--mode offline" */
+			opt = getarg(opt, &argv);
+
+			if (STRIMATCH(opt, "online")) {
 				set.mode = REMOTE_ONLINE;
-			} else if (STRIMATCH(getarg(opt, &argv), "offline")) {
+			} else if (STRIMATCH(opt, "offline")) {
 				set.mode = REMOTE_OFFLINE;
-			} else if (STRIMATCH(getarg(opt, &argv), "recovery")) {
+			} else if (STRIMATCH(opt, "recovery")) {
 				set.mode = REMOTE_RECOVERY;
 			} else {
 				die("ERROR: invalid polling mode '%s' specified", opt);
@@ -499,7 +524,7 @@ int main(int argc, char *argv[]) {
 			char *setting = getarg(opt, &argv);
 			char *value   = strchr(setting, ':');
 
-			if (*value) {
+			if (value != NULL) {
 				*value++ = '\0';
 			} else {
 				die("ERROR: -O requires setting:value");
@@ -618,7 +643,8 @@ int main(int argc, char *argv[]) {
 		SPINE_LOG_DEBUG(("DEBUG: Selective Debug Devices %s", set.selective_device_debug));
 		int i = 0;
 		char *token = strtok(set.selective_device_debug, ",");
-		while(token) {
+		/* debug_devices holds 100 ids, the last one the terminator */
+		while (token && i < 99) {
 			debug_devices[i]   = atoi(token);
 			debug_devices[i+1] = '\0';
 			token = strtok(NULL, ",");
@@ -657,15 +683,24 @@ int main(int argc, char *argv[]) {
 
 
 	/* check for device 0 items */
-	result = db_query(&mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
-	if (mysql_num_rows(result)) {
-		set.has_device_0 = TRUE;
+	if (device_0_selected()) {
+		result = db_query(&mysql, LOCAL, "SELECT * FROM (SELECT COUNT(*) AS items FROM poller_item WHERE host_id = 0 AND poller_id = 1) AS rs WHERE rs.items > 0");
+		if (mysql_num_rows(result)) {
+			set.has_device_0 = TRUE;
+		}
+		db_free_result(result);
 	}
-	db_free_result(result);
 
-	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti */
+	/* Since MySQL 5.7 the sql_mode defaults are too strict for cacti.  An
+	 * online remote collector writes its poller_time row through the main
+	 * server connection, so that session needs the same relaxation. */
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
 	db_insert(&mysql, LOCAL, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+
+	if (mode == REMOTE) {
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'NO_ZERO_DATE', ''))");
+		db_insert(&mysqlr, REMOTE, "SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY', ''))");
+	}
 
 	if (set.log_level == POLLER_VERBOSITY_DEBUG) {
 		SPINE_LOG_DEBUG(("DEBUG: Version %s starting", VERSION));
@@ -920,16 +955,21 @@ int main(int argc, char *argv[]) {
 		/* dev note - errno was never primed at this point in previous version of code */
 		int loop_count = 0;
 		double progress_time = 0;
-		unsigned int sem_err = 0;
+		int sem_err = 0;
 		int spine_timeout = FALSE;
+		int have_permit = FALSE;
 
 		while (TRUE) {
-			sem_err = sem_trywait(&available_threads);
-
-			if (sem_err == 0) {
+			/* sem_trywait() returns -1 and reports the reason in errno */
+			if (sem_trywait(&available_threads) == 0) {
 				// Acquired a thread
+				have_permit = TRUE;
 				break;
-			} else if (sem_err == EINTR) {
+			}
+
+			sem_err = errno;
+
+			if (sem_err == EINTR) {
 				// Interrupted by signal handler
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
@@ -945,6 +985,7 @@ int main(int argc, char *argv[]) {
 				if (progress_time + 1 > set.poller_interval) {
 					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
 					spine_timeout = TRUE;
+					canexit = TRUE;
 					break;
 				}
 
@@ -966,12 +1007,14 @@ int main(int argc, char *argv[]) {
 		loop_count = 0;
 
 		while (!spine_timeout) {
-			sem_err = sem_trywait(&thread_init_sem);
-
-			if (sem_err == 0) {
+			if (sem_trywait(&thread_init_sem) == 0) {
 				// Acquired a thread
 				break;
-			} else if (sem_err == EINTR) {
+			}
+
+			sem_err = errno;
+
+			if (sem_err == EINTR) {
 				// Interrupted by signal handler
 			} else if (sem_err == EDEADLK) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
@@ -981,12 +1024,15 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
 			}
 
+			loop_count++;
+
 			if (loop_count == 10) {
 				progress_time = get_time_as_double() - start_time;
 
 				if (progress_time + 1 > set.poller_interval) {
 					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
 					spine_timeout = TRUE;
+					canexit = TRUE;
 					break;
 				}
 
@@ -1005,6 +1051,11 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		/* no worker will run to return the permit */
+		if (spine_timeout && have_permit) {
+			sem_post(&available_threads);
+		}
+
 		if (!spine_timeout) {
 			/* child_cleanup frees every partition after the first as soon as
 			 * its poll ends, which can precede the logging below. */
@@ -1014,10 +1065,9 @@ int main(int argc, char *argv[]) {
 			int created_host_data_ids = poller_details->host_data_ids;
 			int created_complete      = poller_details->complete;
 
-			/* create child process */
+			/* create child process.  The child reads only its own
+			 * poller_details copy, so no lock is handed to it. */
 			thread_retry:
-
-			thread_mutex_lock(LOCK_HOST_TIME);
 
 			thread_status = pthread_create(&threads[device_counter], &attr, child, poller_details);
 
@@ -1048,9 +1098,11 @@ int main(int argc, char *argv[]) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 			}
 
-			/* Restore thread initialization semaphore if thread creation failed */
+			/* Restore thread initialization semaphore if thread creation failed,
+			 * and return the worker permit child_cleanup() would have released */
 			if (thread_status) {
 				sem_post(&thread_init_sem);
+				sem_post(&available_threads);
 			}
 		}
 

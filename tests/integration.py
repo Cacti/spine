@@ -18,6 +18,26 @@ FAULT_BINARY = Path(os.environ.get('SPINE_TEST_FAULT_BINARY', ROOT / 'spine_allo
 # Linking the fault binary needs a linker with --wrap; see configure.ac.
 HAVE_FAULT_BINARY = FAULT_BINARY.is_file()
 CLIENT = shutil.which('mariadb') or shutil.which('mysql')
+# Optional cases that must run instead of being skipped, as a comma separated
+# list, for a CI job that provides their prerequisites.
+OPTIONAL = {'cacti', 'fault'}
+REQUIRED = {name.strip() for name in os.environ.get('SPINE_TEST_REQUIRE', '').split(',') if name.strip()}
+if REQUIRED - OPTIONAL:
+    raise SystemExit('Unknown SPINE_TEST_REQUIRE entries: ' + ', '.join(sorted(REQUIRED - OPTIONAL)))
+
+
+def optional(name, available, reason):
+    """Skip a case whose prerequisite is missing, unless SPINE_TEST_REQUIRE
+    names it, in which case the case fails instead."""
+    if available or name not in REQUIRED:
+        return unittest.skipUnless(available, reason)
+
+    def missing(test):
+        def run(self):
+            self.fail(reason + ', and SPINE_TEST_REQUIRE requires this case')
+        run.__name__ = test.__name__
+        return run
+    return missing
 
 
 class Polling(unittest.TestCase):
@@ -159,12 +179,13 @@ class Polling(unittest.TestCase):
         self.sql('INSERT IGNORE INTO audit_first SELECT host_id,local_data_id,rrd_name FROM audit_expected '
                  'ORDER BY local_data_id,rrd_name;')
 
-    def run_spine(self, failure=None, ping=False, strict=False):
+    def run_spine(self, failure=None, ping=False, strict=False, hosts=(), conf=None, poller=1):
         self.sql("SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log=ON;", False)
-        conf = self.strict_conf if strict else self.conf
-        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', '1', '-t', '16', '-S', '-V', '1']
+        conf = conf or (self.strict_conf if strict else self.conf)
+        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', str(poller), '-t', '16', '-S', '-V', '1']
         if ping:
             args.append('-P')
+        args.extend(hosts)
         env = os.environ.copy()
         if failure:
             env['SPINE_TEST_ALLOC_FAILURE'] = failure
@@ -180,7 +201,7 @@ class Polling(unittest.TestCase):
                          self.result.stdout[-3000:] + self.result.stderr[-1000:])
         self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_expected ex LEFT JOIN poller_output po '
                                  'ON po.local_data_id=ex.local_data_id AND po.rrd_name=ex.rrd_name '
-                                 'WHERE po.local_data_id IS NULL OR po.output<>CAST(ex.local_data_id AS CHAR);'), '0')
+                                 'WHERE po.local_data_id IS NULL OR CAST(po.output AS BINARY)<>CAST(ex.local_data_id AS BINARY);'), '0')
         self.assertEqual(self.sql('SELECT attempts FROM audit_duplicates;'), '0')
         counts = self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
                           "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False)
@@ -189,6 +210,25 @@ class Polling(unittest.TestCase):
             self.assertEqual(int(self.sql('SELECT COUNT(*) FROM audit_schedule;')), devices)
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
                                      'SELECT COUNT(*) FROM audit_expected ex WHERE ex.host_id=s.host_id);'), '0')
+
+    def test_remote_collector_records_its_start_on_the_main_server(self):
+        # An online remote collector writes its poller_time row, with a zero
+        # end_time, through its main server connection, which needs the same
+        # sql_mode relaxation as the local one.  MySQL 5.7 and later reject
+        # the zero date by default; require that here on any server.
+        self.seed(3, 1)
+        self.sql('UPDATE host SET poller_id=2; UPDATE poller_item SET poller_id=2;'
+                 'INSERT INTO poller(id,threads) VALUES(2,16) ON DUPLICATE KEY UPDATE threads=VALUES(threads);')
+        conf = self.directory / 'spine-remote.conf'
+        conf.touch(mode=0o600)
+        conf.write_text(self.conf.read_text() + f'RDB_Host {self.host}\nRDB_Port {self.port}\nRDB_Database {self.database}\n'
+                        f'RDB_User {self.user}\nRDB_Pass {self.password}\n')
+        mode = self.sql('SELECT @@GLOBAL.sql_mode;', False)
+        self.addCleanup(self.sql, "SET GLOBAL sql_mode='" + mode + "';", False)
+        self.sql("SET GLOBAL sql_mode=CONCAT(@@GLOBAL.sql_mode,',STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE');", False)
+        self.run_spine(conf=conf, poller=2)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM poller_time WHERE poller_id=2 AND end_time<>'0000-00-00 00:00:00';"),
+                         '1', self.result.stdout[-3000:])
 
     def test_single_and_ten_workers(self):
         for threads in (1, 10):
@@ -267,6 +307,21 @@ class Polling(unittest.TestCase):
         self.run_spine()
         self.check_complete(devices=2)
 
+    def test_device_zero_only_in_its_range(self):
+        # poller.php gives device 0 to the process whose range starts at 0;
+        # every other concurrent process must leave its items alone.
+        for hosts, polled in ((('--first=1', '--last=2'), False), (('--first=0', '--last=1'), True),
+                              (('-H', '1,2'), False), (('-H', '2,0,1'), True)):
+            with self.subTest(hosts=hosts):
+                self.setUp()
+                self.seed(13, 10, host=0)
+                self.seed(37, 10, host=1)
+                self.run_spine(hosts=hosts)
+                self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+                device_0 = int(self.sql('SELECT COUNT(*) FROM poller_output WHERE local_data_id<10000;'))
+                self.assertEqual(device_0, 13 if polled else 0, self.result.stdout[-3000:])
+                self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output WHERE local_data_id>10000;'), '37')
+
     def test_output_write_failure(self):
         # A failed write still advances the countdown, as in 1.2.31, so a
         # persistent failure cannot freeze the schedule; only Strict_Mode
@@ -294,7 +349,7 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
                                   "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False), '0')
 
-    @unittest.skipUnless(HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
+    @optional('fault', HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
     def test_allocation_failures_and_retry(self):
         for failure in ('target', 'target-once', 'snmp', 'snmp-once'):
             with self.subTest(failure=failure):
@@ -315,7 +370,7 @@ class Polling(unittest.TestCase):
                 self.run_spine()
                 self.check_complete()
 
-    @unittest.skipUnless(os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
+    @optional('cacti', os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
     def test_real_script_server_pool(self):
         for pool in (1, 10, 15):
             with self.subTest(pool=pool):
@@ -327,7 +382,7 @@ class Polling(unittest.TestCase):
                 self.run_spine()
                 self.check_complete()
 
-    @unittest.skipUnless(os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
+    @optional('cacti', os.environ.get('SPINE_TEST_CACTI_ROOT'), 'requires a complete upstream Cacti source tree')
     def test_real_script_server_mixed_with_shell(self):
         self.seed(103, 10, multi=True)
         command = str(self.cacti / 'scripts/ss_spine_regression.php') + ' ss_spine_regression '

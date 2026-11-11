@@ -265,7 +265,9 @@
 #define GD_Y_MO_D 4
 #define GD_Y_MN_D 5
 #define GD_MAX 5
-#define GD_DEFAULT 5
+/* Every format fell through to Y/m/d before the switch had breaks; keep
+ * that as the default log timestamp. */
+#define GD_DEFAULT GD_Y_MO_D
 
 /* host availability statics */
 #define AVAIL_NONE 0
