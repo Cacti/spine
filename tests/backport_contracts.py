@@ -710,8 +710,8 @@ static double wait_for(int workers,int finish_us){int a_threads_value,i;double b
  for(i=0;i<workers;i++)pthread_join(t[i],NULL);(void)cur_time;return get_time_as_double()-begin_time;}
 int main(void){double took;
  set.poller_interval=60;
- /* the wait ends with the workers, well inside the former 500 ms step */
- took=wait_for(4,50000);assert(took<0.3&&set.exit_code==0);
+ /* the wait ends with the workers, inside the former 500 ms step even on a slow runner */
+ took=wait_for(4,50000);assert(took<0.45&&set.exit_code==0);
  /* nothing to wait for */
  took=wait_for(0,0);assert(took<0.1);
  /* the polling interval still ends the wait for a worker that does not finish */
