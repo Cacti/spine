@@ -91,7 +91,11 @@ void test_execution_policy(void) {
 	 * part of the result; output still open at the deadline is undefined, as
 	 * when the outer shell waits on the inner one while holding the pipe */
 	expect_script(&host, "/bin/sh -c 'printf 42; exit 7'", "42");
-	expect_script(&host, "/bin/sh -c 'printf 42; exec 1>&-; sleep 30'", "U");
+	/* a script that closed its output and exited delivers its value without
+	 * waiting for a helper it left running.  A nested /bin/sh cannot show
+	 * this: dash waits for it with the pipe still open, so the read reaches
+	 * the deadline, while bash and the BSD shells exec it */
+	expect_script(&host, "./tests/support/resource_fixture detach", "42");
 	expect_script(&host, "./tests/support/resource_fixture chunked", "42");
 	expect_script(&host, "./tests/support/resource_fixture linger", "U");
 	cancellation_contract(&host);
