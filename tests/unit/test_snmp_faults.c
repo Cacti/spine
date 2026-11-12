@@ -30,7 +30,6 @@ static int fail_pdu_create;
 static int fail_add_null_var;
 static int session_liberr;
 static int fail_ascii_string;
-static size_t failing_calloc;
 static int null_default_protocols;
 static int fail_auth_oid;
 static int fail_priv_oid;
@@ -42,10 +41,23 @@ static bool scripted_response;
 static int response_variables;
 static long response_errstat;
 static long response_errindex;
+/* An agent that drops (MULTI_TIMEOUT) or refuses (MULTI_TOOBIG) a request
+ * with more than one OID, and answers each OID alone. */
+typedef enum {
+	MULTI_ANSWERED,
+	MULTI_TIMEOUT,
+	MULTI_TOOBIG
+} multi_fault_t;
+static multi_fault_t multi_fault;
+/* The single-OID request, counted from 1, that times out; 0 for none. */
+static int single_timeout_at;
+static int single_calls;
 static bool response_nameless;
 static bool response_long_name;
 static bool response_reversed;
 static bool response_foreign_name;
+static bool small_response_limit;
+static bool single_response_timeout;
 static unsigned char captured_engine_id[64];
 static size_t captured_engine_id_len;
 
@@ -75,14 +87,6 @@ static void controlled_sess_error(void *session, int *liberr, int *syserr, char 
 static int controlled_ascii_string(char *buffer, size_t capacity, const u_char *input, size_t length) {
 	if (fail_ascii_string) return -1;
 	return snprint_asciistring(buffer, capacity, input, length);
-}
-
-static void *controlled_calloc(size_t count, size_t size) {
-	if (count == failing_calloc && failing_calloc != 0) {
-		failing_calloc = 0;
-		return NULL;
-	}
-	return calloc(count, size);
 }
 
 static const oid *controlled_default_authtype(size_t *length) {
@@ -156,11 +160,26 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 	/* Net-SNMP consumes the request even when the send fails. */
 	snmp_free_pdu(request);
 	*response = NULL;
+	if (multi_fault == MULTI_TIMEOUT && requested > 1) return STAT_TIMEOUT;
+	if (requested == 1 && single_timeout_at != 0 && ++single_calls == single_timeout_at) return STAT_TIMEOUT;
+	if (multi_fault == MULTI_TOOBIG && requested > 1) {
+		*response = snmp_pdu_create(SNMP_MSG_RESPONSE);
+		assert_non_null(*response);
+		(*response)->errstat = SNMP_ERR_TOOBIG;
+		(*response)->errindex = 0;
+		return STAT_SUCCESS;
+	}
 	if (!scripted_response) return scripted_status;
+	if (single_response_timeout && requested == 1) return STAT_TIMEOUT;
 	*response = snmp_pdu_create(SNMP_MSG_RESPONSE);
 	assert_non_null(*response);
 	(*response)->errstat = response_errstat;
 	(*response)->errindex = response_errindex;
+	if (small_response_limit && requested > 1) {
+		(*response)->errstat = SNMP_ERR_TOOBIG;
+		(*response)->errindex = 0;
+		return scripted_status;
+	}
 	for (index = 0; index < response_variables; index++) {
 		int source = response_reversed ? response_variables - 1 - index : index;
 		long reply_value = value + source;
@@ -203,7 +222,6 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 #define snmp_sess_session controlled_sess_session
 #define snmp_sess_synch_response controlled_synch_response
 #define snprint_asciistring controlled_ascii_string
-#define calloc controlled_calloc
 #define get_default_authtype controlled_default_authtype
 #define get_default_privtype controlled_default_privtype
 #define sc_get_auth_oid controlled_auth_oid
@@ -217,7 +235,6 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 #undef sc_get_auth_oid
 #undef get_default_privtype
 #undef get_default_authtype
-#undef calloc
 #undef snprint_asciistring
 #undef snmp_sess_synch_response
 #undef snmp_sess_session
@@ -238,7 +255,6 @@ static int snmp_reset(void **state) {
 	fail_add_null_var = FALSE;
 	session_liberr = 0;
 	fail_ascii_string = FALSE;
-	failing_calloc = 0;
 	null_default_protocols = FALSE;
 	fail_auth_oid = FALSE;
 	fail_priv_oid = FALSE;
@@ -250,10 +266,14 @@ static int snmp_reset(void **state) {
 	response_variables = 0;
 	response_errstat = SNMP_ERR_NOERROR;
 	response_errindex = 0;
+	multi_fault = MULTI_ANSWERED;
+	single_timeout_at = single_calls = 0;
 	response_nameless = FALSE;
 	response_long_name = FALSE;
 	response_reversed = FALSE;
 	response_foreign_name = FALSE;
+	small_response_limit = FALSE;
+	single_response_timeout = FALSE;
 	captured_engine_id_len = 0;
 	return 0;
 }
@@ -506,6 +526,100 @@ static void test_multi_values_missing_from_the_reply_are_unknown(void **state) {
 	assert_string_equal(oids[1].result, "U");
 }
 
+/* A checked batch that times out is retried one OID at a time. When the
+ * first OID also times out alone, every OID is recorded as failed, as a
+ * single get of each would have, after one timeout more than single gets.
+ * The caller marks the device as it reads the failures in order. */
+static void test_checked_batch_timeout_fails_every_oid(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+	scripted_status = STAT_TIMEOUT;
+
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_false(host.ignore_host);
+	assert_true(failed[0] && failed[1]);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+	assert_int_equal(scripted_calls, 2);
+}
+
+/* An agent that drops a request with many OIDs, or refuses it as tooBig, but
+ * answers each OID alone: the single gets decide each value. */
+static void test_checked_batch_without_verdicts_gets_each_oid_alone(void **state) {
+	const multi_fault_t faults[] = {MULTI_TIMEOUT, MULTI_TOOBIG};
+
+	(void) state;
+	for (size_t index = 0; index < sizeof(faults) / sizeof(faults[0]); index++) {
+		host_t host = {0};
+		target_t items[2];
+		snmp_oids_t oids[2];
+		bool failed[2] = {TRUE, TRUE};
+
+		snmp_reset(NULL);
+		host.snmp.session = (void *) (uintptr_t) 1;
+		prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+		multi_fault = faults[index];
+		scripted_response = TRUE;
+		response_variables = 1;
+
+		snmp_get_checked(&host, oids, 2, failed);
+		assert_false(host.ignore_host);
+		assert_false(failed[0] || failed[1]);
+		assert_string_equal(oids[0].result, "42");
+		assert_string_equal(oids[1].result, "42");
+		assert_int_equal(scripted_calls, 3);
+	}
+}
+
+/* A later OID that times out alone fails itself and the rest, and keeps
+ * the values read before it; the caller marks the device at that row. */
+static void test_checked_fallback_keeps_values_before_a_lone_timeout(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {TRUE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+	multi_fault = MULTI_TIMEOUT;
+	single_timeout_at = 2;
+	scripted_response = TRUE;
+	response_variables = 1;
+
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_false(host.ignore_host);
+	assert_false(failed[0]);
+	assert_true(failed[1]);
+	assert_string_equal(oids[0].result, "42");
+	assert_string_equal(oids[1].result, "U");
+	assert_int_equal(scripted_calls, 3);
+}
+
+/* The plain batched get keeps its verdict: no single-get fallback. */
+static void test_multi_batch_timeout_is_not_retried(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.1.1.0", ".1.3.6.1.2.1.1.3.0");
+	multi_fault = MULTI_TIMEOUT;
+
+	snmp_get_multi(&host, items, oids, 2);
+	assert_true(host.ignore_host);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+	assert_int_equal(scripted_calls, 1);
+}
+
 static void test_multi_success_without_a_reply_is_unknown(void **state) {
 	host_t host = {0};
 	target_t items[2];
@@ -666,18 +780,6 @@ static void test_unprintable_ascii_value_is_an_error(void **state) {
 	assert_string_equal(output, "42");
 }
 
-static void test_value_formatting_without_scratch_memory_is_unknown(void **state) {
-	netsnmp_variable_list variable;
-	char output[77] = "unchanged";
-
-	(void) state;
-	memset(&variable, 0, sizeof(variable));
-	failing_calloc = sizeof(output);
-
-	snmp_snprint_value(output, sizeof(output), NULL, 0, &variable);
-	assert_string_equal(output, "U");
-}
-
 static void init_v3_options(snmp_connection_t *options, char *auth, const char *auth_password,
 	char *priv, const char *priv_passphrase) {
 	static char host[] = "127.0.0.1";
@@ -783,8 +885,78 @@ static int snmp_group_setup(void **state) {
 	return 0;
 }
 
+static void test_checked_batch_retries_too_big_individually(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+	char *single;
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.2.1.0", ".1.3.6.1.2.1.2.2.1.1.1");
+	scripted_response = TRUE;
+	response_variables = 1;
+	small_response_limit = TRUE;
+	single = snmp_get(&host, oids[0].oid);
+	assert_string_equal(single, "42");
+	free(single);
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_string_equal(oids[0].result, "42");
+	assert_string_equal(oids[1].result, "42");
+	assert_false(failed[0]);
+	assert_false(failed[1]);
+	assert_false(host.ignore_host);
+	assert_int_equal(scripted_calls, 4);
+}
+
+static void test_checked_batch_stops_fallback_after_timeout(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.2.1.0", ".1.3.6.1.2.1.2.2.1.1.1");
+	scripted_response = TRUE;
+	small_response_limit = TRUE;
+	single_response_timeout = TRUE;
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+	assert_true(failed[0]);
+	assert_true(failed[1]);
+	/* failed[] carries the timeout; the caller marks the host at that row */
+	assert_false(host.ignore_host);
+	assert_int_equal(scripted_calls, 2);
+}
+
+static void test_checked_batch_bounds_persistent_too_big(void **state) {
+	host_t host = {0};
+	target_t items[2];
+	snmp_oids_t oids[2];
+	bool failed[2] = {FALSE, FALSE};
+
+	(void) state;
+	host.snmp.session = (void *) (uintptr_t) 1;
+	prepare_multi(oids, items, ".1.3.6.1.2.1.2.1.0", ".1.3.6.1.2.1.2.2.1.1.1");
+	scripted_response = TRUE;
+	response_errstat = SNMP_ERR_TOOBIG;
+	snmp_get_checked(&host, oids, 2, failed);
+	assert_string_equal(oids[0].result, "U");
+	assert_string_equal(oids[1].result, "U");
+	assert_false(failed[0]);
+	assert_false(failed[1]);
+	assert_false(host.ignore_host);
+	assert_int_equal(scripted_calls, 3);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test_setup(test_checked_batch_stops_fallback_after_timeout, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_bounds_persistent_too_big, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_retries_too_big_individually, snmp_reset),
 		cmocka_unit_test_setup(test_pdu_allocation_failure_reads_as_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_varbind_allocation_failure_reads_as_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_unrecognised_transport_status_is_not_decoded, snmp_reset),
@@ -797,6 +969,10 @@ int main(void) {
 		cmocka_unit_test_setup(test_multi_request_drops_an_oid_it_cannot_add, snmp_reset),
 		cmocka_unit_test_setup(test_multi_values_missing_from_the_reply_are_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_multi_success_without_a_reply_is_unknown, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_timeout_fails_every_oid, snmp_reset),
+		cmocka_unit_test_setup(test_checked_batch_without_verdicts_gets_each_oid_alone, snmp_reset),
+		cmocka_unit_test_setup(test_multi_batch_timeout_is_not_retried, snmp_reset),
+		cmocka_unit_test_setup(test_checked_fallback_keeps_values_before_a_lone_timeout, snmp_reset),
 		cmocka_unit_test_setup(test_multi_pdu_error_without_a_failing_oid_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_multi_retry_budget_is_bounded_by_the_oid_count, snmp_reset),
 		cmocka_unit_test_setup(test_multi_values_follow_their_oid_not_their_position, snmp_reset),
@@ -805,7 +981,6 @@ int main(void) {
 		cmocka_unit_test_setup(test_missing_instances_are_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_exception_check_tolerates_a_missing_varbind, snmp_reset),
 		cmocka_unit_test_setup(test_unprintable_ascii_value_is_an_error, snmp_reset),
-		cmocka_unit_test_setup(test_value_formatting_without_scratch_memory_is_unknown, snmp_reset),
 		cmocka_unit_test_setup(test_security_keys_fall_back_to_the_library_defaults, snmp_reset),
 		cmocka_unit_test_setup(test_session_refused_when_a_protocol_oid_is_unavailable, snmp_reset),
 		cmocka_unit_test_setup(test_engine_id_is_passed_to_the_session, snmp_reset),

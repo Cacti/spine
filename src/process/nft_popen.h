@@ -131,7 +131,7 @@ extern int spine_open_pipe_cloexec(int pdes[2]);
 extern int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
 
 /*!
- *  spine_reap_child_bounded
+ *  spine_reap_child_owned
  *
  *  Reap a child with WNOHANG, sleeping between attempts, so a wedged script
  *  cannot pin a poller thread indefinitely.
@@ -142,9 +142,10 @@ extern int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr);
  *  errno as waitpid() set it; EINTR is retried within a bounded per-attempt
  *  budget, so it too surfaces as -1 with errno == EINTR once that budget is
  *  exhausted.
+ *
+ *  Reaping and clearing *pid, which is set to 0 once the child is collected,
+ *  share the registry's mutex.
  */
-extern int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts);
-/* Reaping and clearing the owned PID share the registry's mutex. */
 extern int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_mutex_t *mutex);
 /* Permanently stop spawning and kill registered external script groups.
  * This function takes a mutex and must never run in a signal handler. */

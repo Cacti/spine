@@ -145,6 +145,9 @@ static void test_unknown_assertion_operator_never_fails(void **state) {
 	assert_false(reindex_assertion_failed(&reindex, "5"));
 }
 
+/* which uptime OID answered; these cases do not inspect it */
+static bool uptime_source_legacy;
+
 static void test_empty_script_command_yields_no_result(void **state) {
 	host_t host = {.id = 1};
 	reindex_t reindex;
@@ -155,7 +158,7 @@ static void test_empty_script_command_yields_no_result(void **state) {
 	memset(&reindex, 0, sizeof(reindex));
 	reindex.action = POLLER_ACTION_SCRIPT;
 
-	assert_null(poll_reindex_action(&host, &reindex, 1, uptime, &unavailable));
+	assert_null(poll_reindex_action(&host, &reindex, 1, uptime, &uptime_source_legacy, &unavailable));
 	assert_false(unavailable);
 }
 
@@ -171,7 +174,7 @@ static void test_snmp_count_without_a_session_is_unknown(void **state) {
 	reindex.action = POLLER_ACTION_SNMP_COUNT;
 	snprintf(reindex.arg1, sizeof(reindex.arg1), ".1.3.6.1.2.1.2.2.1.1");
 
-	result = poll_reindex_action(&host, &reindex, 1, uptime, &unavailable);
+	result = poll_reindex_action(&host, &reindex, 1, uptime, &uptime_source_legacy, &unavailable);
 	assert_non_null(result);
 	assert_string_equal(result, "U");
 	free(result);
@@ -191,7 +194,7 @@ static void assert_line_count(int action, const char *answer, const char *expect
 	script_answer_armed = TRUE;
 	script_answer = answer;
 
-	result = poll_reindex_action(&host, &reindex, 1, uptime, &unavailable);
+	result = poll_reindex_action(&host, &reindex, 1, uptime, &uptime_source_legacy, &unavailable);
 	assert_non_null(result);
 	assert_string_equal(result, expected);
 	free(result);
@@ -231,14 +234,14 @@ static void run_reindex_action(void) {
 	char uptime[BUFSIZE] = "";
 	bool unavailable = FALSE;
 
-	free(poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &unavailable));
+	free(poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &uptime_source_legacy, &unavailable));
 }
 
 static void run_reindex_uptime_action(void) {
 	char uptime[BUFSIZE] = "12345";
 	bool unavailable = FALSE;
 
-	free(poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &unavailable));
+	free(poll_reindex_action(&allocation_host, &allocation_reindex, 1, uptime, &uptime_source_legacy, &unavailable));
 }
 
 static void test_reindex_result_allocation_failures_are_fatal(void **state) {

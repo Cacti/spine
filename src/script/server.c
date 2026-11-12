@@ -79,6 +79,8 @@ int php_init(int php_process) {
 	int slot = -1;
 	int i;
 	int rc = FALSE;
+	int banner_timeout;
+	double init_deadline;
 
 	/* An out-of-range slot would index past php_processes. */
 	if (php_processes == NULL || set.php.php_servers < 0 || set.php.php_servers > MAX_PHP_SERVERS ||
@@ -93,6 +95,9 @@ int php_init(int php_process) {
 	} else {
 		num_processes = 1;
 	}
+	/* The servers start one after another, so initial startup shares one
+	 * script_timeout instead of waiting it out for each server. */
+	init_deadline = spine_monotonic_time() + set.php.script_timeout;
 
 	for (i = 0; i < num_processes; i++) {
 		/* the spawn retry budget is per server. Sharing one counter across the
@@ -274,9 +279,19 @@ int php_init(int php_process) {
 		cancel_held = FALSE;
 
 		/* check pipe to insure startup took place. Initial startup holds no
-		 * slot lock, so a slow PHP start gets the full script_timeout; a
-		 * single-slot restart is recovery and keeps the short cap. */
-		result_string = php_read_banner(slot, php_process == PHP_INIT || set.php.script_timeout < 2 ? set.php.script_timeout : 2);
+		 * slot lock, so a slow PHP start gets what is left of the shared
+		 * script_timeout, and never less than the 2 second cap of a
+		 * single-slot restart, which is recovery. A hung PHP thus delays
+		 * startup by script_timeout plus 2 seconds per further server. */
+		banner_timeout = set.php.script_timeout < 2 ? set.php.script_timeout : 2;
+		if (php_process == PHP_INIT) {
+			double remaining = init_deadline - spine_monotonic_time();
+
+			if (remaining > banner_timeout) {
+				banner_timeout = remaining < set.php.script_timeout ? (int) remaining + 1 : set.php.script_timeout;
+			}
+		}
+		result_string = php_read_banner(slot, banner_timeout);
 
 		if (strstr(result_string, "Started")) {
 			SPINE_LOG_DEBUG(("DEBUG: SS[%i] Confirmed PHP Script Server running using readfd[%i], writefd[%i]", slot, php_processes[slot].php_read_fd, php_processes[slot].php_write_fd));

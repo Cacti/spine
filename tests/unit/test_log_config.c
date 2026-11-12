@@ -412,7 +412,8 @@ static void test_local_and_remote_tls_configuration(void **state) {
 	write_config("DB_SSL_Mode required\nDB_SSL_MinVersion TLSv1.2\n"
 				 "DB_SSL_Cipher ECDHE-RSA-AES128-GCM-SHA256\n"
 				 "RDB_SSL_Mode verify-full\nRDB_SSL_MinVersion TLSv1.3\n"
-				 "RDB_SSL_CA /fixture/ca.pem\nRDB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256\n");
+				 "RDB_SSL_CA /fixture/ca.pem\nRDB_SSL_Ciphersuites TLS_AES_128_GCM_SHA256\n"
+				 "DB_SSL_Key /fixture/key.pem\nDB_SSL_Cert /fixture/cert.pem\n");
 	assert_int_equal(read_spine_config(config_path), 0);
 	assert_int_equal(set.database.tls_mode, SPINE_TLS_REQUIRED);
 	assert_int_equal(set.database.tls_min_version, 12);
@@ -423,6 +424,8 @@ static void test_local_and_remote_tls_configuration(void **state) {
 	assert_string_equal(set.remote_database.tls_cipher, "");
 	assert_string_equal(set.remote_database.ssl_ca, "/fixture/ca.pem");
 	assert_string_equal(set.remote_database.tls_ciphersuites, "TLS_AES_128_GCM_SHA256");
+	assert_string_equal(set.database.ssl_key, "/fixture/key.pem");
+	assert_string_equal(set.database.ssl_cert, "/fixture/cert.pem");
 	config_defaults();
 	assert_int_equal(set.database.tls_mode, SPINE_TLS_LEGACY);
 	assert_int_equal(set.remote_database.tls_min_version, 0);
@@ -430,7 +433,10 @@ static void test_local_and_remote_tls_configuration(void **state) {
 }
 
 static void test_invalid_tls_configuration_is_refused(void **state) {
-	const char *invalid[] = {"DB_SSL_Mode pretend\n", "RDB_SSL_MinVersion TLSv1.0\n"};
+	/* a bad value, a misspelled directive, and a directive without a value
+	 * would each leave a weaker policy than the file asks for */
+	const char *invalid[] = {"DB_SSL_Mode pretend\n", "RDB_SSL_MinVersion TLSv1.0\n", "DB_SSL_Mod verify-full\n",
+		"RDB_SSL_Chipher HIGH\n", "DB_SSL_Mode\n", "RDB_SSL_Cipher\n"};
 	size_t index;
 	(void) state;
 	for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); index++) {

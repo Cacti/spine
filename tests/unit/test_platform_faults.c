@@ -38,6 +38,7 @@ static int fail_clock_gettime;
 static pthread_mutex_t *fail_lock_mutex;
 static pthread_mutex_t *fail_unlock_mutex;
 static int fail_attr_init;
+static int fail_cond_init;
 
 int __real_nanosleep(const struct timespec *requested, struct timespec *remaining);
 int __wrap_nanosleep(const struct timespec *requested, struct timespec *remaining) {
@@ -85,6 +86,15 @@ int __wrap_pthread_attr_init(pthread_attr_t *attributes) {
 	}
 	return __real_pthread_attr_init(attributes);
 }
+
+int __real_pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attributes);
+int __wrap_pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attributes) {
+	if (fail_cond_init) {
+		fail_cond_init = FALSE;
+		return ENOMEM;
+	}
+	return __real_pthread_cond_init(cond, attributes);
+}
 #endif
 
 static int platform_setup(void **state) {
@@ -96,6 +106,7 @@ static int platform_setup(void **state) {
 	fail_lock_mutex = NULL;
 	fail_unlock_mutex = NULL;
 	fail_attr_init = FALSE;
+	fail_cond_init = FALSE;
 #endif
 	return 0;
 }
@@ -231,6 +242,19 @@ static void test_thread_attributes_report_an_init_failure(void **state) {
 	fail_attr_init = TRUE;
 	assert_int_equal(spine_thread_attr_init(&attributes), ENOMEM);
 }
+
+/* A permit set whose condition variable cannot be created reports the
+ * failure and releases the mutex it had already initialized. */
+static void test_permits_report_a_condition_init_failure(void **state) {
+	spine_permits_t permits;
+
+	(void) state;
+	fail_cond_init = TRUE;
+	assert_int_equal(spine_permits_init(&permits, 1), ENOMEM);
+	assert_false(fail_cond_init);
+	assert_int_equal(spine_permits_init(&permits, 1), 0);
+	assert_int_equal(spine_permits_destroy(&permits), 0);
+}
 #endif
 
 int main(void) {
@@ -249,6 +273,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_permit_lock_failure_is_fatal, platform_setup),
 		cmocka_unit_test_setup(test_permit_unlock_failure_is_fatal, platform_setup),
 		cmocka_unit_test_setup(test_thread_attributes_report_an_init_failure, platform_setup),
+		cmocka_unit_test_setup(test_permits_report_a_condition_init_failure, platform_setup),
 #endif
 	};
 

@@ -22,6 +22,7 @@
 #include "app/spine.h"
 #include "tests/support/child_run.h"
 #include "config/settings_internal.h"
+#include "poller/poller_internal.h"
 
 #define HOST_COLUMNS 37
 #define REINDEX_COLUMNS 5
@@ -69,7 +70,18 @@ static struct {
 	const char *fail_strdup_text;
 	int fail_strdup_skip;
 	const char *host_time;
+	int ping_calls;
+	int reindex_queries;
+	int uptime_gets;
+	int index_gets;
+	int batch_requests;
+	int batch_oids;
+	const char *failing_index_oid;
 } fake;
+
+/* Partitions of one device run on their own threads; the fake's counters
+ * and query log are shared, so updates go through this lock. */
+static pthread_mutex_t fake_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static pool_t fake_pool;
 static int fake_session;
@@ -80,10 +92,12 @@ static void reset_fake(void) {
 }
 
 static void capture(const char *query) {
+	pthread_mutex_lock(&fake_lock);
 	assert_true(fake.query_count < MAX_QUERIES);
 	fake.queries[fake.query_count] = strdup(query);
 	assert_non_null(fake.queries[fake.query_count]);
 	fake.query_count++;
+	pthread_mutex_unlock(&fake_lock);
 }
 
 static int captured(const char *needle) {
@@ -143,9 +157,12 @@ static void observe_completion(const char *query) {
 	if (strncmp(query, "UPDATE poller_item SET rrd_next_step", 36) == 0 ||
 		strncmp(query, "UPDATE host SET polling_time", 28) == 0 ||
 		strncmp(query, "INSERT INTO host_errors", 23) == 0) {
+		bool locked = thread_mutex_trylock(LOCK_THDET) != 0;
+		if (!locked) thread_mutex_unlock(LOCK_THDET);
+		pthread_mutex_lock(&fake_lock);
 		fake.completion_queries++;
-		if (thread_mutex_trylock(LOCK_THDET) == 0) thread_mutex_unlock(LOCK_THDET);
-		else fake.completion_queries_locked++;
+		if (locked) fake.completion_queries_locked++;
+		pthread_mutex_unlock(&fake_lock);
 	}
 }
 
@@ -167,6 +184,9 @@ MYSQL_RES *__wrap_db_query(MYSQL *mysql, int type, const char *query) {
 		return (MYSQL_RES *) make_result(1, HOST_COLUMNS, host_cell);
 	}
 	if (strstr(query, "FROM poller_reindex") != NULL) {
+		pthread_mutex_lock(&fake_lock);
+		fake.reindex_queries++;
+		pthread_mutex_unlock(&fake_lock);
 		return (MYSQL_RES *) make_result(fake.reindex_count, REINDEX_COLUMNS, reindex_cell);
 	}
 	if (strstr(query, "SELECT SQL_NO_CACHE action") != NULL) {
@@ -196,13 +216,17 @@ void __wrap_db_escape(MYSQL *mysql, char *output, int max_size, const char *inpu
 bool __wrap_db_acquire_lease(int type, db_lease_t *lease) {
 	lease->type = type;
 	lease->connection = &fake_pool;
+	pthread_mutex_lock(&fake_lock);
 	if (fake.fail_poll_allocation != 0) fake.poll_allocations_armed = TRUE;
 	if (type == LOCAL || type == REMOTE) fake.leases[type == LOCAL ? 0 : 1] = lease;
+	pthread_mutex_unlock(&fake_lock);
 	return TRUE;
 }
 
 bool __wrap_db_release_lease(db_lease_t *lease) {
+	pthread_mutex_lock(&fake_lock);
 	fake.lease_releases++;
+	pthread_mutex_unlock(&fake_lock);
 	lease->connection = NULL;
 	return TRUE;
 }
@@ -272,27 +296,55 @@ MYSQL_ROW __wrap_mysql_fetch_row(MYSQL_RES *opaque) {
 }
 
 void *__wrap_snmp_host_init(const snmp_connection_t *options) {
+	void *session = &fake_session;
+	pthread_mutex_lock(&fake_lock);
 	assert_true(fake.session_opens < MAX_QUERIES);
 	if (fake.session_fail_at == fake.session_opens + 1) {
-		fake.session_opens++;
-		return NULL;
+		session = NULL;
+	} else {
+		fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
+		snprintf(fake.session_hostnames[fake.session_opens], BUFSIZE, "%s", options->hostname);
 	}
-	fake.session_timeouts[fake.session_opens] = options->snmp_timeout;
-	snprintf(fake.session_hostnames[fake.session_opens], BUFSIZE, "%s", options->hostname);
 	fake.session_opens++;
-	return &fake_session;
+	pthread_mutex_unlock(&fake_lock);
+	return session;
 }
 
 void __wrap_snmp_host_cleanup(void *session) {
 	assert_ptr_equal(session, &fake_session);
 }
 
+#define INDEX_OID ".1.3.6.1.2.1.2.2.1.1."
+
+/* An index column answers index-<n> for row n; the failing OID is one the
+ * agent has no instance for, which a single get treats as a failure. */
+static const char *fake_index_value(const char *oid, char *buffer, size_t size, bool *failed) {
+	*failed = fake.failing_index_oid != NULL && strcmp(oid, fake.failing_index_oid) == 0;
+	if (*failed) return NULL;
+	snprintf(buffer, size, "index-%s", oid + strlen(INDEX_OID));
+	return buffer;
+}
+
 /* Mirrors snmp_get_base(): a failure is "" when allowed and U otherwise. */
 static char *fake_get(host_t *host, const char *oid, bool should_fail) {
 	const char *value = NULL;
+	char index_value[64];
+	bool index_failed = FALSE;
+	bool uptime = strcmp(oid, ".1.3.6.1.6.3.10.2.1.3.0") == 0 || strcmp(oid, ".1.3.6.1.2.1.1.3.0") == 0;
 	if (strcmp(oid, ".1.3.6.1.6.3.10.2.1.3.0") == 0) value = fake.engine_uptime;
 	else if (strcmp(oid, ".1.3.6.1.2.1.1.3.0") == 0) value = fake.legacy_uptime;
-	else value = "fake-system-field";
+	else if (strncmp(oid, INDEX_OID, strlen(INDEX_OID)) == 0) {
+		value = fake_index_value(oid, index_value, sizeof(index_value), &index_failed);
+		pthread_mutex_lock(&fake_lock);
+		fake.index_gets++;
+		pthread_mutex_unlock(&fake_lock);
+	} else value = "fake-system-field";
+	if (host->ignore_host && strncmp(oid, INDEX_OID, strlen(INDEX_OID)) == 0) value = NULL;
+	if (uptime) {
+		pthread_mutex_lock(&fake_lock);
+		fake.uptime_gets++;
+		pthread_mutex_unlock(&fake_lock);
+	}
 	if (value == NULL) {
 		if (should_fail) host->ignore_host = TRUE;
 		value = should_fail ? "U" : "";
@@ -315,6 +367,19 @@ char *__wrap_snmp_get_allow_fail(host_t *host, char *oid) {
 	return fake_get(host, oid, FALSE);
 }
 
+void __wrap_snmp_get_checked(host_t *host, snmp_oids_t *oids, int count, bool *failed) {
+	(void) host;
+	pthread_mutex_lock(&fake_lock);
+	fake.batch_requests++;
+	fake.batch_oids += count;
+	pthread_mutex_unlock(&fake_lock);
+	for (int i = 0; i < count; i++) {
+		char value[64];
+		if (fake_index_value(oids[i].oid, value, sizeof(value), &failed[i]) == NULL) SET_UNDEFINED(oids[i].result);
+		else snprintf(oids[i].result, sizeof(oids[i].result), "%s", value);
+	}
+}
+
 void __wrap_snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oids, int count) {
 	(void) items;
 	if (fake.multi_ignores_host) host->ignore_host = TRUE;
@@ -326,6 +391,9 @@ void __wrap_snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oid
 int __wrap_ping_host(host_t *host, ping_t *ping) {
 	(void) host;
 	(void) ping;
+	pthread_mutex_lock(&fake_lock);
+	fake.ping_calls++;
+	pthread_mutex_unlock(&fake_lock);
 	return HOST_UP;
 }
 
@@ -540,6 +608,209 @@ static void test_uptime_baseline_survives_unknown(void **state) {
 	}
 }
 
+/* A legacy agent's 32-bit sysUpTime wraps after about 497 days. A drop from
+ * near 2^32 to a value that fits the elapsed time is a wrap, not a reboot:
+ * no reindex, no spike kill, and the new value becomes the baseline. A drop
+ * that does not fit, or one reported by the engine time OID, still fires. */
+static void test_legacy_uptime_wrap_is_not_a_reboot(void **state) {
+	static const struct {
+		const char *engine;
+		const char *legacy;
+		int commands;
+		const char *stored;
+		const char *output;
+	} cycles[] = {
+		{NULL, "4294960000", 0, "4294960000", "'123')"},
+		{NULL, "10000", 0, "10000", "'123')"},
+		{NULL, "500", 1, "500", "'U')"},
+		{NULL, "4000000000", 0, "4000000000", "'123')"},
+		{NULL, "100", 1, "100", "'U')"},
+		{"42949600", NULL, 0, "4294960000", "'123')"},
+		{"5", NULL, 1, "500", "'U')"},
+	};
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	set.poller.poller_interval = 300;
+	add_reindex(POLLER_ACTION_SNMP, "<", "0", ".1.3.6.1.2.1.1.3.0");
+	add_script_item("661", "a", "/usr/bin/printf 123");
+	for (size_t i = 0; i < sizeof(cycles) / sizeof(cycles[0]); i++) {
+		for (int q = 0; q < fake.query_count; q++) free(fake.queries[q]);
+		fake.query_count = 0;
+		fake.engine_uptime = cycles[i].engine;
+		fake.legacy_uptime = cycles[i].legacy;
+		run_poll();
+		print_message("cycle %zu stored=%s\n", i, fake.reindex[0][3]);
+		assert_int_equal(captured("REPLACE INTO poller_command"), cycles[i].commands);
+		assert_string_equal(fake.reindex[0][3], cycles[i].stored);
+		assert_int_equal(captured(cycles[i].output), 1);
+	}
+}
+
+/* The wrap window is two polling intervals, and never under ten minutes. */
+static void test_uptime_wrap_window(void **state) {
+	(void) state;
+	assert_true(uptime_wrapped("4294967295", "0", 0));
+	assert_true(uptime_wrapped("4294907296", "0", 300));
+	assert_false(uptime_wrapped("4294907296", "1", 300));
+	assert_true(uptime_wrapped("4294847296", "0", 600));
+	assert_false(uptime_wrapped("4294967296", "0", 300));
+	assert_false(uptime_wrapped("4294967295", "4294967295", 300));
+	assert_false(uptime_wrapped("U", "0", 300));
+	assert_false(uptime_wrapped("4294967295", "U", 300));
+}
+
+typedef struct {
+	poller_thread_t work;
+	int errors;
+} partition_run_t;
+
+static void *run_partition(void *argument) {
+	partition_run_t *run = argument;
+	poll_host(&run->work, &run->errors);
+	return NULL;
+}
+
+static void prepare_partitions(poller_thread_t *device, partition_run_t *runs, int partitions) {
+	memset(device, 0, sizeof(*device));
+	device->host_id = 47;
+	device->host_threads = partitions;
+	device->host_data_ids = 1;
+	device->host_time_double = get_time_as_double();
+	STRNCOPY(device->host_time, "1791158400");
+	for (int i = 0; i < partitions; i++) {
+		memset(&runs[i], 0, sizeof(runs[i]));
+		runs[i].work = *device;
+		runs[i].work.host_thread = i + 1;
+	}
+}
+
+/* With device_threads > 1 only the first partition pings the device and
+ * runs its reindex checks; the others wait for its verdict, here a reboot
+ * whose spike kill they must apply to their own items. The host status is
+ * written once and the reindex is queued once. */
+static void test_partitions_share_one_availability_and_reindex_check(void **state) {
+	enum { PARTITIONS = 3 };
+	poller_thread_t device;
+	poller_thread_t *table[1] = {&device};
+	partition_run_t runs[PARTITIONS];
+	pthread_t threads[PARTITIONS];
+	pthread_attr_t attributes;
+	(void) state;
+	set_host("regression", "5", AVAIL_PING);
+	set.poller.poller_interval = 300;
+	start_time = get_time_as_double();
+	add_reindex(POLLER_ACTION_SNMP, "<", "50000", ".1.3.6.1.2.1.1.3.0");
+	add_snmp_item("671", "a", "regression", "2", NULL);
+	fake.legacy_uptime = "100";
+	fake.multi_value = "42";
+	prepare_partitions(&device, runs, PARTITIONS);
+	details = table;
+
+	/* Production runs poll_host() on worker threads sized by
+	 * spine_thread_attr_init(); musl's 128 KiB default stack is too small.
+	 * The later partitions start first and must wait for the first. */
+	assert_int_equal(spine_thread_attr_init(&attributes), 0);
+	for (int i = PARTITIONS - 1; i >= 0; i--) {
+		assert_int_equal(pthread_create(&threads[i], &attributes, run_partition, &runs[i]), 0);
+		if (i > 0) spine_sleep_usec(20000);
+	}
+	pthread_attr_destroy(&attributes);
+	for (int i = 0; i < PARTITIONS; i++) assert_int_equal(pthread_join(threads[i], NULL), 0);
+	details = NULL;
+
+	assert_int_equal(fake.ping_calls, 1);
+	assert_int_equal(fake.reindex_queries, 1);
+	assert_int_equal(fake.uptime_gets, 2);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 1);
+	assert_int_equal(captured("UPDATE host SET status"), 1);
+	assert_int_equal(captured("(671, 'a', FROM_UNIXTIME(1791158400), 'U')"), PARTITIONS);
+	assert_int_equal(captured("'42')"), 0);
+	assert_int_equal(device.verdict, DEVICE_VERDICT_READY);
+	assert_int_equal(device.threads_complete, PARTITIONS);
+	assert_true(device.complete);
+}
+
+/* A later partition whose first partition never answers stops waiting at
+ * the polling deadline and checks the device itself, without writing the
+ * device's status or reindex state. */
+static void test_partition_checks_the_device_after_the_deadline(void **state) {
+	poller_thread_t device;
+	poller_thread_t *table[1] = {&device};
+	partition_run_t runs[2];
+	double begin;
+	(void) state;
+	set_host("regression", "5", AVAIL_PING);
+	set.poller.poller_interval = 300;
+	start_time = get_time_as_double() - 300;
+	add_reindex(POLLER_ACTION_SNMP, "<", "50000", ".1.3.6.1.2.1.1.3.0");
+	add_snmp_item("672", "a", "regression", "2", NULL);
+	fake.legacy_uptime = "100";
+	fake.multi_value = "42";
+	prepare_partitions(&device, runs, 2);
+	details = table;
+
+	begin = spine_monotonic_time();
+	run_partition(&runs[1]);
+	details = NULL;
+	assert_true(spine_monotonic_time() - begin < 5);
+	assert_int_equal(fake.ping_calls, 1);
+	assert_int_equal(fake.reindex_queries, 1);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 0);
+	assert_int_equal(captured("UPDATE host SET status"), 0);
+	assert_int_equal(captured("(672, 'a', FROM_UNIXTIME(1791158400), 'U')"), 1);
+	assert_int_equal(device.verdict, DEVICE_VERDICT_PENDING);
+}
+
+static void add_index_reindex(int data_query_id, const char *op, const char *assert_value, int index) {
+	char oid[64];
+	snprintf(oid, sizeof(oid), INDEX_OID "%d", index);
+	add_reindex(POLLER_ACTION_SNMP, op, assert_value, oid);
+	snprintf(fake.reindex[fake.reindex_count - 1][0], BUFSIZE, "%d", data_query_id);
+}
+
+/* "Verify All Fields" stores one SNMP assertion per index. They go out
+ * max_oids at a time, and each row is still judged on its own value: the
+ * first mismatch queues the reindex and stores the value it saw, and the
+ * rest of that data query is skipped. */
+static void test_reindex_gets_share_a_request(void **state) {
+	(void) state;
+	set_host("regression", "3", AVAIL_NONE);
+	add_index_reindex(7, "=", "index-1", 1);
+	add_index_reindex(7, "=", "stale", 2);
+	add_index_reindex(7, "=", "stale", 3);
+	add_index_reindex(8, "=", "index-4", 4);
+	run_poll();
+	/* rows 1-3 in one request, then row 4 alone through a single get */
+	assert_int_equal(fake.batch_requests, 1);
+	assert_int_equal(fake.batch_oids, 3);
+	assert_int_equal(fake.index_gets, 1);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 1);
+	assert_int_equal(captured("'47:7'"), 1);
+	assert_int_equal(captured("SET assert_value='index-2'"), 1);
+	assert_int_equal(captured("SET assert_value='index-3'"), 0);
+	assert_int_equal(captured("SET assert_value"), 1);
+}
+
+/* An index the agent lacks fails a single get and marks the device
+ * ignored; in a batch that applies at the same row, and later rows read U
+ * instead of their batched values. */
+static void test_failed_reindex_get_in_a_batch_ignores_the_device(void **state) {
+	(void) state;
+	set_host("regression", "5", AVAIL_NONE);
+	add_index_reindex(7, "=", "index-1", 1);
+	add_index_reindex(8, "=", "stale", 2);
+	add_index_reindex(9, "=", "stale", 3);
+	add_snmp_item("681", "a", "regression", "2", NULL);
+	fake.failing_index_oid = INDEX_OID "2";
+	fake.multi_value = "42";
+	run_poll();
+	assert_int_equal(fake.batch_requests, 1);
+	assert_int_equal(captured("REPLACE INTO poller_command"), 0);
+	assert_int_equal(captured("SET assert_value"), 0);
+	/* the ignored device collects nothing */
+	assert_int_equal(captured("'42')"), 0);
+}
+
 /* Padded script output is trimmed, then freed through its own pointer; the
  * device's error list starts empty, and completion writes run unlocked. */
 static void test_script_reindex_and_completion(void **state) {
@@ -711,6 +982,18 @@ static void test_oid_table_allocation_failure_is_fatal(void **state) {
 	assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
 }
 
+/* Batched reindex gets allocate their OID table on first use; running out
+ * of memory there is fatal, as for the item OID table. */
+static void test_reindex_batch_allocation_failure_is_fatal(void **state) {
+	(void) state;
+	set_host("regression", "3", AVAIL_NONE);
+	add_index_reindex(7, "=", "index-1", 1);
+	add_index_reindex(7, "=", "index-2", 2);
+	fake.fail_calloc_size = sizeof(snmp_oids_t);
+
+	assert_int_equal(spine_test_run_child(poll_without_memory), EXIT_FAILURE);
+}
+
 /* The bulk settings load gives up quietly when memory runs out, and a
  * setting it could not copy reads as absent, not as a stale value. */
 static void test_settings_cache_survives_allocation_failures(void **state) {
@@ -766,6 +1049,13 @@ int main(void) {
 		cmocka_unit_test_setup(test_snmpv3_batches_on_profile, setup),
 		cmocka_unit_test_setup(test_snmp_batches_on_timeout, setup),
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
+		cmocka_unit_test_setup(test_legacy_uptime_wrap_is_not_a_reboot, setup),
+		cmocka_unit_test_setup(test_uptime_wrap_window, setup),
+		cmocka_unit_test_setup(test_partitions_share_one_availability_and_reindex_check, setup),
+		cmocka_unit_test_setup(test_partition_checks_the_device_after_the_deadline, setup),
+		cmocka_unit_test_setup(test_reindex_gets_share_a_request, setup),
+		cmocka_unit_test_setup(test_failed_reindex_get_in_a_batch_ignores_the_device, setup),
+		cmocka_unit_test_setup(test_reindex_batch_allocation_failure_is_fatal, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
 		cmocka_unit_test_setup(test_invalid_snmp_value_is_reported_and_discarded, setup),

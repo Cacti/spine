@@ -54,6 +54,6 @@ extern int spine_snmpv3_security_level(const char *auth_protocol, const char *au
 extern int snmp_varbind_is_exception(const struct variable_list *vars);
 extern int snmp_count(host_t *current_host, char *snmp_oid);
 extern void snmp_get_multi(host_t *current_host, const target_t *poller_items, snmp_oids_t *snmp_oids, int num_oids);
-extern void snmp_snprint_value(char *obuf, size_t buf_len, const oid *objid, size_t objidlen, const struct variable_list *variable);
+extern void snmp_get_checked(host_t *current_host, snmp_oids_t *snmp_oids, int num_oids, bool *failed);
 
 #endif /* SPINE_SNMP_H */

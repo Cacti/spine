@@ -63,8 +63,34 @@ static void discard_reindex_spike(const reindex_evaluation_t *evaluation) {
 	}
 }
 
-static bool evaluate_reindex_assertion(const reindex_evaluation_t *evaluation, const reindex_t *reindex, const char *value) {
+static bool is_uptime_oid(const char *oid) {
+	return strstr(oid, ".1.3.6.1.2.1.1.3.0") != NULL || strstr(oid, ".1.3.6.1.6.3.10.2.1.3.0") != NULL;
+}
+
+/* sysUpTime is a 32-bit TimeTicks counter and wraps to 0 after about 497
+ * days. Agents without the engine time OID then report a smaller uptime that
+ * is not a reboot. A drop counts as a wrap only when the ticks from the
+ * stored value up to 2^32 and on to the new value fit in two polling
+ * intervals (at least ten minutes), so a reboot is still detected unless it
+ * happens in the last minutes before the counter would have wrapped. */
+bool uptime_wrapped(const char *previous_text, const char *current_text, int poller_interval) {
+	const unsigned long long ticks_per_wrap = 4294967296ULL;
+	unsigned long long previous;
+	unsigned long long current;
+	unsigned long long window = (unsigned long long) (poller_interval > 300 ? poller_interval : 300) * 2 * 100;
+
+	if (!parse_uptime(previous_text, &previous) || !parse_uptime(current_text, &current)) return FALSE;
+	if (previous >= ticks_per_wrap || current >= previous) return FALSE;
+	return ticks_per_wrap - previous + current <= window;
+}
+
+static bool evaluate_reindex_assertion(const reindex_evaluation_t *evaluation, const reindex_t *reindex, const char *value, bool legacy_uptime) {
 	bool failed = reindex_assertion_failed(reindex, value);
+	if (failed && legacy_uptime && STRMATCH(reindex->op, "<") && is_uptime_oid(reindex->arg1) &&
+		uptime_wrapped(reindex->assert_value, value, set.poller.poller_interval)) {
+		SPINE_LOG_DEVICE(evaluation->host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] sysUpTime wrapped from %s to %s", evaluation->host->id, evaluation->work->host_thread, reindex->data_query_id, reindex->assert_value, value));
+		failed = FALSE;
+	}
 	bool unavailable = value == NULL || IS_UNDEFINED(value) || STRIMATCH(value, "No Such Instance");
 	if (failed || unavailable) log_reindex_assertion(evaluation, reindex, value, failed);
 	/* Advancing the stored value without a queued reindex would lose the
@@ -101,7 +127,9 @@ bool parse_uptime(const char *text, unsigned long long *ticks) {
 	return TRUE;
 }
 
-static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread, char *sysUptime, bool *unavailable) {
+/* legacy_uptime records whether sysUptime came from the 32-bit sysUpTime
+ * OID rather than the engine time; the cached value keeps its source. */
+static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread, char *sysUptime, bool *legacy_uptime, bool *unavailable) {
 	if (host->snmp.session == NULL) {
 		*unavailable = TRUE;
 		SPINE_LOG(("WARNING: Device[%i] HT[%i] DQ[%i] Reindex Check FAILED: No SNMP Session.  If not an SNMP host, don't use Uptime Goes Backwards!", host->id, host_thread, reindex->data_query_id));
@@ -126,6 +154,7 @@ static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread
 
 		// Ensure uptime is empty to start with
 		sysUptime[0] = '\0';
+		*legacy_uptime = FALSE;
 
 		/* Pin the uptime-goes-backward calculation to a single OID for this poll.
 		   The legacy (centisecond) and modern (second) OIDs are different counters,
@@ -151,6 +180,7 @@ static char *poll_reindex_snmp(host_t *host, reindex_t *reindex, int host_thread
 
 			if (parse_uptime(poll_result, &ticks)) {
 				snprintf(sysUptime, BUFSIZE, "%llu", ticks);
+				*legacy_uptime = TRUE;
 			}
 
 			SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] Legacy Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result != NULL ? poll_result : "U", sysUptime[0] != '\0'));
@@ -198,13 +228,13 @@ static void format_line_count(char *poll_result, const char *count_result) {
 	}
 }
 
-static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thread, char *sysUptime, bool *unavailable) {
+static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thread, char *sysUptime, bool *legacy_uptime, bool *unavailable) {
 	char *poll_result = NULL;
 	int php_process;
 	char script[SMALL_BUFSIZE];
 	switch (reindex->action) {
 		case POLLER_ACTION_SNMP:
-			poll_result = poll_reindex_snmp(host, reindex, host_thread, sysUptime, unavailable);
+			poll_result = poll_reindex_snmp(host, reindex, host_thread, sysUptime, legacy_uptime, unavailable);
 			break;
 		case POLLER_ACTION_SCRIPT: /* script (popen) */
 			/* Reject empty script commands that could cause unexpected behavior */
@@ -302,6 +332,59 @@ static void load_reindex_item(reindex_t *reindex, MYSQL_ROW row) {
 	if (row[4] != NULL) snprintf(reindex->arg1, sizeof(reindex->arg1), "%s", row[4]);
 }
 
+/* Plain SNMP gets can share a request; Cacti's "Verify All Fields" reindex
+ * method stores one per index. The uptime OIDs keep their own engine and
+ * legacy selection. */
+static bool reindex_row_batchable(MYSQL_ROW row) {
+	return row[1] != NULL && atoi(row[1]) == POLLER_ACTION_SNMP && row[4] != NULL && !is_uptime_oid(row[4]);
+}
+
+typedef struct {
+	snmp_oids_t *oids;
+	bool failed[100];
+	int first;
+	int count;
+} reindex_batch_t;
+
+/* Up to max_oids gets for the contiguous plain-SNMP rows from first on, in
+ * one request. A lone row keeps the single get. Rows that a failed
+ * assertion later skips are fetched but never read. */
+static void fetch_reindex_batch(host_t *host, MYSQL_ROW *rows, int first, int total, reindex_batch_t *batch) {
+	int count = 0;
+	int limit = host->snmp.max_oids < (int) (sizeof(batch->failed) / sizeof(batch->failed[0])) ? host->snmp.max_oids : (int) (sizeof(batch->failed) / sizeof(batch->failed[0]));
+
+	batch->first = first;
+	batch->count = 0;
+	if (host->ignore_host || host->snmp.session == NULL || limit < 2) return;
+	while (first + count < total && count < limit && reindex_row_batchable(rows[first + count])) count++;
+	if (count < 2) return;
+	if (batch->oids == NULL && (batch->oids = calloc((size_t) limit, sizeof(*batch->oids))) == NULL) {
+		die("ERROR: Fatal malloc error: reindex.c batch");
+	}
+	for (int index = 0; index < count; index++) {
+		snprintf(batch->oids[index].oid, sizeof(batch->oids[index].oid), "%s", rows[first + index][4]);
+	}
+	snmp_get_checked(host, batch->oids, count, batch->failed);
+	batch->count = count;
+}
+
+/* The batched value of row position, read in row order as snmp_get() would:
+ * once a failed get has marked the host ignored, later rows read U. */
+static char *take_reindex_batch_value(host_t *host, const reindex_t *reindex, int host_thread, const reindex_batch_t *batch, int position) {
+	int index = position - batch->first;
+	char *value = malloc(RESULTS_BUFFER);
+
+	if (value == NULL) die("ERROR: Fatal malloc error: reindex.c batch value");
+	if (host->ignore_host || batch->failed[index]) {
+		host->ignore_host = TRUE;
+		SET_UNDEFINED(value);
+	} else {
+		snprintf(value, RESULTS_BUFFER, "%s", batch->oids[index].result);
+	}
+	SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_MEDIUM, ("Device[%i] HT[%i] DQ[%i] RECACHE OID: %s, (assert: %s %s output: %s)", host->id, host_thread, reindex->data_query_id, reindex->arg1, reindex->assert_value, reindex->op, value));
+	return value;
+}
+
 bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 	const reindex_evaluation_t *evaluation) {
 	if (host->ignore_host || evaluation->work->host_id == 0) return TRUE;
@@ -317,22 +400,38 @@ bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 			SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_DEBUG, ("Device[%i] HT[%i] DEBUG: RECACHE: Processing %i items in the auto reindex cache for '%s'", host->id, thread, count, host->hostname));
 		}
 		char sysUptime[BUFSIZE] = "";
+		bool legacy_uptime = FALSE;
 		int last_data_query_id = 0;
 		bool previous_assert_failure = FALSE;
-		MYSQL_ROW row;
-		while ((row = mysql_fetch_row(result))) {
-			load_reindex_item(reindex, row);
+		reindex_batch_t batch = {.oids = NULL, .first = 0, .count = 0};
+		/* The stored result keeps every row until it is freed. */
+		MYSQL_ROW *rows = count > 0 ? (MYSQL_ROW *) malloc(sizeof(*rows) * (size_t) count) : NULL;
+		int fetched = 0;
+		if (count > 0 && rows == NULL) die("ERROR: Fatal malloc error: reindex.c rows");
+		while (fetched < count && (rows[fetched] = mysql_fetch_row(result)) != NULL) fetched++;
+		for (int position = 0; position < fetched; position++) {
+			bool unavailable = FALSE;
+			char *value;
+			load_reindex_item(reindex, rows[position]);
 			if (last_data_query_id != reindex->data_query_id) {
 				last_data_query_id = reindex->data_query_id;
 				previous_assert_failure = FALSE;
 			}
 			if (previous_assert_failure) continue;
-			bool unavailable = FALSE;
-			char *value = poll_reindex_action(host, reindex, thread, sysUptime, &unavailable);
+			if (position >= batch.first + batch.count && reindex_row_batchable(rows[position])) {
+				fetch_reindex_batch(host, rows, position, fetched, &batch);
+			}
+			if (position >= batch.first && position < batch.first + batch.count) {
+				value = take_reindex_batch_value(host, reindex, thread, &batch, position);
+			} else {
+				value = poll_reindex_action(host, reindex, thread, sysUptime, &legacy_uptime, &unavailable);
+			}
 			if (unavailable) continue;
-			if (evaluate_reindex_assertion(evaluation, reindex, value)) previous_assert_failure = TRUE;
+			if (evaluate_reindex_assertion(evaluation, reindex, value, reindex->action == POLLER_ACTION_SNMP && legacy_uptime)) previous_assert_failure = TRUE;
 			SPINE_FREE(value);
 		}
+		SPINE_FREE(batch.oids);
+		SPINE_FREE(rows);
 		db_free_result(result);
 	}
 	/* Item polling opens a new session after reindex work has finished. */
