@@ -832,7 +832,7 @@ int main(int argc, char *argv[]) {
 	 * devices also counts the items each one polls this cycle, so the
 	 * launch loop does not query the count once per device. */
 	eligible_item_filter(eligible_filter, sizeof(eligible_filter));
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi, eligible FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount, SUM(%s) AS eligible FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id", eligible_filter);
+	qp += snprintf(qp, sizeof(querybuf) - (size_t)(qp - querybuf), "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi, eligible FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount, SUM(%s) AS eligible FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id", eligible_filter);
 	qp += sprintf(qp, " WHERE disabled = ''");
 
 	if (!strlen(set.host_id_list)) {

@@ -162,8 +162,9 @@ static char *poll_reindex_assert(host_t *host, MYSQL_RES *result, int position, 
 		batch->next = batch->count = 0;
 		if (batch->oids != NULL) {
 			mysql_data_seek(result, position);
-			while (batch->count < limit && (row = mysql_fetch_row(result)) != NULL) {
-				if (row[1] == NULL || atoi(row[1]) != POLLER_ACTION_SNMP || row[4] == NULL ||
+			while (batch->count < limit) {
+				row = mysql_fetch_row(result);
+				if (row == NULL || row[1] == NULL || atoi(row[1]) != POLLER_ACTION_SNMP || row[4] == NULL ||
 					strstr(row[4], ".1.3.6.1.2.1.1.3.0") || strstr(row[4], ".1.3.6.1.6.3.10.2.1.3.0")) break;
 				snprintf(batch->oids[batch->count].oid, sizeof(batch->oids[batch->count].oid), "%s", row[4]);
 				batch->oids[batch->count].array_position = position + batch->count;

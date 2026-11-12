@@ -566,7 +566,8 @@ void db_connect(int type, MYSQL *mysql) {
 
 			/* The client library does not reset errno, so only the first few
 			 * interrupted attempts are retried without counting. */
-			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR && ++interrupts <= 3) {
+			if ((error == 2002 || error == 2003 || error == 2006 || error == 2013) && errno == EINTR && interrupts < 3) {
+				interrupts++;
 				usleep(5000);
 				tries++;
 				success = FALSE;
