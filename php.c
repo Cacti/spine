@@ -356,7 +356,6 @@ char *php_readpipe(int php_process, char *command) {
 }
 
 static char *php_readpipe_until(int php_process, char *command, double deadline) {
-	fd_set fds;
 	struct timeval timeout;
 	double begin_time = 0;
 	double end_time = 0;
@@ -406,25 +405,7 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 	 * should only be the READ pipe */
 	retry:
 
-	/* FD_SET() does not range check; a descriptor at or above FD_SETSIZE
-	 * would write past the end of the on-stack fd_set below. */
-	if (php_processes[php_process].php_read_fd < 0 || php_processes[php_process].php_read_fd >= FD_SETSIZE) {
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server read descriptor %i is outside of FD_SETSIZE %i", php_process, php_processes[php_process].php_read_fd, FD_SETSIZE));
-
-		SET_UNDEFINED(result_string);
-
-		/* kill script server because it is misbehaving */
-		php_close(php_process);
-		php_init(php_process);
-
-		return result_string;
-	}
-
-	/* initialize file descriptors to review for input/output */
-	FD_ZERO(&fds);
-	FD_SET(read_fd,&fds);
-
-	switch (select(read_fd+1, &fds, NULL, NULL, &timeout)) {
+	switch (wait_fd_readable(read_fd, &timeout)) {
 	case -1:
 		switch (errno) {
 			case EBADF:
@@ -486,77 +467,69 @@ static char *php_readpipe_until(int php_process, char *command, double deadline)
 		}
 		break;
 	default:
-		if (FD_ISSET(read_fd, &fds)) {
-			bptr = result_string;
+		bptr = result_string;
 
-			while (1) {
-				size_t avail;
-				size_t used;
+		while (1) {
+			size_t avail;
+			size_t used;
 
-				/* reserve one byte for the trailing '\0' written below */
-				used = (size_t)(bptr - result_string);
+			/* reserve one byte for the trailing '\0' written below */
+			used = (size_t)(bptr - result_string);
 
-				if (used >= RESULTS_BUFFER - 1) {
-					SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
-					SET_UNDEFINED(result_string);
-					reset_server = TRUE;
-					break;
-				}
-
-				/* A newline may require multiple reads.  Re-check readability
-				 * against the original command deadline before every one so a
-				 * partial line cannot hold this worker indefinitely. */
-				end_time = get_time_as_double();
-				remaining_usec = deadline - end_time;
-				if (remaining_usec <= 0) {
-					SPINE_LOG(("WARNING: SS[%i] The PHP Script Server stalled during a partial response", php_process));
-					SET_UNDEFINED(result_string);
-					reset_server = TRUE;
-					break;
-				}
-
-				timeout.tv_sec = (int)remaining_usec;
-				timeout.tv_usec = (int)((remaining_usec - timeout.tv_sec) * 1000000);
-				FD_ZERO(&fds);
-				FD_SET(read_fd, &fds);
-				i = select(read_fd + 1, &fds, NULL, NULL, &timeout);
-				if (i < 0 && errno == EINTR) {
-					continue;
-				}
-				if (i <= 0 || !FD_ISSET(read_fd, &fds)) {
-					SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not complete its response", php_process));
-					SET_UNDEFINED(result_string);
-					reset_server = TRUE;
-					break;
-				}
-
-				avail = (size_t)RESULTS_BUFFER - 1 - used;
-				i = read(read_fd, bptr, avail);
-
-				if (i < 0 && errno == EINTR) {
-					continue;
-				}
-
-				if (i <= 0) {
-					SET_UNDEFINED(result_string);
-					reset_server = TRUE;
-					if (i == 0) {
-						send_quit = FALSE;
-					}
-					break;
-				}
-
-				bptr += i;
-				*bptr = '\0';	/* make what we've got into a string */
-
-				if ((cp = strstr(result_string,"\n")) != 0) {
-					break;
-				}
+			if (used >= RESULTS_BUFFER - 1) {
+				SPINE_LOG(("ERROR: SS[%i] The Script Server result was longer than the acceptable range", php_process));
+				SET_UNDEFINED(result_string);
+				reset_server = TRUE;
+				break;
 			}
-		} else {
-			SPINE_LOG(("ERROR: SS[%i] The FD was not set as expected", php_process));
-			SET_UNDEFINED(result_string);
-			reset_server = TRUE;
+
+			/* A newline may require multiple reads.  Re-check readability
+			 * against the original command deadline before every one so a
+			 * partial line cannot hold this worker indefinitely. */
+			end_time = get_time_as_double();
+			remaining_usec = deadline - end_time;
+			if (remaining_usec <= 0) {
+				SPINE_LOG(("WARNING: SS[%i] The PHP Script Server stalled during a partial response", php_process));
+				SET_UNDEFINED(result_string);
+				reset_server = TRUE;
+				break;
+			}
+
+			timeout.tv_sec = (int)remaining_usec;
+			timeout.tv_usec = (int)((remaining_usec - timeout.tv_sec) * 1000000);
+			i = wait_fd_readable(read_fd, &timeout);
+			if (i < 0 && errno == EINTR) {
+				continue;
+			}
+			if (i <= 0) {
+				SPINE_LOG(("WARNING: SS[%i] The PHP Script Server did not complete its response", php_process));
+				SET_UNDEFINED(result_string);
+				reset_server = TRUE;
+				break;
+			}
+
+			avail = (size_t)RESULTS_BUFFER - 1 - used;
+			i = read(read_fd, bptr, avail);
+
+			if (i < 0 && errno == EINTR) {
+				continue;
+			}
+
+			if (i <= 0) {
+				SET_UNDEFINED(result_string);
+				reset_server = TRUE;
+				if (i == 0) {
+					send_quit = FALSE;
+				}
+				break;
+			}
+
+			bptr += i;
+			*bptr = '\0';	/* make what we've got into a string */
+
+			if ((cp = strstr(result_string,"\n")) != 0) {
+				break;
+			}
 		}
 
 		if (reset_server) {

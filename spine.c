@@ -290,6 +290,69 @@ static bool device_0_selected(void) {
 	return !HOSTID_DEFINED(set.start_host_id) || set.start_host_id == 0;
 }
 
+/* The poller_item condition for the items a device polls this cycle,
+ * matching the worker item query in poller.c: the poller and, without
+ * active profiles, the items that are due.  main() has already replaced a
+ * zero polling interval with 300, so the worker's full-run query, and its
+ * deleted column that Cacti's poller_item does not have, is never used. */
+static void eligible_item_filter(char *filter, size_t size) {
+	char poller_filter[64] = "";
+	const char *item_filter = "";
+
+	if (set.poller_id != 0) {
+		snprintf(poller_filter, sizeof(poller_filter), " AND poller_id=%i", set.poller_id);
+	}
+	if (set.active_profiles != 1) {
+		item_filter = " AND rrd_next_step<=0";
+	}
+
+	snprintf(filter, size, "1%s%s", poller_filter, item_filter);
+}
+
+/* A device without poller items has no row in the grouped count. */
+static int parse_item_count(const char *text, int host_id) {
+	char *count_end;
+	unsigned long count;
+
+	if (text == NULL) return 0;
+
+	errno = 0;
+	count = strtoul(text, &count_end, 10);
+	if (errno || count_end == text || *count_end != '\0' || count > INT_MAX) {
+		die("ERROR: Device[%i] poller item count exceeds supported range", host_id);
+	}
+
+	return (int) count;
+}
+
+/* Take a semaphore by the deadline, a get_time_as_double() value.
+ * sem_timedwait() returns as soon as a permit is posted; where it is
+ * missing, or reports an unexpected error, poll at the former 10 ms. */
+static int spine_sem_wait(sem_t *sem, double deadline) {
+	int sem_err;
+
+	while (TRUE) {
+#if defined(_POSIX_TIMEOUTS) && _POSIX_TIMEOUTS > 0
+		struct timespec until;
+
+		until.tv_sec  = (time_t) deadline;
+		until.tv_nsec = (long) ((deadline - (double) until.tv_sec) * 1000000000.0);
+		if (until.tv_nsec < 0) until.tv_nsec = 0;
+		if (until.tv_nsec > 999999999L) until.tv_nsec = 999999999L;
+
+		if (sem_timedwait(sem, &until) == 0) return 0;
+#else
+		if (sem_trywait(sem) == 0) return 0;
+#endif
+		sem_err = errno;
+
+		if (sem_err == EINTR) continue;
+		if (sem_err == ETIMEDOUT || get_time_as_double() >= deadline) return ETIMEDOUT;
+
+		usleep(10000);
+	}
+}
+
 int main(int argc, char *argv[]) {
 	char *conf_file = NULL;
 	double begin_time, end_time, cur_time;
@@ -297,6 +360,8 @@ int main(int argc, char *argv[]) {
 	int device_counter = 0;
 	int valid_conf_file = FALSE;
 	char querybuf[MEGA_BUFSIZE], *qp = querybuf;
+	char eligible_filter[BUFSIZE];
+	int host_eligible = 0;
 	char *host_time = NULL;
 	double host_time_double = 0;
 	int items_per_thread = 0;
@@ -763,8 +828,11 @@ int main(int argc, char *argv[]) {
 		set.php_current_server = 0;
 	}
 
-	/* obtain the list of hosts to poll */
-	qp += sprintf(qp, "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id");
+	/* obtain the list of hosts to poll.  The grouped scan that orders the
+	 * devices also counts the items each one polls this cycle, so the
+	 * launch loop does not query the count once per device. */
+	eligible_item_filter(eligible_filter, sizeof(eligible_filter));
+	qp += snprintf(qp, sizeof(querybuf) - (size_t)(qp - querybuf), "SELECT SQL_NO_CACHE id, device_threads, picount, picount/device_threads AS tppi, eligible FROM host LEFT JOIN (SELECT host_id, COUNT(*) AS picount, SUM(%s) AS eligible FROM poller_item GROUP BY host_id) AS pi ON host.id = pi.host_id", eligible_filter);
 	qp += sprintf(qp, " WHERE disabled = ''");
 
 	if (!strlen(set.host_id_list)) {
@@ -872,6 +940,7 @@ int main(int argc, char *argv[]) {
 			}
 			host_id         = atoi(mysql_row[0]);
 			device_threads  = atoi(mysql_row[1]);
+			host_eligible   = parse_item_count(mysql_row[4], host_id);
 			current_thread  = 1;
 
 			if (device_threads < 1) {
@@ -888,36 +957,23 @@ int main(int argc, char *argv[]) {
 				device_threads = 1;
 				items_per_thread = 0;
 			} else {
-				char poller_filter[64] = "";
-				const char *item_filter = "";
-				char *count_end;
-				unsigned long count;
-
-				if (set.poller_id != 0) {
-					snprintf(poller_filter, sizeof(poller_filter), " AND poller_id=%i", set.poller_id);
-				}
-				if (set.poller_interval == 0) {
-					if (set.poller_id == 0) item_filter = " AND deleted=''";
-				} else if (set.active_profiles != 1) {
-					item_filter = " AND rrd_next_step<=0";
-				}
-				snprintf(querybuf, BIG_BUFSIZE,
-					"SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i%s%s",
-					host_id, poller_filter, item_filter);
-				tresult = db_query(&mysql, LOCAL, querybuf);
-				mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
-				if (mysql_row == NULL || mysql_row[0] == NULL) {
-					if (tresult != NULL) db_free_result(tresult);
-					die("ERROR: Device[%i] unable to determine the poller item count", host_id);
-				}
-				errno = 0;
-				count = strtoul(mysql_row[0], &count_end, 10);
-				if (errno || *count_end != '\0' || count > INT_MAX) {
+				if (host_id == 0) {
+					/* device 0 is not in the device list */
+					eligible_item_filter(eligible_filter, sizeof(eligible_filter));
+					snprintf(querybuf, BIG_BUFSIZE,
+						"SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=0 AND %s",
+						eligible_filter);
+					tresult = db_query(&mysql, LOCAL, querybuf);
+					mysql_row = (tresult != NULL) ? mysql_fetch_row(tresult) : NULL;
+					if (mysql_row == NULL || mysql_row[0] == NULL) {
+						if (tresult != NULL) db_free_result(tresult);
+						die("ERROR: Device[%i] unable to determine the poller item count", host_id);
+					}
+					total_items = parse_item_count(mysql_row[0], host_id);
 					db_free_result(tresult);
-					die("ERROR: Device[%i] poller item count exceeds supported range", host_id);
+				} else {
+					total_items = host_eligible;
 				}
-				total_items = (int)count;
-				db_free_result(tresult);
 				if (total_items < device_threads) {
 					device_threads = total_items > 0 ? total_items : 1;
 				}
@@ -947,108 +1003,34 @@ int main(int argc, char *argv[]) {
 		poller_details->threads_complete = 0;
 		poller_details->output_failed    = FALSE;
 		poller_details->poll_failed      = FALSE;
+		poller_details->verdict_ready    = FALSE;
+		poller_details->ignore_host      = FALSE;
+		poller_details->spike_kill       = FALSE;
 
 		thread_mutex_lock(LOCK_THDET);
 		if (current_thread == 1) details[device_counter] = poller_details;
 		thread_mutex_unlock(LOCK_THDET);
 
-		/* dev note - errno was never primed at this point in previous version of code */
-		int loop_count = 0;
-		double progress_time = 0;
-		int sem_err = 0;
+		/* Launching stops one second before the polling interval ends. */
+		double launch_deadline = start_time + set.poller_interval - 1;
 		int spine_timeout = FALSE;
 		int have_permit = FALSE;
 
-		while (TRUE) {
-			/* sem_trywait() returns -1 and reports the reason in errno */
-			if (sem_trywait(&available_threads) == 0) {
-				// Acquired a thread
-				have_permit = TRUE;
-				break;
-			}
-
-			sem_err = errno;
-
-			if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Available Thread Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
-			}
-
-			loop_count++;
-
-			if (loop_count == 10) {
-				progress_time = get_time_as_double() - start_time;
-
-				if (progress_time + 1 > set.poller_interval) {
-					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
-					spine_timeout = TRUE;
-					canexit = TRUE;
-					break;
-				}
-
-				loop_count = 0;
-			}
-
-			usleep(10000);
-
-			total_time = get_time_as_double();
-
-			if (total_time - start_time > set.poller_interval) {
-				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices External", host_id, current_thread));
-				spine_timeout = TRUE;
-				canexit = TRUE;
-				break;
-			}
+		if (spine_sem_wait(&available_threads, launch_deadline) == 0) {
+			have_permit = TRUE;
+		} else {
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Available Thread Lock", host_id, current_thread));
+			spine_timeout = TRUE;
+			canexit = TRUE;
+			/* this device and the rest are not polled */
+			set.exit_code = EXIT_FAILURE;
 		}
 
-		loop_count = 0;
-
-		while (!spine_timeout) {
-			if (sem_trywait(&thread_init_sem) == 0) {
-				// Acquired a thread
-				break;
-			}
-
-			sem_err = errno;
-
-			if (sem_err == EINTR) {
-				// Interrupted by signal handler
-			} else if (sem_err == EDEADLK) {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring Thread Initialization Lock", host_id, current_thread));
-			} else if (sem_err == EAGAIN) {
-				// Keep trying
-			} else {
-				SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring Thread Initialization Lock", host_id, current_thread, sem_err));
-			}
-
-			loop_count++;
-
-			if (loop_count == 10) {
-				progress_time = get_time_as_double() - start_time;
-
-				if (progress_time + 1 > set.poller_interval) {
-					SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
-					spine_timeout = TRUE;
-					canexit = TRUE;
-					break;
-				}
-
-				loop_count = 0;
-			}
-
-			usleep(10000);
-
-			total_time = get_time_as_double();
-
-			if (total_time - start_time > set.poller_interval) {
-				SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices Internal", host_id, current_thread));
-				spine_timeout = TRUE;
-				canexit = TRUE;
-				break;
-			}
+		if (!spine_timeout && spine_sem_wait(&thread_init_sem, launch_deadline) != 0) {
+			SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring Thread Init Lock", host_id, current_thread));
+			spine_timeout = TRUE;
+			canexit = TRUE;
+			set.exit_code = EXIT_FAILURE;
 		}
 
 		/* no worker will run to return the permit */
@@ -1091,9 +1073,12 @@ int main(int argc, char *argv[]) {
 					created_host_threads,
 					created_host_data_ids,
 					created_complete));
-			} else if (thread_status == EAGAIN) {
+			} else if (thread_status == EAGAIN && get_time_as_double() < launch_deadline) {
 				usleep(10000);
 				goto thread_retry;
+			} else if (thread_status == EAGAIN) {
+				SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while the system could not create a thread", created_host_id, created_host_thread));
+				canexit = TRUE;
 			} else if (thread_status == EINVAL) {
 				SPINE_LOG(("ERROR: The Thread Attribute is Not Initialized"));
 			}
@@ -1103,35 +1088,79 @@ int main(int argc, char *argv[]) {
 			if (thread_status) {
 				sem_post(&thread_init_sem);
 				sem_post(&available_threads);
+				/* the device's items are not polled this cycle */
+				set.exit_code = EXIT_FAILURE;
+
+				/* the device row is consumed either way; the next device must
+				 * not take over this one's details[] record */
+				if (change_host) {
+					device_counter++;
+				}
+
+				/* the later partitions must not wait for a first one that never ran */
+				if (current_thread == 1) {
+					thread_mutex_lock(LOCK_THDET);
+					poller_details->ignore_host   = TRUE;
+					poller_details->verdict_ready = TRUE;
+					thread_mutex_unlock(LOCK_THDET);
+				}
 			}
 		}
 
 		/* A partition that never started has no child_cleanup() to free it,
-		 * and only the first partition is reachable through details[]. */
+		 * and only the first partition is reachable through details[].  A
+		 * first partition skipped at the deadline started none of its device's
+		 * partitions, so its record is dropped and the device is reported as
+		 * not run; one whose create failed stays, as the verdict for the
+		 * later partitions. */
 		if ((spine_timeout || thread_status != 0) && current_thread > 1) {
+			SPINE_FREE(poller_details);
+		} else if (spine_timeout && current_thread == 1) {
+			thread_mutex_lock(LOCK_THDET);
+			details[device_counter] = NULL;
+			thread_mutex_unlock(LOCK_THDET);
 			SPINE_FREE(poller_details);
 		}
 	}
 
+	/* wait for all threads to 'complete'.  child_cleanup_thread() posts
+	 * the semaphore and then broadcasts the LOCK_THDET condition, so the
+	 * wait ends when the last worker finishes instead of on the next half
+	 * second.  The half second remains as the longest single wait, for the
+	 * log line and the polling interval check. */
+	thread_mutex_lock(LOCK_THDET);
 	sem_getvalue(&available_threads, &a_threads_value);
-
-	/* wait for all threads to 'complete'
- 	 * using the mutex here as the semaphore will
-     * show zero before the children are done */
 	while (a_threads_value < set.threads) {
+		struct timespec until;
+		double wake;
+		int waiting = set.threads - a_threads_value;
+
 		cur_time = get_time_as_double();
 
 		if (cur_time - begin_time > set.poller_interval) {
-			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", set.threads - a_threads_value));
+			thread_mutex_unlock(LOCK_THDET);
+			SPINE_LOG(("ERROR: Polling timed out while waiting for %d Threads to End", waiting));
 			/* Unfinished threads have not written their output. */
 			set.exit_code = EXIT_FAILURE;
+			thread_mutex_lock(LOCK_THDET);
 			break;
 		}
 
-		SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", set.threads - a_threads_value));
-		usleep(500000);
+		wake = cur_time + 0.5;
+		until.tv_sec  = (time_t) wake;
+		until.tv_nsec = (long) ((wake - (double) until.tv_sec) * 1000000000.0);
+		if (until.tv_nsec < 0) until.tv_nsec = 0;
+		if (until.tv_nsec > 999999999L) until.tv_nsec = 999999999L;
+
+		if (pthread_cond_timedwait(get_cond(LOCK_THDET), get_lock(LOCK_THDET), &until) == ETIMEDOUT) {
+			thread_mutex_unlock(LOCK_THDET);
+			SPINE_LOG_HIGH(("NOTE: Polling sleeping while waiting for %d Threads to End", waiting));
+			thread_mutex_lock(LOCK_THDET);
+		}
+
 		sem_getvalue(&available_threads, &a_threads_value);
 	}
+	thread_mutex_unlock(LOCK_THDET);
 
 	threads_final = set.threads - a_threads_value;
 
@@ -1192,11 +1221,15 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (db_pool_local) {
+	/* After a polling timeout some workers are still running.  They use the
+	 * connection pools, the Script Servers, SNMP, details[], debug_devices
+	 * and php_processes until they finish, so none of it is torn down here;
+	 * the process exit releases it. */
+	if (db_pool_local && threads_final == 0) {
 		db_close_connection_pool(LOCAL);
 	}
 
-	if (db_pool_remote) {
+	if (db_pool_remote && threads_final == 0) {
 		db_close_connection_pool(REMOTE);
 	}
 
@@ -1208,26 +1241,29 @@ int main(int argc, char *argv[]) {
 	if (nft_popen_cleanup() != 0) set.exit_code = EXIT_FAILURE;
 
 	/* close the php script server */
-	if (set.php_required && !set.ping_only) {
+	if (set.php_required && !set.ping_only && threads_final == 0) {
 		php_close(PHP_INIT);
 	}
 
 	SPINE_LOG_DEBUG(("DEBUG: PHP Script Server Pipes Closed"));
 
-	/* free malloc'd variables */
-	for (i = 0; i < num_rows; i++) {
-		if (details[i] != NULL) {
-			SPINE_FREE(details[i]);
+	/* free malloc'd variables, except those running workers still use */
+	if (threads_final == 0) {
+		for (i = 0; i < num_rows; i++) {
+			if (details[i] != NULL) {
+				SPINE_FREE(details[i]);
+			}
 		}
+
+		SPINE_FREE(details);
+		SPINE_FREE(debug_devices);
+		SPINE_FREE(php_processes);
 	}
 
-	SPINE_FREE(details);
 	SPINE_FREE(threads);
 	SPINE_FREE(ids);
 	SPINE_FREE(conf_file);
-	SPINE_FREE(debug_devices);
 	SPINE_FREE(host_time);
-	SPINE_FREE(php_processes);
 
 	SPINE_LOG_DEBUG(("DEBUG: Allocated Variable Memory Freed"));
 
@@ -1242,7 +1278,9 @@ int main(int argc, char *argv[]) {
 	SPINE_LOG_DEBUG(("DEBUG: MYSQL Free & Close Completed"));
 
 	/* close snmp */
-	snmp_spine_close();
+	if (threads_final == 0) {
+		snmp_spine_close();
+	}
 
 	SPINE_LOG_DEBUG(("DEBUG: Net-SNMP Close Completed"));
 

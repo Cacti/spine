@@ -360,7 +360,7 @@ run('maintenance-required-tls-contract', '#include "common.h"\n#include "spine.h
 config_t set;static int options,fail_option;static jmp_buf failed;
 int mysql_options(MYSQL *mysql,enum mysql_option option,const void *value){(void)mysql;(void)option;assert(value);options++;return fail_option;}
 void die(const char *format,...){(void)format;longjmp(failed,1);}
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
+''' + function(sql, 'static int db_tls_fallback_first(') + '\n' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '''
 int main(void){MYSQL mysql;set.db_ssl=0;set.db_ssl_required=1;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0);
  /* DB_UseSSL alone keeps the 1.2.31 plaintext fallback */
  set.db_ssl=1;set.db_ssl_required=0;db_require_tls(&mysql,LOCAL,"db.example","");assert(options==0&&!db_tls_required(LOCAL,"db.example"));
@@ -411,16 +411,19 @@ static int warnings;
 int spine_log(const char *format,...){if(strstr(format,"fell back to plaintext"))warnings++;return TRUE;}
 static void fixture_exit(int status){(void)status;longjmp(failed,1);}
 #define exit fixture_exit
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+''' + function(sql, 'static int db_tls_fallback_first(') + '\n' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
 static void reset(int error){inits=tls_options=connects=closes=warnings=0;first_error=error;have_cipher=0;}
 int main(void){MYSQL mysql;pid_t child;int status;
  snprintf(set.db_host,sizeof(set.db_host),"%s","db.example");set.poller_id=1;set.db_ssl=1;
  /* without DB_SSL_Required a plaintext session is accepted, as in 1.2.31,
   * and a handshake failure is retried */
  reset(2013);db_connect(LOCAL,&mysql);assert(connects==2&&inits==2&&tls_options==0);
- /* the plaintext fallback is logged once for the connection */
+ /* the plaintext fallback is logged once per process and connection type,
+  * not for every pooled connection of every cycle */
  assert(warnings==1);
- reset(2026);db_connect(LOCAL,&mysql);assert(connects==2&&warnings==1);
+ reset(2026);db_connect(LOCAL,&mysql);assert(connects==2&&warnings==0);
+ snprintf(set.rdb_host,sizeof(set.rdb_host),"%s","db.example");set.rdb_ssl=1;
+ reset(2013);db_connect(REMOTE,&mysql);assert(connects==2&&warnings==1);
  reset(2013);have_cipher=1;db_connect(LOCAL,&mysql);assert(warnings==0);
  set.db_ssl_required=1;
  /* a transient failure, then a plaintext session: the retry must have the TLS
@@ -454,7 +457,7 @@ void die(const char *format,...){(void)format;abort();}
 int spine_log(const char *format,...){(void)format;return TRUE;}
 #define strdup fixture_strdup
 #define free fixture_free
-''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static int db_tls_expected(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'void db_connect(') + '''
+''' + function(sql, 'static int db_tls_requested(') + '\n' + function(sql, 'static int db_tls_required(') + '\n' + function(sql, 'static int db_tls_expected(') + '\n' + function(sql, 'static void db_require_tls(') + '\n' + function(sql, 'static void db_prepare_handle(') + '\n' + function(sql, 'static int db_tls_fallback_first(') + '\n' + function(sql, 'void db_connect(') + '''
 int main(void){MYSQL mysql;struct sockaddr_un address;int listener;int poller;
  memset(&address,0,sizeof(address));address.sun_family=AF_UNIX;
  snprintf(address.sun_path,sizeof(address.sun_path),"%s","''' + str(out / 'db.sock') + '''");
@@ -524,29 +527,37 @@ int main(void){host_t host;const char *ipv4[]={"127.0.0.2","tcp:127.0.0.2","tcp:
 util = (root / 'util.c').read_text()
 trims = '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim('))
 run('maintenance-numeric-contract', '#include "common.h"\n#include "spine.h"\n' + trims + '\n' + function(util, 'int is_numeric(') + '''
-static int numeric(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return is_numeric(buffer);}
+static char buffer[64];
+static int numeric(const char *text){snprintf(buffer,sizeof(buffer),"%s",text);return is_numeric(buffer);}
 int main(void){
- /* the length and the parse must start at the same character */
- assert(numeric(" 12")&&numeric("\\t 12 \\n")&&numeric(" -1.5")&&numeric("12 "));
+ /* padding is trimmed in place, so the stored value matches cmd.php's trim() */
+ assert(numeric(" 12")&&strcmp(buffer,"12")==0);assert(numeric("\\t 12 \\n")&&strcmp(buffer,"12")==0);
+ assert(numeric(" -1.5")&&strcmp(buffer,"-1.5")==0);assert(numeric("12 ")&&numeric("1e3")&&numeric(".5"));
+ /* a counter above the long range is still a value */
+ assert(numeric("18446744073709551615"));
  /* a leading quote keeps the strip_alpha() path that stores 12 */
  assert(!numeric("\\"12\\"")&&!numeric(" ")&&!numeric("")&&!numeric(" 12 abc")&&!numeric("00 1A"));return 0;}
 ''')
 
-# Every caller prints hex2dec() unsigned; "%lld" printed an all-FF counter as -1.
-assert '"%lld", hex2dec(' not in (root / 'poller.c').read_text()
+# Every caller stores hex through hex_result(), which prints unsigned; "%lld"
+# printed an all-FF counter as -1.
+assert 'hex2dec(' not in (root / 'poller.c').read_text()
 util = (root / 'util.c').read_text()
-hexes = 'static int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(util, 'static int hex_digit(int c) {')
+hexes = 'static int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'void hex_result(') + '\n' + function(util, 'static int hex_digit(int c) {')
 run('maintenance-hex-contract', '#include "common.h"\n#include "spine.h"\n' + hexes + '''
-static unsigned long long convert(const char *text){char buffer[64];snprintf(buffer,sizeof(buffer),"%s",text);return hex2dec(buffer);}
-int main(void){char out[32];
- snprintf(out,sizeof(out),"%llu",convert("ff ff ff ff ff ff ff ff"));assert(strcmp(out,"18446744073709551615")==0);
+static char out[32];
+static const char *convert(const char *text){hex_result(out,sizeof(out),text);return out;}
+int main(void){
+ assert(strcmp(convert("ff ff ff ff ff ff ff ff"),"18446744073709551615")==0);
  /* above 2^53 a double cannot hold the exact value */
- assert(convert("20 00 00 00 00 00 00 01")==0x2000000000000001ULL);
- assert(convert("\\"00 1A\\"")==0x1A&&convert("0x10")==0);
+ assert(strcmp(convert("20 00 00 00 00 00 00 01"),"2305843009213693953")==0);
+ assert(strcmp(convert("\\"00 1A\\""),"26")==0);
+ /* wider than 64 bits: U, not a numeric prefix from the non-hex path */
+ assert(strcmp(convert("01 ff ff ff ff ff ff ff ff"),"U")==0);
  assert(is_hexadecimal("00 1A 2B",TRUE)&&is_hexadecimal("\\"00 1A\\"",TRUE)&&is_hexadecimal("ff ff ff ff ff ff ff ff",TRUE));
  /* hex2dec() would turn these into 0, so they take the non-hex path */
  assert(!is_hexadecimal("2024-01-05",TRUE)&&!is_hexadecimal("00-1A-2B",TRUE)&&!is_hexadecimal("00:1A 2B",TRUE));
- assert(!is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
+ assert(is_hexadecimal("ff ff ff ff ff ff ff ff ff",TRUE)&&!is_hexadecimal("ab",TRUE)&&!is_hexadecimal(NULL,TRUE));return 0;}
 ''')
 
 # Every SNMP batch flush, including the one forced by a change of SNMP
@@ -569,7 +580,7 @@ int is_debug_device(int id){(void)id;return FALSE;}
 double get_time_as_double(void){return 0;}
 void buffer_output_errors(char *e,int *s,int *b,int d,int t,int l,bool f){(void)e;(void)s;(void)b;(void)d;(void)t;(void)l;(void)f;}
 static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)capacity;}
-''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '\n' + flushes + '''
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'void hex_result(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '\n' + flushes + '''
 typedef void (*flush_t)(host_t*,target_t*,snmp_oids_t*,int,int);
 int main(void){flush_t flush[]={flush0,flush1,flush2};size_t n;
  for(n=0;n<3;n++){host_t host={0};target_t items[3]={0};snmp_oids_t oids[3]={0};int i;
@@ -597,7 +608,7 @@ static void normalize_poll_result(char *text,size_t capacity){(void)text;(void)c
 int php_get_process(void){return 0;}
 char *php_cmd(const char *command,int process){(void)command;(void)process;return strdup(reply);}
 char *exec_poll(host_t *host,char *command,int id,char *type){(void)host;(void)command;(void)id;(void)type;return strdup(reply);}
-''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'unsigned long long hex2dec(') + '\n' + function(poller, 'static const char *script_log_name(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '''
+''' + '\n'.join(function(util, name) for name in ('char *rtrim(', 'char *ltrim(', 'char *trim(', 'int is_numeric(', 'char *strip_alpha(', 'static int hex_digit(int c) {')) + '\nstatic int hex_digit(int c);\n' + function(util, 'static bool hex_value(') + '\n' + function(util, 'int is_hexadecimal(') + '\n' + function(util, 'void hex_result(') + '\n' + function(poller, 'static const char *script_log_name(') + '\n' + function(poller, 'static void spike_kill_result(') + '\n' + function(poller, 'int is_multipart_output(') + '\n' + function(poller, 'int validate_result(') + '''
 static const char *poll(int action,const char *output,int spike_kill){static target_t poller_items[1];host_t h={0};host_t *host=&h;
  int i=0,host_id=1,host_thread=1,errors=0,php_process;int *buf_size=NULL,*buf_errors=NULL;char *error_string=NULL;
  char temp_result[RESULTS_BUFFER];char script[SMALL_BUFSIZE];char *poll_result;double thread_start=0,thread_end=0;
@@ -627,17 +638,22 @@ int main(void){
 # The worker launch sequence of main(), with only the semaphore, thread,
 # clock and lock primitives substituted.
 spine = (root / 'spine.c').read_text()
-a = spine.index('\t\t/* dev note - errno was never primed')
-b = spine.index('\n\t}\n\n\tsem_getvalue(&available_threads', a)
+a = spine.index('\t\t/* Launching stops one second before')
+b = spine.index('\n\t}\n\n\t/* wait for all threads to', a)
 launch = spine[a:b]
 run('maintenance-thread-launch-contract', '#include "common.h"\n#include "spine.h"\n' + '''
-config_t set;sem_t available_threads;double start_time,total_time;
+config_t set;sem_t available_threads;double start_time,total_time;static poller_thread_t *slots[1];poller_thread_t **details=slots;static int counter_result;
 static double now;static int held,creates,eagain,create_error,available_posts,init_posts,available_ok,init_ok,errored;
-static int fixture_trywait(sem_t *s){if(s==&available_threads?available_ok:init_ok)return 0;errno=EAGAIN;return -1;}
+static int sleeps,released_after;
+/* released_after counts the waits a permit takes to be posted; a blocking
+ * wait returns on the post, a try-acquire only sees it on a later poll. */
+__attribute__((unused)) static int fixture_trywait(sem_t *s){if(s==&available_threads?available_ok:init_ok)return 0;if(s==&available_threads&&released_after&&--released_after==0)return 0;errno=EAGAIN;return -1;}
+__attribute__((unused)) static int fixture_timedwait(sem_t *s,const struct timespec *until){if(s==&available_threads?available_ok:init_ok)return 0;if(s==&available_threads&&released_after){released_after=0;return 0;}
+ now=until->tv_sec+until->tv_nsec/1e9;errno=ETIMEDOUT;return -1;}
 static int fixture_post(sem_t *s){if(s==&available_threads)available_posts++;else init_posts++;return 0;}
 static int fixture_getvalue(sem_t *s,int *v){(void)s;*v=0;return 0;}
 static int fixture_create(pthread_t *t,const pthread_attr_t *a,void *(*f)(void *),void *arg){(void)t;(void)a;(void)f;(void)arg;creates++;if(eagain){eagain--;return EAGAIN;}return create_error;}
-static int fixture_usleep(useconds_t usec){now+=usec/1000000.0;return 0;}
+static int fixture_usleep(useconds_t usec){now+=usec/1000000.0;sleeps++;return 0;}
 double get_time_as_double(void){return now;}
 /* a non-recursive mutex: locking it twice from one thread deadlocks */
 void thread_mutex_lock(int id){(void)id;assert(!held);held=1;}
@@ -645,28 +661,86 @@ void thread_mutex_unlock(int id){(void)id;assert(held);held=0;}
 int spine_log(const char *format,...){if(strstr(format,"errored with"))errored++;return TRUE;}
 void *child(void *arg){return arg;}
 #define sem_trywait fixture_trywait
+#define sem_timedwait fixture_timedwait
 #define sem_post fixture_post
 #define sem_getvalue fixture_getvalue
 #define pthread_create fixture_create
 #define usleep fixture_usleep
+''' + function(spine, 'static int spine_sem_wait(') + '''
 static int canexit_result;
 static int launch(int current_thread){int host_id=1,canexit=FALSE,change_host=TRUE,device_counter=0,thread_status=0,a_threads_value=0;
  pthread_t threads[1];pthread_attr_t attr;sem_t thread_init_sem;poller_thread_t *poller_details=calloc(1,sizeof(*poller_details));assert(poller_details);memset(&attr,0,sizeof(attr));
+ if(current_thread==1)details[0]=poller_details;
 ''' + launch + '''
- (void)a_threads_value;(void)device_counter;canexit_result=canexit;if(current_thread==1)free(poller_details);return thread_status;}
-static void reset(void){now=start_time=total_time=0;held=creates=eagain=create_error=available_posts=init_posts=errored=0;available_ok=init_ok=1;set.poller_interval=10;set.threads=4;}
+ (void)a_threads_value;counter_result=device_counter;canexit_result=canexit;
+ /* a first partition skipped at the deadline is dropped from details[] and freed by the launch code */
+ if(current_thread==1&&details[0]!=NULL){assert(details[0]==poller_details);free(poller_details);details[0]=NULL;}
+ return thread_status;}
+static void reset(void){now=start_time=total_time=0;held=creates=eagain=create_error=available_posts=init_posts=errored=sleeps=released_after=0;available_ok=init_ok=1;set.poller_interval=10;set.threads=4;set.exit_code=0;details[0]=NULL;}
 int main(void){
  /* EAGAIN retries the create without taking a lock again */
- reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0);
+ reset();eagain=1;assert(launch(1)==0&&creates==2&&!held&&init_posts==1&&available_posts==0&&set.exit_code==0);
+ /* EAGAIN retries end at the launch deadline, returning the permits */
+ reset();eagain=100000;assert(launch(1)==EAGAIN&&canexit_result&&now>=set.poller_interval-1&&creates<100000&&init_posts==1&&available_posts==1&&set.exit_code==EXIT_FAILURE);
  /* a failed create releases the init slot and the worker permit */
- reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1);
+ reset();create_error=EPERM;assert(launch(2)==EPERM&&creates==1&&!held&&init_posts==1&&available_posts==1&&set.exit_code==EXIT_FAILURE);
+ /* the failed device still consumes its row, so the next device gets a record of its own */
+ assert(counter_result==1);
+ reset();assert(launch(1)==0&&counter_result==1);
  /* the soft deadline, one second early, stops launching like the hard one */
  reset();available_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==0);
+ /* the skipped device is not polled: Strict_Mode exits non-zero, and the
+  * device is reported as a thread that did not run */
+ assert(set.exit_code==EXIT_FAILURE&&details[0]==NULL);
  /* the init wait counts its polls, so the soft deadline fires there too,
   * the taken worker permit is returned, and EAGAIN is not an error */
- reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored);
+ reset();init_ok=0;launch(1);assert(canexit_result&&!creates&&now<set.poller_interval&&available_posts==1&&!errored&&set.exit_code==EXIT_FAILURE);
+ /* a permit released during the wait starts the launch without a sleep */
+ reset();available_ok=0;released_after=3;assert(launch(1)==0&&creates==1&&!canexit_result);
+#if defined(_POSIX_TIMEOUTS) && _POSIX_TIMEOUTS > 0
+ assert(sleeps==0);
+#endif
  return 0;}
 ''')
+
+# The completion wait of main() ends when the last worker posts its permit
+# and signals LOCK_THDET, not on the next half-second poll; the polling
+# interval still bounds it.
+a = spine.index('\tthread_mutex_lock(LOCK_THDET);\n\tsem_getvalue(&available_threads, &a_threads_value);\n\twhile')
+b = spine.index('\tthread_mutex_unlock(LOCK_THDET);\n', spine.index('\n\t}\n', a)) + len('\tthread_mutex_unlock(LOCK_THDET);\n')
+wait = spine[a:b]
+run('maintenance-completion-wait-contract', '#include "common.h"\n#include "spine.h"\n' + """
+config_t set;
+static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;static pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t count_lock=PTHREAD_MUTEX_INITIALIZER;static int permits;
+static int fixture_getvalue(sem_t *s,int *v){(void)s;pthread_mutex_lock(&count_lock);*v=permits;pthread_mutex_unlock(&count_lock);return 0;}
+static int fixture_post(sem_t *s){(void)s;pthread_mutex_lock(&count_lock);permits++;pthread_mutex_unlock(&count_lock);return 0;}
+#define sem_getvalue fixture_getvalue
+#define sem_post fixture_post
+double get_time_as_double(void){struct timeval now;gettimeofday(&now,NULL);return now.tv_sec+now.tv_usec/1e6;}
+void thread_mutex_lock(int id){(void)id;pthread_mutex_lock(&lock);}
+void thread_mutex_unlock(int id){(void)id;pthread_mutex_unlock(&lock);}
+pthread_mutex_t *get_lock(int id){(void)id;return &lock;}
+pthread_cond_t *get_cond(int id){(void)id;return &cond;}
+int spine_log(const char *format,...){(void)format;return TRUE;}
+sem_t available_threads;
+""" + function((root / 'poller.c').read_text(), 'void child_cleanup_thread(') + """
+static void *worker(void *arg){usleep(*(int *)arg);child_cleanup_thread(NULL);return NULL;}
+static double wait_for(int workers,int finish_us){int a_threads_value,i;double begin_time=get_time_as_double(),cur_time;pthread_t t[8];
+ set.threads=workers;permits=0;set.exit_code=0;
+ for(i=0;i<workers;i++)assert(pthread_create(&t[i],NULL,worker,&finish_us)==0);
+""" + wait + """
+ for(i=0;i<workers;i++)pthread_join(t[i],NULL);(void)cur_time;return get_time_as_double()-begin_time;}
+int main(void){double took;
+ set.poller_interval=60;
+ /* the wait ends with the workers, inside the former 500 ms step even on a slow runner */
+ took=wait_for(4,50000);assert(took<0.45&&set.exit_code==0);
+ /* nothing to wait for */
+ took=wait_for(0,0);assert(took<0.1);
+ /* the polling interval still ends the wait for a worker that does not finish */
+ set.poller_interval=0;took=wait_for(1,1200000);assert(set.exit_code==EXIT_FAILURE);
+ return 0;}
+""")
 
 # A reconnected session gets the same sql_mode adjustments as a pooled one.
 sql = (root / 'sql.c').read_text()
@@ -803,6 +877,260 @@ int main(void){static target_t items[5000];int i;
  assert(statements[0]>1&&statements[0]==statements[1]&&rows_seen[0]==5000&&rows_seen[1]==5000);
  assert(longest<MAX_MYSQL_BUF_SIZE+RESULTS_BUFFER);return 0;}
 ''')
+
+# A log another process creates between the existence check and the open is
+# appended to, never truncated, and a missing log is still created.
+util = (root / 'util.c').read_text()
+block = braced(util, util.index('\t\tif (set.logfile_processed) {'))
+log_path = str(out / 'shared.log')
+run('maintenance-log-append-contract', '#include "common.h"\n#include "spine.h"\n#include <fcntl.h>\nconfig_t set;\n' + '''
+int file_exists(const char *filename){(void)filename;return FALSE;}
+static void write_log(const char *flogmessage){FILE *log_file=NULL;static int log_error;
+''' + block + '''
+ (void)log_file;}
+static void expect(const char *first,const char *second){FILE *f=fopen(set.path_logfile,"r");char line[64];assert(f);
+ assert(fgets(line,sizeof(line),f)&&strcmp(line,first)==0);
+ if(second){assert(fgets(line,sizeof(line),f)&&strcmp(line,second)==0);}
+ assert(!fgets(line,sizeof(line),f));fclose(f);}
+int main(void){FILE *f;snprintf(set.path_logfile,sizeof(set.path_logfile),"%s","''' + log_path + '''");set.logfile_processed=TRUE;
+ f=fopen(set.path_logfile,"w");assert(f&&fputs("other process\\n",f)>=0);fclose(f);
+ write_log("spine\\n");expect("other process\\n","spine\\n");
+ unlink(set.path_logfile);umask(0);write_log("first\\n");expect("first\\n",NULL);
+ /* a created log is readable by its group and by no other account */
+ {struct stat st;assert(stat(set.path_logfile,&st)==0&&(st.st_mode&0777)==0640);}
+ unlink(set.path_logfile);return 0;}
+''')
+
+# Legacy 32 bit sysUpTime wraps after about 497 days; that wrap is not an
+# agent restart.  The seconds based engine OID keeps the plain comparison.
+poller = (root / 'poller.c').read_text()
+block = braced(poller, poller.index("/* if uptime is set to '0' don't fail out */"))
+run('maintenance-uptime-wrap-contract', '#include "common.h"\n#include "spine.h"\n#include <limits.h>\nconfig_t set;\n' + '''
+static int queued;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+int is_debug_device(int device_id){(void)device_id;return FALSE;}
+int db_insert(MYSQL *mysql,int mode,const char *query){(void)mysql;(void)mode;assert(strstr(query,"poller_command"));queued++;return TRUE;}
+''' + function(poller, 'static bool parse_uptime(') + function(poller, 'static bool uptime_wrapped(') + '''
+static int restarted(const char *assert_value,unsigned long long curr_uptime,int uptime_use_engine_oid){
+ reindex_t r={0},*reindex=&r;host_t h={0},*host=&h;char poll_result[32],query3[LRG_BUFSIZE];
+ MYSQL *mysql=NULL,*mysqlr=NULL;int host_thread=1,errors=0,assert_fail=FALSE,previous_assert_failure=FALSE,queue_succeeded=TRUE;
+ unsigned long long previous_uptime=0;
+ snprintf(r.op,sizeof(r.op),"<");snprintf(r.assert_value,sizeof(r.assert_value),"%s",assert_value);
+ snprintf(poll_result,sizeof(poll_result),"%llu",curr_uptime);parse_uptime(assert_value,&previous_uptime);
+''' + block + '''
+ (void)mysql;(void)mysqlr;(void)errors;(void)previous_assert_failure;(void)queue_succeeded;(void)host_thread;
+ return assert_fail;}
+int main(void){set.poller_interval=300;
+ /* 2^32 - 296 ticks to 100 ticks: four seconds across the wrap */
+ assert(!restarted("4294967000",100,FALSE)&&!queued);
+ assert(!restarted("4294967295",0,FALSE)&&!queued);
+ /* the same values from the engine OID are a restart */
+ assert(restarted("4294967000",100,TRUE)&&queued==1);
+ /* a small uptime after a counter far from 2^32, or past two intervals, is a restart */
+ assert(restarted("1000000",100,FALSE)&&queued==2);
+ assert(restarted("4294967000",59705,FALSE)&&queued==3);
+ assert(!restarted("4294967000",59704,FALSE)&&queued==3);
+ assert(!restarted("100",200,FALSE)&&queued==3);
+ return 0;}
+''')
+
+# ICMP tries an unprivileged datagram socket before raising the effective
+# UID for a raw one, and matches datagram replies without an IP header.
+ping = (root / 'ping.c').read_text()
+run('maintenance-icmp-datagram-contract', '#include "common.h"\n#include "spine.h"\n#include "ping.h"\n#include <fcntl.h>\n' + '''
+config_t set;
+static int dgram_ok,raw_ok,raw_requests,elevations,datagram_reply,wrong_seq,replies;static double now;
+static unsigned short sent_seq;
+int spine_log(const char *format,...){(void)format;return TRUE;}
+int is_debug_device(int device_id){(void)device_id;return FALSE;}
+void die(const char *format,...){(void)format;abort();}
+void thread_mutex_lock(int id){(void)id;}
+void thread_mutex_unlock(int id){(void)id;}
+int hasCaps(){return FALSE;}
+unsigned short int get_checksum(void *buf,int len){(void)buf;(void)len;return 0;}
+int init_sockaddr(struct sockaddr_in *name,const char *hostname,unsigned short int port){(void)hostname;memset(name,0,sizeof(*name));name->sin_family=AF_INET;name->sin_port=htons(port);name->sin_addr.s_addr=htonl(INADDR_LOOPBACK);return TRUE;}
+double get_time_as_double(void){return now;}
+static double ping_monotonic_time(void){return now;}
+static void ping_wait_left(double deadline,struct timeval *t){double left=deadline-now;if(left<0)left=0;t->tv_sec=(time_t)left;t->tv_usec=(suseconds_t)((left-t->tv_sec)*1e6);}
+static int fixture_socket(int family,int type,int protocol){assert(family==AF_INET&&protocol==IPPROTO_ICMP);
+ if((type&SOCK_DGRAM)==SOCK_DGRAM&&(type&SOCK_RAW)!=SOCK_RAW){if(dgram_ok)return 100;errno=EACCES;return -1;}
+ raw_requests++;if(raw_ok)return 100;errno=EPERM;return -1;}
+static int fixture_seteuid(uid_t uid){if(uid==0)elevations++;return 0;}
+static uid_t fixture_getuid(void){return 1000;}
+static int fixture_close(int fd){assert(fd==100);return 0;}
+static int fixture_fcntl(int fd,int cmd,...){(void)fd;(void)cmd;return 0;}
+static int fixture_usleep(useconds_t usec){(void)usec;return 0;}
+static int fixture_setsockopt(int fd,int level,int name,const void *value,socklen_t len){(void)fd;(void)level;(void)name;(void)value;(void)len;return 0;}
+static ssize_t fixture_sendto(int fd,const void *buf,size_t len,int flags,const struct sockaddr *to,socklen_t tolen){(void)fd;(void)len;(void)flags;(void)to;(void)tolen;sent_seq=((const struct icmp *)buf)->icmp_seq;return (ssize_t)len;}
+int wait_fd_readable(int fd,const struct timeval *t){(void)fd;(void)t;if(replies>=3){now+=1;return 0;}return 1;}
+static ssize_t fixture_recvfrom(int fd,void *buf,size_t len,int flags,struct sockaddr *from,socklen_t *fromlen){
+ struct sockaddr_in *source=(struct sockaddr_in *)from;size_t ihl=datagram_reply?0:sizeof(struct ip);struct icmp *reply=(struct icmp *)((char *)buf+ihl);
+ (void)fd;(void)flags;(void)fromlen;assert(len>=ihl+ICMP_HDR_SIZE);replies++;memset(buf,0,ihl+ICMP_HDR_SIZE);
+ if(!datagram_reply)((struct ip *)buf)->ip_hl=sizeof(struct ip)>>2;
+ memset(source,0,sizeof(*source));source->sin_family=AF_INET;source->sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+ reply->icmp_type=ICMP_ECHOREPLY;reply->icmp_id=datagram_reply?0x4242:(getpid()&0xFFFF);reply->icmp_seq=wrong_seq?sent_seq+1:sent_seq;
+ return (ssize_t)(ihl+ICMP_HDR_SIZE);}
+#define socket fixture_socket
+#define seteuid fixture_seteuid
+#define getuid fixture_getuid
+#define close fixture_close
+#define fcntl fixture_fcntl
+#define usleep fixture_usleep
+#define setsockopt fixture_setsockopt
+#define sendto fixture_sendto
+#define recvfrom fixture_recvfrom
+#define ICMP_DISCARD_PEEKED(sock, buf) ((void)0)
+''' + function(ping, 'int ping_icmp(') + '''
+static int probe(void){host_t host={0};ping_t result={{0}};host.ping_timeout=500;host.ping_retries=0;snprintf(host.hostname,sizeof(host.hostname),"127.0.0.1");
+ raw_requests=elevations=replies=0;now=0;return ping_icmp(&host,&result);}
+int main(void){
+#if defined(__linux__) && HAVE_DECL_SOCK_CLOEXEC
+ /* a datagram socket needs no raw socket or root, and its reply has no IP header and a kernel identifier */
+ dgram_ok=1;raw_ok=0;datagram_reply=1;assert(probe()==HOST_UP&&!raw_requests&&!elevations);
+ /* the sequence still has to match */
+ wrong_seq=1;assert(probe()==HOST_DOWN&&!raw_requests);wrong_seq=0;
+#endif
+ /* without a datagram socket the raw socket is opened as before */
+ dgram_ok=0;raw_ok=1;datagram_reply=0;assert(probe()==HOST_UP&&raw_requests==1&&elevations==1);
+ wrong_seq=1;assert(probe()==HOST_DOWN);return 0;}
+''')
+
+# Exercise the rolling reindex reader with production SNMP handling. Only
+# stored-result iteration, allocation failure, and the transport are controlled.
+poller = (root / 'poller.c').read_text()
+batch_type = poller[poller.index('typedef struct {\n\tsnmp_oids_t *oids;'):
+                    poller.index('static char *poll_reindex_assert(')]
+source = r'''#include "common.h"
+#include "spine.h"
+static int requests, response_mode;
+static struct snmp_session session;
+static struct snmp_session *fixture_session(void *handle) {
+ (void)handle; session.version = SNMP_VERSION_2c; return &session;
+}
+static int fixture_response(void *handle, struct snmp_pdu *request, struct snmp_pdu **response) {
+ netsnmp_variable_list *var;
+ long value = 42;
+ int count = 0;
+ (void)handle;
+ requests++;
+ *response = NULL;
+ if (response_mode == 1) { snmp_free_pdu(request); return STAT_TIMEOUT; }
+ *response = snmp_pdu_create(SNMP_MSG_RESPONSE);
+ assert(*response);
+ (*response)->errstat = SNMP_ERR_NOERROR;
+ (*response)->errindex = 0;
+ for (var = request->variables; var != NULL; var = var->next_variable) count++;
+ if (response_mode == 2 && count > 1) {
+  (*response)->errstat = SNMP_ERR_TOOBIG;
+ } else {
+  for (var = request->variables; var != NULL; var = var->next_variable) {
+   value = var->name[var->name_length - 1] == 2 ? 43 : 42;
+   assert(snmp_pdu_add_variable(*response, var->name, var->name_length,
+                               ASN_INTEGER, (const u_char *)&value, sizeof(value)));
+  }
+ }
+ snmp_free_pdu(request);
+ return STAT_SUCCESS;
+}
+#define snmp_sess_session fixture_session
+#define snmp_sess_synch_response fixture_response
+#include "snmp.c"
+#undef snmp_sess_synch_response
+#undef snmp_sess_session
+static int row_count, cursor, barrier = -1, allocation_failure;
+static size_t largest_allocation;
+static int allocation_attempts;
+static char *normal_rows[2][5] = {
+ {"1", "0", "=", "42", ".1.3.6.1.2.1.2.2.1.1.1"},
+ {"1", "0", "=", "43", ".1.3.6.1.2.1.2.2.1.1.2"}
+};
+static char *barrier_row[] = {"1", "1", "=", "42", "fixture-script"};
+static void fixture_seek(MYSQL_RES *result, my_ulonglong offset) {
+ assert(result == (MYSQL_RES *)1 && offset <= (my_ulonglong)row_count);
+ cursor = (int)offset;
+}
+static MYSQL_ROW fixture_row(MYSQL_RES *result) {
+ assert(result == (MYSQL_RES *)1);
+ if (cursor == row_count) return NULL;
+ cursor++;
+ return cursor - 1 == barrier ? barrier_row : normal_rows[(cursor - 1) % 2];
+}
+static void *fixture_calloc(size_t count, size_t size) {
+ allocation_attempts++;
+ if (count * size > largest_allocation) largest_allocation = count * size;
+ return allocation_failure ? NULL : calloc(count, size);
+}
+#define mysql_data_seek fixture_seek
+#define mysql_fetch_row fixture_row
+#define calloc fixture_calloc
+''' + batch_type + function(poller, 'static char *poll_reindex_assert(') + r'''
+#undef calloc
+static void probe(int rows, int limit, int expected_requests) {
+ host_t host = {0};
+ reindex_batch_t batch = {0};
+ int position;
+ host.snmp_session = (void *)1;
+ host.max_oids = limit;
+ row_count = rows;
+ cursor = requests = 0;
+ largest_allocation = 0;
+ allocation_attempts = 0;
+ for (position = 0; position < rows; position++) {
+  char *value;
+  MYSQL_ROW row = fixture_row((MYSQL_RES *)1);
+  assert(row != NULL);
+  if (position == barrier) continue;
+  value = poll_reindex_assert(&host, (MYSQL_RES *)1, position, row[4], &batch);
+  assert(strcmp(value, response_mode == 1 ? "U" : (position % 2 ? "43" : "42")) == 0);
+  assert(cursor == position + 1);
+  free(value);
+ }
+ assert(requests == expected_requests);
+ if (!allocation_failure) assert(allocation_attempts == (limit > 1 ? 1 : 0));
+ assert(largest_allocation <= 100 * sizeof(snmp_oids_t));
+ assert(host.ignore_host == (response_mode == 1));
+ free(batch.oids);
+}
+int main(void) {
+ init_mutexes();
+ set.stdout_notty = set.stderr_notty = TRUE;
+ snmp_spine_init();
+ response_mode = 1;
+ /* A batch timeout leaves its OIDs to single gets; the first of those
+  * times out too and gives the host up, so the other 99 batches and the
+  * remaining single gets are never sent. */
+ probe(1000, 10, 2);
+ response_mode = 0;
+ probe(100000, 100, 1000); /* One reusable allocation, bounded by max_oids. */
+ probe(1000, 1000, 10); /* The state array also bounds oversized limits. */
+ probe(21, 10, 3); /* The final lone row uses a single GET. */
+ probe(3, 1, 3);
+ assert(largest_allocation == 0);
+ barrier = 4;
+ probe(10, 10, 2); /* A script separates two independent SNMP batches. */
+ barrier_row[1] = "0";
+ barrier_row[4] = ".1.3.6.1.2.1.1.3.0";
+ probe(10, 10, 2); /* Uptime retains its separate handling. */
+ barrier = -1;
+ allocation_failure = 1;
+ probe(10, 10, 10); /* Allocation failure retains the single-GET path. */
+ allocation_failure = 0;
+ response_mode = 2;
+ probe(10, 10, 11); /* An oversized batch retries each row individually. */
+ return 0;
+}
+'''
+path = out / 'reindex-batch-contract.c'
+path.write_text(source)
+executable = out / 'reindex-batch-contract'
+objects = [str(root / (name + '.o')) for name in
+           ['sql', 'util', 'locks', 'nft_popen', 'php', 'ping', 'keywords',
+            'error', 'poller']]
+subprocess.run([*compiler, *flags, str(path), str(spine_object), *objects,
+                *make_variable('LDFLAGS'), *make_variable('LIBS'),
+                '-o', str(executable)], check=True)
+subprocess.run([str(executable)], check=True, timeout=20)
+print('maintenance-reindex-batch-contract: passed')
 
 ping = (root / 'ping.c').read_text()
 run('maintenance-resolver-failure-contract', r'''#include "common.h"

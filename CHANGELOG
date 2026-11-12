@@ -16,8 +16,8 @@ The Cacti Group | spine
 -issue#622: RECACHE Event and ASSERT FAILED
 -issue#632: Reap nft_pclose() with a single bounded non-blocking check, killing and parking anything still running for a later sweep instead of the previous unbounded blocking waitpid()
 -issue#632: Remove the USING_TPOPEN/--enable-popen native popen() fallback in exec_poll(), which could not track or kill a timed-out child
--issue#676: Store a result with leading whitespace such as " 12" as a number instead of converting it as hex
--issue#676: Convert hex results exactly up to 64 bits, store an all-FF Counter64 as 18446744073709551615 instead of -1, and store '-' or ':' delimited strings such as dates as U instead of 0
+-issue#676: Store a result with leading whitespace such as " 12" as 12 instead of converting it as hex
+-issue#676: Convert hex results exactly up to 64 bits, store an all-FF Counter64 as 18446744073709551615 instead of -1, store a value wider than 64 bits as U, and store '-' or ':' delimited strings such as dates as U instead of 0
 -issue#676: Store U for a counter after an agent restart in Script Server results, as the other actions do
 -issue#676: Store U for a counter after an agent restart in the SNMP batch that is flushed when the SNMP settings change between items
 -issue#676: Keep max_oids batching for SNMP communities longer than 49 characters
@@ -38,16 +38,28 @@ The Cacti Group | spine
 -issue#676: Free the copied DB_Host setting when it names a socket file instead of leaking it on every database connection
 -issue#676: Treat only a socket file at the DB_Host path as a socket, so a regular file is used as the host name and is not exempted from DB_SSL_Required
 -issue#676: Relax the session sql_mode of an online remote collector's main server connection so its poller_time row is recorded on MySQL 5.7 and later instead of failing with error 1292
+-issue#680: Treat the 32 bit sysUpTime wrap after about 497 days as elapsed time instead of an agent restart that queued a reindex and stored U
+-issue#680: Open the log file in append mode so a log that another process has just created is not truncated; a log Spine creates is now readable by its group only (0640) instead of 0666 less the umask, so a web server that shows the log must share the group of the poller
+-issue#680: Launch the next device as soon as a polling thread finishes instead of checking for a free thread every 10 ms
+-issue#680: Use an ICMP datagram socket on Linux when net.ipv4.ping_group_range allows it, instead of running every thread as root while the raw socket is opened
+-issue#680: Check device availability and reindex assertions once per device instead of once per device thread, so that all device threads agree on whether the device is up
+-issue#680: Fetch the SNMP reindex assertion values max_oids at a time instead of one per request, falling back to one per request when a batch times out
+-issue#680: Keep polling a device when a reindex assertion OID returns noSuchObject, noSuchInstance, endOfMibView or an error status, and read the value as U as cmd.php does, queuing the reindex once and storing U, instead of skipping the device for the cycle
+-issue#680: Wait for script, Script Server and ping replies with poll() so a descriptor at or above FD_SETSIZE no longer aborts Spine, stores U or reports the device down
+-issue#680: End the poll cycle when the last device thread finishes instead of on the next 500 ms check
+-issue#680: Take each device's poller item count from the device list query instead of one COUNT query per device
+-issue#680: Leave rrd_next_step unwritten for items polled every interval, whose value would not change
+-issue#680: Close a finished script's pipe only after its entry is claimed, so another thread reusing the descriptor number cannot reap the wrong child
 -issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
 -issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
 -issue: Disable persisted CI credentials, hash-lock flawfinder and propagate scanner failures
 -issue: Force boost_redirect to be true always
 -issue: Backport polling fixes from develop #641 and #660: separate SNMP endpoints and timeouts, check whole uptime conversions, reject truncated script output, and preserve one-shot reads (#661)
 -issue: Backport worker stack sizing, SNMP synchronization (SNMPv3 requests are now serialized process-wide; v1 and v2c stay parallel), PHP slot validation, and CLI/config boundaries from develop #644, #646 and #660 (#662)
--issue: Backport connection ownership, destination upserts, retry limits, and failure-aware completion from develop #641, #655 and #660; signal interruptions no longer count toward the reconnect limit (#663)
+-issue: Backport connection ownership, destination upserts, retry limits, and failure-aware completion from develop #641, #655 and #660; interrupted queries and connection attempts get 3 retries in place, then count toward the retry limit, instead of retrying without limit (#663)
 -issue: Backport SNMPv3 key handling, probe deadlines, opt-in result normalization, safe signal/logging paths, input limits, and opt-in required TLS; collect offline regression contracts (#664)
--issue: New DB_SSL_Required and RDB_SSL_Required settings refuse a TCP connection that does not negotiate TLS; without them DB_UseSSL keeps the plaintext fallback and logs a warning when it is used. The session is encrypted but the server is not authenticated unless DB_SSL_CA is set with a MySQL client library, and Unix sockets and localhost are exempt (#664)
--issue: New Strict_Mode setting normalizes poll results before storage ("12 abc" is stored as 12, "FF" as 255 and "0x10" as U) and exits non-zero after a failed output write, final push, poller_time update or poll timeout; the default keeps the 1.2.31 values and exit status (#664)
+-issue: New DB_SSL_Required and RDB_SSL_Required settings refuse a TCP connection that does not negotiate TLS; without them DB_UseSSL keeps the plaintext fallback and logs a warning the first time it is used for each connection type. The session is encrypted but the server is not authenticated unless DB_SSL_CA is set with a MySQL client library, and Unix sockets and localhost are exempt (#664)
+-issue: New Strict_Mode setting normalizes poll results before storage ("12 abc" is stored as 12, "FF" as 255 and "0x10" as U) and exits non-zero after a failed output write, final push, poller_time update, poll timeout or a device thread that could not start; the default keeps the 1.2.31 values and exit status (#664)
 -issue: SIGINT, SIGQUIT and SIGBUS now terminate the poller (#664)
 -issue: SQL errors are logged with the error number, SQLSTATE and a statement label (verb and table), never the server's message or the statement text (#664)
 

@@ -34,6 +34,9 @@
 #include "common.h"
 #include "spine.h"
 #include <stdint.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <poll.h>
 
 static int nopts = 0;
 
@@ -1458,10 +1461,20 @@ int spine_log(const char *format, ...) {
 		(set.log_level != POLLER_VERBOSITY_NONE) &&
 		(strlen(set.path_logfile) != 0))) {
 		if (set.logfile_processed) {
-			if (!file_exists(set.path_logfile)) {
-				log_file = fopen(set.path_logfile, "w");
-			} else {
-				log_file = fopen(set.path_logfile, "a");
+			/* Append mode creates a missing log without the window between an
+			 * existence check and a truncating open, in which a log another
+			 * process had just created would be emptied.  A log Spine creates
+			 * is readable by its group, which the web server shares to show
+			 * the log, and not by every other account. */
+			int log_fd = open(set.path_logfile, O_WRONLY | O_CREAT | O_APPEND, 0640);
+
+			log_file = NULL;
+			if (log_fd >= 0) {
+				log_file = fdopen(log_fd, "a");
+
+				if (log_file == NULL) {
+					close(log_fd);
+				}
 			}
 
 			if (log_file) {
@@ -1576,14 +1589,15 @@ int is_numeric(char *string) {
 	char *end_ptr_long, *end_ptr_double;
 	int conv_base=10;
 	int length;
+	char *start;
 
-	/* rtrim() strips the tail in place.  The length must be measured from
-	 * the same pointer that strtol() and strtod() parse, so skip only the
-	 * leading whitespace they would skip anyway: " 12" is numeric, while a
-	 * leading quote still takes the callers' strip_alpha() path. */
+	/* Trim in place at both ends, as cmd.php trims a result before it
+	 * stores it, so a stored " 12" has no padding either.  A leading quote
+	 * still takes the callers' strip_alpha() path. */
 	rtrim(string);
-	while (isspace((unsigned char) *string)) {
-		string++;
+	for (start = string; isspace((unsigned char) *start); start++);
+	if (start != string) {
+		memmove(string, start, strlen(start) + 1);
 	}
 
 	length = strlen(string);
@@ -1660,17 +1674,15 @@ static bool hex_value(const char *str, unsigned long long *value) {
  *
  *  \return TRUE if the string is valid hex, FALSE otherwise
  *
- *  The string must include at least one ' ' delimiter.  The callers convert
- *  an accepted string with hex2dec(), so this accepts only what hex2dec()
- *  can convert exactly: a '-' or ':' delimited value such as a date or a
- *  MAC address would otherwise be stored as 0.
+ *  The string must include at least one ' ' delimiter.  The callers store
+ *  an accepted string with hex_result(), which converts only space delimited
+ *  octets: a '-' or ':' delimited value such as a date or a MAC address is
+ *  not accepted, as it would otherwise be stored as 0.
  *
  */
 int is_hexadecimal(const char * str, const short ignore_special) {
 	int i = 0;
 	int delim_found = FALSE;
-	const char *start = str;
-	unsigned long long value;
 
 	if (!str) return FALSE;
 
@@ -1703,8 +1715,23 @@ int is_hexadecimal(const char * str, const short ignore_special) {
 		return FALSE;
 	}
 
-	/* a value wider than 64 bits has no exact conversion */
-	return hex_value(start, &value);
+	return TRUE;
+}
+
+/*! \fn void hex_result(char *result, size_t size, const char *str)
+ *  \brief store the decimal value of a string is_hexadecimal() accepted.
+ *
+ *  A value wider than 64 bits has no exact conversion and is stored as U,
+ *  rather than taking the non-hex path, which could keep a numeric prefix.
+ */
+void hex_result(char *result, size_t size, const char *str) {
+	unsigned long long value;
+
+	if (hex_value(str, &value)) {
+		snprintf(result, size, "%llu", value);
+	} else {
+		snprintf(result, size, "U");
+	}
 }
 
 /*! \fn char *strip_alpha(char *string)
@@ -1854,6 +1881,51 @@ double get_time_as_double(void) {
 	return (now).tv_sec + ((double) (now).tv_usec / 1000000);
 }
 
+/*! \fn int wait_fd_readable(int fd, const struct timeval *timeout)
+ *  \brief waits for one descriptor the way select() does, without the
+ *         FD_SETSIZE limit that FD_SET() does not range check.
+ *
+ *  End of file and a pending socket error count as readable, as they do for
+ *  select(), so the caller's read() reports them.
+ *
+ *  \return 1 when readable, 0 on timeout, -1 with errno set on failure
+ */
+int wait_fd_readable(int fd, const struct timeval *timeout) {
+	struct pollfd readable;
+	double wait_ms;
+	int ready;
+
+	/* poll() ignores a negative descriptor instead of failing as select() does */
+	if (fd < 0) {
+		errno = EBADF;
+		return -1;
+	}
+
+	if (timeout->tv_sec < 0 || timeout->tv_usec < 0 || timeout->tv_usec >= 1000000) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* round up so a sub-millisecond remainder waits rather than returning early */
+	wait_ms = ceil((double) timeout->tv_sec * 1000 + (double) timeout->tv_usec / 1000);
+
+	readable.fd      = fd;
+	readable.events  = POLLIN;
+	readable.revents = 0;
+
+	ready = poll(&readable, 1, wait_ms >= INT_MAX ? INT_MAX : (int) wait_ms);
+	if (ready <= 0) {
+		return ready;
+	}
+
+	if (readable.revents & POLLNVAL) {
+		errno = EBADF;
+		return -1;
+	}
+
+	return 1;
+}
+
 /*! \fn trim()
  *  \brief removes leading and trailing blanks, tabs, line feeds and
  *         carriage returns from a string.
@@ -1940,12 +2012,6 @@ int char_count(const char *str, int chr) {
 		}
 	}
 	return count;
-}
-
-unsigned long long hex2dec(char *str) {
-	unsigned long long number;
-
-	return hex_value(str, &number) ? number : 0;
 }
 
 int hasCaps() {

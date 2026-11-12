@@ -8,8 +8,12 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import socket
 import subprocess
+import sys
 import tempfile
+import threading
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parent
@@ -18,9 +22,11 @@ FAULT_BINARY = Path(os.environ.get('SPINE_TEST_FAULT_BINARY', ROOT / 'spine_allo
 # Linking the fault binary needs a linker with --wrap; see configure.ac.
 HAVE_FAULT_BINARY = FAULT_BINARY.is_file()
 CLIENT = shutil.which('mariadb') or shutil.which('mysql')
+# A net-snmp snmpd executable; the tests start their own agent with it.
+SNMPD = os.environ.get('SPINE_TEST_SNMPD')
 # Optional cases that must run instead of being skipped, as a comma separated
 # list, for a CI job that provides their prerequisites.
-OPTIONAL = {'cacti', 'fault'}
+OPTIONAL = {'cacti', 'fault', 'snmpd'}
 REQUIRED = {name.strip() for name in os.environ.get('SPINE_TEST_REQUIRE', '').split(',') if name.strip()}
 if REQUIRED - OPTIONAL:
     raise SystemExit('Unknown SPINE_TEST_REQUIRE entries: ' + ', '.join(sorted(REQUIRED - OPTIONAL)))
@@ -38,6 +44,189 @@ def optional(name, available, reason):
         run.__name__ = test.__name__
         return run
     return missing
+
+
+def icmp_datagram_available():
+    # Spine only uses ICMP with root or CAP_NET_RAW; it then tries the
+    # datagram socket that net.ipv4.ping_group_range grants first.
+    if not sys.platform.startswith('linux') or os.geteuid() != 0:
+        return False
+    try:
+        socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP).close()
+    except OSError:
+        return False
+    return True
+
+
+def ber_length(data, i):
+    length = data[i]
+    if length < 0x80:
+        return length, i + 1
+    count = length & 0x7f
+    return int.from_bytes(data[i + 1:i + 1 + count], 'big'), i + 1 + count
+
+
+def ber_items(data):
+    i = 0
+    while i < len(data):
+        tag = data[i]
+        length, i = ber_length(data, i + 1)
+        yield tag, data[i:i + length]
+        i += length
+
+
+def ber(tag, value):
+    if len(value) < 0x80:
+        return bytes([tag, len(value)]) + value
+    size = len(value).to_bytes((len(value).bit_length() + 7) // 8, 'big')
+    return bytes([tag, 0x80 | len(size)]) + size + value
+
+
+def ber_int(value):
+    return ber(0x02, value.to_bytes(max(1, (value.bit_length() + 8) // 8), 'big', signed=True))
+
+
+def oid_text(data):
+    parts = [data[0] // 40, data[0] % 40]
+    value = 0
+    for byte in data[1:]:
+        value = (value << 7) | (byte & 0x7f)
+        if not byte & 0x80:
+            parts.append(value)
+            value = 0
+    return '.' + '.'.join(map(str, parts))
+
+
+class SnmpAgent:
+    """Answer SNMPv2c GET requests from a table and record each request's OIDs.
+
+    Values are ('int', n), ('ticks', n), ('str', text) or the exception
+    values ('noSuchObject',) and ('endOfMibView',); any other OID is
+    noSuchInstance.  A request for an OID in errors gets a noSuchName error
+    status instead."""
+
+    def __init__(self, values, errors=(), drop_multi=False):
+        self.values = values
+        self.errors = errors
+        self.drop_multi = drop_multi
+        self.requests = []
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('127.0.0.1', 0))
+        self.port = self.sock.getsockname()[1]
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.sock.close()
+
+    def encode(self, oid):
+        kind, value = (self.values.get(oid, (None,)) + (None,))[:2]
+        if kind == 'noSuchObject':
+            return ber(0x80, b'')
+        if kind == 'endOfMibView':
+            return ber(0x82, b'')
+        if kind == 'int':
+            return ber_int(value)
+        if kind == 'ticks':
+            return ber(0x43, value.to_bytes(max(1, (value.bit_length() + 8) // 8), 'big'))
+        if kind == 'str':
+            return ber(0x04, value.encode())
+        return ber(0x81, b'')
+
+    def serve(self):
+        while True:
+            try:
+                data, peer = self.sock.recvfrom(65535)
+            except OSError:
+                return
+            (_, message), = ber_items(data)
+            version, community, (pdu_tag, pdu) = list(ber_items(message))
+            request_id, _, _, (_, bindings) = list(ber_items(pdu))
+            oids = [oid_text(list(ber_items(binding))[0][1]) for _, binding in ber_items(bindings)]
+            self.requests.append(oids)
+            if self.drop_multi and len(oids) > 1:
+                continue
+            response = ber(0x30, b''.join(ber(0x30, ber(0x06, list(ber_items(binding))[0][1]) + self.encode(oid))
+                                          for (_, binding), oid in zip(ber_items(bindings), oids)))
+            failed = [i + 1 for i, oid in enumerate(oids) if oid in self.errors]
+            pdu = ber(0x02, request_id[1]) + ber_int(2 if failed else 0) + ber_int(failed[0] if failed else 0) + response
+            try:
+                self.sock.sendto(ber(0x30, ber(*version) + ber(*community) + ber(0xa2, pdu)), peer)
+            except OSError:
+                return
+
+    def gets(self, oid):
+        return sum(request.count(oid) for request in self.requests)
+
+
+def oid_bytes(text):
+    parts = [int(part) for part in text.strip('.').split('.')]
+    data = bytes([parts[0] * 40 + parts[1]])
+    for part in parts[2:]:
+        chunk = [part & 0x7f]
+        part >>= 7
+        while part:
+            chunk.append(0x80 | (part & 0x7f))
+            part >>= 7
+        data += bytes(reversed(chunk))
+    return data
+
+
+class NetSnmpAgent:
+    """Run a real net-snmp snmpd on a loopback port with fixed SNMPv1/v2c and
+    SNMPv3 credentials and an integer value under BASE for each given index."""
+
+    BASE = '.1.3.6.1.4.1.8072.9999.9999.7'
+    COMMUNITY = 'spine-regression'
+    AUTH_USER = 'spineauth'
+    PRIV_USER = 'spinepriv'
+    AUTH_PASS = 'spine-auth-pass'
+    PRIV_PASS = 'spine-priv-pass'
+
+    def __init__(self, directory, indexes):
+        self.directory = Path(tempfile.mkdtemp(prefix='snmpd-', dir=directory))
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.bind(('127.0.0.1', 0))
+            self.port = probe.getsockname()[1]
+        conf = self.directory / 'snmpd.conf'
+        conf.write_text(f'agentAddress udp:127.0.0.1:{self.port}\n'
+                        f'rocommunity {self.COMMUNITY} 127.0.0.1\n'
+                        f'createUser {self.AUTH_USER} SHA "{self.AUTH_PASS}"\n'
+                        f'createUser {self.PRIV_USER} SHA "{self.AUTH_PASS}" AES "{self.PRIV_PASS}"\n'
+                        f'rouser {self.AUTH_USER} auth\nrouser {self.PRIV_USER} priv\n' +
+                        ''.join(f'override {self.BASE}.{i} integer {i}\n' for i in indexes))
+        env = dict(os.environ, SNMP_PERSISTENT_DIR=str(self.directory))
+        self.process = subprocess.Popen([SNMPD, '-f', '-C', '-c', str(conf), '-Lf', str(self.directory / 'snmpd.log')],
+                                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.wait_ready(indexes[0])
+
+    def wait_ready(self, index):
+        oid = ber(0x06, oid_bytes(self.BASE + '.' + str(index)))
+        request = ber(0x30, ber_int(1) + ber(0x04, self.COMMUNITY.encode()) +
+                      ber(0xa0, ber_int(1) + ber_int(0) + ber_int(0) + ber(0x30, ber(0x30, oid + ber(0x05, b'')))))
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.settimeout(0.2)
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                if self.process.poll() is not None:
+                    break
+                client.sendto(request, ('127.0.0.1', self.port))
+                try:
+                    client.recvfrom(65535)
+                    return
+                except OSError:
+                    pass
+        self.close()
+        raise RuntimeError('snmpd did not start: ' + (self.directory / 'snmpd.log').read_text(errors='replace')[-2000:])
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
 
 
 class Polling(unittest.TestCase):
@@ -150,6 +339,7 @@ class Polling(unittest.TestCase):
         self.sql('SET GLOBAL general_log=OFF;', False)
         self.sql('DROP TRIGGER IF EXISTS injected_write_failure; TRUNCATE poller_item; TRUNCATE host; '
                  'TRUNCATE poller_output; TRUNCATE poller_time; TRUNCATE audit_schedule; '
+                 'TRUNCATE poller_reindex; TRUNCATE poller_command; '
                  'TRUNCATE audit_expected; TRUNCATE audit_first; UPDATE audit_duplicates SET attempts=0; '
                  "UPDATE settings SET value='0' WHERE name='active_profiles';"
                  "UPDATE settings SET value='1' WHERE name='total_snmp_ports';"
@@ -179,10 +369,10 @@ class Polling(unittest.TestCase):
         self.sql('INSERT IGNORE INTO audit_first SELECT host_id,local_data_id,rrd_name FROM audit_expected '
                  'ORDER BY local_data_id,rrd_name;')
 
-    def run_spine(self, failure=None, ping=False, strict=False, hosts=(), conf=None, poller=1):
+    def run_spine(self, failure=None, ping=False, strict=False, hosts=(), conf=None, poller=1, prefix=()):
         self.sql("SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log=ON;", False)
         conf = conf or (self.strict_conf if strict else self.conf)
-        args = [str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', str(poller), '-t', '16', '-S', '-V', '1']
+        args = [*prefix, str(FAULT_BINARY if failure else BINARY), '--conf=' + str(conf), '-p', str(poller), '-t', '16', '-S', '-V', '1']
         if ping:
             args.append('-P')
         args.extend(hosts)
@@ -195,7 +385,7 @@ class Polling(unittest.TestCase):
         self.result = result
         return result
 
-    def check_complete(self, devices=1, schedule=True):
+    def check_complete(self, devices=1, schedule=True, device_zero=False):
         self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
         self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), self.sql('SELECT COUNT(*) FROM audit_expected;'),
                          self.result.stdout[-3000:] + self.result.stderr[-1000:])
@@ -203,13 +393,229 @@ class Polling(unittest.TestCase):
                                  'ON po.local_data_id=ex.local_data_id AND po.rrd_name=ex.rrd_name '
                                  'WHERE po.local_data_id IS NULL OR CAST(po.output AS BINARY)<>CAST(ex.local_data_id AS BINARY);'), '0')
         self.assertEqual(self.sql('SELECT attempts FROM audit_duplicates;'), '0')
-        counts = self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
-                          "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False)
-        self.assertEqual(int(counts), devices)
+        # The device list carries each device's item count; only device 0,
+        # which is not in that list, is counted on its own.
+        self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE id, device_threads,%'), 1)
+        self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%'),
+                         1 if device_zero else 0)
         if schedule:
             self.assertEqual(int(self.sql('SELECT COUNT(*) FROM audit_schedule;')), devices)
             self.assertEqual(self.sql('SELECT COUNT(*) FROM audit_schedule s WHERE output_rows<>('
                                      'SELECT COUNT(*) FROM audit_expected ex WHERE ex.host_id=s.host_id);'), '0')
+
+    def snmp_agent(self, values, availability=2, max_oids=10, errors=(), drop_multi=False):
+        agent = SnmpAgent(values, errors, drop_multi)
+        self.addCleanup(agent.close)
+        self.sql("UPDATE host SET snmp_version=2,snmp_community='public',snmp_port=" + str(agent.port) +
+                 ',snmp_timeout=1000,availability_method=' + str(availability) + ',max_oids=' + str(max_oids) + ';')
+        return agent
+
+    def general_log_count(self, pattern):
+        # Count only this run's Spine sessions: the general log is server-wide,
+        # and another client on the same server would shift the counts.
+        return int(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
+                            "user_host LIKE '" + self.user + "[%' AND "
+                            "argument LIKE '" + pattern + "';", False))
+
+    def test_first_partition_owns_availability_and_reindex(self):
+        self.seed(37, 10)
+        agent = self.snmp_agent({'.1.3.6.1.2.1.1.3.0': ('ticks', 500000), '.1.3.6.1.2.1.2.1.0': ('int', 4)})
+        self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) "
+                 "VALUES(1,1,0,'=','4','.1.3.6.1.2.1.2.1.0');")
+        self.run_spine()
+        self.check_complete()
+        # one SNMP availability get and one reindex check for ten partitions
+        self.assertEqual(agent.gets('.1.3.6.1.2.1.1.3.0'), 1, agent.requests)
+        self.assertEqual(agent.gets('.1.3.6.1.2.1.2.1.0'), 1, agent.requests)
+        self.assertEqual(self.general_log_count('%FROM poller_reindex%'), 1)
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+        self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
+
+    def test_partitions_share_the_restart_verdict(self):
+        # an uptime that went backwards stores U in every partition
+        self.seed(37, 10)
+        agent = self.snmp_agent({'.1.3.6.1.2.1.1.3.0': ('ticks', 500000)})
+        self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) "
+                 "VALUES(1,1,0,'<','90000000','.1.3.6.1.2.1.1.3.0');")
+        self.run_spine()
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM poller_output WHERE output='U';"), '37')
+        self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:1')
+        self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex;'), '500000')
+        self.assertEqual(self.general_log_count('%FROM poller_reindex%'), 1)
+        self.assertLessEqual(len(agent.requests), 3, agent.requests)
+
+    def test_down_device_skips_every_partition(self):
+        self.seed(37, 10)
+        agent = self.snmp_agent({})
+        agent.close()
+        self.sql('UPDATE host SET snmp_timeout=200,ping_retries=0;')
+        self.run_spine()
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
+        self.assertEqual(self.sql('SELECT CONCAT(total_polls,":",failed_polls) FROM host;'), '1:1')
+
+    def test_reindex_gets_are_batched(self):
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.1.3.0': ('ticks', 500000)}
+        rows = []
+        for i in range(1, 26):
+            values['.1.3.6.1.2.1.2.2.1.1.' + str(i)] = ('int', i)
+            rows.append(f"(1,1,0,'=','{i}','.1.3.6.1.2.1.2.2.1.1.{i}')")
+        # the first mismatch queues a reindex and skips the rest of its data query
+        values['.1.3.6.1.2.1.31.1.1.1.1.1'] = ('str', 'eth1')
+        rows += ["(1,2,0,'=','eth0','.1.3.6.1.2.1.31.1.1.1.1.1')", "(1,2,0,'=','x','.1.3.6.1.2.1.31.1.1.1.1.2')",
+                 "(1,3,0,'<','400000','.1.3.6.1.2.1.1.3.0')"]
+        agent = self.snmp_agent(values, availability=0, max_oids=10)
+        self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' + ','.join(rows) + ';')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:2')
+        self.assertEqual(self.sql("SELECT GROUP_CONCAT(assert_value ORDER BY data_query_id) FROM poller_reindex "
+                                  "WHERE data_query_id>1 AND arg1 LIKE '%.1';"), 'eth1')
+        self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=3;'), '500000')
+        uptime = ('.1.3.6.1.2.1.1.3.0', '.1.3.6.1.6.3.10.2.1.3.0')
+        batched = [r for r in agent.requests if not set(r) & set(uptime)]
+        # 27 assertion OIDs in max_oids sized requests, where each took one
+        self.assertEqual([len(r) for r in batched], [10, 10, 7], agent.requests)
+        self.assertEqual(agent.gets('.1.3.6.1.2.1.1.3.0'), 1, agent.requests)
+
+    def test_reindex_batch_timeout_gets_each_value_alone(self):
+        # An agent that drops a request with many OIDs but answers each one
+        # alone: the batch times out, the single gets decide, and the device
+        # is polled.
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.1.3.0': ('ticks', 500000)}
+        rows = []
+        for i in range(1, 6):
+            values['.1.3.6.1.2.1.2.2.1.1.' + str(i)] = ('int', i)
+            rows.append(f"(1,1,0,'=','{i}','.1.3.6.1.2.1.2.2.1.1.{i}')")
+        agent = self.snmp_agent(values, availability=0, max_oids=10, drop_multi=True)
+        self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' + ','.join(rows) + ';')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+        for i in range(1, 6):
+            self.assertGreaterEqual(agent.requests.count(['.1.3.6.1.2.1.2.2.1.1.' + str(i)]), 1, agent.requests)
+
+    def test_reindex_error_status_gets_each_value_alone(self):
+        # An error status names one OID; the batch falls back to one get per
+        # check, where that OID reads as empty and fails its assertion.
+        self.seed(37, 1)
+        values = {'.1.3.6.1.2.1.2.2.1.1.' + str(i): ('int', i) for i in range(1, 6)}
+        agent = self.snmp_agent(values, availability=0, max_oids=10, errors=('.1.3.6.1.2.1.2.2.1.1.3',))
+        self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' +
+                 ','.join(f"(1,{i},0,'=','{i}','.1.3.6.1.2.1.2.2.1.1.{i}')" for i in range(1, 6)) + ';')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT command FROM poller_command;'), '1:3')
+        self.assertEqual([len(r) for r in agent.requests if len(r) > 1], [5], agent.requests)
+        self.assertEqual(sorted(sum((r for r in agent.requests if len(r) == 1), [])), sorted(values))
+
+    # Cacti's cmd.php reads an assertion OID with an exception value or an
+    # error status as U, compares that U with the stored value, queues the
+    # reindex when they differ and stores the U, and goes on with the later
+    # checks and the device's polling.
+    EXCEPTIONS = {'noSuchInstance': None, 'noSuchObject': ('noSuchObject',), 'endOfMibView': ('endOfMibView',)}
+
+    def poll_again(self):
+        # the stored U matches on the next cycle, so nothing is queued again
+        self.sql('TRUNCATE poller_command; TRUNCATE poller_output; UPDATE poller_item SET rrd_next_step=0;')
+        self.run_spine()
+        self.check_complete(schedule=False)
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_command;'), '0')
+
+    def test_missing_reindex_value_queues_one_reindex(self):
+        for name, value in self.EXCEPTIONS.items():
+            with self.subTest(exception=name):
+                self.setUp()
+                self.seed(37, 1)
+                values = {'.1.3.6.1.2.1.2.2.1.1.1': ('int', 1), '.1.3.6.1.2.1.2.2.1.1.3': ('int', 9)}
+                if value:
+                    values['.1.3.6.1.2.1.2.2.1.1.2'] = value
+                agent = self.snmp_agent(values, availability=0, max_oids=10)
+                self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
+                         "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,2,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
+                         "(1,3,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
+                self.run_spine()
+                self.check_complete()
+                # the missing value queues its reindex and the later check still reads 9
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:2,1:3')
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(assert_value ORDER BY data_query_id) FROM poller_reindex;'),
+                                 '1,U,9')
+                self.assertEqual([len(r) for r in agent.requests], [3], agent.requests)
+                self.poll_again()
+
+    def test_missing_reindex_value_fetched_alone_queues_one_reindex(self):
+        # An error status sends every check to its own get, where that OID
+        # and the exception value both read as U.
+        for name, value in self.EXCEPTIONS.items():
+            with self.subTest(exception=name):
+                self.setUp()
+                self.seed(37, 1)
+                values = {'.1.3.6.1.2.1.2.2.1.1.3': ('int', 9)}
+                if value:
+                    values['.1.3.6.1.2.1.2.2.1.1.2'] = value
+                agent = self.snmp_agent(values, availability=0, max_oids=10, errors=('.1.3.6.1.2.1.2.2.1.1.1',))
+                self.sql("INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES"
+                         "(1,1,0,'=','1','.1.3.6.1.2.1.2.2.1.1.1'),(1,2,0,'=','2','.1.3.6.1.2.1.2.2.1.1.2'),"
+                         "(1,3,0,'=','3','.1.3.6.1.2.1.2.2.1.1.3');")
+                self.run_spine()
+                self.check_complete()
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'),
+                                 '1:1,1:2,1:3')
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(assert_value ORDER BY data_query_id) FROM poller_reindex;'),
+                                 'U,U,9')
+                self.assertEqual([len(r) for r in agent.requests], [3, 1, 1, 1], agent.requests)
+                self.poll_again()
+
+    @optional('snmpd', SNMPD, 'set SPINE_TEST_SNMPD to a net-snmp snmpd executable')
+    def test_net_snmp_versions_and_security_levels(self):
+        # Items are fetched max_oids at a time by snmp_get_multi() and the
+        # reindex assertions by the batched gets, over each SNMP version and
+        # SNMPv3 security level, from a real agent.
+        cases = {
+            'v1': (1, {}),
+            'v2c': (2, {}),
+            'v3 authNoPriv': (3, {'snmp_username': NetSnmpAgent.AUTH_USER, 'snmp_password': NetSnmpAgent.AUTH_PASS,
+                                  'snmp_auth_protocol': 'SHA', 'snmp_priv_protocol': '[None]'}),
+            'v3 authPriv': (3, {'snmp_username': NetSnmpAgent.PRIV_USER, 'snmp_password': NetSnmpAgent.AUTH_PASS,
+                                'snmp_auth_protocol': 'SHA', 'snmp_priv_passphrase': NetSnmpAgent.PRIV_PASS,
+                                'snmp_priv_protocol': 'AES'}),
+        }
+        sources = [10000 + i + 1 for i in range(37)]
+        agent = NetSnmpAgent(self.directory, sources)
+        self.addCleanup(agent.close)
+        base = NetSnmpAgent.BASE
+        for name, (version, fields) in cases.items():
+            with self.subTest(snmp=name):
+                self.setUp()
+                self.seed(37, 4)
+                settings = {'snmp_version': version, 'snmp_community': NetSnmpAgent.COMMUNITY,
+                            'snmp_port': agent.port, 'snmp_timeout': 1000, 'snmp_username': '',
+                            'snmp_password': '', 'snmp_auth_protocol': '', 'snmp_priv_passphrase': '',
+                            'snmp_priv_protocol': '', **fields}
+                # Fixed fixture values; none contain a quote.
+                assignments = ','.join(f"{column}='{value}'" for column, value in settings.items())
+                self.sql('UPDATE host SET ' + assignments + ',availability_method=2,ping_retries=1,max_oids=10;'
+                         'UPDATE poller_item SET ' + assignments +
+                         f",action=0,hostname='127.0.0.1',arg1=CONCAT('{base}.',local_data_id);")
+                # 25 matching assertions, one that has changed and one whose
+                # OID the agent does not have
+                rows = [f"(1,1,0,'=','{i}','{base}.{i}')" for i in sources[:25]]
+                rows += [f"(1,2,0,'=','0','{base}.{sources[30]}')", f"(1,3,0,'=','7','{base}.99999')"]
+                self.sql('INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES' +
+                         ','.join(rows) + ';')
+                self.run_spine()
+                self.check_complete()
+                self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
+                # SNMPv1 reports the missing OID with a noSuchName error status
+                # and later versions with noSuchObject; both read as U, which
+                # queues the reindex and is stored.
+                self.assertEqual(self.sql('SELECT GROUP_CONCAT(command ORDER BY command) FROM poller_command;'), '1:2,1:3')
+                self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=3;'), 'U')
+                self.assertEqual(self.sql('SELECT assert_value FROM poller_reindex WHERE data_query_id=2;'),
+                                 str(sources[30]))
 
     def test_remote_collector_records_its_start_on_the_main_server(self):
         # An online remote collector writes its poller_time row, with a zero
@@ -301,11 +707,38 @@ class Polling(unittest.TestCase):
         self.run_spine()
         self.check_complete()
 
+    def test_partition_counts_per_device(self):
+        # Three devices with different due sets and partition counts, all
+        # counted by the one device list query.
+        self.seed(37, 10, host=1)
+        self.seed(5, 3, host=2)
+        self.seed(23, 4, host=3)
+        self.sql('UPDATE poller_item SET rrd_next_step=1800 WHERE host_id=3 AND MOD(local_data_id,3)=0; '
+                 'DELETE ex FROM audit_expected ex JOIN poller_item pi '
+                 'ON pi.local_data_id=ex.local_data_id AND pi.rrd_name=ex.rrd_name WHERE pi.rrd_next_step>0;')
+        self.run_spine()
+        self.check_complete(devices=3)
+
+    def test_schedule_skips_items_already_due_every_interval(self):
+        # An item stepped at the polling interval keeps rrd_next_step 0, so
+        # the countdown update leaves it untouched; the others still count down.
+        self.seed(37, 10)
+        self.sql('UPDATE poller_item SET rrd_step=1800 WHERE local_data_id>10001; '
+                 'CREATE TABLE audit_item_writes(local_data_id INT); '
+                 'CREATE TRIGGER audit_item_write BEFORE UPDATE ON poller_item FOR EACH ROW '
+                 'INSERT INTO audit_item_writes VALUES(OLD.local_data_id);')
+        self.addCleanup(self.sql, 'DROP TRIGGER IF EXISTS audit_item_write; DROP TABLE IF EXISTS audit_item_writes;')
+        self.run_spine()
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT GROUP_CONCAT(local_data_id) FROM audit_item_writes;'), '10001')
+        self.assertEqual(self.sql('SELECT rrd_next_step FROM poller_item WHERE local_data_id=10001;'), '1800')
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_item WHERE local_data_id>10001 AND rrd_next_step<>0;'), '0')
+
     def test_device_zero(self):
         self.seed(13, 10, host=0)
         self.seed(37, 10, host=1)
         self.run_spine()
-        self.check_complete(devices=2)
+        self.check_complete(devices=2, device_zero=True)
 
     def test_device_zero_only_in_its_range(self):
         # poller.php gives device 0 to the process whose range starts at 0;
@@ -346,8 +779,18 @@ class Polling(unittest.TestCase):
         self.run_spine(ping=True)
         self.assertEqual(self.result.returncode, 0)
         self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_output;'), '0')
-        self.assertEqual(self.sql("SELECT COUNT(*) FROM mysql.general_log WHERE command_type='Query' AND "
-                                  "argument LIKE 'SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%';", False), '0')
+        self.assertEqual(self.general_log_count('SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item%'), 0)
+
+    @unittest.skipUnless(icmp_datagram_available(), 'needs root and an ICMP datagram socket on Linux')
+    @unittest.skipUnless(shutil.which('setpriv'), 'needs setpriv to drop CAP_NET_RAW')
+    def test_icmp_datagram_ping(self):
+        # Without CAP_NET_RAW in the bounding set, root cannot open the raw
+        # socket, so the ping succeeds only through the datagram socket.
+        self.seed(3, 1)
+        self.sql('UPDATE host SET availability_method=3,ping_method=1,ping_timeout=1000,ping_retries=1;')
+        self.run_spine(prefix=('setpriv', '--bounding-set=-net_raw'))
+        self.check_complete()
+        self.assertEqual(self.sql('SELECT CONCAT(status,":",total_polls,":",failed_polls) FROM host;'), '3:1:0')
 
     @optional('fault', HAVE_FAULT_BINARY, 'the allocation-failure binary needs a linker with --wrap')
     def test_allocation_failures_and_retry(self):

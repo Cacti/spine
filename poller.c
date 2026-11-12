@@ -36,6 +36,7 @@
 #include <limits.h>
 
 extern poller_thread_t **details;
+extern double start_time;
 
 /* Uptime is a whole nonnegative counter, not a floating point result. */
 static bool parse_uptime(const char *text, unsigned long long *ticks) {
@@ -56,6 +57,58 @@ static bool parse_uptime(const char *text, unsigned long long *ticks) {
 	return TRUE;
 }
 
+
+/* Without the engine time OID, sysUpTime is 32 bit TimeTicks that wrap
+ * after about 497 days.  A decrease from within two polling intervals of
+ * 2^32 to no more than the rest of that span is the wrap, not a restart. */
+static bool uptime_wrapped(unsigned long long previous, unsigned long long current, int poller_interval) {
+	const unsigned long long wrap = 4294967296ULL;
+	unsigned long long span = 2ULL * (unsigned long long) (poller_interval > 0 ? poller_interval : 300) * 100;
+
+	if (previous >= wrap || current >= previous) return FALSE;
+
+	return wrap - previous + current <= span;
+}
+
+/* The first partition of a device checks its availability and reindex
+ * assertions; the others wait for that verdict instead of repeating every
+ * check, so that a device with N partitions is probed once and all of its
+ * partitions agree on whether it is up.  The wait ends with the polling
+ * interval, after which the partition is treated as down. */
+static void publish_device_verdict(int device_counter, int ignore_host, int spike_kill) {
+	thread_mutex_lock(LOCK_THDET);
+	details[device_counter]->ignore_host   = ignore_host;
+	details[device_counter]->spike_kill    = spike_kill;
+	details[device_counter]->verdict_ready = TRUE;
+	pthread_cond_broadcast(get_cond(LOCK_THDET));
+	thread_mutex_unlock(LOCK_THDET);
+}
+
+static bool wait_device_verdict(int device_counter, int *ignore_host, int *spike_kill) {
+	double deadline = start_time + set.poller_interval;
+	struct timespec until;
+	int cancel_state;
+	bool ready;
+
+	until.tv_sec  = (time_t) deadline;
+	until.tv_nsec = (long) ((deadline - (double) until.tv_sec) * 1000000000.0);
+	if (until.tv_nsec < 0) until.tv_nsec = 0;
+	if (until.tv_nsec > 999999999L) until.tv_nsec = 999999999L;
+
+	/* a cancelled wait would return holding the lock */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
+	thread_mutex_lock(LOCK_THDET);
+	while (!details[device_counter]->verdict_ready) {
+		if (pthread_cond_timedwait(get_cond(LOCK_THDET), get_lock(LOCK_THDET), &until) == ETIMEDOUT) break;
+	}
+	ready = details[device_counter]->verdict_ready;
+	*ignore_host = ready ? details[device_counter]->ignore_host : TRUE;
+	*spike_kill  = ready ? details[device_counter]->spike_kill : FALSE;
+	thread_mutex_unlock(LOCK_THDET);
+	pthread_setcancelstate(cancel_state, NULL);
+
+	return ready;
+}
 
 /* The normalized form can be longer than the input ("FF" becomes "255"), so
  * the copy back is bounded by the caller's buffer, not the input length. */
@@ -83,6 +136,60 @@ static void spike_kill_result(char *result, int spike_kill) {
 	if (spike_kill && !IS_UNDEFINED(result) && !strstr(result, ":")) {
 		SET_UNDEFINED(result);
 	}
+}
+
+typedef struct {
+	snmp_oids_t *oids;
+	int state[100];
+	int count;
+	int next;
+} reindex_batch_t;
+
+static char *poll_reindex_assert(host_t *host, MYSQL_RES *result, int position, char *oid_text, reindex_batch_t *batch) {
+	int limit = host->max_oids < 100 ? host->max_oids : 100;
+	MYSQL_ROW row;
+	char *value;
+
+	while (batch->next < batch->count && batch->oids[batch->next].array_position < position) {
+		batch->next++;
+	}
+
+	/* Fetch only the next contiguous batch when its first row is needed.
+	 * Consuming a transport failure then suppresses all later requests, and
+	 * scratch storage stays bounded even for large reindex tables. */
+	if (batch->next == batch->count && !host->ignore_host && limit > 1) {
+		if (batch->oids == NULL) batch->oids = calloc((size_t) limit, sizeof(*batch->oids));
+		batch->next = batch->count = 0;
+		if (batch->oids != NULL) {
+			mysql_data_seek(result, position);
+			while (batch->count < limit) {
+				row = mysql_fetch_row(result);
+				if (row == NULL || row[1] == NULL || atoi(row[1]) != POLLER_ACTION_SNMP || row[4] == NULL ||
+					strstr(row[4], ".1.3.6.1.2.1.1.3.0") || strstr(row[4], ".1.3.6.1.6.3.10.2.1.3.0")) break;
+				snprintf(batch->oids[batch->count].oid, sizeof(batch->oids[batch->count].oid), "%s", row[4]);
+				batch->oids[batch->count].array_position = position + batch->count;
+				batch->count++;
+			}
+			/* The caller has already fetched the current row. */
+			mysql_data_seek(result, position + 1);
+			if (batch->count > 1) {
+				snmp_get_assert_values(host, batch->oids, batch->state, batch->count);
+			} else {
+				batch->count = 0;
+			}
+		}
+	}
+
+	if (batch->next < batch->count && batch->oids[batch->next].array_position == position &&
+		batch->state[batch->next] != SNMP_ASSERT_PENDING && !host->ignore_host) {
+		value = malloc(RESULTS_BUFFER);
+		if (value == NULL) die("ERROR: Fatal malloc error: poller.c reindex result");
+		snprintf(value, RESULTS_BUFFER, "%s", batch->oids[batch->next].result);
+		if (batch->state[batch->next] == SNMP_ASSERT_FAILED) host->ignore_host = TRUE;
+		return value;
+	}
+
+	return snmp_get_assert(host, oid_text);
 }
 
 /* Append at a tracked length: strncat() rescanned the whole statement, up
@@ -141,6 +248,13 @@ void child_cleanup(void *arg) {
 
 void child_cleanup_thread(void *arg) {
 	sem_post(&available_threads);
+
+	/* wake the main thread waiting in spine.c for the workers to finish;
+	 * posting before taking the lock means a waiter that rechecks the
+	 * semaphore under the lock cannot miss this permit */
+	thread_mutex_lock(LOCK_THDET);
+	pthread_cond_broadcast(get_cond(LOCK_THDET));
+	thread_mutex_unlock(LOCK_THDET);
 
 	int a_threads_value;
 	sem_getvalue(&available_threads, &a_threads_value);
@@ -267,6 +381,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 	int    num_rows;
 	int    assert_fail = FALSE;
+	int    assert_read = FALSE;
 	int    reindex_err = FALSE;
 	int    spike_kill = FALSE;
 	int    rows_processed = 0;
@@ -313,6 +428,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	/* uptime values */
 	unsigned long long previous_uptime = 0;
 	unsigned long long curr_uptime     = 0;
+
+	reindex_batch_t assert_batch = {0};
+	int reindex_row = 0;
 
 	extern poller_thread_t** details;
 
@@ -475,11 +593,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			}
 		}
 
-		/* query to setup the next polling interval in cacti */
+		/* query to setup the next polling interval in cacti; an item polled
+		 * every interval already holds 0, so it is not rewritten */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
 			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i))"
-			" WHERE host_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id);
+			" WHERE host_id = %i"
+			" AND (rrd_step <> %i OR rrd_next_step <> 0)", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_interval);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -604,12 +724,14 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			}
 		}
 
-		/* query to setup the next polling interval in cacti */
+		/* query to setup the next polling interval in cacti; an item polled
+		 * every interval already holds 0, so it is not rewritten */
 		snprintf(query6, BUFSIZE,
 			"UPDATE poller_item"
 			" SET rrd_next_step = IF(rrd_step = %i, 0, IF(rrd_next_step - %i < 0, rrd_step - %i, rrd_next_step - %i))"
 			" WHERE host_id = %i"
-			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_id);
+			" AND (rrd_step <> %i OR rrd_next_step <> 0)"
+			" AND poller_id = %i", set.poller_interval, set.poller_interval, set.poller_interval, set.poller_interval, host_id, set.poller_interval, set.poller_id);
 
 		/* query to add output records to the poller output table */
 		snprintf(query8, BUFSIZE,
@@ -697,6 +819,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				details[device_counter]->output_failed = TRUE;
 				set.exit_code = EXIT_FAILURE;
 				thread_mutex_unlock(LOCK_THDET);
+
+				if (host_thread == 1) {
+					publish_device_verdict(device_counter, TRUE, FALSE);
+				}
 
 				mysql_thread_end();
 
@@ -813,9 +939,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				/* free the host result */
 				db_free_result(result);
 
-				if (((host->snmp_version >= 1) && (host->snmp_version <= 2) &&
+				/* this session serves the availability and reindex checks only */
+				if (host_thread == 1 &&
+					(((host->snmp_version >= 1) && (host->snmp_version <= 2) &&
 					(strlen(host->snmp_community) > 0)) ||
-					(host->snmp_version == 3)) {
+					(host->snmp_version == 3))) {
 					host->snmp_session = snmp_host_init(host->id,
 						host->hostname,
 						host->snmp_version,
@@ -836,7 +964,11 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				/* perform a check to see if the host is alive by polling it's SysDesc
 				 * if the host down from an snmp perspective, don't poll it.
 				 * function sets the ignore_host bit */
-				if ((host->availability_method == AVAIL_SNMP) &&
+				if (host_thread > 1) {
+					if (!wait_device_verdict(device_counter, &host->ignore_host, &spike_kill)) {
+						SPINE_LOG(("WARNING: Device[%i] HT[%i] polling timed out waiting for the availability check", host->id, host_thread));
+					}
+				} else if ((host->availability_method == AVAIL_SNMP) &&
 					(strlen(host->snmp_community) == 0) &&
 					(host->snmp_version < 3)) {
 					host->ignore_host = FALSE;
@@ -990,7 +1122,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 	}
 
 	/* do the reindex check for this host if not script based */
-	if ((!host->ignore_host) && (host_id)) {
+	if ((!host->ignore_host) && (host_id) && (host_thread == 1)) {
 		if ((result = db_query(mysql, LOCAL, query4)) != 0) {
 			num_rows = mysql_num_rows(result);
 
@@ -1003,8 +1135,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 				// Cache uptime in case we need it again
 				sysUptime[0] = '\0';
-				while ((row = mysql_fetch_row(result))) {
+				for (reindex_row = 0; (row = mysql_fetch_row(result)); reindex_row++) {
 					assert_fail = FALSE;
+					assert_read = FALSE;
 					reindex_err = FALSE;
 
 					/* initialize the reindex struction */
@@ -1115,7 +1248,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 										SPINE_LOG_MEDIUM(("Device[%i] HT[%i] DQ[%i] Extended Uptime Result: %s, Is Numeric: %d", host->id, host_thread, reindex->data_query_id, poll_result, is_numeric(poll_result) ));
 									}
 								} else {
-									poll_result = snmp_get(host, reindex->arg1);
+									poll_result = poll_reindex_assert(host, result, reindex_row, reindex->arg1, &assert_batch);
+
+									/* the agent answered, so even U is the value to compare */
+									assert_read = !host->ignore_host;
 								}
 
 								if (is_debug_device(host->id)) {
@@ -1260,10 +1396,13 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							query3[0] = '\0';
 							queue_succeeded = TRUE;
 
-							/* assume ok if host is up and result wasn't obtained */
-							if (poll_result == NULL || (IS_UNDEFINED(poll_result)) || (STRIMATCH(poll_result, "No Such Instance"))) {
+							/* Assume ok if host is up and result wasn't obtained.  A plain
+							 * SNMP assertion the agent answered is compared even when it
+							 * reads U, as cmd.php does, so a missing OID queues a reindex
+							 * once and the U stored below matches on later cycles. */
+							if (poll_result == NULL || (!assert_read && (IS_UNDEFINED(poll_result) || STRIMATCH(poll_result, "No Such Instance")))) {
 								if (is_debug_device(host->id) || set.spine_log_level == 2) {
-									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result));
+									SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%s = %s'", host->id, host_thread, reindex->data_query_id, reindex->assert_value, poll_result != NULL ? poll_result : "U"));
 								}
 
 								assert_fail = FALSE;
@@ -1303,7 +1442,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 
 								/* if uptime is set to '0' don't fail out */
 								if (strcmp(reindex->assert_value, "0")) {
-									if (!IS_UNDEFINED(poll_result) && (!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime)) {
+									if (!IS_UNDEFINED(poll_result) && (!strcmp(reindex->op, "<")) && (previous_uptime > curr_uptime) &&
+										(uptime_use_engine_oid || !uptime_wrapped(previous_uptime, curr_uptime, set.poller_interval))) {
 										if (is_debug_device(host->id) || set.spine_log_level == 2) {
 											SPINE_LOG(("Device[%i] HT[%i] DQ[%i] RECACHE ASSERT FAILED: '%llu > %llu'", host->id, host_thread, reindex->data_query_id, previous_uptime, curr_uptime));
 										} else {
@@ -1341,7 +1481,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							 * 2) the OP code is < for uptime goes backward where we have to track the previous uptime
 							 */
 							if (!queue_succeeded) output_failed = TRUE;
-							if (queue_succeeded && poll_result != NULL && !IS_UNDEFINED(poll_result) &&
+							if (queue_succeeded && poll_result != NULL && (assert_read || !IS_UNDEFINED(poll_result)) &&
 								(assert_fail || !strcmp(reindex->op, "<"))) {
 								if (host_thread == 1) {
 									db_escape(mysql, temp_poll_result, sizeof(temp_poll_result), poll_result);
@@ -1384,6 +1524,8 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				}
 			}
 
+			SPINE_FREE(assert_batch.oids);
+
 			/* free the host result */
 			db_free_result(result);
 		} else {
@@ -1396,6 +1538,10 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 			snmp_host_cleanup(host->snmp_session);
 			host->snmp_session = NULL;
 		}
+	}
+
+	if (host_id && host_thread == 1) {
+		publish_device_verdict(device_counter, host->ignore_host, spike_kill);
 	}
 
 	/* calculate the number of poller items to poll this cycle */
@@ -1594,7 +1740,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 							} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 								/* continue */
 							} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-								snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+								hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result);
 							} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 								(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 								if (set.spine_log_level == 2) {
@@ -1701,7 +1847,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 						} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 							/* continue */
 						} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-							snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+							hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result);
 						} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 							(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 							if (set.spine_log_level == 2) {
@@ -1779,7 +1925,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result);
 				} else {
 					/* remove double or single quotes from string */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
@@ -1837,7 +1983,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				} else if ((is_numeric(poll_result)) || (is_multipart_output(trim(poll_result)))) {
 					snprintf(poller_items[i].result, RESULTS_BUFFER, "%s", poll_result);
 				} else if (is_hexadecimal(poll_result, TRUE)) {
-					snprintf(poller_items[i].result, RESULTS_BUFFER, "%llu", hex2dec(poll_result));
+					hex_result(poller_items[i].result, RESULTS_BUFFER, poll_result);
 				} else {
 					/* remove double or single quotes from string */
 					snprintf(temp_result, RESULTS_BUFFER, "%s", strip_alpha(trim(poll_result)));
@@ -1906,7 +2052,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_data_i
 				} else if ((is_numeric(snmp_oids[j].result)) || (is_multipart_output(snmp_oids[j].result))) {
 					/* continue */
 				} else if (is_hexadecimal(snmp_oids[j].result, TRUE)) {
-					snprintf(snmp_oids[j].result, RESULTS_BUFFER, "%llu", hex2dec(snmp_oids[j].result));
+					hex_result(snmp_oids[j].result, RESULTS_BUFFER, snmp_oids[j].result);
 				} else if ((STRIMATCH(snmp_oids[j].result, "U")) ||
 					(STRIMATCH(snmp_oids[j].result, "Nan"))) {
 					if (set.spine_log_level == 2) {
@@ -2402,7 +2548,6 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 	int pid;
 
 	int bytes_read;
-	fd_set fds;
 	double begin_time = 0;
 	double end_time = 0;
 	double script_timeout;
@@ -2503,12 +2648,8 @@ char *exec_poll(host_t *current_host, char *command, int id, char *type) {
 			if (cmd_fd > 0) {
 				retry:
 
-				/* Initialize File Descriptors to Review for Input/Output */
-				FD_ZERO(&fds);
-				FD_SET(cmd_fd, &fds);
-
 				/* wait x seconds for pipe response */
-				switch (select(FD_SETSIZE, &fds, NULL, NULL, &timeout)) {
+				switch (wait_fd_readable(cmd_fd, &timeout)) {
 					case -1:
 						switch (errno) {
 							case EBADF:
