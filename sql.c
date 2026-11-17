@@ -164,9 +164,12 @@ bool db_row_alias(MYSQL *destination) {
  *
  */
 static void db_retry_disconnected(MYSQL *mysql, int type, int error, char *function, int *reconnects, int *interrupts) {
-	if (errno == EINTR && ++*interrupts <= 3) {
-		usleep(50000);
-		return;
+	if (errno == EINTR) {
+		(*interrupts)++;
+		if (*interrupts <= 3) {
+			usleep(50000);
+			return;
+		}
 	}
 
 	if (++*reconnects > 30) {

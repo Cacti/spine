@@ -157,7 +157,9 @@ int main(void){MYSQL mysql;
  /* a stale EINTR still reconnects and is bounded: three in-place retries,
   * then thirty counted reconnects before the limit */
  calls=reconnects=interrupted_calls=0;if(setjmp(stopped)==0){db_insert(&mysql,LOCAL,"fixture");assert(0);}assert(calls==34&&reconnects==30);
- calls=0;error_code=1213;assert(!db_insert(&mysql,LOCAL,"fixture")&&calls==31);return 0;}
+ calls=0;error_code=1213;assert(!db_insert(&mysql,LOCAL,"fixture")&&calls==31);
+ {int attempts=0,signals=0;reconnects=0;errno=EIO;db_retry_disconnected(&mysql,LOCAL,2013,"fixture",&attempts,&signals);assert(attempts==1&&signals==0&&reconnects==1);}
+ return 0;}
 ''')
 
 
@@ -191,6 +193,32 @@ static double now;
 static double ping_monotonic_time(void){return now;}
 '''+wait+'''
 int main(void){struct timeval t;now=0;ping_wait_left(1.5,&t);assert(t.tv_sec==1&&t.tv_usec==500000);now=2;ping_wait_left(1.5,&t);assert(!t.tv_sec&&!t.tv_usec);return 0;}
+''')
+icmp_start=s.index('\t\t\t\tkeep_listening:')+len('\t\t\t\tkeep_listening:')
+icmp_end=s.index('\n\t\t\t\tif (return_code > 0',icmp_start)
+icmp_wait=s[icmp_start:icmp_end]
+run('maintenance-icmp-interrupted-wait-contract','''#include "common.h"
+#include "spine.h"
+static double now;static int calls,ready_after;
+static double ping_monotonic_time(void){return now;}
+static int fixture_select(int count,fd_set *readfds,fd_set *writefds,fd_set *exceptfds,struct timeval *timeout){
+ (void)writefds;(void)exceptfds;assert(count==2&&FD_ISSET(1,readfds));
+ assert(timeout->tv_sec==0&&timeout->tv_usec>0&&timeout->tv_usec<=350000);
+ calls++;now+=0.1;if(ready_after&&calls>=ready_after)return 1;errno=EINTR;return -1;
+}
+#define select fixture_select
+'''+wait+'''
+static int wait_for_reply(void){
+ int icmp_socket=1,return_code;fd_set socket_fds;struct timeval timeout;
+ double deadline=0.35,begin_time=0,total_time=0,one_thousand=1000,host_timeout=350;
+'''+icmp_wait+'''
+ return return_code;
+}
+int main(void){
+ ready_after=3;assert(wait_for_reply()==1&&calls==3);
+ now=0;calls=0;ready_after=0;assert(wait_for_reply()==-1&&calls==4);
+ now=0;calls=0;ready_after=1;assert(wait_for_reply()==1&&calls==1);return 0;
+}
 ''')
 s=(root/'spine.c').read_text();hostlist=function(s,'static void parse_host_list(')
 run('maintenance-hostlist-contract','''#include "common.h"

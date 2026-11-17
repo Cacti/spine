@@ -563,15 +563,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				keep_listening:
-				FD_ZERO(&socket_fds);
-				FD_SET(icmp_socket, &socket_fds);
-				ping_wait_left(deadline, &timeout);
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				do {
+					FD_ZERO(&socket_fds);
+					FD_SET(icmp_socket, &socket_fds);
+					ping_wait_left(deadline, &timeout);
+					return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
-				/* Each interrupted wait retains the same attempt deadline. */
-				total_time = (ping_monotonic_time() - begin_time) * one_thousand;
-
-				if (return_code < 0 && errno == EINTR && total_time < host_timeout) goto keep_listening;
+					/* Each interrupted wait retains the same attempt deadline. */
+					total_time = (ping_monotonic_time() - begin_time) * one_thousand;
+				} while (return_code < 0 && errno == EINTR && total_time < host_timeout);
 				if (return_code > 0 && total_time < host_timeout) {
 					#if !(defined(__CYGWIN__))
 					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
