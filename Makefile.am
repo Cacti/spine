@@ -23,10 +23,10 @@ AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
 spine_SOURCES = sql.c spine.c util.c snmp.c locks.c poller.c nft_popen.c php.c ping.c keywords.c error.c
+noinst_HEADERS = common.h error.h keywords.h locks.h nft_popen.h php.h ping.h poller.h snmp.h spine.h sql.h util.h
 
 configdir = $(sysconfdir)
-config_DATA = spine.conf.dist
-EXTRA_DIST = tests/backport_contracts.py
+dist_config_DATA = spine.conf.dist
 
 # Seed a live config on first install without ever overwriting an existing one.
 install-data-hook:
@@ -45,7 +45,25 @@ uninstall-hook:
 
 bin_PROGRAMS = spine
 
+EXTRA_PROGRAMS = tests/spine_alloc_fault
+tests_spine_alloc_fault_SOURCES = $(spine_SOURCES) tests/alloc_fault.c
+tests_spine_alloc_fault_LDFLAGS = -Wl,--wrap=calloc
+EXTRA_DIST = tests/backport_contracts.py tests/integration.py tests/schema.sql tests/README.md
+
+# Without --wrap the allocation-failure cases are skipped, not failed.
+if HAVE_LD_WRAP
+SPINE_FAULT_PROGRAM = tests/spine_alloc_fault
+SPINE_FAULT_ENV = SPINE_TEST_FAULT_BINARY="$(abs_builddir)/tests/spine_alloc_fault"
+endif
+
+.PHONY: integration-check
+integration-check: spine $(SPINE_FAULT_PROGRAM)
+	SPINE_TEST_BINARY="$(abs_builddir)/spine" $(SPINE_FAULT_ENV) python3 "$(srcdir)/tests/integration.py"
+
+
 man_MANS = spine.1
+# spine.1 is generated from the built binary, so clean removes it.
+CLEANFILES = spine.1
 
 spine.1: $(bin_PROGRAMS)
 	$(HELP2MAN) --output=$@ --name='Data Collector for Cacti' --no-info --version-option='--version' ./spine

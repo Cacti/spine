@@ -113,6 +113,21 @@ AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AC_CHECK_PROG([HELP2MAN], [help2man], [help2man])
 AM_CONDITIONAL([HAVE_HELP2MAN], [test x$HELP2MAN = xhelp2man])
 
+# The allocation-failure test binary wraps calloc() at link time. Apple ld
+# and some BSD linkers have no --wrap, so integration-check skips those
+# cases there instead of failing to link.
+AC_MSG_CHECKING([whether the linker accepts --wrap])
+spine_save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -Wl,--wrap=calloc"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>
+void *__real_calloc(size_t count, size_t size);
+void *__wrap_calloc(size_t count, size_t size) { return __real_calloc(count, size); }]],
+  [[return calloc(1, 1) == NULL;]])],
+  [spine_ld_wrap=yes], [spine_ld_wrap=no])
+LDFLAGS="$spine_save_LDFLAGS"
+AC_MSG_RESULT([$spine_ld_wrap])
+AM_CONDITIONAL([HAVE_LD_WRAP], [test x$spine_ld_wrap = xyes])
+
 # Checks for libraries.
 AC_CHECK_LIB(socket, socket)
 AC_CHECK_LIB(m, floor)
