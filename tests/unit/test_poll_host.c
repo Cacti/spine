@@ -21,6 +21,7 @@
 #define ITEM_COLUMNS 21
 #define MAX_FAKE_ROWS 4
 #define MAX_QUERIES 64
+#define MAX_LOGS 64
 
 extern poller_thread_t **details;
 
@@ -47,6 +48,8 @@ static struct {
 	int query_count;
 	int completion_queries;
 	int completion_queries_locked;
+	char logs[MAX_LOGS][BUFSIZE];
+	int log_count;
 } fake;
 
 static pool_t fake_pool;
@@ -233,6 +236,24 @@ void __wrap_snmp_get_multi(host_t *host, const target_t *items, snmp_oids_t *oid
 	}
 }
 
+/* Every message poller.o logs is kept for the assertions instead of written. */
+int __wrap_spine_log(const char *format, ...) {
+	va_list args;
+	if (fake.log_count >= MAX_LOGS) return TRUE;
+	va_start(args, format);
+	vsnprintf(fake.logs[fake.log_count++], BUFSIZE, format, args);
+	va_end(args);
+	return TRUE;
+}
+
+static int logged(const char *needle) {
+	int matches = 0;
+	for (int i = 0; i < fake.log_count; i++) {
+		if (strstr(fake.logs[i], needle) != NULL) matches++;
+	}
+	return matches;
+}
+
 int __wrap_ping_host(host_t *host, ping_t *ping) {
 	(void) host;
 	(void) ping;
@@ -283,6 +304,14 @@ static void add_script_item(const char *local_data_id, const char *rrd_name, con
 	row[0] = "1";
 	row[6] = rrd_name;
 	row[8] = command;
+	row[11] = local_data_id;
+}
+
+static void add_item(const char *action, const char *local_data_id, const char *rrd_name, const char *arg1) {
+	const char **row = fake.items[fake.item_count++];
+	row[0] = action;
+	row[6] = rrd_name;
+	row[8] = arg1;
 	row[11] = local_data_id;
 }
 
@@ -494,6 +523,20 @@ static void test_system_uptime(void **state) {
 	}
 }
 
+/* An action spine does not handle is reported by number; its argument can
+ * carry credentials, such as a URL with a password or an API key, and never
+ * reaches the log. */
+static void test_unknown_action_omits_argument(void **state) {
+	(void) state;
+	set_host("", "5", AVAIL_NONE);
+	add_item("9", "651", "a", "https://monitor:hunter2@device.example/api?key=TOKEN123");
+	run_poll();
+	assert_int_equal(logged("DS[651] ERROR: Unknown Poller Action[9]"), 1);
+	assert_int_equal(logged("hunter2"), 0);
+	assert_int_equal(logged("TOKEN123"), 0);
+	assert_int_equal(logged("device.example"), 0);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_flush_paths_agree, setup),
@@ -504,6 +547,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_uptime_baseline_survives_unknown, setup),
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
+		cmocka_unit_test_setup(test_unknown_action_omits_argument, setup),
 	};
 	int failures;
 

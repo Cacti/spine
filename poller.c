@@ -1195,7 +1195,6 @@ static int collect_poll_items(host_t *host, snmp_poll_batch_t *batch, int num_ro
 	int i = 0;
 	int rows_processed = 0;
 	double thread_start = 0;
-	char script[SMALL_BUFSIZE];
 	while ((i < num_rows) && (!host->ignore_host)) {
 		thread_start = get_time_as_double();
 
@@ -1210,8 +1209,9 @@ static int collect_poll_items(host_t *host, snmp_poll_batch_t *batch, int num_ro
 			poll_script_item(host, &batch->items[i], batch->errors, thread_start, spike_kill, TRUE);
 			break;
 		default: /* unknown action, generate error */
-			php_command_script(batch->items[i].arg1, script, sizeof(script));
-			SPINE_LOG(("Device[%i] HT[%i] DS[%i] ERROR: Unknown Poller Action: %s", batch->errors->host_id, batch->errors->thread_id, batch->items[i].local_data_id, script));
+			/* arg1 of an action spine does not know can be a URL or command line
+			 * carrying credentials, so name the action rather than its argument */
+			SPINE_LOG(("Device[%i] HT[%i] DS[%i] ERROR: Unknown Poller Action[%i]", batch->errors->host_id, batch->errors->thread_id, batch->items[i].local_data_id, batch->items[i].action));
 
 			break;
 		}
