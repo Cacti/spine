@@ -205,7 +205,7 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
 	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
-	-Wl,--wrap=ping_host
+	-Wl,--wrap=ping_host -Wl,--wrap=spine_log
 
 # Includes ping.c directly so its socket calls can be steered; see the file.
 tests_unit_test_ping_timing_SOURCES = tests/unit/test_ping_timing.c tests/fuzz/stubs.c \
