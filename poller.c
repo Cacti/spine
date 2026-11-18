@@ -226,7 +226,7 @@ typedef struct {
 
 static void poller_item_query(char *buffer, size_t capacity, const char *columns, const poller_query_filter_t *filter) {
 	char *cursor = buffer;
-	cursor += spine_snprintf(cursor, capacity, "SELECT SQL_NO_CACHE %s FROM poller_item WHERE host_id = %i", columns, filter->host_id);
+	cursor += spine_snprintf(cursor, capacity, "SELECT SQL_NO_CACHE %s FROM poller_item WHERE host_id = %i AND action != %i", columns, filter->host_id, POLLER_ACTION_HTTP);
 	if (set.poller.poller_id != 0) cursor += spine_snprintf(cursor, capacity - (size_t)(cursor - buffer), " AND poller_id = %i", set.poller.poller_id);
 	if (filter->due_only) cursor += spine_snprintf(cursor, capacity - (size_t)(cursor - buffer), " AND rrd_next_step <= 0");
 	if (filter->group_ports) {

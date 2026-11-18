@@ -550,9 +550,9 @@ static int count_partition_items(MYSQL *mysql, int host_id, int divisor, bool du
 	char query[BIG_BUFSIZE];
 	const char *due = due_only ? " AND rrd_next_step <=0" : "";
 	if (divisor > 1) {
-		snprintf(query, sizeof(query), "SELECT SQL_NO_CACHE CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i%s", divisor, host_id, due);
+		snprintf(query, sizeof(query), "SELECT SQL_NO_CACHE CEIL(COUNT(local_data_id)/%i) FROM poller_item WHERE host_id=%i AND action != %i%s", divisor, host_id, POLLER_ACTION_HTTP, due);
 	} else {
-		snprintf(query, sizeof(query), "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i%s", host_id, due);
+		snprintf(query, sizeof(query), "SELECT SQL_NO_CACHE COUNT(local_data_id) FROM poller_item WHERE host_id=%i AND action != %i%s", host_id, POLLER_ACTION_HTTP, due);
 	}
 	MYSQL_RES *result = db_query(mysql, LOCAL, query);
 	if (result == NULL) die("ERROR: Unable to count polling items");
