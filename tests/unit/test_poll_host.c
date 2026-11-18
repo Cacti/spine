@@ -50,6 +50,7 @@ static struct {
 	int completion_queries_locked;
 	char logs[MAX_LOGS][BUFSIZE];
 	int log_count;
+	char item_query[BUFSIZE];
 } fake;
 
 static pool_t fake_pool;
@@ -136,6 +137,7 @@ MYSQL_RES *__wrap_db_query(MYSQL *mysql, int type, const char *query) {
 		return (MYSQL_RES *) make_result(fake.reindex_count, REINDEX_COLUMNS, reindex_cell);
 	}
 	if (strstr(query, "SELECT SQL_NO_CACHE action") != NULL) {
+		snprintf(fake.item_query, sizeof(fake.item_query), "%s", query);
 		return (MYSQL_RES *) make_result(fake.item_count, ITEM_COLUMNS, item_cell);
 	}
 	capture(query);
@@ -537,6 +539,16 @@ static void test_unknown_action_omits_argument(void **state) {
 	assert_int_equal(logged("device.example"), 0);
 }
 
+/* Cacti collects HTTP items with cmd.php next to spine, so spine must not
+ * select them: an item it does select gets a 'U' that would replace the value. */
+static void test_http_items_are_left_to_cacti(void **state) {
+	(void) state;
+	set_host("", "5", AVAIL_NONE);
+	add_script_item("661", "a", "/usr/bin/printf 123");
+	run_poll();
+	assert_non_null(strstr(fake.item_query, "FROM poller_item WHERE host_id = 47 AND action != 3"));
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup(test_flush_paths_agree, setup),
@@ -548,6 +560,7 @@ int main(void) {
 		cmocka_unit_test_setup(test_script_reindex_and_completion, setup),
 		cmocka_unit_test_setup(test_system_uptime, setup),
 		cmocka_unit_test_setup(test_unknown_action_omits_argument, setup),
+		cmocka_unit_test_setup(test_http_items_are_left_to_cacti, setup),
 	};
 	int failures;
 
