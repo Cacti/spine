@@ -531,11 +531,10 @@ static void test_system_uptime(void **state) {
 static void test_unknown_action_omits_argument(void **state) {
 	(void) state;
 	set_host("", "5", AVAIL_NONE);
-	add_item("9", "651", "a", "https://monitor:hunter2@device.example/api?key=TOKEN123");
+	add_item("9", "651", "a", "https://device.example/api?probe=fixture-marker");
 	run_poll();
 	assert_int_equal(logged("DS[651] ERROR: Unknown Poller Action[9]"), 1);
-	assert_int_equal(logged("hunter2"), 0);
-	assert_int_equal(logged("TOKEN123"), 0);
+	assert_int_equal(logged("fixture-marker"), 0);
 	assert_int_equal(logged("device.example"), 0);
 }
 
