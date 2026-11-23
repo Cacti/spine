@@ -1730,9 +1730,9 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 				if (IS_UNDEFINED(poll_result)) {
 					SET_UNDEFINED(poller_items[i].result);
 					if (set.spine_log_level == 2) {
-						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
+						SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SERVER: %s, output: %s",
 							host_id, host_thread, poller_items[i].local_data_id,
-							poller_items[i].arg1, poller_items[i].result));
+							poller_items[i].arg1, poll_result));
 					} else if (set.spine_log_level == 1) {
 						errors++;
 						buffer_output_errors(error_string, buf_size, buf_errors, host_id, host_thread, poller_items[i].local_data_id, false);
@@ -1749,7 +1749,7 @@ void poll_host(int device_counter, int host_id, int host_thread, int host_thread
 					/* detect erroneous result. can be non-numeric */
 					if (!validate_result(poller_items[i].result)) {
 						if (set.spine_log_level == 2) {
-							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
+							SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SERVER: %s, output: %s",
 								host_id, host_thread, poller_items[i].local_data_id,
 								poller_items[i].arg1, poller_items[i].result));
 						} else if (set.spine_log_level == 1) {
