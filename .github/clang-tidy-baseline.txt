@@ -8,11 +8,7 @@ src/app/signals.c: standard function '__errno_location' may not be asynchronous-
 # src/process/nft_popen.c: inherit_fd is reset to -1 after close() as a guard.
 src/process/nft_popen.c: Value stored to 'inherit_fd' is never read [clang-analyzer-deadcode.DeadStores]
 src/process/nft_popen.c: Value stored to 'inherit_fd' is never read [clang-analyzer-deadcode.DeadStores]
-# PHP read/process modules: the narrowing conversions split a sub-second timeout into
-# struct timeval fields and keep a short write count.
-src/script/read.c: narrowing conversion from '__time_t' (aka 'long') to 'double' [bugprone-narrowing-conversions]
-src/script/read.c: narrowing conversion from 'double' to '__suseconds_t' (aka 'long') [bugprone-narrowing-conversions]
-src/script/read.c: narrowing conversion from 'double' to '__time_t' (aka 'long') [bugprone-narrowing-conversions]
+# src/script/server.c: the narrowing conversion keeps a short write count.
 src/script/server.c: narrowing conversion from 'ssize_t' (aka 'long') to signed type 'int' is implementation-defined [bugprone-narrowing-conversions]
 # IPv4/IPv6 probe modules: icmp_socket and total_time stores are defensive resets. The
 # return_code store keeps sendto()'s result unchecked; a failed send waits

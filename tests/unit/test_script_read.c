@@ -27,6 +27,7 @@
 #include "tests/support/child_run.h"
 
 static int select_errors;
+static int select_calls;
 static int select_error_number;
 static int select_hides_descriptor;
 static int read_interruptions;
@@ -36,6 +37,7 @@ static int scripted_time_count;
 
 static int controlled_select(int count, fd_set *readable, fd_set *writable, fd_set *failed,
 	struct timeval *timeout) {
+	select_calls++;
 	if (select_errors > 0) {
 		select_errors--;
 		errno = select_error_number;
@@ -92,6 +94,7 @@ static int read_setup(void **state) {
 	set.logging.log_destination = LOGDEST_STDOUT;
 	set.php.php_servers = 1;
 	select_errors = 0;
+	select_calls = 0;
 	select_error_number = 0;
 	select_hides_descriptor = FALSE;
 	read_interruptions = 0;
@@ -111,7 +114,7 @@ static int read_setup(void **state) {
 static int read_teardown(void **state) {
 	(void) state;
 	close(pipe_fds[0]);
-	close(pipe_fds[1]);
+	if (pipe_fds[1] >= 0) close(pipe_fds[1]);
 	free(php_processes);
 	php_processes = NULL;
 	return 0;
@@ -175,6 +178,27 @@ static void test_interrupted_select_gives_up_when_the_timeout_is_spent(void **st
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
 
+/* Half a second past the timeout, floor() gave tv_sec -1 with a positive
+ * tv_usec. The sum looked like time left, and the retried select() failed
+ * with EINVAL, which was logged as a fatal error instead of a timeout. */
+static void test_interrupted_select_past_the_timeout_does_not_retry(void **state) {
+	char *result;
+
+	(void) state;
+	scripted_times[0] = 1000.0;
+	scripted_times[1] = 1001.5;
+	scripted_time_count = 2;
+	select_errors = 1;
+	select_error_number = EINTR;
+
+	result = php_read_response(0, "poll 1", FALSE, 1);
+	assert_non_null(result);
+	assert_string_equal(result, "U");
+	free(result);
+	assert_int_equal(select_calls, 1);
+	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
+}
+
 static void test_interrupted_read_is_retried(void **state) {
 	char *result;
 
@@ -204,6 +228,69 @@ static void test_descriptor_missing_from_the_ready_set_is_a_failure(void **state
 	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
 }
 
+static void assert_banner(int slot, int timeout, const char *expected) {
+	char *result = php_read_banner(slot, timeout);
+
+	assert_non_null(result);
+	assert_string_equal(result, expected);
+	free(result);
+}
+
+/* Notices before the banner are skipped, even when a read is interrupted. */
+static void test_banner_follows_skipped_lines(void **state) {
+	(void) state;
+	send_line("PHP Notice:  first\nPHP Warning:  second\nPHP Script Server has Started - Parent is spine\n");
+	read_interruptions = 1;
+	assert_banner(0, 1, "PHP Script Server has Started - Parent is spine");
+	assert_int_equal(read_interruptions, 0);
+}
+
+/* Only PHP_STARTUP_LINES lines are read; the last one is reported. */
+static void test_banner_search_is_bounded(void **state) {
+	(void) state;
+	for (int line = 1; line < PHP_STARTUP_LINES; line++) send_line("PHP Notice:  repeated\n");
+	send_line("PHP Notice:  last\nStarted\n");
+	assert_banner(0, 1, "PHP Notice:  last");
+}
+
+static void test_banner_fails_on_silence_end_of_file_or_an_endless_line(void **state) {
+	char line[RESULTS_BUFFER];
+
+	(void) state;
+	assert_banner(0, 0, "U");
+
+	memset(line, 'x', sizeof(line));
+	assert_int_equal(write(pipe_fds[1], line, sizeof(line)), (ssize_t) sizeof(line));
+	assert_banner(0, 1, "U");
+
+	send_line("\nPHP Notice:  then the server exits\n");
+	close(pipe_fds[1]);
+	pipe_fds[1] = -1;
+	assert_banner(0, 1, "PHP Notice:  then the server exits");
+}
+
+static void test_banner_rejects_unusable_slots(void **state) {
+	php_t *owned_processes = php_processes;
+
+	(void) state;
+	assert_banner(-1, 1, "U");
+	assert_banner(1, 1, "U");
+	php_processes = NULL;
+	assert_banner(0, 1, "U");
+	php_processes = owned_processes;
+
+	/* select() cannot represent the descriptor, so the slot is retired */
+	php_processes[0].php_read_fd = FD_SETSIZE;
+	assert_banner(0, 1, "U");
+	assert_int_equal(php_processes[0].php_state, PHP_BUSY);
+	php_processes[0].php_read_fd = pipe_fds[0];
+}
+
+static void read_banner_with_no_buffer(void) {
+	failing_allocation = RESULTS_BUFFER;
+	free(php_read_banner(0, 1));
+}
+
 static void read_with_no_result_buffer(void) {
 	failing_allocation = RESULTS_BUFFER;
 	free(php_read_response(0, "poll 1", FALSE, 1));
@@ -212,6 +299,7 @@ static void read_with_no_result_buffer(void) {
 static void test_result_allocation_failure_is_fatal(void **state) {
 	(void) state;
 	assert_int_equal(spine_test_run_child(read_with_no_result_buffer), EXIT_FAILURE);
+	assert_int_equal(spine_test_run_child(read_banner_with_no_buffer), EXIT_FAILURE);
 }
 
 int main(void) {
@@ -219,8 +307,13 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_select_failures_leave_the_slot_busy, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_interrupted_select_resumes_with_the_remaining_timeout, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_interrupted_select_gives_up_when_the_timeout_is_spent, read_setup, read_teardown),
+		cmocka_unit_test_setup_teardown(test_interrupted_select_past_the_timeout_does_not_retry, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_interrupted_read_is_retried, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_descriptor_missing_from_the_ready_set_is_a_failure, read_setup, read_teardown),
+		cmocka_unit_test_setup_teardown(test_banner_follows_skipped_lines, read_setup, read_teardown),
+		cmocka_unit_test_setup_teardown(test_banner_search_is_bounded, read_setup, read_teardown),
+		cmocka_unit_test_setup_teardown(test_banner_fails_on_silence_end_of_file_or_an_endless_line, read_setup, read_teardown),
+		cmocka_unit_test_setup_teardown(test_banner_rejects_unusable_slots, read_setup, read_teardown),
 		cmocka_unit_test_setup_teardown(test_result_allocation_failure_is_fatal, read_setup, read_teardown),
 	};
 

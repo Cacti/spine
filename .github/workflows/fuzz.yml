@@ -1,8 +1,8 @@
 name: Fuzz
 
 on:
+  # Every base branch, so stacked pull requests are fuzzed too.
   pull_request:
-    branches: [develop]
     paths:
       - 'configure.ac'
       - 'Makefile.am'

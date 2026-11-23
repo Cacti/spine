@@ -7,8 +7,8 @@ name: Security scanning
 on:
   push:
     branches: [develop]
+  # Every base branch, so stacked pull requests are scanned too.
   pull_request:
-    branches: [develop, '1.2.x']
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:

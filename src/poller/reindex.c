@@ -187,6 +187,17 @@ static char *trim_owned(char *owned) {
 	return owned;
 }
 
+/* A count script that failed answers U or nothing. Its line count, 0, would
+ * differ from the stored count and queue a false reindex; U never fails an
+ * assertion, as in 1.2.x. poll_result holds BUFSIZE bytes. */
+static void format_line_count(char *poll_result, const char *count_result) {
+	if (count_result == NULL || IS_UNDEFINED(count_result)) {
+		SET_UNDEFINED(poll_result);
+	} else {
+		spine_snprintf(poll_result, BUFSIZE, "%d", char_count(count_result, '\n'));
+	}
+}
+
 static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thread, char *sysUptime, bool *unavailable) {
 	char *poll_result = NULL;
 	int php_process;
@@ -242,7 +253,7 @@ static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thre
 			poll_result[0] = '\0';
 
 			char *count_result = exec_poll(host, reindex->arg1, reindex->data_query_id, "DQ");
-			snprintf(poll_result, BUFSIZE, "%d", char_count(count_result, '\n'));
+			format_line_count(poll_result, count_result);
 			SPINE_FREE(count_result);
 
 			php_command_script(reindex->arg1, script, sizeof(script));
@@ -259,7 +270,7 @@ static char *poll_reindex_action(host_t *host, reindex_t *reindex, int host_thre
 			php_process = php_get_process();
 
 			char *count_result = php_cmd(reindex->arg1, php_process);
-			spine_snprintf(poll_result, BUFSIZE, "%d", char_count(count_result, '\n'));
+			format_line_count(poll_result, count_result);
 			SPINE_FREE(count_result);
 
 			php_command_script(reindex->arg1, script, sizeof(script));

@@ -25,6 +25,19 @@ int main(int argc, char **argv) {
 	/* Longer than the recovery handshake cap, shorter than script_timeout. */
 	if (strstr(mode, "slow-start") != NULL) sleep(3);
 
+	/* PHP notices from the includes, ahead of the banner: a few, split over
+	 * two writes, or more than the startup handshake skips. */
+	if (strstr(mode, "notice-start") != NULL) {
+		puts("PHP Notice:  Undefined index: poller_id in global.php on line 1");
+		fflush(stdout);
+		usleep(100000);
+		fputs("PHP Deprecated:  a deprecated call in global.php on line 2\n", stdout);
+		fflush(stdout);
+	} else if (strstr(mode, "notice-flood") != NULL) {
+		for (int line = 0; line < 11; line++) puts("PHP Notice:  repeated notice");
+		fflush(stdout);
+	}
+
 	if (strstr(mode, "silent") == NULL) {
 		struct sigaction action;
 		int bad_start = strstr(mode, "bad-start") != NULL;

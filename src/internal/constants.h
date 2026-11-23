@@ -287,6 +287,8 @@
 #define PHP_READY 0
 #define PHP_BUSY 1
 #define PHP_INIT 999
+/* lines the startup handshake reads looking for the banner, as in 1.2.x */
+#define PHP_STARTUP_LINES 10
 #define PHP_ERROR 99
 
 /* required for validation of script results */

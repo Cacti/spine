@@ -38,6 +38,11 @@ typedef struct {
 static fake_result_t fake_result;
 static fake_result_t count_result;
 static const char *count_cell;
+/* answers for successive COUNT() queries, then count_cell for the rest */
+static const char *count_sequence[8];
+static int count_sequence_length;
+static int count_sequence_next;
+static int started_threads[8];
 static int permit_errors[16];
 static int permit_error_count;
 static int permit_error_next;
@@ -61,6 +66,9 @@ static int controlled_start(spine_worker_set_t *workers, const pthread_attr_t *a
 	(void) workers;
 	(void) attributes;
 	(void) function;
+	if (start_calls < (int) (sizeof(started_threads) / sizeof(started_threads[0]))) {
+		started_threads[start_calls] = ((const poller_thread_t *) argument)->host_thread;
+	}
 	start_calls++;
 	/* the worker thread would own and free its instructions */
 	if (status == 0) free(argument);
@@ -68,14 +76,17 @@ static int controlled_start(spine_worker_set_t *workers, const pthread_attr_t *a
 }
 
 static MYSQL_RES *controlled_query(MYSQL *mysql, int type, const char *query) {
+	const char *cell = count_cell;
+
 	(void) mysql;
 	(void) type;
 	(void) query;
-	if (count_cell == NULL) return NULL;
+	if (count_sequence_next < count_sequence_length) cell = count_sequence[count_sequence_next++];
+	if (cell == NULL) return NULL;
 	memset(&count_result, 0, sizeof(count_result));
 	/* an empty string stands for a COUNT() query that returned no row */
-	count_result.count = count_cell[0] == '\0' ? 0 : 1;
-	count_result.cells[0][0] = count_cell;
+	count_result.count = cell[0] == '\0' ? 0 : 1;
+	count_result.cells[0][0] = cell;
 	return (MYSQL_RES *) &count_result;
 }
 
@@ -138,6 +149,9 @@ static int workers_setup(void **state) {
 	init_mutexes();
 	memset(&fake_result, 0, sizeof(fake_result));
 	count_cell = NULL;
+	count_sequence_length = 0;
+	count_sequence_next = 0;
+	memset(started_threads, 0, sizeof(started_threads));
 	permit_error_count = 0;
 	permit_error_next = 0;
 	failing_permit = NULL;
@@ -377,6 +391,52 @@ static void test_launch_dispatches_one_worker_per_device(void **state) {
 	spine_permits_destroy(&startup);
 }
 
+/* The first worker of a split device can poll and advance rrd_next_step
+ * before the next worker is launched, so a later count of due items can be
+ * smaller. Every partition the first thread planned must still be launched:
+ * only the last one advances the device's schedule. */
+static void test_launch_keeps_the_partition_count_of_the_first_thread(void **state) {
+	pthread_attr_t attributes;
+	spine_worker_set_t workers = {0};
+	spine_permits_t startup;
+	char host_time[SMALL_BUFSIZE] = "";
+	poller_thread_t *table[1] = {NULL};
+	poller_thread_t **saved = details;
+	MYSQL mysql;
+
+	(void) state;
+	memset(&mysql, 0, sizeof(mysql));
+	assert_int_equal(spine_permits_init(&startup, 4), 0);
+	assert_int_equal(pthread_attr_init(&attributes), 0);
+	assert_int_equal(spine_permits_destroy(&available_threads), 0);
+	assert_int_equal(spine_permits_init(&available_threads, 4), 0);
+	set.poller.threads = 4;
+	set.poller.active_profiles = 2;
+	set.availability.ping_only = FALSE;
+	memset(&fake_result, 0, sizeof(fake_result));
+	fake_result.count = 1;
+	fake_result.cells[0][0] = "5";
+	fake_result.cells[0][1] = "4";
+	/* eight due items in four partitions of two, then one left due */
+	count_sequence[0] = "8";
+	count_sequence[1] = "2";
+	count_sequence_length = 2;
+	count_cell = "1";
+	details = table;
+
+	launch_poll_workers(&mysql, (MYSQL_RES *) &fake_result, 1, &workers, &startup, &attributes, host_time);
+	assert_int_equal(start_calls, 4);
+	for (int i = 0; i < 4; i++) assert_int_equal(started_threads[i], i + 1);
+	assert_non_null(table[0]);
+	assert_int_equal(table[0]->host_threads, 4);
+	assert_int_equal(table[0]->host_data_ids, 2);
+
+	free(table[0]);
+	details = saved;
+	pthread_attr_destroy(&attributes);
+	spine_permits_destroy(&startup);
+}
+
 static void launch_with_no_instruction_memory(void) {
 	pthread_attr_t attributes;
 	spine_worker_set_t workers = {0};
@@ -412,6 +472,7 @@ int main(void) {
 		cmocka_unit_test_setup_teardown(test_storage_counts_the_non_device_source_for_poller_one, workers_setup, workers_teardown),
 		cmocka_unit_test_setup_teardown(test_storage_allocation_failures_are_fatal, workers_setup, workers_teardown),
 		cmocka_unit_test_setup_teardown(test_launch_dispatches_one_worker_per_device, workers_setup, workers_teardown),
+		cmocka_unit_test_setup_teardown(test_launch_keeps_the_partition_count_of_the_first_thread, workers_setup, workers_teardown),
 		cmocka_unit_test_setup_teardown(test_launch_allocation_failure_is_fatal, workers_setup, workers_teardown),
 	};
 

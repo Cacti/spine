@@ -13,7 +13,15 @@ set -eu
 
 top_builddir="${top_builddir:-.}"
 
+# A CI step that runs this as root lists "setuid" in SPINE_TEST_REQUIRE, so
+# a missing prerequisite fails there instead of skipping.
 skip() {
+	case " $(printf '%s' "${SPINE_TEST_REQUIRE:-}" | tr ',' ' ') " in
+	*" setuid "*)
+		echo "FAIL: required setuid fixture unavailable: $*" >&2
+		exit 1
+		;;
+	esac
 	echo "SKIP: $*"
 	exit 77
 }

@@ -301,8 +301,22 @@ static void icmp_shared_handoff(const icmp_shared_t *shared) {
 	}
 }
 
+/* Waits run on the monotonic clock like every other deadline, so a wall-clock
+ * step cannot cut one short or stretch it. Where a condition variable cannot
+ * select its clock (macOS), it keeps the wall clock and icmp_shared_sleep()
+ * converts the time left; the await loop rechecks the monotonic deadline.
+ * Every platform with the call supports CLOCK_MONOTONIC for it. */
 void icmp_shared_register(icmp_waiter_t *waiter) {
+#ifdef HAVE_PTHREAD_CONDATTR_SETCLOCK
+	pthread_condattr_t attributes;
+
+	pthread_condattr_init(&attributes);
+	pthread_condattr_setclock(&attributes, CLOCK_MONOTONIC);
+	pthread_cond_init(&waiter->wake, &attributes);
+	pthread_condattr_destroy(&attributes);
+#else
 	pthread_cond_init(&waiter->wake, NULL);
+#endif
 
 	thread_mutex_lock(LOCK_ICMP);
 	waiter->answered = FALSE;
@@ -364,6 +378,19 @@ static void icmp_shared_dispatch(int family, const unsigned char *reply, ssize_t
 	}
 }
 
+/* Called with LOCK_ICMP held: sleep until woken or the monotonic deadline. */
+static void icmp_shared_sleep(icmp_waiter_t *waiter, double deadline) {
+	struct timespec until;
+	double instant = deadline;
+
+#ifndef HAVE_PTHREAD_CONDATTR_SETCLOCK
+	instant = get_time_as_double() + (deadline - spine_monotonic_time());
+#endif
+	until.tv_sec = (time_t) instant;
+	until.tv_nsec = (long) ((instant - (double) until.tv_sec) * 1000000000.0);
+	pthread_cond_timedwait(&waiter->wake, get_lock(LOCK_ICMP), &until);
+}
+
 /*! \fn static int icmp_shared_await(icmp_waiter_t *waiter, double deadline)
  *  \brief waits until the reply to a registered request arrives, or deadline
  *
@@ -371,6 +398,8 @@ static void icmp_shared_dispatch(int family, const unsigned char *reply, ssize_t
  *  never stuck behind a thread whose own deadline is further away: a reader
  *  returns from select() as soon as anything arrives, drains the queue, and
  *  wakes the threads whose replies it found.
+ *
+ *  deadline is a spine_monotonic_time() instant.
  *
  *  \return TRUE if the reply arrived in time.
  */
@@ -382,7 +411,6 @@ int icmp_shared_await(icmp_waiter_t *waiter, double deadline) {
 	socklen_t fromlen;
 	ssize_t received;
 	struct timeval wait;
-	struct timespec until;
 	fd_set fds;
 	double now;
 	double remaining;
@@ -392,13 +420,10 @@ int icmp_shared_await(icmp_waiter_t *waiter, double deadline) {
 	int slot;
 	int answered;
 
-	until.tv_sec = (time_t) deadline;
-	until.tv_nsec = (long) ((deadline - (double) until.tv_sec) * 1000000000.0);
-
 	thread_mutex_lock(LOCK_ICMP);
 
 	while (!waiter->answered) {
-		now = get_time_as_double();
+		now = spine_monotonic_time();
 
 		if (now >= deadline) {
 			break;
@@ -406,7 +431,7 @@ int icmp_shared_await(icmp_waiter_t *waiter, double deadline) {
 
 		if (shared->reading) {
 			waiter->sleeping = TRUE;
-			pthread_cond_timedwait(&waiter->wake, get_lock(LOCK_ICMP), &until);
+			icmp_shared_sleep(waiter, deadline);
 			waiter->sleeping = FALSE;
 			continue;
 		}
