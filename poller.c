@@ -173,8 +173,9 @@ static void record_result_error(const poll_error_context_t *context, const host_
 		char script[SMALL_BUFSIZE];
 
 		php_command_script(item->arg1, script, sizeof(script));
-		SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] SCRIPT: %s, output: %s",
-			context->host_id, context->thread_id, item->local_data_id, script, result));
+		SPINE_LOG(("WARNING: Invalid Response, Device[%i] HT[%i] DS[%i] %s: %s, output: %s",
+			context->host_id, context->thread_id, item->local_data_id,
+			item->action == POLLER_ACTION_PHP_SCRIPT_SERVER ? "SERVER" : "SCRIPT", script, result));
 	}
 }
 
