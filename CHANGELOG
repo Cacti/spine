@@ -50,6 +50,8 @@ The Cacti Group | spine
 -issue#680: Take each device's poller item count from the device list query instead of one COUNT query per device
 -issue#680: Leave rrd_next_step unwritten for items polled every interval, whose value would not change
 -issue#680: Close a finished script's pipe only after its entry is claimed, so another thread reusing the descriptor number cannot reap the wrong child
+-issue#690: Push every device and poller item of a full batch from a remote collector to the main server instead of skipping one in every 501 devices and 10001 items
+-issue#690: Skip the remote collector push of rrd_next_step to the main server with a single active profile, where the values never change
 -issue: Validate ICMP packet bounds and correlate echo replies before reporting a host up
 -issue: Stop snmp_count() after an internal Net-SNMP error instead of repeating GETNEXT indefinitely
 -issue: Disable persisted CI credentials, hash-lock flawfinder and propagate scanner failures
