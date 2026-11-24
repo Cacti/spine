@@ -636,6 +636,49 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.sql("SELECT COUNT(*) FROM poller_time WHERE poller_id=2 AND end_time<>'0000-00-00 00:00:00';"),
                          '1', self.result.stdout[-3000:])
 
+    def remote_collector(self):
+        # A separate main database, so a row missing from a push is visible.
+        main = self.database + '_main'
+        self.sql(f'CREATE DATABASE {main};'
+                 f"GRANT SELECT,INSERT,UPDATE,DELETE ON {main}.* TO '{self.user}'@'%';", False)
+        self.addCleanup(self.sql, f'DROP DATABASE IF EXISTS {main};', False)
+        self.sql(f'USE {main};\n' + (ROOT / 'schema.sql').read_text(), False)
+        self.sql('UPDATE host SET poller_id=2; UPDATE poller_item SET poller_id=2;'
+                 'INSERT INTO poller(id,threads) VALUES(2,16) ON DUPLICATE KEY UPDATE threads=VALUES(threads);')
+        conf = self.directory / 'spine-remote-main.conf'
+        conf.touch(mode=0o600)
+        conf.write_text(self.conf.read_text() + f'RDB_Host {self.host}\nRDB_Port {self.port}\nRDB_Database {main}\n'
+                        f'RDB_User {self.user}\nRDB_Pass {self.password}\n')
+        return main, conf
+
+    def test_remote_collector_pushes_every_row_of_a_full_batch(self):
+        # One row more than a batch of each table: 500 devices, 10000 items.
+        self.seed(3, 1)
+        self.sql("INSERT INTO host(id,poller_id,hostname,disabled) VALUES" +
+                 ','.join(f"({i},2,'127.0.0.1','on')" for i in range(2, 502)) + ';'
+                 'INSERT INTO poller_item(local_data_id,host_id,poller_id,action,rrd_name,rrd_step,rrd_next_step) VALUES' +
+                 ','.join(f"({i},1,2,1,'value',3600,1800)" for i in range(1, 9999)) + ';')
+        main, conf = self.remote_collector()
+        self.run_spine(conf=conf, poller=2)
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM host;'), '501')
+        self.assertEqual(self.sql('SELECT COUNT(*) FROM poller_item;'), '10001')
+        self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.host;'), '501')
+        self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.poller_item;'), '10001')
+        self.assertEqual(self.sql(f'SELECT COUNT(*) FROM poller_item l JOIN {main}.poller_item m '
+                                  'ON m.local_data_id=l.local_data_id AND m.rrd_name=l.rrd_name '
+                                  'WHERE m.rrd_next_step=l.rrd_next_step;'), '10001')
+
+    def test_remote_collector_keeps_a_single_profile_schedule_off_the_main_server(self):
+        self.seed(3, 1, profiles=True)
+        main, conf = self.remote_collector()
+        self.run_spine(conf=conf, poller=2)
+        self.assertEqual(self.result.returncode, 0, self.result.stdout[-3000:])
+        self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.poller_output;'), '3', self.result.stdout[-3000:])
+        self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.host;'), '1')
+        self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.poller_item;'), '0')
+        self.assertEqual(self.general_log_count('INSERT INTO poller_item %'), 0)
+
     def test_single_and_ten_workers(self):
         for threads in (1, 10):
             with self.subTest(threads=threads):

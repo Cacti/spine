@@ -963,7 +963,10 @@ bool poller_push_data_to_main() {
 					sqlp += sprintf(sqlp, ")");
 
 					rows++;
-				} else {
+				}
+
+				/* flush a full batch only after its last row is in it */
+				if (rows == 500) {
 					sqlp += sprintf(sqlp, "%s", suffix);
 					if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
@@ -979,6 +982,12 @@ bool poller_push_data_to_main() {
 	}
 
 	db_free_result(result);
+
+	/* Spine advances rrd_next_step only with more than one active profile,
+	 * so with a single profile the main server already holds every value */
+	if (set.active_profiles == 1) {
+		goto disconnect;
+	}
 
 	SPINE_LOG_MEDIUM(("Pushing Poller Item RRD Next Step to Main Server"));
 
@@ -1031,7 +1040,10 @@ bool poller_push_data_to_main() {
 					sqlp += sprintf(sqlp, ")");
 
 					rows++;
-				} else {
+				}
+
+				/* flush a full batch only after its last row is in it */
+				if (rows == 10000) {
 					sqlp += sprintf(sqlp, "%s", suffix);
 					if (!db_insert(&mysqlr, REMOTE, sqlbuf)) pushed = FALSE;
 
@@ -1050,6 +1062,7 @@ bool poller_push_data_to_main() {
 
 	db_free_result(result);
 
+disconnect:
 	db_disconnect(&mysql);
 	db_disconnect(&mysqlr);
 
