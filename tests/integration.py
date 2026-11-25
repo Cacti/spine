@@ -666,7 +666,7 @@ class Polling(unittest.TestCase):
         self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.host;'), '501')
         self.assertEqual(self.sql(f'SELECT COUNT(*) FROM {main}.poller_item;'), '10001')
         self.assertEqual(self.sql(f'SELECT COUNT(*) FROM poller_item l JOIN {main}.poller_item m '
-                                  'ON m.local_data_id=l.local_data_id AND m.rrd_name=l.rrd_name '
+                                  'ON m.local_data_id=l.local_data_id AND CAST(m.rrd_name AS BINARY)=CAST(l.rrd_name AS BINARY) '
                                   'WHERE m.rrd_next_step=l.rrd_next_step;'), '10001')
 
     def test_remote_collector_keeps_a_single_profile_schedule_off_the_main_server(self):
