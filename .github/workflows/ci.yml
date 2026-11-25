@@ -92,7 +92,7 @@ jobs:
           default-mysql-client \
           libsnmp-dev libssl-dev build-essential \
           help2man autoconf automake libtool dos2unix \
-          php8.3-cli php8.3-mysql
+          php8.3-cli php8.3-mysql snmpd
           sudo update-alternatives --set php /usr/bin/php8.3
           php -m | grep -qx pdo_mysql
 
@@ -130,8 +130,9 @@ jobs:
         env:
           TEST_DATABASE_PORT: ${{ job.services.database.ports['3306'] }}
           SPINE_TEST_CACTI_ROOT: ${{ github.workspace }}/cacti-1.2
+          SPINE_TEST_SNMPD: /usr/sbin/snmpd
           # fail rather than skip the cases this job provides for
-          SPINE_TEST_REQUIRE: cacti,fault
+          SPINE_TEST_REQUIRE: cacti,fault,snmpd
         run: |
           config="$RUNNER_TEMP/spine-test-client.cnf"
           umask 077

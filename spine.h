@@ -480,6 +480,11 @@ typedef struct target_struct {
  * This structure holds SNMP get results temporarily while polling is taking place.
  *
  */
+/* snmp_get_assert_values() results */
+#define SNMP_ASSERT_PENDING 0
+#define SNMP_ASSERT_VALUE   1
+#define SNMP_ASSERT_FAILED  2
+
 typedef struct snmp_oids {
 	int    array_position;
 	char   oid[1024];
@@ -501,6 +506,10 @@ typedef struct poller_thread {
 	int output_failed;
 	int poll_failed;
 	int complete;
+	/* set by the first partition for the others: see poll_host() */
+	int verdict_ready;
+	int ignore_host;
+	int spike_kill;
 	char host_time[40];
 	double host_time_double;
 	sem_t *thread_init_sem;

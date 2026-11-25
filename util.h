@@ -52,6 +52,7 @@ extern int is_numeric(char *string);
 extern int is_ipaddress(const char *string);
 extern int all_digits(const char *str);
 extern int is_hexadecimal(const char * str, const short ignore_special);
+extern void hex_result(char *result, size_t size, const char *str);
 
 /* determine if a device is a debug device */
 extern int is_debug_device(int device_id);
@@ -67,8 +68,6 @@ extern char *ltrim(char *str);
 extern int strpos(char *haystack, char *needle) ;
 extern int char_count(const char *str, int chr);
 
-/* custom hex2dec that returns a string instead of a number */
-unsigned long long hex2dec(char *str);
 
 /* macro to copy string to string with an ending null */
 #define STRNCOPY(dst, src)  strncopy((dst), (src), sizeof(dst))
@@ -83,6 +82,9 @@ unsigned long long hex2dec(char *str);
 
 /* get highres time as double */
 extern double get_time_as_double(void);
+
+/* select() on one descriptor for reading, without the FD_SETSIZE limit */
+extern int wait_fd_readable(int fd, const struct timeval *timeout);
 
 /* function to check to see if program has capability to use raw socket with
    out uid = 0 */

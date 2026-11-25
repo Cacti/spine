@@ -105,12 +105,14 @@ chmod +s /usr/local/spine/bin/spine
    move it to a better location if you choose to do so, make sure to copy the
    spine.conf as well.
 
-   With `DB_UseSSL 1` (or `RDB_UseSSL 1`) Spine asks for TLS but, as in
-   1.2.31, falls back to plaintext when the server does not offer it, and logs
-   a warning when it does. Add `DB_SSL_Required 1` (or `RDB_SSL_Required 1`)
-   to refuse that fallback. `Strict_Mode 1` normalizes poll results before
-   storage and makes Spine exit non-zero after a failed output write, final
-   push, `poller_time` update or poll timeout. Both are off by default.
+   With `DB_UseSSL 1` (or `RDB_UseSSL 1`) Spine uses TLS when the server
+   supports it but, as in 1.2.31, connects in plaintext when it does not. The
+   first plaintext connection of each type logs a warning. Add
+   `DB_SSL_Required 1` (or `RDB_SSL_Required 1`) to refuse that fallback.
+   `Strict_Mode 1` normalizes poll results before storage and makes Spine exit
+   non-zero after a failed output write, final push, `poller_time` update,
+   poll timeout, or a device left unpolled because its thread could not start.
+   Both are off by default.
 
 8. Ensure that Spine runs well by running with `/usr/local/spine/spine -R -S -V 3`
 

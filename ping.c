@@ -379,12 +379,12 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	int    elevate_euid;
 	int    fork_locked;
 	int    socket_type = SOCK_RAW;
+	int    datagram = FALSE;
 	int    ihl;
 	char   *cacti_msg = "cacti-monitoring-system\0";
 	int    packet_len;
 	socklen_t    fromlen;
 	ssize_t    return_code;
-	fd_set socket_fds;
 
 	static   unsigned int seq = 0;
 	struct   icmp  *icmp;
@@ -405,7 +405,14 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 	/* get ICMP socket */
 	retry_count = 0;
-	while (TRUE) {
+	#if defined(__linux__) && defined(HAVE_DECL_SOCK_CLOEXEC) && HAVE_DECL_SOCK_CLOEXEC
+	/* Linux grants an ICMP datagram socket to the groups in
+	 * net.ipv4.ping_group_range.  It needs no seteuid(0), which would run
+	 * every other thread as root until the raw socket is open. */
+	icmp_socket = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_ICMP);
+	datagram = icmp_socket != -1;
+	#endif
+	while (!datagram) {
 		fd_error = 0;
 		elevate_euid = FALSE;
 		fork_locked = FALSE;
@@ -513,13 +520,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 	icmp->icmp_cksum = get_checksum(packet, packet_len);
 
 	/* hostname must be nonblank */
-	if (icmp_socket >= FD_SETSIZE) {
-		close(icmp_socket);
-		SPINE_FREE(packet);
-		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
-		return HOST_DOWN;
-	}
-
 	if ((strlen(host->hostname) != 0) && (icmp_socket != -1)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
@@ -530,10 +530,6 @@ int ping_icmp(host_t *host, ping_t *ping) {
 			retry_count = 0;
 			total_time  = 0;
 			begin_time  = get_time_as_double();
-
-			/* initialize file descriptor to review for input/output */
-			FD_ZERO(&socket_fds);
-			FD_SET(icmp_socket,&socket_fds);
 
 			while (1) {
 				if (retry_count > host->ping_retries) {
@@ -563,10 +559,8 @@ int ping_icmp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				keep_listening:
-				FD_ZERO(&socket_fds);
-				FD_SET(icmp_socket, &socket_fds);
 				ping_wait_left(deadline, &timeout);
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				return_code = wait_fd_readable(icmp_socket, &timeout);
 
 				/* Each interrupted wait retains the same attempt deadline. */
 				total_time = (ping_monotonic_time() - begin_time) * one_thousand;
@@ -592,14 +586,15 @@ int ping_icmp(host_t *host, ping_t *ping) {
 							goto keep_listening;
 						}
 					} else {
-						if (return_code < (ssize_t) sizeof(struct ip)) {
+						if (!datagram && return_code < (ssize_t) sizeof(struct ip)) {
 							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
 
+						/* A datagram socket delivers the ICMP message without its IP header. */
 						ip  = (struct ip *) socket_reply;
-						ihl = ip->ip_hl << 2;
-						if (ihl < (int) sizeof(struct ip) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
+						ihl = datagram ? 0 : ip->ip_hl << 2;
+						if ((!datagram && ihl < (int) sizeof(struct ip)) || return_code < (ssize_t) (ihl + ICMP_HDR_SIZE)) {
 							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 							goto keep_listening;
 						}
@@ -615,8 +610,10 @@ int ping_icmp(host_t *host, ping_t *ping) {
 						if (pkt->icmp_type == ICMP_ECHOREPLY) {
 							/* Only echo replies carry our identifier and sequence in
 							 * the outer ICMP header.  Error responses carry the
-							 * triggering packet there instead. */
-							if (pkt->icmp_id != icmp->icmp_id || pkt->icmp_seq != icmp->icmp_seq) {
+							 * triggering packet there instead.  The kernel gives a
+							 * datagram socket's request its own identifier and
+							 * delivers only the replies that carry it. */
+							if ((!datagram && pkt->icmp_id != icmp->icmp_id) || pkt->icmp_seq != icmp->icmp_seq) {
 								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
 								goto keep_listening;
 							}
@@ -696,7 +693,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	char   request[BUFSIZE];
 	int    request_len;
 	int    return_code;
-	fd_set socket_fds;
 
 	if (host->ping_timeout <= 0 || host->ping_retries < 0) {
 		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
@@ -721,12 +717,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 	udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	/* hostname must be nonblank */
-	if (udp_socket >= FD_SETSIZE) {
-		close(udp_socket);
-		snprintf(ping->ping_status, sizeof(ping->ping_status), "down");
-		return HOST_DOWN;
-	}
-
 	if ((strlen(host->hostname) != 0) && (udp_socket != -1)) {
 		/* initialize variables */
 		snprintf(ping->ping_status, 50, "down");
@@ -747,10 +737,6 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 			retry_count = 0;
 
-			/* initialize file descriptor to review for input/output */
-			FD_ZERO(&socket_fds);
-			FD_SET(udp_socket,&socket_fds);
-
 			while (1) {
 				if (retry_count > host->ping_retries) {
 					snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Ping timed out");
@@ -770,30 +756,25 @@ int ping_udp(host_t *host, ping_t *ping) {
 
 				/* wait for a response on the socket */
 				wait_more:
-				FD_ZERO(&socket_fds);
-				FD_SET(udp_socket, &socket_fds);
 				ping_wait_left(deadline, &timeout);
-				return_code = select(udp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				return_code = wait_fd_readable(udp_socket, &timeout);
 
 				/* Each interrupted wait retains the same attempt deadline. */
 				total_time = (ping_monotonic_time() - begin_time) * one_thousand;
 
-				/* check to see which socket talked */
 				if (return_code > 0) {
-					if (FD_ISSET(udp_socket, &socket_fds)) {
-						return_code = read(udp_socket, socket_reply, BUFSIZE);
+					return_code = read(udp_socket, socket_reply, BUFSIZE);
 
-						if (return_code == -1 && (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED)) {
-							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-							} else {
-								SPINE_LOG_MEDIUM(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
-							}
-							snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
-							snprintf(ping->ping_status, 50, "%.5f", total_time);
-							close(udp_socket);
-							return HOST_UP;
+					if (return_code == -1 && (errno == EHOSTUNREACH || errno == ECONNRESET || errno == ECONNREFUSED)) {
+						if (is_debug_device(host->id)) {
+							SPINE_LOG(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
+						} else {
+							SPINE_LOG_MEDIUM(("Device[%i] INFO: UDP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count+1, (total_time)));
 						}
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "UDP: Device is Alive");
+						snprintf(ping->ping_status, 50, "%.5f", total_time);
+						close(udp_socket);
+						return HOST_UP;
 					}
 				} else if (return_code == -1) {
 					if (errno == EINTR && total_time < host_timeout) {

@@ -10,7 +10,9 @@ directly from `nft_popen.c`.
 on an **isolated MariaDB or MySQL test server**. The runner creates a random
 database and user and removes them on completion. It temporarily enables the
 server's general query log to verify the number of native eligibility counts.
-Do not point it at a shared or production server.
+The counts include only the run's own user, but the log switch is
+server-wide, so run one suite at a time per server. Do not point it at a
+shared or production server.
 
 Provide a mode-0600 MySQL client file through `SPINE_TEST_DB_CONFIG`. Its
 `[client]` section must specify `host`, `port`, `user`, and, when required,
@@ -38,9 +40,17 @@ temporary directory, loads its complete schema, and writes fixture credentials
 only into the copy. Without this option those two compatibility tests are
 reported as skipped. The ordinary polling regressions still execute.
 
+Set `SPINE_TEST_SNMPD` to a net-snmp `snmpd` executable to also poll a real
+agent over SNMPv1, SNMPv2c, and SNMPv3 authNoPriv and authPriv, covering the
+batched item gets and reindex assertion gets. The runner starts its own agent
+on a free loopback port with a temporary configuration and fixed fixture
+credentials, and stops it afterwards. Without this option that test is
+reported as skipped.
+
 Set `SPINE_TEST_REQUIRE` to a comma separated list of `cacti` (the Script
-Server cases) and `fault` (the allocation-failure cases) to make those cases
-fail instead of being skipped when their prerequisite is missing. CI sets it
+Server cases), `fault` (the allocation-failure cases) and `snmpd` (the real
+agent case) to make those cases fail instead of being skipped when their
+prerequisite is missing. CI sets it
 so that a missing package or tree cannot pass unnoticed.
 
 `schema.sql` contains the actual table definitions from Cacti maintenance
