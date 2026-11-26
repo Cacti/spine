@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Verify that every commit in a revision range has a Signed-off-by trailer
 # matching that commit's author. This enforces the Developer Certificate of
 # Origin without granting a third-party action access to the repository.

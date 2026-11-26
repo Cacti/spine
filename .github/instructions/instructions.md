@@ -1,22 +1,28 @@
 # GitHub Copilot Instructions for spine
 
 spine is the high-performance C poller for Cacti. It is a multi-threaded
-POSIX C99 program using pthreads, net-snmp, and libmariadb, built with
+POSIX C17 program using pthreads, net-snmp, and libmariadb, built with
 GNU autotools.
 
 ## Language and standard
 
-- C99. Mixed declarations and statements are allowed. No VLAs.
+- C17 with GNU extensions (`-std=gnu17`, set by `configure`). See
+  `docs/adr/0001-c17-language-standard.md`.
+- Keep variable scope narrow and initialize at definition. No VLAs.
+- `_Static_assert` and `_Noreturn` are fine. Keep pthreads; do not use
+  `<threads.h>` or C23 features.
 - POSIX.1-2008 is the baseline. Do not use glibc extensions unless they
   already appear in the codebase.
-- All new files must include the LGPL-2.1 header block found in `spine.c`.
+- Retain each file’s license and contributor credits using SPDX notices.
+  Keep module headers beside implementations; `include/spine/` is reserved
+  for deliberately supported external interfaces.
 
 ## Build system
 
 - `configure.ac` + `Makefile.am`. Run `./bootstrap` to regenerate.
 - AC_PREREQ is 2.69. Do not add macros deprecated before autoconf 2.69
   (AC_C_CONST, AC_STRUCT_TM, RETSIGTYPE, etc.). AC_HEADER_TIME is used
-  and must be kept because common.h guards with TIME_WITH_SYS_TIME.
+  and must be kept because `src/internal/common.h` guards with TIME_WITH_SYS_TIME.
 - `make -j$(nproc) CFLAGS="-Wall -Wextra"` must produce zero warnings.
 
 ## Code conventions
@@ -28,8 +34,8 @@ GNU autotools.
 - Locking: acquire mutexes in a consistent order to avoid deadlock.
   Document the lock order in comments where it is not obvious.
 - Memory: every `malloc` / `calloc` return must be checked immediately.
-  Use `snprintf`, never `sprintf`. Use `strncat`/`strncpy` with explicit
-  bounds.
+  Use checked `spine_snprintf` and `STRNCOPY` where their contracts fit.
+  Check truncation and capacity explicitly; do not depend on Annex K.
 - String buffers: declare length constants; do not use magic numbers for
   buffer sizes.
 
@@ -43,23 +49,25 @@ GNU autotools.
 
 ## Database
 
-- All SQL must use parameterized queries via the db_* wrappers in
-  `sql.c`. No raw `mysql_query` calls in poller code.
+- Send SQL through the db_* wrappers in
+  `src/database/sql.c`. Escape values with `db_escape` and check buffer
+  bounds and database outcomes. No raw `mysql_query` calls in poller code.
 - Connection flags: respect `DB_UseSSL` and the SSL key/cert/CA
   settings parsed from `spine.conf`.
 
 ## Configuration file
 
-- `spine.conf.dist` is the authoritative reference. When adding a new
+- `etc/spine.conf.dist` is the authoritative reference. When adding a new
   setting, add it to the header comment block AND as a commented example
   line in the settings section.
-- Parse new keys in `util.c:read_spine_config()`. Add the field to
-  `config_struct` in `spine.h`.
+- Parse new keys in `src/config/file.c:read_spine_config()`. Add the field to
+  `config_t` in `src/config/model.h`.
 
 ## Testing and CI
 
 - When configuring CI, it SHOULD run at least: build (gcc+clang), cppcheck, flawfinder, and CodeQL.
-- Before opening a PR, run `cppcheck --enable=all --std=c11 *.c *.h`
+- Before opening a PR, run
+  `cppcheck --enable=all --std=c17 --library=scripts/cppcheck/spine.cfg src`
   locally and fix all errors (warnings are informational).
 - flawfinder level-5 hits fail CI; lower levels are informational.
 
@@ -73,14 +81,14 @@ must preserve all three:
 - **One shot, no EOF wait.** A script or PHP Script Server command gets
   exactly one read attempt within `script_timeout`. Never loop reading
   until EOF or read a second response after the first read (or timeout)
-  completes. See `exec_poll()` in `poller.c` and `php_read_result()` in
-  `php.c`.
+  completes. See `exec_poll()` in `src/poller/poller.c` and `php_read_result()` in
+  `src/script/protocol.c`.
 - **Never block the polling thread on `waitpid()`.** After a script's
   pipe is closed, reap with a single non-blocking `waitpid(..., WNOHANG)`
   and stop there. Do not spin/`usleep()`/retry waiting for the child to
   exit, and do not escalate SIGTERM/SIGKILL synchronously in the calling
   thread — hand off anything not immediately reaped to the async sweep
-  (`AbandonedPids`/`nft_sweep_abandoned()` in `nft_popen.c`). This applies
+  (`AbandonedPids`/`nft_sweep_abandoned()` in `src/process/nft_popen.c`). This applies
   to both `nft_pclose()` and `php_close()`.
 - **Script timeouts must go through `nft_popen()`/`nft_pchild()`.**
   Killing a timed-out script requires the real child pid, which is only

@@ -1,0 +1,47 @@
+{
+  "base_commit": "bf65f988f88845c25a0a3c53f47cbfdf21c8a34a",
+  "baseline": "Ubuntu 24.04 / GCC: production Autotools build; make check: 17 PASS, 1 SKIP (privilege-dependent), 0 FAIL.",
+  "source_sha256": {
+    "nft_popen.c": "62a5d405a8ab8e7be87b3ad8955fd375e1311db1d02251a1d8ca98a13731ae95",
+    "util.c": "6d4154394eea1e85f8b64e88f004dc8a4487fc0b8caacbb3956ad49dac1d3f49",
+    "ping.c": "87efc928f4e181d9a0b88633b59b1ea5f7acd59cc1ec6844530966f0a369c327",
+    "poller.c": "0b1a325c6a47103200f45536301b6ff43a9e1eb95732529496b7f586df6668b0",
+    "error.c": "9ba4b456ad1b673a2d293c48b43058d0bb4cf098a254ab3b4dfefe00de053f63",
+    "snmp.c": "cb263082946fb2e5ecf5a150dc2bf5b5e2317cc2aef73f55dd75b23fc26384fb",
+    "sql.c": "1a5e156c7a0c6782978cf19958f58f4f5d0d0642e83274152c59f5e20cf3266a",
+    "spine.c": "1b8f2bf01277fcece754e7c64dd41f8e73976625f897572de840225be195b07d",
+    "php.c": "dc8d3a32c7b2ac00e6d0ea88ebf133bca03dab7638be57b057c78bd0c62e2767",
+    "ping.h": "868e721ca2eb2d1049d43246561a67de3a7496d1405739ece3027c412712c017",
+    "src/core/keywords.c": "fb39b0346b29398804969e0b10dcc466f753824b40fc6c9d85db9cc11387a263",
+    "src/core/locks.c": "7104ec002406eb7e78296a67563a47a20dc227a0c1867f331e6a743969cf6019"
+  },
+  "literal_changes": {
+    "poller.c": {
+      "removed_unreachable_diagnostics": [
+        "\"ERROR: Fatal malloc error: poller.c error_string!\"",
+        "\"ERROR: Fatal malloc error: poller.c buf_size!\"",
+        "\"ERROR: Fatal malloc error: poller.c buf_errors!\"",
+        "\"ERROR: Fatal malloc error: poller error buffer!\""
+      ]
+    }
+  },
+  "availability": "Existing production SNMPv3, availability, ICMP and timing contracts are reused. Current host methods and status handling are retained; the older CMake branch OR shortcut is not reintroduced.",
+  "retries": "SQL counts disconnected attempts including EINTR, permits only three initial in-place EINTR retries, caps its shared retry count at 30, and stops on failed reconnection. db_query returns NULL on failure. Existing production fault tests cover retry/reconnect paths; the older unbounded EINTR and process exit behaviors are not reintroduced.",
+  "formatting": "Production numeric classification, multipart output, regex, log/config and CLI contracts are reused. SQL, protocol and log literal sequences stay unchanged except removal of four now-unreachable poller allocation error diagnostics.",
+  "database_writes": "Production persistence/output/reindex contracts and wrapped poll_host tests cover generated writes, batching, completion and output-failure handling. Offline make check does not claim live MariaDB acceptance.",
+  "script_protocols": "Existing real PHP child fixture tests cover startup argv, handshake, command framing, response limits, restart, slot selection, SIGPIPE and reap behavior. The newer response bounds and credential-safe logging are retained.",
+  "shutdown": "Production fault/regression tests and linked/PHP runtime suites exercise thread, descriptor, child ownership and reap paths. Existing graceful process cleanup is retained.",
+  "intentional_changes": [
+    "Poller error buffer and counters have automatic storage and a designated context; their allocation failure paths disappear.",
+    "Checksum reads copy native-endian words from byte buffers into aligned uint16_t values; its unsigned accumulator avoids signed overflow.",
+    "rtrim checks the buffer boundary before decrementing, including empty and completely trimmed strings."
+  ],
+  "port_scope": "Portable C17 changes were adapted to current develop. Already-fixed regex, PHP bounds/retry leaks and protocol paths were left in their current form; old Windows/platform/CMake modules are absent and are not reintroduced. Existing ICMP sequence mutexes are retained; no optional atomics or Annex K dependency added.",
+  "coverage_limits": "Offline mocks and local child fixtures are evidence for application contracts. Live databases/agents, setuid, BSD, Windows and full deployment behavior require separate runtime verification.",
+  "validation": {
+    "baseline": "17 PASS, 1 privilege-dependent SKIP, 0 FAIL",
+    "ported_candidate": "17 PASS, 1 privilege-dependent SKIP, 0 FAIL; includes new checksum and trim regressions in test_linked",
+    "environment": "Ubuntu 24.04/GCC offline Autotools build and make check in a disposable container",
+    "formatting": "clang-format 18.1.8 applied to changed C/header lines"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "elapsed_seconds": {
+    "baseline": {
+      "median": 0.7525356299884152,
+      "minimum": 0.7402700199745595,
+      "maximum": 0.8017025970038958
+    },
+    "candidate": {
+      "median": 0.7495700540021062,
+      "minimum": 0.7154070700053126,
+      "maximum": 0.785845601989422
+    },
+    "median_paired_delta": -0.0023004760150797665
+  },
+  "user_seconds": {
+    "baseline": {
+      "median": 0.010839999999999989,
+      "minimum": 0.00418099999999999,
+      "maximum": 0.027290000000000036
+    },
+    "candidate": {
+      "median": 0.010637499999999966,
+      "minimum": 0.005520999999999998,
+      "maximum": 0.020832000000000017
+    },
+    "median_paired_delta": 7.549999999997836e-05
+  },
+  "system_seconds": {
+    "baseline": {
+      "median": 0.014444000000000068,
+      "minimum": 0.00869999999999993,
+      "maximum": 0.03352900000000003
+    },
+    "candidate": {
+      "median": 0.013671500000000059,
+      "minimum": 0.009895999999999988,
+      "maximum": 0.028407000000000016
+    },
+    "median_paired_delta": 0.00043449999999997657
+  },
+  "cpu_seconds": {
+    "baseline": {
+      "median": 0.02315900000000004,
+      "minimum": 0.020685999999999982,
+      "maximum": 0.05364599999999997
+    },
+    "candidate": {
+      "median": 0.023171000000000053,
+      "minimum": 0.020781999999999995,
+      "maximum": 0.04923900000000003
+    },
+    "median_paired_delta": -9.599999999987396e-05
+  },
+  "cpu_percent": {
+    "baseline": {
+      "median": 3.081625215761342,
+      "minimum": 2.6492434159853517,
+      "maximum": 6.769641094367021
+    },
+    "candidate": {
+      "median": 3.0908100253149082,
+      "minimum": 2.7866304000283075,
+      "maximum": 6.265734627177162
+    },
+    "median_paired_delta": -0.0006975083003537552
+  }
+}

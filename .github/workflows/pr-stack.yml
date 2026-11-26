@@ -1,0 +1,48 @@
+name: PR stack validation
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  squash-restack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify stack validator contracts
+        run: python3 tests/tools/test_pr_stack.py
+      - name: Verify current PR deltas with squash and ordered restacking
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # A pull request is checked with the open PRs it is stacked on, so an
+          # unrelated PR that conflicts cannot fail this one. A push to
+          # develop or a manual run audits every open stack.
+          if [ -n "$PR_NUMBER" ]; then
+            python3 tests/tools/verify_pr_stack.py --repository "$GH_REPO" --other-root 1.2.x --pull-request "$PR_NUMBER" --fetch --output pr-stack-audit.json
+          else
+            python3 tests/tools/verify_pr_stack.py --repository "$GH_REPO" --other-root 1.2.x --fetch --output pr-stack-audit.json
+          fi
+      - name: Preserve exact revision evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-stack-audit
+          path: pr-stack-audit.json
+          if-no-files-found: error

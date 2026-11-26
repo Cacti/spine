@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Integration tests for db_column_exists() runtime detection in spine.
 #
 # Exercises three schema lifecycle states for poller_item.output_regex:

@@ -1,0 +1,2 @@
+# Vendored from troydhanson/uthash; keep it byte-identical to upstream.
+vendor/uthash/uthash.h

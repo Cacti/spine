@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 ## Status
 
-Accepted
+Proposed for upstream review
 
 ## Date
 
@@ -20,7 +20,7 @@ compiler built Spine in its own default mode. GCC 8 to 14 and current Clang
 default to `gnu17`. GCC 15 and later default to `gnu23`, so a distribution
 that moves to GCC 15 would start building Spine as C23 with no change in the
 tree. Under GCC 16 that already adds `-Wdiscarded-qualifiers` warnings in
-`spine.c` that `gnu17` builds do not show.
+`src/app/runtime.c` that `gnu17` builds do not show.
 
 C17 is the C11 language with defect fixes. It gives Spine `_Static_assert`
 for checking struct sizes and buffer limits at compile time, `_Noreturn` for
@@ -30,7 +30,7 @@ Spine also depends on POSIX and BSD interfaces such as pthreads,
 `getaddrinfo`, `strtok_r`, `clock_gettime` and the `u_char` type in
 Net-SNMP's API. It defines no feature-test macros. Strict `-std=c17` makes
 glibc hide those declarations, and on Ubuntu 24.04 the build stops in
-`snmp.c` at the first `u_char`. Strict mode would need feature-test macros
+`src/snmp/requests.c` at the first `u_char`. Strict mode would need feature-test macros
 in every file first.
 
 ## Decision
@@ -48,7 +48,6 @@ The supported compiler floor is:
   only until 2029-05-31, so the floor serves packagers who still build there
   and is not a statement of CI coverage;
 - Clang 6 and Apple Clang;
-- MSVC 2019 16.8 (`/std:c17`), for the planned Windows port.
 
 These rules stay as they are:
 
@@ -56,7 +55,7 @@ These rules stay as they are:
   declarations follow statements; leave them until that code changes for
   another reason.
 - No variable-length arrays.
-- Threads use pthreads until libuv's thread API replaces them in Phase 4.
+- Threads use pthreads.
   Do not use `<threads.h>`.
 - No C23 features until the oldest supported distribution's compiler builds
   C23.

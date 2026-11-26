@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Project contributor history: CONTRIBUTORS.md.
 # Asserts that the poll actually produced data, rather than that spine exited 0.
 #
 # Runs after the spine service completes, against the same database spine wrote

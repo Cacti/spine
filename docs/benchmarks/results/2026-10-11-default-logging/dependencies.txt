@@ -1,0 +1,9 @@
+autoconf	2.71-3
+automake	1:1.16.5-1.3ubuntu1
+gcc	4:13.2.0-7ubuntu1
+libc6-dev:arm64	2.39-0ubuntu8.9
+libmariadb-dev	1:10.11.14-0ubuntu0.24.04.1
+libsnmp-dev	5.9.4+dfsg-1.1ubuntu3.2
+libssl-dev:arm64	3.0.13-0ubuntu3.16
+libtool	2.4.7-7build1
+snmpd	5.9.4+dfsg-1.1ubuntu3.2

@@ -1,0 +1,26 @@
+name: Distro end of life
+
+# Fails when a distro-matrix lane has passed its vendor end-of-life date, so
+# the lane is removed rather than kept on an unsupported release. It reports
+# only; it opens no issue or pull request.
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check lanes against endoflife.date
+        run: python3 .github/scripts/check-distro-eol.py

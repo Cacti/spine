@@ -36,10 +36,11 @@ endif
 
 CFLAGS ?= -O0 -g
 CFLAGS += \
-	-std=c99 \
+	-std=gnu17 \
 	-D_DEFAULT_SOURCE \
 	-I$(SPINE_ROOT) \
-	-I$(SPINE_ROOT)/src/core \
+	-I$(SPINE_ROOT)/src \
+	-I$(SPINE_ROOT)/vendor/uthash \
 	-I$(SPINE_ROOT)/config \
 	$(CMOCKA_CFLAGS) \
 	$(MYSQL_CFLAGS) \

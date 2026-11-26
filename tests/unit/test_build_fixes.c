@@ -1,4 +1,10 @@
 /*
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Project contributor history: CONTRIBUTORS.md.
+ */
+
+/*
  * Unit tests for spine build fixes.
  *
  * Covers:

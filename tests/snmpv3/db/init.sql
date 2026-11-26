@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS `host` (
   `failed_polls`          int(12) unsigned      DEFAULT 0,
   `availability`          decimal(8,5)          NOT NULL DEFAULT 100.00000,
   `polling_time`          double                DEFAULT 0,
+  `last_updated`          timestamp             NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `snmp_sysUpTimeInstance` bigint(20) unsigned  DEFAULT 0,
   `snmp_sysDescr`         varchar(300)          DEFAULT '',
   `snmp_sysObjectID`      varchar(128)          DEFAULT '',
