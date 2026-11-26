@@ -18,19 +18,32 @@
 #include <pthread.h>
 #include <stdint.h>
 #include "internal/constants.h"
-/* Process-local permits own their mutex. Initialize before sharing; destroy
- * only after users stop. Acquire/release/available serialize on that mutex.
- * Init/destroy return pthread errors; acquisition returns EAGAIN when empty
- * and release returns EOVERFLOW at the limit. Lock failures remain fatal. */
+/* Process-local permits own their mutex and condition variable. Initialize
+ * before sharing; destroy only after users stop. Acquire/release/available
+ * serialize on that mutex. Init/destroy return pthread errors; try-acquire
+ * returns EAGAIN when empty, a timed acquire returns ETIMEDOUT at its
+ * deadline, and release returns EOVERFLOW at the limit. Release wakes every
+ * waiter. Lock failures remain fatal. */
 typedef struct spine_permits {
 	pthread_mutex_t mutex;
+	pthread_cond_t released;
 	int available;
 } spine_permits_t;
 int spine_permits_init(spine_permits_t *permits, int count);
 int spine_permits_destroy(spine_permits_t *permits);
 int spine_permits_try_acquire(spine_permits_t *permits);
+/* Blocks until a permit is free or until deadline, a spine_monotonic_time()
+ * instant. A free permit is taken even when the deadline has passed. The
+ * wait is a cancellation point; cancellation releases the mutex. */
+int spine_permits_acquire_until(spine_permits_t *permits, double deadline);
 int spine_permits_release(spine_permits_t *permits);
 int spine_permits_available(spine_permits_t *permits);
+/* A condition variable timed on the monotonic clock where the platform can
+ * select its clock (pthread_condattr_setclock); elsewhere, such as macOS, it
+ * keeps the wall clock and each wait converts the time left. Callers recheck
+ * their predicate and the monotonic deadline after every wake. */
+int spine_cond_init_monotonic(pthread_cond_t *cond);
+void spine_cond_wait_until(pthread_cond_t *cond, pthread_mutex_t *mutex, double deadline);
 /* Raise, never lower, the platform stack default, accounting for results. */
 /* Check the unrounded expression before evaluating its size_t arithmetic. */
 _Static_assert(RESULTS_BUFFER >= 2, "RESULTS_BUFFER must hold a value and terminator");

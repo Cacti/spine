@@ -18,6 +18,15 @@
 #define SPINE_STRINGIFY_INNER(value) #value
 #define SPINE_STRINGIFY(value) SPINE_STRINGIFY_INNER(value)
 
+/* The database TLS policy directives, whose mistakes fail closed. */
+static bool is_tls_directive(const char *name) {
+	return strncasecmp(name, "DB_SSL_", 7) == 0 || strncasecmp(name, "RDB_SSL_", 8) == 0;
+}
+
+/* A misspelled or empty TLS policy directive would leave the connection with
+ * a weaker policy than the file asks for, so it ends Spine instead of being
+ * skipped with a warning. The key, certificate and CA paths are plain
+ * strings, set by the caller. */
 static bool apply_tls_directive(const char *name, const char *value) {
 	spine_database_config_t *configuration;
 	const char *option;
@@ -34,6 +43,8 @@ static bool apply_tls_directive(const char *name, const char *value) {
 	} else {
 		return FALSE;
 	}
+	if (STRIMATCH(option, "Key") || STRIMATCH(option, "Cert") || STRIMATCH(option, "CA")) return FALSE;
+	if (value[0] == '\0') die("ERROR: Database TLS directive without a value");
 	if (STRIMATCH(option, "Mode")) {
 		for (index = 0; index < sizeof(modes) / sizeof(modes[0]); index++) {
 			if (STRIMATCH(value, modes[index])) {
@@ -51,7 +62,7 @@ static bool apply_tls_directive(const char *name, const char *value) {
 	}
 	if (STRIMATCH(option, "Cipher")) destination = configuration->tls_cipher;
 	else if (STRIMATCH(option, "Ciphersuites")) destination = configuration->tls_ciphersuites;
-	else return FALSE;
+	else die("ERROR: Unknown database TLS directive");
 	if (strlen(value) >= BUFSIZE) die("ERROR: Database TLS cipher policy exceeds the configuration limit");
 	strncopy(destination, value, BUFSIZE);
 	return TRUE;
@@ -190,7 +201,8 @@ int read_spine_config(const char *file) {
 		 * A lone token is a key without a value, or a line that is no
 		 * directive at all; the old %15s split such a line in two. */
 		if (fields == 1) {
-			if (STRIMATCH(name, "ScriptMaxOutputBytes") || STRIMATCH(name, "ScriptCpuSeconds") || STRIMATCH(name, "ScriptMemoryMB"))
+			if (STRIMATCH(name, "ScriptMaxOutputBytes") || STRIMATCH(name, "ScriptCpuSeconds") || STRIMATCH(name, "ScriptMemoryMB") ||
+				is_tls_directive(name))
 				(void) apply_config_directive(name, "");
 			if (!set.console.stderr_notty) {
 				fprintf(stderr, "WARNING: Directive without a value on line %d of %s\n", line, display_file);

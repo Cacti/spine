@@ -17,7 +17,6 @@
 spine_permits_t available_threads;
 spine_permits_t available_scripts;
 double start_time;
-double total_time;
 config_t set;
 char config_paths[CONFIG_PATHS][BUFSIZE];
 int *debug_devices;

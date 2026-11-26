@@ -43,20 +43,16 @@ static const char *count_sequence[8];
 static int count_sequence_length;
 static int count_sequence_next;
 static int started_threads[8];
-static int permit_errors[16];
-static int permit_error_count;
-static int permit_error_next;
-static const spine_permits_t *failing_permit;
+static int sleeps;
 static int start_statuses[8];
 static int start_status_count;
 static int start_calls;
 static size_t failing_allocation;
 static size_t failing_array_count;
 
-static int controlled_try_acquire(spine_permits_t *permits) {
-	if (failing_permit != NULL && permits == failing_permit) return EAGAIN;
-	if (permit_error_next < permit_error_count) return permit_errors[permit_error_next++];
-	return spine_permits_try_acquire(permits);
+static void counted_sleep(unsigned int microseconds) {
+	sleeps++;
+	spine_sleep_usec(microseconds);
 }
 
 static int controlled_start(spine_worker_set_t *workers, const pthread_attr_t *attributes,
@@ -125,7 +121,7 @@ static void *controlled_calloc(size_t count, size_t size) {
 	return calloc(count, size);
 }
 
-#define spine_permits_try_acquire controlled_try_acquire
+#define spine_sleep_usec counted_sleep
 #define spine_worker_set_start controlled_start
 #define db_query controlled_query
 #define mysql_fetch_row controlled_fetch_row
@@ -141,7 +137,7 @@ static void *controlled_calloc(size_t count, size_t size) {
 #undef mysql_fetch_row
 #undef db_query
 #undef spine_worker_set_start
-#undef spine_permits_try_acquire
+#undef spine_sleep_usec
 
 static int workers_setup(void **state) {
 	(void) state;
@@ -152,9 +148,7 @@ static int workers_setup(void **state) {
 	count_sequence_length = 0;
 	count_sequence_next = 0;
 	memset(started_threads, 0, sizeof(started_threads));
-	permit_error_count = 0;
-	permit_error_next = 0;
-	failing_permit = NULL;
+	sleeps = 0;
 	start_status_count = 0;
 	start_calls = 0;
 	failing_allocation = 0;
@@ -172,40 +166,58 @@ static int workers_teardown(void **state) {
 	return 0;
 }
 
-/* Ten refusals in a row, including errors that are not plain contention, are
- * waited out while the poll interval has room for it. */
-static void test_permit_wait_survives_a_run_of_refusals(void **state) {
+static void *release_after_a_pause(void *permits) {
+	spine_sleep_usec(50000);
+	assert_int_equal(spine_permits_release(permits), 0);
+	return NULL;
+}
+
+/* A busy dispatcher sleeps on the permit, not in a retry loop, and takes the
+ * permit as soon as a worker returns it. */
+static void test_permit_wait_wakes_on_release(void **state) {
+	pthread_t releaser;
+	double begin;
+
 	(void) state;
-	permit_errors[0] = EDEADLK;
-	permit_errors[1] = EIO;
-	for (int i = 2; i < 10; i++) permit_errors[i] = EAGAIN;
-	permit_error_count = 10;
+	assert_int_equal(spine_permits_try_acquire(&available_threads), 0);
+	begin = spine_monotonic_time();
+	assert_int_equal(pthread_create(&releaser, NULL, release_after_a_pause, &available_threads), 0);
 
 	assert_true(wait_for_worker_permit(&available_threads, 1, 1, "Available Thread Lock"));
-	assert_int_equal(permit_error_next, 10);
+	assert_true(spine_monotonic_time() - begin >= 0.04);
+	assert_int_equal(sleeps, 0);
+	assert_int_equal(spine_permits_available(&available_threads), 0);
+	assert_int_equal(pthread_join(releaser, NULL), 0);
 }
 
 static void test_permit_wait_gives_up_when_the_interval_is_spent(void **state) {
+	double begin;
+
 	(void) state;
-	failing_permit = &available_threads;
+	assert_int_equal(spine_permits_try_acquire(&available_threads), 0);
+
+	/* the wait ends a second before the interval does: none is left here */
 	set.poller.poller_interval = 1;
-
-	/* the tenth refusal comes 0.1 s in, and a further full second of waiting
-	 * would not fit in a one second interval */
+	begin = spine_monotonic_time();
 	assert_false(wait_for_worker_permit(&available_threads, 1, 1, "Available Thread Lock"));
+	assert_true(spine_monotonic_time() - begin < 0.5);
 
-	/* an interval that ended before the wait began stops it at the first sleep */
+	/* an interval that ended before the wait began stops it at once */
 	set.poller.poller_interval = 5;
 	start_time = get_time_as_double() - 10;
 	assert_false(wait_for_worker_permit(&available_threads, 1, 1, "Available Thread Lock"));
+
+	/* a free permit is still taken after the deadline */
+	assert_int_equal(spine_permits_release(&available_threads), 0);
+	assert_true(wait_for_worker_permit(&available_threads, 1, 1, "Available Thread Lock"));
+	assert_int_equal(sleeps, 0);
 }
 
 static void test_startup_permit_failure_returns_the_thread_permit(void **state) {
 	spine_permits_t startup;
 
 	(void) state;
-	assert_int_equal(spine_permits_init(&startup, 1), 0);
-	failing_permit = &startup;
+	assert_int_equal(spine_permits_init(&startup, 0), 0);
 	start_time = get_time_as_double() - 10;
 	set.poller.poller_interval = 5;
 
@@ -223,7 +235,7 @@ static void test_worker_start_fails_the_run_when_no_permit_arrives(void **state)
 	(void) state;
 	assert_int_equal(spine_permits_init(&startup, 1), 0);
 	assert_int_equal(pthread_attr_init(&attributes), 0);
-	failing_permit = &available_threads;
+	assert_int_equal(spine_permits_try_acquire(&available_threads), 0);
 	start_time = get_time_as_double() - 10;
 	set.poller.poller_interval = 5;
 	set.exit.exit_code = EXIT_SUCCESS;
@@ -462,7 +474,7 @@ static void test_launch_allocation_failure_is_fatal(void **state) {
 
 int main(void) {
 	const struct CMUnitTest tests[] = {
-		cmocka_unit_test_setup_teardown(test_permit_wait_survives_a_run_of_refusals, workers_setup, workers_teardown),
+		cmocka_unit_test_setup_teardown(test_permit_wait_wakes_on_release, workers_setup, workers_teardown),
 		cmocka_unit_test_setup_teardown(test_permit_wait_gives_up_when_the_interval_is_spent, workers_setup, workers_teardown),
 		cmocka_unit_test_setup_teardown(test_startup_permit_failure_returns_the_thread_permit, workers_setup, workers_teardown),
 		cmocka_unit_test_setup_teardown(test_worker_start_fails_the_run_when_no_permit_arrives, workers_setup, workers_teardown),

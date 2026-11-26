@@ -11,7 +11,7 @@
 static int scenario;
 static int calls;
 static int wait_errno;
-static int permit_failures;
+static int sleeps;
 static size_t failing_allocation;
 static int controlled_wait(int fd, double deadline) {
 	(void) fd;
@@ -22,12 +22,10 @@ static int controlled_wait(int fd, double deadline) {
 	}
 	return scenario == 2 ? 0 : 1;
 }
-static int controlled_acquire(spine_permits_t *permits) {
-	if (permit_failures > 0) {
-		permit_failures--;
-		return EIO;
-	}
-	return spine_permits_try_acquire(permits);
+/* Counts any retry sleep external.c makes; a blocking permit wait makes none. */
+__attribute__((unused)) static void counted_sleep(unsigned int microseconds) {
+	sleeps++;
+	spine_sleep_usec(microseconds);
 }
 static void *controlled_malloc(size_t size) {
 	if (size == failing_allocation) {
@@ -62,8 +60,17 @@ static ssize_t controlled_read(int fd, void *buffer, size_t capacity) {
 static int handoff_test;
 static int handoff_disabled;
 static int handoff_fd;
+/* Starts the script directly while the policy stays set, so a test can
+ * apply a resource policy without the resource helper binary. */
+static int popen_without_helper;
 static int controlled_popen(const char *command, const char *type) {
-	int fd = nft_popen(command, type);
+	unsigned int cpu_seconds = set.php.script_cpu_seconds;
+	unsigned int memory_mb = set.php.script_memory_mb;
+	int fd;
+	if (popen_without_helper) set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	fd = nft_popen(command, type);
+	set.php.script_cpu_seconds = cpu_seconds;
+	set.php.script_memory_mb = memory_mb;
 	if (handoff_test) handoff_fd = fd;
 	return fd;
 }
@@ -82,11 +89,11 @@ static int controlled_pclose(int fd, double deadline) {
 #define nft_pclose_deadline controlled_pclose
 #define spine_wait_readable controlled_wait
 #define read controlled_read
-#define spine_permits_try_acquire controlled_acquire
+#define spine_sleep_usec counted_sleep
 #define malloc controlled_malloc
 #include "../../src/script/external.c"
 #undef malloc
-#undef spine_permits_try_acquire
+#undef spine_sleep_usec
 #undef read
 #undef spine_wait_readable
 #undef nft_popen
@@ -158,21 +165,43 @@ static void test_timeout_without_a_registered_child_is_undefined(void **state) {
 	scenario = 0;
 }
 
-static void test_script_permit_errors_are_retried(void **state) {
+static void *return_script_permit(void *unused) {
+	(void) unused;
+	spine_sleep_usec(50000);
+	assert_int_equal(spine_permits_release(&available_scripts), 0);
+	return NULL;
+}
+
+/* A script waiting for a permit sleeps on it and runs once another script
+ * returns one; with none returned it gives up within its budget. */
+static void test_script_waits_for_a_returned_permit(void **state) {
 	host_t host = {.id = 1};
+	pthread_t releaser;
 	char *result;
+	double begin;
 	(void) state;
-	scenario = calls = 0;
+	scenario = calls = sleeps = 0;
 	set.php.script_timeout = 5;
 	set.php.script_max_output = set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
-	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
-	permit_failures = 2;
+	assert_int_equal(spine_permits_init(&available_scripts, 0), 0);
+	assert_int_equal(pthread_create(&releaser, NULL, return_script_permit, NULL), 0);
 
 	result = exec_poll(&host, "/bin/echo 42", 1, "DS");
-	assert_int_equal(permit_failures, 0);
 	assert_string_equal(result, "42");
 	free(result);
+	assert_int_equal(sleeps, 0);
+	assert_int_equal(pthread_join(releaser, NULL), 0);
 	assert_int_equal(spine_permits_available(&available_scripts), 1);
+
+	/* 15 tries 10 ms apart per second of timeout, less the first sleep */
+	assert_int_equal(spine_permits_try_acquire(&available_scripts), 0);
+	set.php.script_timeout = 1;
+	begin = spine_monotonic_time();
+	result = exec_poll(&host, "/bin/echo 42", 1, "DS");
+	assert_string_equal(result, "U");
+	free(result);
+	assert_true(spine_monotonic_time() - begin >= 0.13);
+	assert_int_equal(spine_permits_available(&available_scripts), 0);
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
@@ -267,8 +296,9 @@ static void test_long_command_is_an_invalid_item(void **state) {
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
 
-/* A script may print its value, close stdout and keep working. It must be
- * allowed to finish inside script_timeout instead of being killed at EOF. */
+/* Under a resource policy a script may print its value, close stdout and
+ * keep working. It must be allowed to finish inside script_timeout instead
+ * of being killed at EOF. */
 static void test_script_finishes_after_closing_its_output(void **state) {
 	host_t host = {.id = 1};
 	char directory[] = "spine-script-grace-XXXXXX";
@@ -285,7 +315,11 @@ static void test_script_finishes_after_closing_its_output(void **state) {
 	snprintf(saved, sizeof(saved), "%s/saved", directory);
 	snprintf(command, sizeof(command), "/bin/echo 42; exec >&-; sleep 0.05; echo saved > %s", saved);
 
+	set.php.script_cpu_seconds = 5;
+	popen_without_helper = TRUE;
 	result = exec_poll(&host, command, 1, "DS");
+	popen_without_helper = FALSE;
+	set.php.script_cpu_seconds = 0;
 	assert_string_equal(result, "42");
 	free(result);
 	assert_int_equal(access(saved, F_OK), 0);
@@ -309,11 +343,48 @@ static void test_lingering_script_is_bounded_by_its_deadline(void **state) {
 	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
 
 	start = spine_monotonic_time();
+	set.php.script_cpu_seconds = 5;
+	popen_without_helper = TRUE;
 	result = exec_poll(&host, "/bin/echo 42; exec >&-; trap '' TERM; while :; do sleep 1; done", 1, "DS");
+	popen_without_helper = FALSE;
+	set.php.script_cpu_seconds = 0;
 	assert_true(spine_monotonic_time() - start < set.php.script_timeout + 1.0);
 	assert_string_equal(result, "U");
 	free(result);
 	for (attempts = 0; attempts < 100 && nft_abandoned_pending() != 0; attempts++) usleep(20000);
+	assert_int_equal(nft_abandoned_pending(), 0);
+	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
+}
+
+/* An output cap alone is enforced by the read: the exit status stays
+ * unused, so a script that prints its value and exits non-zero, or keeps
+ * running after closing stdout, keeps its value and is not waited for. */
+static void test_output_cap_alone_ignores_the_exit_status(void **state) {
+	host_t host = {.id = 1};
+	double start;
+	char *result;
+	int attempts;
+	(void) state;
+	scenario = calls = 0;
+	set.php.script_timeout = 2;
+	set.php.script_max_output = 8;
+	set.php.script_cpu_seconds = set.php.script_memory_mb = 0;
+	assert_int_equal(spine_permits_init(&available_scripts, 1), 0);
+
+	/* read() is the fixture's: the first call of each poll returns "42" */
+	result = exec_poll(&host, "/bin/echo 42; exit 3", 1, "DS");
+	assert_string_equal(result, "42");
+	free(result);
+
+	calls = 0;
+	start = spine_monotonic_time();
+	result = exec_poll(&host, "/bin/echo 42; exec 1>&-; sleep 3", 1, "DS");
+	assert_true(spine_monotonic_time() - start < 0.5);
+	assert_string_equal(result, "42");
+	free(result);
+
+	set.php.script_max_output = 0;
+	for (attempts = 0; attempts < 200 && nft_abandoned_pending() != 0; attempts++) usleep(20000);
 	assert_int_equal(nft_abandoned_pending(), 0);
 	assert_int_equal(spine_permits_destroy(&available_scripts), 0);
 }
@@ -348,9 +419,10 @@ static void test_unlimited_lingering_script_is_not_waited_for(void **state) {
 }
 
 int main(void) {
-	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_unlimited_read_reports_wait_failures), cmocka_unit_test(test_timeout_without_a_registered_child_is_undefined), cmocka_unit_test(test_script_permit_errors_are_retried), cmocka_unit_test(test_result_allocation_failure_is_fatal),
+	const struct CMUnitTest tests[] = {cmocka_unit_test(test_limited_read_outcomes), cmocka_unit_test(test_unlimited_read_reports_wait_failures), cmocka_unit_test(test_timeout_without_a_registered_child_is_undefined), cmocka_unit_test(test_script_waits_for_a_returned_permit), cmocka_unit_test(test_result_allocation_failure_is_fatal),
 		cmocka_unit_test(test_suffix_failure_preserves_buffer_ownership), cmocka_unit_test(test_close_handoff_defers_cancellation), cmocka_unit_test(test_long_command_is_an_invalid_item),
 		cmocka_unit_test(test_script_finishes_after_closing_its_output), cmocka_unit_test(test_lingering_script_is_bounded_by_its_deadline),
+		cmocka_unit_test(test_output_cap_alone_ignores_the_exit_status),
 		cmocka_unit_test(test_unlimited_lingering_script_is_not_waited_for)};
 	return cmocka_run_group_tests(tests, NULL, NULL);
 }

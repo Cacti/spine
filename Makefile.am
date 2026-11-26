@@ -298,7 +298,7 @@ tests_unit_test_poll_host_LDFLAGS = \
 	-Wl,--wrap=db_acquire_lease -Wl,--wrap=db_release_lease \
 	-Wl,--wrap=db_free_result -Wl,--wrap=mysql_num_rows -Wl,--wrap=mysql_fetch_row \
 	-Wl,--wrap=snmp_host_init -Wl,--wrap=snmp_host_cleanup -Wl,--wrap=snmp_get_base \
-	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi \
+	-Wl,--wrap=snmp_get -Wl,--wrap=snmp_get_allow_fail -Wl,--wrap=snmp_get_multi -Wl,--wrap=snmp_get_checked \
 	-Wl,--wrap=ping_host -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=strdup
 
 # Includes src/poller/availability.c directly so its socket calls can be steered; see the file.
@@ -397,7 +397,8 @@ tests_unit_test_platform_faults_CPPFLAGS = $(AM_CPPFLAGS)
 if HAVE_LINKER_WRAP
 tests_unit_test_platform_faults_CPPFLAGS += -DSPINE_PLATFORM_FAULT_WRAPS
 tests_unit_test_platform_faults_LDFLAGS = -Wl,--wrap=nanosleep -Wl,--wrap=clock_gettime \
-	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init
+	-Wl,--wrap=pthread_mutex_lock -Wl,--wrap=pthread_mutex_unlock -Wl,--wrap=pthread_attr_init \
+	-Wl,--wrap=pthread_cond_init
 endif
 
 TEST_EXTENSIONS = .sh

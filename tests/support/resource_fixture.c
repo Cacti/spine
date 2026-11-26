@@ -41,6 +41,21 @@ int main(int argc, char *argv[]) {
 		sleep(30);
 		return 0;
 	}
+	if (strcmp(argv[1], "detach") == 0) {
+		/* the value is complete once the script exits, but a helper it left
+		 * behind keeps running without the output pipe */
+		if (write(STDOUT_FILENO, "42", 2) != 2) return 2;
+		if (close(STDOUT_FILENO) != 0) return 2;
+		switch (fork()) {
+			case -1:
+				return 2;
+			case 0:
+				sleep(5);
+				_exit(0);
+			default:
+				return 0;
+		}
+	}
 	if (strcmp(argv[1], "chunked") == 0) {
 		if (write(STDOUT_FILENO, "4", 1) != 1) return 2;
 		usleep(100000);

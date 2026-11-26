@@ -151,7 +151,9 @@ int spine_spawnattr_sigpipe_default(posix_spawnattr_t *attr) {
 	return 0;
 }
 
-/*! \fn static int reap_child_bounded(pid_t pid, int *pstat, int attempts)
+/*! \fn static int reap_child_guarded(pid_t pid, pid_t *owned, int *pstat, int attempts, pthread_mutex_t *mutex)
+ *  \brief the spine_reap_child_owned() loop; mutex guards each waitpid() and
+ *  the clearing of *owned once pid is collected
  *  \return 0 when reaped, 1 when still running after attempts, -1 on error
  */
 static int reap_child_guarded(pid_t pid, pid_t *owned, int *pstat, int attempts, pthread_mutex_t *mutex) {
@@ -179,14 +181,12 @@ static int reap_child_guarded(pid_t pid, pid_t *owned, int *pstat, int attempts,
 		/* Bounded so a stream of caught signals cannot spin this call
 		 * forever instead of returning within its attempt budget. */
 		eintr_budget = 1000;
-		if (mutex != NULL) {
-			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
-			pthread_mutex_lock(mutex);
-		}
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+		pthread_mutex_lock(mutex);
 		do {
 			waited = waitpid(pid, pstat, WNOHANG);
 		} while (waited < 0 && errno == EINTR && --eintr_budget > 0 && spine_monotonic_time() < deadline);
-		if (mutex != NULL) {
+		{
 			int saved_errno = errno;
 			if (waited == pid || (waited < 0 && errno == ECHILD)) *owned = 0;
 			pthread_mutex_unlock(mutex);
@@ -234,10 +234,6 @@ static int reap_child_guarded(pid_t pid, pid_t *owned, int *pstat, int attempts,
 	}
 
 	return 1;
-}
-
-int spine_reap_child_bounded(pid_t pid, int *pstat, int attempts) {
-	return reap_child_guarded(pid, NULL, pstat, attempts, NULL);
 }
 
 int spine_reap_child_owned(pid_t *pid, int *pstat, int attempts, pthread_mutex_t *mutex) {

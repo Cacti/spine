@@ -15,22 +15,13 @@
 #include "internal/common.h"
 #include "app/spine.h"
 
-static int acquire_script_permit(const host_t *host) {
+/* Blocks until another script returns its permit. The wait keeps the
+ * earlier retry budget, 15 tries 10 ms apart per second of script timeout:
+ * 0.15 s per second less the first try's sleep. */
+static int acquire_script_permit(void) {
 	if (set.php.script_timeout <= 0) return EINVAL;
-	/* Preserve the existing retry budget without signed multiplication overflow. */
-	uint64_t attempts = (uint64_t) set.php.script_timeout * 15;
-	int error = EAGAIN;
-	for (uint64_t retry = 1; retry < attempts; retry++) {
-		error = spine_permits_try_acquire(&available_scripts);
-		if (error == 0) return 0;
-		if (error == EAGAIN || error == EWOULDBLOCK) {
-			SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_DEVDBG, ("Device[%i] DEBUG: Pausing as unable to obtain a script execution lock", host->id));
-		} else {
-			SPINE_LOG_DEVICE(host->id, POLLER_VERBOSITY_DEVDBG, ("Device[%i] DEBUG: Pausing as error %d whilst obtaining a script execution lock", host->id, error));
-		}
-		spine_sleep_usec(10000);
-	}
-	return error;
+	double budget = ((double) set.php.script_timeout * 15 - 1) * 0.01;
+	return spine_permits_acquire_until(&available_scripts, spine_monotonic_time() + budget);
 }
 
 typedef struct {
@@ -40,6 +31,10 @@ typedef struct {
 	const char *type;
 } script_result_context_t;
 
+/* Spine itself never cancels a thread: termination ends the process. The
+ * cleanup handlers here, in nft_popen.c and in the worker paths keep a
+ * thread cancelled by a future caller from leaking a script, a descriptor
+ * or a permit; they are not reached today. */
 typedef struct {
 	/* glibc cleanup unwinds with setjmp/longjmp. Preserve state changed after
 	 * pthread_cleanup_push even when the compiler keeps ordinary locals in registers. */
@@ -197,7 +192,7 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 
 	pthread_cleanup_push(cancel_script_read, &execution_owner);
 
-	sem_err = acquire_script_permit(current_host);
+	sem_err = acquire_script_permit();
 
 	if (sem_err) {
 		SPINE_LOG(("ERROR: Device[%i]: Failed to obtain a script execution lock (error %d)", current_host->id, sem_err));
@@ -239,7 +234,10 @@ char *exec_poll(host_t *current_host, char *command, int id, const char *type) {
 				script_read_owner_t owner = {cmd_fd, NULL, FALSE, NULL};
 				int child_status;
 				int cancel_state;
-				const bool limited = set.php.script_max_output != 0 || set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0;
+				/* A resource limit can kill the script part way through its
+				 * output, so only then is the exit status part of the result.
+				 * An output cap alone is enforced by the read. */
+				const bool limited = set.php.script_cpu_seconds != 0 || set.php.script_memory_mb != 0;
 				pthread_cleanup_push(cancel_script_read, &owner);
 				(void) read_script_result(&context, cmd_fd, deadline, result_string);
 

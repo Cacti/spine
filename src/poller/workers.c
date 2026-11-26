@@ -40,30 +40,21 @@
  *  \return 0 if SUCCESS, or -1 if FAILED
  *
  */
+/* Blocks on the permit until one is released, so the dispatcher starts the
+ * next worker as soon as a slot frees. As the earlier retry loop did, the
+ * wait gives up one second before the polling interval ends, but always
+ * allows 0.1 s while the interval lasts: a worker that has just started
+ * returns the startup permit within that. start_time is a wall-clock instant,
+ * so the time left is moved onto the monotonic clock. */
 static bool wait_for_worker_permit(spine_permits_t *permit, int host_id, int host_thread, const char *label) {
-	int retries = 0;
-	for (;;) {
-		int error = spine_permits_try_acquire(permit);
-		if (error == 0) return TRUE;
-		if (error == EDEADLK) {
-			SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] would have deadlocked acquiring %s", host_id, host_thread, label));
-		} else if (error != EINTR && error != EAGAIN) {
-			SPINE_LOG_DEVDBG(("WARNING: Device[%i] HT[%i] errored with %d while acquiring %s", host_id, host_thread, error, label));
-		}
-		if (++retries == 10) {
-			if (get_time_as_double() - start_time + 1 > set.poller.poller_interval) {
-				SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring %s", host_id, host_thread, label));
-				return FALSE;
-			}
-			retries = 0;
-		}
-		spine_sleep_usec(10000);
-		total_time = get_time_as_double();
-		if (total_time - start_time > set.poller.poller_interval) {
-			SPINE_LOG(("ERROR: Device[%i] HT[%i] Spine Timed Out While Processing Devices (%s)", host_id, host_thread, label));
-			return FALSE;
-		}
-	}
+	double now = get_time_as_double();
+	double end = start_time + set.poller.poller_interval;
+	double give_up = end - 1;
+
+	if (give_up < now + 0.1) give_up = now + 0.1 < end ? now + 0.1 : end;
+	if (spine_permits_acquire_until(permit, spine_monotonic_time() + (give_up - now)) == 0) return TRUE;
+	SPINE_LOG(("ERROR: Device[%i] HT[%i] polling timed out while acquiring %s", host_id, host_thread, label));
+	return FALSE;
 }
 
 static bool acquire_worker_permits(spine_permits_t *startup, int host_id, int host_thread) {
@@ -343,6 +334,9 @@ void launch_poll_workers(MYSQL *mysql, MYSQL_RES *result, int num_rows,
 			poller_details->threads_complete = 0;
 			poller_details->output_failed = FALSE;
 			poller_details->poll_failed = FALSE;
+			poller_details->verdict = DEVICE_VERDICT_PENDING;
+			poller_details->verdict_ignore_host = FALSE;
+			poller_details->verdict_spike_kill = FALSE;
 
 			thread_mutex_lock(LOCK_THDET);
 			details[device_counter] = poller_details;

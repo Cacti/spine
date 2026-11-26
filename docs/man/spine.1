@@ -76,9 +76,11 @@ the wall-clock deadline; a CPU limit does not replace it.
 .B ScriptMaxOutputBytes
 Maximum total stdout bytes, from 1 through RESULTS_BUFFER minus 1.
 With any limit enabled, Spine reads until EOF within the wall-clock deadline.
-Excess output, empty output, an unfinished command, or a failed limited child
-produces an undefined result. The legacy single-read behavior remains when all
-limits are disabled.
+Excess output, empty output or output unfinished at the deadline produces an
+undefined result. With ScriptCpuSeconds or ScriptMemoryMB set, Spine also waits
+for the command to exit within the deadline, and a command that fails or is
+stopped by its limit produces an undefined result. The legacy single-read
+behavior remains when all limits are disabled.
 .TP
 .B ScriptCpuSeconds
 Per-process CPU-time limit in whole seconds, inherited by descendants.

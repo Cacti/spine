@@ -110,6 +110,42 @@ static void run_uptime_cache_case(MYSQL *mysql) {
 	free(work);
 }
 
+/* Two plain SNMP assertions share one request to the real agent; each row
+ * must be judged on its own OID's value. */
+static void run_batched_reindex_case(MYSQL *mysql, const char *location, int commands) {
+	char query[LRG_BUFSIZE];
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_reindex WHERE host_id=45"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_command WHERE command='45:7' OR command='45:8'"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output WHERE local_data_id=801"));
+	assert(db_insert(mysql, LOCAL, "DELETE FROM poller_output_boost WHERE local_data_id=801"));
+	spine_snprintf(query, sizeof(query), "INSERT INTO poller_reindex(host_id,data_query_id,action,op,assert_value,arg1) VALUES (45,7,%d,'=','regression','.1.3.6.1.2.1.1.4.0'),(45,7,%d,'=','%s','.1.3.6.1.2.1.1.6.0')", POLLER_ACTION_SNMP, POLLER_ACTION_SNMP, location);
+	assert(db_insert(mysql, LOCAL, query));
+	reindex_test_work_t *work = calloc(1, sizeof(*work));
+	assert(work != NULL);
+	work->thread.host_id = 45;
+	work->thread.host_thread = 1;
+	work->thread.host_threads = 1;
+	work->thread.host_data_ids = 1;
+	work->thread.host_time_double = get_time_as_double();
+	STRNCOPY(work->thread.host_time, "1791158400");
+	poller_thread_t **owned_details = calloc(1, sizeof(*owned_details));
+	assert(owned_details != NULL);
+	owned_details[0] = &work->thread;
+	poller_thread_t **prior_details = details;
+	details = owned_details;
+	pthread_t worker;
+	start_test_worker(&worker, run_reindex_worker, work);
+	assert(pthread_join(worker, NULL) == 0);
+	assert(work->thread.complete && work->errors == 0);
+	assert(reindex_count(mysql, "SELECT COUNT(*) FROM poller_command WHERE poller_id=1 AND action=1 AND command='45:7'") == (unsigned long) commands);
+	assert(reindex_count(mysql, "SELECT COUNT(*) FROM poller_reindex WHERE host_id=45 AND arg1='.1.3.6.1.2.1.1.4.0' AND assert_value='regression'") == 1);
+	assert(reindex_count(mysql, "SELECT COUNT(*) FROM poller_reindex WHERE host_id=45 AND arg1='.1.3.6.1.2.1.1.6.0' AND assert_value='isolated-regression-agent'") == 1);
+	assert(reindex_count(mysql, "SELECT COUNT(*) FROM poller_output WHERE local_data_id=801 AND output='123'") == 1);
+	details = prior_details;
+	free(owned_details);
+	free(work);
+}
+
 void test_additional_reindex_contracts(MYSQL *mysql) {
 	const char *agent = getenv("SPINE_TEST_SNMP_HOST");
 	assert(agent != NULL && agent[0] != '\0');
@@ -153,6 +189,8 @@ void test_additional_reindex_contracts(MYSQL *mysql) {
 	run_reindex_case(mysql, POLLER_ACTION_SNMP, "invalid-regression-oid", "=", "previous", "previous", 0);
 	run_reindex_case(mysql, POLLER_ACTION_SNMP_COUNT, ".1.3.6.1.2.1.1.6", "=", "0", "1", 1);
 	run_uptime_cache_case(mysql);
+	run_batched_reindex_case(mysql, "isolated-regression-agent", 0);
+	run_batched_reindex_case(mysql, "previous", 1);
 	assert(db_insert(mysql, LOCAL, "UPDATE host SET snmp_community='' WHERE id=45"));
 	run_reindex_case(mysql, POLLER_ACTION_SNMP, ".1.3.6.1.2.1.1.6.0", "=", "previous", "previous", 0);
 

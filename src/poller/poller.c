@@ -151,11 +151,67 @@ static void release_poll_connections(const poller_thread_t *work,
 
 
 
+/* Partitions of one device wait for its first partition's verdict on this
+ * condition variable, paired with LOCK_THDET. It runs on the monotonic clock
+ * where the platform allows; see spine_cond_init_monotonic(). */
+static pthread_cond_t device_verdict_cond;
+static pthread_once_t device_verdict_once = PTHREAD_ONCE_INIT;
+
+static void init_device_verdict_cond(void) {
+	if (spine_cond_init_monotonic(&device_verdict_cond) != 0) die("ERROR: Unable to initialize the device verdict condition");
+}
+
+/* Called by the first partition exactly once. Later partitions are launched
+ * after it, so none can miss the broadcast; they recheck the record anyway. */
+static void publish_device_verdict(const poller_thread_t *work, int verdict, bool ignore_host, bool spike_kill) {
+	extern poller_thread_t **details;
+	poller_thread_t *device = details[work->device_counter];
+
+	pthread_once(&device_verdict_once, init_device_verdict_cond);
+	thread_mutex_lock(LOCK_THDET);
+	device->verdict = verdict;
+	device->verdict_ignore_host = ignore_host;
+	device->verdict_spike_kill = spike_kill;
+	pthread_cond_broadcast(&device_verdict_cond);
+	thread_mutex_unlock(LOCK_THDET);
+}
+
+/* A later partition waits, holding no lease or session, until the first
+ * partition has pinged the device and run its reindex checks, or until the
+ * polling deadline. The first partition was launched earlier and needs
+ * nothing this one holds, so the wait cannot deadlock. On a timeout or NONE
+ * the partition checks the device itself, as every partition used to. */
+static int await_device_verdict(const poller_thread_t *work, bool *ignore_host, int *spike_kill) {
+	extern poller_thread_t **details;
+	const poller_thread_t *device = details[work->device_counter];
+	double deadline = spine_monotonic_time() + (start_time + set.poller.poller_interval - get_time_as_double());
+	int verdict;
+
+	pthread_once(&device_verdict_once, init_device_verdict_cond);
+	thread_mutex_lock(LOCK_THDET);
+	while (device->verdict == DEVICE_VERDICT_PENDING && spine_monotonic_time() < deadline) {
+		spine_cond_wait_until(&device_verdict_cond, get_lock(LOCK_THDET), deadline);
+	}
+	verdict = device->verdict;
+	*ignore_host = device->verdict_ignore_host;
+	*spike_kill = device->verdict_spike_kill;
+	thread_mutex_unlock(LOCK_THDET);
+
+	if (verdict == DEVICE_VERDICT_PENDING) {
+		SPINE_LOG(("WARNING: Device[%i] HT[%i] the first partition gave no availability verdict before the polling deadline; checking the device here", work->host_id, work->host_thread));
+	} else if (verdict == DEVICE_VERDICT_READY) {
+		SPINE_LOG_DEVICE(work->host_id, POLLER_VERBOSITY_DEBUG, ("Device[%i] HT[%i] DEBUG: Using the first partition's availability and reindex verdict", work->host_id, work->host_thread));
+	}
+	return verdict;
+}
+
 /* A device deleted since selection returns quietly. A failed device query
  * fails the device: treating it as an ignored host would still advance its
- * schedule and drop the samples it never collected. */
+ * schedule and drop the samples it never collected. A later partition given
+ * the first partition's verdict loads the device but neither opens an SNMP
+ * session nor pings it. */
 static poll_host_load_t load_poll_host(MYSQL *mysql, const poller_queries_t *queries,
-	host_t *host, ping_t *ping, const poller_thread_t *work) {
+	host_t *host, ping_t *ping, const poller_thread_t *work, const bool *verdict_ignore_host) {
 	/* host_id=0 denotes a data source without a device. */
 	if (!work->host_id) {
 		host->id = 0;
@@ -181,6 +237,10 @@ static poll_host_load_t load_poll_host(MYSQL *mysql, const poller_queries_t *que
 	}
 	load_host_metadata(mysql, row, host, work);
 	db_free_result(result);
+	if (verdict_ignore_host != NULL) {
+		host->ignore_host = *verdict_ignore_host;
+		return POLL_HOST_LOADED;
+	}
 	initialize_host_snmp(host);
 	bool include_system_information = refresh_host_availability(mysql, host, ping, work->host_thread);
 	if (work->host_thread == 1) {
@@ -326,10 +386,22 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	MYSQL *mysqlr = NULL;
 	MYSQL_RES *result = NULL;
 
+	/* With more than one partition, the first owns the availability and
+	 * reindex checks and publishes them to the others. Device 0 has one. */
+	bool shared_checks = work->host_threads > 1 && host_id != 0;
+	bool owns_checks = shared_checks && host_thread == 1;
+	bool verdict_published = FALSE;
+	bool verdict_ignore_host = FALSE;
+	bool shared_verdict = FALSE;
+
 	/* A device's bounded I/O completes ownership transfers before cancellation
 	 * is delivered. Helpers may allocate private resources before returning;
 	 * cancellation must not strand those resources or a database lease. */
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancel_state);
+	if (shared_checks && !owns_checks) {
+		shared_verdict = await_device_verdict(work, &verdict_ignore_host, &spike_kill) == DEVICE_VERDICT_READY;
+		if (!shared_verdict) spike_kill = FALSE;
+	}
 	if (db_acquire_lease(LOCAL, &local_lease)) local_cnn = local_lease.connection;
 	if (local_cnn != NULL && set.poller.poller_id > 1 && set.poller.mode == REMOTE_ONLINE) {
 		if (db_acquire_lease(REMOTE, &remote_lease)) remote_cnn = remote_lease.connection;
@@ -341,6 +413,7 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 
 	if (local_cnn == NULL) {
 		SPINE_LOG(("ERROR: Device[%i] HT[%i] No database connection available for polling", host_id, host_thread));
+		if (owns_checks) publish_device_verdict(work, DEVICE_VERDICT_NONE, FALSE, FALSE);
 		complete_poll_host(NULL, NULL, work, &error_context, FALSE, TRUE, poll_time);
 		mysql_thread_end();
 		pthread_setcancelstate(old_cancel_state, NULL);
@@ -378,7 +451,7 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	snprintf(ping->snmp_status, 50, "down");
 	snprintf(ping->snmp_response, SMALL_BUFSIZE, "SNMP not performed due to setting or ping result");
 
-	loaded = load_poll_host(mysql, &queries, host, ping, work);
+	loaded = load_poll_host(mysql, &queries, host, ping, work, shared_verdict ? &verdict_ignore_host : NULL);
 	if (loaded == POLL_HOST_FAILED) {
 		complete_poll_host(mysql, &queries, work, &error_context, FALSE, TRUE, poll_time);
 	}
@@ -390,8 +463,15 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 		goto finish_poll;
 	}
 
-	const reindex_evaluation_t evaluation = {mysql, mysqlr, host, work, &errors, &spike_kill};
-	poll_failed = !poll_host_reindex(host, reindex, queries.reindex, &evaluation);
+	if (!shared_verdict) {
+		const reindex_evaluation_t evaluation = {mysql, mysqlr, host, work, &errors, &spike_kill};
+		poll_failed = !poll_host_reindex(host, reindex, queries.reindex, &evaluation);
+		/* A failed reindex query leaves later partitions to check for themselves. */
+		if (owns_checks) {
+			publish_device_verdict(work, poll_failed ? DEVICE_VERDICT_NONE : DEVICE_VERDICT_READY, host->ignore_host, spike_kill);
+			verdict_published = TRUE;
+		}
+	}
 
 	/* calculate the number of poller items to poll this cycle */
 	num_rows = 0;
@@ -423,6 +503,8 @@ void poll_host(const poller_thread_t *work, int *host_errors) {
 	report_completion = TRUE;
 
 finish_poll:
+	/* Every early exit of the first partition still releases its partitions. */
+	if (owns_checks && !verdict_published) publish_device_verdict(work, DEVICE_VERDICT_NONE, FALSE, FALSE);
 	if (host != NULL && host->snmp.session != NULL) {
 		snmp_host_cleanup(host->snmp.session);
 		host->snmp.session = NULL;

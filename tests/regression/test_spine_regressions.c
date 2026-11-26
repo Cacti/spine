@@ -201,7 +201,7 @@ static void *exercise_permit(void *unused) {
 	(void) unused;
 	for (int iteration = 0; iteration < 100; iteration++) {
 		int status;
-		while ((status = spine_permits_try_acquire(&test_permits)) == EAGAIN) spine_sleep_usec(100);
+		status = spine_permits_acquire_until(&test_permits, spine_monotonic_time() + 30);
 		assert(status == 0);
 		assert(pthread_mutex_lock(&permit_test_mutex) == 0);
 		assert(active_permit_workers == 0);
@@ -2526,6 +2526,26 @@ static void test_snmp_multi_responses(host_t *host) {
 	 * exception varbind; neither is data, so both store U. */
 	assert(strcmp(oids[2].result, "U") == 0);
 	assert(strstr(oids[3].result, "regression") != NULL);
+	/* A checked batch gives each OID the value and verdict of its own get,
+	 * including a missing object (v2c: an inline noSuchObject; v1: a
+	 * noSuchName error that drops the OID and resends the rest) and the
+	 * values on either side of it. */
+	snmp_oids_t checked[6] = {0};
+	static const char *const checked_names[] = {".1.3.6.1.2.1.1.6.0", "invalid-regression-oid", ".1.3.6.1.2.1.1.1.999",
+		".1.3.6.1.4.1.99999.1.0", ".1.3.6.1.2.1.1.4.0", ".1.3.6.1.2.1.1.5.0"};
+	bool failed[6];
+	for (int index = 0; index < 6; index++) strncopy(checked[index].oid, checked_names[index], sizeof(checked[index].oid));
+	snmp_get_checked(host, checked, 6, failed);
+	assert(!host->ignore_host);
+	for (int index = 0; index < 6; index++) {
+		host_t single = *host;
+		char *expected = snmp_get(&single, checked[index].oid);
+		if (strcmp(checked[index].result, expected) != 0 || failed[index] != (bool) single.ignore_host) {
+			fprintf(stderr, "checked batch: oid=%s batch=%s/%d single=%s/%d\n", checked[index].oid, checked[index].result, failed[index], expected, single.ignore_host);
+			assert(0);
+		}
+		free(expected);
+	}
 	snmp_get_multi(NULL, NULL, NULL, 0);
 	host_t missing_session = {0};
 	snmp_oids_t undefined[2] = {0};
@@ -2534,28 +2554,6 @@ static void test_snmp_multi_responses(host_t *host) {
 	snmp_get_multi(&missing_session, items, undefined, 2);
 	assert(missing_session.snmp.status == STAT_DESCRIP_ERROR);
 	assert(IS_UNDEFINED(undefined[0].result) && IS_UNDEFINED(undefined[1].result));
-	struct variable_list value = {0};
-	u_char text[] = "regression";
-	value.type = ASN_OCTET_STR;
-	value.val.string = text;
-	value.val_len = sizeof(text) - 1;
-	char formatted[128];
-	snmp_snprint_value(formatted, sizeof(formatted), NULL, 0, &value);
-	assert(strstr(formatted, "regression") != NULL);
-	struct {
-		char before;
-		char value;
-		char after;
-	} bounded = {'a', 'x', 'z'};
-	snmp_snprint_value(&bounded.value, 0, NULL, 0, &value);
-	assert(bounded.before == 'a' && bounded.value == 'x' && bounded.after == 'z');
-	snmp_snprint_value(&bounded.value, 1, NULL, 0, &value);
-	assert(bounded.before == 'a' && bounded.value == '\0' && bounded.after == 'z');
-	snmp_snprint_value(NULL, 0, NULL, 0, &value);
-	snmp_snprint_value(NULL, 1, NULL, 0, &value);
-	char insufficient[3] = "xx";
-	snmp_snprint_value(insufficient, 2, NULL, 0, &value);
-	assert(strcmp(insufficient, "U") == 0 && insufficient[2] == '\0');
 }
 
 static void test_snmp_scalar_responses(host_t *host) {

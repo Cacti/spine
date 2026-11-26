@@ -87,12 +87,21 @@ void test_execution_policy(void) {
 	expect_script(&host, "/usr/bin/printf 42", "42");
 	expect_script(&host, "/usr/bin/printf 421", "U");
 	expect_script(&host, "/usr/bin/printf ''", "U");
-	expect_script(&host, "/bin/sh -c 'printf 42; exit 7'", "U");
-	expect_script(&host, "/bin/sh -c 'printf 42; exec 1>&-; sleep 30'", "U");
+	/* the output cap is enforced by the read alone, so the exit status is not
+	 * part of the result; output still open at the deadline is undefined, as
+	 * when the outer shell waits on the inner one while holding the pipe */
+	expect_script(&host, "/bin/sh -c 'printf 42; exit 7'", "42");
+	/* a script that closed its output and exited delivers its value without
+	 * waiting for a helper it left running.  A nested /bin/sh cannot show
+	 * this: dash waits for it with the pipe still open, so the read reaches
+	 * the deadline, while bash and the BSD shells exec it */
+	expect_script(&host, "./tests/support/resource_fixture detach", "42");
 	expect_script(&host, "./tests/support/resource_fixture chunked", "42");
 	expect_script(&host, "./tests/support/resource_fixture linger", "U");
 	cancellation_contract(&host);
+	/* a resource limit can stop a script part way, so its exit status counts */
 	set.php.script_cpu_seconds = 1;
+	expect_script(&host, "/bin/sh -c 'printf 42; exit 7'", "U");
 	expect_script(&host, "./tests/support/resource_fixture cpu", "U");
 	expect_script(&host, "./tests/support/resource_fixture limits", "1");
 	set.php.script_executable[0] = '\0';

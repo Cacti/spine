@@ -26,7 +26,6 @@ int num_hosts = 0;
 spine_permits_t available_threads;
 spine_permits_t available_scripts;
 double start_time;
-double total_time;
 
 config_t set;
 php_t *php_processes = NULL;
@@ -50,7 +49,6 @@ _Noreturn void spine_run(int argc, char *argv[]) {
 	int a_threads_value;
 
 	start_time = get_time_as_double();
-	total_time = 0;
 
 	/* Before any option, file or setting is read; see drop_privileges(). */
 	drop_privileges();

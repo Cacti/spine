@@ -67,6 +67,7 @@ typedef enum {
 poll_item_storage_t load_poll_items(MYSQL_RES *result, host_t *host, int num_rows);
 int collect_poll_items(host_t *host, snmp_poll_batch_t *batch, int num_rows, bool spike_kill);
 bool parse_uptime(const char *text, unsigned long long *ticks);
+bool uptime_wrapped(const char *previous_text, const char *current_text, int poller_interval);
 bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 	const reindex_evaluation_t *evaluation);
 void load_host_metadata(MYSQL *mysql, MYSQL_ROW row, host_t *host, const poller_thread_t *work);
