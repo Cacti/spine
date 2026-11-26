@@ -161,7 +161,10 @@ static int controlled_synch_response(void *session, struct snmp_pdu *request, st
 	snmp_free_pdu(request);
 	*response = NULL;
 	if (multi_fault == MULTI_TIMEOUT && requested > 1) return STAT_TIMEOUT;
-	if (requested == 1 && single_timeout_at != 0 && ++single_calls == single_timeout_at) return STAT_TIMEOUT;
+	if (requested == 1 && single_timeout_at != 0) {
+		single_calls++;
+		if (single_calls == single_timeout_at) return STAT_TIMEOUT;
+	}
 	if (multi_fault == MULTI_TOOBIG && requested > 1) {
 		*response = snmp_pdu_create(SNMP_MSG_RESPONSE);
 		assert_non_null(*response);

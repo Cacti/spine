@@ -358,8 +358,9 @@ static void fetch_reindex_batch(host_t *host, MYSQL_ROW *rows, int first, int to
 	if (host->ignore_host || host->snmp.session == NULL || limit < 2) return;
 	while (first + count < total && count < limit && reindex_row_batchable(rows[first + count])) count++;
 	if (count < 2) return;
-	if (batch->oids == NULL && (batch->oids = calloc((size_t) limit, sizeof(*batch->oids))) == NULL) {
-		die("ERROR: Fatal malloc error: reindex.c batch");
+	if (batch->oids == NULL) {
+		batch->oids = calloc((size_t) limit, sizeof(*batch->oids));
+		if (batch->oids == NULL) die("ERROR: Fatal malloc error: reindex.c batch");
 	}
 	for (int index = 0; index < count; index++) {
 		snprintf(batch->oids[index].oid, sizeof(batch->oids[index].oid), "%s", rows[first + index][4]);
@@ -408,7 +409,11 @@ bool poll_host_reindex(host_t *host, reindex_t *reindex, const char *query,
 		MYSQL_ROW *rows = count > 0 ? (MYSQL_ROW *) malloc(sizeof(*rows) * (size_t) count) : NULL;
 		int fetched = 0;
 		if (count > 0 && rows == NULL) die("ERROR: Fatal malloc error: reindex.c rows");
-		while (fetched < count && (rows[fetched] = mysql_fetch_row(result)) != NULL) fetched++;
+		while (fetched < count) {
+			rows[fetched] = mysql_fetch_row(result);
+			if (rows[fetched] == NULL) break;
+			fetched++;
+		}
 		for (int position = 0; position < fetched; position++) {
 			bool unavailable = FALSE;
 			char *value;
