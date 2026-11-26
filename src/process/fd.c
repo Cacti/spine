@@ -185,7 +185,9 @@ static int reap_child_guarded(pid_t pid, pid_t *owned, int *pstat, int attempts,
 		}
 		do {
 			waited = waitpid(pid, pstat, WNOHANG);
-		} while (waited < 0 && errno == EINTR && --eintr_budget > 0 && spine_monotonic_time() < deadline);
+			if (waited >= 0 || errno != EINTR) break;
+			eintr_budget--;
+		} while (eintr_budget > 0 && spine_monotonic_time() < deadline);
 		if (mutex != NULL) {
 			int saved_errno = errno;
 			if (waited == pid || (waited < 0 && errno == ECHILD)) *owned = 0;

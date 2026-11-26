@@ -156,64 +156,66 @@ char *php_cmd(const char *php_command, int php_process) {
 
 	php_process_lock(php_process);
 
-retry:
-	/* Validate every attempt under the same per-slot lock that protects
-	 * close/restart. A
-	 * check before the lock races a recovery and can use a descriptor after it
-	 * has been closed and reused by another thread. A failed restart may also
-	 * leave live descriptors in a BUSY slot, which must not receive a command. */
-	if (php_processes[php_process].php_state != PHP_READY ||
-		php_processes[php_process].php_pid <= 1 ||
-		php_processes[php_process].php_read_fd < 0 ||
-		php_processes[php_process].php_write_fd < 0) {
-		php_process_unlock(php_process);
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server slot is unavailable", php_process));
-		return php_undefined_result();
-	}
-
-	/* Output left over from an earlier request would be read as this
-	 * request's answer, and every later answer would shift by one. */
-	if (php_output_pending(php_processes[php_process].php_read_fd)) {
-		SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent output nobody asked for.  Restarting PHP Script Server", php_process));
-		php_close(php_process);
-		retries++;
-		if (retries < 3 && php_init(php_process) == TRUE &&
-			php_processes[php_process].php_state == PHP_READY) {
-			goto retry;
-		}
-		php_process_unlock(php_process);
-		return php_undefined_result();
-	}
-
-	/* send command to the script server */
-	bytes = php_write_no_sigpipe(php_processes[php_process].php_write_fd, command, strlen(command));
-
-	/* if write status is <= 0 then the script server may be hung */
-	if (bytes <= 0) {
-		char script[SMALL_BUFSIZE];
-
-		php_command_script(command, script, sizeof(script));
-		SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending a command.  Restarting PHP Script Server", php_process));
-		SPINE_LOG_DEBUG(("DEBUG: SS[%i] Unsent command for script '%s'", php_process, script));
-
-		php_close(php_process);
-		retries++;
-		if (retries < 3 && php_init(php_process) == TRUE &&
-			php_processes[php_process].php_state == PHP_READY) {
-			goto retry;
+	for (;;) {
+		/* Validate every attempt under the same per-slot lock that protects
+		 * close/restart. A
+		 * check before the lock races a recovery and can use a descriptor after it
+		 * has been closed and reused by another thread. A failed restart may also
+		 * leave live descriptors in a BUSY slot, which must not receive a command. */
+		if (php_processes[php_process].php_state != PHP_READY ||
+			php_processes[php_process].php_pid <= 1 ||
+			php_processes[php_process].php_read_fd < 0 ||
+			php_processes[php_process].php_write_fd < 0) {
+			php_process_unlock(php_process);
+			SPINE_LOG(("ERROR: SS[%i] PHP Script Server slot is unavailable", php_process));
+			return php_undefined_result();
 		}
 
-		/* allocated only once the retry budget is spent: a successful retry
-		   reassigns result_string below and would orphan an earlier copy */
-		result_string = php_undefined_result();
-	} else {
-		/* read the result from the php_command */
-		result_string = php_readpipe(php_process, command);
-
-		/* check for a null */
-		if (!strlen(result_string)) {
-			SET_UNDEFINED(result_string);
+		/* Output left over from an earlier request would be read as this
+		 * request's answer, and every later answer would shift by one. */
+		if (php_output_pending(php_processes[php_process].php_read_fd)) {
+			SPINE_LOG(("WARNING: SS[%i] The PHP Script Server sent output nobody asked for.  Restarting PHP Script Server", php_process));
+			php_close(php_process);
+			retries++;
+			if (retries < 3 && php_init(php_process) == TRUE &&
+				php_processes[php_process].php_state == PHP_READY) {
+				continue;
+			}
+			php_process_unlock(php_process);
+			return php_undefined_result();
 		}
+
+		/* send command to the script server */
+		bytes = php_write_no_sigpipe(php_processes[php_process].php_write_fd, command, strlen(command));
+
+		/* if write status is <= 0 then the script server may be hung */
+		if (bytes <= 0) {
+			char script[SMALL_BUFSIZE];
+
+			php_command_script(command, script, sizeof(script));
+			SPINE_LOG(("ERROR: SS[%i] PHP Script Server communications lost sending a command.  Restarting PHP Script Server", php_process));
+			SPINE_LOG_DEBUG(("DEBUG: SS[%i] Unsent command for script '%s'", php_process, script));
+
+			php_close(php_process);
+			retries++;
+			if (retries < 3 && php_init(php_process) == TRUE &&
+				php_processes[php_process].php_state == PHP_READY) {
+				continue;
+			}
+
+			/* allocated only once the retry budget is spent: a successful retry
+			   reassigns result_string below and would orphan an earlier copy */
+			result_string = php_undefined_result();
+		} else {
+			/* read the result from the php_command */
+			result_string = php_readpipe(php_process, command);
+
+			/* check for a null */
+			if (!strlen(result_string)) {
+				SET_UNDEFINED(result_string);
+			}
+		}
+		break;
 	}
 
 	php_process_unlock(php_process);

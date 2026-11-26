@@ -155,7 +155,8 @@ static int split_host_spec(const char *spec, int *method, char *address, size_t 
 		}
 	}
 
-	if (host[0] == '[' && (end = strchr(host, ']')) != NULL) {
+	end = host[0] == '[' ? strchr(host, ']') : NULL;
+	if (end != NULL) {
 		ipv6 = TRUE;
 		host = host + 1;
 		length = (size_t) (end - host);

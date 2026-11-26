@@ -231,108 +231,110 @@ int ping_icmp(const host_t *host, ping_t *ping) {
 
 			/* wait for a response on the socket */
 			/* reinitialize fd_set -- select(2) clears bits in place on return */
-			keep_listening:
-				FD_ZERO(&socket_fds);
-				if (icmp_socket >= FD_SETSIZE) {
-					SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
-					snprintf(ping->ping_status, 50, "down");
-					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
-					rc = HOST_DOWN;
-					goto cleanup;
-				}
-				FD_SET(icmp_socket, &socket_fds);
-				/* a stray datagram must not restart the wait, and only Linux
-				 * writes the time left back into the timeval */
-				ping_wait_left(deadline, &timeout);
-				return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+				for (;;) {
+					FD_ZERO(&socket_fds);
+					if (icmp_socket >= FD_SETSIZE) {
+						SPINE_LOG(("ERROR: Device[%i] ICMP socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+						snprintf(ping->ping_status, 50, "down");
+						snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: fd exceeds FD_SETSIZE");
+						rc = HOST_DOWN;
+						goto cleanup;
+					}
+					FD_SET(icmp_socket, &socket_fds);
+					/* a stray datagram must not restart the wait, and only Linux
+					 * writes the time left back into the timeval */
+					ping_wait_left(deadline, &timeout);
+					return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
 
-				if (return_code < 0 && errno == EINTR) {
-					goto keep_listening;
-				}
+					if (return_code < 0 && errno == EINTR) {
+						continue;
+					}
 
-				total_time = (spine_monotonic_time() - begin_time) * one_thousand;
+					total_time = (spine_monotonic_time() - begin_time) * one_thousand;
 
-				if (return_code > 0 && total_time < host_timeout) {
+					if (return_code > 0 && total_time < host_timeout) {
 #if !(defined(__CYGWIN__))
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
+						return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_WAITALL, (struct sockaddr *) &recvname, &fromlen);
 #else
-					return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
+						return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, MSG_PEEK, (struct sockaddr *) &recvname, &fromlen);
 #endif
 
-					if (return_code < 0) {
-						if (errno == EINTR) {
-							/* call was interrupted by some system event */
-
-							if (is_debug_device(host->id)) {
-								SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
-							} else {
-								SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
-							}
-
-							goto keep_listening;
-						}
-					} else {
-						const struct icmp *reply_pkt = NULL;
-						const struct icmp *seen = NULL;
-						spine_icmp_reply_t verdict;
-
-						if (icmp_dgram) {
-							verdict = spine_icmp_classify_dgram_reply((const unsigned char *) socket_reply,
-								return_code, icmp->icmp_seq, &reply_pkt);
-						} else {
-							verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
-								return_code, (uint16_t) (getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
-						}
-
-						if (verdict == SPINE_ICMP_REPLY_NOT_OURS) {
-							/* a middlebox that rewrites ICMP query ids is indistinguishable
-							 * from a dead device once the reply is dropped, so record what
-							 * arrived.  Both classifiers validate the length before they can
-							 * return this, so the header is safe to read here */
-							if (icmp_dgram) {
-								seen = (const struct icmp *) socket_reply;
-							} else {
-								seen = (const struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
-							}
-
-							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int) (getpid() & 0xFFFF), icmp->icmp_seq, seen->icmp_id, seen->icmp_seq));
-						}
-
-						if (verdict != SPINE_ICMP_REPLY_OK && verdict != SPINE_ICMP_REPLY_NOT_ECHO) {
-							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
-							goto keep_listening;
-						}
-
-						if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
-							if (verdict == SPINE_ICMP_REPLY_OK) {
+						if (return_code < 0) {
+							if (errno == EINTR) {
+								/* call was interrupted by some system event */
 
 								if (is_debug_device(host->id)) {
-									SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
+									SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
 								} else {
-									SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
+									SPINE_LOG_DEBUG(("Device[%i] DEBUG: Received EINTR", host->id));
 								}
-								snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
-								snprintf(ping->ping_status, 50, "%.5f", total_time);
-								rc = HOST_UP;
-								goto cleanup;
-							} else {
-								/* received a response other than an echo reply; the
-								 * echo reply may still arrive inside this deadline */
-								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
-								goto keep_listening;
+
+								continue;
 							}
 						} else {
-							/* another host responded */
-							ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
-							goto keep_listening;
+							const struct icmp *reply_pkt = NULL;
+							const struct icmp *seen = NULL;
+							spine_icmp_reply_t verdict;
+
+							if (icmp_dgram) {
+								verdict = spine_icmp_classify_dgram_reply((const unsigned char *) socket_reply,
+									return_code, icmp->icmp_seq, &reply_pkt);
+							} else {
+								verdict = spine_icmp_classify_reply((const unsigned char *) socket_reply,
+									return_code, (uint16_t) (getpid() & 0xFFFF), icmp->icmp_seq, &reply_pkt);
+							}
+
+							if (verdict == SPINE_ICMP_REPLY_NOT_OURS) {
+								/* a middlebox that rewrites ICMP query ids is indistinguishable
+								 * from a dead device once the reply is dropped, so record what
+								 * arrived.  Both classifiers validate the length before they can
+								 * return this, so the header is safe to read here */
+								if (icmp_dgram) {
+									seen = (const struct icmp *) socket_reply;
+								} else {
+									seen = (const struct icmp *) (socket_reply + (((struct ip *) socket_reply)->ip_hl << 2));
+								}
+
+								SPINE_LOG_DEBUG(("DEBUG: Device[%i] Discarded ICMP reply, expected id:%d seq:%d, received id:%d seq:%d", host->id, (int) (getpid() & 0xFFFF), icmp->icmp_seq, seen->icmp_id, seen->icmp_seq));
+							}
+
+							if (verdict != SPINE_ICMP_REPLY_OK && verdict != SPINE_ICMP_REPLY_NOT_ECHO) {
+								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+								continue;
+							}
+
+							if (fromname.sin_addr.s_addr == recvname.sin_addr.s_addr) {
+								if (verdict == SPINE_ICMP_REPLY_OK) {
+
+									if (is_debug_device(host->id)) {
+										SPINE_LOG(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
+									} else {
+										SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMP Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
+									}
+									snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMP: Device is Alive");
+									snprintf(ping->ping_status, 50, "%.5f", total_time);
+									rc = HOST_UP;
+									goto cleanup;
+								} else {
+									/* received a response other than an echo reply; the
+									 * echo reply may still arrive inside this deadline */
+									ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+									continue;
+								}
+							} else {
+								/* another host responded */
+								ICMP_DISCARD_PEEKED(icmp_socket, socket_reply);
+								continue;
+							}
+						}
+					} else {
+						if (is_debug_device(host->id)) {
+							SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
+						} else {
+							SPINE_LOG_DEBUG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
 						}
 					}
-				} else {
-					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
-					} else {
-						SPINE_LOG_DEBUG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
-					}
+					break;
 				}
 
 				total_time = 0;

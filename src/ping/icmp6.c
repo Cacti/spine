@@ -366,75 +366,77 @@ int ping_icmp_ipv6(const host_t *host, ping_t *ping) {
 
 	/* wait for a response on the socket */
 	/* reinitialize fd_set -- select(2) clears bits in place on return */
-	keep_listening_ipv6:
-		FD_ZERO(&socket_fds);
-		if (icmp_socket >= FD_SETSIZE) {
-			SPINE_LOG(("ERROR: Device[%i] ICMPv6 socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
-			snprintf(ping->ping_status, 50, "down");
-			snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: fd exceeds FD_SETSIZE");
-			goto cleanup;
-		}
-		FD_SET(icmp_socket, &socket_fds);
-		/* a stray datagram must not restart the wait, and only Linux
-		 * writes the time left back into the timeval */
-		ping_wait_left(deadline, &timeout);
-		return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
-
-		if (return_code < 0 && errno == EINTR) {
-			goto keep_listening_ipv6;
-		}
-
-		total_time = (spine_monotonic_time() - begin_time) * one_thousand;
-
-		if ((return_code > 0) && (total_time < host_timeout)) {
-			fromlen = sizeof(recvname);
-			return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &recvname, &fromlen);
-
-			if (return_code < 0) {
-				if (errno == EINTR) {
-					/* call was interrupted by some system event */
-
-					if (is_debug_device(host->id)) {
-						SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
-					} else {
-						SPINE_LOG_DEBUG(("DEBUG: Device[%i] Received EINTR", host->id));
-					}
-
-					goto keep_listening_ipv6;
-				}
-			} else {
-				/* the kernel does not match the source address for us */
-				if (memcmp(fromname.sin6_addr.s6_addr, recvname.sin6_addr.s6_addr, sizeof(fromname.sin6_addr.s6_addr)) != 0) {
-					/* another host responded */
-					goto keep_listening_ipv6;
-				}
-
-				/* on a datagram socket the kernel assigns the echo id, so it
-				 * will not match what we wrote; sequence, source address and
-				 * payload still identify the reply */
-				if (!icmp6_reply_matches((const unsigned char *) socket_reply, return_code,
-						htons(our_id), htons(our_seq), !icmp_dgram)) {
-					goto keep_listening_ipv6;
-				}
-
-				if (is_debug_device(host->id)) {
-					SPINE_LOG(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
-				} else {
-					SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
-				}
-
-				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
-				snprintf(ping->ping_status, 50, "%.5f", total_time);
-
-				result = HOST_UP;
+		for (;;) {
+			FD_ZERO(&socket_fds);
+			if (icmp_socket >= FD_SETSIZE) {
+				SPINE_LOG(("ERROR: Device[%i] ICMPv6 socket %d exceeds FD_SETSIZE %d", host->id, icmp_socket, FD_SETSIZE));
+				snprintf(ping->ping_status, 50, "down");
+				snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: fd exceeds FD_SETSIZE");
 				goto cleanup;
 			}
-		} else {
-			if (is_debug_device(host->id)) {
-				SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
-			} else {
-				SPINE_LOG_DEBUG(("DEBUG: Device[%i] Exceeded Device Timeout, Retrying", host->id));
+			FD_SET(icmp_socket, &socket_fds);
+			/* a stray datagram must not restart the wait, and only Linux
+			 * writes the time left back into the timeval */
+			ping_wait_left(deadline, &timeout);
+			return_code = select(icmp_socket + 1, &socket_fds, NULL, NULL, &timeout);
+
+			if (return_code < 0 && errno == EINTR) {
+				continue;
 			}
+
+			total_time = (spine_monotonic_time() - begin_time) * one_thousand;
+
+			if ((return_code > 0) && (total_time < host_timeout)) {
+				fromlen = sizeof(recvname);
+				return_code = recvfrom(icmp_socket, socket_reply, BUFSIZE, 0, (struct sockaddr *) &recvname, &fromlen);
+
+				if (return_code < 0) {
+					if (errno == EINTR) {
+						/* call was interrupted by some system event */
+
+						if (is_debug_device(host->id)) {
+							SPINE_LOG(("Device[%i] DEBUG: Received EINTR", host->id));
+						} else {
+							SPINE_LOG_DEBUG(("DEBUG: Device[%i] Received EINTR", host->id));
+						}
+
+						continue;
+					}
+				} else {
+					/* the kernel does not match the source address for us */
+					if (memcmp(fromname.sin6_addr.s6_addr, recvname.sin6_addr.s6_addr, sizeof(fromname.sin6_addr.s6_addr)) != 0) {
+						/* another host responded */
+						continue;
+					}
+
+					/* on a datagram socket the kernel assigns the echo id, so it
+					 * will not match what we wrote; sequence, source address and
+					 * payload still identify the reply */
+					if (!icmp6_reply_matches((const unsigned char *) socket_reply, return_code,
+							htons(our_id), htons(our_seq), !icmp_dgram)) {
+						continue;
+					}
+
+					if (is_debug_device(host->id)) {
+						SPINE_LOG(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
+					} else {
+						SPINE_LOG_MEDIUM(("Device[%i] INFO: ICMPv6 Device Alive, Try Count:%i, Time:%.4f ms", host->id, retry_count + 1, (total_time)));
+					}
+
+					snprintf(ping->ping_response, SMALL_BUFSIZE, "ICMPv6: Device is Alive");
+					snprintf(ping->ping_status, 50, "%.5f", total_time);
+
+					result = HOST_UP;
+					goto cleanup;
+				}
+			} else {
+				if (is_debug_device(host->id)) {
+					SPINE_LOG(("Device[%i] DEBUG: Exceeded Device Timeout, Retrying", host->id));
+				} else {
+					SPINE_LOG_DEBUG(("DEBUG: Device[%i] Exceeded Device Timeout, Retrying", host->id));
+				}
+			}
+			break;
 		}
 
 		total_time = 0;

@@ -149,7 +149,10 @@ int __wrap_usleep(useconds_t delay) {
 }
 
 int __wrap_spine_worker_set_reap(spine_worker_set_t *workers, size_t *remaining) {
-	if (fail_shutdown_reap && ++reap_calls == 2) return EIO;
+	if (fail_shutdown_reap) {
+		reap_calls++;
+		if (reap_calls == 2) return EIO;
+	}
 	return __real_spine_worker_set_reap(workers, remaining);
 }
 #endif

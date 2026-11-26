@@ -22,13 +22,15 @@
 
 # make check runs this through $(SHELL), which is not bash on Alpine or the
 # BSDs, and the rest of the file needs bash.
-if [ -z "${BASH_VERSION:-}" ]; then
+case ${BASH_VERSION:-} in
+'')
 	if command -v bash >/dev/null 2>&1; then
 		exec bash "$0" "$@"
 	fi
 	echo "bash is not installed; skipping"
 	exit 77
-fi
+	;;
+esac
 
 set -euo pipefail
 

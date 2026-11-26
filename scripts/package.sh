@@ -26,14 +26,14 @@ display_help () {
 }
 
 # Sanity checks
-[ ! -e configure.ac ] && echo "ERROR: Your current working directory must be the SVN check out of Spine" && exit 1
+[[ ! -e configure.ac ]] && echo "ERROR: Your current working directory must be the SVN check out of Spine" && exit 1
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   display_help
   exit 0
 fi
 
-if [ -z "${1:-}" ]; then
+if [[ -z "${1:-}" ]]; then
   echo ""
   echo "ERROR: Invalid syntax, missing required argument"
   echo ""
@@ -56,14 +56,14 @@ echo "  Version: ${VERSION}"
 echo "----------------------------------------------------------------------------"
 
 # Clean up previous builds
-if [ -e "${TMP_DIR}/cacti-spine-${VERSION}" ]; then
+if [[ -e "${TMP_DIR}/cacti-spine-${VERSION}" ]]; then
   echo "INFO: Removing previous build ${TMP_DIR}/cacti-spine-${VERSION}..."
   if ! rm -Rf -- "${TMP_DIR}/cacti-spine-${VERSION}"; then
     echo "ERROR: Unable to remove directory: ${TMP_DIR}/cacti-spine-${VERSION}" >&2
     exit 1
   fi
 fi
-if [ -e "${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" ]; then
+if [[ -e "${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" ]]; then
   if ! rm -Rf -- "${TMP_DIR}/cacti-spine-${VERSION}.tar.gz"; then
     echo "ERROR: Unable to remove file: ${TMP_DIR}/cacti-spine-${VERSION}.tar.gz" >&2
     exit 1
@@ -90,7 +90,7 @@ pushd "${TMP_DIR}/cacti-spine-${VERSION}" > /dev/null || exit 1
 
 # Get version from source files, warn if different than defined for build
 SRC_VERSION=$(grep AC_INIT configure.ac | awk -F, '{print $2}' | sed 's/ //g')
-if [ "${SRC_VERSION}" != "${VERSION}" ]; then
+if [[ "${SRC_VERSION}" != "${VERSION}" ]]; then
   echo "WARNING: Build version and source version are not the same";
   echo "WARNING:    Build Version: ${VERSION}"
   echo "WARNING:   Source Version: ${SRC_VERSION}"

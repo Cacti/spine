@@ -400,30 +400,7 @@ retry:
 		failure_errno = spawn_err;
 		SPINE_LOG(("ERROR: SCRIPT: posix_spawn failed: %s", strerror(spawn_err)));
 
-	spawn_failed:
-		/* One teardown for every failure after the file actions exist and the
-		 * list mutex is held. ListMutex is process-global, so a path that
-		 * returns still holding it wedges every later nft_popen() and
-		 * nft_pclose() in every poller thread and the daemon stops collecting
-		 * script data until it is restarted. */
-		posix_spawn_file_actions_destroy(&fa);
-		if (attr_valid) posix_spawnattr_destroy(&attr);
-
-		if (inherit_fd != -1) {
-			(void) close(inherit_fd);
-			inherit_fd = -1;
-		}
-
-		(void) close(pdes[0]);
-		(void) close(pdes[1]);
-		pthread_mutex_unlock(&ListMutex);
-		free(command_copy);
-		free(cur);
-		pthread_setcancelstate(cancel_state, NULL);
-		if (failure_errno != 0) {
-			errno = failure_errno;
-		}
-		return -1;
+		goto spawn_failed;
 	}
 
 	posix_spawn_file_actions_destroy(&fa);
@@ -459,6 +436,31 @@ retry:
 	pthread_setcancelstate(cancel_state, NULL);
 
 	return fd;
+
+spawn_failed:
+	/* One teardown for every failure after the file actions exist and the
+	 * list mutex is held. ListMutex is process-global, so a path that
+	 * returns still holding it wedges every later nft_popen() and
+	 * nft_pclose() in every poller thread and the daemon stops collecting
+	 * script data until it is restarted. */
+	posix_spawn_file_actions_destroy(&fa);
+	if (attr_valid) posix_spawnattr_destroy(&attr);
+
+	if (inherit_fd != -1) {
+		(void) close(inherit_fd);
+		inherit_fd = -1;
+	}
+
+	(void) close(pdes[0]);
+	(void) close(pdes[1]);
+	pthread_mutex_unlock(&ListMutex);
+	free(command_copy);
+	free(cur);
+	pthread_setcancelstate(cancel_state, NULL);
+	if (failure_errno != 0) {
+		errno = failure_errno;
+	}
+	return -1;
 }
 
 /*! ------------------------------------------------------------------------------
@@ -508,7 +510,9 @@ static int nft_reap_closed_child(pid_t *pid, int *pstat, double deadline) {
 	int rc = spine_reap_child_owned(pid, pstat, NFT_PCLOSE_SPIN_ATTEMPTS, &ListMutex);
 
 	if (rc != 1 || deadline <= 0) return rc;
-	while (rc == 1 && (remaining = deadline - term_grace - spine_monotonic_time()) > 0) {
+	while (rc == 1) {
+		remaining = deadline - term_grace - spine_monotonic_time();
+		if (remaining <= 0) break;
 		spine_sleep_usec(remaining * 1000000.0 < NFT_PCLOSE_REAP_USEC ? (unsigned int) (remaining * 1000000.0) : NFT_PCLOSE_REAP_USEC);
 		rc = spine_reap_child_owned(pid, pstat, 1, &ListMutex);
 	}
